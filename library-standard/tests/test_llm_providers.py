@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
-
 from mas.library.standard.plugins.llm.cache import CacheLLMProvider
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
 from mas.runtime.registry.llm_provider_registry import (
@@ -407,6 +407,152 @@ def test_openai_provider_default_exclude_strips_without_sending_extension(monkey
     assert "max_completion_tokens" not in payload
     assert out["content"] == "Answer"
     assert "reasoning_content" not in out
+
+
+class _FlakyPostClient:
+    """Raises a transport error the first `fail_times` calls, then succeeds."""
+
+    def __init__(self, message: dict, *, fail_times: int = 0, exc_factory=None, **_: object) -> None:
+        self._message = message
+        self._fail_times = fail_times
+        self._exc_factory = exc_factory or (lambda: httpx.ConnectError("boom"))
+        self.calls = 0
+
+    def post(self, url: str, json: object, headers: object, params: object = None):
+        self.calls += 1
+        if self.calls <= self._fail_times:
+            raise self._exc_factory()
+        return _FakePostResponse(self._message)
+
+    def __enter__(self) -> "_FlakyPostClient":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_openai_provider_retries_dropped_connection_then_succeeds(monkeypatch) -> None:
+    monkeypatch.setattr("mas.library.standard.plugins.llm.openai.time.sleep", lambda _s: None)
+    client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=2)
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
+    out = OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    assert out["content"] == "ok"
+    assert client.calls == 3
+
+
+def test_openai_provider_gives_up_after_max_attempts(monkeypatch) -> None:
+    monkeypatch.setattr("mas.library.standard.plugins.llm.openai.time.sleep", lambda _s: None)
+    client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=10)
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
+    with pytest.raises(RuntimeError):
+        OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    assert client.calls == 3
+
+
+def test_openai_provider_does_not_retry_auth_error(monkeypatch) -> None:
+    monkeypatch.setattr("mas.library.standard.plugins.llm.openai.time.sleep", lambda _s: None)
+
+    def _auth_error() -> httpx.HTTPStatusError:
+        request = httpx.Request("POST", "https://example.test/v1/chat/completions")
+        response = httpx.Response(401, request=request)
+        return httpx.HTTPStatusError("unauthorized", request=request, response=response)
+
+    client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=1, exc_factory=_auth_error)
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
+    with pytest.raises(RuntimeError):
+        OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    assert client.calls == 1
+
+
+class _FlakyStreamClient:
+    """`.stream()` raises a transport error the first `fail_times` calls."""
+
+    def __init__(self, lines: list[str], *, fail_times: int = 0, **_: object) -> None:
+        self._lines = lines
+        self._fail_times = fail_times
+        self.calls = 0
+
+    def stream(self, method: str, url: str, *, json: object, headers: object, params: object = None):
+        self.calls += 1
+        if self.calls <= self._fail_times:
+            raise httpx.ConnectError("boom")
+        return _FakeStreamResponse(self._lines)
+
+    def __enter__(self) -> "_FlakyStreamClient":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_openai_provider_retries_stream_connect_failure(monkeypatch) -> None:
+    monkeypatch.setattr("mas.library.standard.plugins.llm.openai.time.sleep", lambda _s: None)
+    lines = [
+        _sse({"choices": [{"delta": {"content": "Hi"}, "finish_reason": "stop"}]}),
+        "data: [DONE]",
+    ]
+    client = _FlakyStreamClient(lines, fail_times=2)
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
+    received: list[str] = []
+    provider = OpenAILLMProvider(stream=True)
+    message = provider.chat_completion(
+        model="gpt",
+        messages=[{"role": "user", "content": "hi"}],
+        api_key="k",
+        on_stream_chunk=received.append,
+    )
+    assert received == ["Hi"]
+    assert message["content"] == "Hi"
+    assert client.calls == 3
+
+
+class _DroppedMidStreamResponse:
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def iter_lines(self):
+        yield from self._lines
+        raise httpx.RemoteProtocolError("peer closed connection")
+
+    def __enter__(self) -> "_DroppedMidStreamResponse":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+class _MidStreamDropClient:
+    def __init__(self, lines: list[str], **_: object) -> None:
+        self._lines = lines
+
+    def stream(self, method: str, url: str, *, json: object, headers: object, params: object = None):
+        return _DroppedMidStreamResponse(self._lines)
+
+    def __enter__(self) -> "_MidStreamDropClient":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+
+def test_openai_provider_does_not_retry_after_partial_stream_emitted(monkeypatch) -> None:
+    monkeypatch.setattr("mas.library.standard.plugins.llm.openai.time.sleep", lambda _s: None)
+    lines = [_sse({"choices": [{"delta": {"content": "Hel"}}]})]
+    client = _MidStreamDropClient(lines)
+    monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
+    received: list[str] = []
+    provider = OpenAILLMProvider(stream=True)
+    with pytest.raises(RuntimeError):
+        provider.chat_completion(
+            model="gpt",
+            messages=[{"role": "user", "content": "hi"}],
+            api_key="k",
+            on_stream_chunk=received.append,
+        )
+    assert received == ["Hel"]
 
 
 def test_openai_provider_stream_ignores_reasoning_deltas(monkeypatch) -> None:
