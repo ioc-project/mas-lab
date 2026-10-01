@@ -112,6 +112,19 @@ class OpenAILLMProvider:
             self._aclient = httpx.AsyncClient(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
         return self._aclient
 
+    def _discard_client_after_transport_failure(self, exc: BaseException) -> None:
+        """Drop the pooled client after a transport-level failure.
+
+        A network change (wifi/VPN switch, interface change, ...) can leave
+        pooled keep-alive sockets bound to a now-dead route; retrying on the
+        same pool can just hang or fail again. Force a brand-new client (and
+        DNS/connect) on the next attempt. HTTP-status failures (429/5xx) keep
+        the pool — the connection itself was fine.
+        """
+        if isinstance(exc, httpx.TransportError) and self._client is not None:
+            client, self._client = self._client, None
+            client.close()
+
     def _send_with_retry(self, send: Callable[[], httpx.Response]) -> httpx.Response:
         """Retry a single request on dropped connections, timeouts, 429/5xx.
 
@@ -128,6 +141,7 @@ class OpenAILLMProvider:
             except Exception as exc:
                 if attempt >= _MAX_REQUEST_ATTEMPTS or not _is_retryable_llm_error(exc):
                     raise
+                self._discard_client_after_transport_failure(exc)
                 delay = _RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
                 logger.warning(
                     "LLM request failed (attempt %d/%d), retrying in %.1fs: %s",
@@ -547,6 +561,7 @@ class OpenAILLMProvider:
             except Exception as exc:
                 if emitted_any or attempt >= _MAX_REQUEST_ATTEMPTS or not _is_retryable_llm_error(exc):
                     raise
+                self._discard_client_after_transport_failure(exc)
                 delay = _RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
                 logger.warning(
                     "Streamed LLM request failed before any output (attempt %d/%d), retrying in %.1fs: %s",

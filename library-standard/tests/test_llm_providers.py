@@ -424,6 +424,9 @@ class _FlakyPostClient:
             raise self._exc_factory()
         return _FakePostResponse(self._message)
 
+    def close(self) -> None:
+        return None
+
     def __enter__(self) -> "_FlakyPostClient":
         return self
 
@@ -447,6 +450,25 @@ def test_openai_provider_gives_up_after_max_attempts(monkeypatch) -> None:
     with pytest.raises(RuntimeError):
         OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
     assert client.calls == 3
+
+
+def test_openai_provider_recreates_client_after_transport_failure(monkeypatch) -> None:
+    """A network change can wedge the pooled client; retry must use a fresh one."""
+    monkeypatch.setattr("mas.library.standard.plugins.llm.openai.time.sleep", lambda _s: None)
+    created: list[_FlakyPostClient] = []
+
+    def factory(**kwargs):
+        fail_times = 10 if not created else 0
+        client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=fail_times)
+        created.append(client)
+        return client
+
+    monkeypatch.setattr("httpx.Client", factory)
+    out = OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    assert out["content"] == "ok"
+    assert len(created) == 2
+    assert created[0].calls == 1
+    assert created[1].calls == 1
 
 
 def test_openai_provider_does_not_retry_auth_error(monkeypatch) -> None:
@@ -477,6 +499,9 @@ class _FlakyStreamClient:
         if self.calls <= self._fail_times:
             raise httpx.ConnectError("boom")
         return _FakeStreamResponse(self._lines)
+
+    def close(self) -> None:
+        return None
 
     def __enter__(self) -> "_FlakyStreamClient":
         return self
