@@ -328,6 +328,40 @@ experiment:
     max_executions: 200      # fail if the planned grid is larger
 ```
 
+These three modes only pick cells from **scenarios × dataset items**
+(`run.n_runs` always replicates each cell). They are not a general
+factorial language. Missing or unknown keys fail; they do not fall back
+to cartesian.
+
+| Mode | Cells | Required keys |
+| --- | --- | --- |
+| `cartesian` | every scenario × every item | none |
+| `coupled` | listed `(scenario, items)` pairs | `couplings` |
+| `one_factor` | sweep one of those two axes; hold the other | `vary` (`axis` + `values`) |
+
+```yaml
+experiment:
+  design:
+    mode: one_factor
+    pin_scenarios: [baseline]
+    vary:
+      axis: item             # scenario | item
+      values: [item-1, item-2]
+```
+
+Other study axes stay outside this enum until they are folded into a
+scenario overlay, or declared separately:
+
+- **Overlay / infra as a factor** — one `scenarios[]` row per column
+  (`overlays.logic` / `control` / `infra`). Hold infra constant with
+  workspace `infra_refs` and `bench_emulation`, not a per-cell cache flip.
+- **Model as a factor** — two experiments with different `models.main`,
+  or two scenarios whose overlays patch the model. Study-wide pin:
+  `experiment.models`.
+- **Starting state** — `experiment.checkpoints` is crossed after the
+  plan (always cartesian on that axis today).
+- **Smoke, not a pin** — `dataset.limit` and `design.max_executions`.
+
 Replication is **design**, not a retry knob: `run.n_runs` only.
 
 ### `schedule`

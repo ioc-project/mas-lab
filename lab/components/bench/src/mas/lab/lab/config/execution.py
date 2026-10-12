@@ -283,7 +283,6 @@ class ExperimentDesignSpec:
     """Fail when the planned grid exceeds this limit."""
 
     couplings: List[Dict[str, Any]] = field(default_factory=list)
-    pin: Dict[str, Any] = field(default_factory=dict)
     vary: Optional[Dict[str, Any]] = None
     pin_scenarios: Optional[List[str]] = None
     pin_items: Optional[List[Any]] = None
@@ -295,8 +294,6 @@ class ExperimentDesignSpec:
             data["max_executions"] = self.max_executions
         if self.couplings:
             data["couplings"] = self.couplings
-        if self.pin:
-            data["pin"] = self.pin
         if self.vary:
             data["vary"] = self.vary
         if self.pin_scenarios is not None:
@@ -308,11 +305,14 @@ class ExperimentDesignSpec:
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ExperimentDesignSpec":
         data = data or {}
+        if "pin" in data:
+            raise ValueError(
+                "design.pin is not read; use pin_scenarios / pin_items with one_factor"
+            )
         return cls(
             mode=data.get("mode", "cartesian"),
             max_executions=data.get("max_executions"),
             couplings=list(data.get("couplings") or []),
-            pin=dict(data.get("pin") or {}),
             vary=data.get("vary"),
             pin_scenarios=data.get("pin_scenarios"),
             pin_items=data.get("pin_items"),

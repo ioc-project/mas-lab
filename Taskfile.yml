@@ -99,6 +99,7 @@ tasks:
           runtime/tests/ \
           lab/components/core/tests/ \
           lab/components/bench/tests/ \
+          lab/tests/benchmark/test_experiment_schema.py \
           ctl/tests/ \
           library-standard/tests/ \
           library-eval/tests/ \

@@ -188,3 +188,76 @@ def test_execution_max_attempts_zero_fails_schema() -> None:
         validate_manifest(
             data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
         )
+
+
+def test_one_factor_design_validates_on_canonical_and_legacy_execution() -> None:
+    design = {
+        "mode": "one_factor",
+        "pin_scenarios": ["baseline"],
+        "vary": {"axis": "item", "values": ["item-1"]},
+    }
+    canonical = _canonical()
+    canonical["experiment"]["design"] = design
+    assert (
+        validate_manifest(
+            canonical, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+        )
+        == []
+    )
+    legacy = _canonical()
+    legacy["experiment"]["execution"] = {"design": design}
+    warnings = validate_manifest(
+        legacy, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+    )
+    assert any("experiment.execution" in msg for msg in warnings)
+
+
+def test_one_factor_vary_rejects_unknown_axis() -> None:
+    data = _canonical()
+    data["experiment"]["design"] = {
+        "mode": "one_factor",
+        "vary": {"axis": "overlay", "values": ["x"]},
+    }
+    with pytest.raises(ManifestValidationError, match="overlay"):
+        validate_manifest(
+            data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+        )
+
+
+def test_one_factor_without_vary_fails_schema() -> None:
+    data = _canonical()
+    data["experiment"]["design"] = {"mode": "one_factor"}
+    with pytest.raises(ManifestValidationError, match="vary"):
+        validate_manifest(
+            data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+        )
+
+
+def test_cartesian_rejects_one_factor_keys() -> None:
+    data = _canonical()
+    data["experiment"]["design"] = {
+        "mode": "cartesian",
+        "vary": {"axis": "item", "values": ["item-1"]},
+    }
+    with pytest.raises(ManifestValidationError):
+        validate_manifest(
+            data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+        )
+
+
+def test_dead_pin_key_fails_schema() -> None:
+    data = _canonical()
+    data["experiment"]["design"] = {"mode": "cartesian", "pin": {"scenarios": ["baseline"]}}
+    with pytest.raises(ManifestValidationError, match="pin"):
+        validate_manifest(
+            data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+        )
+
+
+def test_coupled_without_couplings_fails_schema() -> None:
+    data = _canonical()
+    data["experiment"]["design"] = {"mode": "coupled"}
+    with pytest.raises(ManifestValidationError, match="couplings"):
+        validate_manifest(
+            data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False
+        )

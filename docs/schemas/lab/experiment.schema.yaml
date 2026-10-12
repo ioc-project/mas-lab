@@ -588,7 +588,11 @@ $defs:
   experiment_design:
     type: object
     additionalProperties: false
-    description: "Experiment design mode and cartesian guard."
+    description: >
+      How to pick cells from scenarios × dataset items. cartesian = full
+      product; coupled = listed pairs; one_factor = vary one of those two
+      axes. Other study axes (checkpoints, overlays, models, infra) are
+      not combinators here.
     properties:
       mode:
         type: string
@@ -600,21 +604,60 @@ $defs:
         description: "Fail when scenarios × items × n_runs exceeds this limit."
       couplings:
         type: array
+        minItems: 1
         items:
           type: object
-          additionalProperties: true
-      pin:
-        type: object
-        additionalProperties: true
+          additionalProperties: false
+          required: [scenario]
+          properties:
+            scenario:
+              type: string
+            items:
+              type: array
       vary:
         type: object
-        additionalProperties: true
+        additionalProperties: false
+        required: [axis, values]
+        description: "one_factor only: which scenario/item axis to sweep."
+        properties:
+          axis:
+            type: string
+            enum: [scenario, item]
+          values:
+            type: array
+            minItems: 1
       pin_scenarios:
         type: array
+        minItems: 1
         items:
           type: string
+        description: "one_factor: scenarios held constant. Omit to use every scenario."
       pin_items:
         type: array
+        minItems: 1
+        description: "one_factor: item ids held constant. Omit to use every item."
+    allOf:
+      - if:
+          properties:
+            mode: { const: one_factor }
+          required: [mode]
+        then:
+          required: [vary]
+        else:
+          not:
+            anyOf:
+              - required: [vary]
+              - required: [pin_scenarios]
+              - required: [pin_items]
+      - if:
+          properties:
+            mode: { const: coupled }
+          required: [mode]
+        then:
+          required: [couplings]
+        else:
+          not:
+            required: [couplings]
 
   experiment_schedule:
     type: object
