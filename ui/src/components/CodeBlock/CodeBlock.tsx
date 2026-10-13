@@ -6,9 +6,14 @@ import { Box, useTheme } from "@mui/material";
 interface CodeBlockProps {
   code: string;
   language?: string;
+  preStyle?: React.CSSProperties;
 }
 
-const CodeBlock = ({ code, language = "yaml" }: CodeBlockProps) => {
+const CodeBlock = ({
+  code,
+  language = "yaml",
+  preStyle = {},
+}: CodeBlockProps) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
 
@@ -22,6 +27,7 @@ const CodeBlock = ({ code, language = "yaml" }: CodeBlockProps) => {
         "& pre": {
           margin: 0,
           padding: "16px",
+          ...preStyle,
         },
       }}
     >

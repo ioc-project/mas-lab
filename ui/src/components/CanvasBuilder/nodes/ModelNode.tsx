@@ -8,6 +8,7 @@ const MODEL_OPTIONS = [
   "vertex_ai/gemini-2.5-pro",
   "vertex_ai/gemini-2.5-flash",
   "vertex_ai/gemini-2.0-flash",
+  "onprem/gemma4",
   "azure/gpt-4o",
   "azure/gpt-4o-mini",
   "azure/gpt-4.1",

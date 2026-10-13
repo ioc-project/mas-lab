@@ -271,6 +271,16 @@ async def get_experiment_file(experiment_name: str, path: str):
         content = file_path.read_text(encoding="utf-8")
         return {"path": path, "content": content}
 
+    # Raster images are inlined too: the UI fetches this endpoint as JSON and
+    # builds a `data:` URI, so return the bytes base64-encoded rather than as a
+    # binary FileResponse (which the JSON client cannot parse).
+    raster_suffixes = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+    if file_path.suffix.lower() in raster_suffixes:
+        import base64
+
+        content = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        return {"path": path, "content": content}
+
     return FileResponse(file_path, filename=file_path.name)
 
 

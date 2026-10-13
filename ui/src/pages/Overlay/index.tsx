@@ -332,7 +332,7 @@ const Overlay = () => {
                   }}
                 >
                   {overlayName
-                    ? `${overlayName}.overlay.yaml`
+                    ? `${overlayName}.yaml`
                     : "overlay.yaml"}
                 </Typography>
                 <CodeBlock code={overlayYaml} language="yaml" />

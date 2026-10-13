@@ -69,7 +69,8 @@ export type ModelNodeData = {
 };
 
 export type DesignPatternNodeData = {
-  type: "react" | "cot" | "reflection" | "";
+  /** Manifest name for spec.design_pattern.type (e.g. "react", "deterministic_staged_debate"). */
+  type: string;
   max_steps: number;
   disabled?: boolean;
   onChange?: NodeDataChangeHandler;

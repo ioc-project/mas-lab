@@ -26,11 +26,19 @@ def _overlay_dir_for_namespace(lib_dir: Path, namespace: str | None) -> Path:
 
 
 def _extract_namespace_from_yaml(content: str) -> str:
-    """Extract the ``metadata.namespace`` field from overlay YAML content."""
+    """Extract the namespace from overlay YAML content.
+
+    Checks root-level ``x-namespace`` first (UI-generated overlays), then
+    falls back to ``metadata.namespace``, defaulting to ``"global"``.
+    """
     import yaml as _yaml
     try:
         doc = _yaml.safe_load(content) or {}
-        return str((doc.get("metadata") or {}).get("namespace", "global") or "global")
+        return str(
+            doc.get("x-namespace")
+            or (doc.get("metadata") or {}).get("namespace")
+            or "global"
+        )
     except Exception:
         return "global"
 

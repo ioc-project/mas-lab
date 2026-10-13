@@ -55,7 +55,8 @@ interface PipelineJobStatus {
     | "completed"
     | "failed"
     | "cancelled"
-    | "timeout";
+    | "timeout"
+    | "interrupted";
   stdout?: string;
   stderr?: string;
 }
@@ -260,7 +261,7 @@ const Pipelines = () => {
       try {
         const { job_id } = await runPipeline(library, {
           pipeline_yaml: `pipelines/${filename}`,
-          timeout: 1200,
+          timeout: 43200,
         });
         setRunningJobs((prev) => ({
           ...prev,

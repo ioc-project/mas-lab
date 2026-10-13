@@ -38,7 +38,7 @@ import {
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
 
-const APPLICATION_TAB_KEYS = ["graph", "yaml"] as const;
+const APPLICATION_TAB_KEYS = ["graph", "yaml", "output"] as const;
 type ApplicationTab = (typeof APPLICATION_TAB_KEYS)[number];
 
 const Application = () => {
@@ -56,12 +56,13 @@ const Application = () => {
   const [masIntent, setMasIntent] = useState("");
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [runMasError, setRunMasError] = useState<string | null>(null);
-  const [runMasResult, setRunMasResult] = useState<{
-    message: string;
-    severity: "success" | "error";
-  } | null>(null);
   const [isRunningMas, setIsRunningMas] = useState(false);
+  const [runOutput, setRunOutput] = useState<{
+    stdout: string;
+    stderr: string;
+    status: "success" | "error";
+  } | null>(null);
+  const [outputSubTab, setOutputSubTab] = useState(0);
 
   const validateMutation = useValidateAgent();
   const validateMasMutation = useValidateMas();
@@ -148,38 +149,62 @@ const Application = () => {
     return () => clearTimeout(timer);
   }, [validateMasMutation.isSuccess, validateMasMutation.isError]);
 
+  const navigateToOutputTab = useCallback(() => {
+    const basePath = applicationTab
+      ? location.pathname.replace(/\/[^/]+$/, "/output")
+      : `${location.pathname}/output`;
+    navigate(basePath, { replace: true });
+  }, [navigate, location.pathname, applicationTab]);
+
   const handleRunMas = useCallback(async () => {
     if (!library) return;
     const masYaml = yamlOutputMap["mas"];
     if (!masYaml) {
-      setRunMasError("No MAS manifest available.");
+      setRunOutput({
+        stdout: "",
+        stderr: "No MAS manifest available.",
+        status: "error",
+      });
+      navigateToOutputTab();
       return;
     }
 
     const masDoc = parse(masYaml);
     const entryAgentId = masDoc?.spec?.workflow?.entry;
     if (!entryAgentId) {
-      setRunMasError("MAS manifest has no workflow entry agent defined.");
+      setRunOutput({
+        stdout: "",
+        stderr: "MAS manifest has no workflow entry agent defined.",
+        status: "error",
+      });
+      navigateToOutputTab();
       return;
     }
 
     const entryAgentYaml = yamlOutputMap[`agent:${entryAgentId}`];
     if (!entryAgentYaml) {
-      setRunMasError(`Entry agent "${entryAgentId}" manifest not found.`);
+      setRunOutput({
+        stdout: "",
+        stderr: `Entry agent "${entryAgentId}" manifest not found.`,
+        status: "error",
+      });
+      navigateToOutputTab();
       return;
     }
 
     const entryDoc = parse(entryAgentYaml);
     const textInput = entryDoc?.spec?.["x-text-input"];
     if (!textInput || !textInput.trim()) {
-      setRunMasError(
-        `A Text Input node with content must be connected to the entry agent "${entryAgentId}" before running the MAS.`,
-      );
+      setRunOutput({
+        stdout: "",
+        stderr: `A Text Input node with content must be connected to the entry agent "${entryAgentId}" before running the MAS.`,
+        status: "error",
+      });
+      navigateToOutputTab();
       return;
     }
 
-    setRunMasError(null);
-    setRunMasResult(null);
+    setRunOutput(null);
     setIsRunningMas(true);
 
     try {
@@ -196,43 +221,28 @@ const Application = () => {
         result = await pollJob(job_id);
       }
 
-      if (result.status !== "completed" || result.exit_code !== 0) {
-        setRunMasResult({
-          message: result.stderr || result.error || "MAS run failed.",
-          severity: "error",
-        });
-      } else {
-        const stderrErrors = result.stderr
-          ? result.stderr
-              .split("\n")
-              .filter(
-                (line: string) =>
-                  /\bError[:\s]|\bfailed\b|\bnot found\b|\bTraceback\b/i.test(
-                    line,
-                  ) && !/tool\(.*\) Error:/i.test(line),
-              )
-              .join("\n")
-              .trim()
-          : "";
-        if (stderrErrors) {
-          setRunMasError(stderrErrors);
-        }
-        setRunMasResult({
-          message:
-            result.stdout ||
-            result.response ||
-            "MAS run completed successfully.",
-          severity: "success",
-        });
-      }
+      const failed = result.status !== "completed" || result.exit_code !== 0;
+      setRunOutput({
+        stdout:
+          result.stdout ||
+          result.response ||
+          (failed ? "" : "MAS run completed successfully."),
+        stderr: result.stderr || result.error || "",
+        status: failed ? "error" : "success",
+      });
+      navigateToOutputTab();
     } catch (err) {
-      setRunMasError(
-        err instanceof Error ? err.message : "An unexpected error occurred.",
-      );
+      setRunOutput({
+        stdout: "",
+        stderr:
+          err instanceof Error ? err.message : "An unexpected error occurred.",
+        status: "error",
+      });
+      navigateToOutputTab();
     } finally {
       setIsRunningMas(false);
     }
-  }, [library, yamlOutputMap]);
+  }, [library, yamlOutputMap, navigateToOutputTab]);
 
   const handleValidateMas = useCallback(() => {
     if (!library) return;
@@ -530,40 +540,11 @@ const Application = () => {
                 validateMasMutation.data.stdout}
           </Alert>
         )}
-        {runMasError && (
-          <Alert
-            severity="error"
-            onClose={() => setRunMasError(null)}
-            sx={{
-              whiteSpace: "pre-wrap",
-              position: "absolute",
-              top: 0,
-              right: 0,
-              zIndex: 1000,
-            }}
-          >
-            {runMasError}
-          </Alert>
-        )}
-        {runMasResult && !runMasError && (
-          <Alert
-            severity={runMasResult.severity}
-            onClose={() => setRunMasResult(null)}
-            sx={{
-              whiteSpace: "pre-wrap",
-              position: "absolute",
-              top: 0,
-              right: 0,
-              zIndex: 1000,
-            }}
-          >
-            {runMasResult.message}
-          </Alert>
-        )}
         <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
           <Tabs value={selectedTab} onChange={handleTabChange}>
             <Tab label="Graph" id="application-tab-0" />
             <Tab label="Yaml" id="application-tab-1" />
+            <Tab label="Run Output" id="application-tab-2" />
           </Tabs>
         </Box>
 
@@ -609,6 +590,78 @@ const Application = () => {
               </Box>
             ))}
           </Stack>
+        </TabPanel>
+
+        <TabPanel value={selectedTab} index={2} sx={{ flex: 1 }}>
+          {!runOutput && !isRunningMas ? (
+            <Typography
+              variant="body2"
+              sx={{ color: "text.secondary", py: 4, textAlign: "center" }}
+            >
+              No run output yet. Use the Run button to execute the MAS.
+            </Typography>
+          ) : isRunningMas ? (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 2,
+                py: 4,
+              }}
+            >
+              <CircularProgress size={20} />
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                Running MAS...
+              </Typography>
+            </Box>
+          ) : (
+            <Stack direction="column" sx={{ gap: 0, flex: 1, minHeight: 0 }}>
+              {runOutput?.status === "error" && (
+                <Alert severity="error" sx={{ mb: 1 }}>
+                  MAS run failed.
+                </Alert>
+              )}
+              <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+                <Tabs
+                  value={outputSubTab}
+                  onChange={(_e, v) => setOutputSubTab(v)}
+                  sx={{ minHeight: 36 }}
+                >
+                  <Tab label="Output" sx={{ minHeight: 36, py: 0.5 }} />
+                  <Tab label="Verbose" sx={{ minHeight: 36, py: 0.5 }} />
+                </Tabs>
+              </Box>
+              <Box
+                sx={{
+                  flex: 1,
+                  minHeight: 0,
+                  pt: 1,
+                }}
+              >
+                {outputSubTab === 0 && (
+                  <CodeBlock
+                    code={runOutput?.stdout || "No output."}
+                    language="text"
+                    preStyle={{
+                      height: "calc(100vh - 300px)",
+                      overflow: "auto",
+                    }}
+                  />
+                )}
+                {outputSubTab === 1 && (
+                  <CodeBlock
+                    code={runOutput?.stderr || "No verbose output."}
+                    language="text"
+                    preStyle={{
+                      height: "calc(100vh - 300px)",
+                      overflow: "auto",
+                    }}
+                  />
+                )}
+              </Box>
+            </Stack>
+          )}
         </TabPanel>
       </Stack>
 

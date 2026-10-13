@@ -70,7 +70,8 @@ export interface ExperimentJobStatus {
     | "completed"
     | "failed"
     | "cancelled"
-    | "timeout";
+    | "timeout"
+    | "interrupted";
   progress?: number;
   stdout?: string;
   stderr?: string;

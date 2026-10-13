@@ -40,6 +40,7 @@ import {
   type YamlOutputMap,
   type ChatMessage,
 } from "./types";
+import { autoLayoutYamlMap } from "./autoLayout";
 import "./canvasBuilder.css";
 
 function generateNodeId(): string {
@@ -448,32 +449,6 @@ function buildDegrees(
   return { outDegree, inDegree };
 }
 
-/** DFS-based cycle detection on the directed agent-to-agent graph. */
-function hasCycle(agentNodes: Node[], agentEdges: Edge[]): boolean {
-  const visited = new Set<string>();
-  const stack = new Set<string>();
-  const adj = new Map<string, string[]>();
-  for (const node of agentNodes) adj.set(node.id, []);
-  for (const edge of agentEdges) adj.get(edge.source)?.push(edge.target);
-
-  function dfs(id: string): boolean {
-    if (stack.has(id)) return true;
-    if (visited.has(id)) return false;
-    visited.add(id);
-    stack.add(id);
-    for (const neighbor of adj.get(id) ?? []) {
-      if (dfs(neighbor)) return true;
-    }
-    stack.delete(id);
-    return false;
-  }
-
-  for (const node of agentNodes) {
-    if (dfs(node.id)) return true;
-  }
-  return false;
-}
-
 /**
  * BFS over the undirected agent graph to find connected components
  * (groups of agents linked by edges but disconnected from other groups).
@@ -551,27 +526,6 @@ function findEntryAgent(agentNodes: Node[], agentEdges: Edge[]): Node {
   return scored[0].node;
 }
 
-/**
- * Classify the MAS workflow topology from the agent-to-agent edge graph:
- *   - "sequential": linear chain (no branching/merging, no cycles)
- *   - "dynamic":    everything else (single agent, branching, merging, cycles)
- */
-function detectWorkflowType(
-  agentNodes: Node[],
-  agentEdges: Edge[],
-): "sequential" | "dynamic" {
-  if (agentNodes.length <= 1 || agentEdges.length === 0) return "dynamic";
-
-  if (hasCycle(agentNodes, agentEdges)) return "dynamic";
-
-  const { outDegree, inDegree } = buildDegrees(agentNodes, agentEdges);
-  const hasBranching = [...outDegree.values()].some((d) => d > 1);
-  const hasMerging = [...inDegree.values()].some((d) => d > 1);
-
-  if (hasBranching || hasMerging) return "dynamic";
-  return "sequential";
-}
-
 function serializeGraphToYamls(
   nodes: Node[],
   edges: Edge[],
@@ -600,7 +554,6 @@ function serializeGraphToYamls(
 
   // Build MAS manifest whenever at least one agent exists
   if (agentNodes.length >= 1) {
-    const workflowType = detectWorkflowType(agentNodes, agentEdges);
     const entryNode = findEntryAgent(agentNodes, agentEdges);
     const entryAgentId = getAgentId(entryNode);
 
@@ -656,7 +609,6 @@ function serializeGraphToYamls(
     }
 
     const workflow: Record<string, unknown> = {
-      type: workflowType,
       entry: entryAgentId,
       nodes: workflowNodes,
     };
@@ -1000,7 +952,10 @@ function CanvasFlow({
   const { library = "" } = useParams();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const initialGraph = useMemo(
-    () => (initialYamlMap ? deserializeYamlsToGraph(initialYamlMap) : null),
+    () =>
+      initialYamlMap
+        ? deserializeYamlsToGraph(autoLayoutYamlMap(initialYamlMap))
+        : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -1017,7 +972,7 @@ function CanvasFlow({
   useEffect(() => {
     if (hasInitialized.current) return;
     if (!initialYamlMap || Object.keys(initialYamlMap).length === 0) return;
-    const graph = deserializeYamlsToGraph(initialYamlMap);
+    const graph = deserializeYamlsToGraph(autoLayoutYamlMap(initialYamlMap));
     if (graph.nodes.length === 0) return;
     setNodes(graph.nodes);
     setEdges(graph.edges);

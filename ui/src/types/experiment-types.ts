@@ -120,9 +120,19 @@ export interface ArtifactSpec {
   validate?: boolean;
 }
 
+/**
+ * A single pre/post pipeline hook entry.  We only author the ``{ref: path}``
+ * form (or a bare-string path, which the parser also treats as a ref); inline
+ * steps / ``{steps}`` / ``{id}`` may appear in hand-written manifests and are
+ * preserved verbatim rather than dropped.
+ */
+export type PipelineHookEntry = string | { ref: string } | Record<string, unknown>;
+
 export interface LevelSpec {
   artifacts?: Record<string, string | ArtifactSpec>;
   pipeline?: PipelineStepSpec[];
+  pre?: PipelineHookEntry[];
+  post?: PipelineHookEntry[];
 }
 
 export interface RunLevelSpec extends LevelSpec {
@@ -146,6 +156,7 @@ export interface Experiment {
   pipeline?: PipelineStepSpec[];
   pipeline_resources?: Record<string, unknown>[];
   artifacts?: Record<string, string | ArtifactSpec>;
+  application?: LevelSpec;
   test?: LevelSpec;
   scenario?: LevelSpec;
 }
