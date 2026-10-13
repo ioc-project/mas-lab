@@ -187,6 +187,7 @@ class EvalMceStep(PipelineStep):
 
     type = "eval_mce"
     persistent = True
+    resource = "judge"
 
     PARAMS = [
         ConfigParam("runs_dir", str, default=None, description="Runs tree containing item*/r*/traces/events.jsonl."),
@@ -276,6 +277,22 @@ class EvalMceStep(PipelineStep):
         if metrics_file.exists() and not overwrite:
             reuse, reason = _reuse_decision(metrics_file, digest)
             if reuse:
+                try:
+                    from mas.library.lab.steps.services.metric_event import (
+                        flatten_mce_document,
+                        publish_metric_record,
+                    )
+
+                    doc = json.loads(metrics_file.read_text(encoding="utf-8"))
+                    publish_metric_record(
+                        "eval_mce",
+                        flatten_mce_document(doc),
+                        scenario=config.get("scenario") or (doc.get("scenario") if isinstance(doc, dict) else None),
+                        test=config.get("test"),
+                        run=config.get("run"),
+                    )
+                except Exception:
+                    logger.debug("eval_mce reuse publish skipped", exc_info=True)
                 return StepOutput(
                     data={"total": 1, "computed": 0, "skipped": 1, "errors": 0},
                     files=[metrics_file],
@@ -334,6 +351,21 @@ class EvalMceStep(PipelineStep):
             except Exception:
                 logger.debug("suppressed", exc_info=True)
         metrics_file.write_text(json.dumps(doc, indent=2, ensure_ascii=False), encoding="utf-8")
+        try:
+            from mas.library.lab.steps.services.metric_event import (
+                flatten_mce_document,
+                publish_metric_record,
+            )
+
+            publish_metric_record(
+                "eval_mce",
+                flatten_mce_document(doc),
+                scenario=config.get("scenario") or doc.get("scenario"),
+                test=config.get("test"),
+                run=config.get("run"),
+            )
+        except Exception:
+            logger.debug("eval_mce publish skipped", exc_info=True)
         return StepOutput(
             data={"total": 1, "computed": 1, "skipped": 0, "errors": 0},
             files=[metrics_file],

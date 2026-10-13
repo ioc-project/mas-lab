@@ -81,6 +81,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.library.lab.steps.services.plot_stream import image_html_shell, post_plot_tick
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +257,7 @@ class CIPlotStep(PipelineStep):
                 step_name=self.name,
             )
             files.append(output_path)
+            self._stream_plot_tick(output_path, config=config, summary_df=summary_df, ctx=ctx)
 
         return StepOutput(
             data={"ci_summary": str(summary_path), "summary_df": summary_df},
@@ -267,6 +269,50 @@ class CIPlotStep(PipelineStep):
                 "summary_csv": str(summary_path),
             },
         )
+
+    def _stream_plot_tick(
+        self, output_path: Path, *, config: Dict[str, Any], summary_df, ctx: "ExecutionContext"
+    ) -> None:
+        """Publish the figure just written to disk as a ``custom.{owner}.plot`` tick.
+
+        Non-image formats (PDF, say) are skipped because they cannot embed as
+        an ``<img>``.
+        """
+        renderable = {".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp"}
+        if output_path.suffix.lower() not in renderable:
+            logger.debug(
+                "CIPlotStep '%s': output format %s is not browser-renderable, skipping live plot tick",
+                self.name,
+                output_path.suffix,
+            )
+            return
+        if not output_path.is_file():
+            return
+        owner = str(config.get("plot_owner") or self.name)
+        title = str((config.get("labels") or {}).get("title") or self.name)
+        scope = getattr(getattr(ctx, "scope_context", None), "scenario", None)
+        ref = {
+            "library": config.get("library"),
+            "experiment": config.get("experiment"),
+            "scenario": config.get("scenario") or scope,
+            "run": getattr(ctx, "run_id", None),
+        }
+        try:
+            html = image_html_shell(output_path, title=title)
+            post_plot_tick(
+                owner,
+                kind="image",
+                title=title,
+                data={"groups": len(summary_df), "columns": list(summary_df.columns)},
+                html=html,
+                url=config.get("demo_ui_url"),
+                ref=ref,
+            )
+        except Exception:
+            # Same "optional, never fatal" contract as FileTailStep.on_event's
+            # transform errors -- a broken live-plot path must never fail the
+            # pipeline step whose real job is the static artefact.
+            logger.warning("CIPlotStep '%s': failed to publish live plot tick", self.name, exc_info=True)
 
 
 def _render_ci_figure(

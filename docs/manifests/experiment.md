@@ -43,24 +43,6 @@ Deprecated aliases still load with a warning: `applications:`, `application.post
 
 Each level supports `pre:` and `post:` as **lists of steps** (0..N).
 
-`pre:` prepares the runs beneath its level and runs **before any of them
-starts**; `post:` runs after the runs have finished:
-
-| Level | `pre:` runs | `post:` runs |
-| ------- | ----------- | ------------ |
-| experiment (root) | once, before the first run | once, after every run |
-| `scenario:` | once per scenario, before its first run | after the runs |
-| `item:` | once per item, before its first run | after the runs |
-| `run:` | before every attempt of every run (a retry re-runs it) | after the runs |
-
-A `pre:` only runs when a run beneath it actually executes: runs served from
-the trace cache start nothing, so nothing under them is prepared. A failing
-`scenario` / `item` `pre:` fails every run beneath it, and a failing `run`
-`pre:` fails that run without starting the MAS (the error is recorded in
-`results.csv`). Steps are expanded for the exact scenario, item or run they
-belong to; they never depend on which folders already exist in the output
-directory.
-
 ---
 
 ## Core fields
@@ -236,7 +218,7 @@ directly. Checkpoint IDs and source paths are written to `results.csv` and
 `session_mappings.jsonl` alongside each run's session ID.
 
 See the [checkpoint-axis example](../schemas/examples/checkpoint-axis.yaml)
-and [Tutorial 11](../tutorials/11-sessions-and-recovery/README.md).
+and [Tutorial 6](../tutorials/06-sessions-and-recovery/README.md).
 
 ---
 

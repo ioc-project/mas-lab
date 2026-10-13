@@ -121,7 +121,7 @@ async def finalize_batch(
     data_cache_dir: Optional[Path] = None,
 ) -> bool:
     """Write CSV, run post-pipeline, update metadata, return success."""
-    from mas.lab.benchmark.schedule.pipeline import PipelineExecutionError, run_pipeline_phase
+    from mas.lab.benchmark.schedule.pipeline import PipelineExecutionError
 
     write_results_csv(prepared.csv_path, execution.results_rows)
     write_session_mappings(prepared.output_dir, execution.results_rows)
@@ -131,8 +131,13 @@ async def finalize_batch(
 
     pipeline_ok = True
     pipeline_error = ""
-    if loaded.pipeline_specs:
+    if loaded.pipeline_specs and not execution.pipeline_drained:
         try:
+            from mas.lab.benchmark.pipeline.expand import planned_nodes
+            from mas.lab.benchmark.schedule.pipeline import run_pipeline_phase
+
+            keys = list(execution.run_keys or [])
+            nodes = planned_nodes(keys, prepared.output_dir) if keys else None
             await run_pipeline_phase(
                 phase="post",
                 exp=loaded.exp,
@@ -144,6 +149,7 @@ async def finalize_batch(
                 step_overrides=loaded.step_overrides_dict,
                 progress=progress,
                 data_cache_dir=data_cache_dir,
+                nodes=nodes,
             )
         except PipelineExecutionError as exc:
             pipeline_error = str(exc)

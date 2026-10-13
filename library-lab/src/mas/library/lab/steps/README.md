@@ -13,7 +13,7 @@ duplicate.
 | **eval** | `eval/` | `eval_mce`, `metrics_to_dataframe`, `eval_adversarial`, `annotate_metrics`, `collect_metrics`, `compute_ci`, `compute_drift`, `validate_outputs` |
 | **viz** | `viz/` | `plot`, `plot_trajectory`, `plot_multilevel_trajectory`, `plot_communication_flow`, `plot_message_graph`, `ggplot`, `plotnine`, `ci_plot`, `metrics_comparison_plot`, `pipeline_diagram` |
 | **data** | `data/` | `dataset`, `experiment`, `analysis`, `to_dataframe`, `join_dataframe`, `collect_dataframe`, `gather_level`, `diff_trajectories`, `embed_trajectories`, `generate_dataset`, `serialize`, `deserialize`, `processor` |
-| **services** | `services/` | `service_start`, `service_stop`, `export_otel` |
+| **services** | `services/` | `service_start`, `service_stop`, `export_otel`, `file_tail`, `shell` |
 
 Shared utilities (not registered step types) stay in the bench engine:
 `mas.lab.benchmark.pipeline.lib.data_source`, `mas.lab.benchmark.pipeline.lib.plot_lib`.

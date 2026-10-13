@@ -26,6 +26,10 @@ n_checks_passed      int  Sum of ``checks_passed`` across all
                           of policy evaluations (scales with policy count).
 n_tool_calls      int    Count of ``tool_call_start`` events.
 n_llm_calls       int    Count of ``llm_call_start`` events.
+prompt_tokens     int    Sum of ``tokens_used.prompt_tokens`` on ``llm_call_end``.
+completion_tokens int    Sum of ``tokens_used.completion_tokens`` on ``llm_call_end``.
+total_tokens      int    Sum of ``tokens_used.total_tokens`` on ``llm_call_end``.
+cached_tokens     int    Sum of cached/read prompt tokens on ``llm_call_end``.
 n_context_tokens  int    Sum of ``token_estimate`` across
                          ``context_part_contributed`` events.
 n_context_parts   int    Count of ``context_part_contributed`` events.
@@ -51,11 +55,14 @@ import csv
 import json
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from mas.lab.benchmark.cache.trace_store import resolve_run_events_path as _resolve_events_path
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.schema.validation import check_trace_integrity
+from mas.library.lab.steps.services.metric_event import publish_metric_record
 
 logger = logging.getLogger(__name__)
 
@@ -81,69 +88,261 @@ def _run_index(run_dir: str) -> int:
     return int(m.group(1)) if m else 0
 
 
-def _extract_stats(events_path: Path) -> Dict[str, Any]:
-    """Read one events.jsonl file and return a stats dict."""
-    events: list = []
+_TRACE_METRIC_KEYS = (
+    "duration_s",
+    "n_governance_checks",
+    "n_governance_fired",
+    "n_checks_passed",
+    "n_tool_calls",
+    "n_llm_calls",
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "cached_tokens",
+    "n_context_parts",
+    "n_context_tokens",
+    "n_selfref_events",
+)
+
+
+def empty_trace_stats() -> Dict[str, Any]:
+    return {
+        "duration_s": 0.0,
+        "n_governance_checks": 0,
+        "n_governance_fired": 0,
+        "n_checks_passed": 0,
+        "n_tool_calls": 0,
+        "n_llm_calls": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cached_tokens": 0,
+        "n_context_parts": 0,
+        "n_context_tokens": 0,
+        "n_selfref_events": 0,
+        "_timestamps": [],
+    }
+
+
+def public_trace_stats(stats: Dict[str, Any]) -> Dict[str, Any]:
+    timestamps = stats.get("_timestamps") or []
+    duration_s = (max(timestamps) - min(timestamps)) if len(timestamps) >= 2 else 0.0
+    return {
+        "duration_s": round(duration_s, 3),
+        "n_governance_checks": int(stats.get("n_governance_checks") or 0),
+        "n_governance_fired": int(stats.get("n_governance_fired") or 0),
+        "n_checks_passed": int(stats.get("n_checks_passed") or 0),
+        "n_tool_calls": int(stats.get("n_tool_calls") or 0),
+        "n_llm_calls": int(stats.get("n_llm_calls") or 0),
+        "prompt_tokens": int(stats.get("prompt_tokens") or 0),
+        "completion_tokens": int(stats.get("completion_tokens") or 0),
+        "total_tokens": int(stats.get("total_tokens") or 0),
+        "cached_tokens": int(stats.get("cached_tokens") or 0),
+        "n_context_parts": int(stats.get("n_context_parts") or 0),
+        "n_context_tokens": int(stats.get("n_context_tokens") or 0),
+        "n_selfref_events": int(stats.get("n_selfref_events") or 0),
+    }
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fold_usage(stats: Dict[str, Any], event: Dict[str, Any]) -> None:
+    usage = event.get("tokens_used") or event.get("usage")
+    if not isinstance(usage, dict):
+        return
+    details = usage.get("prompt_tokens_details")
+    if not isinstance(details, dict):
+        details = {}
+    prompt = _as_int(usage.get("prompt_tokens") or usage.get("input_tokens"))
+    completion = _as_int(usage.get("completion_tokens") or usage.get("output_tokens"))
+    total = _as_int(usage.get("total_tokens")) or (prompt + completion)
+    cached = _as_int(
+        usage.get("cached_tokens")
+        or usage.get("cache_read_input_tokens")
+        or details.get("cached_tokens")
+        or details.get("cache_read_tokens")
+    )
+    stats["prompt_tokens"] = int(stats.get("prompt_tokens") or 0) + prompt
+    stats["completion_tokens"] = int(stats.get("completion_tokens") or 0) + completion
+    stats["total_tokens"] = int(stats.get("total_tokens") or 0) + total
+    stats["cached_tokens"] = int(stats.get("cached_tokens") or 0) + cached
+
+
+def fold_trace_event(stats: Dict[str, Any], event: Dict[str, Any]) -> None:
+    """Increment structural counters from one native projected record."""
+    kind = str(event.get("kind") or "")
+    if kind in {"metric", "trace_stats"}:
+        return
+    ts = event.get("timestamp")
+    if isinstance(ts, (int, float)):
+        stats.setdefault("_timestamps", []).append(ts)
+    if kind == "governance_checked":
+        stats["n_governance_checks"] = int(stats.get("n_governance_checks") or 0) + 1
+    if kind == "governance_policy" and event.get("outcome") == "fired":
+        stats["n_governance_fired"] = int(stats.get("n_governance_fired") or 0) + 1
+    if kind == "governance_event":
+        stats["n_checks_passed"] = int(stats.get("n_checks_passed") or 0) + int(
+            event.get("checks_passed") or 0
+        )
+    if kind == "tool_call_start":
+        stats["n_tool_calls"] = int(stats.get("n_tool_calls") or 0) + 1
+    if kind == "llm_call_start":
+        stats["n_llm_calls"] = int(stats.get("n_llm_calls") or 0) + 1
+        stats["_llm_starts"] = int(stats.get("_llm_starts") or 0) + 1
+    if kind == "llm_call_end":
+        if not stats.get("_llm_starts"):
+            stats["n_llm_calls"] = int(stats.get("n_llm_calls") or 0) + 1
+        _fold_usage(stats, event)
+    if kind == "context_part_contributed":
+        stats["n_context_parts"] = int(stats.get("n_context_parts") or 0) + 1
+        stats["n_context_tokens"] = int(stats.get("n_context_tokens") or 0) + int(
+            event.get("token_estimate") or 0
+        )
+
+
+def _iter_jsonl_batches(events_path: Path, batch_size: int = 256) -> list:
+    """Yield batches of dict records from a jsonl file."""
+    try:
+        from mas.library.standard.lib.jsonl_iter import iter_jsonl_records
+
+        return list(iter_jsonl_records(events_path, batch_size=batch_size))
+    except Exception:
+        logger.debug("jsonl_iter unavailable; reading %s linewise", events_path, exc_info=True)
+    batches: list = []
+    batch: list = []
     try:
         with open(events_path) as fh:
             for line in fh:
                 line = line.strip()
-                if line:
-                    events.append(json.loads(line))
+                if not line:
+                    continue
+                rec = json.loads(line)
+                if not isinstance(rec, dict):
+                    continue
+                batch.append(rec)
+                if len(batch) >= batch_size:
+                    batches.append(batch)
+                    batch = []
     except Exception as exc:
         logger.warning("Failed to read %s: %s", events_path, exc)
+        return []
+    if batch:
+        batches.append(batch)
+    return batches
+
+
+def _extract_stats(events_path: Path) -> Dict[str, Any]:
+    """Read one events.jsonl file and return a stats dict."""
+    stats = empty_trace_stats()
+    events: list = []
+    for batch in _iter_jsonl_batches(events_path):
+        events.extend(batch)
+        for event in batch:
+            fold_trace_event(stats, event)
+    if not events:
         return {}
 
-    timestamps = [e["timestamp"] for e in events if isinstance(e.get("timestamp"), (int, float))]
-    duration_s = (max(timestamps) - min(timestamps)) if len(timestamps) >= 2 else 0.0
-
-    n_checks = sum(1 for e in events if e.get("kind") == "governance_checked")
-    n_fired = sum(
-        1 for e in events
-        if e.get("kind") == "governance_policy" and e.get("outcome") == "fired"
-    )
-    n_checks_passed = sum(
-        int(e.get("checks_passed") or 0)
-        for e in events
-        if e.get("kind") == "governance_event"
-    )
-    n_tool_calls = sum(1 for e in events if e.get("kind") == "tool_call_start")
-    n_llm_calls = sum(1 for e in events if e.get("kind") == "llm_call_start")
-    n_ctx_parts = sum(1 for e in events if e.get("kind") == "context_part_contributed")
-    n_ctx_tokens = sum(
-        e.get("token_estimate", 0) or 0
-        for e in events
-        if e.get("kind") == "context_part_contributed"
-    )
-
-    # Trace integrity — self-referential start events are a runtime emission
-    # bug (inner-layer duplicate frames).  Count them so the metric is visible
-    # in trace_stats.csv for native, OTel-replay, and KG sources alike.
     n_selfref = len(check_trace_integrity(events, source=events_path.name))
     if n_selfref:
         logger.warning(
             "%s: %d self-referential start event(s) detected (call_id == parent_call_id)",
-            events_path, n_selfref,
+            events_path,
+            n_selfref,
         )
-
-    return {
-        "duration_s": round(duration_s, 3),
-        "n_governance_checks": n_checks,
-        "n_governance_fired": n_fired,
-        "n_checks_passed": n_checks_passed,
-        "n_tool_calls": n_tool_calls,
-        "n_llm_calls": n_llm_calls,
-        "n_context_parts": n_ctx_parts,
-        "n_context_tokens": n_ctx_tokens,
-        "n_selfref_events": n_selfref,
-    }
+    stats["n_selfref_events"] = n_selfref
+    return public_trace_stats(stats)
 
 
-from mas.lab.benchmark.cache.trace_store import resolve_run_events_path as _resolve_events_path
 class ExtractTraceStatsStep(PipelineStep):
-    """Extract per-run structural metrics from events.jsonl trace files."""
+    """Extract per-run structural metrics from events.jsonl trace files.
+
+    ``on_batch`` folds the live or sealed channel (or jsonl batches on disk)
+    into the same counters the CSV persist writes. Per-run fold state is
+    keyed so overlapping scenarios never mix.
+    """
 
     type = "extract_trace_stats"
+    VERSION = "1"
+    resource = "cpu"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._live_by_run: Dict[str, Dict[str, Any]] = {}
+        self._last_pub_by_run: Dict[str, float] = {}
+        self._live = empty_trace_stats()
+        self._last_pub = 0.0
+        self._active: str = ""
+
+    def _slot(self, event: Dict[str, Any], ctx: "Any") -> str:  # noqa: F821
+        if self._active:
+            return self._active
+        run_id = event.get("run_id")
+        if run_id:
+            return str(run_id)
+        session_id = event.get("session_id")
+        if session_id:
+            return str(session_id)
+        scenario = str(event.get("scenario") or "")
+        test = str(event.get("test") or "")
+        if scenario or test:
+            return f"{scenario}/{test}"
+        return "_"
+
+    def begin(self, key: Any, ctx: "Any") -> None:  # noqa: F821
+        del ctx
+        sid = key.stream_id() if hasattr(key, "stream_id") else str(key)
+        self._active = sid
+        self._live_by_run[sid] = empty_trace_stats()
+        self._last_pub_by_run[sid] = 0.0
+
+    def on_batch(self, batch: list, ctx: "Any") -> None:  # noqa: F821
+        for rec in batch:
+            if isinstance(rec, dict):
+                self._fold_one(rec, ctx)
+
+    def snapshot(self) -> bytes:
+        return json.dumps(
+            {"live": self._live_by_run, "pub": self._last_pub_by_run, "active": self._active},
+            default=str,
+        ).encode("utf-8")
+
+    def restore(self, blob: bytes) -> None:
+        data = json.loads(blob.decode("utf-8"))
+        self._live_by_run = data.get("live") or {}
+        self._last_pub_by_run = {k: float(v) for k, v in (data.get("pub") or {}).items()}
+        self._active = str(data.get("active") or "")
+
+    def _fold_one(self, event: Dict[str, Any], ctx: "Any") -> None:  # noqa: F821
+        slot = self._slot(event, ctx)
+        stats = self._live_by_run.setdefault(slot, empty_trace_stats())
+        self._live = stats
+        fold_trace_event(stats, event)
+        kind = str(event.get("kind") or "")
+        now = time.monotonic()
+        last = self._last_pub_by_run.get(slot, 0.0)
+        if now - last < 1.0 and kind not in {"mas_call_end", "execution_end"}:
+            return
+        self._last_pub_by_run[slot] = now
+        self._last_pub = now
+        run_id = event.get("run_id")
+        if not run_id:
+            try:
+                run_id = ctx.run_id
+            except AttributeError:
+                run_id = None
+        publish_metric_record(
+            "trace_stats",
+            public_trace_stats(stats),
+            agent_id=event.get("agent_id"),
+            run_id=run_id,
+            session_id=event.get("session_id"),
+            scenario=event.get("scenario"),
+        )
 
     async def execute(self, ctx: "Any") -> StepOutput:  # noqa: F821
         self._ctx = ctx
@@ -169,9 +368,7 @@ class ExtractTraceStatsStep(PipelineStep):
         fieldnames = [
             "scenario", "item", "item_group", "run",
             "run_hash",
-            "duration_s", "n_governance_checks", "n_governance_fired", "n_checks_passed",
-            "n_tool_calls", "n_llm_calls", "n_context_parts", "n_context_tokens",
-            "n_selfref_events",
+            *_TRACE_METRIC_KEYS,
         ]
 
         rows: List[Dict[str, Any]] = []
@@ -219,6 +416,13 @@ class ExtractTraceStatsStep(PipelineStep):
                         "run_hash": _run_hash,
                         **stats,
                     })
+                    publish_metric_record(
+                        "trace_stats",
+                        {key: stats[key] for key in _TRACE_METRIC_KEYS if key in stats},
+                        scenario=scenario,
+                        test=item,
+                        run=_run_index(run_dir.name),
+                    )
 
         # Write CSV
         with open(output_path, "w", newline="") as fh:

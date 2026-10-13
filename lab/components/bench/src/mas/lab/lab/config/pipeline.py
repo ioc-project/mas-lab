@@ -54,8 +54,7 @@ class PipelineStepSpec:
     """(v1) When True, expand this step once for each benchmark run folder."""
 
     concurrency: int = 1
-    """Max concurrent per-run instances when per_run=True / scope=run.
-    Values > 1 wrap all instances into a ConcurrentRunnerStep."""
+    """Scheduler cap for this step type when > 1 (per-type semaphore)."""
 
     phase: str = "post"
     """Execution phase: ``pre`` (before benchmark loop) or ``post`` (after)."""
@@ -79,6 +78,11 @@ class PipelineStepSpec:
     """(v2) Output artifact names.  Must match artifacts declared at the
     step's level."""
 
+    role: str = ""
+    resource: str = "cpu"
+    refresh: str = ""
+    batch: Dict[str, Any] = field(default_factory=dict)
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PipelineStepSpec":
         # Parse in/out — accept scalar or list
@@ -86,7 +90,6 @@ class PipelineStepSpec:
         inputs = [raw_in] if isinstance(raw_in, str) else list(raw_in)
         raw_out = data.get("out", [])
         outputs = [raw_out] if isinstance(raw_out, str) else list(raw_out)
-
         return cls(
             type=data["type"],
             name=data.get("name"),
@@ -99,6 +102,10 @@ class PipelineStepSpec:
             depends_on=data.get("depends_on", []),
             inputs=inputs,
             outputs=outputs,
+            role=str(data.get("role") or ""),
+            resource=str(data.get("resource") or "cpu"),
+            refresh=str(data.get("refresh") or ""),
+            batch=dict(data.get("batch") or {}),
         )
 
 
@@ -193,6 +200,37 @@ class ArtifactSpec:
 # LevelSpec — artifacts + pipeline at a hierarchy level
 # ---------------------------------------------------------------------------
 
+def _pipeline_ref_raw(entry: dict) -> Optional[str]:
+    """Return a library id / file path from ``{ref:}`` or ``{id:}`` wrappers."""
+    if "type" in entry or "steps" in entry:
+        return None
+    raw = entry.get("ref")
+    if raw is None:
+        raw = entry.get("id")
+    if raw is None or isinstance(raw, (dict, list)):
+        return None
+    text = str(raw).strip()
+    return text or None
+
+
+def _resolve_pipeline_ref(raw: str, base_dir: Optional[Path]) -> Path:
+    """Resolve ``library:name``, ``{id:}``, or a filesystem path to a YAML file."""
+    from mas.runtime.spec.source import resolve_yaml_path
+
+    anchor = base_dir if base_dir is not None else Path(".")
+    try:
+        path = resolve_yaml_path(raw, anchor)
+    except LookupError as exc:
+        raise ValueError(f"pipeline not found: {raw}") from exc
+    except FileNotFoundError:
+        path = Path(raw)
+        if not path.is_absolute() and base_dir is not None:
+            path = (base_dir / path).resolve()
+    if not path.is_file():
+        raise ValueError(f"pipeline not found: {raw}")
+    return path
+
+
 def _expand_pipeline_entries(
     entries: Any,
     *,
@@ -208,14 +246,15 @@ def _expand_pipeline_entries(
         raise ValueError(f"{level}.{phase} must be a list or pipeline file path")
     steps: List[PipelineStepSpec] = []
     for entry in entries:
-        if isinstance(entry, dict) and "ref" in entry:
-            ref_path = Path(entry["ref"])
-            if not ref_path.is_absolute() and base_dir is not None:
-                ref_path = (base_dir / ref_path).resolve()
+        if isinstance(entry, str):
+            entry = {"ref": entry}
+        raw_ref = _pipeline_ref_raw(entry) if isinstance(entry, dict) else None
+        if raw_ref:
             from mas.lab.benchmark.schedule.pipeline_resolve import (
                 resolve_pipeline_specs_from_yaml,
             )
 
+            ref_path = _resolve_pipeline_ref(raw_ref, base_dir)
             for step in resolve_pipeline_specs_from_yaml(ref_path):
                 if not step.scope:
                     step.scope = level
@@ -237,7 +276,8 @@ def _expand_pipeline_entries(
         else:
             raise ValueError(
                 f"{level}.{phase}: each entry must be a step object, "
-                f"{{ref: path}}, {{steps: [...]}}, or a pipeline file path string"
+                f"{{ref: path}}, {{id: library:name}}, {{steps: [...]}}, "
+                f"or a pipeline file path string"
             )
     return steps
 

@@ -87,7 +87,7 @@ import click
         "Attach a pipeline YAML after experiment hooks (same order as repeated flags). "
         "Format: run:post:library:eti-apps/pipelines/observability/native-to-kg.yaml "
         "or run:library:... (phase defaults to post). "
-        "Levels: run, item, scenario, experiment (test aliases item; application aliases experiment)."
+        "Levels: run, test, scenario, application (experiment aliases application)."
     ),
 )
 @click.option(

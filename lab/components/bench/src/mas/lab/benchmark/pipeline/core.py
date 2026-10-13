@@ -136,11 +136,10 @@ def _import_class(spec: str, base_dir: Optional[Path] = None) -> type:
 def resolve_step_class(name: str, *, base_dir: Optional[Path] = None, required_base: type | None = None) -> type:
     """Resolve a pipeline step class by name, with module/class fallback."""
     if name == "__concurrent_runner__":
-        from mas.lab.benchmark.pipeline.concurrent import ConcurrentRunnerStep
-        cls = ConcurrentRunnerStep
-        if required_base and not issubclass(cls, required_base):
-            raise TypeError(f"step type {name!r} is not a {required_base.__name__} subclass.")
-        return cls
+        raise ValueError(
+            "step type '__concurrent_runner__' was removed; the scheduler runs "
+            "each instance as its own node (use concurrency: N as a cap)"
+        )
 
     try:
         cls = get_step(name)
@@ -180,7 +179,7 @@ class PipelineStep(ABC):
 
     type: str = "base"
     persistent: bool = False
-    streaming: bool = False
+    resource: str = "cpu"
     PARAMS: ClassVar[List[ConfigParam]] = []
 
     def __init__(
@@ -191,7 +190,10 @@ class PipelineStep(ABC):
         phase: str = "post",
         per_scenario: bool = False,
         per_run: bool = False,
-        streaming: bool | None = None,
+        scope: str = "",
+        resource: str | None = None,
+        refresh: str = "",
+        concurrency: int = 1,
     ):
         self.name = name
         self.config = config
@@ -199,22 +201,25 @@ class PipelineStep(ABC):
         self.phase = phase
         self.per_scenario = per_scenario
         self.per_run = per_run
-        if streaming is not None:
-            self.streaming = bool(streaming)
+        self.scope = scope
+        self.resource = str(resource or type(self).resource or "cpu")
+        self.refresh = refresh
+        self.concurrency = max(1, int(concurrency or 1))
 
     def is_persistent(self) -> bool:
         cfg_val = self.config.get("persist")
         if cfg_val is not None:
             return bool(cfg_val)
-        return getattr(self.__class__, "persistent", True)
+        return bool(type(self).persistent)
 
-    def on_event(self, event: Dict[str, Any], ctx: "ExecutionContext") -> None:
-        """Live telemetry hook. Default is a no-op.
-
-        Steps with ``streaming: true`` receive events as the MAS run emits
-        them. ``execute`` still runs afterward to write artefacts.
-        """
+    def on_batch(self, batch: List[Dict[str, Any]], ctx: "ExecutionContext") -> None:
+        """Fold a batch of records. Default is a no-op; override to consume streams."""
+        del batch, ctx
         return None
+
+    async def finish(self, ctx: "ExecutionContext") -> StepOutput:
+        """Seal-side persist. Default delegates to :meth:`execute`."""
+        return await self.execute(ctx)
 
     @abstractmethod
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
@@ -241,32 +246,38 @@ class PipelineStep(ABC):
             )
 
         cfg = dict(data.get("config", {}))
-        if step_type == "processor" and "processor" in data:
+        if "processor" in data and "processor" not in cfg:
             cfg.setdefault("processor", data["processor"])
 
         per_scenario = bool(data.get("per_scenario", False))
         per_run = bool(data.get("per_run", False))
-        streaming = bool(data.get("streaming", False))
+        scope = str(data.get("scope") or "")
+        resource = str(data.get("resource") or step_class.__dict__.get("resource") or "cpu")
+        refresh = str(data.get("refresh") or "")
+        try:
+            concurrency = int(data.get("concurrency") or 1)
+        except (TypeError, ValueError):
+            concurrency = 1
         try:
             step = step_class(
                 name=data["name"],
                 config=cfg,
                 depends_on=data.get("depends_on", []),
                 phase=data.get("phase", "post"),
-                per_scenario=per_scenario,
-                per_run=per_run,
-                streaming=streaming,
             )
         except TypeError:
             step = step_class(
                 name=data["name"],
                 config=cfg,
                 depends_on=data.get("depends_on", []),
-                phase=data.get("phase", "post"),
             )
-            step.per_scenario = per_scenario
-            step.per_run = per_run
-            step.streaming = streaming or bool(getattr(step, "streaming", False))
+        step.phase = str(data.get("phase") or "post")
+        step.per_scenario = per_scenario
+        step.per_run = per_run
+        step.scope = scope
+        step.resource = resource
+        step.refresh = refresh
+        step.concurrency = max(1, concurrency)
         return step
 
     @classmethod
@@ -412,11 +423,12 @@ class Pipeline:
         if "spec" in pipeline_data and "metadata" in pipeline_data:
             pipeline_data = dict(pipeline_data.get("spec", {}))
 
-        return [
-            dict(step_data)
-            for step_data in pipeline_data.get("steps", [])
-            if isinstance(step_data, dict) and "name" in step_data and "type" in step_data
-        ]
+        out: List[Dict[str, Any]] = []
+        for step_data in pipeline_data.get("steps", []):
+            if not isinstance(step_data, dict) or "name" not in step_data or "type" not in step_data:
+                continue
+            out.append(dict(step_data))
+        return out
 
     @classmethod
     def from_yaml(cls, path: Union[str, Path]) -> Pipeline:

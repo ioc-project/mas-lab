@@ -39,6 +39,15 @@ properties:
         type: string
         description: "Free-text description."
 
+      max_active:
+        type: integer
+        minimum: 1
+        default: 8
+        description: >
+          Global cap on in-flight scheduler nodes. Independent of per-step
+          concurrency. Standalone CLI defaults to parallel=true (this cap);
+          pass --no-parallel to force 1.
+
       # ── Output ────────────────────────────────────────────────────────────
       output:
         type: object
@@ -115,22 +124,64 @@ properties:
               enum: [pre, post]
               default: post
               description: "Execution phase relative to the benchmark run loop."
-            persist:
-              type: boolean
-              description: "Persist this step's output as a resumable artifact (e.g. LLM-as-judge steps)."
             concurrency:
               type: integer
               minimum: 1
               default: 1
               description: >
-                Max concurrent per-run instances for a run-scope step. Values > 1
-                wrap the per-run instances in one concurrent runner.
+                Per-type semaphore: at most N instances of this step type run
+                at once. Each instance is its own scheduler node (not a wrapper).
             per_scenario:
               type: boolean
               description: "(v1, legacy) Expand this step once per scenario. Superseded by scope: scenario."
             per_run:
               type: boolean
               description: "(v1, legacy) Expand this step once per benchmark run folder. Superseded by scope: run."
+            role:
+              type: string
+              enum: [native, wrap, batch]
+              description: "v2 step class. Default batch (C)."
+            resource:
+              type: string
+              enum: [cpu, io, net, judge]
+              default: cpu
+              description: "v2 scheduler resource class."
+            refresh:
+              type: string
+              enum: [progressive]
+              description: "Higher-scope UI-only partial re-evaluation on child-terminal."
+            batch:
+              type: object
+              additionalProperties: false
+              properties:
+                max_records:
+                  type: integer
+                  minimum: 1
+                max_latency_ms:
+                  type: number
+                  minimum: 0
+            shape:
+              type: string
+              enum: [value, records, multi]
+              description: Output artifact shape.
+            mode:
+              type: string
+              enum: [append, upsert, snapshot]
+              description: How records accumulate on the output artifact.
+            records:
+              type: object
+              additionalProperties: true
+              description: Named record types for multi-shape artifacts (e.g. kg node/edge).
+            invariants:
+              type: array
+              items:
+                type: string
+              description: Seal-time invariants (e.g. edges_reference_nodes).
+            persist:
+              type: [boolean, string]
+              description: >
+                Persist policy. Boolean true writes the v1 path; ``always`` /
+                ``on-seal`` / ``never`` for the stream artefact store.
             config:
               type: object
               additionalProperties: true

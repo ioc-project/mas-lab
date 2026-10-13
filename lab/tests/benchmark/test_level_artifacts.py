@@ -173,13 +173,17 @@ def test_application_gather_fans_in_scenario_dfs(tmp_path: Path) -> None:
     )
     by_name = {s["name"]: s for s in steps}
     gather = by_name["gather-experiment"]
-    batched = by_name["gather-scenario"]
-    assert batched["config"].get("_batch_instances")
-    assert len(batched["config"]["_batch_instances"]) == 2
-    assert gather["depends_on"] == ["gather-scenario"]
+    scenario_gathers = [
+        by_name["gather-scenario-topo-parallel"],
+        by_name["gather-scenario-topo-linear-pipeline"],
+    ]
+    assert set(gather["depends_on"]) == {
+        "gather-scenario-topo-parallel",
+        "gather-scenario-topo-linear-pipeline",
+    }
     instance_paths = {
         path
-        for inst in batched["config"]["_batch_instances"]
+        for inst in scenario_gathers
         for path in inst["config"].get("artifact_paths") or []
     }
     assert instance_paths == {
@@ -314,9 +318,11 @@ def test_run_df_batches_sibling_runs(tmp_path: Path) -> None:
         step_overrides={},
         template_vars={"output_dir": str(tmp_path)},
     )
-    assert len(steps) == 1
-    assert steps[0]["name"] == "run-df"
-    assert len(steps[0]["config"]["_batch_instances"]) == 2
+    names = {s["name"] for s in steps}
+    assert names == {
+        "run-df-topo-parallel-item1-r1",
+        "run-df-topo-parallel-item1-r2",
+    }
 
 
 def test_eval_mce_batches_sibling_runs(tmp_path: Path) -> None:
@@ -340,9 +346,11 @@ def test_eval_mce_batches_sibling_runs(tmp_path: Path) -> None:
         step_overrides={},
         template_vars={"output_dir": str(tmp_path)},
     )
-    assert len(steps) == 1
-    assert steps[0]["name"] == "eval-quality"
-    assert len(steps[0]["config"]["_batch_instances"]) == 2
+    names = {s["name"] for s in steps}
+    assert names == {
+        "eval-quality-topo-parallel-item1-r1",
+        "eval-quality-topo-parallel-item1-r2",
+    }
 
 
 def test_batched_run_df_depends_on_batched_eval(tmp_path: Path) -> None:
@@ -375,8 +383,18 @@ def test_batched_run_df_depends_on_batched_eval(tmp_path: Path) -> None:
         template_vars={"output_dir": str(tmp_path)},
     )
     by_name = {s["name"]: s for s in steps}
-    assert set(by_name) == {"eval-quality", "run-df"}
-    assert by_name["run-df"]["depends_on"] == ["eval-quality"]
+    assert set(by_name) == {
+        "eval-quality-topo-parallel-item1-r1",
+        "eval-quality-topo-parallel-item1-r2",
+        "run-df-topo-parallel-item1-r1",
+        "run-df-topo-parallel-item1-r2",
+    }
+    assert by_name["run-df-topo-parallel-item1-r1"]["depends_on"] == [
+        "eval-quality-topo-parallel-item1-r1"
+    ]
+    assert by_name["run-df-topo-parallel-item1-r2"]["depends_on"] == [
+        "eval-quality-topo-parallel-item1-r2"
+    ]
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Process-wide live telemetry bus for pipeline steps and demo UI sinks."""
+"""Process-wide live telemetry bus for projected native records and pipeline subscribers."""
 
 from __future__ import annotations
 
@@ -54,3 +54,24 @@ def publish_event(event: dict[str, Any]) -> None:
     stream = get_event_stream()
     if stream is not None:
         stream.publish(event)
+
+
+_channel_emit: ContextVar[Callable[[dict[str, Any]], None] | None] = ContextVar(
+    "mas_pipeline_channel_emit", default=None
+)
+_channel_emit_process: Callable[[dict[str, Any]], None] | None = None
+
+
+def set_channel_emitter(fn: Callable[[dict[str, Any]], None] | None) -> Token:
+    global _channel_emit_process
+    _channel_emit_process = fn
+    return _channel_emit.set(fn)
+
+
+def emit_to_channel(event: dict[str, Any]) -> None:
+    fn = _channel_emit.get() or _channel_emit_process
+    if fn is not None:
+        try:
+            fn(event)
+        except Exception:
+            _logger.debug("channel emitter failed", exc_info=True)

@@ -22,12 +22,15 @@ _STEP_KNOWN_KEYS: frozenset = frozenset({
     "in",
     "out",
     "scope",
-    "streaming",
+    "role",
+    "resource",
+    "refresh",
+    "batch",
 })
 
 #: Keys accepted at the pipeline-config level.
 _CONFIG_KNOWN_KEYS: frozenset = frozenset({
-    "name", "version", "description", "output", "steps",
+    "name", "version", "description", "output", "steps", "max_active",
 })
 
 _MISSING = object()  # sentinel for "no default"
@@ -72,6 +75,7 @@ class PipelineConfig:
     version: str = "v1"
     description: str = ""
     output: Dict[str, Any] = field(default_factory=lambda: {"base_dir": "./output"})
+    max_active: int = 8
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> PipelineConfig:
@@ -80,6 +84,7 @@ class PipelineConfig:
             version=data.get("version", "v1"),
             description=data.get("description", ""),
             output=data.get("output", {"base_dir": "./output"}),
+            max_active=max(1, int(data.get("max_active") or 8)),
         )
 
 
