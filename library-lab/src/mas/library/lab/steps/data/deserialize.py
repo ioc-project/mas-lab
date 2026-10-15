@@ -45,9 +45,25 @@ from mas.lab.benchmark.codecs import get_codec
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, ConfigParam
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.schema_validation import validate_payload
-from mas.library.lab.steps.data.serialize import _resolve_store
+from mas.library.lab.steps.data.serialize import _iter_channel_records, _jsonl_path, _resolve_store
 
 logger = logging.getLogger(__name__)
+
+
+def decode_streaming(codec: Any, extra_opts: dict[str, Any]) -> Any:
+    """Prefer a live channel or JSONL file; fall back to ``codec.decode``."""
+    live = _iter_channel_records(extra_opts)
+    if live is not None:
+        return list(live)
+    path = _jsonl_path(extra_opts) or _jsonl_path(extra_opts.get("path") or extra_opts.get("source") or "")
+    if path is not None:
+        from mas.library.standard.lib.jsonl_iter import iter_jsonl_records
+
+        rows: list[dict] = []
+        for batch in iter_jsonl_records(path, batch_size=int(extra_opts.get("batch_size") or 256)):
+            rows.extend(batch)
+        return rows
+    return codec.decode(**extra_opts)
 
 
 class DeserializeStep(PipelineStep):
@@ -107,7 +123,7 @@ class DeserializeStep(PipelineStep):
             "[%s] decoding %r ← %s store",
             self.name, artifact_kind, store.type,
         )
-        artifact = codec.decode(**extra_opts)
+        artifact = decode_streaming(codec, extra_opts)
 
         validate_payload(
             artifact,

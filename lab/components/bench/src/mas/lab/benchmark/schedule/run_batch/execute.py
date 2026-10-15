@@ -8,8 +8,9 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
+import os
 import time as _time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
@@ -39,6 +40,12 @@ _FATAL_RUN_MARKERS = (
     "http 403",
     "authentication/authorization",
 )
+
+
+def _infra_refs_for_scenario(scenario_id: str, prepared: PreparedBatch) -> list[str]:
+    """Return the prepared infra refs for this scenario."""
+    del scenario_id
+    return list(prepared.infra_refs)
 
 
 def lab_run_retry_settings(schedule: Any | None) -> tuple[int, float]:
@@ -128,6 +135,8 @@ class ExecutionResult:
     total_ok: int
     total_fail: int
     exit_stack: Any
+    run_keys: list = field(default_factory=list)
+    pipeline_drained: bool = False
 
 
 async def execute_batch(
@@ -147,6 +156,8 @@ async def execute_batch(
 
     exp = loaded.exp
     experiment_yaml = loaded.experiment_yaml
+    if not os.environ.get("MAS_LLM_SCHEDULER_USER", "").strip():
+        os.environ["MAS_LLM_SCHEDULER_USER"] = getattr(exp, "name", "") or "experiment"
     _flavour = loaded.flavour
     _flavour_name = loaded.flavour_name
     trace_cache_dir = loaded.trace_cache_dir
@@ -193,6 +204,53 @@ async def execute_batch(
     _max_attempts, _retry_backoff = lab_run_retry_settings(_schedule)
     _sem      = asyncio.Semaphore(_parallel)
     _io_lock  = asyncio.Lock()
+
+    from mas.lab.benchmark.pipeline.config import pipeline_settings
+    from mas.lab.benchmark.pipeline.keys import run_key_from_parts
+    from mas.lab.benchmark.pipeline.channel import install_channel
+    from mas.lab.benchmark.pipeline.lifecycle import attempt_reset, begin_run, terminal_run
+    from mas.runtime.boundary.obs.event_stream import set_channel_emitter
+
+    _v2_settings = pipeline_settings(exp)
+    _v2_keys: list = []
+    install_channel(_v2_settings, cache_root=get_trace_cache_dir(explicit=trace_cache_dir))
+
+    _v2_plan_keys: list = []
+    for _sid, _itm, _ridx in _execution_plan:
+        _item_id = _itm.get("id", 0)
+        _v2_plan_keys.append(
+            run_key_from_parts(
+                experiment=getattr(exp, "name", "") or "experiment",
+                scenario=_sid,
+                item=f"item{_item_id}",
+                run=f"r{_ridx + 1}",
+            )
+        )
+    _live_post = None
+    if loaded.pipeline_specs:
+        try:
+            from mas.lab.benchmark.schedule.pipeline import start_pipeline_scheduler
+
+            _live_post = start_pipeline_scheduler(
+                exp=exp,
+                experiment_yaml=experiment_yaml,
+                output_dir=output_dir,
+                specs=loaded.pipeline_specs,
+                keys=_v2_plan_keys,
+                scenario_ids=list(prepared.loaded_ids),
+                infra_name=loaded.infra_name,
+                step_overrides=loaded.step_overrides_dict,
+                progress=progress,
+                data_cache_dir=data_cache_dir,
+            )
+        except Exception:
+            logger.debug("live run-post not started", exc_info=True)
+            _live_post = None
+
+    from mas.lab.benchmark.pipeline.live_sink import LiveChannelSink
+
+    _live_sink = LiveChannelSink()
+    set_channel_emitter(_live_sink.emit)
 
     _emulation = getattr(exp, "bench_emulation", None) or getattr(
         getattr(exp, "execution", None), "emulation", None
@@ -317,7 +375,13 @@ async def execute_batch(
         run_output_dir = output_dir / _sc_dir_name / f"item{item_id}" / f"r{run_idx + 1}"
         run_output_dir.mkdir(parents=True, exist_ok=True)
         _events_path = run_output_dir / "traces" / "events.jsonl"
-
+        _v2_key = run_key_from_parts(
+            experiment=getattr(exp, "name", "") or "experiment",
+            scenario=scenario_id,
+            item=f"item{item_id}",
+            run=f"r{run_idx + 1}",
+        )
+        _v2_keys.append(_v2_key)
         _use_cache = _cache_policy != "disabled"
 
         # A global cache hit requires the trace to exist AND the prior run to
@@ -379,6 +443,8 @@ async def execute_batch(
                 })
             if progress:
                 print(f"  ❌ [{scenario_id}] item={item_id} run={run_idx+1} (cache=forced, miss)")
+            if _live_post is not None:
+                await _live_post.on_terminal(_v2_key, "skipped")
             return
         if _global_hit or _local_hit:
             _src = "cached:" + _run_hash[:8] if _global_hit else "local"
@@ -420,6 +486,23 @@ async def execute_batch(
                     "attempts": 0,
                 })
                 total_ok += 1
+            begin_run(_v2_key)
+            try:
+                if resolved_events.is_file():
+                    for line in resolved_events.read_text(encoding="utf-8").splitlines():
+                        if not line.strip():
+                            continue
+                        try:
+                            rec = _json.loads(line)
+                        except _json.JSONDecodeError:
+                            continue
+                        if isinstance(rec, dict):
+                            _live_sink.emit(rec)
+            except Exception:
+                logger.debug("cache-hit stream replay skipped", exc_info=True)
+            terminal_run(_v2_key, "cached")
+            if _live_post is not None:
+                await _live_post.on_terminal(_v2_key, "cached")
             return
 
         if _events_path.is_symlink():
@@ -472,8 +555,21 @@ async def execute_batch(
                         set_event_stream,
                     )
 
-                    _stream = EventStream()
+                    class _ScenarioStream(EventStream):
+                        def publish(self, event: dict) -> None:
+                            if scenario_id and isinstance(event, dict) and not event.get("scenario"):
+                                event = {**event, "scenario": scenario_id}
+                            super().publish(event)
+
+                    _stream = _ScenarioStream()
                     _token = set_event_stream(_stream)
+                    _sid_token = begin_run(_v2_key)
+                    try:
+                        from mas.lab.benchmark.pipeline.channel import set_stream_id
+                    except Exception:
+                        set_stream_id = None  # type: ignore[assignment]
+                    if set_stream_id is not None and _sid_token is None:
+                        _sid_token = set_stream_id(_v2_key.stream_id())
 
                     _runner_id = infer_runner_id(
                         execution_runner=(
@@ -494,7 +590,7 @@ async def execute_batch(
                         flavour=_sc_flavour if isinstance(_sc_flavour, dict) else None,
                     )
                     _overlay_refs = list(prepared.scenario_overlay_stacks.get(scenario_id, []))
-                    _infra_refs = list(prepared.infra_refs)
+                    _infra_refs = _infra_refs_for_scenario(scenario_id, prepared)
                     ctx = RunContext(
                         prompt=prompt,
                         config=config,
@@ -526,9 +622,16 @@ async def execute_batch(
                             "session_id": result.metadata.get("session_id", ""),
                         }
                     finally:
+                        try:
+                            from mas.lab.benchmark.pipeline.channel import reset_stream_id
+                            if _sid_token is not None:
+                                reset_stream_id(_sid_token)
+                        except Exception:
+                            pass
                         reset_event_stream(_token)
 
                 def _on_retry(failed_attempt: int, attempts: int, err: str) -> None:
+                    attempt_reset(_v2_key)
                     _clear_failed_attempt_traces(_global_run_dir)
                     logger.warning(
                         "lab run %s failed (%s); retrying %s/%s",
@@ -598,6 +701,10 @@ async def execute_batch(
 
         trace_path = str(_cached_events)
         elapsed_ms = (_time.monotonic() - t0) * 1000
+        _term = "ok" if status == "ok" else "failed"
+        terminal_run(_v2_key, _term)
+        if _live_post is not None:
+            await _live_post.on_terminal(_v2_key, _term)
         write_run_result(_global_run_dir, status, elapsed_ms, error or "")
         write_run_info(
             _global_run_dir, run_output_dir, _run_hash, exp.name, scenario_id,
@@ -642,9 +749,19 @@ async def execute_batch(
 
     await _dispatch_all()
 
+    live_ok = False
+    if _live_post is not None:
+        try:
+            await _live_post.wait()
+            live_ok = bool(_live_post.done and _live_post.error is None)
+        except Exception:
+            logger.error("live run-post failed", exc_info=True)
+
     return ExecutionResult(
         results_rows=results_rows,
         total_ok=total_ok,
         total_fail=total_fail,
         exit_stack=_exit_stack,
+        run_keys=_v2_keys or _v2_plan_keys,
+        pipeline_drained=live_ok,
     )

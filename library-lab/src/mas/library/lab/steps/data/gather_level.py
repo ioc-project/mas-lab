@@ -96,13 +96,13 @@ class GatherLevelStep(PipelineStep):
                 f"gather_level '{self.name}': {detail} — fan-in produced nothing to concatenate."
             )
 
+        from mas.lab.benchmark.pipeline.gather import gather_records
+
         df = pd.concat(frames, ignore_index=True)
         df = _filter_identity(df, config)
         if annotate:
-            df = df.copy()
-            for col, val in annotate.items():
-                if col not in df.columns:
-                    df[col] = val
+            rows = gather_records([df.to_dict(orient="records")], annotate=annotate)
+            df = pd.DataFrame(rows) if rows else df.iloc[0:0]
 
         output_dir = Path(config["output_dir"]) if config.get("output_dir") else ctx.output_dir
         output_path = Path(config.get("output", f"data.{fmt}"))

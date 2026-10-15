@@ -9,6 +9,12 @@ import sys
 from typing import Protocol, runtime_checkable
 
 
+def envelope_only_kind(kind: str) -> bool:
+    """True for envelope kinds that must not land in ``events.jsonl``."""
+    text = str(kind or "")
+    return text.startswith(("run.", "artifact.", "control.", "scope.")) or text == "metric"
+
+
 @runtime_checkable
 class EventEmitter(Protocol):
     """Ctl termination: persist or stream serialized event records."""

@@ -164,9 +164,12 @@ def inject_lab_libraries(lab_context: LabContext) -> None:
         if lib_path is None:
             logger.warning("Lab library not found: %r (anchor %s)", lib_ref, anchor)
             continue
-        lib_str = str(lib_path)
-        if lib_str not in sys.path:
-            sys.path.append(lib_str)
+        for candidate in (lib_path, lib_path / "src"):
+            if not candidate.is_dir():
+                continue
+            lib_str = str(candidate.resolve())
+            if lib_str not in sys.path:
+                sys.path.append(lib_str)
 
     for plugin in lab_context.plugins:
         _apply_plugin(plugin, anchor)

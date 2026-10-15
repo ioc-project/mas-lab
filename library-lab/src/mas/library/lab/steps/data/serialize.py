@@ -146,12 +146,76 @@ class SerializeStep(PipelineStep):
             "[%s] encoding %r → %s store",
             self.name, artifact_kind, store.type,
         )
-        codec.encode(artifact, **extra_opts)
+        streamed = encode_streaming(codec, artifact, extra_opts)
 
         return StepOutput(
-            data={"artifact_kind": artifact_kind, "store_type": store.type},
-            metadata={"codec": type(codec).__name__},
+            data={"artifact_kind": artifact_kind, "store_type": store.type, "streamed": streamed},
+            metadata={"codec": type(codec).__name__, "streamed": streamed},
         )
+
+
+def _jsonl_path(artifact: Any) -> Path | None:
+    if isinstance(artifact, (str, Path)):
+        path = Path(artifact)
+        if path.is_file() and path.suffix in {".jsonl", ".ndjson"}:
+            return path
+    if isinstance(artifact, dict):
+        for key in ("path", "jsonl", "events_path", "spans_path", "df_path"):
+            raw = artifact.get(key)
+            if raw:
+                path = Path(str(raw))
+                if path.is_file() and path.suffix in {".jsonl", ".ndjson"}:
+                    return path
+    return None
+
+
+def _iter_channel_records(artifact: Any):
+    stream_id = None
+    if isinstance(artifact, str) and "/" in artifact and "#" in artifact:
+        stream_id = artifact
+    if isinstance(artifact, dict):
+        stream_id = artifact.get("stream_id")
+    if not stream_id:
+        return None
+    try:
+        from mas.lab.benchmark.pipeline.channel import get_channel, native_body
+    except Exception:
+        return None
+    channel = get_channel()
+    replay = getattr(channel, "replay", None) if channel is not None else None
+    if replay is None:
+        return None
+    frames = replay(stream_id)
+    if not frames:
+        return None
+    return (native_body(frame) for frame in frames)
+
+
+def encode_streaming(codec: Any, artifact: Any, extra_opts: dict[str, Any]) -> bool:
+    """Encode from a JSONL path or live stream when possible; else whole artifact.
+
+    Streaming is the large-file path: batches of records, no ``read_text``.
+    """
+    batch_size = max(1, int(extra_opts.get("batch_size") or 256))
+    path = _jsonl_path(artifact)
+    if path is not None:
+        from mas.library.standard.lib.jsonl_iter import iter_jsonl_records
+
+        def _records():
+            for batch in iter_jsonl_records(path, batch_size=batch_size):
+                yield from batch
+
+        codec.encode_iter(_records(), **extra_opts)
+        return True
+    live = _iter_channel_records(artifact)
+    if live is not None:
+        codec.encode_iter(live, **extra_opts)
+        return True
+    if isinstance(artifact, list):
+        codec.encode_iter(artifact, **extra_opts)
+        return True
+    codec.encode(artifact, **extra_opts)
+    return False
 
 
 # ---------------------------------------------------------------------------

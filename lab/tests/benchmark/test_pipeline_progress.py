@@ -22,17 +22,13 @@ class _WriteFile(PipelineStep):
 
 @pytest.mark.asyncio
 async def test_progress_rewrites_line_and_logs_artifacts(tmp_path: Path, capsys) -> None:
-    instances = [
-        {"name": f"write-{i}", "config": {"filename": "out.txt"}, "depends_on": []}
-        for i in range(1, 5)
-    ]
     pipeline = Pipeline(
         config=PipelineConfig(name="progress"),
         steps=[
-            _WriteFile(
-                name="write-file",
-                config={"_batch_instances": instances},
-            ),
+            *[
+                _WriteFile(name=f"write-{i}", config={"filename": "out.txt"})
+                for i in range(1, 5)
+            ],
             _WriteFile(
                 name="figure",
                 config={"filename": "figure.png"},

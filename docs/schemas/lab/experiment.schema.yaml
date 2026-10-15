@@ -735,6 +735,38 @@ $defs:
       faults:
         type: object
         additionalProperties: true
+      pipeline:
+        type: object
+        additionalProperties: false
+        description: >
+          Stream-first pipeline executor settings (artefact store and telemetry
+          channel). Never a CLI flag.
+        properties:
+          engine:
+            type: string
+            description: Ignored. The stream-first engine is the only executor.
+          shadow:
+            type: boolean
+            description: Ignored. Shadow mode was removed with the dual-engine period.
+          store:
+            type: string
+            description: "Artefact store root (default: next to the trace cache)."
+          max_active:
+            type: integer
+            minimum: 1
+            description: "Global cap on in-flight pipeline nodes (default: 8)."
+          streams:
+            type: object
+            additionalProperties: true
+            properties:
+              transport:
+                type: string
+                enum: [inproc, log, websocket]
+                default: inproc
+              max_active:
+                type: integer
+                minimum: 1
+                description: "Override max_active under streams:."
 
   # ── Artifact declarations ─────────────────────────────────────────────────
   artifact_declarations:
@@ -943,10 +975,6 @@ $defs:
           concurrency: 1 (default) preserves sequential behavior.
           concurrency: N > 1 wraps all run instances in a concurrent runner
           backed by asyncio.Semaphore(N).
-      streaming:
-        type: boolean
-        default: false
-        description: "If true, call on_event for live MAS telemetry; execute still finalizes artefacts."
       config:
         type: object
         additionalProperties: true

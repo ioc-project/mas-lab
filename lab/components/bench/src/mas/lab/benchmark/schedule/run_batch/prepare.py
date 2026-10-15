@@ -5,7 +5,9 @@ from __future__ import annotations
 
 """Prepare output directory and scenario configurations."""
 
+import json as _json
 import logging
+import os
 import shutil as _shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +20,12 @@ from mas.runtime.package_refs import path_ref_for_anchor
 from mas.runtime.spec.infra_paths import experiment_infra_bundle_path
 
 logger = logging.getLogger(__name__)
+
+
+def extra_overlays_for_scenario(scenario_id: str) -> list[str]:
+    """Optional extra overlays for a scenario. Stock engine has none."""
+    del scenario_id
+    return []
 
 
 def _resolve_run_infra_refs(loaded: LoadedExperiment) -> list[str]:
@@ -126,21 +134,25 @@ def preload_scenario_configs(
     for _sid in scenario_ids:
         try:
             _scenario_spec = exp.get_scenario(_sid)
-            if (
-                _scenario_spec
-                and _scenario_spec.overlays.flattened()
-                and exp.mas
-                and exp.mas.manifest
-            ):
+            declared = list(_scenario_spec.overlays.flattened()) if _scenario_spec else []
+            overlays = []
+            seen: set[str] = set()
+            for item in [*declared, *extra_overlays_for_scenario(_sid)]:
+                marker = _json.dumps(item, sort_keys=True) if isinstance(item, dict) else str(item)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                overlays.append(item)
+            if overlays and exp.mas and exp.mas.manifest:
                 _cfg, _bp = load_stacked_config(
-                    exp.mas.manifest, _scenario_spec.overlays.flattened(),
+                    exp.mas.manifest, overlays,
                     overlays_dir=configs_dir,
                     base_dir=experiment_yaml.parent,
                     infra_refs=infra_refs,
                     workspace_root=experiment_yaml.parent,
                 )
-                _scenario_overlay_stacks[_sid] = list(_scenario_spec.overlays.flattened())
-            elif (configs_dir is None or (_scenario_spec and not _scenario_spec.overlays.flattened())) and exp.mas and exp.mas.manifest:
+                _scenario_overlay_stacks[_sid] = overlays
+            elif (configs_dir is None or not overlays) and exp.mas and exp.mas.manifest:
                 from mas.lab.manifest.load import load_mas_config
                 _mas_man = load_mas_config(
                     exp.mas.manifest,

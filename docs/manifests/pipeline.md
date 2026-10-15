@@ -107,21 +107,43 @@ UI may emit `x-canvas-positions` (stripped before execution).
 ## Steps, types, and artifacts
 
 - **DAG:** `depends_on` with cycle detection (controller + executor).
+  Independent steps run concurrently (`max_active`). **Fork** = several steps
+  share one artifact/stream (record-level for incremental consumers). **Join**
+  = a step that waits on two or more different artifacts until they are sealed.
 - **Step types:** registered processors (`extract_trajectories`, `extract_trace_stats`,
   `eval_mce`, `plot_*`, …). Catalog: [pipeline steps](../../lab/docs/pipeline-steps.md).
 - **Artifacts:** typed values passed between steps — in-process during execution; serializable
   to files or infra sinks when a step writes `outputs` paths.
-- **Cache:** each step fingerprints its type, config, and upstream steps under
-  `<output_dir>/.cache/`. Unchanged steps are skipped; a fingerprint change
-  reruns that step and everything that `depends_on` it. Force with
-  `mas-lab benchmark pipeline run … --force STEP` or
-  `mas-lab benchmark step restart`.
-- **Streaming:** set `streaming: true` on a step. During a MAS run the runtime
-  publishes transition dicts on `mas.runtime.boundary.obs.event_stream.EventStream`.
-  The step's `on_event` is called for each; `execute` still writes artefacts
-  afterward. Demo UIs subscribe to the same stream.
+- **Cache:** each step is a content-addressed **node key** (type, version,
+  config, upstream digests) under `<output_dir>/.cache/` (fingerprint sidecar
+  + `artefacts/` store). Unchanged steps restore persisted outputs and skip
+  execute. Force with `mas-lab benchmark pipeline run … --force STEP` or
+  `mas-lab benchmark step restart`. Parallelism is on by default
+  (`--no-parallel` to serialize).
+- **Streams:** During a MAS run native records go on the telemetry channel
+  (in-process, durable log, or `mas-stream/1` WebSocket). A step that
+  implements `on_batch` folds that stream in batches while it is open and
+  `finish`es when it seals. Whole-step writers `execute` once their inputs
+  are sealed. Run-scope fold nodes overlap later MAS runs; higher scopes
+  wait on gates, then the same scheduler runs them (plan-based expansion,
+  not a disk scan). Demo UIs consume the channel through an ingest
+  subscriber (`kind: metric`, `control.structure`, native observability).
+  Metric ticks are ingest-only — they are not republished onto the native
+  run stream. `events.jsonl` is the log-sink export of that stream, not a
+  file consumers tail.
+- **Step keys:** optional `role`, `resource` (`cpu` / `io` / `net` / `judge`),
+  `concurrency: N` (per-type semaphore, default 1), `refresh: progressive`
+  (UI-only partial re-eval; never persisted), `batch`,
+  artifact `shape` / `mode` / `records` / `invariants` / `persist`.
+- **Defaults:** `max_active: 8`, parallel on, `streams.transport: inproc`.
+  Set `emulation.pipeline.max_active` on the experiment, or `pipeline.max_active`
+  on a standalone YAML. `engine` / `shadow` on old YAML are ignored.
 
 ---
+
+Standalone CLI shortcuts (`mas-lab telemetry push`, `mas-lab kg dump`, …)
+map onto these same library pipelines. Catalog:
+[CLI commands and their pipelines](../../lab/docs/cli-pipelines.md).
 
 ## See also
 

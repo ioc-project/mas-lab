@@ -24,8 +24,10 @@ def pipeline_group() -> None:
               help="Template variable(s) used in step config (e.g. --var events_jsonl=/path/events.jsonl).")
 @click.option("--dry-run", is_flag=True, default=False,
               help="Propagate dry_run=True to every step: execute each step but skip real I/O.")
-@click.option("--parallel", is_flag=True, default=False,
-              help="Execute independent steps in parallel.")
+@click.option("--parallel/--no-parallel", default=True,
+              help="Run independent steps concurrently (cap max_active). "
+                   "Default on. Pass --no-parallel to serialize for debugging. "
+                   "Incremental fork consumers fold records as they arrive.")
 @click.option("-o", "--output-dir", type=Path, default=None,
               help="Override the pipeline's base output directory.")
 def pipeline_run_cmd(config: Path, only: tuple, force: tuple, template_vars: tuple,
@@ -36,8 +38,14 @@ def pipeline_run_cmd(config: Path, only: tuple, force: tuple, template_vars: tup
 
     from mas.lab.benchmark.pipeline.cli import _load_lab_custom_steps
     from mas.lab.benchmark.pipeline import Pipeline, PipelineExecutor
+    from mas.lab.benchmark.pipeline.config import PipelineEngineSpec
+    from mas.lab.benchmark.pipeline.channel import install_channel
 
     _load_lab_custom_steps(config.resolve())
+    try:
+        install_channel(PipelineEngineSpec())
+    except Exception:
+        logging.getLogger(__name__).debug("stream channel not installed", exc_info=True)
 
     parsed_template_vars = {}
     for raw in template_vars:

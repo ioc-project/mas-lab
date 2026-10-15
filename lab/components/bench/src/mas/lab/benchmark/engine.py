@@ -38,6 +38,7 @@ class BenchmarkRunOptions:
     pipeline_attachments: list = field(default_factory=list)
     experiment_overlays: list = field(default_factory=list)
     clean_stale: bool | None = None
+    pipeline_engine: str | None = None
 
     @classmethod
     def from_spec(cls, spec: dict[str, Any]) -> "BenchmarkRunOptions":
@@ -67,6 +68,7 @@ class BenchmarkRunOptions:
             pipeline_attachments=spec.get("pipeline_attachments") or [],
             experiment_overlays=spec.get("experiment_overlays") or [],
             clean_stale=spec.get("clean_stale"),
+            pipeline_engine=spec.get("pipeline_engine"),
         )
 
 
@@ -148,6 +150,7 @@ async def run_benchmark(
         pipeline_attachments=opts.pipeline_attachments,
         experiment_overlays=opts.experiment_overlays,
         clean_stale=opts.clean_stale,
+        pipeline_engine=opts.pipeline_engine,
     )
 
 

@@ -22,21 +22,26 @@ curl -s http://localhost:8090/api/pipeline-step-types   # when controller runnin
 
 | Type | Output |
 |------|--------|
-| `extract_trace_stats` | Per-run governance/LLM/tool counts → CSV |
+| `extract_trace_stats` | Per-run governance/LLM/tool counts plus token/cached usage → CSV; publishes `kind: metric` |
 | `extract_mealy_stats` | Per-agent timing → CSV |
 | `extract_trajectories` | State sequences |
 | `extract_sys_stats` | `sys_stats` events |
+
+`extract_trace_stats` folds the same counters from channel batches (live or
+sealed) and from `events.jsonl`, and publishes ``kind: metric`` records.
+`eval_mce` publishes flattened ``mce.<id>`` scores (including when it skips
+because ``metrics.json`` already exists) and uses the ``judge`` resource class.
 
 ## eval/ — scoring & aggregation
 
 | Type | Output |
 |------|--------|
-| `eval_mce` | One run → `metrics.json` (`scope: run`). Lists metric ids; each metric knows its input. Stock MCE = MAS I/O. Inline `prompt_metrics` are metric definitions (`id`, `prompt`, `unit`, `evidence`). Judge: `experiment.evaluation.model`, else `experiment.models.judge`, else `experiment.model` / `models.main`, else application `spec.models[]`. |
+| `eval_mce` | One run's `events.jsonl` → `metrics.json` (`scope: run`). Judge: `experiment.evaluation.model`, else `experiment.models.judge`, else `experiment.model` / `models.main`, else application `spec.models[]`. |
 | `eval_trip_planner_gt` | Trip-planner ground truth |
 | `eval_adversarial` | Adversarial probes |
 | `annotate_metrics` | Attach scores to run metadata |
-| `collect_metrics` | Aggregate run metrics (whole-tree walk; legacy alternative to `metrics_to_dataframe` + `gather_level`). `metrics_filename` may be a name, glob, or list so split eval files merge; `details` is copied as JSON. |
-| `metrics_to_dataframe` | One run's metrics file(s) → tidy `data.csv` in that run folder (`scope: run`). Same `metrics_filename` list/glob as `collect_metrics`. |
+| `collect_metrics` | Aggregate run metrics (whole-tree walk; legacy alternative to `metrics_to_dataframe` + `gather_level`) |
+| `metrics_to_dataframe` | One run's `metrics.json` → tidy `data.csv` in that run folder (`scope: run`) |
 | `compute_ci` | Confidence intervals |
 | `validate_outputs` | Check `experiment.output_schema`'s `required_files`/`required_columns` against the output directory |
 
@@ -68,6 +73,8 @@ curl -s http://localhost:8090/api/pipeline-step-types   # when controller runnin
 |------|------|
 | `service_start` / `service_stop` | Infra lifecycle |
 | `export_otel` | OTel export |
+| `file_tail` | Watch a file glob and publish `custom.{owner}.raw` on change |
+| `shell` | Inline `/bin/sh -c` command (lab cwd) |
 
 ## Internal extensions (mas-lab-internal)
 

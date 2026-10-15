@@ -19,7 +19,12 @@ from mas.lab.benchmark.pipeline.core import (
     register_step_type,
     resolve_step_class,
 )
-from mas.lab.benchmark.pipeline.executor import ExecutionContext, ExecutionPlan, PipelineExecutor
+from mas.lab.benchmark.pipeline.executor import (
+    BoundPipeline,
+    ExecutionContext,
+    ExecutionPlan,
+    PipelineExecutor,
+)
 from mas.lab.benchmark.pipeline.models import (
     _CONFIG_KNOWN_KEYS,
     _MISSING,
@@ -31,6 +36,25 @@ from mas.lab.benchmark.pipeline.models import (
     StepOutput,
 )
 from mas.lab.benchmark.pipeline.resolver import DependencyResolver
+from mas.lab.benchmark.pipeline.artifact import Artifact, ArtifactContext, ArtifactType
+from mas.lab.benchmark.pipeline.channel import (
+    InprocChannel,
+    LogChannel,
+    StreamFrame,
+    TelemetryChannel,
+    get_channel,
+    install_channel,
+    make_channel,
+    native_body,
+    set_channel,
+)
+from mas.lab.benchmark.pipeline.config import PipelineEngineSpec, pipeline_settings
+from mas.lab.benchmark.pipeline.keys import RunKey
+from mas.lab.benchmark.pipeline.scheduler import Scheduler
+from mas.lab.benchmark.pipeline.store import ArtifactStore
+
+# Register built-in artifact types.
+from mas.lab.benchmark.pipeline import types as _types  # noqa: F401
 
 __all__ = [
     "_MISSING",
@@ -52,8 +76,26 @@ __all__ = [
     "YAMLIncludeLoader",
     "include_constructor",
     "PipelineExecutor",
+    "BoundPipeline",
     "ExecutionContext",
     "ExecutionPlan",
     "DependencyResolver",
     "CacheManager",
+    "Artifact",
+    "ArtifactContext",
+    "ArtifactStore",
+    "ArtifactType",
+    "InprocChannel",
+    "LogChannel",
+    "PipelineEngineSpec",
+    "RunKey",
+    "Scheduler",
+    "StreamFrame",
+    "TelemetryChannel",
+    "get_channel",
+    "install_channel",
+    "make_channel",
+    "native_body",
+    "pipeline_settings",
+    "set_channel",
 ]

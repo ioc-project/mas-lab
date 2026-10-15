@@ -23,12 +23,7 @@ Write one when:
 - You need to call an external service or library that has no built-in step.
 
 For everything else prefer built-in steps — `eval_mce`, `collect_metrics`,
-`plotnine`, `extract_trace_stats`. To add a **session metric**, either
-define it inline on `eval_mce.config.prompt_metrics` (`id`, `prompt`,
-`unit`, `evidence`) or register an `eval_metric` plugin. The metric
-implementation knows what input it needs; the step only runs ids. See
-`library-eval/README.md` and
-[Tutorial 10](../../docs/tutorials/10-evaluation-metrics/).
+`plotnine`, `extract_trace_stats`.
 
 ---
 

@@ -41,7 +41,10 @@ from mas.library.lab.steps.extract.mealy_stats import ExtractMealyStatsStep
 from mas.library.lab.steps.extract.sys_stats import ExtractSysStatsStep
 from mas.library.lab.steps.extract.trace_stats import ExtractTraceStatsStep
 from mas.library.lab.steps.extract.trajectories import ExtractTrajectoriesStep
+from mas.library.lab.steps.services.events_to_otel import EventsToOtelStep
+from mas.library.lab.steps.services.export_otel import ExportOtelStep
 from mas.library.lab.steps.services.service_start import ServiceStartStep
+from mas.library.lab.steps.services.shell import ShellStep
 from mas.library.lab.steps.services.service_stop import ServiceStopStep
 from mas.library.lab.steps.viz.ci_plot import CIPlotStep
 from mas.library.lab.steps.viz.metrics_comparison_plot import MetricsComparisonPlotStep
@@ -68,7 +71,9 @@ __all__ = [
     "EmbedStep",
     "EvalMceStep",
     "MetricsToDataFrameStep",
+    "EventsToOtelStep",
     "ExperimentStep",
+    "ExportOtelStep",
     "ExtractMealyStatsStep",
     "ExtractSysStatsStep",
     "ExtractTraceStatsStep",
@@ -88,6 +93,7 @@ __all__ = [
     "ProcessorStep",
     "SerializeStep",
     "ServiceStartStep",
+    "ShellStep",
     "ServiceStopStep",
     "ToDataFrameStep",
 ]

@@ -84,9 +84,17 @@ plugins:
     module: mas.library.lab.steps.eval.mce
     class: EvalMceStep
   - type: step
+    name: events_to_otel
+    module: mas.library.lab.steps.services.events_to_otel
+    class: EventsToOtelStep
+  - type: step
     name: experiment
     module: mas.library.lab.steps.data.experiment
     class: ExperimentStep
+  - type: step
+    name: export_otel
+    module: mas.library.lab.steps.services.export_otel
+    class: ExportOtelStep
   - type: step
     name: extract_mealy_stats
     module: mas.library.lab.steps.extract.mealy_stats
@@ -99,6 +107,14 @@ plugins:
     name: extract_trace_stats
     module: mas.library.lab.steps.extract.trace_stats
     class: ExtractTraceStatsStep
+  - type: step
+    name: file_tail
+    module: mas.library.lab.steps.services.file_tail
+    class: FileTailStep
+  - type: step
+    name: shell
+    module: mas.library.lab.steps.services.shell
+    class: ShellStep
   - type: step
     name: extract_trajectories
     module: mas.library.lab.steps.extract.trajectories

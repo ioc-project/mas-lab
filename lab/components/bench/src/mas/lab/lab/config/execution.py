@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
@@ -123,6 +124,39 @@ class RuntimeEmulationSpec:
 
 
 @dataclass
+class PipelineEngineSpec:
+    """Stream-first pipeline executor settings. ``engine`` / ``shadow`` on old YAML are ignored."""
+
+    engine: str = "v2"
+    shadow: bool = False
+    store: str = ""
+    streams_transport: str = "inproc"
+    max_active: int = 8
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None = None) -> "PipelineEngineSpec":
+        data = data or {}
+        streams = data.get("streams") or {}
+        transport = streams.get("transport") if isinstance(streams, dict) else data.get("transport")
+        max_active = data.get("max_active")
+        if max_active is None and isinstance(streams, dict):
+            max_active = streams.get("max_active")
+        return cls(
+            engine="v2",
+            shadow=False,
+            store=str(data.get("store") or ""),
+            streams_transport=str(transport or "inproc"),
+            max_active=max(1, int(max_active or 8)),
+        )
+
+    def store_root(self, cache_root: Path | None = None) -> Path:
+        if self.store:
+            return Path(self.store).expanduser()
+        base = Path(cache_root) if cache_root is not None else Path.home() / ".cache" / "mas-lab"
+        return Path(base) / "artefacts"
+
+
+@dataclass
 class InterceptSpec:
     """L3–L6 hook-level interception: MITM and fault injection.
 
@@ -195,6 +229,9 @@ class EmulationSpec:
     intercept: InterceptSpec = field(default_factory=InterceptSpec)
     """L3–L6 hook-level interception."""
 
+    pipeline: "PipelineEngineSpec" = field(default_factory=lambda: PipelineEngineSpec())
+    """Stream-first pipeline executor (artefact store + telemetry channel)."""
+
     faults: Optional[Dict[str, Any]] = None
     """Optional fault-injection configuration (bench posture, not design)."""
 
@@ -204,6 +241,7 @@ class EmulationSpec:
             infra=InfraEmulationSpec.from_dict(data.get("infra", {})),
             runtime=RuntimeEmulationSpec.from_dict(data.get("runtime", {})),
             intercept=InterceptSpec.from_dict(data.get("intercept", {})),
+            pipeline=PipelineEngineSpec.from_dict(data.get("pipeline", {})),
             faults=data.get("faults"),
         )
 

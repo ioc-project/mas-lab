@@ -25,17 +25,7 @@ _INFRA_STEP_TYPES = frozenset(
     {"service_start", "service_stop", "serialize", "deserialize"}
 )
 
-# Same type at run/item/scenario is one PipelineStep, not N objects.
-_BATCHABLE_TYPES = frozenset(
-    {
-        "gather_level",
-        "metrics_to_dataframe",
-        "extract_trace_stats",
-        "extract_mealy_stats",
-        "eval_mce",
-    }
-)
-_BATCHABLE_SCOPES = frozenset({"run", "item", "test", "scenario"})
+# The scheduler runs each instance as its own node (max_active + per-type concurrency).
 
 
 def substitute_template_vars(obj: Any, template_vars: dict[str, str]) -> Any:
@@ -63,12 +53,12 @@ def _effective_scope(spec: Any) -> str:
     under, or written directly) always wins. The ``per_run``/``per_scenario``
     booleans are a fallback for specs with no ``scope:`` at all.
     """
-    scope = str(getattr(spec, "scope", "") or "").strip()
+    scope = str(spec.scope or "").strip()
     if scope:
         return scope
-    if getattr(spec, "per_run", False):
+    if spec.per_run:
         return "run"
-    if getattr(spec, "per_scenario", False):
+    if spec.per_scenario:
         return "scenario"
     return "application"
 
@@ -286,9 +276,13 @@ def _step_dict(spec: Any, name: str, cfg: dict[str, Any], deps: list[str]) -> di
     return {
         "name": name,
         "type": spec.type,
-        "phase": getattr(spec, "phase", "post"),
+        "phase": spec.phase,
         "config": cfg,
         "depends_on": deps,
+        "scope": _effective_scope(spec),
+        "resource": str(spec.resource or "cpu"),
+        "refresh": str(spec.refresh or ""),
+        "concurrency": int(spec.concurrency or 1),
     }
 
 
@@ -297,56 +291,9 @@ def _emit_instances(
     base_name: str,
     instances: list[tuple[str, dict[str, Any], list[str]]],
 ) -> list[dict]:
-    """One PipelineStep when siblings share a batchable type or concurrency>1; else one dict each."""
-    if not instances:
-        return []
-
-    concurrency = int(getattr(spec, "concurrency", 1))
-
-    # Concurrent wrapper: N per-run instances → one ConcurrentRunnerStep
-    if concurrency > 1 and _effective_scope(spec) == "run" and len(instances) > 1:
-        child_dicts = [_step_dict(spec, name, cfg, deps) for name, cfg, deps in instances]
-        wrapper_deps: list[str] = []
-        seen: set[str] = set()
-        for _name, _cfg, inst_deps in instances:
-            for dep in inst_deps:
-                if dep not in seen:
-                    seen.add(dep)
-                    wrapper_deps.append(dep)
-        logger.info(
-            "Step '%s' (%s): wrapping %d run instances with concurrency=%d",
-            base_name, spec.type, len(instances), concurrency,
-        )
-        return [
-            {
-                "name": base_name,
-                "type": "__concurrent_runner__",
-                "phase": getattr(spec, "phase", "post"),
-                "config": {"steps": child_dicts, "concurrency": concurrency},
-                "depends_on": wrapper_deps,
-            }
-        ]
-
-    if (
-        spec.type not in _BATCHABLE_TYPES
-        or _effective_scope(spec) not in _BATCHABLE_SCOPES
-        or len(instances) == 1
-    ):
-        return [_step_dict(spec, name, cfg, deps) for name, cfg, deps in instances]
-    payload = [
-        {"name": name, "config": cfg, "depends_on": deps}
-        for name, cfg, deps in instances
-    ]
-    deps: list[str] = []
-    seen: set[str] = set()
-    for _name, _cfg, inst_deps in instances:
-        for dep in inst_deps:
-            if dep not in seen:
-                seen.add(dep)
-                deps.append(dep)
-    shared = copy.deepcopy(spec.config or {})
-    shared["_batch_instances"] = payload
-    return [_step_dict(spec, base_name, shared, deps)]
+    """One scheduler node per instance. Concurrency is a scheduler cap, not a wrapper."""
+    del base_name
+    return [_step_dict(spec, name, cfg, deps) for name, cfg, deps in instances]
 
 
 #: Scope vocabulary used by ``_Node`` / the node tables, for the public aliases.
@@ -465,22 +412,6 @@ def materialize_step_dicts(
     name_scope = {
         _base_step_name(spec): _effective_scope(spec) for spec in phase_specs
     }
-    batched = {
-        _base_step_name(spec)
-        for spec in phase_specs
-        if spec.type in _BATCHABLE_TYPES
-        and _effective_scope(spec) in _BATCHABLE_SCOPES
-        and len(nodes[_effective_scope(spec)]) > 1
-    }
-    # Concurrent wrappers also collapse N run instances into one step in the DAG.
-    # Deps onto them must use the base name, not per-run suffixed names.
-    concurrent = {
-        _base_step_name(spec)
-        for spec in phase_specs
-        if int(getattr(spec, "concurrency", 1)) > 1
-        and _effective_scope(spec) == "run"
-        and len(nodes["run"]) > 1
-    }
     level_arts = level_artifacts or {}
     derived_deps = _dataflow_deps(phase_specs)
 
@@ -502,12 +433,94 @@ def materialize_step_dicts(
             declared = list(spec.depends_on or [])
             deps = _expand_deps(
                 declared + [d for d in derived_deps.get(base_name, []) if d not in declared],
-                node, name_scope, nodes, batched,
-                collapsed=concurrent,
+                node, name_scope, nodes, set(),
             )
             instances.append((name, cfg, deps))
         step_dicts.extend(_emit_instances(spec, base_name, instances))
     return step_dicts
+
+
+def start_pipeline_scheduler(
+    *,
+    exp: Any,
+    experiment_yaml: Path,
+    output_dir: Path,
+    specs: list | None,
+    keys: list,
+    scenario_ids: list[str],
+    infra_name: str | None = None,
+    step_overrides: dict | None = None,
+    progress: bool = True,
+    data_cache_dir: Path | None = None,
+):
+    """Start the post DAG so run-scope nodes overlap MAS execution."""
+    if not specs or not keys:
+        return None
+    from mas.lab.benchmark.pipeline.executor import PipelineExecutor
+    from mas.lab.benchmark.pipeline.expand import planned_nodes
+    from mas.lab.benchmark.pipeline.scheduler import install_scope_gates
+
+    nodes = planned_nodes(keys, output_dir)
+    step_dicts = materialize_step_dicts(
+        specs,
+        phase="post",
+        scenario_ids=list(scenario_ids or sorted({k.scenario for k in keys})),
+        infra_name=infra_name,
+        step_overrides=step_overrides,
+        template_vars={"output_dir": str(output_dir)},
+        level_artifacts=_level_artifacts(exp),
+        nodes=nodes,
+    )
+    if not step_dicts:
+        return None
+    try:
+        name = str(exp.name)
+    except AttributeError:
+        name = "pipeline"
+    pipeline = build_runtime_pipeline(
+        exp=exp,
+        experiment_yaml=experiment_yaml,
+        step_dicts=step_dicts,
+        pipeline_name=f"{name}-post",
+    )
+    executor = PipelineExecutor(
+        pipeline,
+        output_dir=output_dir,
+        progress=progress,
+        data_cache_dir=data_cache_dir,
+    )
+    bound = executor.bind(
+        template_vars={"output_dir": str(output_dir)},
+        parallel=True,
+    )
+    install_scope_gates(bound.sched, keys)
+    import asyncio
+
+    task = asyncio.create_task(bound.finish())
+
+    class _Live:
+        def __init__(self) -> None:
+            self.bound = bound
+            self._task = task
+            self.done = False
+            self.error: BaseException | None = None
+
+        async def on_terminal(self, key, status: str) -> None:
+            try:
+                await self.bound.mark_run_terminal(key, status)
+            except Exception:
+                logger.debug("pipeline terminal skipped", exc_info=True)
+
+        async def wait(self) -> Any:
+            try:
+                result = await self._task
+                self.done = True
+                return result
+            except BaseException as exc:
+                self.error = exc
+                raise
+
+    return _Live()
 
 
 def build_runtime_pipeline(
@@ -527,7 +540,10 @@ def build_runtime_pipeline(
         PipelineStep.from_dict(s, base_dir=experiment_yaml.parent)
         for s in step_dicts
     ]
-    label = pipeline_name or getattr(exp, "name", "pipeline")
+    try:
+        label = pipeline_name or str(exp.name)
+    except AttributeError:
+        label = pipeline_name or "pipeline"
     return Pipeline(
         config=PipelineConfig(name=label),
         steps=steps,
@@ -537,6 +553,18 @@ def build_runtime_pipeline(
 
 class PipelineExecutionError(RuntimeError):
     """Raised when a benchmark post/pre pipeline step fails."""
+
+
+def _publish_pipeline_phase(phase: str) -> None:
+    """Publish a pipeline_phase record onto EventStream and the channel."""
+    record = {"kind": "pipeline_phase", "phase": phase}
+    try:
+        from mas.runtime.boundary.obs.event_stream import emit_to_channel, publish_event
+
+        publish_event(record)
+        emit_to_channel(record)
+    except Exception:
+        logger.debug("pipeline_phase event skipped", exc_info=True)
 
 
 def _print_pipeline_banner(pipeline, phase_label: str) -> None:
@@ -585,6 +613,7 @@ async def execute_runtime_pipeline(
         result = await executor.run(
             template_vars=dict(template_vars or {"output_dir": str(output_dir)}),
             force_rerun=force_rerun,
+            parallel=True,
         )
         print(result.summary())
         if not result.success:
@@ -674,6 +703,9 @@ async def run_pipeline_phase(
     )
     if not step_dicts:
         return None
+
+    if phase == "post":
+        _publish_pipeline_phase("post")
 
     pipeline = build_runtime_pipeline(
         exp=exp,

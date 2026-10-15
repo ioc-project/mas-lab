@@ -1,9 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-import logging
-
 """
-logger = logging.getLogger(__name__)
 Caching and fingerprinting for pipeline steps.
 
 Determines when steps need to be rerun based on:
@@ -14,11 +11,13 @@ Determines when steps need to be rerun based on:
 This is the canonical implementation.
 """
 
-
-import json
 import hashlib
+import json
+import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class CacheManager:
@@ -28,9 +27,12 @@ class CacheManager:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
-        # In-memory cache of fingerprints
+        # In-memory cache of fingerprints (sidecars of ArtifactStore node keys)
         self._fingerprints: Dict[str, str] = {}
         self._loaded = False
+        from mas.lab.benchmark.pipeline.store import ArtifactStore
+
+        self.store = ArtifactStore(self.cache_dir / "artefacts")
     
     def _load_fingerprints(self):
         """Load all fingerprints from cache directory."""
@@ -60,19 +62,19 @@ class CacheManager:
         Returns:
             SHA256 hex digest
         """
-        inputs = {
-            "type": step.type,
-            "config": step.config,
-            "dependencies": {
-                dep_name: self._hash_step_output(output)
-                for dep_name, output in dependency_outputs.items()
-            },
+        from mas.lab.benchmark.pipeline.incremental import step_version
+        from mas.lab.benchmark.pipeline.store import compute_node_key
+
+        config = {
+            k: v
+            for k, v in dict(getattr(step, "config", None) or {}).items()
+            if k not in {"_batch_instances", "dry_run"}
         }
-        
-        # Deterministic JSON serialization
-        json_str = json.dumps(inputs, sort_keys=True, default=str)
-        
-        return hashlib.sha256(json_str.encode()).hexdigest()
+        digests = [
+            self._hash_step_output(output)
+            for _, output in sorted(dependency_outputs.items())
+        ]
+        return compute_node_key(step.type, step_version(step), config, *digests)
     
     def _hash_step_output(self, output: "StepOutput") -> str:
         """Hash a step output.
@@ -146,8 +148,8 @@ class CacheManager:
         Returns:
             True if step should be rerun
         """
-        # Check if outputs exist
-        if not step.outputs_exist(output_dir):
+        # Check if outputs exist on disk or were persisted in the cache store
+        if not step.outputs_exist(output_dir) and self.load_output(step.name) is None:
             return True
         
         # Compute current fingerprint
@@ -161,7 +163,9 @@ class CacheManager:
         
         if current_fp != cached_fp:
             return True  # Config or dependencies changed
-        
+
+        if self.store.exists(current_fp):
+            self.store.get(current_fp)
         return False  # Cache valid
     
     def invalidate(self, step_name: str):
@@ -228,6 +232,41 @@ class CacheManager:
         (step_dir / "output.json").write_text(
             json.dumps(meta, default=str), encoding="utf-8"
         )
+
+    def persist_output(self, step: Any, fingerprint: str, output: Any) -> None:
+        """Fingerprint sidecar + in-memory snapshot + content-addressed store."""
+        self.save_fingerprint(getattr(step, "name", ""), fingerprint)
+        try:
+            self.save_output(getattr(step, "name", ""), output)
+        except Exception:
+            logger.debug("save_output skipped for %s", getattr(step, "name", ""), exc_info=True)
+        try:
+            from mas.lab.benchmark.pipeline.incremental import step_version
+            from mas.lab.benchmark.pipeline.store import StoreManifest
+
+            files: Dict[str, Path] = {}
+            for path in getattr(output, "files", None) or []:
+                dest = Path(path)
+                if dest.is_file():
+                    files[dest.name] = dest
+            self.store.put(
+                StoreManifest(
+                    key=fingerprint,
+                    step_type=str(getattr(step, "type", "")),
+                    version=step_version(step),
+                    config=dict(getattr(step, "config", None) or {}),
+                    input_digests=[],
+                    output_digest=fingerprint,
+                    extra={"step_name": getattr(step, "name", "")},
+                ),
+                files=files or None,
+            )
+        except Exception:
+            logger.debug(
+                "artifact store put skipped for %s",
+                getattr(step, "name", ""),
+                exc_info=True,
+            )
 
     def load_output(self, step_name: str) -> Optional[Any]:
         """Load a previously persisted step output, or ``None`` if unavailable."""

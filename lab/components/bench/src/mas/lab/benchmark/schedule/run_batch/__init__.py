@@ -35,6 +35,7 @@ async def run_mas_benchmark(
     pipeline_attachments: Optional[list] = None,
     experiment_overlays: Optional[list] = None,
     clean_stale: Optional[bool] = None,
+    pipeline_engine: Optional[str] = None,
 ) -> bool:
     """Run a MAS batch benchmark from a *MASExperimentConfig* YAML.
 
@@ -66,6 +67,12 @@ async def run_mas_benchmark(
     if loaded is None:
         return False
 
+    if pipeline_engine:
+        emu = getattr(loaded.exp, "bench_emulation", None)
+        pipe = getattr(emu, "pipeline", None) if emu is not None else None
+        if pipe is not None and hasattr(pipe, "engine"):
+            pipe.engine = str(pipeline_engine)
+
     if dry_run:
         from mas.lab.benchmark.stale_cleanup import maybe_handle_stale_outputs
 
@@ -94,7 +101,6 @@ async def run_mas_benchmark(
         progress=progress,
         force=force,
         strategy=strategy,
-        data_cache_dir=data_cache_dir,
     )
     return await finalize_batch(
         loaded,

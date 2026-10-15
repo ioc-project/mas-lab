@@ -20,6 +20,8 @@ def test_list_registered_loads_manifest_steps() -> None:
     items = list_steps()
     assert "serialize" in items
     assert "export_otel" in items
+    assert "file_tail" in items
+    assert "shell" in items
     loaded = set(sys.modules) - before
     leaked = [
         name

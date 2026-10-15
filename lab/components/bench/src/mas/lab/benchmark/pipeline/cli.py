@@ -77,6 +77,14 @@ def cmd_run(args):
     config_path = Path(args.config).resolve()
     _load_lab_custom_steps(config_path)
 
+    try:
+        from mas.lab.benchmark.pipeline.config import PipelineEngineSpec
+        from mas.lab.benchmark.pipeline.channel import install_channel
+
+        install_channel(PipelineEngineSpec())
+    except Exception:
+        logger.debug("stream channel not installed for standalone pipeline", exc_info=True)
+
     pipeline = Pipeline.from_yaml(args.config)
     executor = PipelineExecutor(pipeline)
 
@@ -211,7 +219,13 @@ def main():
         help="Template variable KEY=VALUE (repeatable)",
     )
     run_parser.add_argument("--dry-run", action="store_true", help="Show plan without executing")
-    run_parser.add_argument("--parallel", action="store_true", help="Execute independent steps in parallel")
+    run_parser.add_argument(
+        "--no-parallel",
+        dest="parallel",
+        action="store_false",
+        help="Serialize steps (default is concurrent, capped by max_active)",
+    )
+    run_parser.set_defaults(parallel=True)
 
     plan_parser = subparsers.add_parser("plan", help="Show execution plan")
     plan_parser.add_argument("config", type=Path, help="Pipeline config YAML")
