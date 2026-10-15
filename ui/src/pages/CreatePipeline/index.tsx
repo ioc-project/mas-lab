@@ -6,26 +6,22 @@ import {
   TabPanel,
   PipelineBuilder,
 } from "@/components";
-import {
-  Box,
-  Stack,
-  Typography,
-  useTheme,
-  Tabs,
-  Tab,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Alert,
-} from "@mui/material";
+import { Box, Stack, Typography, useTheme, Alert } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useValidatePipeline, createPipeline } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
 import { parse, stringify } from "yaml";
+import {
+  Button,
+  InputField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tab,
+  Tabs,
+} from "@open-ui-kit/core";
 
 const TAB_KEYS = ["graph", "yaml"] as const;
 type PipelineTab = (typeof TAB_KEYS)[number];
@@ -164,14 +160,14 @@ const CreatePipeline = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleOpenSaveDialog}
               disabled={!pipelineYaml || !hasExperiment}
             >
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={
                 !pipelineYaml || !hasExperiment || validateMutation.isPending
@@ -182,6 +178,7 @@ const CreatePipeline = () => {
           </Stack>
         </Stack>
       }
+      showBreadcrumbs={false}
     >
       <Stack direction="column" sx={{ width: "100%", height: "100%" }}>
         {validateMutation.isSuccess && (
@@ -271,12 +268,11 @@ const CreatePipeline = () => {
               {saveError}
             </Alert>
           )}
-          <TextField
+          <InputField
             autoFocus
             margin="dense"
             label="Pipeline Name"
             placeholder="Enter a name for the pipeline"
-            variant="standard"
             autoComplete="off"
             fullWidth
             value={pipelineName}
@@ -285,11 +281,10 @@ const CreatePipeline = () => {
               setSaveError("");
             }}
           />
-          <TextField
+          <InputField
             margin="dense"
             label="Description"
             placeholder="Optional description for the pipeline"
-            variant="standard"
             autoComplete="off"
             fullWidth
             multiline
@@ -301,7 +296,7 @@ const CreatePipeline = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseSaveDialog}>Cancel</Button>
-          <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+          <Button variant="gradient" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>
         </DialogActions>

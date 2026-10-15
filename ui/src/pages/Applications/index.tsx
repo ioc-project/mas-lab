@@ -1,7 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle, MasTable } from "@/components";
-import { Box, Button, Stack, Typography, useTheme } from "@mui/material";
+import { Box, Stack, Typography, useTheme } from "@mui/material";
+import { Button } from "@open-ui-kit/core";
 import { useNavigate, useParams } from "react-router";
 
 const Applications = () => {
@@ -25,7 +26,10 @@ const Applications = () => {
             >
               Applications
             </Typography>
-            <Button onClick={() => navigate(`/${library}/playground`)}>
+            <Button
+              variant="gradient"
+              onClick={() => navigate(`/${library}/playground`)}
+            >
               Add Application
             </Button>
           </Stack>

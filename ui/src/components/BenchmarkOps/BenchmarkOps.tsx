@@ -1,13 +1,14 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useCallback, useRef, useState } from "react";
-import { Box, Button, Stack, TextField, Typography } from "@mui/material";
+import { Box, Stack, Typography } from "@mui/material";
 import {
   analyzeBenchmark,
   uploadImportBenchmark,
   pollJob,
   type JobSubmitResponse,
 } from "@/api/apiCalls";
+import { InputField, Button } from "@open-ui-kit/core";
 
 interface BenchmarkOpsProps {
   library: string;
@@ -90,17 +91,15 @@ export function BenchmarkOps({ library }: BenchmarkOpsProps) {
     >
       <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
         Analyze or import benchmark run results. Use the benchmark name to
-        reference a completed run. Export is available from the table row actions.
+        reference a completed run. Export is available from the table row
+        actions.
       </Typography>
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 2 }}>
-        <TextField
+        <InputField
           label="Benchmark id"
           placeholder="short id, full id, experiment name, last, or latest"
-          variant="standard"
-          autoComplete="off"
           value={benchmarkId}
           onChange={(e) => setBenchmarkId(e.target.value)}
-          fullWidth
         />
       </Stack>
       <Stack
@@ -112,7 +111,7 @@ export function BenchmarkOps({ library }: BenchmarkOpsProps) {
       >
         <Button
           size="small"
-          variant="outlined"
+          variant="gradient"
           disabled={busy || !benchmarkId.trim()}
           onClick={() =>
             runJob("Analyze", () =>
@@ -124,7 +123,7 @@ export function BenchmarkOps({ library }: BenchmarkOpsProps) {
         </Button>
         <Button
           size="small"
-          variant="outlined"
+          variant="gradient"
           disabled={busy}
           onClick={() => fileInputRef.current?.click()}
         >

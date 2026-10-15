@@ -1,6 +1,13 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { AppBar, MenuItem, Select, Toolbar, Typography, useTheme } from "@mui/material";
+import {
+  AppBar,
+  MenuItem,
+  Select,
+  Toolbar,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { useNavigate, useLocation } from "react-router";
 import { useLibraries } from "@/api/apiCalls";
 import type { SelectChangeEvent } from "@mui/material";
@@ -12,7 +19,10 @@ const TopBar = () => {
   const location = useLocation();
   const { data: libraries = [] } = useLibraries();
 
-  const library = useMemo(() => location.pathname.split("/")[1] || "", [location.pathname]);
+  const library = useMemo(
+    () => location.pathname.split("/")[1] || "",
+    [location.pathname],
+  );
 
   useEffect(() => {
     if (libraries.length === 0) return;
@@ -41,19 +51,19 @@ const TopBar = () => {
       position="static"
       elevation={0}
       sx={{
-        backgroundColor: theme.palette.vars.baseBackgroundMedium,
-        borderBottom: `1px solid ${theme.palette.vars.baseBorderDefault}`,
-        color: theme.palette.text.primary,
+        backgroundColor: theme.palette.vars.baseBackgroundStrong,
       }}
     >
       <Toolbar
         variant="dense"
         sx={{
-          minHeight: "32px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: 0,
+          "&.MuiToolbar-root": {
+            minHeight: "32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "8px 36px",
+          },
         }}
       >
         <Typography
@@ -70,7 +80,11 @@ const TopBar = () => {
         {libraries.length > 0 && (
           <Select
             size="small"
-            value={libraries.some((l) => l.dir === library) ? library : libraries[0].dir}
+            value={
+              libraries.some((l) => l.dir === library)
+                ? library
+                : libraries[0].dir
+            }
             onChange={handleLibraryChange}
             variant="outlined"
             sx={{

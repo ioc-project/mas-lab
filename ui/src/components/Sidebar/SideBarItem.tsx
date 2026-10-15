@@ -15,10 +15,10 @@ import {
   siteBarItemStyle,
   previewIconStyle,
 } from "./styles";
-import { Icons } from "@open-ui-kit/core";
+import { LegacyIcons } from "@open-ui-kit/core";
 import type { SideBarProps } from "@/routes/types.ts";
 
-const { Preview } = Icons;
+const { Preview } = LegacyIcons;
 
 export interface SideBarItemProps extends SideBarProps {
   selected: boolean;
@@ -70,7 +70,6 @@ export const SideBarItem = (props: SideBarItemProps) => {
             {Icon && <Icon sx={style.listItemIconNode} />}
           </ListItemIcon>
           {!compact && (
-            // @ts-ignore
             <ListItemText
               primary={
                 <Typography variant={"captionSemibold"}>{title}</Typography>

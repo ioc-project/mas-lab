@@ -1,17 +1,9 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useCallback, useMemo, useState } from "react";
-import {
-  Box,
-  Button,
-  IconButton,
-  Stack,
-  TextField,
-  Typography,
-  Chip,
-  Pagination,
-} from "@mui/material";
+import { Box, Stack, Typography, Chip, Pagination } from "@mui/material";
 import { Delete as DeleteIcon, Add as AddIcon } from "@mui/icons-material";
+import { InputField, Button, IconButton } from "@open-ui-kit/core";
 
 const PAGE_SIZE = 20;
 
@@ -71,9 +63,8 @@ function ArrayChipEditor({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-      <TextField
+      <InputField
         size="small"
-        variant="standard"
         placeholder={placeholder}
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -164,7 +155,7 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
         </Typography>
         <Button
           size="small"
-          variant="primary"
+          variant="gradient"
           startIcon={<AddIcon />}
           onClick={handleAddRow}
         >
@@ -202,9 +193,8 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
               </IconButton>
 
               <Stack direction="row" sx={{ gap: 2 }}>
-                <TextField
+                <InputField
                   size="small"
-                  variant="standard"
                   label="ID"
                   value={String(item.id ?? "")}
                   onChange={(e) => {
@@ -218,9 +208,8 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
                   }}
                   sx={{ width: 160 }}
                 />
-                <TextField
+                <InputField
                   size="small"
-                  variant="standard"
                   label="Category"
                   value={item.category ?? ""}
                   onChange={(e) =>
@@ -232,9 +221,8 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
                   }
                   sx={{ width: 200 }}
                 />
-                <TextField
+                <InputField
                   size="small"
-                  variant="standard"
                   label="Group"
                   value={item.group ?? ""}
                   onChange={(e) =>
@@ -248,9 +236,8 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
                 />
               </Stack>
 
-              <TextField
+              <InputField
                 size="small"
-                variant="standard"
                 label="Prompt"
                 value={item.prompt ?? ""}
                 onChange={(e) =>
@@ -262,9 +249,8 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
                 fullWidth
               />
 
-              <TextField
+              <InputField
                 size="small"
-                variant="standard"
                 label="Ground Truth"
                 value={item.ground_truth ?? ""}
                 onChange={(e) =>

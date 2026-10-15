@@ -7,14 +7,13 @@ import {
   CircularProgress,
   MenuItem,
   Select,
-  Tabs,
-  Tab,
   Typography,
   useTheme,
 } from "@mui/material";
 import type { SelectChangeEvent } from "@mui/material";
 import { PageWithTitle, CodeBlock, TabPanel } from "@/components";
 import { useConfigFiles, useRuntimeRunners } from "@/api/apiCalls";
+import { Tab, Tabs } from "@open-ui-kit/core";
 
 const TAB_KEYS = ["infra", "flavours", "workspace"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -93,8 +92,7 @@ const ControlPanel = () => {
       >
         {runtimeRunners && runtimeRunners.length > 0 && (
           <Typography variant="body2" sx={{ mb: 1, opacity: 0.85 }}>
-            Runtime runners:{" "}
-            {runtimeRunners.map((r) => r.id).join(", ")}
+            Runtime runners: {runtimeRunners.map((r) => r.id).join(", ")}
           </Typography>
         )}
         <Tabs value={activeTab} onChange={handleTabChange}>

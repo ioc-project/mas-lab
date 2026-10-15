@@ -33,7 +33,6 @@ import {
   Typography,
 } from "@mui/material";
 import type { MASManifest } from "@/types/mas-types";
-import { GLOBAL_BACKGROUND_COLOR } from "@/common/styles";
 import { Tags } from "@/components";
 
 type MRT_ColumnDefList = TableProps<MASManifest>["columns"];
@@ -362,30 +361,8 @@ export const MasTable = ({
         onClick: onMasClick ? () => onMasClick(row.original) : undefined,
         sx: {
           cursor: "pointer",
-          backgroundColor: GLOBAL_BACKGROUND_COLOR,
-          "& > td": {
-            backgroundColor: `${GLOBAL_BACKGROUND_COLOR} !important`,
-          },
         },
       };
-    },
-
-    muiTablePaperProps: {
-      sx: {
-        padding: 0,
-        backgroundColor: `${GLOBAL_BACKGROUND_COLOR}`,
-        elevation: 0,
-      },
-    },
-    muiTableHeadCellProps: {
-      sx: { backgroundColor: GLOBAL_BACKGROUND_COLOR, color: "#ffffff" },
-    },
-    muiTableBodyCellProps: {
-      sx: {
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        color: "#ffffff",
-        height: "40px",
-      },
     },
   });
 

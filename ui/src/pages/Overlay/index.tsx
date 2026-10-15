@@ -1,10 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import {
-  PageWithTitle,
-  CodeBlock,
-  TabPanel,
-} from "@/components";
+import { PageWithTitle, CodeBlock, TabPanel } from "@/components";
 import { OverlayBuilder } from "@/components/OverlayBuilder/OverlayBuilder";
 import {
   useOverlay,
@@ -12,25 +8,21 @@ import {
   createOverlay,
   updateOverlay,
 } from "@/api/apiCalls";
-import {
-  Alert,
-  Box,
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Alert, Box, Stack, Typography, useTheme } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { parse, stringify } from "yaml";
+import {
+  InputField,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tab,
+  Tabs,
+} from "@open-ui-kit/core";
 
 const TAB_KEYS = ["graph", "yaml"] as const;
 type OverlayTab = (typeof TAB_KEYS)[number];
@@ -40,7 +32,11 @@ const Overlay = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { library = "", name: routeName, overlayTab } = useParams<{
+  const {
+    library = "",
+    name: routeName,
+    overlayTab,
+  } = useParams<{
     library: string;
     name: string;
     overlayTab: string;
@@ -86,10 +82,7 @@ const Overlay = () => {
     setNameInput(overlayName);
   }, [overlayName]);
 
-  const selectedTab = Math.max(
-    0,
-    TAB_KEYS.indexOf(overlayTab as OverlayTab),
-  );
+  const selectedTab = Math.max(0, TAB_KEYS.indexOf(overlayTab as OverlayTab));
 
   const handleTabChange = useCallback(
     (_event: React.SyntheticEvent, newValue: number) => {
@@ -180,13 +173,23 @@ const Overlay = () => {
         navigate(newRoute, { replace: true });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to save overlay.";
+      const msg =
+        err instanceof Error ? err.message : "Failed to save overlay.";
       setSaveError(msg);
       setAlertMessage({ severity: "error", message: msg });
     } finally {
       setSaving(false);
     }
-  }, [overlayYaml, nameInput, descriptionInput, isNew, library, overlayName, navigate, queryClient]);
+  }, [
+    overlayYaml,
+    nameInput,
+    descriptionInput,
+    isNew,
+    library,
+    overlayName,
+    navigate,
+    queryClient,
+  ]);
 
   const handleSaveClick = useCallback(() => {
     setSaveError("");
@@ -227,11 +230,11 @@ const Overlay = () => {
             {pageTitle}
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
-            <Button variant="primary" onClick={handleSaveClick}>
+            <Button variant="gradient" onClick={handleSaveClick}>
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={!overlayYaml || validateMutation.isPending}
             >
@@ -240,6 +243,7 @@ const Overlay = () => {
           </Stack>
         </Stack>
       }
+      showBreadcrumbs={false}
     >
       <Stack direction="column" sx={{ width: "100%", height: "100%" }}>
         {alertMessage && (
@@ -298,7 +302,10 @@ const Overlay = () => {
         <TabPanel value={selectedTab} index={0} sx={{ flex: 1 }}>
           <Box sx={{ height: "100%", paddingTop: "8px" }}>
             {isLoading ? (
-              <Typography variant="body2" sx={{ color: "text.secondary", py: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{ color: "text.secondary", py: 2 }}
+              >
                 Loading overlay...
               </Typography>
             ) : (
@@ -331,9 +338,7 @@ const Overlay = () => {
                     color: theme.palette.warning.main,
                   }}
                 >
-                  {overlayName
-                    ? `${overlayName}.yaml`
-                    : "overlay.yaml"}
+                  {overlayName ? `${overlayName}.yaml` : "overlay.yaml"}
                 </Typography>
                 <CodeBlock code={overlayYaml} language="yaml" />
               </Box>
@@ -355,40 +360,42 @@ const Overlay = () => {
               {saveError}
             </Alert>
           )}
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Overlay Name"
-            placeholder="Enter a name for the overlay"
-            variant="standard"
-            autoComplete="off"
-            fullWidth
-            value={nameInput}
-            onChange={(e) => {
-              setNameInput(e.target.value);
-              setSaveError("");
-            }}
-            disabled={saving}
-          />
-          <TextField
-            margin="dense"
-            label="Description"
-            placeholder="Enter a description"
-            variant="standard"
-            autoComplete="off"
-            fullWidth
-            multiline
-            minRows={2}
-            value={descriptionInput}
-            onChange={(e) => setDescriptionInput(e.target.value)}
-            disabled={saving}
-          />
+          <Stack direction="column" sx={{ gap: "8px" }}>
+            <InputField
+              autoFocus
+              label="Overlay Name"
+              placeholder="Enter a name for the overlay"
+              autoComplete="off"
+              fullWidth
+              value={nameInput}
+              onChange={(e) => {
+                setNameInput(e.target.value);
+                setSaveError("");
+              }}
+              disabled={saving}
+            />
+            <InputField
+              label="Description"
+              placeholder="Enter a description"
+              autoComplete="off"
+              fullWidth
+              multiline
+              minRows={2}
+              value={descriptionInput}
+              onChange={(e) => setDescriptionInput(e.target.value)}
+              disabled={saving}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={handleDialogSave} disabled={saving}>
+          <Button
+            variant="gradient"
+            onClick={handleDialogSave}
+            disabled={saving}
+          >
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogActions>

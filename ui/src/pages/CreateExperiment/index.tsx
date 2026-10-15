@@ -4,22 +4,13 @@ import { PageWithTitle, CodeBlock, TabPanel } from "@/components";
 import {
   Alert,
   Box,
-  Button,
   Checkbox,
-  Chip,
   CircularProgress,
   Collapse,
   Divider,
-  FormControl,
   FormControlLabel,
   IconButton,
-  InputLabel,
-  MenuItem,
-  Select,
   Stack,
-  Tab,
-  Tabs,
-  TextField,
   Typography,
   useTheme,
 } from "@mui/material";
@@ -51,6 +42,17 @@ import {
   updateExperimentApi,
   type OverlayEntry,
 } from "@/api/apiCalls";
+import {
+  Button,
+  GeneralSize,
+  InputField,
+  MenuItem,
+  Tag,
+  Tab,
+  Tabs,
+} from "@open-ui-kit/core";
+import { SelectField } from "./SelectField";
+import { pulseRingStyle } from "./styles";
 
 const TAB_KEYS = ["setup", "yaml"] as const;
 type ExperimentTab = (typeof TAB_KEYS)[number];
@@ -129,29 +131,26 @@ function OverlaySelect({
   const selected = value[0] ?? "";
 
   return (
-    <FormControl variant="standard" sx={{ minWidth: 350, flex: 1 }}>
-      <InputLabel>Overlay</InputLabel>
-      <Select
-        value={selected}
-        label="Overlay"
-        onChange={(e) => {
-          const v = e.target.value as string;
-          onChange(v ? [v] : []);
-        }}
-      >
-        <MenuItem value="">
-          <em>None</em>
-        </MenuItem>
-        {sorted.map((o) => {
-          const dn = overlayDisplayName(o);
-          return (
-            <MenuItem key={dn} value={dn}>
-              {dn}
-            </MenuItem>
-          );
-        })}
-      </Select>
-    </FormControl>
+    <SelectField
+      label="Overlay"
+      placeholder="None"
+      containerSx={{ minWidth: 350, flex: 1 }}
+      value={selected}
+      onChange={(e) => {
+        const v = e.target.value as string;
+        onChange(v ? [v] : []);
+      }}
+      onClear={() => onChange([])}
+    >
+      {sorted.map((o) => {
+        const dn = overlayDisplayName(o);
+        return (
+          <MenuItem key={dn} value={dn}>
+            {dn}
+          </MenuItem>
+        );
+      })}
+    </SelectField>
   );
 }
 
@@ -281,37 +280,44 @@ function PipelineHookSelect({
   const extras = value.filter((v) => !optionStems.has(v));
 
   return (
-    <FormControl variant="standard" sx={{ flex: 1, minWidth: 0 }}>
-      <InputLabel>{label}</InputLabel>
-      <Select
-        multiple
-        value={value}
-        label={label}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(typeof v === "string" ? v.split(",") : v);
-        }}
-        renderValue={(selected) => (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-            {(selected as string[]).map((s) => {
+    <SelectField<string[]>
+      multiple
+      label={label}
+      placeholder="Select pipelines"
+      containerSx={{ flex: 1 }}
+      value={value}
+      onChange={(e) => {
+        const v = e.target.value;
+        onChange(typeof v === "string" ? v.split(",") : v);
+      }}
+      renderValue={(selected) =>
+        selected.length === 0 ? (
+          "Select pipelines"
+        ) : (
+          <Stack direction="row" spacing={0.5} sx={{ overflow: "hidden" }}>
+            {selected.map((s) => {
               const opt = options.find((o) => o.stem === s);
-              return <Chip key={s} size="small" label={opt ? opt.label : s} />;
+              return (
+                <Tag key={s} size={GeneralSize.Medium}>
+                  {opt ? opt.label : s}
+                </Tag>
+              );
             })}
-          </Box>
-        )}
-      >
-        {options.map((o) => (
-          <MenuItem key={o.stem} value={o.stem}>
-            {o.label}
-          </MenuItem>
-        ))}
-        {extras.map((v) => (
-          <MenuItem key={v} value={v}>
-            {v}
-          </MenuItem>
-        ))}
-      </Select>
-    </FormControl>
+          </Stack>
+        )
+      }
+    >
+      {options.map((o) => (
+        <MenuItem key={o.stem} value={o.stem}>
+          {o.label}
+        </MenuItem>
+      ))}
+      {extras.map((v) => (
+        <MenuItem key={v} value={v}>
+          {v}
+        </MenuItem>
+      ))}
+    </SelectField>
   );
 }
 
@@ -821,12 +827,13 @@ const CreateExperiment = () => {
             <Button onClick={handleCancel} disabled={saving}>
               Cancel
             </Button>
-            <Button variant="primary" onClick={handleSave} disabled={!canSave}>
+            <Button variant="gradient" onClick={handleSave} disabled={!canSave}>
               {saving ? "Saving..." : "Save"}
             </Button>
           </Stack>
         </Stack>
       }
+      showBreadcrumbs={false}
     >
       <Stack direction="column" sx={{ width: "100%", height: "100%" }}>
         {loadError && (
@@ -873,14 +880,16 @@ const CreateExperiment = () => {
               <Stack sx={{ gap: "16px", mt: "8px", padding: "8px 0" }}>
                 {error && <Alert severity="error">{error}</Alert>}
 
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: theme.palette.vars.baseTextWeak }}
+                >
                   Basic Info
                 </Typography>
                 <Stack direction="row" sx={{ gap: "16px" }}>
-                  <TextField
+                  <InputField
                     label="Name"
                     placeholder="Enter experiment name"
-                    variant="standard"
                     autoComplete="off"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -889,10 +898,9 @@ const CreateExperiment = () => {
                     error={Boolean(error)}
                   />
                 </Stack>
-                <TextField
+                <InputField
                   label="Description"
                   placeholder="Enter a description for this experiment"
-                  variant="standard"
                   autoComplete="off"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -913,7 +921,10 @@ const CreateExperiment = () => {
                     alignItems="flex-start"
                     sx={{ gap: "4px" }}
                   >
-                    <Typography variant="subtitle2" color="text.secondary">
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ color: theme.palette.vars.baseTextWeak }}
+                    >
                       Scenarios
                     </Typography>
                     <FormControlLabel
@@ -927,18 +938,17 @@ const CreateExperiment = () => {
                         />
                       }
                       label={
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          sx={{ marginLeft: "4px" }}
-                        >
+                        <Typography variant="caption" color="text.secondary">
                           Use Patch Overlays
                         </Typography>
                       }
-                      sx={{ marginLeft: 0 }}
                     />
                   </Stack>
-                  <IconButton size="small" onClick={addScenario}>
+                  <IconButton
+                    size="small"
+                    onClick={addScenario}
+                    sx={[pulseRingStyle(theme), { marginRight: "8px" }]}
+                  >
                     <AddIcon fontSize="small" />
                   </IconButton>
                 </Stack>
@@ -951,10 +961,9 @@ const CreateExperiment = () => {
                     justifyContent="center"
                   >
                     {usePatchOverlays ? (
-                      <TextField
+                      <InputField
                         label="ID"
                         placeholder="scenario-id"
-                        variant="standard"
                         autoComplete="off"
                         value={scenario.id}
                         onChange={(e) =>
@@ -964,32 +973,29 @@ const CreateExperiment = () => {
                         sx={{ width: 400 }}
                       />
                     ) : (
-                      <FormControl
-                        variant="standard"
+                      <SelectField
+                        label="ID"
                         required
-                        sx={{ width: 350 }}
+                        clearable={false}
+                        placeholder="Select a scenario"
+                        width={350}
+                        value={scenario.id}
+                        onChange={(e) =>
+                          updateScenario(index, "id", e.target.value)
+                        }
                       >
-                        <InputLabel>ID</InputLabel>
-                        <Select
-                          value={scenario.id}
-                          label="ID"
-                          onChange={(e) =>
-                            updateScenario(index, "id", e.target.value)
-                          }
-                        >
-                          {scenarioOptions
-                            .filter(
-                              (s) =>
-                                s.name === scenario.id ||
-                                !scenarios.some((sc) => sc.id === s.name),
-                            )
-                            .map((s) => (
-                              <MenuItem key={s.name} value={s.name}>
-                                {s.name}
-                              </MenuItem>
-                            ))}
-                        </Select>
-                      </FormControl>
+                        {scenarioOptions
+                          .filter(
+                            (s) =>
+                              s.name === scenario.id ||
+                              !scenarios.some((sc) => sc.id === s.name),
+                          )
+                          .map((s) => (
+                            <MenuItem key={s.name} value={s.name}>
+                              {s.name}
+                            </MenuItem>
+                          ))}
+                      </SelectField>
                     )}
 
                     {usePatchOverlays && (
@@ -1002,10 +1008,9 @@ const CreateExperiment = () => {
                       />
                     )}
 
-                    <TextField
+                    <InputField
                       label="Description"
                       placeholder="Scenario description"
-                      variant="standard"
                       autoComplete="off"
                       value={scenario.description}
                       onChange={(e) =>
@@ -1013,10 +1018,9 @@ const CreateExperiment = () => {
                       }
                       fullWidth
                     />
-                    <TextField
+                    <InputField
                       label="Tags"
                       placeholder="tag1, tag2"
-                      variant="standard"
                       autoComplete="off"
                       value={scenario.tags}
                       onChange={(e) =>
@@ -1040,66 +1044,76 @@ const CreateExperiment = () => {
                   <>
                     <Divider />
 
-                    <Typography variant="subtitle2" color="text.secondary">
+                    <Typography
+                      variant="subtitle2"
+                      sx={{ color: theme.palette.vars.baseTextWeak }}
+                    >
                       MAS Configuration
                     </Typography>
-                    <FormControl variant="standard" required fullWidth>
-                      <InputLabel>Base MAS Application</InputLabel>
-                      <Select
-                        value={masManifest}
-                        label="Base MAS Application"
-                        onChange={(e) => {
-                          setMasManifest(e.target.value);
-                          setScenarios((prev) =>
-                            prev.map((s) => ({ ...s, overlays: [] })),
-                          );
-                        }}
-                      >
-                        {scenarioOptions.map((s) => (
-                          <MenuItem key={s.name} value={s.name}>
-                            {s.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                    <SelectField
+                      label="Base MAS Application"
+                      required
+                      fullWidth
+                      clearable={false}
+                      placeholder="Select an application"
+                      value={masManifest}
+                      onChange={(e) => {
+                        setMasManifest(e.target.value);
+                        setScenarios((prev) =>
+                          prev.map((s) => ({ ...s, overlays: [] })),
+                        );
+                      }}
+                    >
+                      {scenarioOptions.map((s) => (
+                        <MenuItem key={s.name} value={s.name}>
+                          {s.name}
+                        </MenuItem>
+                      ))}
+                    </SelectField>
                   </>
                 )}
 
                 <Divider />
 
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: theme.palette.vars.baseTextWeak }}
+                >
                   Dataset
                 </Typography>
-                <FormControl variant="standard" required fullWidth>
-                  <InputLabel>Dataset Path</InputLabel>
-                  <Select
-                    value={datasetPath}
-                    label="Dataset Path"
-                    onChange={(e) => setDatasetPath(e.target.value)}
-                  >
-                    {datasetOptions
-                      .filter(
-                        (d) =>
-                          d.name.endsWith(".yaml") || d.name.endsWith(".yml"),
-                      )
-                      .map((d) => (
-                        <MenuItem key={d.path} value={d.path}>
-                          {d.path.replace(/^datasets\//, "")}
-                        </MenuItem>
-                      ))}
-                  </Select>
-                </FormControl>
+                <SelectField
+                  label="Dataset Path"
+                  required
+                  fullWidth
+                  clearable={false}
+                  placeholder="Select a dataset"
+                  value={datasetPath}
+                  onChange={(e) => setDatasetPath(e.target.value)}
+                >
+                  {datasetOptions
+                    .filter(
+                      (d) =>
+                        d.name.endsWith(".yaml") || d.name.endsWith(".yml"),
+                    )
+                    .map((d) => (
+                      <MenuItem key={d.path} value={d.path}>
+                        {d.path.replace(/^datasets\//, "")}
+                      </MenuItem>
+                    ))}
+                </SelectField>
 
                 <Divider />
 
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: theme.palette.vars.baseTextWeak }}
+                >
                   Execution
                 </Typography>
                 <Stack direction="row" sx={{ gap: "16px" }}>
-                  <TextField
+                  <InputField
                     label="Number of Runs"
                     placeholder="1"
-                    variant="standard"
                     autoComplete="off"
                     value={nRuns}
                     onChange={(e) => setNRuns(e.target.value)}
@@ -1108,10 +1122,9 @@ const CreateExperiment = () => {
                     slotProps={{ htmlInput: { min: 1 } }}
                     sx={{ width: 140 }}
                   />
-                  <TextField
+                  <InputField
                     label="Parallel Scenarios"
                     placeholder="3"
-                    variant="standard"
                     autoComplete="off"
                     value={parallelScenarios}
                     onChange={(e) => setParallelScenarios(e.target.value)}
@@ -1120,10 +1133,9 @@ const CreateExperiment = () => {
                     slotProps={{ htmlInput: { min: 1 } }}
                     sx={{ width: 160 }}
                   />
-                  <TextField
+                  <InputField
                     label="Timeout (s)"
                     placeholder="300"
-                    variant="standard"
                     autoComplete="off"
                     value={timeout}
                     onChange={(e) => setTimeout(e.target.value)}
@@ -1132,10 +1144,9 @@ const CreateExperiment = () => {
                     slotProps={{ htmlInput: { min: 1 } }}
                     sx={{ width: 130 }}
                   />
-                  <TextField
+                  <InputField
                     label="Pause Between Runs (s)"
                     placeholder="1.0"
-                    variant="standard"
                     autoComplete="off"
                     value={pauseBetweenRuns}
                     onChange={(e) => setPauseBetweenRuns(e.target.value)}
@@ -1144,75 +1155,81 @@ const CreateExperiment = () => {
                     slotProps={{ htmlInput: { step: 0.5, min: 0 } }}
                     sx={{ width: 180 }}
                   />
-                  <FormControl variant="standard" required sx={{ width: 160 }}>
-                    <InputLabel>Strategy</InputLabel>
-                    <Select
-                      value={strategy}
-                      label="Strategy"
-                      onChange={(e) => setStrategy(e.target.value)}
-                    >
-                      <MenuItem value="coverage">coverage</MenuItem>
-                      <MenuItem value="random">random</MenuItem>
-                      <MenuItem value="sequential">sequential</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <SelectField
+                    label="Strategy"
+                    required
+                    clearable={false}
+                    width={160}
+                    value={strategy}
+                    onChange={(e) => setStrategy(e.target.value)}
+                  >
+                    <MenuItem value="coverage">coverage</MenuItem>
+                    <MenuItem value="random">random</MenuItem>
+                    <MenuItem value="sequential">sequential</MenuItem>
+                  </SelectField>
                 </Stack>
 
                 <Divider />
 
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: theme.palette.vars.baseTextWeak }}
+                >
                   Emulation
                 </Typography>
                 <Stack direction="row" sx={{ gap: "16px" }}>
-                  <FormControl variant="standard" required sx={{ width: 150 }}>
-                    <InputLabel>Infra LLM</InputLabel>
-                    <Select
-                      value={infraLlm}
-                      label="Infra LLM"
-                      onChange={(e) =>
-                        setInfraLlm(e.target.value as InfraLlmMode)
-                      }
-                    >
-                      <MenuItem value="live">live</MenuItem>
-                      <MenuItem value="mock">mock</MenuItem>
-                      <MenuItem value="replay">replay</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl variant="standard" required sx={{ width: 150 }}>
-                    <InputLabel>Infra Tools</InputLabel>
-                    <Select
-                      value={infraTools}
-                      label="Infra Tools"
-                      onChange={(e) =>
-                        setInfraTools(e.target.value as InfraToolsMode)
-                      }
-                    >
-                      <MenuItem value="live">live</MenuItem>
-                      <MenuItem value="mock">mock</MenuItem>
-                      <MenuItem value="stub">stub</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <FormControl variant="standard" required sx={{ width: 200 }}>
-                    <InputLabel>Runtime Cache</InputLabel>
-                    <Select
-                      value={runtimeCache}
-                      label="Runtime Cache"
-                      onChange={(e) =>
-                        setRuntimeCache(e.target.value as RuntimeCacheMode)
-                      }
-                    >
-                      <MenuItem value="content-addressed">
-                        content-addressed
-                      </MenuItem>
-                      <MenuItem value="disabled">disabled</MenuItem>
-                      <MenuItem value="forced">forced</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <SelectField
+                    label="Infra LLM"
+                    required
+                    clearable={false}
+                    width={150}
+                    value={infraLlm}
+                    onChange={(e) =>
+                      setInfraLlm(e.target.value as InfraLlmMode)
+                    }
+                  >
+                    <MenuItem value="live">live</MenuItem>
+                    <MenuItem value="mock">mock</MenuItem>
+                    <MenuItem value="replay">replay</MenuItem>
+                  </SelectField>
+                  <SelectField
+                    label="Infra Tools"
+                    required
+                    clearable={false}
+                    width={150}
+                    value={infraTools}
+                    onChange={(e) =>
+                      setInfraTools(e.target.value as InfraToolsMode)
+                    }
+                  >
+                    <MenuItem value="live">live</MenuItem>
+                    <MenuItem value="mock">mock</MenuItem>
+                    <MenuItem value="stub">stub</MenuItem>
+                  </SelectField>
+                  <SelectField
+                    label="Runtime Cache"
+                    required
+                    clearable={false}
+                    width={200}
+                    value={runtimeCache}
+                    onChange={(e) =>
+                      setRuntimeCache(e.target.value as RuntimeCacheMode)
+                    }
+                  >
+                    <MenuItem value="content-addressed">
+                      content-addressed
+                    </MenuItem>
+                    <MenuItem value="disabled">disabled</MenuItem>
+                    <MenuItem value="forced">forced</MenuItem>
+                  </SelectField>
                 </Stack>
 
                 <Divider />
 
-                <Typography variant="subtitle2" color="text.secondary">
+                <Typography
+                  variant="subtitle2"
+                  sx={{ color: theme.palette.vars.baseTextWeak }}
+                >
                   Pipeline hooks
                 </Typography>
 
@@ -1228,6 +1245,7 @@ const CreateExperiment = () => {
                 <Button
                   onClick={() => setAdvancedHooksOpen((o) => !o)}
                   sx={{ alignSelf: "flex-start" }}
+                  variant="gradient"
                   endIcon={
                     <ExpandMoreIcon
                       sx={{

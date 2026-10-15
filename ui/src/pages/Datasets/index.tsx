@@ -1,19 +1,16 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle } from "@/components";
-import {
-  MRT_RowSelectionState,
-  MRT_SortingState,
-} from "material-react-table";
+import { MRT_RowSelectionState, MRT_SortingState } from "material-react-table";
 import {
   Table,
   EmptyState,
   TableProps,
   Tooltip,
+  Button,
 } from "@open-ui-kit/core";
 import { Delete as DeleteIcon } from "@mui/icons-material";
 import {
-  Button,
   Box,
   Dialog,
   DialogTitle,
@@ -31,7 +28,6 @@ import { useCallback, useMemo, useState } from "react";
 import { useDatasetsList, deleteDataset } from "@/api/apiCalls";
 import type { DatasetSummary } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
-import { GLOBAL_BACKGROUND_COLOR } from "@/common/styles";
 
 type DatasetColumnDefs = TableProps<DatasetSummary>["columns"];
 
@@ -51,7 +47,10 @@ const Datasets = () => {
   ]);
 
   const rows = useMemo<DatasetSummary[]>(
-    () => (datasets ?? []).filter((d) => d.name.endsWith(".yaml") || d.name.endsWith(".yml")),
+    () =>
+      (datasets ?? []).filter(
+        (d) => d.name.endsWith(".yaml") || d.name.endsWith(".yml"),
+      ),
     [datasets],
   );
 
@@ -94,9 +93,6 @@ const Datasets = () => {
                   overflow: "hidden",
                   whiteSpace: "nowrap",
                 }}
-                onClick={() =>
-                  navigate(`/${library}/datasets/${relPath}`)
-                }
               >
                 {relPath}
               </Typography>
@@ -110,7 +106,7 @@ const Datasets = () => {
         size: 400,
       },
     ],
-    [library, navigate],
+    [],
   );
 
   const tableProps: TableProps<DatasetSummary> = {
@@ -148,7 +144,9 @@ const Datasets = () => {
           color="negative"
           disabled={!hasSelection}
           onClick={() => {
-            const names = selectedRows.map((r) => r.original.path.replace(/^datasets\//, ""));
+            const names = selectedRows.map((r) =>
+              r.original.path.replace(/^datasets\//, ""),
+            );
             if (names.length > 0) handleRequestDelete(names);
           }}
         >
@@ -162,18 +160,15 @@ const Datasets = () => {
         description="No datasets found in this library."
       />
     ),
-    muiTableBodyRowProps: () => ({
+    muiTableBodyRowProps: ({ row }) => ({
+      onClick: () =>
+        navigate(
+          `/${library}/datasets/${row.original.path.replace(/^datasets\//, "")}`,
+        ),
       sx: {
         cursor: "pointer",
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        "& > td": {
-          backgroundColor: `${GLOBAL_BACKGROUND_COLOR} !important`,
-        },
       },
     }),
-    muiTablePaperProps: {
-      sx: { backgroundColor: GLOBAL_BACKGROUND_COLOR },
-    },
     state: { sorting, rowSelection },
     onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
@@ -190,11 +185,14 @@ const Datasets = () => {
           >
             <Typography
               variant="h5"
-              sx={{ color: theme.palette.vars.interactivePrimaryDefaultDefault }}
+              sx={{
+                color: theme.palette.vars.interactivePrimaryDefaultDefault,
+              }}
             >
               Datasets
             </Typography>
             <Button
+              variant="gradient"
               onClick={() => navigate(`/${library}/datasets/_create`)}
             >
               Add Dataset

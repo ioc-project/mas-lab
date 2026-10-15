@@ -13,18 +13,9 @@ import {
   Stack,
   Typography,
   useTheme,
-  Tabs,
-  Tab,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   Alert,
 } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
-import { toTitleCase } from "@/utils/string";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parse, stringify } from "yaml";
 import { validateManifests } from "@/utils/manifestValidator";
@@ -37,6 +28,16 @@ import {
   pollJob,
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Button,
+  Dialog,
+  InputField,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tab,
+  Tabs,
+} from "@open-ui-kit/core";
 
 const APPLICATION_TAB_KEYS = ["graph", "yaml", "output"] as const;
 type ApplicationTab = (typeof APPLICATION_TAB_KEYS)[number];
@@ -409,7 +410,7 @@ const Application = () => {
           The application &quot;{id}&quot; does not exist or has been deleted.
         </Typography>
         <Button
-          variant="primary"
+          variant="gradient"
           onClick={() => navigate(`/${library}/applications`)}
         >
           Back to Applications
@@ -420,6 +421,7 @@ const Application = () => {
 
   return (
     <PageWithTitle
+      showBreadcrumbs={false}
       title={
         <Stack
           direction="row"
@@ -433,25 +435,25 @@ const Application = () => {
             variant={"h5"}
             sx={{ color: theme.palette.vars.interactivePrimaryDefaultDefault }}
           >
-            {toTitleCase(id ?? "")}
+            {id ?? ""}
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleOpenSaveDialog}
               disabled={sortedKeys.length === 0}
             >
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={!selectedAgentName || validateMutation.isPending}
             >
               {validateMutation.isPending ? "Validating..." : "Validate"}
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidateMas}
               disabled={!yamlOutputMap["mas"] || validateMasMutation.isPending}
             >
@@ -460,7 +462,7 @@ const Application = () => {
                 : "Validate MAS"}
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleRunMas}
               disabled={isRunningMas}
             >
@@ -678,48 +680,44 @@ const Application = () => {
               {saveError}
             </Alert>
           )}
-          <TextField
-            autoFocus
-            margin="dense"
-            label="MAS Name"
-            placeholder="Enter a name for the MAS"
-            variant="standard"
-            autoComplete="off"
-            fullWidth
-            value={masName}
-            onChange={(e) => {
-              setMasName(e.target.value);
-              setSaveError("");
-            }}
-          />
-          <TextField
-            margin="dense"
-            label="Description"
-            placeholder="Enter a description"
-            variant="standard"
-            autoComplete="off"
-            fullWidth
-            multiline
-            minRows={2}
-            value={masDescription}
-            onChange={(e) => setMasDescription(e.target.value)}
-          />
-          <TextField
-            margin="dense"
-            label="Intent"
-            placeholder="Enter the intent summary"
-            variant="standard"
-            autoComplete="off"
-            fullWidth
-            multiline
-            minRows={2}
-            value={masIntent}
-            onChange={(e) => setMasIntent(e.target.value)}
-          />
+          <Stack direction="column" sx={{ gap: "16px" }}>
+            <InputField
+              autoFocus
+              label="MAS Name"
+              placeholder="Enter a name for the MAS"
+              autoComplete="off"
+              fullWidth
+              value={masName}
+              onChange={(e) => {
+                setMasName(e.target.value);
+                setSaveError("");
+              }}
+            />
+            <InputField
+              label="Description"
+              placeholder="Enter a description"
+              autoComplete="off"
+              fullWidth
+              multiline
+              minRows={2}
+              value={masDescription}
+              onChange={(e) => setMasDescription(e.target.value)}
+            />
+            <InputField
+              label="Intent"
+              placeholder="Enter the intent summary"
+              autoComplete="off"
+              fullWidth
+              multiline
+              minRows={2}
+              value={masIntent}
+              onChange={(e) => setMasIntent(e.target.value)}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseSaveDialog}>Cancel</Button>
-          <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+          <Button variant="gradient" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>
         </DialogActions>

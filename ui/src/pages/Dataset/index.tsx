@@ -1,21 +1,17 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle, DatasetEditor } from "@/components";
-import type { DatasetContent, DatasetItem } from "@/components/DatasetEditor/DatasetEditor";
+import type {
+  DatasetContent,
+  DatasetItem,
+} from "@/components/DatasetEditor/DatasetEditor";
 import {
   Alert,
   Box,
   CircularProgress,
   Stack,
-  TextField,
   Typography,
   useTheme,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -27,6 +23,15 @@ import {
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import {
+  InputField,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+} from "@open-ui-kit/core";
 
 interface YamlDatasetItem {
   id: string | number;
@@ -50,7 +55,8 @@ function yamlToEditorContent(yamlStr: string): DatasetContent {
       const userMsgs = it.inputs?.user ?? [];
       const prompt = userMsgs.map((m) => m.content).join("\n") || "";
       const result: DatasetItem = { id: it.id, prompt };
-      if (it.expectations?.ground_truth) result.ground_truth = it.expectations.ground_truth;
+      if (it.expectations?.ground_truth)
+        result.ground_truth = it.expectations.ground_truth;
       if (it.group) result.group = it.group;
       if (it.target_agents?.length) result.target_agents = it.target_agents;
       if (it.category) result.category = it.category;
@@ -70,7 +76,8 @@ function editorContentToYaml(
       id: it.id,
       inputs: { user: [{ role: "user", content: it.prompt }] },
     };
-    if (it.ground_truth) result.expectations = { ground_truth: it.ground_truth };
+    if (it.ground_truth)
+      result.expectations = { ground_truth: it.ground_truth };
     if (it.group) result.group = it.group;
     if (it.target_agents?.length) result.target_agents = it.target_agents;
     if (it.category) result.category = it.category;
@@ -103,7 +110,11 @@ const Dataset = () => {
 
   const isNew = !id;
 
-  const { data: dataset, isLoading, isError } = useDatasetDetail(library, isNew ? "" : id);
+  const {
+    data: dataset,
+    isLoading,
+    isError,
+  } = useDatasetDetail(library, isNew ? "" : id);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
@@ -141,7 +152,9 @@ const Dataset = () => {
     try {
       const parsed: DatasetContent = JSON.parse(currentContent);
       if (parsed.description) setSaveDescription(parsed.description);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     setSaveDialogOpen(true);
   };
 
@@ -155,7 +168,9 @@ const Dataset = () => {
     try {
       const parsed: DatasetContent = JSON.parse(currentContent);
       contentToSave = editorContentToYaml(parsed, saveName, saveDescription);
-    } catch { /* send as-is */ }
+    } catch {
+      /* send as-is */
+    }
 
     if (isNew) {
       createMutation.mutate({ name: saveName, content: contentToSave });
@@ -191,14 +206,18 @@ const Dataset = () => {
   useEffect(() => {
     if (createMutation.isSuccess) {
       queryClient.removeQueries({ queryKey: ["datasets-list", library] });
-      setSaveAlert({ severity: "success", message: "Dataset created successfully" });
+      setSaveAlert({
+        severity: "success",
+        message: "Dataset created successfully",
+      });
       navigate(`/${library}/datasets/${lastSavedName}`, { replace: true });
     }
     if (createMutation.isError) {
       const err = createMutation.error;
       setSaveAlert({
         severity: "error",
-        message: err instanceof Error ? err.message : "Failed to create dataset",
+        message:
+          err instanceof Error ? err.message : "Failed to create dataset",
       });
     }
   }, [createMutation.isSuccess, createMutation.isError]);
@@ -246,7 +265,7 @@ const Dataset = () => {
           The dataset &quot;{id ?? ""}&quot; does not exist or has been deleted.
         </Typography>
         <Button
-          variant="primary"
+          variant="gradient"
           onClick={() => navigate(`/${library}/datasets`)}
         >
           Back to Datasets
@@ -274,15 +293,17 @@ const Dataset = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: 1 }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={openSaveDialog}
               disabled={saveMutation.isPending || createMutation.isPending}
             >
-              {saveMutation.isPending || createMutation.isPending ? "Saving..." : "Save"}
+              {saveMutation.isPending || createMutation.isPending
+                ? "Saving..."
+                : "Save"}
             </Button>
             {!isNew && (
               <Button
-                variant="primary"
+                variant="gradient"
                 color="negative"
                 onClick={() => setDeleteDialogOpen(true)}
               >
@@ -292,6 +313,7 @@ const Dataset = () => {
           </Stack>
         </Stack>
       }
+      showBreadcrumbs={false}
     >
       {saveAlert && (
         <Alert
@@ -312,17 +334,17 @@ const Dataset = () => {
 
       <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)}>
         <DialogTitle>Save Dataset</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-          <TextField
+        <DialogContent
+          sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}
+        >
+          <InputField
             label="Name"
-            variant="standard"
             fullWidth
             value={saveName}
             onChange={(e) => setSaveName(e.target.value)}
           />
-          <TextField
+          <InputField
             label="Description"
-            variant="standard"
             fullWidth
             multiline
             minRows={2}
@@ -332,7 +354,11 @@ const Dataset = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleSave} disabled={!saveName.trim()}>
+          <Button
+            variant="gradient"
+            onClick={handleSave}
+            disabled={!saveName.trim()}
+          >
             Save
           </Button>
         </DialogActions>
@@ -357,7 +383,7 @@ const Dataset = () => {
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="gradient"
             color="negative"
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}

@@ -20,7 +20,6 @@ import {
 import {
   Alert,
   Box,
-  Button,
   Stack,
   Typography,
   useTheme,
@@ -44,8 +43,8 @@ import {
 } from "@/api/apiCalls";
 import type { PipelineSummary } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
-import { GLOBAL_BACKGROUND_COLOR } from "@/common/styles";
 import { ScrollableTooltip } from "@/components/ScrollableTooltip";
+import { Button } from "@open-ui-kit/core";
 
 interface PipelineJobStatus {
   jobId: string;
@@ -303,11 +302,6 @@ const Pipelines = () => {
                 overflow: "hidden",
                 whiteSpace: "nowrap",
               }}
-              onClick={() =>
-                navigate(
-                  `/${library}/pipelines/${encodeURIComponent(row.name)}`,
-                )
-              }
             >
               {row.name}
             </Typography>
@@ -440,7 +434,7 @@ const Pipelines = () => {
         },
       },
     ],
-    [library, navigate, runningJobs],
+    [],
   );
 
   const enrichedData = useMemo(
@@ -551,32 +545,15 @@ const Pipelines = () => {
         </Button>
       );
     },
-    muiTableBodyRowProps: () => ({
+    muiTableBodyRowProps: ({ row }) => ({
+      onClick: () =>
+        navigate(
+          `/${library}/pipelines/${encodeURIComponent(row.original.name)}`,
+        ),
       sx: {
         cursor: "pointer",
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        "& > td": {
-          backgroundColor: `${GLOBAL_BACKGROUND_COLOR} !important`,
-        },
       },
     }),
-    muiTablePaperProps: {
-      sx: {
-        padding: 0,
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        elevation: 0,
-      },
-    },
-    muiTableHeadCellProps: {
-      sx: { backgroundColor: GLOBAL_BACKGROUND_COLOR, color: "#ffffff" },
-    },
-    muiTableBodyCellProps: {
-      sx: {
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        color: "#ffffff",
-        height: "40px",
-      },
-    },
   });
 
   return (
@@ -614,7 +591,10 @@ const Pipelines = () => {
             >
               Pipelines
             </Typography>
-            <Button onClick={() => navigate(`/${library}/pipelines/new`)}>
+            <Button
+              variant="gradient"
+              onClick={() => navigate(`/${library}/pipelines/new`)}
+            >
               Add Pipeline
             </Button>
           </Stack>

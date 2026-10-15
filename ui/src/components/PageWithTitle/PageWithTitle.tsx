@@ -10,6 +10,8 @@ interface PageWithTitleProps {
   children: React.ReactNode;
   actions?: React.ReactNode[];
   breadcrumbItems?: BreadcrumbsProps["items"];
+  /** Set to false to hide the breadcrumbs entirely (default: true). */
+  showBreadcrumbs?: boolean;
   title: React.ReactNode;
   subTitle?: string;
   moduloMaxWidth?: number;
@@ -18,6 +20,7 @@ interface PageWithTitleProps {
 
 export const PageWithTitle = ({
   breadcrumbItems,
+  showBreadcrumbs = true,
   children,
   title,
   subTitle,
@@ -72,7 +75,7 @@ export const PageWithTitle = ({
     >
       <Stack direction="row" sx={{ justifyContent: "space-between" }}>
         <Stack direction="column" sx={{ width: "100%" }}>
-          {breadcrumbsToRender.length > 1 && (
+          {showBreadcrumbs && breadcrumbsToRender.length > 1 && (
             <Breadcrumbs
               items={breadcrumbsToRender}
               maximumNumberOfVisibleBreadcrumbs={breadcrumbsToRender.length}

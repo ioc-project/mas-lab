@@ -1,7 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { type Theme, type SxProps } from "@mui/material";
-import { GLOBAL_BACKGROUND_COLOR } from "@/common/styles";
 
 export const openDrawerWidth = 264;
 export const compactDrawerWidth = 92;
@@ -84,13 +83,14 @@ export const sideBarPaperStyle = (theme: Theme, compact = false): SxProps => {
     position: "relative",
     boxSizing: "border-box",
     background: theme.palette.vars.baseBackgroundStrong,
-    borderRight: `1px solid ${theme.palette.vars.baseBorderDefault}`,
+    border: "none",
     transition: theme.transitions.create(["width", "height"], {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.enteringScreen,
     }),
     overflowX: "hidden",
     zIndex: 80,
+    marginTop: "12px",
 
     "&::-webkit-scrollbar": {
       width: 0,
@@ -110,15 +110,12 @@ export const sideBarDrawerStyle = (compact = false): SxProps<Theme> => {
       width: compact ? compactDrawerWidth : openDrawerWidth,
       boxSizing: "border-box",
       borderRadius: 0,
-      backgroundColor: GLOBAL_BACKGROUND_COLOR,
     },
   };
 };
 
 export const sideBarTooltip = (theme: Theme) => {
   return {
-    //  bgcolor: '#00f',
-    // color: '#00f',
     ...theme.typography.caption,
     zIndex: 100,
     position: "relative",

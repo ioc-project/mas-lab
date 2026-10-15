@@ -7,11 +7,10 @@ import {
   type MRT_RowSelectionState,
   type MRT_SortingState,
 } from "material-react-table";
-import { CreateTableInstance, EmptyState } from "@open-ui-kit/core";
+import { CreateTableInstance, EmptyState, Button } from "@open-ui-kit/core";
 import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
 import {
   Box,
-  Button,
   Stack,
   Typography,
   useTheme,
@@ -25,14 +24,12 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router";
 import { useCallback, useMemo, useState } from "react";
-import { GLOBAL_BACKGROUND_COLOR } from "@/common/styles";
 import {
   useOverlays,
   deleteOverlayApi,
   type OverlayEntry,
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
-
 type OverlayRow = Pick<OverlayEntry, "name" | "description" | "namespace">;
 
 const Overlays = () => {
@@ -95,11 +92,6 @@ const Overlays = () => {
               color: theme.palette.vars.interactivePrimaryDefaultDefault,
               "&:hover": { textDecoration: "underline" },
             }}
-            onClick={() =>
-              navigate(
-                `/${library}/overlays/${encodeURIComponent(row.original.name)}`,
-              )
-            }
           >
             {row.original.name}
           </Typography>
@@ -115,7 +107,7 @@ const Overlays = () => {
         header: "Description",
       },
     ],
-    [library, navigate, theme],
+    [theme],
   );
 
   const tableRef = CreateTableInstance<OverlayRow>({
@@ -182,32 +174,15 @@ const Overlays = () => {
         </Button>
       );
     },
-    muiTableBodyRowProps: () => ({
+    muiTableBodyRowProps: ({ row }) => ({
+      onClick: () =>
+        navigate(
+          `/${library}/overlays/${encodeURIComponent(row.original.name)}`,
+        ),
       sx: {
         cursor: "pointer",
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        "& > td": {
-          backgroundColor: `${GLOBAL_BACKGROUND_COLOR} !important`,
-        },
       },
     }),
-    muiTablePaperProps: {
-      sx: {
-        padding: 0,
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        elevation: 0,
-      },
-    },
-    muiTableHeadCellProps: {
-      sx: { backgroundColor: GLOBAL_BACKGROUND_COLOR, color: "#ffffff" },
-    },
-    muiTableBodyCellProps: {
-      sx: {
-        backgroundColor: GLOBAL_BACKGROUND_COLOR,
-        color: "#ffffff",
-        height: "40px",
-      },
-    },
   });
 
   return (
@@ -230,7 +205,10 @@ const Overlays = () => {
             >
               Overlays
             </Typography>
-            <Button onClick={() => navigate(`/${library}/overlays/new`)}>
+            <Button
+              variant="gradient"
+              onClick={() => navigate(`/${library}/overlays/new`)}
+            >
               New Overlay
             </Button>
           </Stack>
@@ -251,7 +229,9 @@ const Overlays = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} disabled={deleting}>Cancel</Button>
+          <Button onClick={handleCancelDelete} disabled={deleting}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             color="negative"

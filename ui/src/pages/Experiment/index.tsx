@@ -1,7 +1,13 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle } from "@/components";
-import { Box, CircularProgress, Typography, useTheme, Button } from "@mui/material";
+import {
+  Box,
+  CircularProgress,
+  Typography,
+  useTheme,
+  Button,
+} from "@mui/material";
 import { useNavigate, useParams } from "react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useExperimentDetail, fetchExperimentFile } from "@/api/apiCalls";
@@ -108,6 +114,7 @@ const Experiment = () => {
           {experiment.name}
         </Typography>
       }
+      showBreadcrumbs={false}
     >
       {useGrouped && (
         <ResultsOverviewCards

@@ -7,16 +7,7 @@ import {
   TabPanel,
 } from "@/components";
 import type { ExperimentJobStatus } from "@/components/ExperimentsTable/ExperimentsTable";
-import {
-  Alert,
-  Box,
-  Button,
-  Stack,
-  Tab,
-  Tabs,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Alert, Box, Stack, Typography, useTheme } from "@mui/material";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate, useParams } from "react-router";
 import { parse } from "yaml";
@@ -33,6 +24,7 @@ import {
   downloadBenchmarkExport,
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button, Tab, Tabs } from "@open-ui-kit/core";
 
 const POLL_INTERVAL = 2000;
 
@@ -360,7 +352,11 @@ const Experiments = () => {
             >
               Experiments
             </Typography>
-            {tab === 0 && <Button onClick={handleAdd}>Add Experiment</Button>}
+            {tab === 0 && (
+              <Button variant="gradient" onClick={handleAdd}>
+                Add Experiment
+              </Button>
+            )}
           </Stack>
         }
       >
