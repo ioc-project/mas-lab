@@ -262,10 +262,33 @@ class ToolProviderRegistry:
         try:
             for spec in handler.list_tools(ctx=ctx) or []:
                 if str(spec.get("name") or "") == tool_name:
-                    return spec
+                    return self._with_advertised_schema(handler, spec, ctx=ctx)
         except Exception as exc:
             logger.error("Error listing tools from provider %s: %s", handler, exc, exc_info=True)
         return None
+
+    @staticmethod
+    def _with_advertised_schema(handler: Any, spec: dict[str, Any], *, ctx: Any = None) -> dict[str, Any]:
+        """Give the model real parameters for an explicitly claimed tool.
+
+        An explicit claim routes by name without asking the server, so its
+        ``list_tools`` entry has an empty schema. When the spec is built for the
+        model, ask the provider's own advertisement (``discover_tools``) for that
+        tool. A failed lookup keeps the bare entry.
+        """
+        params = spec.get("parameters")
+        if params and (params.get("properties") or params.get("required")):
+            return spec
+        discover = getattr(handler, "discover_tools", None)
+        if not callable(discover):
+            return spec
+        try:
+            for found in discover(ctx=ctx) or []:
+                if str(found.get("name") or "") == str(spec.get("name") or ""):
+                    return found
+        except Exception:  # noqa: BLE001 - the bare entry still routes
+            logger.debug("schema lookup failed for tool %r", spec.get("name"), exc_info=True)
+        return spec
 
     def list_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
         """Return the spec for each routed name from its owning provider."""

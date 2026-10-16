@@ -480,3 +480,29 @@ def test_registry_invalidate_forwards_to_provider():
     registry.invalidate()
     assert provider.dropped is True
     assert registry._routes is None
+
+
+def test_explicit_claim_advertises_server_schema_to_the_model():
+    """Routing stays name-only; the model-facing spec carries the real schema."""
+
+    class _Mcp:
+        tools_claim = ("web-search",)
+        discovered = 0
+
+        def list_tools(self, *, ctx=None):
+            return [{"name": "web-search", "parameters": {"type": "object", "properties": {}}}]
+
+        def discover_tools(self, *, ctx=None):
+            self.discovered += 1
+            return [{"name": "web-search", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}]
+
+        def call_tool(self, tool_name, arguments, **kwargs):
+            return {"ok": True}
+
+    provider = _Mcp()
+    registry = ToolProviderRegistry()
+    registry.register_provider(provider)
+    registry.initialize()
+    assert provider.discovered == 0  # routing did not ask the server
+    specs = registry.list_tools()
+    assert specs[0]["parameters"]["properties"] == {"query": {"type": "string"}}

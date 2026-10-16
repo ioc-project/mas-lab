@@ -45,7 +45,7 @@ def _safe_eval(expr: str) -> float:
 class CalcTool(ToolContract):
     """Evaluate a safe arithmetic expression for cost aggregation."""
 
-    def on_collect_tools(self, **_: Any) -> List[Dict[str, Any]]:
+    def list_tools(self, **_: Any) -> List[Dict[str, Any]]:
         return [
             {
                 "name": "calc",
@@ -66,7 +66,7 @@ class CalcTool(ToolContract):
             }
         ]
 
-    def on_execute_tool(self, tool_name: str, arguments: Dict[str, Any], **_: Any) -> Any:
+    def call_tool(self, tool_name: str, arguments: Dict[str, Any], **_: Any) -> Any:
         if tool_name != "calc":
             return None
 

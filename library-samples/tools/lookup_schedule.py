@@ -43,7 +43,7 @@ class LookupScheduleTool(ToolContract):
     def __init__(self, dataset_path: str = "fixtures/arborian-network.yaml") -> None:
         self._dataset_path = dataset_path
 
-    def on_collect_tools(self, **_: Any) -> List[Dict[str, Any]]:
+    def list_tools(self, **_: Any) -> List[Dict[str, Any]]:
         return [
             {
                 "name": "lookup_schedule",
@@ -77,7 +77,7 @@ class LookupScheduleTool(ToolContract):
             }
         ]
 
-    def on_execute_tool(self, tool_name: str, arguments: Dict[str, Any], **_: Any) -> Any:
+    def call_tool(self, tool_name: str, arguments: Dict[str, Any], **_: Any) -> Any:
         if tool_name != "lookup_schedule":
             return None
 
