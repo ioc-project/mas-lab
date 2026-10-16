@@ -208,3 +208,35 @@ def test_push_dry_run_defaults_localhost(tmp_path):
     body = json.loads(result.output)
     assert body["status"] == "dry-run"
     assert "localhost:4318" in body["detail"]
+
+
+def test_push_app_name_sets_service_name(tmp_path, monkeypatch):
+    from mas.library.telemetry.collector import otlp
+
+    spans = tmp_path / "s.jsonl"
+    spans.write_text(
+        json.dumps(
+            {
+                "name": "AgentCall",
+                "context": {"span_id": "0x1", "trace_id": "0x2"},
+                "start_time": "2024-01-01T00:00:00.000000Z",
+                "end_time": "2024-01-01T00:00:01.000000Z",
+                "attributes": {"mas.boundary": "AgentCall"},
+                "resource": {"attributes": {"service.name": "original"}},
+            }
+        )
+        + "\n"
+    )
+    seen = {}
+
+    def fake_push(spans_, resource_attrs, endpoint, **kw):
+        seen.update(resource_attrs)
+        return {"spans": len(spans_), "batches": 1, "status": "dry-run", "detail": ""}
+
+    monkeypatch.setattr(otlp, "_push", fake_push)
+    result = runner.invoke(
+        telemetry_group,
+        ["push", str(spans), "--endpoint", "http://x:4318", "--app-name", "my-app"],
+    )
+    assert result.exit_code == 0
+    assert seen["service.name"] == "my-app"

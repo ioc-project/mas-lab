@@ -45,7 +45,7 @@ def h_mas_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     conv.close_span(
         ev.get("call_id"),
         {
-            "mas.output": str(output)[:2000],
+            "mas.output": str(output),
         },
         status=ev.get("status", "success"),
         end_ns=conv.ts_ns(ev),
@@ -62,7 +62,7 @@ def h_execution_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.boundary": "AgentCall",
             "mas.agent.id": conv.agent_id(ev),
             "mas.run.id": ev.get("run_id", ""),
-            "mas.input": str(ev.get("input", ""))[:2000],
+            "mas.input": str(ev.get("input", "")),
             **({} if not ev.get("dp_id") else {"mas.dp.id": ev["dp_id"]}),
         },
         ev.get("parent_call_id"),
@@ -79,7 +79,7 @@ def h_execution_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         or conv.agent_output_for(ev.get("call_id"))
         or ""
     )
-    extra: Dict[str, Any] = {"mas.output": str(output)[:2000]}
+    extra: Dict[str, Any] = {"mas.output": str(output)}
     if ev.get("failure_reason"):
         extra["mas.failure.reason"] = str(ev["failure_reason"])[:500]
     if ev.get("failure_category"):

@@ -136,8 +136,8 @@ class SpanEmitter(Protocol):
     def span_key(self, ev: Dict[str, Any]) -> str:
         """Tracking key for interval spans (nested wrappers vs structural calls)."""
 
-    def enc(self, value: Any, limit: int = ...) -> str:
-        """Encode an arbitrary value to a length-limited JSON string."""
+    def enc(self, value: Any, limit: int | None = None) -> str:
+        """Encode an arbitrary value to a JSON string (uncapped unless ``limit`` is given)."""
 
     def is_open(self, call_id: str | None) -> bool:
         """Whether an interval span is currently open for ``call_id``."""

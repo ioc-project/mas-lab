@@ -692,7 +692,7 @@ class MasOtelConverter:
         messages = ev.get("messages")
         if not call_id or not messages:
             return
-        encoded = self.enc(messages, limit=4000)
+        encoded = self.enc(messages)
         attrs: Dict[str, Any] = {
             "mas.llm.messages": encoded,
             semconv.GEN_AI_INPUT_MESSAGES: encoded,
@@ -711,10 +711,10 @@ class MasOtelConverter:
         cleaned = str(text or "").strip()
         if not call_id or not cleaned:
             return
-        self._agent_outputs[str(call_id)] = cleaned[:2000]
-        extra = {"mas.output": cleaned[:2000]}
+        self._agent_outputs[str(call_id)] = cleaned
+        extra = {"mas.output": cleaned}
         if self._converter_profile == "observe_sdk":
-            extra[semconv.IOA_ENTITY_OUTPUT] = cleaned[:2000]
+            extra[semconv.IOA_ENTITY_OUTPUT] = cleaned
         self.annotate_open_span(call_id, extra)
 
     def agent_output_for(self, call_id: str | None) -> str:
@@ -1134,15 +1134,15 @@ class MasOtelConverter:
     )
 
     @staticmethod
-    def enc(value: Any, limit: int = 2000) -> str:
-        """Encode an arbitrary value to a length-limited string."""
+    def enc(value: Any, limit: int | None = None) -> str:
+        """Encode an arbitrary value to a JSON string. Pass ``limit`` to cap the length; by default nothing is cut."""
         if value is None:
             return ""
         try:
             text = json.dumps(value, ensure_ascii=True, default=str)
         except Exception:  # pragma: no cover - defensive
             text = str(value)
-        return text[:limit]
+        return text if limit is None else text[:limit]
 
     def is_open(self, call_id: str | None) -> bool:
         return bool(call_id) and call_id in self._open_spans

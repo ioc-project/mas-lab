@@ -131,7 +131,6 @@ def h_context_steer(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.annotation.kind": "context_steer",
             "mas.annotation.content": conv.enc(
                 ev.get("content") or ev.get("steer") or ev.get("instruction") or "",
-                limit=2000,
             ),
         },
         ev.get("parent_call_id"),

@@ -80,7 +80,7 @@ def h_user_input(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 
 @register("user_output", "client_response", "user_response")
 def h_user_output(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    content = str(ev.get("content") or ev.get("output", ""))[:2000]
+    content = str(ev.get("content") or ev.get("output", ""))
     ensure = getattr(conv, "ensure_resumed_agent_call", None)
     dest = ev.get("parent_call_id") or ev.get("call_id")
     if callable(ensure):

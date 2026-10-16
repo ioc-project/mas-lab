@@ -90,7 +90,7 @@ def close_caller_visit(
     output = conv.agent_output_for(current) or resolve_tool_name(ev) or "delegate"
     conv.close_span(
         current,
-        {"mas.output": str(output)[:2000]},
+        {"mas.output": str(output)},
         status="success",
         end_ns=conv.ts_ns(ev),
     )
@@ -115,7 +115,7 @@ def ensure_resumed_agent_call(conv: Any, ev: Dict[str, Any]) -> str | None:
     attrs: Dict[str, Any] = {
         "mas.boundary": "AgentCall",
         "mas.agent.id": agent,
-        "mas.input": str(pending.get("input") or ev.get("input") or "")[:2000],
+        "mas.input": str(pending.get("input") or ev.get("input") or ""),
     }
     start_ns = conv.ts_ns(ev)
     awaiting = str(pending.get("awaiting") or "")

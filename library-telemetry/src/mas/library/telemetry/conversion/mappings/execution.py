@@ -32,7 +32,7 @@ def h_llm_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         or ev.get("llm_name")
         or getattr(conv, "llm_model_for", lambda _a: "")(conv.agent_id(ev))
         or "",
-        "mas.llm.messages": conv.enc(ev.get("messages"), limit=4000),
+        "mas.llm.messages": conv.enc(ev.get("messages")),
     }
     if ev.get("temperature") is not None:
         attrs["mas.llm.temperature"] = float(ev["temperature"])
@@ -60,10 +60,10 @@ def h_llm_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         completion = ev.get("output", "")
     extra: Dict[str, Any] = {
         "mas.llm.finish_reason": ev.get("finish_reason") or "",
-        "mas.llm.response": str(completion)[:2000],
+        "mas.llm.response": str(completion),
     }
     if thinking:
-        extra["mas.llm.thinking"] = str(thinking)[:2000]
+        extra["mas.llm.thinking"] = str(thinking)
     if isinstance(tokens, dict):
         extra["metrics.token.input"] = tokens.get("prompt_tokens")
         extra["metrics.token.output"] = tokens.get("completion_tokens")
@@ -101,7 +101,7 @@ def h_tool_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         "mas.boundary": "ToolCall",
         "mas.agent.id": conv.agent_id(ev),
         "mas.tool.name": resolve_tool_name(ev),
-        "mas.tool.input": conv.enc(ev.get("arguments"), limit=1000),
+        "mas.tool.input": conv.enc(ev.get("arguments")),
         "mas.tool.category": ev.get("tool_category", "data"),
     }
     if ev.get("barrier_id"):
@@ -119,7 +119,7 @@ def h_tool_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     result = ev.get("result")
     if result in (None, ""):
         result = ev.get("output", "")
-    output = result[:1000] if isinstance(result, str) else conv.enc(result, limit=1000)
+    output = result if isinstance(result, str) else conv.enc(result)
     conv.close_span(
         ev.get("call_id"),
         {
@@ -172,7 +172,7 @@ def h_skill_execution_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.boundary": "SkillExecution",
             "mas.agent.id": conv.agent_id(ev),
             "mas.skill.name": ev.get("skill_name") or "",
-            "mas.skill.input": conv.enc(ev.get("input"), limit=1000),
+            "mas.skill.input": conv.enc(ev.get("input")),
         },
         ev.get("parent_call_id"),
         start_ns=conv.ts_ns(ev),
@@ -182,7 +182,7 @@ def h_skill_execution_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 @register("skill_execution_end")
 def h_skill_execution_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     output = ev.get("output", "")
-    val = output[:1000] if isinstance(output, str) else conv.enc(output, limit=1000)
+    val = output if isinstance(output, str) else conv.enc(output)
     conv.close_span(
         ev.get("call_id"),
         {"mas.skill.output": val},

@@ -31,7 +31,7 @@ def h_memory_store_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.memory.type": ev.get("memory_type") or "episodic",
             "mas.memory.operation": "write",
             "mas.memory.input": conv.enc(
-                ev.get("data") or ev.get("content"), limit=1000
+                ev.get("data") or ev.get("content")
             ),
         },
         ev.get("parent_call_id"),
@@ -73,9 +73,9 @@ def h_memory_read_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 def h_memory_read_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     result = ev.get("result", "")
     extra: Dict[str, Any] = {
-        "mas.memory.output": result[:1000]
+        "mas.memory.output": result
         if isinstance(result, str)
-        else conv.enc(result, limit=1000),
+        else conv.enc(result),
     }
     if ev.get("result_count"):
         extra["mas.memory.result_count"] = int(ev["result_count"])
@@ -113,9 +113,9 @@ def h_rag_query_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 def h_rag_query_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     result = ev.get("result", "")
     extra: Dict[str, Any] = {
-        "mas.memory.output": result[:1000]
+        "mas.memory.output": result
         if isinstance(result, str)
-        else conv.enc(result, limit=1000),
+        else conv.enc(result),
     }
     if ev.get("result_count"):
         extra["mas.memory.result_count"] = int(ev["result_count"])
