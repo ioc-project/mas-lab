@@ -125,6 +125,7 @@ class SessionController:
     llm_id: str = ""
     obs_recorder: Any | None = None
     exchange_listener: Any | None = None
+    exchange_hub: Any | None = field(default=None, repr=False)
     # One id for the whole MAS run — every turn this controller ever runs
     # shares it (see _run_user_turn). Empty here means "mint a fresh one";
     # explicitly pass an existing value (e.g. from an entry agent's own
@@ -147,6 +148,7 @@ class SessionController:
     _trace_turn_start: float = 0.0
     _trace_plugin: CliTraceExchangePlugin | None = field(default=None, repr=False)
     _bridge_plugin: _ToolErrorAndListenerBridge | None = field(default=None, repr=False)
+    _hub_plugin: Any | None = field(default=None, repr=False)
     _checkpoint_event_counter: int = field(default=0, repr=False)
 
     @property
@@ -207,6 +209,11 @@ class SessionController:
         if self._bridge_plugin is None:
             self._bridge_plugin = _ToolErrorAndListenerBridge()
             self.instance.driver.subscribe_exchange(self._bridge_plugin)
+        if self._hub_plugin is None and self.exchange_hub is not None:
+            from mas.runtime.boundary.obs.exchange_hub import HubExchangePlugin
+
+            self._hub_plugin = HubExchangePlugin(self.exchange_hub, self.session_id)
+            self.instance.driver.subscribe_exchange(self._hub_plugin)
         self._bridge_plugin.configure(
             agent_id=self.agent_id,
             exchange_listener=self.exchange_listener,

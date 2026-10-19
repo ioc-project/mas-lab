@@ -107,12 +107,13 @@ async def serve_and_advertise(
     port: int = 0,
     path: str | Path | None = None,
     token: str = "",
+    hub: Any | None = None,
 ) -> tuple[ControlRpcServer, ControlHost]:
     attach_token = token or secrets.token_urlsafe(32)
     if path is not None:
-        server = ControlRpcServer(control, path, token=attach_token)
+        server = ControlRpcServer(control, path, token=attach_token, hub=hub)
     else:
-        server = ControlRpcServer(control, host=host, port=port, token=attach_token)
+        server = ControlRpcServer(control, host=host, port=port, token=attach_token, hub=hub)
     await server.start()
     hosted = ControlHost(
         directory,

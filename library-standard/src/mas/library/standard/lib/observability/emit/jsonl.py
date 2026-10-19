@@ -1,11 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Event emission — terminating protocol (stdout, file, OTLP push)."""
+"""Event emission — terminating protocol (stdout, file)."""
 
 from __future__ import annotations
 
 import json
 import sys
+import threading
+from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
@@ -27,18 +29,21 @@ class EventEmitter(Protocol):
 
 
 class JsonlFileEmitter:
-    """Append JSONL records to a file (native observability parity)."""
+    """Append native records to ``events.jsonl``. Truncates on open."""
 
     def __init__(self, path) -> None:
-        from pathlib import Path
-
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_bytes(b"")
+        self._lock = threading.Lock()
 
     def emit(self, record: dict) -> None:
-        with self._path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(record, default=str) + "\n")
+        if envelope_only_kind(str(record.get("kind") or "")):
+            return
+        line = json.dumps(record, default=str) + "\n"
+        with self._lock:
+            with self._path.open("a", encoding="utf-8") as handle:
+                handle.write(line)
 
     def flush(self) -> None:
         pass

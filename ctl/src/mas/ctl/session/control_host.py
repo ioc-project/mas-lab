@@ -16,9 +16,10 @@ from mas.library.standard.plugins.control.directory import FileSessionDirectory
 class ControlDirectoryHost:
     """Background RPC server keyed in a file directory by session id."""
 
-    def __init__(self, control: Any, directory: str | Path) -> None:
+    def __init__(self, control: Any, directory: str | Path, *, hub: Any | None = None) -> None:
         self.control = control
         self.directory = FileSessionDirectory(Path(directory))
+        self._hub = hub
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._error: BaseException | None = None
@@ -44,6 +45,7 @@ class ControlDirectoryHost:
                         self.control,
                         self.directory,
                         session_id,
+                        hub=self._hub,
                     )
                     self._server = server
                     self._hosted = hosted

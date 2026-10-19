@@ -564,6 +564,7 @@ async def execute_batch(
             try:
                 def _do_mas_run() -> dict:
                     from mas.lab.runners.infer import infer_runner_id
+                    from mas.lab.benchmark.pipeline.ui_bridge import forward_native_to_channel
                     from mas.runtime.boundary.obs.event_stream import (
                         EventStream,
                         reset_event_stream,
@@ -577,6 +578,7 @@ async def execute_batch(
                             super().publish(event)
 
                     _stream = _ScenarioStream()
+                    _stream.subscribe(forward_native_to_channel)
                     _token = set_event_stream(_stream)
                     _sid_token = begin_run(_v2_key)
                     try:

@@ -174,3 +174,49 @@ def test_native_plugin_emits_tool_call(tmp_path) -> None:
     assert event["tool_name"] == "delegate_to_flights"
     assert event["mas_id"] == "trip-planner"
     assert event["app_name"] == "trip-planner"
+
+
+def test_native_plugin_publishes_projected_records_on_event_stream(tmp_path) -> None:
+    from mas.runtime.boundary.obs.event_stream import EventStream, reset_event_stream, set_event_stream
+
+    events_path = tmp_path / "events.jsonl"
+    stream = EventStream()
+    seen: list[dict] = []
+    stream.subscribe(seen.append)
+    token = set_event_stream(stream)
+    try:
+        plugin = NativeObservabilityPlugin(
+            transforms=[NativeObservabilityTransform()],
+            emitters=[JsonlFileEmitter(events_path)],
+            context=TransformContext(agent_id="planner", run_id="run-1"),
+        )
+        plugin.on_transition(
+            TransitionEvent(
+                contract_id="tool",
+                mealy_symbol="TOOL_CALL",
+                phase="start",
+                agent_id="planner",
+                run_id="run-1",
+                correlation_id=3,
+                boundary_kind="engine.io",
+                attributes={"op": "TOOL_CALL", "tool_name": "search"},
+            )
+        )
+    finally:
+        reset_event_stream(token)
+    assert seen
+    assert seen[0]["kind"] == "tool_call_start"
+    assert seen[0]["tool_name"] == "search"
+
+
+def test_jsonl_file_emitter_skips_envelope_kinds_and_truncates(tmp_path) -> None:
+    dest = tmp_path / "traces" / "events.jsonl"
+    dest.parent.mkdir(parents=True)
+    dest.write_text('{"kind":"stale"}\n', encoding="utf-8")
+    emitter = JsonlFileEmitter(dest)
+    emitter.emit({"kind": "llm_call_end", "n": 1})
+    emitter.emit({"kind": "control.structure", "offset": 0})
+    lines = [ln for ln in dest.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    assert len(lines) == 1
+    assert "llm_call_end" in lines[0]
+    assert "stale" not in dest.read_text(encoding="utf-8")

@@ -417,9 +417,11 @@ def chat_cmd(
             # CLI-only run without explicit manifest: show "n/a" instead of generic "agent"
             agent_name = "n/a"
 
+        from mas.runtime.boundary.obs.exchange_hub import ExchangeHub
         from mas.runtime.driver.driver import engine_model_id
 
         llm_name = engine_model_id(getattr(instance.driver, "engine", None))
+        exchange_hub = ExchangeHub() if not no_control else None
 
         controller = SessionController(
             instance=instance,
@@ -431,6 +433,7 @@ def chat_cmd(
             obs_recorder=obs_rec,
             agent_id=agent_name,
             llm_id=llm_name,
+            exchange_hub=exchange_hub,
             config=ConversationConfig(
                 single_turn=single_turn or (bool(scripted) and not interactive),
                 save_checkpoint_each_turn=save_checkpoint,
@@ -459,6 +462,7 @@ def chat_cmd(
                     capability=ControlCapability(actor="admin", surface="admin")
                 ),
                 advertised,
+                hub=exchange_hub,
             )
             control_host.start(managed_session.session_id)
             display.on_system(

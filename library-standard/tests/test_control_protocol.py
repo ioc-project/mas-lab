@@ -191,3 +191,35 @@ async def test_persist_writes_checkpoint_file_for_resume(tmp_path: Path) -> None
         await client.close()
         hosted.unadvertise()
         await server.close()
+
+
+@pytest.mark.asyncio
+async def test_subscribe_exchange_replays_then_streams(tmp_path: Path) -> None:
+    from mas.runtime.boundary.obs.exchange_hub import ExchangeHub
+
+    manager = _manager()
+    control = manager.control(capability=ControlCapability(actor="rpc", surface="admin"))
+    directory = FileSessionDirectory(tmp_path)
+    hub = ExchangeHub()
+    hub.publish("s-sub-ex", {"kind": "user_in", "text": "hi"})
+    server, hosted = await serve_and_advertise(
+        control, directory, "s-sub-ex", host="127.0.0.1", hub=hub
+    )
+    client = await attach(directory, "s-sub-ex")
+    seen: list[str] = []
+    replayed = False
+    try:
+        agen = client.asubscribe_exchange("s-sub-ex")
+        first = await agen.__anext__()
+        seen.append(first["record"]["kind"])
+        replayed = bool(first.get("replay"))
+        hub.publish("s-sub-ex", {"kind": "user_out", "text": "ok"})
+        second = await agen.__anext__()
+        seen.append(second["record"]["kind"])
+        await agen.aclose()
+    finally:
+        await client.close()
+        hosted.unadvertise()
+        await server.close()
+    assert seen == ["user_in", "user_out"]
+    assert replayed is True

@@ -193,6 +193,15 @@ class IngestSubscriber:
         )
 
 
+def forward_native_to_channel(event: dict[str, Any]) -> None:
+    """EventStream subscriber: projected native records only, not Mealy hops."""
+    if not isinstance(event, dict) or event.get("source") == "transition":
+        return
+    from mas.runtime.boundary.obs.event_stream import emit_to_channel
+
+    emit_to_channel(event)
+
+
 class LiveRunSink:
     """Publish native records onto the channel and POST ingest once. DAG nodes fold."""
 

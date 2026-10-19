@@ -57,6 +57,17 @@ def test_subscribes_both_trace_and_bridge_plugins_exactly_once():
     assert hasattr(bridge_candidates[0], "on_exchange")
 
 
+def test_subscribes_hub_plugin_only_when_hub_is_injected():
+    from mas.runtime.boundary.obs.exchange_hub import ExchangeHub, HubExchangePlugin
+
+    controller = _controller()
+    controller.exchange_hub = ExchangeHub()
+    controller._setup_exchange_tracing()
+    controller._setup_exchange_tracing()
+    plugins = controller.instance.driver.exchange_plugins
+    assert sum(isinstance(p, HubExchangePlugin) for p in plugins) == 1
+
+
 def test_bridge_forwards_to_exchange_listener_even_when_trace_is_off():
     """The bridge (errors + exchange_listener forwarding) must stay active
     even when normal --trace/--verbose display is off -- only CliTrace

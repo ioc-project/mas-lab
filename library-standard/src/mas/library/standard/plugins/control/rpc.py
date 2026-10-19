@@ -90,6 +90,7 @@ class ControlRpcServer:
         host: str | None = None,
         port: int = 0,
         token: str = "",
+        hub: Any | None = None,
     ) -> None:
         if path is not None and host is not None:
             raise ValueError("use either a unix path or a tcp host, not both")
@@ -102,6 +103,7 @@ class ControlRpcServer:
         self.token = token
         self._server: asyncio.AbstractServer | None = None
         self._bound: tuple[str, int] | None = None
+        self._hub = hub
 
     @property
     def endpoint(self) -> str:
@@ -133,19 +135,29 @@ class ControlRpcServer:
         if self.path is not None and self.path.exists():
             self.path.unlink()
 
+    def _require_hub(self) -> Any:
+        if self._hub is None:
+            raise RuntimeError("exchange hub is not configured")
+        return self._hub
+
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             while True:
                 raw = await reader.readline()
                 if not raw:
                     break
+                request: dict[str, Any] | None = None
                 try:
                     request = json.loads(raw.decode())
+                    method = str((request or {}).get("method") or "")
+                    if method == "subscribe_exchange":
+                        await self._stream_exchanges(request, reader, writer)
+                        return
                     result = await asyncio.to_thread(self._dispatch, request)
                     reply = {"id": request.get("id"), "ok": True, "result": _jsonable(result)}
                 except Exception as exc:
                     reply = {
-                        "id": (request.get("id") if isinstance(locals().get("request"), dict) else None),
+                        "id": (request.get("id") if isinstance(request, dict) else None),
                         "ok": False,
                         "error": {"type": type(exc).__name__, "message": str(exc)},
                     }
@@ -154,6 +166,71 @@ class ControlRpcServer:
         finally:
             writer.close()
             await writer.wait_closed()
+
+    async def _stream_exchanges(
+        self,
+        request: dict[str, Any],
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
+        session_id = str(request.get("session_id") or "")
+        if not _tokens_match(self.token, str(request.get("token") or "")):
+            raise ControlDenied("subscribe_exchange", session_id, reason="attach token mismatch")
+        hub = self._require_hub()
+        queue = hub.subscribe(session_id)
+        buffered = hub.buffer(session_id)
+        writer.write(
+            (
+                json.dumps(
+                    {
+                        "id": request.get("id"),
+                        "ok": True,
+                        "result": {"subscribed": True, "buffered": buffered},
+                    }
+                )
+                + "\n"
+            ).encode()
+        )
+        await writer.drain()
+        read_task = asyncio.create_task(reader.readline())
+        get_task = asyncio.create_task(queue.get())
+        try:
+            while True:
+                done, _pending = await asyncio.wait(
+                    {read_task, get_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if read_task in done:
+                    raw = read_task.result()
+                    if not raw:
+                        break
+                    read_task = asyncio.create_task(reader.readline())
+                    continue
+                item = get_task.result()
+                get_task = asyncio.create_task(queue.get())
+                writer.write(
+                    (
+                        json.dumps(
+                            {
+                                "type": "exchange",
+                                "session_id": session_id,
+                                "replay": bool(item.get("replay")),
+                                "record": item.get("record") or {},
+                            }
+                        )
+                        + "\n"
+                    ).encode()
+                )
+                await writer.drain()
+        finally:
+            read_task.cancel()
+            get_task.cancel()
+            for task in (read_task, get_task):
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            hub.unsubscribe(session_id, queue)
 
     def _dispatch(self, request: dict[str, Any]) -> Any:
         method = str(request.get("method") or "")
@@ -249,6 +326,36 @@ class ControlRpcClient:
                 raise SessionNotStopped(session_id, method=method)
             raise RuntimeError(f"{name}: {message}")
         return reply.get("result")
+
+    async def asubscribe_exchange(self, session_id: str):
+        """Yield live exchange dicts. Catch-up rows have replay=True."""
+        if self._reader is None or self._writer is None:
+            raise RuntimeError("ControlRpcClient is not connected")
+        self._next_id += 1
+        request = {
+            "id": self._next_id,
+            "method": "subscribe_exchange",
+            "session_id": session_id,
+            "args": {},
+            "token": self.token,
+        }
+        self._writer.write((json.dumps(request) + "\n").encode())
+        await self._writer.drain()
+        raw = await self._reader.readline()
+        reply = json.loads(raw.decode() or "{}")
+        if not reply.get("ok"):
+            err = reply.get("error") or {}
+            raise RuntimeError(str(err.get("message") or "subscribe_exchange failed"))
+        for item in list((reply.get("result") or {}).get("buffered") or []):
+            yield dict(item, replay=True)
+        while True:
+            raw = await self._reader.readline()
+            if not raw:
+                break
+            payload = json.loads(raw.decode() or "{}")
+            if payload.get("type") != "exchange":
+                continue
+            yield payload
 
     async def ainspect(self, session_id: str) -> dict[str, Any]:
         return dict(await self.call("inspect", session_id) or {})
@@ -359,5 +466,6 @@ class ControlRpcProtocol:
         host: str | None = None,
         port: int = 0,
         token: str = "",
+        hub: Any | None = None,
     ) -> ControlRpcServer:
-        return ControlRpcServer(control, path, host=host, port=port, token=token)
+        return ControlRpcServer(control, path, host=host, port=port, token=token, hub=hub)

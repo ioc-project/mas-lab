@@ -67,15 +67,24 @@ def make_runtime_handler(
     manager = SessionManager(checkpoint_store=InMemoryCheckpointStore())
     mailbox = SessionTurnMailbox(queue=manager.turn_queue)
     host: ControlDirectoryHost | None = None
+    exchange_hub = None
     if control_dir is not None:
+        from mas.runtime.boundary.obs.exchange_hub import ExchangeHub
+
+        exchange_hub = ExchangeHub()
         host = ControlDirectoryHost(
             manager.control(capability=ControlCapability(actor="admin", surface="admin")),
             control_dir,
+            hub=exchange_hub,
         )
 
     def ensure_session(session_id: str) -> Any:
         if session_id not in manager.sessions:
-            controller = SessionController(instance=instance, display=_SilentDisplay())
+            controller = SessionController(
+                instance=instance,
+                display=_SilentDisplay(),
+                exchange_hub=exchange_hub,
+            )
             manager.create(instance, controller, manifest or {}, session_id=session_id)
             if host is not None:
                 host.advertise(session_id)

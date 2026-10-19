@@ -42,6 +42,39 @@ def test_live_channel_sink_publishes_native_not_metric() -> None:
     assert kinds[-1] == "tool_call_end"
 
 
+def test_event_stream_forwards_native_not_mealy_to_channel() -> None:
+    from mas.lab.benchmark.pipeline.ui_bridge import forward_native_to_channel
+    from mas.runtime.boundary.obs.event_stream import (
+        EventStream,
+        publish_event,
+        reset_event_stream,
+        set_event_stream,
+    )
+
+    ch = InprocChannel()
+    set_channel(ch)
+    from mas.lab.benchmark.pipeline.channel import set_stream_id
+
+    sid = "e/s/i/r1#1"
+    set_stream_id(sid)
+    seen: list = []
+
+    def _emit(rec):
+        seen.append(rec)
+        ch.publish_sync(sid, rec)
+
+    set_channel_emitter(_emit)
+    stream = EventStream()
+    stream.subscribe(forward_native_to_channel)
+    token = set_event_stream(stream)
+    try:
+        publish_event({"kind": "llm_call_end", "n": 1})
+        publish_event({"source": "transition", "contract_id": "tool"})
+    finally:
+        reset_event_stream(token)
+    assert [r.get("kind") for r in seen] == ["llm_call_end"]
+
+
 def test_channel_emitter_publishes() -> None:
     ch = InprocChannel()
     set_channel(ch)
