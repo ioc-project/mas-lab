@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Click wrappers for ``mas-lab benchmark`` subcommands."""
+
 from __future__ import annotations
 
 import click
@@ -12,9 +13,11 @@ from .daemon import daemon_group
 from .export_cmd import export_cmd
 from .follow import follow_cmd
 from .import_cmd import import_cmd
+from .import_hf import import_hf_cmd
 from .list_cmd import list_cmd
 from .migrate import migrate_cmd
 from .pipeline import pipeline_group
+from .publish_hf import publish_hf_cmd
 from .rename import rename_cmd
 from .run import run_cmd
 from .show import show_cmd
@@ -38,6 +41,8 @@ group.add_command(migrate_cmd)
 group.add_command(analyze_cmd)
 group.add_command(export_cmd)
 group.add_command(import_cmd)
+group.add_command(publish_hf_cmd)
+group.add_command(import_hf_cmd)
 group.add_command(follow_cmd)
 group.add_command(clean_cmd)
 group.add_command(step_info_cmd)
@@ -57,6 +62,8 @@ __all__ = [
     "analyze_cmd",
     "export_cmd",
     "import_cmd",
+    "publish_hf_cmd",
+    "import_hf_cmd",
     "follow_cmd",
     "clean_cmd",
     "step_info_cmd",
