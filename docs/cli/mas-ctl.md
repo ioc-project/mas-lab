@@ -174,8 +174,9 @@ Shared with `run-mas` and `tui`. Full semantics: [observability.md](observabilit
 ## `mas-ctl run-mas [MANIFEST]`
 
 Compose → materialize → session on the MAS entry agent. Manifest defaults to
-`mas.yaml`. Hosted A2A Application endpoints with `usage: deploy` or
-`use-and-deploy` bind for interrogation while the conversation stays on stdin.
+`mas.yaml`. Deployed A2A Application endpoints on in-process agents
+(`usage: deploy` on the entry agent, or on specialists that are not also
+`use`) bind for interrogation while the conversation stays on stdin.
 
 ```bash
 mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace

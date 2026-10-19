@@ -54,6 +54,8 @@ Then continue with:
 
 | Path              | Link                                                         |
 | ----------------- | ------------------------------------------------------------ |
+| CLI (`mas-lab`)   | [docs/cli/mas-lab.md](docs/cli/mas-lab.md)                   |
+| CLI (`mas-ctl`)   | [docs/cli/mas-ctl.md](docs/cli/mas-ctl.md)                   |
 | Tutorials         | [docs/tutorials/](docs/tutorials/index.md)                   |
 | Web UI (authoring)| [docs/ui/index.md](docs/ui/index.md)                         |
 | Live dashboard    | [docs/ui/live.md](docs/ui/live.md)                           |

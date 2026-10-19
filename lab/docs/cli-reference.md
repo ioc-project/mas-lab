@@ -63,3 +63,7 @@ Format: `STEP_TYPE.config_key=value`. Coercion: `true`/`false` → bool, integer
 | `mas-lab benchmark pipeline plan PIPELINE.yaml` | Dry-run pipeline DAG |
 
 See [components/bench/README.md](../components/bench/README.md) for the full command list.
+
+CLI commands that wrap library pipelines (`telemetry push`, `kg dump`, …):
+[cli-pipelines.md](cli-pipelines.md). Man-page index:
+[docs/cli/mas-lab.md](../../docs/cli/mas-lab.md).

@@ -12,10 +12,11 @@ MAS-Lab ships two CLIs. **`mas-ctl`** runs agents and MAS manifests.
 | CLI | Package | Use for |
 |-----|---------|---------|
 | [`mas-ctl`](mas-ctl.md) | `ctl/` | Chat, TUI, compile, compose, validate, `run-mas` |
-| [`mas-lab`](#mas-lab) | `lab/` | `init`, benchmarks, pipelines, telemetry, plots |
+| [`mas-lab`](mas-lab.md) | `lab/` + libraries | Experiments, telemetry, KG, plots — [man-page index](mas-lab.md) |
 | `mas-ctl --help` / `mas-ctl COMMAND --help` | — | Always-current flag list |
 
-**Complete option tables:** [mas-ctl.md](mas-ctl.md).
+**mas-lab man pages** live with the owning package ([index](mas-lab.md)).
+**Complete mas-ctl option tables:** [mas-ctl.md](mas-ctl.md).
 **Workspace file:** [config.yaml reference](../references/config.yaml.md).
 **Machine run logs:** [observability.md](observability.md) (`events.jsonl`).
 
