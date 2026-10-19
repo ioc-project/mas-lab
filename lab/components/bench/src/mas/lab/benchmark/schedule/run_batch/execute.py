@@ -43,9 +43,24 @@ _FATAL_RUN_MARKERS = (
 
 
 def _infra_refs_for_scenario(scenario_id: str, prepared: PreparedBatch) -> list[str]:
-    """Return the prepared infra refs for this scenario."""
-    del scenario_id
-    return list(prepared.infra_refs)
+    """Prefer per-scenario demo-ui cache refs when the worker set them."""
+    refs = list(prepared.infra_refs)
+    raw = os.environ.get("MAS_DEMO_UI_SCENARIO_INFRA")
+    if not raw:
+        return refs
+    try:
+        mapping = _json.loads(raw)
+    except ValueError:
+        return refs
+    if not isinstance(mapping, dict):
+        return refs
+    extra = mapping.get(scenario_id) or mapping.get(str(scenario_id).lower())
+    if not extra:
+        return refs
+    chosen = [str(item) for item in extra if item]
+    if chosen:
+        return chosen
+    return refs
 
 
 def lab_run_retry_settings(schedule: Any | None) -> tuple[int, float]:
@@ -247,9 +262,9 @@ async def execute_batch(
             logger.debug("live run-post not started", exc_info=True)
             _live_post = None
 
-    from mas.lab.benchmark.pipeline.live_sink import LiveChannelSink
+    from mas.lab.benchmark.pipeline.ui_bridge import LiveRunSink
 
-    _live_sink = LiveChannelSink()
+    _live_sink = LiveRunSink()
     set_channel_emitter(_live_sink.emit)
 
     _emulation = getattr(exp, "bench_emulation", None) or getattr(
@@ -613,6 +628,25 @@ async def execute_batch(
                         },
                     )
                     try:
+                        from mas.lab.benchmark.pipeline.ui_bridge import (
+                            pop_demo_ui_scope,
+                            push_demo_ui_scope,
+                        )
+                    except Exception:
+                        push_demo_ui_scope = None  # type: ignore[assignment]
+                        pop_demo_ui_scope = None  # type: ignore[assignment]
+                    _scope = None
+                    if push_demo_ui_scope is not None:
+                        _ov_ref = str(prepared.scenario_overlay_refs.get(scenario_id) or "")
+                        _ov_name = Path(_ov_ref).stem if _ov_ref else ""
+                        _scope = push_demo_ui_scope(
+                            {
+                                "scenario": scenario_id,
+                                "experiment": getattr(exp, "name", None),
+                                "overlay": _ov_name or None,
+                            }
+                        )
+                    try:
                         result = invoke_runner(ctx)
                         return {
                             "content": result.content,
@@ -622,6 +656,8 @@ async def execute_batch(
                             "session_id": result.metadata.get("session_id", ""),
                         }
                     finally:
+                        if _scope is not None and pop_demo_ui_scope is not None:
+                            pop_demo_ui_scope(_scope)
                         try:
                             from mas.lab.benchmark.pipeline.channel import reset_stream_id
                             if _sid_token is not None:

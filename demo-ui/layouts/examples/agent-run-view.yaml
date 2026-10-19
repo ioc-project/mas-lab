@@ -1,0 +1,24 @@
+version: 1
+title: "Agent run"
+layout:
+  type: vstack
+  children:
+    - type: panel
+      plugin: plot
+      size: 0.62fr
+      title: Topology
+      props:
+        artefact: topology
+        kind: topology
+        stream: custom.topology
+        format: embedded
+        layout: entry-lr
+    - type: panel
+      plugin: plot
+      size: 1fr
+      title: Messages
+      props:
+        artefact: chat
+        kind: chat
+        stream: custom.chat
+        format: embedded

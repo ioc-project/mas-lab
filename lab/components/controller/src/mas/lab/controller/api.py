@@ -10,16 +10,35 @@ from typing import Any, Dict, List, Optional
 
 from mas.lab.controller.manifest_store import ManifestStore
 from mas.lab.controller.registry import WorkerRegistry
-from mas.runtime.spec.source import load_yaml_file
 from mas.lab.controller.worker_model import WorkerKind, WorkerStatus
 from mas.lab.controller.workers import (
     WorkerRunner,
     run_application_worker,
     run_benchmark_worker,
+    run_experiment_worker,
     run_pipeline_worker,
 )
+from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
+
+_INSTANCE: "ControllerAPI | None" = None
+
+
+def set_controller_api(api: "ControllerAPI") -> None:
+    global _INSTANCE
+    _INSTANCE = api
+
+
+def peek_controller_api() -> "ControllerAPI | None":
+    return _INSTANCE
+
+
+def get_controller_api(workspace: Any = None) -> "ControllerAPI":
+    global _INSTANCE
+    if _INSTANCE is None:
+        _INSTANCE = ControllerAPI(workspace)
+    return _INSTANCE
 
 
 class ControllerAPI:
@@ -66,8 +85,35 @@ class ControllerAPI:
     def cancel_worker(self, worker_id: str) -> bool:
         return self.runner.cancel(worker_id)
 
+    def drop_worker(self, worker_id: str) -> bool:
+        self.runner.cancel(worker_id)
+        return self.workers.drop(worker_id)
+
+    def drop_workers(self, *, origin: str | None = None, terminal_only: bool = True) -> int:
+        from mas.lab.controller.worker_model import _ui_origin
+
+        removed = 0
+        for record in list(self.workers.list_workers()):
+            if terminal_only and record.status not in {
+                WorkerStatus.COMPLETED,
+                WorkerStatus.FAILED,
+                WorkerStatus.CANCELLED,
+            }:
+                continue
+            job_origin = _ui_origin(record.spec)
+            if origin is not None and job_origin != origin:
+                continue
+            if self.drop_worker(record.id):
+                removed += 1
+        return removed
+
     def submit_benchmark(self, spec: dict) -> Dict[str, Any]:
         record = run_benchmark_worker(self.workers, self.runner, spec)
+        return {"worker_id": record.id, "job_id": record.id, "status": record.status.value}
+
+    def submit_experiment(self, spec: dict) -> Dict[str, Any]:
+        live_spec = {**spec, "live": True, "progress": False}
+        record = run_experiment_worker(self.workers, self.runner, live_spec)
         return {"worker_id": record.id, "job_id": record.id, "status": record.status.value}
 
     def submit_application(self, spec: dict) -> Dict[str, Any]:
@@ -120,7 +166,15 @@ class ControllerAPI:
                     }
                 )
             except Exception:
-                summaries.append({"name": item["name"], "description": "", "version": "", "scenarios": [], "dataset": ""})
+                summaries.append(
+                    {
+                        "name": item["name"],
+                        "description": "",
+                        "version": "",
+                        "scenarios": [],
+                        "dataset": "",
+                    }
+                )
         return summaries
 
     def get_experiment_content(self, library: str, name: str) -> Dict[str, str]:
@@ -157,7 +211,15 @@ class ControllerAPI:
                     }
                 )
             except Exception:
-                out.append({"filename": item["name"], "name": item["name"], "description": "", "steps": [], "experiment": ""})
+                out.append(
+                    {
+                        "filename": item["name"],
+                        "name": item["name"],
+                        "description": "",
+                        "steps": [],
+                        "experiment": "",
+                    }
+                )
         return out
 
     def get_pipeline_content(self, library: str, name: str) -> Dict[str, str]:

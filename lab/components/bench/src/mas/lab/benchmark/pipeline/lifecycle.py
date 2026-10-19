@@ -60,6 +60,23 @@ def terminal_run(key: RunKey, status: str, **extra: Any) -> None:
         channel.seal_sync(key.stream_id())
     except Exception:
         logger.debug("seal failed", exc_info=True)
+    if status in {"ok", "cached"}:
+        try:
+            from mas.lab.benchmark.pipeline.ui_bridge import post_ingest
+
+            post_ingest(
+                {
+                    "kind": "run.terminal",
+                    "status": status,
+                    "complete": True,
+                    "experiment": key.experiment,
+                    "scenario": key.scenario,
+                    "test": key.item,
+                    "run": key.run,
+                }
+            )
+        except Exception:
+            logger.debug("demo-ui seal ingest skipped", exc_info=True)
 
 
 def current_run_stream() -> str | None:

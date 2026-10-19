@@ -1,0 +1,27 @@
+version: 1
+title: "Run view"
+dataSource: {}
+layout:
+  type: vstack
+  children:
+    - type: hstack
+      size: 2fr
+      children:
+        - type: panel
+          plugin: plot
+          size: 1fr
+          title: Topology
+          props:
+            artefact: topology
+            kind: topology
+            stream: custom.topology
+            format: embedded
+        - type: panel
+          plugin: plot
+          size: 1fr
+          title: Chat
+          props:
+            artefact: chat
+            kind: chat
+            stream: custom.chat
+            format: embedded

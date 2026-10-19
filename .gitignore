@@ -5,6 +5,8 @@ __pycache__/
 dist/
 build/
 .venv/
+.demo-ui/
+.demo-ui-mock/
 .env
 .env.local
 .env.*.local

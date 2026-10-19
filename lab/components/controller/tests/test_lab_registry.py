@@ -102,3 +102,43 @@ def test_list_experiments_lab_layout(tmp_path: Path):
     exps = reg.list_experiments("demo")
     assert any(e["name"] == "root-exp" for e in exps)
     reset_lab_registry()
+
+
+def test_mas_library_paths_strips_lab_suffix(tmp_path: Path, monkeypatch):
+    lab = tmp_path / "sample-demo.lab"
+    lab.mkdir()
+    (lab / "lab-config.yaml").write_text("lab:\n  name: sample-demo\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_LIBRARY_PATHS", str(lab))
+    reset_lab_registry()
+    reg = LabRegistry()
+    libraries, sources = reg._discover_library_paths()
+    assert libraries["sample-demo"] == lab.resolve()
+    assert sources["sample-demo"] == "MAS_LIBRARY_PATHS:lab"
+    reset_lab_registry()
+
+
+def test_mas_library_paths_registers_library_yaml_name(tmp_path: Path, monkeypatch):
+    lib = tmp_path / "pack"
+    lib.mkdir()
+    (lib / "library.yaml").write_text("name: mas-example-library\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_LIBRARY_PATHS", str(lib))
+    reset_lab_registry()
+    reg = LabRegistry()
+    libraries, sources = reg._discover_library_paths()
+    assert libraries["pack"] == lib.resolve()
+    assert libraries["mas-example-library"] == lib.resolve()
+    assert reg.library_root("mas-example-library") == lib.resolve()
+    reset_lab_registry()
+
+
+def test_mas_library_paths_discovers_lab_config_root(tmp_path: Path, monkeypatch):
+    lab = tmp_path / "demo-lib"
+    lab.mkdir()
+    (lab / "lab-config.yaml").write_text("lab:\n  name: demo\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_LIBRARY_PATHS", str(lab))
+    reset_lab_registry()
+    reg = LabRegistry()
+    libraries, sources = reg._discover_library_paths()
+    assert libraries["demo-lib"] == lab.resolve()
+    assert sources["demo-lib"] == "MAS_LIBRARY_PATHS:lab"
+    reset_lab_registry()

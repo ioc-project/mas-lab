@@ -77,3 +77,7 @@ class WorkerRegistry:
         record.status = WorkerStatus.CANCELLED
         record.finished_at = record.finished_at or __import__("time").time()
         return True
+
+    def drop(self, worker_id: str) -> bool:
+        with self._lock:
+            return self._workers.pop(worker_id, None) is not None

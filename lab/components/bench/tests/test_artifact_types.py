@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 from mas.lab.lab.config.artifact_types import (
+    artefact_address,
     list_artifact_types,
     register_artifact_type,
 )
@@ -45,6 +46,25 @@ def test_register_artifact_type_is_visible() -> None:
     types = list_artifact_types()
     assert types["embeddings-test"]["format"] == "npy"
     assert types["plot"]["format"] == "png"
+
+
+def test_realtime_chat_and_topology_register_an_address() -> None:
+    types = list_artifact_types()
+    assert types["chat"]["stream"] == "custom.chat"
+    assert types["chat"]["plot"] == "chat"
+    assert types["chat"]["realtime"] is True
+    assert types["topology"]["stream"] == "custom.topology"
+    assert types["chat"]["address"].endswith("/{name}")
+    href = artefact_address("chat", {"library": "demo", "experiment": "e1", "run": "r1"})
+    assert href == "/api/artefacts/demo/e1/-/-/r1/chat"
+    assert types["series"]["stream"] == "series"
+    assert types["series"]["plot"] == "loop"
+    assert types["series"]["realtime"] is True
+    from mas.library.lab import artifact_types as lab_types
+
+    assert not hasattr(lab_types, "MasLoopSeries")
+    assert not hasattr(lab_types, "StorySnapshot")
+    assert lab_types.LoopSeries.stream == "series"
 
 
 def test_unknown_type_has_empty_format() -> None:

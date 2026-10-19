@@ -21,6 +21,7 @@ on:
       - "Taskfile.yml"
       - "pyproject.toml"
       - "scripts/**"
+      - "demo-ui/**"
       - ".github/workflows/test.yml"
       - ".github/workflows/docker.yml"
   push:
@@ -67,6 +68,18 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=0 \
             -q
+
+  demo-ui:
+    name: Demo UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Demo UI host tests
+        working-directory: demo-ui
+        run: node --test src/*.test.js
 
   mcp-compliance:
     name: MCP compliance

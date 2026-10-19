@@ -16,6 +16,7 @@ reusable benchmark pipelines.
 [CLI](cli/index.md) · [mas-ctl options](cli/mas-ctl.md) ·
 [config.yaml](references/config.yaml.md) ·
 [References](references/index.md) · [Web UI](ui/index.md) ·
+[Live dashboard](ui/live.md) ·
 [Run logs](cli/observability.md) · [Paper labs](paper/index.md) · [Glossary](glossary.md)
 
 ---
@@ -54,6 +55,13 @@ Design agents and experiments, browse manifests, and inspect benchmark runs in t
 browser. Started as part of Tutorial 0 (same Docker stack).
 
 [Web UI guide](ui/index.md)
+
+### Live dashboard
+
+Live topology, native event log, metrics, and chat for a running session or a completed run.
+Separate from the authoring studio.
+
+[Live dashboard](ui/live.md)
 
 ---
 

@@ -61,7 +61,7 @@ def app(ctx: click.Context, verbose: int) -> None:
     ctx.obj["verbose"] = verbose
 
     try:
-        from mas.runtime.logging_setup import setup_logging
+        from mas.ctl.logging_setup import setup_logging
         setup_logging(verbosity=verbose)
     except ImportError:
         level = (logging.DEBUG if verbose >= 2

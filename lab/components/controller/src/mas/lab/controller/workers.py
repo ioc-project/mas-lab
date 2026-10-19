@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import tempfile
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from mas.lab.controller.io_capture import capture_worker_io
 from mas.lab.controller.registry import WorkerRegistry
@@ -108,6 +109,108 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
     return record
 
 
+def _bind_demo_ui_env(spec: dict) -> dict[str, str | None]:
+    import json
+    import os
+
+    keys = (
+        "MAS_DEMO_UI_INGEST_URL",
+        "MAS_DEMO_UI_INGEST_KINDS",
+        "MAS_DEMO_UI_REF",
+        "MAS_DEMO_UI_PROMPT",
+        "MAS_INFRA_REFS",
+        "MAS_DEMO_UI_SCENARIO_INFRA",
+        "MAS_DEMO_UI_SCENARIO_OVERLAYS",
+        "MAS_LLM_CACHE",
+    )
+    previous = {key: os.environ.get(key) for key in keys}
+    ingest = spec.get("demo_ui_ingest_url")
+    if ingest:
+        os.environ["MAS_DEMO_UI_INGEST_URL"] = str(ingest)
+        os.environ.setdefault("MAS_DEMO_UI_INGEST_KINDS", "all")
+    ref = spec.get("demo_ui_ref")
+    if ref:
+        os.environ["MAS_DEMO_UI_REF"] = json.dumps(ref)
+    query = spec.get("query")
+    if query:
+        os.environ["MAS_DEMO_UI_PROMPT"] = str(query)
+    refs = spec.get("infra_refs") or []
+    if refs:
+        os.environ["MAS_INFRA_REFS"] = ",".join(str(item) for item in refs if item)
+    elif "MAS_INFRA_REFS" in os.environ and not spec.get("keep_process_infra"):
+        os.environ.pop("MAS_INFRA_REFS", None)
+    mapping = spec.get("scenario_infra_refs") or {}
+    if mapping:
+        os.environ["MAS_DEMO_UI_SCENARIO_INFRA"] = json.dumps(mapping)
+    elif "MAS_DEMO_UI_SCENARIO_INFRA" in os.environ and not spec.get("keep_process_infra"):
+        os.environ.pop("MAS_DEMO_UI_SCENARIO_INFRA", None)
+    overlays = spec.get("scenario_overlays") or {}
+    if overlays:
+        os.environ["MAS_DEMO_UI_SCENARIO_OVERLAYS"] = json.dumps(overlays)
+    elif "MAS_DEMO_UI_SCENARIO_OVERLAYS" in os.environ and not spec.get("keep_process_infra"):
+        os.environ.pop("MAS_DEMO_UI_SCENARIO_OVERLAYS", None)
+    cwd = spec.get("cwd")
+    if cwd and not os.environ.get("MAS_LLM_CACHE"):
+        eval_cache = Path(cwd) / "infra" / ".cache" / "eval.llm-cache.json"
+        os.environ["MAS_LLM_CACHE"] = str(eval_cache)
+    return previous
+
+
+def _restore_env(previous: dict[str, str | None]) -> None:
+    import os
+
+    for key, value in previous.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
+def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: dict) -> WorkerRecord:
+    """In-process experiment worker: same engine as a benchmark, live ingest, no stdout dump."""
+    experiment_yaml = Path(spec["experiment_yaml"])
+    record = registry.create(
+        WorkerKind.EXPERIMENT,
+        spec=spec,
+        command=spec.get("command") or f"mas-lab experiment run {experiment_yaml}",
+        endpoint=spec.get("endpoint", "/api/experiment/run"),
+    )
+
+    def _execute() -> bool:
+        import traceback
+
+        from mas.lab.benchmark.engine import BenchmarkRunOptions, run_benchmark
+
+        previous = _bind_demo_ui_env(spec)
+        live_spec = {**spec, "progress": False}
+        cwd = spec.get("cwd")
+        prev_cwd = os.getcwd()
+        with capture_worker_io(record):
+            try:
+                if cwd:
+                    os.chdir(str(cwd))
+                ok = asyncio.run(
+                    run_benchmark(
+                        experiment_yaml=experiment_yaml,
+                        options=BenchmarkRunOptions.from_spec(live_spec),
+                    )
+                )
+            except Exception:
+                traceback.print_exc()
+                raise
+            finally:
+                os.chdir(prev_cwd)
+                _restore_env(previous)
+            if not ok:
+                raise RuntimeError(
+                    "experiment run failed — see the logged error above for the cause"
+                )
+        return ok
+
+    runner.submit(record, _execute)
+    return record
+
+
 def run_application_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: dict) -> WorkerRecord:
     record = registry.create(
         WorkerKind.APPLICATION,
@@ -162,9 +265,15 @@ def run_pipeline_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: 
 
         from mas.lab.benchmark.pipeline import Pipeline, PipelineExecutor
         from mas.lab.benchmark.pipeline.cli import _load_lab_custom_steps
+        from mas.lab.benchmark.pipeline.config import PipelineEngineSpec
+        from mas.lab.benchmark.pipeline.channel import install_channel
 
         pipeline_yaml = Path(spec["pipeline_yaml"])
         _load_lab_custom_steps(pipeline_yaml.resolve())
+        try:
+            install_channel(PipelineEngineSpec())
+        except Exception:
+            pass
         pipeline = Pipeline.from_yaml(pipeline_yaml)
         executor = PipelineExecutor(
             pipeline,
@@ -175,7 +284,7 @@ def run_pipeline_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: 
                 steps=spec.get("only"),
                 force_rerun=spec.get("force"),
                 dry_run=spec.get("dry_run", False),
-                parallel=spec.get("parallel", False),
+                parallel=spec.get("parallel", True),
                 template_vars=spec.get("variables") or {},
             )
         )

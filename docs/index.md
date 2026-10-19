@@ -55,6 +55,7 @@ More on each audience in the [overview](overview.md).
 | Workspace `config.yaml` | [config.yaml reference](references/config.yaml.md) |
 | Labs vs libraries | [labs-and-libraries.md](labs-and-libraries.md) |
 | Hands-on path (agent → team → experiment) | [Tutorials](tutorials/index.md) |
+| Live telemetry dashboard | [Live dashboard](ui/live.md) |
 | YAML manifests, schemas, contracts | [References](references/index.md) |
 | Design-space exploration labs | [Paper](paper/index.md) |
 | Releases and updates | [Blog](blog/index.md) |
@@ -64,7 +65,8 @@ More on each audience in the [overview](overview.md).
 If you are new to MAS-Lab, begin with
 [Tutorial 0 — Environment setup](tutorials/00-environment-setup/README.md) to
 install the stack and run your first commands. The [Web UI](ui/index.md) lets you
-browse manifests and inspect runs in the browser. For context on what shipped in
+browse manifests and inspect runs in the browser. The [live dashboard](ui/live.md) is a
+separate surface over `/ws` and `/api/ingest`. For context on what shipped in
 this release, read the
 [v0.2 release post](blog/posts/2026-09-30-v0-2-release/). For the research motivation,
 formal model, and reproducible Section 5 labs, see the

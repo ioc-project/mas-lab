@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>{title}</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #0f172a; color: #e2e8f0; font: 13px/1.4 ui-sans-serif, system-ui, sans-serif; }
+    #root { padding: 10px 12px; height: 100%; box-sizing: border-box; }
+    h1 { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: #94a3b8; }
+    #chart { height: calc(100% - 1.6rem); }
+    .idle { color: #64748b; padding: 1.5rem 0; text-align: center; }
+{extra_css}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script>/*__MAS_D3_INLINE__*/</script>
+  <script>
+const CHART = {chart_json};
+
+function esc(v) {
+  return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function chartData(chart) {
+  const data = chart && chart.data && typeof chart.data === "object" && !Array.isArray(chart.data)
+    ? Object.assign({}, chart, chart.data)
+    : (chart || {});
+  return data;
+}
+
+function kindOf(raw, fallback) {
+  const k = String((raw && raw.kind) || fallback || "");
+  if (k.indexOf(".") >= 0) return fallback || "chat";
+  if (k === "topology") return "topology";
+  if (k === "story") return "story";
+  if (k === "loop" || k === "series") return "series";
+  if (k === "chat") return "chat";
+  return fallback || "chat";
+}
+
+const STATE = {
+  kind: kindOf(CHART, "chat"),
+  title: CHART.title || "",
+  xrange: Number(CHART.xrange || (CHART.data && CHART.data.xrange) || 64),
+  yrange: CHART.yrange || (CHART.data && CHART.data.yrange) || [0, 1],
+  labels: CHART.labels || (CHART.data && CHART.data.labels) || {},
+  xlabel: CHART.xlabel || (CHART.data && CHART.data.xlabel) || "",
+  ylabel: CHART.ylabel || (CHART.data && CHART.data.ylabel) || "",
+  data: chartData(CHART)
+};
+
+{draw_js}
+
+function ensureChart() {
+  const root = d3.select("#root");
+  let h1 = root.select("h1");
+  if (h1.empty()) h1 = root.append("h1");
+  h1.style("display", "none");
+  let el = root.select("#chart");
+  if (el.empty()) el = root.append("div").attr("id", "chart");
+  return el;
+}
+
+window.masLockKind = function(k) {
+  STATE.kind = kindOf({ kind: k }, STATE.kind);
+};
+
+function render(chart) {
+  const data = chart.data && typeof chart.data === "object" ? chart.data : chartData(chart);
+  window.masDraw(ensureChart(), data);
+}
+
+function mergeChart(incoming) {
+  if (!incoming || typeof incoming !== "object") return STATE;
+  const data = chartData(incoming);
+  if (incoming.xrange != null) STATE.xrange = Number(incoming.xrange);
+  if (data.xrange != null) STATE.xrange = Number(data.xrange);
+  if (incoming.yrange) STATE.yrange = incoming.yrange;
+  if (data.yrange) STATE.yrange = data.yrange;
+  if (incoming.labels) STATE.labels = incoming.labels;
+  if (data.labels) STATE.labels = data.labels;
+  if (incoming.xlabel) STATE.xlabel = incoming.xlabel;
+  if (data.xlabel) STATE.xlabel = data.xlabel;
+  if (incoming.ylabel) STATE.ylabel = incoming.ylabel;
+  if (data.ylabel) STATE.ylabel = data.ylabel;
+  if (incoming.threshold != null) STATE.threshold = Number(incoming.threshold);
+  if (data.threshold != null) STATE.threshold = Number(data.threshold);
+  if (!STATE.data || typeof STATE.data !== "object") STATE.data = {};
+  if (incoming.vertical != null) STATE.data.vertical = incoming.vertical;
+  if (data.vertical != null) STATE.data.vertical = data.vertical;
+  if (incoming.view != null) STATE.data.view = incoming.view;
+  if (data.view != null) STATE.data.view = data.view;
+  if (incoming.t0 != null && Number(incoming.t0)) STATE.data.t0 = incoming.t0;
+  if (data.t0 != null && Number(data.t0)) STATE.data.t0 = data.t0;
+  if (incoming.now != null && Number.isFinite(Number(incoming.now))) STATE.data.now = incoming.now;
+  if (data.now != null && Number.isFinite(Number(data.now))) STATE.data.now = data.now;
+  if (incoming.t != null) STATE.data.t = incoming.t;
+  if (data.t != null) STATE.data.t = data.t;
+  if (incoming.idle != null) STATE.data.idle = incoming.idle;
+  if (data.idle != null) STATE.data.idle = data.idle;
+  if (incoming.charts) STATE.data.charts = incoming.charts;
+  if (data.charts) STATE.data.charts = data.charts;
+  ["nodes", "edges", "cards", "activity", "events", "status", "series", "diracs"].forEach((key) => {
+    if (data[key] == null) return;
+    if (key === "activity" && Array.isArray(data[key]) && !data[key].length && !data.idle && !incoming.idle) return;
+    if (key === "series" && typeof data[key] === "object" && !Array.isArray(data[key])) {
+      if (!Object.keys(data[key]).length) return;
+      const next = { ...(STATE.data.series || {}) };
+      Object.entries(data[key]).forEach(([label, ys]) => {
+        if (Array.isArray(ys) && !ys.length) return;
+        next[label] = ys;
+      });
+      STATE.data.series = next;
+      return;
+    }
+    STATE.data[key] = data[key];
+  });
+  return STATE;
+}
+
+let raf = 0;
+window.masUpdateChart = function(newData) {
+  mergeChart(newData || CHART);
+  if (raf) return;
+  raf = requestAnimationFrame(() => {
+    raf = 0;
+    render(STATE);
+  });
+};
+render(STATE);
+  </script>
+</body>
+</html>

@@ -16,6 +16,7 @@ Endpoints are scoped under /api/libraries/{library_name}/:
     /api/libraries/{name}/overlays     — list overlay files
     /api/libraries/{name}/topologies   — list topology files
     /api/libraries/{name}/pipelines    — list pipeline files
+    /api/libraries/{name}/experiment/run — in-process experiment worker (live streams)
     /api/libraries/{name}/benchmark/run — run a benchmark experiment
     /api/libraries/{name}/pipeline/run  — run an analysis pipeline
     /api/libraries/{name}/eval-output   — run LLM-as-judge evaluation
@@ -79,20 +80,23 @@ def _get_library_path(library_name: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Emit discovery report once the API process starts."""
-    if os.environ.get("MAS_CONTROLLER_DISABLE_STARTUP_DISCOVERY", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }:
+    from mas.lab.controller.ui_stream.app import ui_stream_lifespan
+
+    async with ui_stream_lifespan(app):
+        if os.environ.get("MAS_CONTROLLER_DISABLE_STARTUP_DISCOVERY", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+        }:
+            yield
+            return
+        try:
+            store = get_manifest_store()
+            report = store._registry.discovery_report()
+            logger.info("MAS Lab API startup discovery: %s", report)
+        except Exception as exc:
+            logger.warning("Startup discovery report failed: %s", exc)
         yield
-        return
-    try:
-        store = get_manifest_store()
-        report = store._registry.discovery_report()
-        logger.info("MAS Lab API startup discovery: %s", report)
-    except Exception as exc:
-        logger.warning("Startup discovery report failed: %s", exc)
-    yield
 
 
 def create_app() -> FastAPI:

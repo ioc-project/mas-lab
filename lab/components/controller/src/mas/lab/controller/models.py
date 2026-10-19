@@ -60,11 +60,34 @@ class MultiTurnRequest(BaseModel):
 
 
 class RunMASRequest(BaseModel):
-    manifest_yaml: str = Field(..., description="Full MAS YAML manifest content to run")
+    manifest_yaml: str = Field(
+        default="",
+        description="Full MAS YAML. Ignored when mas_path is set.",
+    )
+    mas_path: Optional[str] = Field(
+        default=None,
+        description="MAS file relative to the library root (preferred: keeps agent refs valid).",
+    )
     query: str = Field(..., description="The question to send to the MAS")
     overlays: list[str] = Field(
         default_factory=list,
-        description="Overlay filenames to apply (relative to library dir)",
+        description="Overlay names or paths relative to the library dir",
+    )
+    infra_refs: list[str] = Field(
+        default_factory=list,
+        description="If set, only these infra files are passed to mas-ctl (no directory glob).",
+    )
+    pre: list[dict] = Field(
+        default_factory=list,
+        description="Inline pipeline-style steps run in the library cwd before mas-ctl (type: shell).",
+    )
+    demo_ui_ingest_url: Optional[str] = Field(
+        default=None,
+        description="When set, mas-ctl POSTs live native records to this demo-ui ingest URL.",
+    )
+    demo_ui_ref: Optional[dict] = Field(
+        default=None,
+        description="Data-source ref stamped onto live ingest records.",
     )
     flavour: Optional[str] = Field(default=None, description="Flavour name")
     verbose: bool = Field(default=True, description="Enable verbose output")
@@ -74,6 +97,36 @@ class RunMASRequest(BaseModel):
 class SaveDatasetRequest(BaseModel):
     name: str = Field(..., description="Dataset filename (e.g. my-dataset.yaml)")
     content: str = Field(..., description="Full dataset YAML content")
+
+
+class ExperimentRunRequest(BaseModel):
+    experiment_yaml: str = Field(
+        ...,
+        description="Experiment filename or path relative to the library root",
+    )
+    query: str = Field(
+        default="",
+        description="Optional prompt override shown in the demo-ui selector",
+    )
+    infra_refs: list[str] = Field(
+        default_factory=list,
+        description="Extra infra files relative to the library root (LLM cache, model pin)",
+    )
+    pre: list[dict] = Field(
+        default_factory=list,
+        description="Inline pipeline-style steps run in the library cwd before the worker starts",
+    )
+    demo_ui_ingest_url: Optional[str] = Field(
+        default=None,
+        description="When set, the in-process worker POSTs live native records here",
+    )
+    demo_ui_ref: Optional[dict] = Field(
+        default=None,
+        description="Data-source ref stamped onto live ingest records",
+    )
+    force: bool = Field(default=True, description="Force a new run even if a previous exists")
+    max_runs: Optional[int] = Field(default=1, description="Cap n_runs for a live experiment")
+    timeout: int = Field(default=MAX_TIMEOUT, ge=1, le=MAX_TIMEOUT, description="Timeout in seconds")
 
 
 class BenchmarkRunRequest(BaseModel):

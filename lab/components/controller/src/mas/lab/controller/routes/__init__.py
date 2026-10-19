@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
-
 from mas.lab.controller.routes import (
     apps,
     benchmark,
@@ -38,3 +37,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(eval_output.router)
     app.include_router(apps.router)
     app.include_router(health.router)
+    from mas.lab.controller.ui_stream import mount_ui_stream
+
+    mount_ui_stream(app)

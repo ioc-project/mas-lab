@@ -17,7 +17,11 @@ from importlib.metadata import entry_points as _entry_points
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from mas.runtime.constants import LAB_CONFIG_FILENAME, WORKSPACE_CONFIG_FILENAME
+from mas.runtime.constants import (
+    LAB_CONFIG_FILENAME,
+    LIBRARY_MANIFEST_FILENAME,
+    WORKSPACE_CONFIG_FILENAME,
+)
 from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
@@ -41,6 +45,36 @@ def _library_description(path: Path) -> str:
             except Exception:
                 pass
     return ""
+
+
+def _manifest_library_names(path: Path) -> list[str]:
+    """Directory stem plus ``library.yaml`` ``name`` / schemes (lookup aliases)."""
+    names: list[str] = []
+    stem = path.stem if path.name.endswith(".lab") else path.name
+    if stem:
+        names.append(stem)
+    manifest = path / LIBRARY_MANIFEST_FILENAME
+    if not manifest.is_file():
+        return names
+    try:
+        data = load_yaml_file(manifest)
+    except Exception:
+        return names
+    if not isinstance(data, dict):
+        return names
+    pkg = str(data.get("name") or "").strip()
+    if pkg and pkg not in names:
+        names.append(pkg)
+    for key in ("schemes", "aliases"):
+        raw = data.get(key) or []
+        if not isinstance(raw, list):
+            continue
+        for item in raw:
+            text = str(item).strip()
+            if text and text not in names:
+                names.append(text)
+    return names
+
 
 from mas.runtime.agent_defaults import (
     agent_defaults as _agent_defaults,
@@ -246,9 +280,20 @@ class LabRegistry:
     def library_root(self, library: str) -> Path:
         self._ensure_ready()
         root = self._libraries.get(library)
-        if root is None:
-            raise KeyError(f"Library {library!r} not found")
-        return root
+        if root is not None:
+            return root
+        for path in self._libraries.values():
+            if path.name == library:
+                return path
+        try:
+            from mas.library_roots import resolve_named_library_root
+
+            found = resolve_named_library_root(library)
+            if found is not None:
+                return found
+        except Exception:
+            pass
+        raise KeyError(f"Library {library!r} not found")
 
     def catalog(self) -> Dict[str, Any]:
         """Full registry snapshot for ``GET /api/registry``."""
@@ -444,9 +489,30 @@ class LabRegistry:
             from mas.library_roots import discover_library_roots
 
             for root in discover_library_roots():
-                _add(root.name, root, "manifest_libraries")
+                for slug in _manifest_library_names(root):
+                    _add(slug, root, "manifest_libraries")
         except Exception as exc:
             logger.debug("manifest library discovery failed: %s", exc)
+
+        for entry in os.environ.get("MAS_LIBRARY_PATHS", "").split(os.pathsep):
+            entry = entry.strip()
+            if not entry:
+                continue
+            path = Path(entry).expanduser()
+            if not path.is_dir():
+                continue
+            if path.name.endswith(".lab") or (path / LAB_CONFIG_FILENAME).is_file():
+                for slug in _manifest_library_names(path):
+                    _add(slug, path, "MAS_LIBRARY_PATHS:lab")
+            try:
+                from mas.library_roots import iter_libraries_in_search_path
+
+                libs = iter_libraries_in_search_path(path)
+            except Exception:
+                libs = [path] if (path / LIBRARY_MANIFEST_FILENAME).is_file() else []
+            for lib in libs:
+                for slug in _manifest_library_names(lib):
+                    _add(slug, lib, "MAS_LIBRARY_PATHS")
 
         ws_root = self._workspace_root()
         if ws_root is not None:

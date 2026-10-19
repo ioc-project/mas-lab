@@ -1,0 +1,7 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+kind: Overlay
+metadata:
+  name: overlay-b
+  description: Example overlay label for side-by-side comparison (structured variant).
+spec: {}

@@ -100,10 +100,12 @@ nav:
       - libraries.md
       - CLI:
           - Overview: cli/index.md
+          - mas-lab index: cli/mas-lab.md
           - mas-ctl: cli/mas-ctl.md
           - Observability / run logs: cli/observability.md
           - compile: cli/compile.md
       - Web UI: ui/index.md
+      - Live dashboard: ui/live.md
       - ctl/tui.md
       - glossary.md
   - Tutorials:

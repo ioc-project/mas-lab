@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter
 
 from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
@@ -77,6 +79,23 @@ async def list_library_skills(library_name: str, namespaces: str = "global"):
     lib_dir = deps.get_library_path(library_name)
     ns_list = [n.strip() for n in namespaces.split(",") if n.strip()]
     return {"skills": deps.discover_skills(lib_dir, ns_list)}
+
+
+@router.get("/api/libraries/{library_name}/documents", tags=["Libraries"])
+async def read_library_document(library_name: str, path: str):
+    """Read a file under the library root (MAS YAML, agent YAML, overlays)."""
+    from fastapi import HTTPException
+
+    rel = str(path or "").strip().lstrip("/")
+    if not rel or ".." in Path(rel).parts:
+        raise HTTPException(status_code=400, detail="invalid path")
+    lib_dir = deps.get_library_path(library_name).resolve()
+    target = (lib_dir / rel).resolve()
+    if not str(target).startswith(str(lib_dir)):
+        raise HTTPException(status_code=400, detail="path escapes library")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail=f"file not found: {rel}")
+    return {"path": rel, "content": target.read_text(encoding="utf-8")}
 
 
 @router.get("/api/libraries/{library_name}/topologies", tags=["Libraries"])

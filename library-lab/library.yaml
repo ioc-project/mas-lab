@@ -270,3 +270,15 @@ plugins:
     name: trace
     module: mas.library.lab.artifact_types
     class: Trace
+  - type: artifact
+    name: chat
+    module: mas.library.lab.artifact_types
+    class: ChatSnapshot
+  - type: artifact
+    name: topology
+    module: mas.library.lab.artifact_types
+    class: TopologySnapshot
+  - type: artifact
+    name: series
+    module: mas.library.lab.artifact_types
+    class: LoopSeries

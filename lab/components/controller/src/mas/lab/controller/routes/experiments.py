@@ -4,12 +4,101 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
 
-from mas.lab.controller.models import SaveExperimentRequest
-from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
+from fastapi import APIRouter, HTTPException
+from mas.lab.controller.api import get_controller_api
+from mas.lab.controller.models import ExperimentRunRequest, SaveExperimentRequest
+from mas.lab.controller.routes._api import deps
+from mas.lab.controller.routes.run import _run_pre_steps
 
 router = APIRouter()
+
+
+def resolve_experiment_path(lib_dir: Path, name: str) -> Path:
+    """Resolve an experiment by path, filename, stem, or YAML ``experiment.name``."""
+    raw = Path(name)
+    candidates: list[Path] = []
+    if raw.is_absolute():
+        candidates.append(raw)
+    else:
+        candidates.append(lib_dir / name)
+        candidates.append(lib_dir / "experiments" / name)
+        if not name.endswith((".yaml", ".yml")):
+            candidates.extend(
+                [
+                    lib_dir / f"{name}.yaml",
+                    lib_dir / "experiments" / f"{name}.yaml",
+                    lib_dir / "experiment.yaml",
+                    lib_dir / "experiments" / "experiment.yaml",
+                ]
+            )
+    for path in candidates:
+        if path.is_file():
+            return path
+    wanted = name
+    if wanted.endswith(".yaml"):
+        wanted = wanted[:-5]
+    elif wanted.endswith(".yml"):
+        wanted = wanted[:-4]
+    for path in _experiment_yaml_files(lib_dir):
+        if path.stem == wanted or path.name == name:
+            return path
+        if _experiment_yaml_name(path) == wanted:
+            return path
+    raise HTTPException(status_code=404, detail=f"Experiment '{name}' not found")
+
+
+def _experiment_yaml_files(lib_dir: Path):
+    if not lib_dir.is_dir():
+        return
+    for path in (lib_dir / "experiment.yaml", lib_dir / "experiment.yml"):
+        if path.is_file():
+            yield path
+    experiments = lib_dir / "experiments"
+    if experiments.is_dir():
+        yield from sorted(experiments.glob("*.yaml"))
+        yield from sorted(experiments.glob("*.yml"))
+        yield from sorted(experiments.glob("**/experiment.yaml"))
+        yield from sorted(experiments.glob("**/experiment.yml"))
+
+
+def _experiment_yaml_name(path: Path) -> str:
+    try:
+        from mas.runtime.spec.source import load_yaml_file
+
+        doc = load_yaml_file(path)
+    except Exception:
+        return path.stem
+    block = doc.get("experiment") if isinstance(doc, dict) else None
+    if isinstance(block, dict) and block.get("name"):
+        return str(block["name"])
+    return path.stem
+
+
+@router.post("/api/libraries/{library_name}/experiment/run", tags=["Libraries"], status_code=202)
+async def experiment_run(library_name: str, req: ExperimentRunRequest):
+    """Start an in-process experiment worker that streams live to demo-ui."""
+    lib_dir = deps.get_library_path(library_name)
+    _run_pre_steps(lib_dir, req.pre)
+    experiment_path = resolve_experiment_path(lib_dir, req.experiment_yaml)
+    spec = {
+        "experiment_yaml": str(experiment_path),
+        "progress": False,
+        "live": True,
+        "single_run": True,
+        "force": req.force,
+        "max_runs": req.max_runs or 1,
+        "query": req.query,
+        "infra_refs": list(req.infra_refs or []),
+        "demo_ui_ingest_url": req.demo_ui_ingest_url,
+        "demo_ui_ref": req.demo_ui_ref or {},
+        "endpoint": f"/api/libraries/{library_name}/experiment/run",
+        "command": f"mas-lab experiment run {experiment_path}",
+    }
+    result = get_controller_api().submit_experiment(spec)
+    result["command"] = spec["command"]
+    return result
 
 
 @router.get("/api/libraries/{library_name}/experiments", tags=["Libraries"])

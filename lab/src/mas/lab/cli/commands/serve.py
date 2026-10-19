@@ -19,8 +19,14 @@ import click
     show_default=True,
     help="TCP port for the controller HTTP API.",
 )
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    show_default=True,
+    help="Bind address. Non-loopback requires TLS and MAS_DEMO_UI_TOKEN.",
+)
 @click.pass_context
-def serve_cmd(ctx: click.Context, port: int) -> None:
+def serve_cmd(ctx: click.Context, port: int, host: str) -> None:
     """Launch the MAS Lab controller daemon.
 
     \b
@@ -33,11 +39,11 @@ def serve_cmd(ctx: click.Context, port: int) -> None:
     click.echo("=" * 60)
     click.echo("  MAS Lab Serve — controller daemon")
     click.echo("=" * 60)
-    click.echo(f"  HTTP       : http://127.0.0.1:{port}")
+    click.echo(f"  HTTP       : http://{host}:{port}")
     click.echo()
     click.echo("  Press Ctrl+C to stop")
     click.echo()
 
     from mas.lab.controller.daemon import main as daemon_main
 
-    raise SystemExit(daemon_main(["--port", str(port)]))
+    raise SystemExit(daemon_main(["--host", host, "--port", str(port)]))

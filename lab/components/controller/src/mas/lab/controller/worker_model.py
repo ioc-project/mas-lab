@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 class WorkerKind(str, enum.Enum):
     APPLICATION = "application"
     BENCHMARK = "benchmark"
+    EXPERIMENT = "experiment"
     PIPELINE = "pipeline"
 
 
@@ -76,7 +77,8 @@ class WorkerRecord:
         return "\n".join(parts)
 
     def to_job_summary(self) -> Dict[str, Any]:
-        return {
+        origin = _ui_origin(self.spec)
+        summary = {
             "id": self.id,
             "endpoint": self.endpoint,
             "command": self.command,
@@ -86,7 +88,11 @@ class WorkerRecord:
             "finished_at": _iso(self.finished_at),
             "pid": self.pid,
             "exit_code": self.exit_code,
+            "origin": origin,
         }
+        if self.error:
+            summary["error"] = self.error
+        return summary
 
     def to_job_detail(self) -> Dict[str, Any]:
         detail = self.to_job_summary()
@@ -109,6 +115,13 @@ class WorkerRecord:
             WorkerStatus.CANCELLED: "cancelled",
         }
         return mapping.get(self.status, "running")
+
+
+def _ui_origin(spec: Dict[str, Any] | None) -> str | None:
+    ref = (spec or {}).get("demo_ui_ref") if isinstance(spec, dict) else None
+    if not isinstance(ref, dict) or not ref:
+        return None
+    return str(ref.get("origin") or "demo-ui")
 
 
 def new_worker_id(prefix: str = "w") -> str:

@@ -23,9 +23,20 @@ logger = logging.getLogger(__name__)
 
 
 def extra_overlays_for_scenario(scenario_id: str) -> list[str]:
-    """Optional extra overlays for a scenario. Stock engine has none."""
-    del scenario_id
-    return []
+    """Layout-lane overlays the demo UI bound via ``MAS_DEMO_UI_SCENARIO_OVERLAYS``."""
+    raw = os.environ.get("MAS_DEMO_UI_SCENARIO_OVERLAYS")
+    if not raw:
+        return []
+    try:
+        mapping = _json.loads(raw)
+    except ValueError:
+        return []
+    if not isinstance(mapping, dict):
+        return []
+    extra = mapping.get(scenario_id) or mapping.get(str(scenario_id).lower())
+    if not extra:
+        return []
+    return [str(item).strip() for item in extra if str(item).strip()]
 
 
 def _resolve_run_infra_refs(loaded: LoadedExperiment) -> list[str]:

@@ -9,13 +9,12 @@ import logging
 import os
 import signal
 import socket
-import sys
 import threading
 from pathlib import Path
 from typing import Any
 
-from mas.lab.controller.api import ControllerAPI
 from mas.lab.controller import config as cfg
+from mas.lab.controller.api import ControllerAPI, set_controller_api
 from mas.lab.controller.config import DEFAULT_HTTP_PORT, ensure_mas_dirs
 from mas.lab.controller.sessions import SessionRegistry
 
@@ -30,10 +29,11 @@ _env_fingerprint: dict[str, str] | None = None
 
 def _serve_http(*, host: str, port: int) -> None:
     import uvicorn
-
     from mas.lab.controller.fastapi_app import app
+    from mas.lab.controller.ui_stream.auth import assert_ui_bind, ssl_uvicorn_kwargs
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    assert_ui_bind(host)
+    uvicorn.run(app, host=host, port=port, log_level="info", **ssl_uvicorn_kwargs())
 
 
 def _handle_request(payload: dict) -> dict:
@@ -52,6 +52,7 @@ def _handle_request(payload: dict) -> dict:
         "get_worker": lambda p: _api.get_worker(p["worker_id"]),
         "cancel_worker": lambda p: {"ok": _api.cancel_worker(p["worker_id"])},
         "submit_benchmark": lambda p: _api.submit_benchmark(p),
+        "submit_experiment": lambda p: _api.submit_experiment(p),
         "submit_application": lambda p: _api.submit_application(p),
         "submit_pipeline": lambda p: _api.submit_pipeline(p),
         "list_libraries": lambda _p: _api.list_libraries(),
@@ -110,6 +111,11 @@ def _serve_socket(path: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="MAS Lab controller daemon")
     parser.add_argument("--port", type=int, default=int(os.environ.get("MAS_CONTROLLER_PORT", DEFAULT_HTTP_PORT)))
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("MAS_CONTROLLER_HOST", "127.0.0.1"),
+        help="HTTP bind address (non-loopback requires TLS and MAS_DEMO_UI_TOKEN).",
+    )
     parser.add_argument("--socket", type=Path, default=None)
     parser.add_argument("--no-http", action="store_true")
     args = parser.parse_args(argv)
@@ -128,6 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         workspace = None
     _api = ControllerAPI(workspace)
+    set_controller_api(_api)
 
     cfg.pid_path().write_text(str(os.getpid()), encoding="utf-8")
 
@@ -145,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         threads.append(
             threading.Thread(
                 target=_serve_http,
-                kwargs={"host": "127.0.0.1", "port": args.port},
+                kwargs={"host": args.host, "port": args.port},
                 daemon=True,
                 name="http",
             )

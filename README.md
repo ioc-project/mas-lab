@@ -55,7 +55,8 @@ Then continue with:
 | Path              | Link                                                         |
 | ----------------- | ------------------------------------------------------------ |
 | Tutorials         | [docs/tutorials/](docs/tutorials/index.md)                   |
-| Web UI demo       | [docs/ui/index.md](docs/ui/index.md)                         |
+| Web UI (authoring)| [docs/ui/index.md](docs/ui/index.md)                         |
+| Live dashboard    | [docs/ui/live.md](docs/ui/live.md)                           |
 | Paper labs        | [docs/paper/index.md](docs/paper/index.md)                   |
 | Labs vs libraries | [docs/labs-and-libraries.md](docs/labs-and-libraries.md)     |
 

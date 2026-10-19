@@ -19,6 +19,9 @@ dependencies = [
 [project.entry-points."mas.lab.eval.plugins"]
 mcev1 = "mas.library.lab.eval.mcev1:MCEv1Provider"
 
+[project.entry-points."mas.lab.ui.plots"]
+series = "mas.library.lab.ui.series:SeriesPlots"
+
 [project.entry-points."mas.runtime.manifest_libraries"]
 lab = "mas.library.lab"
 

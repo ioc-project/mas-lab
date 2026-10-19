@@ -26,7 +26,7 @@ def check_cmd(mas_spec: Path, verbose: int, base_dir: Path | None,
     overlays, workflows, …).  For any other kind (Agent, Patch, Flavour,
     Tool, …) the manifest is validated directly against its JSON Schema.
     """
-    from mas.runtime.logging_setup import setup_logging
+    from mas.ctl.logging_setup import setup_logging
     setup_logging(verbosity=verbose)
 
     import yaml as _yaml_mod

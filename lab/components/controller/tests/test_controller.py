@@ -57,6 +57,30 @@ def test_controller_api_submit_benchmark_worker():
         Path(exp_path).unlink(missing_ok=True)
 
 
+def test_controller_api_submit_experiment_worker():
+    from mas.lab.controller.api import ControllerAPI
+    from mas.lab.controller.worker_model import WorkerKind
+
+    api = ControllerAPI()
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as fh:
+        fh.write("experiment:\n  name: live\n")
+        exp_path = fh.name
+    try:
+        result = api.submit_experiment(
+            {"experiment_yaml": exp_path, "progress": True, "demo_ui_ingest_url": "http://127.0.0.1:8765/api/ingest"}
+        )
+        assert "worker_id" in result
+        detail = api.get_worker(result["worker_id"])
+        assert detail is not None
+        record = api.workers.get(result["worker_id"])
+        assert record is not None
+        assert record.kind is WorkerKind.EXPERIMENT
+        assert record.spec.get("live") is True
+        assert record.spec.get("progress") is False
+    finally:
+        Path(exp_path).unlink(missing_ok=True)
+
+
 def test_get_manifest_store_refresh_throttled(monkeypatch):
     import mas.lab.controller.deps as deps
 

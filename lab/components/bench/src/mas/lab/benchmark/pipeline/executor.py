@@ -39,6 +39,20 @@ from mas.runtime.constants import LAB_CONFIG_FILENAME
 logger = logging.getLogger(__name__)
 
 
+def _republish_cached_output(step_name: str, output: Any) -> None:
+    """Reinject a restored artefact onto the live channel so downstream / UI see it."""
+    try:
+        from mas.lab.benchmark.pipeline.channel import get_channel
+        from mas.lab.benchmark.pipeline.fanout import publish_output_stream
+
+        channel = get_channel()
+        if channel is None or output is None:
+            return
+        publish_output_stream(channel, step_name, output)
+    except Exception:
+        logger.debug("cached republish skipped for %s", step_name, exc_info=True)
+
+
 def is_fatal_pipeline_error(exc: BaseException) -> bool:
     """True when a step failure must abort the whole pipeline (auth / missing key)."""
     err = str(exc)
@@ -642,6 +656,7 @@ class PipelineExecutor:
             if restored is not None:
                 restored.metadata["cached"] = True
                 ctx.step_outputs[step_name] = restored
+                _republish_cached_output(step_name, restored)
                 continue
             data: dict = {}
             files: list = []
@@ -662,9 +677,11 @@ class PipelineExecutor:
                 steps_to_rerun.append(step_name)
             else:
                 from mas.lab.benchmark.pipeline import StepOutput as _SO
-                ctx.step_outputs[step_name] = _SO(
+                restored_files = _SO(
                     data=data, files=files, metadata={"cached": True}
                 )
+                ctx.step_outputs[step_name] = restored_files
+                _republish_cached_output(step_name, restored_files)
         type_totals: Dict[str, int] = {}
         for step_name in steps_to_rerun:
             step = self.pipeline.get_step(step_name)

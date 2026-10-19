@@ -1,7 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for the shared custom.{owner}.plot envelope helper, verified against
-the real client-side contract (demo-ui/src/plugins/html-plot.js's chartOf())."""
+the real client-side contract (demo-ui/src/plot-host.js)."""
 
 import base64
 
@@ -36,7 +36,7 @@ def test_build_plot_record_requires_owner():
 def test_build_plot_record_rejects_content_free_tick():
     # Neither html nor data -- would publish but render nothing. This is the
     # real bug build_plot_record exists to catch (see its docstring: "kind"
-    # alone would satisfy html-plot.js's chartOf(), so a naive truthy check
+    # alone would satisfy the embedded host's chart check, so a naive truthy check
     # against its full field list would never fire).
     with pytest.raises(ValueError, match="neither 'data' nor 'html'"):
         build_plot_record("ci_plot", kind="image")

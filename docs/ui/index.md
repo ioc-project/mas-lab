@@ -6,7 +6,10 @@
 
 The **MAS Lab web UI** is a browser studio for working with manifests, launching
 benchmarks, and inspecting run artifacts. It talks to **mas-lab-controller**
-over HTTP — the same controller that backs `mas-lab serve`.
+over HTTP — the same controller that backs `mas-lab serve`. For a **live**
+topology / native-event / chat dashboard, use the [live dashboard](live.md)
+instead; that app does not replace this authoring studio.
+
 
 Use the UI when you prefer visual browsing over the CLI. Paper reproduction and
 CI still use `mas-lab benchmark run` and `task reproduce`.

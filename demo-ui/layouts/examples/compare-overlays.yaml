@@ -1,0 +1,18 @@
+version: 1
+title: "Compare overlay variants"
+mode: live
+modes: [live, replay]
+dataSource: {}
+ref: run-view.yaml
+navbar:
+  left:
+    - plugin: title
+      props: { text: "Compare overlay variants" }
+  right:
+    - plugin: settings
+    - plugin: connection-status
+lanes:
+  - title: Overlay A
+    dataSource: { overlay: overlay-a }
+  - title: Overlay B
+    dataSource: { overlay: overlay-b }

@@ -21,7 +21,9 @@ def test_worker_model_helpers():
     detail = rec.to_job_detail()
     assert "line1" in detail["stdout"]
     rec.status = WorkerStatus.FAILED
+    rec.error = "llm_cache miss"
     assert rec._job_status() == "failed"
+    assert rec.to_job_summary()["error"] == "llm_cache miss"
     reg = WorkerRegistry()
     rec = reg.create(WorkerKind.BENCHMARK, command="c")
     reg.update(rec.id, status=WorkerStatus.RUNNING)

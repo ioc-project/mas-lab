@@ -279,6 +279,8 @@ uv pip install mas-library-lab  # PyPI
 
 **Python entry point `mas.lab.eval.plugins`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.eval.plugins` without a hard-coded path.
 
+**Python entry point `mas.lab.ui.plots`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.ui.plots` without a hard-coded path.
+
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 
 ---
