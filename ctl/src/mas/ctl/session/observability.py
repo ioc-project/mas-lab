@@ -2,10 +2,11 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Wire observability from manifest config -> runtime instance.
 
-ctl is agnostic to plugins: everything here converts ctl-side config into an
-``ObservabilityBinding`` (pure data, see ``mas.runtime.boundary.obs.binding``)
-and asks runtime to build/attach the actual plugin instances via
-``build_observability_plugin_set`` / ``attach_observability_plugin_set``.
+Ctl converts config into an ``ObservabilityBinding`` (pure data) and asks
+runtime to build/attach plugins via ``build_observability_plugin_set`` /
+``attach_observability_plugin_set``. Default-native detection uses
+``NativeObservabilityPlugin.events_jsonl_path``; plugin construction still
+lives in runtime.
 This module only orchestrates *when* that happens (single instance, a
 pre-built dict of instances, or instances discovered lazily one at a time)
 and wraps the result in ctl's own ``SessionObservabilityRecorder`` lifecycle
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from mas.ctl.adapters.obs.config import ObservabilityConfig
 from mas.ctl.adapters.obs.session import SessionObservabilityRecorder
+from mas.library.standard.plugins.observability.native_plugin import NativeObservabilityPlugin
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.plugins import (
     ObsPluginSet,
@@ -42,20 +44,15 @@ def obs_config_to_binding(config: ObservabilityConfig) -> ObservabilityBinding |
         native_cfg = dict(plugin_configs.get("native") or {})
         native_cfg.setdefault("path", config.events_file)
         plugin_configs["native"] = native_cfg
-    if config.mas_id:
-        # Live native + otel export must use the MAS name, not the agent
-        # or the runtime package id.
-        for plugin in ("otel", "native"):
-            cfg = dict(plugin_configs.get(plugin) or {})
-            cfg.setdefault("app_name", config.mas_id)
-            cfg.setdefault("mas_id", config.mas_id)
-            plugin_configs[plugin] = cfg
-    return ObservabilityBinding(
+    binding = ObservabilityBinding(
         plugins=plugins,
         plugin_configs=plugin_configs,
         events_file=config.events_file,
         stdout=config.events_stdout,
     )
+    if config.mas_id:
+        binding = binding.with_mas_id(config.mas_id)
+    return binding
 
 
 def setup_instance_obs(
@@ -67,7 +64,7 @@ def setup_instance_obs(
 ) -> ObsPluginSet | None:
     """Build plugins, subscribe to instance's operator, and begin run. Returns plugin_set."""
     binding = obs_config_to_binding(config)
-    effective_agent_id = agent_id or config.agent_id or "agent"
+    effective_agent_id = agent_id or config.agent_id
     plugin_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=effective_agent_id)
     if plugin_set is None:
         return None
@@ -96,15 +93,7 @@ def setup_shared_obs(
     return shared_set
 
 
-def _emitter_path(plugin: object) -> Path | None:
-    for emitter in getattr(plugin, "emitters", None) or []:
-        path = getattr(emitter, "path", None)
-        if path is not None:
-            return Path(path)
-    return None
-
-
-def _is_default_native_plugin_set(plugin_set: object) -> bool:
+def _is_default_native_plugin_set(plugin_set: ObsPluginSet) -> bool:
     """True when *plugin_set* is native-only writing the default traces/events.jsonl.
 
     Agent overlays such as ``observability-native`` and ``with-guardrail``
@@ -115,28 +104,38 @@ def _is_default_native_plugin_set(plugin_set: object) -> bool:
     ctl shared ``events.jsonl`` already covers it. A custom filename or an
     extra plugin (otel, …) stays scoped.
     """
-    plugins = list(getattr(plugin_set, "plugins", None) or [])
-    if len(plugins) != 1:
+    if len(plugin_set.plugins) != 1:
         return False
-    plugin = plugins[0]
-    plugin_id = str(getattr(plugin, "plugin_id", "") or type(plugin).__name__).lower()
-    if "native" not in plugin_id:
+    plugin = plugin_set.plugins[0]
+    if not isinstance(plugin, NativeObservabilityPlugin):
         return False
-    path = _emitter_path(plugin)
+    path = plugin.events_jsonl_path()
     if path is None:
         return True
     return path.name == "events.jsonl" and path.parent.name == "traces"
 
 
+def _plugin_set_of(instance: object) -> ObsPluginSet | None:
+    """Private plugin set on a runtime instance, or ``None`` if the instance has none.
+
+    ``RuntimeInstance`` always declares ``obs_plugin_set``. Test and compose
+    stubs may omit the field; they join the shared run, same as an instance
+    whose set is explicitly ``None``.
+    """
+    try:
+        plugin_set = instance.obs_plugin_set  # type: ignore[attr-defined]
+    except AttributeError:
+        return None
+    return plugin_set
+
+
 def _release_plugin_set(instance: "RuntimeInstance") -> None:
     """Unsubscribe a private set without ``close()`` (that would emit ``mas_call_end``)."""
-    plugin_set = getattr(instance, "obs_plugin_set", None)
-    op = getattr(getattr(instance, "driver", None), "observability", None)
+    plugin_set = _plugin_set_of(instance)
+    op = instance.driver.observability
     if plugin_set is not None and op is not None:
-        unsubscribe = getattr(op, "unsubscribe", None)
-        for plugin in getattr(plugin_set, "plugins", None) or []:
-            if callable(unsubscribe):
-                unsubscribe(plugin)
+        for plugin in plugin_set.plugins:
+            op.unsubscribe(plugin)
     instance.obs_plugin_set = None
 
 
@@ -162,7 +161,7 @@ def partition_instances_by_observability(
     shared: "dict[str, RuntimeInstance]" = {}
     scoped: "dict[str, RuntimeInstance]" = {}
     for agent_id, instance in instances.items():
-        plugin_set = getattr(instance, "obs_plugin_set", None)
+        plugin_set = _plugin_set_of(instance)
         if plugin_set is not None and not _is_default_native_plugin_set(plugin_set):
             scoped[agent_id] = instance
             continue
@@ -186,7 +185,7 @@ def finalize_scoped_observability(
     """
     recorders: list[SessionObservabilityRecorder] = []
     for instance in scoped.values():
-        plugin_set = instance.obs_plugin_set
+        plugin_set = _plugin_set_of(instance)
         if plugin_set is None:
             continue
         op = instance.driver.observability
@@ -232,12 +231,19 @@ def setup_observability(
     *,
     base_dir: Path,
 ) -> SessionObservabilityRecorder | None:
-    """Legacy path: ObservabilityConfig → runtime plugins → ObsPluginSet."""
+    """Legacy path: ObservabilityConfig → runtime plugins → ObsPluginSet.
+
+    If ``from_spec`` already built a plugin set from the agent overlay, reuse
+    it. Subscribing a second set on the same operator duplicates every span.
+    """
+    existing = _plugin_set_of(instance)
+    if existing is not None and existing.plugins:
+        return SessionObservabilityRecorder(plugin_set=existing)
     binding = obs_config_to_binding(config)
     plugin_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=config.agent_id)
     if plugin_set is None:
         return None
-    attach_observability_plugin_set(plugin_set, instance, agent_id=config.agent_id or "agent")
+    attach_observability_plugin_set(plugin_set, instance, agent_id=config.agent_id)
     return SessionObservabilityRecorder(plugin_set=plugin_set)
 
 
@@ -252,7 +258,7 @@ def create_shared_observability(
     setup_fn(instance, agent_id) subscribes the instance and returns a recorder.
     """
     binding = obs_config_to_binding(config)
-    entry_agent_id = config.agent_id or "agent"
+    entry_agent_id = config.agent_id
     shared_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=entry_agent_id)
     if shared_set is None:
         return None, None
@@ -272,13 +278,13 @@ def setup_observability_from_binding(
     binding: ObservabilityBinding,
     *,
     base_dir: Path,
-    agent_id: str = "agent",
+    agent_id: str = "",
 ) -> SessionObservabilityRecorder | None:
     """New path: ObservabilityBinding → runtime plugins → ObsPluginSet."""
     if binding is None or not binding.plugins:
         return None
 
-    plugin_set: ObsPluginSet | None = getattr(instance, "obs_plugin_set", None)
+    plugin_set = _plugin_set_of(instance)
     if plugin_set is None:
         plugin_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=agent_id)
         if plugin_set is None:

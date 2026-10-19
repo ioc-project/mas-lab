@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,11 @@ def test_create_otel_plugin_full_lifecycle(tmp_path: Path, monkeypatch) -> None:
     blob = spans_path.read_text()
     assert "sample-app.graph" in blob
     assert "gen_ai.ioa.graph" in blob
+    spans = [json.loads(line) for line in blob.splitlines() if line.strip()]
+    assert sum(1 for span in spans if span.get("name") == "session.end") == 1
+    graph = next(span for span in spans if str(span.get("name") or "").endswith(".graph"))
+    payload = json.loads((graph.get("attributes") or {})["gen_ai.ioa.graph"])
+    assert isinstance(payload.get("nodes"), dict)
 
     plugin.reset_run()
     assert plugin.converter is not None
@@ -113,6 +119,56 @@ def test_from_binding_constructs_plugin(tmp_path: Path, monkeypatch) -> None:
     assert plugin.mas_id == "sample-app"
     assert plugin.converter is not None
     assert plugin.converter._app_name == "sample-app"
+
+
+def test_from_binding_requires_declared_mas_name(tmp_path: Path) -> None:
+    from mas.library.telemetry.plugins.otel_plugin import OtelObservabilityPlugin
+
+    binding = ObservabilityBinding(
+        plugins=["otel"],
+        plugin_configs={
+            "otel": {
+                "output_path": str(tmp_path / "out.jsonl"),
+                "converter_profile": "observe_sdk",
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="MAS app name is required"):
+        OtelObservabilityPlugin.from_binding(
+            binding, base_dir=tmp_path, agent_id="qa-agent"
+        )
+
+
+def test_from_binding_rejects_filesystem_path_app_name(tmp_path: Path) -> None:
+    from mas.library.telemetry.plugins.otel_plugin import OtelObservabilityPlugin
+
+    binding = ObservabilityBinding(
+        plugins=["otel"],
+        plugin_configs={
+            "otel": {
+                "output_path": str(tmp_path / "out.jsonl"),
+                "app_name": "/opt/mas-lab/library-samples/apps/trip-planner/agents",
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="filesystem path"):
+        OtelObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="planner")
+
+
+def test_from_binding_service_name_is_not_mas_identity(tmp_path: Path) -> None:
+    from mas.library.telemetry.plugins.otel_plugin import OtelObservabilityPlugin
+
+    binding = ObservabilityBinding(
+        plugins=["otel"],
+        plugin_configs={
+            "otel": {
+                "output_path": str(tmp_path / "out.jsonl"),
+                "service_name": "mas-runtime",
+            }
+        },
+    )
+    with pytest.raises(ValueError, match="MAS app name is required"):
+        OtelObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="planner")
 
 
 def test_from_binding_uses_mas_id_not_agent_or_runtime(tmp_path: Path) -> None:

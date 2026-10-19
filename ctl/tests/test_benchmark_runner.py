@@ -170,7 +170,10 @@ def test_multi_agent_topology_runs_on_unified_controller_path(tmp_path: Path):
         manifest_path=tmp_path / "agents" / "step-a.yaml",
         session_id="sid-1",
     )
-    stub_instance = SimpleNamespace(driver=SimpleNamespace(agent_id=None, observability=None))
+    stub_instance = SimpleNamespace(
+        driver=SimpleNamespace(agent_id=None, observability=None),
+        obs_plugin_set=None,
+    )
     materialized = SimpleNamespace(
         compose=compose,
         materialized=SimpleNamespace(instances={"step-a": stub_instance, "step-b": stub_instance}),

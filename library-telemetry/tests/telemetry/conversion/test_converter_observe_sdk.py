@@ -804,7 +804,8 @@ def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
     assert graph["attributes"].get("ioa_observe.entity.name") == "trip-planner"
     assert graph["attributes"].get("execution.success") == "true"
     nodes = json.loads(graph["attributes"]["gen_ai.ioa.graph"])["nodes"]
-    node_ids = set(nodes) if isinstance(nodes, dict) else {n["id"] for n in nodes}
+    assert isinstance(nodes, dict)
+    node_ids = set(nodes)
     assert {"moderator", "schedule_agent"} <= node_ids
     assert not any(s["name"] == "agent.context" for s in spans)
     processing = [s for s in spans if s["name"].endswith(".processing")]

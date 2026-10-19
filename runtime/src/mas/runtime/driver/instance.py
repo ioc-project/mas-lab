@@ -27,6 +27,7 @@ from mas.runtime.schema.ingress import (
 
 if TYPE_CHECKING:
     from mas.runtime.boundary.obs.binding import ObservabilityBinding
+    from mas.runtime.boundary.obs.plugins import ObsPluginSet
 
 
 @dataclass
@@ -36,7 +37,7 @@ class RuntimeInstance:
     kernel: RuntimeKernel
     driver: KernelDriver
     _checkpoints: list[dict] = field(default_factory=list)
-    obs_plugin_set: Any | None = field(default=None, repr=False)
+    obs_plugin_set: ObsPluginSet | None = field(default=None, repr=False)
     # Mirrors spec.working_memory on the agent manifest (default:
     # persistent=True). Set by instantiate_runtime() from the agent
     # manifest; only consulted on the delegation path (make_workflow_send) —
@@ -83,7 +84,7 @@ class RuntimeInstance:
             plugin_set = ObsPluginSet(plugins=plugins)
             plugin_set.subscribe_to(
                 op,
-                agent_id=obs_agent_id or "agent",
+                agent_id=obs_agent_id or "",
             )
             instance.obs_plugin_set = plugin_set
 
@@ -95,7 +96,8 @@ class RuntimeInstance:
         spec: dict,
         *,
         base_dir: Any | None = None,
-        agent_id: str = "agent",
+        agent_id: str = "",
+        mas_id: str = "",
         obs_binding_override: ObservabilityBinding | None = None,
         hitl: Any | None = None,
         engine: Any | None = None,
@@ -125,6 +127,8 @@ class RuntimeInstance:
             manifest_dir=resolved_base_dir,
         )
         obs_binding = obs_binding_override if obs_binding_override is not None else spec_obs_binding
+        if obs_binding is not None and mas_id:
+            obs_binding = obs_binding.with_mas_id(mas_id)
 
         if not enable_governance:
             kernel_config = _replace(kernel_config, enable_governance=False)
@@ -172,8 +176,8 @@ class RuntimeInstance:
         op = self.driver.observability
         exec_id: str | None = None
         if op is not None and self.obs_plugin_set is not None:
-            agent_id = op._agent_id or "agent"
-            exec_id = f"{agent_id}-{turn_id}-exec"
+            agent_id = op._agent_id
+            exec_id = f"{agent_id}-{turn_id}-exec" if agent_id else f"{turn_id}-exec"
             op.push_call_frame(exec_id)
             record_kwargs = {"text": text, "call_id": exec_id, "turn_id": turn_id}
             if parent_call_id:
@@ -216,8 +220,8 @@ class RuntimeInstance:
         op = self.driver.observability
         exec_id: str | None = None
         if op is not None and self.obs_plugin_set is not None:
-            agent_id = op._agent_id or "agent"
-            exec_id = f"{agent_id}-{turn_id}-exec"
+            agent_id = op._agent_id
+            exec_id = f"{agent_id}-{turn_id}-exec" if agent_id else f"{turn_id}-exec"
             op.push_call_frame(exec_id)
             record_kwargs = {"text": text, "call_id": exec_id, "turn_id": turn_id}
             if parent_call_id:

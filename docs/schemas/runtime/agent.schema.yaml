@@ -36,7 +36,12 @@ properties:
     properties:
       name:
         type: string
-        description: "Agent ID — must match the workflow node id that references this agent."
+        minLength: 1
+        not:
+          pattern: "[/\\\\]"
+        description: >
+          Agent ID — must match the workflow node id that references this
+          agent. A filesystem path is not a name.
       description:
         type: string
         description: "Human-readable description of this agent."

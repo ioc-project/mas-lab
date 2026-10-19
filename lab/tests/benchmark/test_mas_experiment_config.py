@@ -23,6 +23,7 @@ from mas.lab.benchmark.schedule.run_batch.load import (
     _select_dataset_items,
     _select_scenario_ids,
 )
+from mas.lab.deprecations import clear_deprecation_warnings
 from mas.lab.lab.config import MASExperimentConfig
 
 # ---------------------------------------------------------------------------
@@ -411,7 +412,7 @@ def _collect_lab_experiments() -> list[tuple[str, Path]]:
         return []
     return [
         (str(p.relative_to(_LABS_DIR)), p)
-        for p in sorted(_LABS_DIR.rglob("experiment.yaml"))
+        for p in sorted(_LABS_DIR.rglob("experiment*.yaml"))
     ]
 
 
@@ -424,11 +425,19 @@ def test_lab_experiment_yaml_parses(label, exp_yaml):
     run time.  The test does NOT execute the experiment — it only validates
     that MASExperimentConfig.from_yaml() succeeds.
 
-    Warnings (e.g. deprecated output_dir) are allowed; errors are not.
+    Envelope deprecations (experiment.execution, experiment.mas, …) fail;
+    those shipped files must already be on design/schedule/bench_emulation.
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", DeprecationWarning)
+    clear_deprecation_warnings()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
         cfg = MASExperimentConfig.from_yaml(exp_yaml)
+    leftover = [
+        str(w.message)
+        for w in caught
+        if issubclass(w.category, DeprecationWarning) and str(w.message).startswith("Deprecated:")
+    ]
+    assert leftover == [], f"{label}: shipped experiment still uses a deprecated shape: {leftover}"
 
     assert cfg.name, f"{label}: experiment name must be non-empty"
     # If a dataset block is present the path must have been resolved

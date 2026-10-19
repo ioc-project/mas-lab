@@ -125,7 +125,7 @@ class OtelSpanSet:
         art.metadata = {
             "source": str(events_path),
             "service_name": service_name,
-            "app_name": app_name or service_name,
+            "app_name": app_name,
         }
         return art
 

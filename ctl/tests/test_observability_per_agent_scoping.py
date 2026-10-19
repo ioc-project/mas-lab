@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 from mas.ctl.adapters.obs.config import ObservabilityConfig
 from mas.ctl.session.observability import (
@@ -62,6 +63,14 @@ def test_partition_splits_by_existing_plugin_set(tmp_path) -> None:
 
     assert list(shared) == ["moderator"]
     assert list(scoped) == ["specialist"]
+
+
+def test_partition_missing_obs_plugin_set_joins_shared() -> None:
+    """Compose/bench stubs without obs_plugin_set join the shared run, not crash."""
+    stub = SimpleNamespace(driver=SimpleNamespace(observability=None))
+    shared, scoped = partition_instances_by_observability({"step-a": stub, "step-b": stub})
+    assert list(shared) == ["step-a", "step-b"]
+    assert scoped == {}
 
 
 def test_default_native_plugin_set_joins_shared(tmp_path) -> None:

@@ -12,7 +12,6 @@ spec:
       type: events_to_otel
       per_run: true
       config:
-        service_name: mas-runtime
         output_filename: otel_sdk_spans_replay.jsonl
         converter_profile: observe_sdk
         # Categories (same as CLI --layer / --governance):

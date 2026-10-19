@@ -12,7 +12,6 @@ spec:
       type: events_to_otel
       per_run: true
       config:
-        service_name: mas-runtime
         export_layers:
           governance: true
           provenance: true

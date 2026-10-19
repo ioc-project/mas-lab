@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,26 @@ class ObservabilityBinding:
     trace_content: bool = True
     # Emit events to stdout as well as file
     stdout: bool = False
+
+    def with_mas_id(self, mas_id: str) -> "ObservabilityBinding":
+        """Stamp the MAS name onto native/otel plugin configs when blank."""
+        name = str(mas_id or "").strip()
+        if not name:
+            return self
+        if "/" in name or "\\" in name:
+            raise ValueError(
+                "MAS app name must be a declared identity, not a filesystem path: "
+                f"{name!r}"
+            )
+        configs = {key: dict(value) for key, value in self.plugin_configs.items()}
+        for plugin in self.plugins:
+            cfg = dict(configs.get(plugin) or {})
+            if not str(cfg.get("app_name") or "").strip():
+                cfg["app_name"] = name
+            if not str(cfg.get("mas_id") or "").strip():
+                cfg["mas_id"] = name
+            configs[plugin] = cfg
+        return replace(self, plugin_configs=configs)
 
 
 __all__ = ["ObservabilityBinding"]

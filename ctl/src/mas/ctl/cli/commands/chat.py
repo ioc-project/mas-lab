@@ -13,6 +13,7 @@ from mas.ctl.cli.help_text import CHAT_EPILOG
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
+from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.controller import (
     ConversationConfig,
     SessionController,
@@ -393,7 +394,7 @@ def chat_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
-            agent_id="agent",
+            agent_id=require_agent_id_from_manifest(agent_data),
             manifest=agent_data,
             flavour_spec=flavour_spec,
         )

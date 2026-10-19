@@ -172,7 +172,7 @@ def execute_run_mas(
         instances,
         obs_config,
         base_dir=base,
-        entry_agent_id=str(entry or "agent"),
+        entry_agent_id=str(entry),
     )
 
     from mas.ctl.session.exposure import close_exposures, start_materialized_exposures
@@ -192,7 +192,7 @@ def execute_run_mas(
             trace_engine=trace_engine,
             trace_summary=trace_summary,
             trace_color=trace_color,
-            agent_id=str(entry or "agent"),
+            agent_id=str(entry),
             config=ConversationConfig(
                 single_turn=single_turn or (bool(scripted) and not interactive),
             ),

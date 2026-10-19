@@ -64,6 +64,13 @@ from mas.library.telemetry.exceptions import OtelSdkUnavailableError
 
 logger = logging.getLogger(__name__)
 
+
+class SpanIdReuse:
+    """Id generator that can force the next emitted span id."""
+
+    def reuse_span_id(self, span_id: int) -> None:
+        raise NotImplementedError
+
 if OTEL_AVAILABLE:
     from opentelemetry import context as context_api
     from opentelemetry import trace
@@ -182,7 +189,9 @@ class MasOtelConverter:
         # Only used by emit_realtime_signal, and only if it exposes
         # reuse_span_id() (see session.py's _SharedTraceIdGenerator).
         self._id_generator = id_generator
-        self._app_name = app_name
+        from mas.library.telemetry.conversion.topology import declared_mas_name
+
+        self._app_name = declared_mas_name(app_name)
         self._export_layers = export_layers or ExportLayers()
         self._converter_profile = normalize_converter_profile(converter_profile)
         self._annotation_enabled = (
@@ -261,7 +270,13 @@ class MasOtelConverter:
         event = self._inherit_agent_id(event)
         self._seen_events.append(event)
         self._ensure_trace_root(self.ts_ns(event))
+        kind = str(event.get("kind") or "")
+        if kind == "mas_call_end":
+            ts = event.get("timestamp")
+            if isinstance(ts, (int, float)):
+                self._mas_call_end_ts = float(ts)
         if not should_export_event(event, self._export_layers):
+            self._maybe_end_session(kind)
             return
         run_id = event.get("run_id") or (event.get("context") or {}).get("run_id", "")
         if run_id and run_id not in self._SENTINEL_RUN_IDS:
@@ -290,11 +305,6 @@ class MasOtelConverter:
             # whichever event first names the session, giving the two
             # paths different session.start timestamps for the same run.
             self.emit_session_start(event)
-        if str(event.get("kind") or "") == "mas_call_end":
-            ts = event.get("timestamp")
-            if isinstance(ts, (int, float)):
-                self._mas_call_end_ts = float(ts)
-        kind = event.get("kind", "")
         handler = self._HANDLERS.get(kind)
         if handler:
             handler(self, event)
@@ -302,6 +312,7 @@ class MasOtelConverter:
             self._emit_generic_event(event)
         if self._realtime:
             self.emit_realtime_signal(event)
+        self._maybe_end_session(kind)
 
     def flush_open_spans(self, *, status: str = "success") -> None:
         """End any spans still open so exporters receive them."""
@@ -312,32 +323,12 @@ class MasOtelConverter:
         """Emit the end-of-run graph span (unless realtime) and close open spans.
 
         Live plugin flush and file replay both call this so graph vs realtime
-        is decided in one place.
+        is decided in one place. ``session.end`` is emitted here as a
+        fallback when the run never recorded ``mas_call_end``.
         """
         do_graph = (not self._realtime) if emit_graph is None else bool(emit_graph)
-        if do_graph and self._seen_events and not self._graph_emitted:
-            from mas.library.telemetry.conversion.topology import build_topology
-
-            earliest_ts = next(
-                (
-                    event.get("timestamp")
-                    for event in self._seen_events
-                    if isinstance(event.get("timestamp"), (int, float))
-                ),
-                None,
-            )
-            graph_ts_ns = self._shifted_ts_ns(earliest_ts)
-            self.emit_graph_span(
-                build_topology(self._seen_events),
-                app_name=self._app_name,
-                ts_ns=graph_ts_ns,
-                parent_call_id=(
-                    None
-                    if self._converter_profile == "observe_sdk"
-                    else self._TRACE_ROOT_CALL_ID
-                ),
-            )
-            self._graph_emitted = True
+        if do_graph:
+            self._emit_graph_bookend()
         for call_id in list(self._open_spans):
             if call_id != self._TRACE_ROOT_CALL_ID:
                 self.close_span(call_id, status="success")
@@ -350,6 +341,46 @@ class MasOtelConverter:
                 self._TRACE_ROOT_CALL_ID,
                 end_ns=self._shifted_ts_ns(self._latest_event_ts()),
             )
+
+    def _emit_graph_bookend(self) -> None:
+        if self._graph_emitted or not self._seen_events:
+            return
+        from mas.library.telemetry.conversion.topology import build_topology
+
+        earliest_ts = next(
+            (
+                event.get("timestamp")
+                for event in self._seen_events
+                if isinstance(event.get("timestamp"), (int, float))
+            ),
+            None,
+        )
+        graph_ts_ns = self._shifted_ts_ns(earliest_ts)
+        self.emit_graph_span(
+            build_topology(self._seen_events),
+            app_name=self._app_name,
+            ts_ns=graph_ts_ns,
+            parent_call_id=(
+                None
+                if self._converter_profile == "observe_sdk"
+                else self._TRACE_ROOT_CALL_ID
+            ),
+        )
+        self._graph_emitted = True
+
+    def _maybe_end_session(self, kind: str) -> None:
+        """``mas_call_end`` is the explicit known end of the MAS run.
+
+        Graph first, then ``session.end``, so ingest sees topology before
+        the session closes. Remaining open spans stay for ``finish()``.
+        """
+        if kind != "mas_call_end" or self._converter_profile != "observe_sdk":
+            return
+        if not self._realtime:
+            self._emit_graph_bookend()
+        if not self._session_start_emitted:
+            self.emit_session_start()
+        self.emit_session_end()
 
     def _ensure_trace_root(self, start_ns: int | None = None) -> None:
         """Raw profile: one exported ``root`` so the tree shares a TraceId.
@@ -770,7 +801,7 @@ class MasOtelConverter:
         point_attrs = dict(attrs)
         if call_id:
             point_attrs["mas.call.id"] = call_id
-        if reuse_span_id is not None and hasattr(self._id_generator, "reuse_span_id"):
+        if reuse_span_id is not None and isinstance(self._id_generator, SpanIdReuse):
             self._id_generator.reuse_span_id(reuse_span_id)
         # set_call_id=False → the synthetic span_key is never written as an
         # attribute (it would be a random, non-deterministic value).
@@ -796,7 +827,7 @@ class MasOtelConverter:
         return raw_span_id
 
     def emit_session_start(self, ev: Dict[str, Any] | None = None) -> None:
-        """OXP ``session.start`` — creates the Session node in norm."""
+        """Observe-sdk ``session.start`` bookend."""
         if self._session_start_emitted:
             return
         ts_ns = self.ts_ns(ev) if ev else self._shifted_ts_ns(self._earliest_event_ts())
@@ -816,7 +847,7 @@ class MasOtelConverter:
         self._session_start_emitted = True
 
     def emit_session_end(self) -> None:
-        """OXP ``session.end`` — sets Session.endTime so the UI counts it complete."""
+        """Observe-sdk ``session.end`` bookend. Idempotent."""
         if self._session_end_emitted or not self._session_start_emitted:
             return
         ts_ns = self._shifted_ts_ns(self._session_end_event_ts())
@@ -948,11 +979,12 @@ class MasOtelConverter:
         from mas.library.telemetry.conversion.topology import (
             graph_span_attributes,
             has_topology,
+            require_mas_name,
         )
 
         if not has_topology(topology):
             return
-        app = app_name or self._app_name or "mas"
+        app = require_mas_name(app_name, self._app_name)
         name = f"{app}.{semconv.SPAN_SUFFIX_GRAPH}"
         attrs = {
             "mas.boundary": "Graph",
@@ -1664,4 +1696,4 @@ class MasOtelConverter:
         return None
 
 
-__all__ = ["MasOtelConverter"]
+__all__ = ["MasOtelConverter", "SpanIdReuse"]

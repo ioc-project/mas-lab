@@ -33,18 +33,40 @@ def kernel_config_from_manifest(
     return build_kernel_config(gov, pattern_plugin_id=pattern_plugin_id or "", agent_spec=spec)
 
 
+def agent_id_from_manifest(manifest: dict | None) -> str:
+    """``metadata.name`` on the loaded Agent or MAS document (schema field)."""
+    meta = (manifest or {}).get("metadata") or {}
+    return str(meta.get("name") or "").strip()
+
+
+def require_agent_id_from_manifest(manifest: dict | None) -> str:
+    """``metadata.name``, required when the loaded document is an Agent or MAS."""
+    name = agent_id_from_manifest(manifest)
+    kind = str((manifest or {}).get("kind") or "").strip().lower()
+    if kind in {"agent", "mas"}:
+        if not name:
+            raise ValueError("metadata.name is required on the loaded manifest")
+        if "/" in name or "\\" in name:
+            raise ValueError(
+                "metadata.name must be a declared identity, not a filesystem path: "
+                f"{name!r}"
+            )
+    return name
+
+
 def mas_id_from_manifest(manifest: dict | None) -> str:
-    doc = manifest or {}
-    kind = str(doc.get("kind") or "").lower()
-    meta = doc.get("metadata") or {}
-    if kind == "mas" and meta.get("name"):
-        return str(meta["name"])
-    mas = doc.get("mas") or {}
-    if isinstance(mas, dict) and mas.get("name"):
-        return str(mas["name"])
-    if meta.get("mas_id"):
-        return str(meta["mas_id"])
-    return ""
+    """MAS identity is this document's ``metadata.name``.
+
+    Both ``kind: MAS`` and ``kind: Agent`` declare identity only as
+    ``metadata.name``. There is no ``metadata.mas_id`` or nested ``mas.name``
+    in the schemas.
+    """
+    return agent_id_from_manifest(manifest)
+
+
+def resolve_mas_id(manifest: dict | None, *, mas_id: str = "") -> str:
+    """Explicit override, else ``metadata.name`` on *manifest*."""
+    return mas_id or mas_id_from_manifest(manifest)
 
 
 def derive_observability_format(
@@ -68,7 +90,7 @@ def observability_config_from_manifest(
     manifest: dict | None,
     *,
     deployment: dict | None = None,
-    agent_id: str = "agent",
+    agent_id: str = "",
     mas_id: str = "",
     cli_events: bool | None = None,
     cli_events_file: str | None = None,
@@ -123,7 +145,7 @@ def observability_config_from_manifest(
         otel_file=str(otel_file) if otel_file else None,
         sink_ref=str(sink_ref) if sink_ref else None,
         agent_id=agent_id,
-        mas_id=mas_id or mas_id_from_manifest(manifest),
+        mas_id=resolve_mas_id(manifest, mas_id=mas_id),
         plugins=plugins,
         plugin_configs=dict(binding.plugin_configs),
     )

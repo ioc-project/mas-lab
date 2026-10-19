@@ -80,7 +80,6 @@ class TestReplayAndPush:
         n = convert_events_to_spans_file(
             QA / "events.jsonl",
             out,
-            service_name="mas-runtime",
             app_name="qa-agent",
         )
         assert n > 0

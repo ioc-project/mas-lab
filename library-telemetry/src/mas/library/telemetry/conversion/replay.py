@@ -101,9 +101,7 @@ def replay_events_file(
         raise FileNotFoundError(f"events.jsonl not found: {input_path}")
 
     events = _read_events(input_path)
-    effective_app_name = require_mas_name(
-        app_name, derive_app_name(events), service_name
-    )
+    effective_app_name = require_mas_name(app_name, derive_app_name(events))
 
     annotation_enabled: bool | None = None
     if isinstance(export_layers, dict):
@@ -135,10 +133,10 @@ def replay_events_file(
         None,
     )
 
-    # Default replay keeps a path+service seed so files stay stable. A new
+    # Default replay keeps a path+MAS-name seed so files stay stable. A new
     # session UUID must also reseed span IDs — Neo4j AgentCall/State hashes
     # include span_id, and reused IDs MERGE into older sessions.
-    seed_src = f"{input_path.resolve()}:{service_name}"
+    seed_src = f"{input_path.resolve()}:{effective_app_name}"
     if new_session_id and session_uuid:
         seed_src = f"{seed_src}:{session_uuid}"
     session_seed = hashlib.sha256(seed_src.encode()).hexdigest()

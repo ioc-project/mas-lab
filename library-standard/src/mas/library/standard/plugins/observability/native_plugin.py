@@ -7,8 +7,14 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 
-from mas.library.standard.lib.observability.emit import EventEmitter, FanOutEmitter
+from mas.library.standard.lib.observability.emit import (
+    EventEmitter,
+    FanOutEmitter,
+    JsonlFileEmitter,
+    StdoutJsonlEmitter,
+)
 from mas.library.standard.lib.observability.native.emit_transition import project_transition
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.runtime.boundary.obs.event_stream import publish_event
@@ -67,6 +73,12 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
     def __post_init__(self) -> None:
         if self.emitters:
             self._fanout = FanOutEmitter(*self.emitters)
+
+    def events_jsonl_path(self) -> Path | None:
+        for emitter in self.emitters:
+            if isinstance(emitter, JsonlFileEmitter):
+                return Path(emitter.path)
+        return None
 
     def _ctx_for(self, agent_id: str) -> TransformContext:
         """Per-agent TransformContext.
@@ -162,10 +174,6 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
         base_dir: str | Path,
         agent_id: str,
     ) -> "NativeObservabilityPlugin":
-        from pathlib import Path
-
-        from mas.library.standard.lib.observability.emit import JsonlFileEmitter, StdoutJsonlEmitter
-
         base_path = Path(base_dir)
         native_cfg = binding.plugin_configs.get("native") or {}
         events_path = Path(binding.events_file) if binding.events_file else base_path / "traces" / "events.jsonl"

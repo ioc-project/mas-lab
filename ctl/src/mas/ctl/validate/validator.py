@@ -287,6 +287,10 @@ def validate_data(
     if any(i.level == "error" for i in result.issues):
         result.ok = False
 
+    from mas.ctl.validate.identity import collect_identity_issues
+
+    result.issues.extend(collect_identity_issues(data, resolved_kind))
+
     if resolved_kind == "agent":
         try:
             from mas.ctl.manifest.spec_bindings import validate_agent_spec_bindings

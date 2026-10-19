@@ -24,8 +24,8 @@ class EventsToOtelStep(PipelineStep):
         ConfigParam("events_jsonl", str, description="Path to events.jsonl."),
         ConfigParam("scenario_dir", str, description="Scenario dir for trace discovery."),
         ConfigParam("output_filename", str, default="otel_sdk_spans.jsonl"),
-        ConfigParam("service_name", str, default="mas-runtime"),
-        ConfigParam("app_name", str, default=None),
+        ConfigParam("service_name", str, default=""),
+        ConfigParam("app_name", str, default=""),
         ConfigParam("in_place", bool, default=False),
         ConfigParam("overwrite", bool, default=False),
         ConfigParam(
@@ -54,8 +54,8 @@ class EventsToOtelStep(PipelineStep):
 
         config = self.config
         output_name = str(config.get("output_filename", "otel_sdk_spans.jsonl"))
-        service_name = str(config.get("service_name", "mas-runtime"))
-        app_name = str(config.get("app_name") or service_name)
+        service_name = str(config.get("service_name") or "")
+        app_name = str(config.get("app_name") or "")
         in_place = bool(config.get("in_place", False))
         overwrite = bool(config.get("overwrite", False))
         copy_from_replay = bool(config.get("copy_from_replay", False))

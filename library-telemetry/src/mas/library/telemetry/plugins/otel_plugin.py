@@ -53,7 +53,7 @@ def create_otel_plugin(
 ) -> OtelObservabilityPlugin:
     from mas.library.telemetry.conversion.topology import require_mas_name
 
-    mas_name = require_mas_name(app_name, mas_id, service_name)
+    mas_name = require_mas_name(app_name, mas_id)
     export = create_otel_export(
         spans_path=spans_path,
         service_name=mas_name,
@@ -158,7 +158,6 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
         mas_name = require_mas_name(
             str(otel_cfg.get("app_name") or ""),
             str(otel_cfg.get("mas_id") or ""),
-            str(otel_cfg.get("service_name") or ""),
         )
         profile = str(otel_cfg.get("converter_profile") or "observe_sdk")
         realtime = bool(otel_cfg.get("realtime", False)) or _env_flag(

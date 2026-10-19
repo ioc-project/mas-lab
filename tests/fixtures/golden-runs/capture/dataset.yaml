@@ -4,11 +4,9 @@ apiVersion: lab/v1
 kind: Dataset
 metadata:
   name: golden-smoke-queries
-  version: "1.0"
+  version: '1.0'
 spec:
   items:
-    - id: 1
-      inputs:
-        user:
-          - role: user
-            content: What is 2+2? Use the calculator if helpful.
+  - id: 1
+    inputs:
+      user: What is 2+2? Use the calculator if helpful.

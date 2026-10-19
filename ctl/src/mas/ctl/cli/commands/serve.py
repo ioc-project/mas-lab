@@ -13,6 +13,7 @@ from mas.ctl.env import load_dotenv
 from mas.ctl.infra.resolve import application_endpoint_is_deployed
 from mas.ctl.runtime_cli import load_merged_agent_manifest
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
+from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.exposure import expose_agent, make_runtime_handler
 from mas.ctl.session.flavour import FlavourError, resolve_flavour
 from mas.ctl.session.infra_resolve import resolve_session_infra
@@ -93,7 +94,7 @@ def serve_agent_cmd(
             anchor=session.manifest_dir or session.original_cwd,
             with_interceptors=True,
         )
-        agent_id = str((manifest.get("metadata") or {}).get("name") or "")
+        agent_id = require_agent_id_from_manifest(manifest)
         endpoint = infra.applications.get(agent_id)
         if endpoint is None or not application_endpoint_is_deployed(endpoint):
             raise click.ClickException(

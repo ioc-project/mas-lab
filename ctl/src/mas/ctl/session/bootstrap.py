@@ -280,10 +280,15 @@ def instantiate_runtime(
         # itself is bound onto ctx at driver init, not written into spec params.
         options.agent_manifest.setdefault("spec", {})["context_manager"] = spec["context_manager"]
 
+    from mas.ctl.session.manifest_config import require_agent_id_from_manifest, resolve_mas_id
+
+    agent_id = require_agent_id_from_manifest(options.agent_manifest)
+    mas_id = resolve_mas_id(options.agent_manifest)
     instance = RuntimeInstance.from_spec(
         spec,
         base_dir=options.manifest_dir,
-        agent_id=str(options.manifest_dir or "agent"),
+        agent_id=agent_id,
+        mas_id=mas_id,
         hitl=hitl,
         engine=selection.engine,
         ctx=ctx,
@@ -299,12 +304,6 @@ def instantiate_runtime(
         instance.working_memory = WorkingMemoryConfig(persistent=bool(working_memory_spec.get("persistent", True)))
     apply_memory_seeds(instance, seeds)
     if seeds and options.agent_manifest:
-        from mas.ctl.executor.mas_session import agent_manifest_label
-
-        agent_id = agent_manifest_label(
-            options.agent_manifest,
-            options.manifest_dir or Path.cwd(),
-        )
         from mas.ctl.adapters.memory_seed import index_seeds_in_semantic_memory
 
         index_seeds_in_semantic_memory(seeds, agent_id=agent_id)

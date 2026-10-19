@@ -52,15 +52,20 @@ def backup_trace_cache(
         for entry in sorted(trace_cache_dir.iterdir()):
             if not entry.is_dir():
                 continue
-            target = dest / entry.name
-            shutil.copytree(entry, target)
+            # EventStream writes a sibling ``streams/`` dir; only hashed run
+            # entries belong in the golden cache backup.
             run_json = entry / "run.json"
             inputs_json = entry / "inputs.json"
+            has_events = (entry / "traces" / "events.jsonl").is_file()
+            if not run_json.is_file() and not inputs_json.is_file() and not has_events:
+                continue
+            target = dest / entry.name
+            shutil.copytree(entry, target)
             manifest["entries"].append({
                 "run_hash": entry.name,
                 "has_run_json": run_json.is_file(),
                 "has_inputs_json": inputs_json.is_file(),
-                "has_events": (entry / "traces" / "events.jsonl").is_file(),
+                "has_events": has_events,
             })
 
     (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

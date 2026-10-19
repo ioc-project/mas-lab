@@ -48,7 +48,8 @@ def test_story_step1_convert(tmp_path):
     g = next(s for s in ss.spans if s["name"].endswith(".graph"))
     topo = json.loads(g["attributes"]["gen_ai.ioa.graph"])
     nodes = topo["nodes"]
-    node_ids = set(nodes) if isinstance(nodes, dict) else {n["id"] for n in nodes}
+    assert isinstance(nodes, dict)
+    node_ids = set(nodes)
     assert node_ids == {
         "orchestrator",
         "moderator",

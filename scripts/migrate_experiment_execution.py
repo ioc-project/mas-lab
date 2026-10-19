@@ -152,6 +152,7 @@ def _discover(root: Path) -> list[Path]:
     paths: list[Path] = []
     for pattern in (
         "labs/**/experiment*.yaml",
+        "library-samples/experiments/**/*.yaml",
         "docs/tutorials/**/experiment*.yaml",
         "tests/fixtures/**/*.yaml",
         "lab/components/controller/tests/fixtures/**/*.yaml",

@@ -294,6 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         "library-samples/datasets/**/*.yaml",
         "labs/**/datasets/**/*.yaml",
         "docs/tutorials/**/dataset*.yaml",
+        "tests/fixtures/**/dataset.yaml",
         "lab/components/controller/tests/fixtures/**/datasets/**/*.yaml",
     ]
     exp_patterns = [

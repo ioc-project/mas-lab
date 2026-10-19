@@ -195,8 +195,8 @@ def ensure_live_otel_span_files(events_path: Path, obs_cfg: Any) -> None:
     if not OTEL_AVAILABLE:
         return
 
-    otel_cfg = (getattr(obs_cfg, "plugin_configs", None) or {}).get("otel") or {}
-    service_name = str(getattr(obs_cfg, "mas_id", "") or getattr(obs_cfg, "agent_id", "") or "mas-runtime")
+    otel_cfg = (obs_cfg.plugin_configs or {}).get("otel") or {}
+    mas_name = str(obs_cfg.mas_id or "")
     layers = parse_export_layers(otel_cfg)
 
     def _span_line_count(path: Path) -> int:
@@ -214,8 +214,7 @@ def ensure_live_otel_span_files(events_path: Path, obs_cfg: Any) -> None:
             replay_events_file(
                 events_path,
                 dest,
-                service_name=service_name,
-                app_name=service_name,
+                app_name=mas_name,
                 export_layers=layers,
             )
             logger.info("Backfilled span export: %s (%d spans)", dest, _span_line_count(dest))

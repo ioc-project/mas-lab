@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mas.library.telemetry.collector.otlp import (
     OtlpSpan,
     _attrs_to_otlp,
@@ -72,6 +74,17 @@ def test_push_dry_run_builds_batches():
     assert result["status"] == "dry-run"
     assert result["spans"] == 5
     assert result["batches"] == 3
+
+
+def test_push_service_name_is_not_mas_identity():
+    sdk = [_sdk_span("AgentCall", "0x1", "0xbeef")]
+    with pytest.raises(ValueError, match="MAS app name is required"):
+        push_spans_to_collector(
+            sdk,
+            "http://localhost:4318",
+            service_name="mas-runtime",
+            dry_run=True,
+        )
 
 
 def test_push_stamps_application_id_and_service_name():

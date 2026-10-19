@@ -62,8 +62,21 @@ items:
               type: string
             service_name:
               type: string
+              description: >
+                Ignored as MAS identity. Observe SDK service.name is the
+                declared MAS name (metadata.name / app_name).
             app_name:
               type: string
+              minLength: 1
+              not:
+                pattern: "[/\\\\]"
+              description: "Declared MAS name. A filesystem path is not a name."
+            mas_id:
+              type: string
+              minLength: 1
+              not:
+                pattern: "[/\\\\]"
+              description: "Declared MAS name. Same contract as app_name."
             realtime:
               type: boolean
             extensions:

@@ -9,6 +9,4 @@ spec:
   items:
   - id: 1
     inputs:
-      user:
-      - role: user
-        content: What is 2+2? Use the calculator if helpful.
+      user: What is 2+2? Use the calculator if helpful.

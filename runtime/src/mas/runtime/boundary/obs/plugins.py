@@ -53,7 +53,7 @@ def build_observability_plugins(
     base_dir: Path,
     agent_id: str | None = None,
 ) -> list[ObservabilityPlugin]:
-    resolved_agent_id = agent_id or "agent"
+    resolved_agent_id = agent_id or ""
     names = list(binding.plugins)
 
     plugins: list[ObservabilityPlugin] = []
@@ -152,7 +152,7 @@ def build_observability_plugin_set(
     """
     if binding is None or not binding.plugins:
         return None
-    plugins = build_observability_plugins(binding, base_dir=base_dir, agent_id=agent_id or "agent")
+    plugins = build_observability_plugins(binding, base_dir=base_dir, agent_id=agent_id or "")
     return ObsPluginSet(plugins=plugins)
 
 

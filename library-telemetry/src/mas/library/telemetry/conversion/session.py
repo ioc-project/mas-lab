@@ -71,9 +71,9 @@ def create_otel_export(
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.id_generator import IdGenerator, RandomIdGenerator
 
-    from mas.library.telemetry.conversion.converter import MasOtelConverter
+    from mas.library.telemetry.conversion.converter import MasOtelConverter, SpanIdReuse
 
-    class _SharedTraceIdGenerator(IdGenerator):
+    class _SharedTraceIdGenerator(SpanIdReuse, IdGenerator):
         """Reuse one TraceId for parentless observe-sdk roots (graph/session/invoke).
 
         Also lets a caller force the *next* span id, so a realtime signal's
@@ -128,12 +128,10 @@ def create_otel_export(
 
     from mas.library.telemetry.conversion.topology import require_mas_name
 
-    # service.name is the OTel resource identity of the process that
-    # emits telemetry. In theory that is the agent (one process per
-    # agent). Observe SDK treats the MAS as that service, so we put
-    # the MAS name here — the same value as application_id. Agent
-    # names stay on agent_id / mas.agent.id.
-    mas_name = require_mas_name(app_name, service_name)
+    # service_name is kept on the signature for call-site compatibility.
+    # It is not MAS identity. Observe SDK's resource service.name is the
+    # declared MAS name (application_id). Agent names stay on agent_id.
+    mas_name = require_mas_name(app_name)
     resource_attrs = {"service.name": mas_name}
     if profile != "observe_sdk":
         resource_attrs["mas.instrumentation.version"] = "1.0.0"

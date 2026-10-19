@@ -37,8 +37,8 @@ def run_convert(
         output_dir: Directory to write the spans JSONL into.  When *None* the
             span set is returned in memory only.
         output_filename: Filename written under *output_dir*.
-        service_name: MAS name when ``app_name`` is unset and events do not carry one.
-        app_name: MAS name stamped as ``application_id`` and ``service.name``.
+        service_name: Unused as MAS identity (kept for call-site compatibility).
+        app_name: Declared MAS name. Required unless events already carry ``app_name``.
         export_layers: Layer toggles (dict or ``ExportLayers``).
         dry_run: If *True*, convert but do not write output.
 

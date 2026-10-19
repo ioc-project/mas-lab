@@ -46,7 +46,7 @@ sections:
         command: >-
           python -c
           "from pathlib import Path; from mas.library.telemetry.pipeline import convert_events_to_spans_file;
-          n=convert_events_to_spans_file(Path('library-telemetry/examples/qa-agent/events.jsonl'), Path('/tmp/t7-replay.jsonl'), service_name='mas-runtime', app_name='qa-agent');
+          n=convert_events_to_spans_file(Path('library-telemetry/examples/qa-agent/events.jsonl'), Path('/tmp/t7-replay.jsonl'), app_name='qa-agent');
           print('replayed', n)"
         allowed_modes: [offline]
         requires: [opentelemetry.sdk]

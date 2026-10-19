@@ -42,7 +42,7 @@ def test_unknown_kind_emits_span_when_execution_enabled(tmp_path):
     replay_events_file(
         src,
         out,
-        service_name="svc",
+        app_name="svc",
         converter_profile="observe_sdk",
         export_layers={"annotation": True},
     )

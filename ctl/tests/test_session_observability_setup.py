@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pytest
+
 from mas.ctl.adapters.obs.config import ObservabilityConfig
 from mas.ctl.session.observability import (
     obs_config_to_binding,
@@ -58,6 +60,28 @@ def test_obs_config_to_binding_injects_mas_id_into_otel_config() -> None:
     assert binding.plugin_configs["native"]["mas_id"] == "sample-app"
 
 
+def test_with_mas_id_overwrites_blank_plugin_config() -> None:
+    binding = ObservabilityBinding(
+        plugins=["otel"],
+        plugin_configs={"otel": {"app_name": "", "mas_id": "  "}},
+    )
+    stamped = binding.with_mas_id("sample-app")
+    assert stamped.plugin_configs["otel"]["app_name"] == "sample-app"
+    assert stamped.plugin_configs["otel"]["mas_id"] == "sample-app"
+
+
+def test_obs_config_to_binding_rejects_path_mas_id() -> None:
+    cfg = ObservabilityConfig(enabled=True, plugins=["otel"], mas_id="/opt/apps/trip-planner")
+    with pytest.raises(ValueError, match="filesystem path"):
+        obs_config_to_binding(cfg)
+
+
+def test_with_mas_id_rejects_path() -> None:
+    binding = ObservabilityBinding(plugins=["otel"])
+    with pytest.raises(ValueError, match="filesystem path"):
+        binding.with_mas_id("/opt/apps/trip-planner")
+
+
 def test_setup_instance_obs_builds_and_attaches(tmp_path: Path) -> None:
     inst = _FakeInstance()
     cfg = ObservabilityConfig(enabled=True, plugins=["native"], agent_id="planner")
@@ -90,6 +114,16 @@ def test_setup_observability_legacy_returns_recorder(tmp_path: Path) -> None:
     rec = setup_observability(inst, cfg, base_dir=tmp_path)
     assert rec is not None
     rec.plugin_set.close()
+
+
+def test_setup_observability_reuses_existing_plugin_set(tmp_path: Path) -> None:
+    inst = _FakeInstance()
+    cfg = ObservabilityConfig(enabled=True, plugins=["native"], agent_id="qa-agent")
+    first = setup_instance_obs(inst, cfg, base_dir=tmp_path)
+    rec = setup_observability(inst, cfg, base_dir=tmp_path)
+    assert rec is not None
+    assert rec.plugin_set is first
+    first.close()
 
 
 def test_setup_observability_from_binding_reuses_existing_set(tmp_path: Path) -> None:

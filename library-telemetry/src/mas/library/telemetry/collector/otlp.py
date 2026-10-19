@@ -342,6 +342,8 @@ def _mas_name(
 ) -> str:
     from mas.library.telemetry.conversion.topology import require_mas_name
 
+    # service_name / resource service.name are OTel process labels, not MAS identity.
+    del service_name, resource_attrs
     existing_app = next(
         (
             str(span.attributes.get("application_id") or "").strip()
@@ -350,12 +352,7 @@ def _mas_name(
         ),
         "",
     )
-    return require_mas_name(
-        app_name,
-        existing_app,
-        str(resource_attrs.get("service.name") or ""),
-        service_name,
-    )
+    return require_mas_name(app_name, existing_app)
 
 
 def _stamp_mas_name(

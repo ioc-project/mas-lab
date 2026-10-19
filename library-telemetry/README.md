@@ -19,8 +19,10 @@ default **off**. When on, the plugin emits incremental `topology.node.*` /
 span.
 
 The `[convert]` extra depends on `ioa-observe-sdk>=1.0.49` for semantic
-constants. MAS Lab does not call `Observe.init()` — conversion stays
-native-events → OTel.
+constants. MAS Lab does **not** call `Observe.init()` for the live plugin
+or for replay — conversion stays native-events → OTel. `session.end` is
+emitted on `mas_call_end` (known end of the run), with `finish()` /
+plugin close as the fallback.
 
 **The inverse of `library-kg`.** Where `library-kg` turns *OTel spans → KG*, this
 library turns *native events → OTel spans*. Together they round-trip:
@@ -139,8 +141,7 @@ push_spans_file("spans.jsonl", "http://localhost:4318", app_name="my-app")
 ```python
 from mas.library.telemetry.conversion import replay_events_file
 
-n = replay_events_file("events.jsonl", "otel_sdk_spans.jsonl",
-                       service_name="mas-runtime", app_name="my-app")
+n = replay_events_file("events.jsonl", "otel_sdk_spans.jsonl", app_name="my-app")
 ```
 
 ### Verify a spans file

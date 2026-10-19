@@ -58,7 +58,12 @@ properties:
     properties:
       name:
         type: string
-        description: "Unique MAS identifier. Used in run output paths and agent URNs."
+        minLength: 1
+        not:
+          pattern: "[/\\\\]"
+        description: >
+          Unique MAS identifier. Used in run output paths and agent URNs.
+          A filesystem path is not a name.
       version:
         type: string
         pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+.*$"

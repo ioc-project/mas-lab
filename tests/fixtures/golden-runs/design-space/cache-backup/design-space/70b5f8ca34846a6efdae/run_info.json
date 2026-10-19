@@ -1,0 +1,14 @@
+{
+  "run_hash": "70b5f8ca34846a6efdae",
+  "experiment": "golden-design-space",
+  "scenario": "tools",
+  "item_id": "1",
+  "run_idx": 0,
+  "referenced_at": "2026-10-19T12:59:59.672065Z",
+  "mas": {
+    "app": "qa-agent",
+    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-otel-graph-session/docs/tutorials/01-building-an-agent/agent.yaml",
+    "overlay": "tools",
+    "overlay_ref": "/Users/augjorda/repos/worktrees/mas-lab-otel-graph-session/docs/tutorials/01-building-an-agent/overlays/tools.yaml"
+  }
+}

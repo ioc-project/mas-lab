@@ -15,7 +15,7 @@ class ObservabilityConfig:
     events_stdout: bool = False
     otel_file: str | None = None
     sink_ref: str | None = None
-    agent_id: str = "agent"
+    agent_id: str = ""
     mas_id: str = ""
     plugins: list[str] = field(default_factory=list)
     plugin_configs: dict[str, dict] = field(default_factory=dict)

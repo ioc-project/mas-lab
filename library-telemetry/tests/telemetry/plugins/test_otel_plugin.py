@@ -84,7 +84,7 @@ def test_flush_emits_graph_span_from_projected_events(monkeypatch) -> None:
     assert len(dummy.graph_calls) == 1
 
     topology, kwargs = dummy.graph_calls[0]
-    assert {node["id"] for node in topology["nodes"]} == {"planner", "worker"}
+    assert set(topology["nodes"]) == {"planner", "worker"}
     assert kwargs["app_name"] == "sample-app"
 
 

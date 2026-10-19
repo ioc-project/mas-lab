@@ -4,11 +4,9 @@ apiVersion: lab/v1
 kind: Dataset
 metadata:
   name: cache-rerun-queries
-  version: "1.0"
+  version: '1.0'
 spec:
   items:
-    - id: smoke-1
-      inputs:
-        user:
-          - role: user
-            content: Plan a weekend trip to Thornhaven with a €400 budget.
+  - id: smoke-1
+    inputs:
+      user: Plan a weekend trip to Thornhaven with a €400 budget.

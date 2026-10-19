@@ -183,9 +183,7 @@ from pathlib import Path
 from mas.library.telemetry.pipeline import convert_events_to_spans_file
 src = Path("library-telemetry/examples/qa-agent/events.jsonl")
 dst = Path("/tmp/otel_sdk_spans_replay.jsonl")
-n = convert_events_to_spans_file(
-    src, dst, service_name="mas-runtime", app_name="qa-agent",
-)
+n = convert_events_to_spans_file(src, dst, app_name="qa-agent")
 print(f"replayed {n} events → {dst}")
 PY
 ```

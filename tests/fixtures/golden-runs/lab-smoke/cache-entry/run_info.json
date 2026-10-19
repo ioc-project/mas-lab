@@ -1,14 +1,14 @@
 {
-  "run_hash": "89f020b167a0a91a8156",
+  "run_hash": "70b5f8ca34846a6efdae",
   "experiment": "verify-lab-smoke",
   "scenario": "tools",
   "item_id": "1",
   "run_idx": 0,
-  "referenced_at": "2026-10-03T15:04:54.580191Z",
+  "referenced_at": "2026-10-19T12:59:57.962070Z",
   "mas": {
     "app": "qa-agent",
-    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-control-debug-script/docs/tutorials/01-building-an-agent/agent.yaml",
+    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-otel-graph-session/docs/tutorials/01-building-an-agent/agent.yaml",
     "overlay": "tools",
-    "overlay_ref": "/Users/augjorda/repos/worktrees/mas-lab-control-debug-script/docs/tutorials/01-building-an-agent/overlays/tools.yaml"
+    "overlay_ref": "/Users/augjorda/repos/worktrees/mas-lab-otel-graph-session/docs/tutorials/01-building-an-agent/overlays/tools.yaml"
   }
 }

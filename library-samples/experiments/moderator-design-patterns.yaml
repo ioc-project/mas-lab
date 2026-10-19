@@ -28,14 +28,14 @@ experiment:
     path: datasets/trip-planner/queries.yaml
   run:
     n_runs: 1
-  execution:
+  schedule:
     parallel_scenarios: 3
     timeout: 300
     pause_between_runs: 1
-    strategy: coverage
-    emulation:
-      infra:
-        llm: live
-        tools: live
-      runtime:
-        cache: content-addressed
+    ordering: coverage
+  bench_emulation:
+    infra:
+      llm: live
+      tools: live
+    runtime:
+      cache: content-addressed

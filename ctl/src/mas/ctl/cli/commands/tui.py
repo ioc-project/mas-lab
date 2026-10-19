@@ -9,6 +9,7 @@ from pathlib import Path
 import click
 from mas.ctl.cli.bind_flags import bind_option, with_binds
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
+from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, close_observability
 from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
@@ -154,7 +155,7 @@ def tui_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
-            agent_id="agent",
+            agent_id=require_agent_id_from_manifest(agent_data),
             manifest=agent_data,
             flavour_spec=flavour_spec,
         )

@@ -80,6 +80,12 @@ def test_codemod_rewrites_fixture(tmp_path: Path) -> None:
     assert "Copyright" in before.read_text(encoding="utf-8")
 
 
+def test_discover_includes_library_samples() -> None:
+    mod = _load_script()
+    discovered = {str(p.relative_to(ROOT)) for p in mod._discover(ROOT)}
+    assert "library-samples/experiments/moderator-design-patterns.yaml" in discovered
+
+
 def test_codemod_is_noop_without_execution(tmp_path: Path) -> None:
     path = tmp_path / "experiment.yaml"
     path.write_text(

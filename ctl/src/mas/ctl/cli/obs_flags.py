@@ -103,7 +103,7 @@ def resolve_observability_config(
     events_file: str | None,
     events_stdout: bool,
     events_format: str | None,
-    agent_id: str = "agent",
+    agent_id: str = "",
     mas_id: str = "",
     manifest: dict | None = None,
     deployment: dict | None = None,

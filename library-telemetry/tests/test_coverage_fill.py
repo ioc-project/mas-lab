@@ -424,8 +424,8 @@ def test_replay_write_mapping_and_empty(tmp_path):
 
     empty = tmp_path / "empty.jsonl"
     empty.write_text("\n")
-    n = replay_events_file(empty, tmp_path / "o2.jsonl", service_name="svc")
-    assert n == 0
+    with pytest.raises(ValueError, match="MAS app name is required"):
+        replay_events_file(empty, tmp_path / "o2.jsonl", service_name="svc")
 
 
 # ── OTLP push_file with SDK-span input ───────────────────────────────────────
