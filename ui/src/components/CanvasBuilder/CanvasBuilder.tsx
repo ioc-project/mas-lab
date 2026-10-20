@@ -632,6 +632,24 @@ function serializeGraphToYamls(
   return result;
 }
 
+function overlayNodeIdsToCanvas(
+  raw: Record<string, string> | undefined,
+): Record<string, string> {
+  if (!raw) return {};
+  const aliases: Record<string, string> = {
+    designPattern: "design_pattern",
+    tool: "tools",
+    prompt_skills: "promptSkills",
+    context_skills: "contextSkills",
+    inputPrompt: "role",
+  };
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    out[aliases[key] ?? key] = value;
+  }
+  return out;
+}
+
 function deserializeYamlsToGraph(yamlMap: YamlOutputMap): {
   nodes: Node[];
   edges: Edge[];
@@ -643,6 +661,9 @@ function deserializeYamlsToGraph(yamlMap: YamlOutputMap): {
   const masDoc = masYaml ? parse(masYaml) : null;
   const canvasPositions: Record<string, { x: number; y: number }> =
     masDoc?.["x-canvas-positions"] ?? {};
+  const masCanvasNodeIds: Record<string, Record<string, string>> =
+    masDoc?.["x-canvas-node-ids"] ?? {};
+  const masTextInput: Record<string, string> = masDoc?.["x-text-input"] ?? {};
 
   const workflowNodes: {
     id: string;
@@ -661,10 +682,13 @@ function deserializeYamlsToGraph(yamlMap: YamlOutputMap): {
     const doc = parse(yamlMap[key]);
     const spec = doc?.spec ?? {};
     const metadata = doc?.metadata ?? {};
-    const canvasNodeIds: Record<string, string> =
-      doc?.["x-canvas-node-ids"] ?? {};
+    const canvasNodeIds: Record<string, string> = {
+      ...overlayNodeIdsToCanvas(masCanvasNodeIds[agentId]),
+      ...(doc?.["x-canvas-node-ids"] ?? {}),
+    };
 
-    const agentNodeId = metadata["x-node-id"] ?? agentId;
+    const agentNodeId =
+      metadata["x-node-id"] ?? canvasNodeIds.agent ?? agentId;
     const position = canvasPositions[agentNodeId] ??
       canvasPositions[agentId] ?? { x: 0, y: 0 };
     agentIdToNodeId.set(agentId, agentNodeId);
@@ -894,6 +918,7 @@ function deserializeYamlsToGraph(yamlMap: YamlOutputMap): {
 
     const textInputValue =
       spec["x-text-input"] ??
+      masTextInput[agentId] ??
       (spec["x-role-enabled"] === false ? spec["x-disabled-role"]?.text : null);
     const roleDisabled = spec["x-role-enabled"] === false;
     if (textInputValue) {

@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 from mas.lab.controller.lab_registry import LabRegistry, _library_description
 from mas.lab.controller.lab_registry import get_lab_registry
+from mas.ctl.overlay.canvas import is_ui_canvas_overlay
 from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
@@ -103,21 +104,23 @@ class ManifestStore:
             for path in self._registry._iter_dataset_files(root)
         ]
 
-    def list_overlays(self, library: str) -> List[Dict[str, str]]:
+    def list_overlays(self, library: str) -> List[Dict[str, Any]]:
         root = self.library_root(library)
-        overlays: List[Dict[str, str]] = []
+        overlays: List[Dict[str, Any]] = []
         for path in self._registry._iter_overlay_files(root):
             rel = str(path.relative_to(root))
-            entry: Dict[str, str] = {
+            entry: Dict[str, Any] = {
                 "name": path.stem,
                 "filename": path.name,
                 "path": rel,
+                "ui_canvas": False,
             }
             try:
                 data = load_yaml_file(path)
                 meta = data.get("metadata", {})
                 entry["description"] = str(meta.get("description", "") or "")
                 entry["namespace"] = str((data.get("metadata") or {}).get("namespace", "global") or "global")
+                entry["ui_canvas"] = is_ui_canvas_overlay(data, path=path)
             except Exception:
                 entry["description"] = ""
                 entry["namespace"] = "global"

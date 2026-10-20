@@ -42,6 +42,7 @@ import {
   updateExperimentApi,
   type OverlayEntry,
 } from "@/api/apiCalls";
+import { isUiCanvasOverlay } from "@/utils/uiCanvasOverlay";
 import {
   Button,
   GeneralSize,
@@ -456,12 +457,13 @@ const CreateExperiment = () => {
   );
 
   const filteredOverlays = useMemo(() => {
-    if (!usePatchOverlays) return overlayOptions;
-    const globalOnly = overlayOptions.filter(
+    const withoutCanvas = overlayOptions.filter((o) => !isUiCanvasOverlay(o));
+    if (!usePatchOverlays) return withoutCanvas;
+    const globalOnly = withoutCanvas.filter(
       (o) => !o.namespace || o.namespace === "global",
     );
     if (!masManifest.trim()) return globalOnly;
-    return overlayOptions.filter(
+    return withoutCanvas.filter(
       (o) =>
         !o.namespace ||
         o.namespace === "global" ||

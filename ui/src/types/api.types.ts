@@ -168,6 +168,7 @@ export interface MasResourceDetail {
   mas_name: string;
   mas_yaml: string;
   agents: Record<string, string>;
+  ui_canvas_overlay?: string;
 }
 
 // --- Scenarios ---
@@ -303,6 +304,7 @@ export interface OverlayEntry {
   description?: string;
   namespace?: string;
   path?: string;
+  ui_canvas?: boolean | string;
 }
 
 export interface OverlayDetail {
