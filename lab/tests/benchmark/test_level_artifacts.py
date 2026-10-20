@@ -643,3 +643,34 @@ def test_gather_fan_in_honors_custom_level_artifact_path(tmp_path: Path) -> None
         level_artifacts=_level_artifacts(_FakeExp()),
     )
     assert steps[0]["config"]["artifact_paths"] == [str(run / "results.csv")]
+
+
+def test_resolve_run_events_accepts_single_run_folder(tmp_path: Path) -> None:
+    """``pipeline run -o <run folder>`` resolves traces/events.jsonl of that run."""
+    from mas.lab.benchmark.pipeline.run_artifacts import resolve_run_events
+
+    (tmp_path / "traces").mkdir()
+    events = tmp_path / "traces" / "events.jsonl"
+    events.write_text("{}\n")
+
+    class _Ctx:
+        output_dir = tmp_path
+        scope_context = None
+
+    assert resolve_run_events(_Ctx()) == events
+    (tmp_path / "results.csv").write_text("a\n")  # experiment-level folder: no guess
+    assert resolve_run_events(_Ctx()) is None
+
+
+def test_missing_run_events_message_is_actionable(tmp_path: Path) -> None:
+    from mas.lab.benchmark.pipeline.run_artifacts import missing_run_events_message
+
+    class _Ctx:
+        output_dir = tmp_path
+
+    msg = missing_run_events_message("eval-quality", _Ctx())
+    assert str(tmp_path) in msg
+    assert "traces/events.jsonl" in msg
+    assert "results.csv" in msg
+    assert "--pipeline run:post:" in msg
+    assert "benchmark pipeline run" in msg

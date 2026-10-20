@@ -175,7 +175,7 @@ class TestPluginAvailability:
         err = exc_info.value
         assert err.urn == "mas.dp.test"
         assert err.missing == ["no_such_package_xyz"]
-        assert "mas plugin enable mas.dp.test" in str(err)
+        assert "mas-ctl plugin enable mas.dp.test" in str(err)
 
     def test_resolve_hints_pip_install_without_extra(self):
         variant = VariantInfo(module="pathlib", class_name="Path", requires=["no_such_package_xyz"])

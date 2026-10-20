@@ -166,6 +166,7 @@ CLI_INSPECTION_COMMANDS: tuple[str, ...] = (
     "mas-lab plot trajectory",
     "mas-lab plot communication-flow",
     "mas-lab plot list",
+    "mas-lab eval",
 )
 
 

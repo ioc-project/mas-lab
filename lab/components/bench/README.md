@@ -271,7 +271,7 @@ Registered step types are listed by `mas-lab benchmark pipeline validate` and in
 ## `eval` — MCE metrics on traces
 
 ```bash
-mas-lab eval path/to/traces/events.jsonl --metric Groundedness --json
+mas-lab eval path/to/traces/events.jsonl --metric groundedness --json
 ```
 
 For batch scoring in benchmarks, use the `eval_mce` pipeline step on `events.jsonl`.

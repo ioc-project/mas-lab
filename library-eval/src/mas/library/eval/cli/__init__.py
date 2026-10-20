@@ -1,318 +1,204 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""mas-lab eval — CLI command for scoring MAS output quality with MCE metrics.
+"""mas-lab eval — library-eval CLI (same runner as the eval_mce pipeline step).
 
 Usage::
 
-    # Score a single trace
-    mas-lab eval path/to/events.jsonl --metric GoalSuccessRate --metric Groundedness
-
-    # Batch scoring (recursive)
-    mas-lab eval path/to/experiment/ --metric GoalSuccessRate --recursive
-
-    # List available metrics
+    mas-lab eval path/to/events.jsonl --metric goal_success_rate --json
+    mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
     mas-lab eval --list-metrics
 """
 from __future__ import annotations
 
-import asyncio
 import json as _json
 from pathlib import Path
 from typing import Optional
 
 import click
 
-from mas.library.eval.mce import (
+from mas.library.eval.mce.catalog import listed_ids, resolve_metric
+from mas.library.eval.mce.runner import (
     compute_session_metrics,
-    build_session_from_trace,
-    METRIC_REGISTRY,
+    install_openai_llm_service,
 )
+
+_DEFAULT_METRICS = ["goal_success_rate"]
 
 
 @click.command("eval")
-@click.argument("source", type=str, required=False)
+@click.argument("source", type=str, metavar="SOURCE", required=False)
 @click.option(
-    "--metric", "metrics", multiple=True,
+    "--fixture",
+    type=Path,
+    default=None,
+    help="Path to a fixture YAML that provides ground truth.",
+)
+@click.option(
+    "--metric",
+    "metrics",
+    multiple=True,
     help=(
-        "Metric(s) to compute (repeatable). "
-        "Use --list-metrics to show available metrics."
+        "MCE metric(s) to compute (repeatable). Snake_case ids only "
+        f"(goal_success_rate). Defaults to {_DEFAULT_METRICS} when omitted. "
+        "Use --list-metrics to show the available metrics."
     ),
 )
 @click.option(
-    "--model",
-    default="azure/gpt-4o",
-    show_default=True,
-    help="LLM model name for judge metrics",
+    "--response-agent",
+    default=None,
+    show_default="auto-detect from trace",
+    help="agent_id whose last execution_end is the final response. Auto-detected when omitted.",
 )
 @click.option(
-    "--api-base",
-    default="https://api.openai.com/v1",
+    "--model",
+    default=None,
+    show_default="workspace infra default model, else gpt-4o",
+    help="Judge model. Default: workspace infra default, else gpt-4o.",
+)
+@click.option(
+    "--list-metrics",
+    is_flag=True,
+    default=False,
+    help="List the available metrics and exit.",
+)
+@click.option(
+    "--json",
+    "output_json",
+    is_flag=True,
+    default=False,
+    help="Output results as JSON instead of a human-readable table.",
+)
+@click.option("--overlay", default=None, help="Label for display (e.g. inject-C7-backend).")
+@click.option(
+    "--engine",
+    type=click.Choice(["mce-v1"]),
+    default="mce-v1",
     show_default=True,
-    help="API base URL for LLM proxy",
+    help="Metric computation engine: mce-v1.",
 )
 @click.option(
     "--api-key-env",
-    default="OPENAI_API_KEY",
-    show_default=True,
-    help="Environment variable holding the API key",
+    default=None,
+    help="Name of the environment variable holding the API key (default: OPENAI_API_KEY).",
 )
 @click.option(
-    "--json", "output_json", is_flag=True, default=False,
-    help="Output results as JSON",
-)
-@click.option(
-    "--list-metrics", is_flag=True, default=False,
-    help="List available metrics and exit",
-)
-@click.option(
-    "--recursive", is_flag=True, default=False,
-    help="Recursively score all traces in SOURCE directory",
+    "--recursive",
+    is_flag=True,
+    default=False,
+    help="Score every events.jsonl under SOURCE when SOURCE is a directory.",
 )
 def eval_cmd(
     source: Optional[str],
+    fixture: Optional[Path],
     metrics: tuple[str, ...],
-    model: str,
-    api_base: str,
-    api_key_env: str,
+    response_agent: str,
+    model: Optional[str],
     output_json: bool,
+    overlay: Optional[str],
+    engine: str,
+    api_key_env: Optional[str],
     list_metrics: bool,
     recursive: bool,
 ) -> None:
-    """Score MAS output quality using MCE v1 LLM-as-judge metrics.
+    """Score traces with MCE LLM-as-judge metrics (same runner as eval_mce).
 
-    SOURCE can be:
-    - Path to events.jsonl trace file
-    - Directory containing traces (with --recursive)
-    - Lab shorthand (e.g., baseline/item1/r1)
+    SOURCE can be a file path (events.jsonl), a directory (with --recursive),
+    a lab shorthand (e.g. tutorials/t3-analysis/baseline/item1/r1), or a run_id.
 
     \b
     Examples:
-      mas-lab eval path/to/events.jsonl --metric GoalSuccessRate
-      mas-lab eval experiments/ --metric GoalSuccessRate --recursive
+      mas-lab eval path/to/events.jsonl --metric goal_success_rate --json
+      mas-lab eval tutorials/t3-analysis/baseline/item1/r1 --metric groundedness
       mas-lab eval --list-metrics
     """
+    del engine  # reserved; only mce-v1 is wired
     if list_metrics:
-        _print_metrics()
+        click.echo("Available metrics (snake_case):")
+        for snake in listed_ids(session_only=True):
+            click.echo(f"  {snake}")
         return
-
     if not source:
-        click.echo("❌  SOURCE argument required (or use --list-metrics)")
-        raise SystemExit(1)
+        raise click.UsageError("SOURCE argument required (or use --list-metrics)")
 
-    if not metrics:
-        click.echo("❌  At least one --metric required (or use --list-metrics)")
-        raise SystemExit(1)
-
-    # Resolve source path
-    source_path = Path(source).expanduser()
-    if not source_path.exists():
-        click.echo(f"❌  Source not found: {source}")
-        raise SystemExit(1)
-
-    # Build LLM config
-    import os
-    llm_config = {
-        "LLM_MODEL_NAME": model,
-        "LLM_BASE_MODEL_URL": api_base,
-        "LLM_API_KEY": os.environ.get(api_key_env, ""),
-    }
-
-    if not llm_config["LLM_API_KEY"]:
-        click.echo(f"❌  Environment variable {api_key_env} not set")
-        raise SystemExit(1)
-
-    # Run evaluation
-    if recursive and source_path.is_dir():
-        _eval_recursive(source_path, list(metrics), llm_config, output_json)
-    elif source_path.is_file():
-        _eval_single(source_path, list(metrics), llm_config, output_json)
-    else:
-        click.echo(f"❌  SOURCE must be a file or directory (with --recursive)")
-        raise SystemExit(1)
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _eval_single(
-    trace_path: Path,
-    metrics: list[str],
-    llm_config: dict,
-    output_json: bool,
-) -> None:
-    """Evaluate a single trace file."""
     try:
-        session = build_session_from_trace(trace_path)
-    except Exception as exc:
-        click.echo(f"❌  Failed to load trace {trace_path}: {exc}")
+        metric_names = [
+            resolve_metric(n, session_only=True).snake for n in (metrics or _DEFAULT_METRICS)
+        ]
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+
+    from mas.lab.cli.commands.plot import resolve_source
+
+    resolved = Path(resolve_source(source)).expanduser()
+    if not resolved.exists():
+        click.echo(f"Source not found: {source}")
         raise SystemExit(1)
 
-    # Run async computation
-    results = asyncio.run(
-        compute_session_metrics(session, metrics, llm_config)
-    )
-
-    if not results:
-        click.echo("❌  No results")
-        raise SystemExit(1)
-
-    # Output
-    if output_json:
-        import dataclasses
-        from datetime import datetime
-
-        def _default(obj):
-            if isinstance(obj, datetime):
-                return obj.isoformat()
-            if dataclasses.is_dataclass(obj):
-                return dataclasses.asdict(obj)
-            raise TypeError(f"Not serializable: {type(obj)}")
-
-        click.echo(_json.dumps([dataclasses.asdict(r) for r in results], indent=2, default=_default))
+    traces: list[Path]
+    if resolved.is_dir():
+        if not recursive:
+            raise click.UsageError("SOURCE is a directory; pass --recursive to score every events.jsonl")
+        traces = sorted(resolved.rglob("events.jsonl"))
+        if not traces:
+            click.echo(f"No events.jsonl under {resolved}")
+            raise SystemExit(1)
     else:
-        _print_table(results, trace_path.stem)
+        traces = [resolved]
 
+    install_openai_llm_service(model, api_key_env=api_key_env)
 
-def _eval_recursive(
-    root: Path,
-    metrics: list[str],
-    llm_config: dict,
-    output_json: bool,
-) -> None:
-    """Recursively evaluate all traces under root directory."""
-    trace_files = list(root.rglob("events.jsonl"))
-    
-    if not trace_files:
-        click.echo(f"❌  No trace files found under {root}")
-        raise SystemExit(1)
+    if fixture:
+        if not fixture.exists():
+            click.echo(f"Fixture not found: {fixture}")
+            raise SystemExit(1)
+        click.echo("ℹ️  --fixture provided but not consumed by current MCE metrics.", err=True)
 
-    click.echo(f"📊 Found {len(trace_files)} trace files")
-
-    all_results = []
-    for trace_path in trace_files:
-        try:
-            session = build_session_from_trace(trace_path)
-            results = asyncio.run(
-                compute_session_metrics(session, metrics, llm_config)
-            )
-            all_results.append((str(trace_path.relative_to(root)), results))
-        except Exception as exc:
-            click.echo(f"⚠️  Skipped {trace_path.name}: {exc}", err=True)
+    any_results = False
+    for trace_path in traces:
+        results_dict = compute_session_metrics(
+            trace_path,
+            metric_names,
+            response_agent_id=response_agent,
+        )
+        if not results_dict:
+            click.echo(f"No results for {trace_path} — check trace content.", err=True)
             continue
-
-    if not all_results:
-        click.echo("❌  No successful evaluations")
+        any_results = True
+        label = overlay or (
+            str(trace_path.relative_to(resolved)) if resolved.is_dir() else trace_path.stem
+        )
+        if output_json:
+            payload = {k: v for k, v in results_dict.items() if not k.startswith("__")}
+            if resolved.is_dir():
+                click.echo(_json.dumps({"source": label, "metrics": payload}, indent=2))
+            else:
+                click.echo(_json.dumps(payload, indent=2))
+        else:
+            _print_table(results_dict, label)
+    if not any_results:
         raise SystemExit(1)
 
-    # Output
-    if output_json:
-        import dataclasses
-        from datetime import datetime
 
-        def _default(obj):
-            if isinstance(obj, datetime):
-                return obj.isoformat()
-            if dataclasses.is_dataclass(obj):
-                return dataclasses.asdict(obj)
-            raise TypeError(f"Not serializable: {type(obj)}")
+def _print_table(results_dict: dict, label: str) -> None:
+    click.echo(f"\n{'─' * 72}")
+    click.echo(f"  eval — {label}")
+    click.echo(f"{'─' * 72}")
+    click.echo(f"  {'Metric':<30}  {'Score':>6}  Reasoning")
+    click.echo(f"  {'─' * 30}  {'─' * 6}  {'─' * 30}")
+    for name, result in results_dict.items():
+        if name.startswith("__"):
+            continue
+        value = result.get("value")
+        error = result.get("error")
+        reasoning = (result.get("reasoning") or "").replace("\n", " ")[:60]
+        score_str = f"{value:.3f}" if value is not None and not error else "ERR"
+        click.echo(f"  {name:<30}  {score_str:>6}  {reasoning}")
+    click.echo(f"{'─' * 72}\n")
 
-        output = {
-            path: [dataclasses.asdict(r) for r in results]
-            for path, results in all_results
-        }
-        click.echo(_json.dumps(output, indent=2, default=_default))
-    else:
-        for path, results in all_results:
-            click.echo(f"\n{'=' * 70}")
-            click.echo(f"📁 {path}")
-            click.echo('=' * 70)
-            _print_table(results, path)
-
-
-def _print_table(results, source_label: str) -> None:
-    """Print results as a human-readable table."""
-    click.echo(f"\n✅ Results for {source_label}:")
-    click.echo()
-    
-    # Header
-    header = f"{'Metric':<30} {'Value':>8} {'Success':>8}"
-    click.echo(header)
-    click.echo('-' * len(header))
-    
-    # Rows
-    for result in results:
-        metric_name = result.metric_name
-        value = result.value if result.value is not None else "N/A"
-        success = "✓" if result.success else "✗"
-        
-        if isinstance(value, float):
-            value_str = f"{value:.3f}"
-        else:
-            value_str = str(value)
-        
-        click.echo(f"{metric_name:<30} {value_str:>8} {success:>8}")
-    
-    click.echo()
-    
-    # Reasoning (if available and not too long)
-    for result in results:
-        if result.reasoning and len(result.reasoning) < 200:
-            click.echo(f"  {result.metric_name}: {result.reasoning[:150]}...")
-
-
-def _print_metrics() -> None:
-    """Print available metrics."""
-    click.echo("\n📊 Available MCE v1 Metrics:\n")
-    
-    # Group by category
-    quality_metrics = []
-    core_metrics = []
-    
-    for name, spec in sorted(METRIC_REGISTRY.items()):
-        if "mce_metrics_plugin" in spec:
-            quality_metrics.append(name)
-        else:
-            core_metrics.append(name)
-    
-    click.echo("Quality Metrics (LLM-as-judge):")
-    for name in quality_metrics:
-        click.echo(f"  • {name}")
-    
-    click.echo("\nCore Metrics (rule-based):")
-    for name in core_metrics:
-        click.echo(f"  • {name}")
-    
-    click.echo()
-
-
-# ---------------------------------------------------------------------------
-# CLI Component for mas-lab extension system
-# ---------------------------------------------------------------------------
 
 class EvalCliComponent:
-    """CLI component that registers the 'mas-lab eval' command.
-    
-    This component is discovered and loaded via the ``mas.lab.cli.components``
-    entry point when ``mas-library-eval`` is installed.
-    
-    Usage::
-        
-        # Installed automatically when library-eval is installed
-        pip install -e library-eval
-        
-        # Then available as:
-        mas-lab eval path/to/events.jsonl --metric GoalSuccessRate
-    """
-    
+    """Register ``mas-lab eval`` via ``mas.lab.cli.components``."""
+
     def register(self, app: click.Group) -> str:
-        """Register the eval command on the main mas-lab CLI app.
-        
-        Args:
-            app: The main Click group (mas-lab CLI)
-            
-        Returns:
-            Command name that was registered ("eval")
-        """
         app.add_command(eval_cmd, name="eval")
         return "eval"

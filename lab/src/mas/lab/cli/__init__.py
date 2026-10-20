@@ -18,7 +18,7 @@ import logging
 import click
 from dotenv import find_dotenv, load_dotenv
 
-from mas.lab.cli.commands import serve, check, benchmark, eval_output, plot, telemetry, run, config as _config_mod, validate as _validate_mod, pipe as _pipe_mod, init as _init_mod
+from mas.lab.cli.commands import serve, check, benchmark, plot, telemetry, run, config as _config_mod, validate as _validate_mod, pipe as _pipe_mod, init as _init_mod
 from mas.lab.cli.extensions import register_extension_components
 
 
@@ -35,7 +35,6 @@ def app(ctx: click.Context, verbose: int) -> None:
       control       Start/stop the controller daemon (UI + workers)
       worker        List and manage background workers
       plot          Generate trajectory and communication diagrams
-      eval-output   Score MAS output quality using MCE LLM-as-judge metrics
       run           Execute processors and pipelines
       pipe          Stream-oriented processing
 
@@ -44,7 +43,9 @@ def app(ctx: click.Context, verbose: int) -> None:
       check         Validate a MAS configuration
       config        Show resolved paths and environment configuration
       serve         Start the benchmark UI server
-      telemetry     Push traces to OTel collector
+      telemetry     Convert, verify, push, and dump traces (library-telemetry)
+      kg            Normalize, validate, push, and dump graphs (library-kg)
+      eval          Score traces with MCE metrics (library-eval)
       validate      Validate YAML manifests
 
         \b
@@ -83,7 +84,6 @@ app.add_command(serve.serve_cmd,        name="serve")
 app.add_command(check.check_cmd,        name="check")
 app.add_command(check.check_config_cmd, name="check-config")
 app.add_command(benchmark.group,        name="benchmark")
-app.add_command(eval_output.eval_output_cmd, name="eval-output")
 app.add_command(plot.plot_group,             name="plot")
 app.add_command(telemetry.telemetry_group,   name="telemetry")
 app.add_command(run.run_group,               name="run")

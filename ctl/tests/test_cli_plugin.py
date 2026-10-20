@@ -57,7 +57,7 @@ def test_list_shows_available_and_disabled(fake_registry) -> None:
     assert "mas.codec.fake_missing" in result.output
     assert "disabled" in result.output
     assert "no_such_package_xyz" in result.output
-    assert "mas plugin enable mas.codec.fake_missing" in result.output
+    assert "mas-ctl plugin enable mas.codec.fake_missing" in result.output
 
 
 def test_list_filters_by_type(fake_registry) -> None:

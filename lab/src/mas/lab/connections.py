@@ -155,7 +155,7 @@ def _load_infra_store(store_id: str) -> Optional[Any]:
         if not ws.found:
             return None
 
-        # Try mas.lab > mas_ctl sections for the infra ref (same fallback as eval_output)
+        # Try mas.lab > mas_ctl sections for the infra ref (same fallback as mas-lab eval)
         infra_ref: Optional[str] = (
             ws.get("mas_lab", "infra")
             or ws.get("mas_ctl", "infra")

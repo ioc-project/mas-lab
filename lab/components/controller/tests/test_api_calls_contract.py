@@ -752,7 +752,7 @@ def test_contract_multi_turn_and_eval_output(mock_submit_job, client):
 
     ev = client.post(
         "/api/libraries/demo/eval-output",
-        json={"events_file": "events.jsonl", "metrics": ["AnswerRelevancyMetric"]},
+        json={"events_file": "events.jsonl", "metrics": ["answer_relevancy"]},
     )
     assert ev.status_code == 202
     assert "job_id" in ev.json()

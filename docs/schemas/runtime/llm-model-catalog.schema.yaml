@@ -93,6 +93,26 @@ definitions:
         items:
           type: string
           enum: [chat_completions, responses, ollama, vllm, anthropic, gemini]
+      pricing:
+        type: object
+        description: USD price per million tokens, used for cost estimates.
+        additionalProperties: false
+        properties:
+          currency:
+            type: string
+          input_per_million_tokens:
+            type: number
+            minimum: 0
+          cached_input_per_million_tokens:
+            type: number
+            minimum: 0
+          output_per_million_tokens:
+            type: number
+            minimum: 0
+          source:
+            type: string
+          checked_at:
+            type: string
       defaults:
         type: object
         additionalProperties: true

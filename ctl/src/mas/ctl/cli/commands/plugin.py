@@ -20,7 +20,7 @@ def _registry():
 
 
 def _install_hint(urn: str, missing: list[str], extra: str) -> str:
-    return f"mas plugin enable {urn}" if extra else f"pip install {' '.join(missing)}"
+    return f"mas-ctl plugin enable {urn}" if extra else f"pip install {' '.join(missing)}"
 
 
 @click.group("plugin")

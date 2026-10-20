@@ -153,7 +153,7 @@ properties:
           type: string
           description: >
             pip/uv extra that installs requires:, e.g.
-            "mas-library-telemetry[convert]". Used by `mas plugin enable <urn>`.
+            "mas-library-telemetry[convert]". Used by `mas-ctl plugin enable <urn>`.
         factory:
           type: string
           description: >

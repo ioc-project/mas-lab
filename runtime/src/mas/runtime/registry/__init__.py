@@ -99,7 +99,7 @@ class PluginUnavailable(RuntimeError):
         self.urn = urn
         self.missing = list(missing)
         self.extra = extra
-        hint = f"mas plugin enable {urn}" if extra else f"pip install {' '.join(missing)}"
+        hint = f"mas-ctl plugin enable {urn}" if extra else f"pip install {' '.join(missing)}"
         super().__init__(
             f"plugin {urn!r} is unavailable: missing {', '.join(missing)} ({hint})"
         )
@@ -411,7 +411,7 @@ class PluginRegistry:
         """Look up a :class:`PluginEntry` by URN or alias, without resolving a variant.
 
         Unlike :meth:`resolve`/:meth:`get`, never raises :class:`PluginUnavailable` —
-        for callers (CLI listing, ``mas plugin enable``) that need the entry
+        for callers (CLI listing, ``mas-ctl plugin enable``) that need the entry
         itself to inspect or fix availability, not to use the plugin.
         """
         key = str(urn).strip().lower()

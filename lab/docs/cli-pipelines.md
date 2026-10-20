@@ -64,6 +64,7 @@ These stay in the same CLI groups but do not wrap a `kind: Pipeline` file:
 | `mas-lab plot trajectory` | Delegation-flow diagram from `events.jsonl` |
 | `mas-lab plot communication-flow` | Agent-to-agent routing graph |
 | `mas-lab plot list` | Discover generated plot artefacts |
+| `mas-lab eval` | Score a trace with the same MCE runner as the `eval_mce` step |
 
 ## Serialize and deserialize
 

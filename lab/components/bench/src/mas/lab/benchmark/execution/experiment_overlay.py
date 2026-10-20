@@ -3,10 +3,10 @@
 """Experiment overlay — apply one or more overlay YAMLs to a raw experiment dict.
 
 An experiment overlay is a YAML file that amends an ``experiment.yaml`` without
-modifying it.  It uses the same deep-merge semantics as agent/MAS overlays, with
-one addition: **pipeline hook lists** (``run.post``, ``item.post``, ``post:``, …)
-default to *append* rather than replace, so an overlay can add evaluation
-pipelines without removing the ones declared in the base experiment.
+modifying it.  It uses the same merge semantics as agent/MAS overlays (RFC 7386 merge patch):
+mappings merge recursively, while lists, including
+pipeline hook lists (``run.post``, ``item.post``, ``post:``, …), are *replaced*.
+An overlay that sets a hook list must therefore carry the full desired list.
 
 Overlay format
 --------------
@@ -25,21 +25,14 @@ Overlay format
           cache: content-addressed
       run:
         post:
-          - ref: pipelines/my-eval.yaml   # appended to base run.post list
+          - ref: pipelines/my-eval.yaml   # replaces base run.post list
       post:
-        - ref: pipelines/my-plots.yaml  # appended to experiment-level post:
-
-To *replace* a pipeline list instead of appending, set ``$replace: true``
-at the level block::
-
-    run:
-      $replace: true       # replace run.post/pre entirely
-      post:
-        - ref: pipelines/my-eval.yaml
+        - ref: pipelines/my-plots.yaml  # replaces experiment-level post:
 
 Precedence (lowest → highest)
 ------------------------------
-experiment.yaml  <  overlay files (in order)  <  --infra  <  --flavour  <  --max-runs  <  --set
+experiment.yaml  <  --override  <  overlay files (in order)  <  pipeline attachments
+(--infra, --flavour, --max-runs and --set are applied afterwards)
 
 CLI usage
 ---------

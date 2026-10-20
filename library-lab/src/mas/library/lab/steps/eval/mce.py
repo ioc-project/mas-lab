@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.models import ConfigParam
-from mas.lab.benchmark.pipeline.run_artifacts import resolve_run_events, run_dir_from_ctx
+from mas.lab.benchmark.pipeline.run_artifacts import missing_run_events_message, resolve_run_events, run_dir_from_ctx
 
 logger = logging.getLogger(__name__)
 
@@ -247,10 +247,7 @@ class EvalMceStep(PipelineStep):
         events_raw = config.get("events_path") or config.get("trace_path")
         events_path = Path(str(events_raw)).expanduser().resolve() if events_raw else resolve_run_events(ctx, config)
         if events_path is None or not events_path.exists():
-            raise RuntimeError(
-                f"EvalMceStep '{self.name}' requires the run-level events artifact "
-                "(traces/events.jsonl). Place this step in run.post with in: trace."
-            )
+            raise RuntimeError(missing_run_events_message(self.name, ctx))
 
         run_folder = Path(run_dir) if run_dir else events_path.parent.parent
         metrics_file = run_folder / str(config.get("metrics_filename", "metrics.json"))

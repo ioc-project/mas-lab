@@ -17,7 +17,10 @@ import click
     "overrides",
     multiple=True,
     metavar="ROOT:PATH=VALUE",
-    help="Schema-validated experiment override (repeatable; applied last).",
+    help=(
+        "Schema-validated experiment override (repeatable). Applied to experiment.yaml "
+        "before -x overlays and --pipeline attachments, so an overlay can supersede it."
+    ),
 )
 @click.option("--resume", is_flag=True, default=False, hidden=True,
               help="(Deprecated) Resume an interrupted run — default behaviour now.")
@@ -85,9 +88,10 @@ import click
     metavar="LEVEL[:PHASE]:REF",
     help=(
         "Attach a pipeline YAML after experiment hooks (same order as repeated flags). "
-        "Format: run:post:library:eti-apps/pipelines/observability/native-to-kg.yaml "
-        "or run:library:... (phase defaults to post). "
-        "Levels: run, test, scenario, application (experiment aliases application)."
+        "Format: run:post:kg:pipelines/native-to-kg.yaml "
+        "or run:kg:pipelines/native-to-kg.yaml (phase defaults to post). "
+        "Levels: run, item, scenario, experiment "
+        "(deprecated aliases: test = item, application = experiment)."
     ),
 )
 @click.option(
@@ -97,9 +101,9 @@ import click
     metavar="OVERLAY_YAML",
     help=(
         "Apply an experiment overlay before running. "
-        "Overlays deep-merge into experiment.yaml; pipeline hook lists (run.post, "
-        "application.post, …) are appended rather than replaced, so overlays can "
-        "add evaluation pipelines without removing base ones. "
+        "Overlays deep-merge into experiment.yaml (RFC 7386 merge patch): mappings "
+        "merge, but lists (run.post, experiment.post, …) are REPLACED, so an overlay "
+        "that sets a hook list must carry the full desired list. "
         "Multiple -x flags are applied in order. "
         "Paths are resolved relative to experiment.yaml's directory."
     ),

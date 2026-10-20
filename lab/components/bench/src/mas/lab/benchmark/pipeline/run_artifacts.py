@@ -122,8 +122,30 @@ def resolve_run_events(ctx: Any, config: Optional[Dict[str, Any]] = None) -> Opt
     """Resolve ``events.jsonl`` for the current run (inline trace or cache ref)."""
     run_dir = run_dir_from_ctx(ctx, config)
     if run_dir is None:
+        # Standalone ``benchmark pipeline run -o <run folder>``: the output dir
+        # itself is a single run folder (it holds ``traces/events.jsonl``).
+        out = getattr(ctx, "output_dir", None)
+        if out and not (Path(out) / "results.csv").is_file():
+            return resolve_run_events_path(Path(out))
         return None
     return resolve_run_events_path(run_dir)
+
+
+def missing_run_events_message(step_name: str, ctx: Any) -> str:
+    """Actionable error for a run-level step that cannot find ``events.jsonl``."""
+    out = getattr(ctx, "output_dir", None)
+    return (
+        f"Step '{step_name}' requires the run-level events artifact "
+        "(traces/events.jsonl), but none was found. "
+        f"The pipeline output dir (-o) was {str(out) if out else '<not set>'}. "
+        "Run-level steps need either a run folder containing traces/events.jsonl, "
+        "or an experiment-level benchmark output folder (with results.csv and "
+        "<scenario>/<item>/<run>/traces/events.jsonl) from a completed benchmark. "
+        "Run it as `mas-lab benchmark pipeline run <pipeline.yaml> -o <benchmark output dir>`, "
+        "or attach it to the benchmark with "
+        "`mas-lab benchmark run ... --pipeline run:post:<pipeline.yaml>`; "
+        "otherwise set `events_path` in the step config."
+    )
 
 
 def run_input_stream(ctx: Any, config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

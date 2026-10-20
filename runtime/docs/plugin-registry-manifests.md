@@ -256,7 +256,7 @@ only of its `convert` extra.
 
 **Discovery is unaffected.** A plugin with unmet `requires:` is still
 registered and still shows up in `PluginRegistry.list()` — it is *marked*
-disabled, not hidden, so `mas plugin list` and `mas registry` can tell you
+disabled, not hidden, so `mas-ctl plugin list` and `mas registry` can tell you
 it exists and how to turn it on. Availability is a filesystem lookup of
 each `requires:` name: listing never imports those modules.
 
@@ -276,13 +276,13 @@ A plugin declared with no `requires:` (the default — every built-in plugin
 today) is unaffected: `missing_requires()` is always `[]`, so
 `resolve()`/`create()` behave exactly as before.
 
-## `mas plugin` CLI
+## `mas-ctl plugin` CLI
 
 ```bash
-mas plugin list [--type TYPE] [--json]   # every discovered plugin, available or disabled + why
-mas plugin doctor [MANIFEST ...]         # check availability for a spec's referenced plugins
+mas-ctl plugin list [--type TYPE] [--json]   # every discovered plugin, available or disabled + why
+mas-ctl plugin doctor [MANIFEST ...]         # check availability for a spec's referenced plugins
                                           # (or every registered plugin, with no arguments)
-mas plugin enable <urn> [--dry-run]      # install the plugin's extra (or requires:), then re-check
+mas-ctl plugin enable <urn> [--dry-run]      # install the plugin's extra (or requires:), then re-check
 ```
 
 `doctor` is the CI/authoring-time version of the same check `resolve()`
@@ -290,15 +290,15 @@ does at runtime — it reports rather than raises, and can be pointed at a
 manifest to check only what that spec actually references:
 
 ```console
-$ mas plugin doctor docs/tutorials/01-building-an-agent/agent.yaml
+$ mas-ctl plugin doctor docs/tutorials/01-building-an-agent/agent.yaml
   ok       mas.dp.react
 
-$ mas plugin list --type observability
+$ mas-ctl plugin list --type observability
 [observability]
   mas.observability.native                 available
-  mas.observability.otel                   disabled  (missing: opentelemetry.sdk.trace; mas plugin enable mas.observability.otel)
+  mas.observability.otel                   disabled  (missing: opentelemetry.sdk.trace; mas-ctl plugin enable mas.observability.otel)
 
-$ mas plugin enable mas.observability.otel
+$ mas-ctl plugin enable mas.observability.otel
 Installing: uv pip install mas-library-telemetry[convert]
 mas.observability.otel is now available.
 ```

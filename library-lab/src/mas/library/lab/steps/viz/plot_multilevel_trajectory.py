@@ -154,9 +154,12 @@ class PlotMultilevelTrajectoryStep(PipelineStep):
                             self.name, log_path)
 
         if not log_path:
+            from mas.lab.benchmark.pipeline.run_artifacts import missing_run_events_message
+
             raise ValueError(
                 f"Step '{self.name}': no log_path in config, no 'trace_path' in "
-                "dependency outputs, and no trace discoverable under the run output."
+                "dependency outputs, and no trace discoverable under the run output. "
+                + missing_run_events_message(self.name, ctx)
             )
 
         # --- Resolve relative paths ---

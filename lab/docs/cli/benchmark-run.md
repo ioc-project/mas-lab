@@ -24,7 +24,7 @@ Execute an experiment YAML.
 |------|------|
 | `EXPERIMENT_YAML` | Positional argument. |
 | `--force` | Force a new run even if a previous run exists (Makefile --force semantics). |
-| `--override` | Schema-validated experiment override (repeatable; applied last). |
+| `--override` | Schema-validated experiment override (repeatable). Applied to experiment.yaml before -x overlays and --pipeline attachments, so an overlay can supersede it. |
 | `--resume` | (Deprecated) Resume an interrupted run — default behaviour now. |
 | `--benchmark-id` | Specific benchmark ID to resume. |
 | `--progress`, `--no-progress` | Show real-time progress bar. |
@@ -43,8 +43,8 @@ Execute an experiment YAML.
 | `--infra` | Infra bundle name resolved to <experiment_dir>/infra/<name>.yaml. Selects which infrastructure services (OTel collector, storage, …) are provisioned by service_start / service_stop pipeline steps. Defaults to experiment's default_infra (opt-in, no default). |
 | `--strategy` | Execution ordering (overrides YAML schedule.ordering). coverage (default): breadth-first — every condition gets one run before any gets a second run, maximising coverage after partial execution. depth: depth-first — complete all runs for each condition before moving on. |
 | `--set` | Override a pipeline step config key from the CLI. Format: STEP_TYPE.key=value (e.g. --set export_otel.destination=mock). Value is auto-coerced: 'true'/'false' → bool, integers → int. Can be repeated for multiple overrides. |
-| `--pipeline` | Attach a pipeline YAML after experiment hooks (same order as repeated flags). Format: run:post:library:eti-apps/pipelines/observability/native-to-kg.yaml or run:library:... (phase defaults to post). Levels: run, test, scenario, application (experiment aliases application). |
-| `-x`, `--experiment-overlay` | Apply an experiment overlay before running. Overlays deep-merge into experiment.yaml; pipeline hook lists (run.post, application.post, …) are appended rather than replaced, so overlays can add evaluation pipelines without removing base ones. Multiple -x flags are applied in order. Paths are resolved relative to experiment.yaml's directory. |
+| `--pipeline` | Attach a pipeline YAML after experiment hooks (same order as repeated flags). Format: run:post:kg:pipelines/native-to-kg.yaml or run:kg:pipelines/native-to-kg.yaml (phase defaults to post). Levels: run, item, scenario, experiment (deprecated aliases: test = item, application = experiment). |
+| `-x`, `--experiment-overlay` | Apply an experiment overlay before running. Overlays deep-merge into experiment.yaml (RFC 7386 merge patch): mappings merge, but lists (run.post, experiment.post, …) are REPLACED, so an overlay that sets a hook list must carry the full desired list. Multiple -x flags are applied in order. Paths are resolved relative to experiment.yaml's directory. |
 | `-b`, `--background` | Submit via controller daemon and return immediately (print worker id). |
 | `--clean-stale` | Remove benchmark output for scenarios no longer in the experiment YAML (and unreferenced trace-cache entries when enabled in config). |
 

@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Shared MCE metric computation logic.
 
-Used by both ``mas-lab eval-output`` (CLI) and ``EvalMceBatchStep`` (pipeline).
+Used by both ``mas-lab eval`` (library CLI) and ``eval_mce`` (pipeline step).
 
 Session-level MCE metrics available
 -------------------------------------

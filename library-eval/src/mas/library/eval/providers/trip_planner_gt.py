@@ -3,7 +3,7 @@
 """TripPlannerGTProvider — ground-truth evaluation for MAS necessity items.
 
 Demonstrates how to extend MCE with a domain-specific provider.  Standard
-MCE metrics (GoalSuccessRate) judge answers without a reference — they rate
+MCE metrics (goal_success_rate) judge answers without a reference — they rate
 a confident hallucination as "successful".  This provider uses Copilot-generated
 ground truths embedded in the dataset to ask the judge "is THIS specific fact
 correct?" rather than "does this answer sound reasonable?".
@@ -16,7 +16,7 @@ Metrics
   the blogger's claim is right or wrong, and name the violated constraint (mn3)?
 
 These metrics complement AdversarialProvider (mn10–mn12) and standard MCE
-(GoalSuccessRate, Groundedness) to produce a complete picture of where each
+(goal_success_rate, groundedness) to produce a complete picture of where each
 topology succeeds and where it hallucinates.
 
 Usage::

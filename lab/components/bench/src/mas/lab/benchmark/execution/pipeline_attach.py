@@ -21,7 +21,7 @@ _EXPERIMENT_PHASE_LEVELS = frozenset({"experiment"})
 def parse_pipeline_attachment(raw: str) -> Tuple[str, str, str]:
     """Parse ``LEVEL:PHASE:REF`` or ``LEVEL:REF`` (phase defaults to post).
 
-    *REF* may contain colons (e.g. ``library:eti-apps/pipelines/foo.yaml``).
+    *REF* may contain colons (e.g. ``kg:pipelines/native-to-kg.yaml``).
     Returns ``(level, phase, ref)``.
     """
     text = str(raw).strip()

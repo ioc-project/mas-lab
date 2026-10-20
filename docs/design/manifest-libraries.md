@@ -3,7 +3,7 @@
 Status: Phase 1 implemented — folder-based `library.yaml` discovery
 (goals 1-3) already shipped via `mas.library_roots`/`mas.runtime.
 package_refs` (see [`docs/library-discovery.md`](../library-discovery.md));
-the availability gate and `mas plugin` CLI (goals 4-5, and the `mas
+the availability gate and `mas-ctl plugin` CLI (goals 4-5, and the `mas
 plugin` section below) now ship too — see
 [`runtime/docs/plugin-registry-manifests.md`](../../runtime/docs/plugin-registry-manifests.md#availability-gate-requiresextra-for-optional-dependencies)
 for the actual `requires:`/`extra:` schema, `PluginUnavailable`, and CLI
@@ -26,7 +26,7 @@ resolution to scan-first) remain future work.
    only when their deps import*. A missing dep surfaces a clear, actionable
    message **at startup** — never deep inside a run.
 5. Dependencies are **opt-in** (never auto-installed on library install).
-   `mas plugin enable <urn>` installs a plugin's declared extra on demand.
+   `mas-ctl plugin enable <urn>` installs a plugin's declared extra on demand.
 
 ## `library.yaml` schema
 
@@ -53,7 +53,7 @@ plugins:
       artifact: kg
       target: neo4j
       requires: [neo4j]              # disabled unless `neo4j` imports
-      extra: "mas-library-kg[neo4j]" # what `mas plugin enable` installs
+      extra: "mas-library-kg[neo4j]" # what `mas-ctl plugin enable` installs
 
 # Declarative bundles — pure data, no deps, resolved by scan.
 infra:   { llm-proxy: libs/claris/llm-proxy.yaml }   # optional explicit catalog
@@ -94,14 +94,14 @@ with a `library.yaml` — no `pip install`, no entry point.
   fast with the install hint rather than mid-run.
 - Declarative refs (infra/app/pipeline) are never gated — they have no deps.
 
-## `mas plugin` CLI
+## `mas-ctl plugin` CLI
 
-- `mas plugin list [--type codec|design_pattern|…]` — every discovered plugin,
+- `mas-ctl plugin list [--type codec|design_pattern|…]` — every discovered plugin,
   its library, `available|disabled`, and (if disabled) the missing deps + extra.
-- `mas plugin enable <urn>` — read the plugin's `extra` (or `requires`) and
+- `mas-ctl plugin enable <urn>` — read the plugin's `extra` (or `requires`) and
   install it into the active environment (`uv pip install <extra>`), then
   re-check. Explicit and opt-in; nothing is auto-installed on library install.
-- `mas plugin doctor` — validate every referenced plugin's deps for a given
+- `mas-ctl plugin doctor` — validate every referenced plugin's deps for a given
   spec, printing install hints for anything disabled.
 
 ## Library alignment
@@ -114,7 +114,7 @@ so the kernel ships no catalog — consistent with the pure-kernel work.
 
 ## Backward compatibility & rollout
 
-- Phase 1 (done): scan discovery, the availability gate, and `mas plugin`
+- Phase 1 (done): scan discovery, the availability gate, and `mas-ctl plugin`
   all shipped additively; entry-point discovery is still active alongside
   them.
 - Phase 2 (future work): add `library.yaml` to every library; move

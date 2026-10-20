@@ -56,6 +56,10 @@ def validate_cmd(
         if path.is_file():
             if overlays and path.suffix in (".yaml", ".yml"):
                 data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                # The manifest kind comes from the base document, not the overlay target.
+                from mas.ctl.validate.schemas import declared_kind
+
+                base_kind = kind or declared_kind(data) or "agent"
                 from mas.ctl.paths import resolve_overlay_path
 
                 for ov in overlays:
@@ -80,7 +84,7 @@ def validate_cmd(
                 result = validate_data(
                     data,
                     source=str(path),
-                    kind=kind or "agent",
+                    kind=base_kind,
                     strict=strict,
                     base_dir=path.parent,
                     resolve_refs=resolve_refs,

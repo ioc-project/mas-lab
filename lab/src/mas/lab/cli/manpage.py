@@ -58,7 +58,6 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
     ManPage("mas-lab check-config", "lab/docs/cli/check-config.md", "Validate workspace / experiment config", "lab"),
     ManPage("mas-lab validate", "lab/docs/cli/validate.md", "Validate YAML manifests", "lab"),
     ManPage("mas-lab serve", "lab/docs/cli/serve.md", "Start the benchmark UI server", "lab"),
-    ManPage("mas-lab eval-output", "lab/docs/cli/eval-output.md", "Score MAS output quality (MCE)", "lab"),
     ManPage("mas-lab telemetry show", "lab/docs/cli/telemetry-show.md", "Summarize a native events.jsonl file", "lab"),
     ManPage("mas-lab telemetry apps", "lab/docs/cli/telemetry-apps.md", "List apps in native telemetry stores", "lab"),
     ManPage("mas-lab telemetry apps list", "lab/docs/cli/telemetry-apps-list.md", "List apps in ClickHouse otel_traces", "lab"),

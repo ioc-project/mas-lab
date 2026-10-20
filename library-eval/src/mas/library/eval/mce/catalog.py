@@ -1,6 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Single MCE metric catalog (snake ids for eval_mce, CamelCase for the SessionEntity API)."""
+"""Single MCE metric catalog.
+
+User-facing metric ids (CLI ``--metric``, YAML ``metrics:``, ``metrics.json``)
+are snake_case. CamelCase is the plugin class name used by the SessionEntity API.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class MceMetricSpec:
-    """One MCE plugin class, addressable by snake_case and/or CamelCase."""
+    """One MCE plugin class. ``snake`` is the metric id; ``camel`` is the class name."""
 
     camel: str
     spec: str
@@ -85,32 +89,38 @@ _CORE: tuple[MceMetricSpec, ...] = (
     MceMetricSpec(
         "ToolUtilizationAccuracy",
         "metrics_computation_engine.metrics.span.tool_utilization_accuracy:ToolUtilizationAccuracy",
+        snake="tool_utilization_accuracy",
         unit="call",
         evidence="io",
     ),
     MceMetricSpec(
         "ToolError",
         "metrics_computation_engine.metrics.span.tool_error:ToolError",
+        snake="tool_error",
         unit="call",
         evidence="io",
     ),
     MceMetricSpec(
         "ToolErrorRate",
         "metrics_computation_engine.metrics.session.tool_error_rate:ToolErrorRate",
+        snake="tool_error_rate",
     ),
     MceMetricSpec(
         "AgentToAgentInteractions",
         "metrics_computation_engine.metrics.session.agent_to_agent_interactions:AgentToAgentInteractions",
+        snake="agent_to_agent_interactions",
         evidence="trajectory",
     ),
     MceMetricSpec(
         "AgentToToolInteractions",
         "metrics_computation_engine.metrics.session.agent_to_tool_interactions:AgentToToolInteractions",
+        snake="agent_to_tool_interactions",
         evidence="trajectory",
     ),
     MceMetricSpec(
         "CyclesCount",
         "metrics_computation_engine.metrics.session.cycles:CyclesCount",
+        snake="cycles_count",
         evidence="trajectory",
     ),
 )
@@ -125,9 +135,41 @@ _BY_CAMEL: Dict[str, MceMetricSpec] = {item.camel: item for item in CATALOG}
 _BY_SPEC: Dict[str, MceMetricSpec] = {**_BY_SNAKE, **_BY_CAMEL}
 
 
+def listed_ids(*, session_only: bool = False) -> List[str]:
+    """Snake_case metric ids accepted by the CLI and YAML ``metrics:`` lists."""
+    pool = _SESSION if session_only else CATALOG
+    return [item.snake for item in pool if item.snake]
+
+
 def lookup(name: str) -> MceMetricSpec | None:
-    """Return the catalog entry for a snake_case or CamelCase id."""
+    """Return the catalog entry for a snake_case id or CamelCase class name."""
     return _BY_SPEC.get(name)
+
+
+def resolve_metric(name: str, *, session_only: bool = False) -> MceMetricSpec:
+    """Resolve a snake_case metric id or raise ``ValueError``.
+
+    CamelCase class names and other spellings are rejected; the error lists
+    the valid ids and the closest match. With *session_only* only the
+    LLM-judge session metrics are accepted.
+    """
+    import difflib
+
+    pool = _SESSION if session_only else CATALOG
+    spec = _BY_SNAKE.get(name)
+    if spec is not None and spec in pool:
+        return spec
+    valid = listed_ids(session_only=session_only)
+    close = difflib.get_close_matches(name, valid, n=1, cutoff=0.5)
+    if not close:
+        camel = _BY_CAMEL.get(name)
+        if camel is not None and camel in pool and camel.snake:
+            close = [camel.snake]
+    msg = f"Unknown metric {name!r}."
+    if close:
+        msg += f" Did you mean {close[0]!r}?"
+    msg += f" Valid metrics: {', '.join(valid)}."
+    raise ValueError(msg)
 
 
 def session_scope(name: str) -> tuple[str, str]:
@@ -139,7 +181,7 @@ def session_scope(name: str) -> tuple[str, str]:
 
 
 def import_metric(name: str) -> Any | None:
-    """Import the MCE class for *name* (snake or CamelCase), or ``None``."""
+    """Import the MCE class for a snake_case id or CamelCase class name, or ``None``."""
     spec = lookup(name)
     if spec is None:
         logger.warning("Unknown MCE metric: %r. Known: %s", name, list(METRIC_MAP) + list(METRIC_REGISTRY))

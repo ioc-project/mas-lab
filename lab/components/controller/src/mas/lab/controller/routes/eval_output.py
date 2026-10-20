@@ -17,12 +17,10 @@ async def eval_output(library_name: str, req: EvalOutputRequest):
     """Run LLM-as-judge evaluation on an events file. Returns a job_id for polling."""
     lib_dir = deps.get_library_path(library_name)
 
-    cmd = [
-        "mas-lab", "eval-output",
-        req.events_file,
-        "--metrics", ",".join(req.metrics),
-        "--model", req.model,
-    ]
+    cmd = ["mas-lab", "eval", req.events_file]
+    for metric in req.metrics:
+        cmd.extend(["--metric", metric])
+    cmd.extend(["--model", req.model])
     job = jobs.submit_job(
         endpoint=f"/api/libraries/{library_name}/eval-output",
         cmd=cmd,

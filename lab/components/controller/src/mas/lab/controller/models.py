@@ -199,7 +199,7 @@ class EvalOutputRequest(BaseModel):
         description="Path to events.jsonl (relative to library dir or absolute)",
     )
     metrics: list[str] = Field(
-        default=["AnswerRelevancyMetric"],
+        default=["answer_relevancy"],
         description="Metric names to compute",
     )
     model: str = Field(default="azure/gpt-4o", description="LLM judge model")

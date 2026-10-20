@@ -10,10 +10,10 @@ Usage::
 
     scores = evaluate_run(
         kg_path=Path("output/baseline/item1/r1/kg.json"),
-        metrics=["GoalSuccessRate", "Groundedness"],
+        metrics=["goal_success_rate", "groundedness"],
         provider="mce",
     )
-    # {"GoalSuccessRate": {"value": 0.85, "reasoning": "...", "error": None}}
+    # {"goal_success_rate": {"value": 0.85, "reasoning": "...", "error": None}}
 
 Provider selection (explicit — no auto-fallback)::
 

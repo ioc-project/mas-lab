@@ -139,10 +139,10 @@ mas-lab eval --help
 
 ```bash
 # Score a single trace
-mas-lab eval path/to/events.jsonl --metric GoalSuccessRate --metric Groundedness
+mas-lab eval path/to/events.jsonl --metric goal_success_rate --metric groundedness
 
 # Batch scoring over a benchmark output tree
-mas-lab eval path/to/experiment/ --metric GoalSuccessRate --recursive
+mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
 ```
 
 ### In Benchmarks
@@ -154,9 +154,9 @@ pipeline:
     # ... execution config
   - step: eval-mce
     metrics:
-      - GoalSuccessRate
-      - Groundedness
-      - ResponseCompleteness
+      - goal_success_rate
+      - groundedness
+      - response_completeness
     model: azure/gpt-4o
     api_key_env: OPENAI_API_KEY
 ```
@@ -201,15 +201,15 @@ results = await compute_session_metrics(session, ["GoalSuccessRate"], llm_config
 
 ## Metric Names
 
-MCE uses **CamelCase** metric names (matching class names):
+CLI ``--metric``, YAML ``metrics:``, and ``metrics.json`` keys are **snake_case**.
+CamelCase is the plugin class name used by the SessionEntity API.
 
-| MCE v2 (old) | MCE (new) |
-|--------------|--------------|
+| Id (CLI / YAML) | Class name |
+|-----------------|------------|
 | `goal_success_rate` | `GoalSuccessRate` |
 | `groundedness` | `Groundedness` |
 | `response_completeness` | `ResponseCompleteness` |
-| `task_delegation` | (upstream span stub — not in OSS registry) |
-| `answer_relevancy` | (via deepeval adapter) |
+| `answer_relevancy` | `AnswerRelevancy` |
 
 ## Configuration
 

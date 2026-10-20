@@ -45,6 +45,12 @@ Pipeline shortcuts (which YAML each command wraps):
 | [`kg otel-to-kg`](../../library-kg/docs/cli/otel-to-kg.md) | OTel → KG |
 | [`kg push`](../../library-kg/docs/cli/push.md) / [`dump`](../../library-kg/docs/cli/dump.md) | Neo4j serialize / deserialize |
 
+## eval
+
+| Command | Summary |
+|---------|---------|
+| [`eval`](../../library-eval/docs/cli/index.md) | Score a trace (same runner as the `eval_mce` step) |
+
 ## benchmark (short list)
 
 Full table: [lab/docs/cli/benchmark.md](../../lab/docs/cli/benchmark.md).

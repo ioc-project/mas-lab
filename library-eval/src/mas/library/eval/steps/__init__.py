@@ -14,7 +14,6 @@ from mas.lab.benchmark.pipeline import PipelineStep
 from mas.library.eval.mce import (
     compute_session_metrics,
     build_session_from_trace,
-    METRIC_REGISTRY,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,9 +29,9 @@ class EvalMceStep(PipelineStep):
 
         - step: eval-mce
           metrics:
-            - GoalSuccessRate
-            - Groundedness
-            - ResponseCompleteness
+            - goal_success_rate
+            - groundedness
+            - response_completeness
           model: azure/gpt-4o
           api_base: https://api.openai.com/v1
           api_key_env: OPENAI_API_KEY
@@ -47,7 +46,7 @@ class EvalMceStep(PipelineStep):
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.metrics: List[str] = config.get("metrics", ["GoalSuccessRate"])
+        self.metrics: List[str] = config.get("metrics", ["goal_success_rate"])
         self.model: str = config.get("model", "azure/gpt-4o")
         self.api_base: str = config.get("api_base", "https://api.openai.com/v1")
         self.api_key_env: str = config.get("api_key_env", "OPENAI_API_KEY")
@@ -97,9 +96,12 @@ class EvalMceStep(PipelineStep):
             logger.error(f"Failed to load trace {trace_path}: {exc}")
             return context
 
-        # Compute metrics
+        # Compute metrics (SessionEntity API uses CamelCase class names)
         try:
-            results = await compute_session_metrics(session, self.metrics, llm_config)
+            from mas.library.eval.mce.catalog import resolve_metric
+
+            class_names = [resolve_metric(n).camel for n in self.metrics]
+            results = await compute_session_metrics(session, class_names, llm_config)
         except Exception as exc:
             logger.error(f"Metric computation failed: {exc}", exc_info=True)
             return context

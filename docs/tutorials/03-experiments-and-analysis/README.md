@@ -188,12 +188,12 @@ by a modulo check (`391 % 17`) before the final answer.
 
 ### A.3 — Evaluation (MCEv1)
 
-Evaluation measures **answer quality**. The `AnswerRelevancyMetric` uses an
+Evaluation measures **answer quality**. The `answer_relevancy` metric uses an
 LLM-as-judge to score how well the agent's response addresses the input:
 
 ```bash
-mas-lab eval-output "$TRACE" \
-  --metric AnswerRelevancyMetric \
+mas-lab eval "$TRACE" \
+  --metric answer_relevancy \
   --model gpt-4o \
   --api-key-env OPENAI_API_KEY
 ```
@@ -203,7 +203,7 @@ and metadata:
 
 ```json
 {
-  "metric": "AnswerRelevancyMetric",
+  "metric": "answer_relevancy",
   "score": 0.92,
   "reason": "The response correctly computes 17*23=391 and accurately verifies primality.",
   "model": "gpt-4o",
