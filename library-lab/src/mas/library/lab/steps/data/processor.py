@@ -53,6 +53,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 
 if TYPE_CHECKING:
@@ -70,8 +71,8 @@ class ProcessorStep(PipelineStep):
         Inline input: a run_id string, a JSONL file path, or another
         path-like value.  Used when there is no upstream ProcessorStep.
     output : str | Path, optional
-        Destination path for file-backed output artifacts.  Resolved
-        relative to ``ctx.output_dir`` when not absolute.
+        Relative destination path for file-backed output artifacts, under the
+        level folder.
     Any additional key is forwarded verbatim to ``Processor.process()``.
     """
 
@@ -190,8 +191,5 @@ class ProcessorStep(PipelineStep):
         raw = self.config.get("output")
         if not raw:
             return None
-        p = Path(str(raw))
-        if not p.is_absolute():
-            p = ctx.output_dir / p
-        p.parent.mkdir(parents=True, exist_ok=True)
+        p = resolve_step_artifact_path(ctx, None, self.name, "processor_output", self.config, mkdir=True)
         return p

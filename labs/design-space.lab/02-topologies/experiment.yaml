@@ -179,7 +179,7 @@ experiment:
         extra_cols: [latency_s]
         ci_method: t
         ci_level: 0.95
-        output: "{output_dir}/results/ci_summary.csv"
+        output: "results/ci_summary.csv"
 
     - name: figure-overhead-quality
       type: plotnine
@@ -255,7 +255,7 @@ experiment:
           y: "Score (AR / GSR)"
           color: "Topology"
           shape: "Metric"
-        output: "{output_dir}/figure-02-overhead-quality.png"
+        output: "figure-02-overhead-quality.png"
         width: 8
         height: 5
         rename_values:

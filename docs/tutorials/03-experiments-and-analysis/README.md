@@ -333,7 +333,7 @@ post:
 | `run` | `run.post` / `--depth run` | `{scenario_id}`, `{item_id}`, `{run_dir}`, `{events_jsonl}` |
 | `item` | `item.post` / `--depth item` | `{scenario_id}`, `{item_id}` |
 | `scenario` | `scenario.post` / `--depth scenario` | `{scenario_id}` |
-| `exp` | root `post:` / `--depth exp` | `{output_dir}` |
+| `exp` | root `post:` / `--depth exp` | (none; artifact paths are relative to the level folder) |
 
 ### Tutorial artifacts vs. design-space lab
 

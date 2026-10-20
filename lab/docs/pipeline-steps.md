@@ -20,6 +20,9 @@ curl -s http://localhost:8090/api/pipeline-step-types   # when controller runnin
 
 ## extract/ — trace → tables
 
+Output paths are always relative to the level folder (`output:`, `subdir:`, `filename:`);
+absolute paths and `..` are rejected. See [Output locations](../../docs/manifests/pipeline.md#output-locations).
+
 | Type | Output |
 |------|--------|
 | `extract_trace_stats` | Per-run governance/LLM/tool counts plus token/cached usage → CSV; publishes `kind: metric` |

@@ -3,19 +3,15 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path
+from ._helpers import execute_csv_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
-
-logger = logging.getLogger(__name__)
-
 
 def render(output_path: Path, mealy_stats_path: Path) -> None:
     import numpy as np
@@ -33,7 +29,6 @@ def render(output_path: Path, mealy_stats_path: Path) -> None:
         "axes.labelsize": 7.5,
         "xtick.labelsize": 7,
     })
-
 
     ms = pd.read_csv(mealy_stats_path)
     b  = ms[ms.scenario == "baseline"].copy()
@@ -193,22 +188,17 @@ def render(output_path: Path, mealy_stats_path: Path) -> None:
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     print(f"Saved → {output_path}")
 
-
 class FigureNonllmStep(PipelineStep):
     type = "figure_nonllm"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        import matplotlib
-        matplotlib.use("Agg")
-
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        mealy_stats_path = resolve_path(cfg.get("mealy_stats", "{output_dir}/results/mealy_stats.csv"), out_dir)
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig-nonllm.png"), out_dir)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        render(output_path, mealy_stats_path)
-        logger.info("Wrote %s", output_path)
-        return StepOutput(files=[output_path], metadata={"output": str(output_path)})
-
+        return execute_csv_figure(
+            ctx,
+            self,
+            input_key="mealy_stats",
+            input_default="results/mealy_stats.csv",
+            output_name="fig-nonllm.png",
+            render=render,
+        )
 
 register_step_type("figure_nonllm", FigureNonllmStep)

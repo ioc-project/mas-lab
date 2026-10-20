@@ -4,7 +4,7 @@ from __future__ import annotations
 """ExtractTraceStatsStep — extract per-run governance and trajectory metrics
 from events.jsonl trace files.
 
-Scans ``<output_dir>/<scenario>/<item>/r<N>/traces/events.jsonl`` for every
+Scans ``<level folder>/<scenario>/<item>/r<N>/traces/events.jsonl`` for every
 scenario/item/run triple, computes a set of structural metrics from the raw
 event stream, and writes a tidy CSV.
 
@@ -36,9 +36,8 @@ n_context_parts   int    Count of ``context_part_contributed`` events.
 
 Configuration
 -------------
-output_dir   str   Root directory to scan. Defaults to ``ctx.output_dir``.
-output       str   Output CSV path (default: ``trace_stats.csv`` inside
-                   ``<output_dir>/results/``).
+output       str   Relative output path (default: ``trace_stats.csv`` inside
+                   ``<level folder>/results/``).
 scenarios    list  Optional list of scenario IDs to include.
 item_glob    str   Glob pattern for item directories (default: ``item*``).
 run_glob     str   Glob pattern for run directories (default: ``r*``).
@@ -47,8 +46,7 @@ Example YAML::
 
     - name: extract-trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}   # writes results/trace_stats.csv
 """
 
 import csv
@@ -61,6 +59,10 @@ from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.cache.trace_store import resolve_run_events_path as _resolve_events_path
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_root,
+)
 from mas.lab.benchmark.schema.validation import check_trace_integrity
 from mas.library.lab.steps.services.metric_event import publish_metric_record
 
@@ -348,18 +350,10 @@ class ExtractTraceStatsStep(PipelineStep):
         self._ctx = ctx
         config = self.config
 
-        output_dir_raw = config.get("output_dir", "")
-        output_dir = Path(output_dir_raw).expanduser() if output_dir_raw else ctx.output_dir
-
-        output_raw = config.get("output", "")
-        if output_raw:
-            output_path = Path(output_raw).expanduser()
-            if not output_path.is_absolute():
-                output_path = output_dir / output_path
-        else:
-            output_path = output_dir / "results" / "trace_stats.csv"
-
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_dir = resolve_step_root(ctx, config, step=self.name)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "trace_stats.csv", config, default_subdir="results", mkdir=True
+        )
 
         scenario_filter: Optional[List[str]] = config.get("scenarios")
         item_glob: str = config.get("item_glob", "item*")

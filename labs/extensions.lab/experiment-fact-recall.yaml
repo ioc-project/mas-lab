@@ -111,8 +111,7 @@ experiment:
     # Step 1: Extract trace stats (durations, tool calls, governance events)
     - name: extract-trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}
 
     # Step 2: Provenance-based fact recall evaluation — no LLM-as-judge.
     # Vector: reads tool_call_end(memory-search) spans for retrieved doc_ids.
@@ -123,10 +122,9 @@ experiment:
       type: extensions_lab.steps.eval_fact_recall:EvalFactRecallStep
       depends_on: [extract-trace-stats]
       config:
-        runs_dir: "{output_dir}"
         dataset: ./datasets/fact-recall.yaml
-        output_runs: "{output_dir}/results/fact_recall_runs.csv"
-        output_summary: "{output_dir}/results/fact_recall_summary.csv"
+        output_runs: "results/fact_recall_runs.csv"
+        output_summary: "results/fact_recall_summary.csv"
         letta_scenarios: [with-letta-factrecall]
         n_seeded_facts: 100
         vector_scenarios:
@@ -139,7 +137,7 @@ experiment:
       type: plotnine
       depends_on: [eval-fact-recall]
       config:
-        data: "{output_dir}/results/fact_recall_summary.csv"
+        data: "results/fact_recall_summary.csv"
         filter:
           group: [k1, k2, k3]
         mapping: { x: group, y: recall_mean, fill: scenario }
@@ -150,7 +148,7 @@ experiment:
           subtitle: "Fraction of expected facts retrieved (n=3 runs per scenario)"
           x: "Query group"
           y: "Recall"
-        output: "{output_dir}/results/fig_fact_recall.png"
+        output: "results/fig_fact_recall.png"
         width: 7.0
         height: 4.0
         rename_values:
@@ -169,7 +167,7 @@ experiment:
       type: plotnine
       depends_on: [eval-fact-recall]
       config:
-        data: "{output_dir}/results/fact_recall_summary.csv"
+        data: "results/fact_recall_summary.csv"
         filter:
           group: [k0]
         mapping: { x: scenario, y: n_retrieved_mean, fill: scenario }
@@ -179,7 +177,7 @@ experiment:
           subtitle: "Mean facts injected/retrieved when no retrieval is required"
           x: "Memory architecture"
           y: "Facts in context (n_retrieved)"
-        output: "{output_dir}/results/fig_overhead.png"
+        output: "results/fig_overhead.png"
         width: 5.0
         height: 4.0
         rename_values:
@@ -194,7 +192,7 @@ experiment:
       type: plotnine
       depends_on: [eval-fact-recall]
       config:
-        data: "{output_dir}/results/fact_recall_summary.csv"
+        data: "results/fact_recall_summary.csv"
         filter:
           group: [k1, k2, k3]
         mapping: { x: recall_mean, y: precision_mean, color: group, shape: scenario }
@@ -204,7 +202,7 @@ experiment:
           subtitle: "Vector Memory vs Letta; shapes = scenario, colors = query group"
           x: "Recall"
           y: "Precision"
-        output: "{output_dir}/results/fig_precision_recall.png"
+        output: "results/fig_precision_recall.png"
         width: 5.5
         height: 4.5
         rename_values:
@@ -223,7 +221,7 @@ experiment:
       type: plotnine
       depends_on: [eval-fact-recall]
       config:
-        data: "{output_dir}/results/fact_recall_summary.csv"
+        data: "results/fact_recall_summary.csv"
         filter:
           group: [k1, k2, k3]
         mapping: { x: group, y: f1_mean, fill: scenario }
@@ -234,7 +232,7 @@ experiment:
           subtitle: "Harmonic mean of precision and recall (n=3 runs)"
           x: "Query group"
           y: "F1"
-        output: "{output_dir}/results/fig_f1_summary.png"
+        output: "results/fig_f1_summary.png"
         width: 6.0
         height: 3.5
         rename_values:

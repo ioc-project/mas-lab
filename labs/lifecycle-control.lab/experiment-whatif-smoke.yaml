@@ -66,26 +66,24 @@ experiment:
     fig-fork: plot
     fig_trajectory_schematic:
       type: plot
-      path: "{output_dir}/fig_trajectory_schematic.svg"
+      path: "fig_trajectory_schematic.svg"
     fig_trajectory:
       type: plot
-      path: "{output_dir}/fig_trajectory.svg"
+      path: "fig_trajectory.svg"
     fig_trajectory_swimlane:
       type: plot
-      path: "{output_dir}/fig_trajectory_swimlane.svg"
+      path: "fig_trajectory_swimlane.svg"
     fig_trajectory_compact:
       type: plot
-      path: "{output_dir}/fig_trajectory_compact.svg"
+      path: "fig_trajectory_compact.svg"
   post:
     - name: extract-trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}
 
     - name: extract-mealy-stats
       type: extract_mealy_stats
-      config:
-        output: "{output_dir}/results/mealy_stats.csv"
+      config: {}
 
     - name: figure-fork
       type: plotnine
@@ -104,7 +102,7 @@ experiment:
           subtitle: "Shared LLM cache, same fault item class; policy fire is the only fork signal"
           x: "Item"
           y: "Scenario"
-        output: "{output_dir}/fig-fork.png"
+        output: "fig-fork.png"
         width: 6.0
         height: 2.8
         palette: ["#d9d9d9", "#1a9850"]
@@ -120,30 +118,30 @@ experiment:
       type: lifecycle_control_lab.steps.figure_trajectory_paper:FigureTrajectoryPaperStep
       depends_on: [extract-trace-stats]
       config:
-        trace_baseline: "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"
-        trace_guardrail: "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
-        output: "{output_dir}/fig_trajectory_schematic.svg"
+        trace_baseline: "baseline/itemf-guardrail/r1/traces/events.jsonl"
+        trace_guardrail: "with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
+        output: "fig_trajectory_schematic.svg"
 
     - name: figure-trajectory-automaton
       type: lifecycle_control_lab.steps.figure_trajectory_automaton:FigureTrajectoryAutomatonStep
       depends_on: [extract-trace-stats]
       config:
-        trace_baseline: "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"
-        trace_guardrail: "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
-        output: "{output_dir}/fig_trajectory.svg"
+        trace_baseline: "baseline/itemf-guardrail/r1/traces/events.jsonl"
+        trace_guardrail: "with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
+        output: "fig_trajectory.svg"
 
     - name: figure-trajectory-swimlane
       type: lifecycle_control_lab.steps.figure_trajectory_swimlane:FigureTrajectorySwimlaneStep
       depends_on: [extract-trace-stats]
       config:
-        trace_baseline: "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"
-        trace_guardrail: "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
-        output: "{output_dir}/fig_trajectory_swimlane.svg"
+        trace_baseline: "baseline/itemf-guardrail/r1/traces/events.jsonl"
+        trace_guardrail: "with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
+        output: "fig_trajectory_swimlane.svg"
 
     - name: figure-trajectory-compact
       type: lifecycle_control_lab.steps.figure_trajectory_compact:FigureTrajectoryCompactStep
       depends_on: [extract-trace-stats]
       config:
-        trace_baseline: "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"
-        trace_guardrail: "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
-        output: "{output_dir}/fig_trajectory_compact.svg"
+        trace_baseline: "baseline/itemf-guardrail/r1/traces/events.jsonl"
+        trace_guardrail: "with-guardrail/itemf-guardrail/r1/traces/events.jsonl"
+        output: "fig_trajectory_compact.svg"

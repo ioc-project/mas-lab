@@ -36,7 +36,6 @@ experiment:
       type: collect_metrics
       depends_on: [eval-quality]
       config:
-        output_dir: "{output_dir}"
         dataset:
           name: trip-planner-benchmark
           locator: samples
@@ -52,4 +51,4 @@ experiment:
         groupby: [scenario, group, metric]
         ci_method: t
         ci_level: 0.95
-        output: "{output_dir}/results/ci_summary.csv"
+        output: "results/ci_summary.csv"

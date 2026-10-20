@@ -10,7 +10,7 @@ description: >
 
   **Artifacts and transport:** Steps pass outputs in-memory within a single pipeline
   run (Python dicts / dataframes). Steps that declare file paths in config
-  (events_jsonl, trajectory_csv, output_dir) serialize artifacts to disk. Experiment
+  (events_jsonl, trajectory_csv) serialize artifacts to disk. Experiment
   manifests declare typed artifacts (trace, metrics, dataframe, plot, …) at each
   level's ``artifacts:`` block; a step's ``in:``/``out:`` names which one it
   reads/writes, fanning in the level below's instances. See
@@ -221,7 +221,6 @@ properties:
 #   artifact_paths: [str]  (from `in:` fan-in)
 #   annotate: {str: str}   (constant columns on every gathered row)
 #   output: str            (default: data.csv)
-#   output_dir: str        (default: ctx.output_dir)
 #   format: csv | parquet  (default: csv)
 #
 # embed_trajectories config:

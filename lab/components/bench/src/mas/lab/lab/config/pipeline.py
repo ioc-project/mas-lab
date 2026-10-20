@@ -90,6 +90,12 @@ class PipelineStepSpec:
         inputs = [raw_in] if isinstance(raw_in, str) else list(raw_in)
         raw_out = data.get("out", [])
         outputs = [raw_out] if isinstance(raw_out, str) else list(raw_out)
+        from mas.lab.benchmark.pipeline.artifact_paths import (
+            step_config_label,
+            validate_step_config_paths,
+        )
+
+        step_label = step_config_label(data)
         return cls(
             type=data["type"],
             name=data.get("name"),
@@ -98,7 +104,9 @@ class PipelineStepSpec:
             concurrency=int(data.get("concurrency", 1)),
             phase=data.get("phase", "post"),
             scope=data.get("scope", ""),
-            config=data.get("config", {}),
+            config=validate_step_config_paths(
+                step_label, data.get("config", {}), step_type=str(data["type"])
+            ),
             depends_on=data.get("depends_on", []),
             inputs=inputs,
             outputs=outputs,
@@ -112,6 +120,18 @@ class PipelineStepSpec:
 # ---------------------------------------------------------------------------
 # ArtifactSpec — named data product at a hierarchy level
 # ---------------------------------------------------------------------------
+
+
+def _confined_artifact_template(name: str, path: str) -> str:
+    """Validate a declared artifact ``path`` template; keep a leading ``{level_dir}`` etc."""
+    from mas.lab.benchmark.pipeline.artifact_paths import normalize_relative_value
+
+    head = ""
+    for prefix in ("{run_dir}", "{level_dir}", "{scenario_dir}"):
+        if path.startswith(prefix):
+            head, path = prefix + "/", path[len(prefix):].lstrip("/\\")
+            break
+    return head + str(normalize_relative_value(f"artifact {name}", "path", path))
 
 
 @dataclass
@@ -187,10 +207,13 @@ class ArtifactSpec:
         if isinstance(value, str):
             return cls(name=name, type=value)
         if isinstance(value, dict):
+            path = value.get("path")
+            if isinstance(path, str):
+                path = _confined_artifact_template(name, path)
             return cls(
                 name=name,
                 type=value["type"],
-                path=value.get("path"),
+                path=path,
                 validate=value.get("validate", False),
             )
         raise ValueError(f"Invalid artifact spec for '{name}': expected str or dict, got {type(value)}")

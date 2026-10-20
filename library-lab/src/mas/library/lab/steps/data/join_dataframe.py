@@ -25,11 +25,11 @@ Example YAML::
       type: join_dataframe
       config:
         inputs:
-          - "{output_dir}/results.csv"
-          - "{output_dir}/latency.csv"
+          - results.csv
+          - latency.csv
         operation: merge
         on: [scenario, item_id, run_idx]
-        output: "{output_dir}/combined.csv"
+        output: combined.csv
 """
 
 import logging
@@ -37,6 +37,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    normalize_relative_value,
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+    resolve_step_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,25 +62,15 @@ class JoinDataFrameStep(PipelineStep):
         if not raw_inputs:
             raise ValueError(f"JoinDataFrameStep '{self.name}': 'inputs' required")
 
+        root = resolve_step_root(ctx, config, step=self.name)
         input_paths: List[Path] = []
         for pattern in raw_inputs:
-            p = Path(pattern)
-            if any(c in pattern for c in "*?["):
-                # Glob pattern — resolve from an anchor directory
-                if p.is_absolute():
-                    # Find the first concrete parent (no wildcards)
-                    parts = p.parts
-                    concrete: list[str] = []
-                    for part in parts:
-                        if any(c in part for c in "*?["):
-                            break
-                        concrete.append(part)
-                    root = Path(*concrete) if concrete else Path("/")
-                    glob_rest = str(p.relative_to(root))
-                    input_paths.extend(sorted(root.glob(glob_rest)))
-                else:
-                    input_paths.extend(sorted(Path.cwd().glob(pattern)))
-            elif p.exists():
+            rel = normalize_relative_value(self.name, "inputs", pattern, warn=False)
+            if any(c in rel for c in "*?["):
+                input_paths.extend(sorted(p for p in root.glob(rel) if p.is_file()))
+                continue
+            p = resolve_step_input_path(ctx, self.name, {**config, "inputs": rel}, "inputs")
+            if p.exists():
                 input_paths.append(p)
             else:
                 logger.warning("JoinDataFrameStep '%s': input not found: %s", self.name, p)
@@ -136,9 +132,9 @@ class JoinDataFrameStep(PipelineStep):
             result = result.sort_values(sort_by)
 
         # ── Write output ───────────────────────────────────────────────
-        output_raw = config.get("output", "joined.csv")
-        output_path = Path(output_raw)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "joined.csv", config, name_keys=(), mkdir=True
+        )
         result.to_csv(output_path, index=False)
 
         logger.info("JoinDataFrameStep '%s': %d rows → %s", self.name, len(result), output_path)

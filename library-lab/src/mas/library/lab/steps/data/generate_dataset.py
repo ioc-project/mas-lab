@@ -47,6 +47,7 @@ from typing import Any, Optional
 
 import yaml
 
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
@@ -188,7 +189,7 @@ class GenerateDatasetStep(PipelineStep):
         api_key_env: str = cfg.get("api_key_env", "OPENAI_API_KEY")
         api_key: str = os.environ.get(api_key_env, "")
         temperature: float = float(cfg.get("temperature", 0.8))
-        output_filename: str = cfg.get("output_filename", "generated_dataset.yaml")
+        output_filename: str = str(cfg.get("output_filename") or "generated_dataset.yaml")
 
         if not api_key:
             logger.warning(
@@ -280,8 +281,10 @@ class GenerateDatasetStep(PipelineStep):
             "spec": {"items": items},
         }
 
-        out_path: Path = ctx.output_dir / output_filename
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path: Path = resolve_step_artifact_path(
+            ctx, None, "generate_dataset", "generated_dataset.yaml", cfg,
+            key="output_filename", name_keys=(), mkdir=True,
+        )
         with open(out_path, "w") as fh:
             yaml.dump(dataset, fh, allow_unicode=True, default_flow_style=False, sort_keys=False, width=120)
 

@@ -54,6 +54,11 @@ NOTICES: Dict[str, Tuple[str, str]] = {
         "manifests/dataset-migration.md",
         "put app- or tool-specific ground truth under expectations.details",
     ),
+    "pipeline.output_dir_template": (
+        "manifests/pipeline.md#output-locations",
+        "drop the {output_dir}/ prefix: use a relative path (results/trace_stats.csv) "
+        "or omit the key to get the step's default artifact",
+    ),
     "experiment.execution": (
         "manifests/experiment.md#design-vs-schedule",
         "use experiment.design, experiment.schedule, and experiment.bench_emulation",

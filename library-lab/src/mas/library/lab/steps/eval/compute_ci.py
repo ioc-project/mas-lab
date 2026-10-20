@@ -39,7 +39,8 @@ groupby      list[str]      Grouping columns (default: ["scenario", "metric"]).
 ci_method    str            "t" | "bootstrap" | "normal" (default: "t").
 ci_level     float          Confidence level (default: 0.95).
 min_runs     int            Warn when a group has fewer runs (default: 2).
-output       str            Output CSV path (default: data.parent/ci_summary.csv).
+output       str            Optional relative output path; persists the table
+                            (default name: ci_summary.csv; ``subdir`` / ``filename`` also persist).
 pre_aggregate dict          Optional: pre-aggregate observations before computing CI.
                             Keys: ``by`` (list[str]) — group columns for pre-
                             aggregation; ``agg`` (str, default ``"mean"``) —
@@ -94,7 +95,7 @@ Example YAML::
         groupby: [scenario, item_group, metric]
         ci_method: t
         ci_level: 0.95
-        output: "{output_dir}/ci_summary.csv"   # optional persistence
+        output: ci_summary.csv   # optional persistence
       depends_on: [collect-metrics]
 
     # Step 2 — render (reads DataFrame from memory, not from disk)
@@ -113,7 +114,7 @@ Example YAML::
         labels:
           title: "Mean ± 95% CI across 3 runs"
           y: "MCE score"
-        output: "{output_dir}/results/figure-ci.png"
+        output: results/figure-ci.png
       depends_on: [compute-ci]
 """
 
@@ -122,6 +123,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline.lib.data_source import resolve_dataframe, write_dataframe
 
 logger = logging.getLogger(__name__)
@@ -365,7 +367,7 @@ class ComputeCIStep(PipelineStep):
         if not data_source:
             raise ValueError(f"ComputeCIStep '{self.name}': 'data' required")
 
-        df = resolve_dataframe(data_source, ctx)
+        df = resolve_dataframe(data_source, ctx, config=config, step=self.name)
         logger.info(
             "ComputeCIStep '%s': loaded %d rows from '%s'",
             self.name, len(df), data_source,
@@ -446,10 +448,11 @@ class ComputeCIStep(PipelineStep):
             data_out[f"df_{name}"] = ldf
 
         # ── Write output ───────────────────────────────────────────────
-        output_raw = config.get("output", "")
         files = []
-        if output_raw:
-            output_path = Path(output_raw)
+        if any(config.get(k) for k in ("output", "subdir", "filename")):
+            output_path = resolve_step_artifact_path(
+                ctx, None, self.name, "ci_summary.csv", config, mkdir=True
+            )
             write_dataframe(level_dfs[first_name], output_path)
             files.append(output_path)
             # Write per-level CSVs when there are multiple levels

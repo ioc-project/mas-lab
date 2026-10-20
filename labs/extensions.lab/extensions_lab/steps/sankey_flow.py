@@ -22,11 +22,11 @@ Configuration
       config:
         data: "@attribution-data"           # in-memory df from upstream
         # or:
-        # csv: "{output_dir}/attribution.csv"
+        # csv: "attribution.csv"
         stages: [query_group, memory_outcome, tool_outcome, answer_outcome]
         value_col: count                    # optional; defaults to row count
         title: "Lab 3.5 — Attribution Sankey: query → context → answer"
-        output: "{output_dir}/results/figure-attribution-sankey.png"
+        output: "results/figure-attribution-sankey.png"
 
 Uses matplotlib only (no plotly dependency).  Renders nodes as vertical
 rectangles per stage with widths summed, and link ribbons as filled
@@ -38,6 +38,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable, List
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import (
     PipelineStep,
     StepOutput,
@@ -64,9 +68,8 @@ def _resolve_df(ctx, config):
         if df is None:
             raise ValueError(f"sankey_flow: upstream '{step_name}' has no .data['df']")
         return df.copy()
-    csv = config.get("csv")
-    if csv:
-        path = Path(str(csv)).expanduser()
+    path = resolve_step_input_path(ctx, "sankey_flow", config, "csv")
+    if path is not None:
         return pd.read_csv(path)
     raise ValueError("sankey_flow: provide either 'data: @step' or 'csv: path'")
 
@@ -216,7 +219,6 @@ class SankeyFlowStep(PipelineStep):
 
         value_col = cfg.get("value_col")
         title = cfg.get("title", "Sankey flow")
-        output_raw = cfg.get("output", "sankey.png")
 
         fig, ax = plt.subplots(figsize=cfg.get("figsize", (12, 7)))
         _draw_sankey(ax, df, stages, value_col,
@@ -224,10 +226,9 @@ class SankeyFlowStep(PipelineStep):
         fig.suptitle(title, fontsize=12)
         fig.tight_layout()
 
-        output_path = Path(str(output_raw)).expanduser()
-        if not output_path.is_absolute() and hasattr(ctx, "output_dir"):
-            output_path = ctx.output_dir / output_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "sankey.png", cfg, name_keys=(), mkdir=True
+        )
         fig.savefig(output_path, dpi=cfg.get("dpi", 150), bbox_inches="tight")
         plt.close(fig)
 

@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.models import ConfigParam
@@ -250,7 +251,9 @@ class EvalMceStep(PipelineStep):
             raise RuntimeError(missing_run_events_message(self.name, ctx))
 
         run_folder = Path(run_dir) if run_dir else events_path.parent.parent
-        metrics_file = run_folder / str(config.get("metrics_filename", "metrics.json"))
+        metrics_file = run_folder / check_simple_name(
+            self.name, "metrics_filename", config.get("metrics_filename", "metrics.json")
+        )
         overwrite = bool(config.get("overwrite", False))
 
         test = str(config.get("test") or "")

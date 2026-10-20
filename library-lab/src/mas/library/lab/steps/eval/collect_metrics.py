@@ -20,9 +20,8 @@ Output columns (schema v1):
 
 Configuration
 -------------
-output_dir   str           Root output directory.
-output       str           Output CSV path (default: "results.csv").
-run_glob     str           Glob for run directories relative to output_dir.
+output       str           Relative output path (default: "results.csv").
+run_glob     str           Glob for run directories relative to the level folder.
                            Default: ``"*/*/r*"`` (scenario/item_id/run).
 scenarios    list[str]     Optional scenario filter.
 metrics_filename  str | list   Metrics file name, glob, or list of those
@@ -87,6 +86,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_root,
+    step_artifact_relpath,
+)
 from mas.lab.benchmark.pipeline.resources import Artifact, Scope
 from mas.library.lab.steps.data.to_dataframe import (
     _apply_transform,
@@ -120,29 +124,19 @@ class CollectMetricsStep(PipelineStep):
 
     @property
     def output_artifacts(self) -> List[Tuple[str, Artifact]]:
-        output_dir_raw = self.config.get("output_dir", "")
-        base = Path(output_dir_raw) if output_dir_raw else None
-        output_raw = self.config.get("output", "results.csv")
-        output_path = Path(output_raw)
-        name = output_path.stem
-        artifact = Artifact(name=name, format="csv", scope=Scope.EXPERIMENT)
-        if base is not None and not output_path.is_absolute():
-            artifact._resolved_path = base / output_path  # type: ignore[attr-defined]
-        elif output_path.is_absolute():
-            artifact._resolved_path = output_path  # type: ignore[attr-defined]
+        rel = step_artifact_relpath(self.name, "results.csv", self.config, name_keys=())
+        artifact = Artifact(name=Path(rel).stem, format="csv", scope=Scope.EXPERIMENT)
+        artifact._relative_path = rel  # type: ignore[attr-defined]
         return [("csv_path", artifact)]
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
         self._ctx = ctx
         config = self.config
 
-        output_dir_raw = config.get("output_dir", "")
-        output_dir = Path(output_dir_raw) if output_dir_raw else ctx.output_dir
-
-        output_path_raw = config.get("output", "results.csv")
-        output_path = Path(output_path_raw)
-        if not output_path.is_absolute():
-            output_path = output_dir / output_path
+        output_dir = resolve_step_root(ctx, config, step=self.name)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "results.csv", config, name_keys=(), mkdir=True
+        )
 
         run_glob = config.get("run_glob", "*/*/r*")
         id_spec = config.get("identity", _DEFAULT_IDENTITY)
@@ -169,7 +163,6 @@ class CollectMetricsStep(PipelineStep):
             "details",
         ] + dataset_columns
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         rows: list = []
         with open(output_path, "w", newline="", encoding="utf-8") as f:

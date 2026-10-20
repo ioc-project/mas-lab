@@ -7,7 +7,7 @@ reference to a prior step's DataFrame output::
 
     data: "@compute-ci"          # read df from ctx.step_outputs["compute-ci"]
     data: "@step-name:my_field"  # read a specific field
-    data: "{output_dir}/results.csv"   # file path
+    data: "results.csv"   # file path, relative to the level folder
 
 Error bars are added automatically when the mapping contains ``ymin``
 and ``ymax`` — no ``error_bars: true`` flag needed::
@@ -22,7 +22,7 @@ and ``ymax`` — no ``error_bars: true`` flag needed::
 Configuration
 -------------
 data         str            DataFrame source (see above).
-output       str            Path to output file (png/svg/pdf).
+output       str            Relative output path (png/svg/pdf); default plot.png.
 mapping      dict           aes() mapping: {x, y, fill, color, ymin, ymax, ...}.
 geom         str            Geometry: "bar", "col", "point", "boxplot", "line".
                             Default: "col".
@@ -82,7 +82,7 @@ Example YAML — CI figure from compute_ci step::
         labels:
           title: "Mean ± 95% CI across 3 runs"
           y: "MCE score"
-        output: "{output_dir}/results/figure-ci.png"
+        output: results/figure-ci.png
       depends_on: [compute-ci]
 
 Example YAML — raw tidy CSV with stat_summary::
@@ -99,17 +99,17 @@ Example YAML — raw tidy CSV with stat_summary::
           title: "Topology Comparison"
           x: ""
           y: "Score"
-        output: "{output_dir}/results/figure-quality.png"
+        output: results/figure-quality.png
       depends_on: [collect-metrics]
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline.lib.data_source import resolve_dataframe
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,7 @@ class PlotNineStep(PipelineStep):
         if not data_source:
             raise ValueError(f"PlotNineStep '{self.name}': 'data' required")
 
-        df = resolve_dataframe(data_source, ctx)
+        df = resolve_dataframe(data_source, ctx, config=config, step=self.name)
         logger.info("PlotNineStep '%s': loaded %d rows from '%s'", self.name, len(df), data_source)
 
         # ── DataFrame schema validation ────────────────────────────────
@@ -242,15 +242,9 @@ class PlotNineStep(PipelineStep):
                     df[col] = pd.Categorical(df[col], categories=levels, ordered=True)
 
         # ── Output path ────────────────────────────────────────────────
-        output_raw = config.get("output", "plot.png")
-        output_path = Path(output_raw).expanduser()
-        # When relative, anchor next to the data file if it's a real file;
-        # otherwise anchor at the executor output_dir (available via ctx).
-        if not output_path.is_absolute():
-            if not data_source.startswith("@"):
-                output_path = Path(data_source).parent / output_path
-            elif ctx is not None and hasattr(ctx, "output_dir"):
-                output_path = ctx.output_dir / output_path
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "plot.png", config, mkdir=True
+        )
 
         # ── Mapping ────────────────────────────────────────────────────
         mapping_cfg: dict = config.get("mapping", {})
@@ -310,7 +304,7 @@ class PlotNineStep(PipelineStep):
         # to each layer's DataFrame as well, so colours stay consistent.
         for layer_cfg in config.get("layers", []):
             layer_src = layer_cfg.get("data", "")
-            layer_df = resolve_dataframe(layer_src, ctx) if layer_src else df.copy()
+            layer_df = resolve_dataframe(layer_src, ctx, config=config, step=self.name) if layer_src else df.copy()
 
             # Apply per-layer filter
             layer_filter = layer_cfg.get("filter", {})
@@ -522,7 +516,6 @@ class PlotNineStep(PipelineStep):
             p = p + scale_fill_brewer(type="qual", palette="Set2")
 
         # ── Save ───────────────────────────────────────────────────────
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         dpi: int = config.get("dpi", 150)
         p.save(str(output_path), dpi=dpi, verbose=False)
 

@@ -3,19 +3,15 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path
+from ._helpers import execute_csv_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
-
-logger = logging.getLogger(__name__)
-
 
 def render(output_path: Path, mealy_stats_path: Path) -> None:
     import numpy as np
@@ -23,7 +19,6 @@ def render(output_path: Path, mealy_stats_path: Path) -> None:
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
     from pathlib import Path
-
 
     ms = pd.read_csv(mealy_stats_path)
     ms_base = ms[ms["scenario"] == "baseline"].copy()
@@ -200,22 +195,17 @@ def render(output_path: Path, mealy_stats_path: Path) -> None:
     print("\nHook ratios (checks per LLM call):")
     print(agg[[h + "_ratio" for h in HOOK_SHORT.values()]].round(2).to_string())
 
-
 class FigurePerCallStep(PipelineStep):
     type = "figure_per_call"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        import matplotlib
-        matplotlib.use("Agg")
-
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        mealy_stats_path = resolve_path(cfg.get("mealy_stats", "{output_dir}/results/mealy_stats.csv"), out_dir)
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig-per-call.png"), out_dir)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        render(output_path, mealy_stats_path)
-        logger.info("Wrote %s", output_path)
-        return StepOutput(files=[output_path], metadata={"output": str(output_path)})
-
+        return execute_csv_figure(
+            ctx,
+            self,
+            input_key="mealy_stats",
+            input_default="results/mealy_stats.csv",
+            output_name="fig-per-call.png",
+            render=render,
+        )
 
 register_step_type("figure_per_call", FigurePerCallStep)

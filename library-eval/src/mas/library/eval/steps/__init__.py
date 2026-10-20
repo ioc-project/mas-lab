@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep
+from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.library.eval.mce import (
     compute_session_metrics,
     build_session_from_trace,
@@ -114,7 +115,7 @@ class EvalMceStep(PipelineStep):
         )
 
         # Write to file
-        metrics_file = work_dir / self.output_file
+        metrics_file = work_dir / check_simple_name("mce", "output_file", self.output_file)
         with metrics_file.open("w", encoding="utf-8") as fh:
             json.dump(metrics_doc, fh, indent=2)
 

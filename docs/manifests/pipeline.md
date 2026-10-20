@@ -36,8 +36,24 @@ pipeline:
       depends_on: [extract]
 ```
 
-Steps reference upstream outputs via template paths (`{{run.output_dir}}/...`) in experiment
-context.
+Steps reference upstream outputs by step name (`@step`) or by a path relative to their level
+folder (see [Output locations](#output-locations)).
+
+### Output locations
+
+Steps write their artifacts in the folder of the level they run at (experiment, scenario,
+item or run); a step never receives or builds an absolute path. Each step type has a fixed
+default file name (`extract_trace_stats` writes `results/trace_stats.csv`). A step config may
+set only a relative `subdir` (nested folders allowed), a relative `output` path
+(`results/ci.csv`), or, to avoid a collision between two steps of the same type, a simple
+`filename` (no separators). Absolute paths, `..`, `~`, drive letters and symlink escapes are
+rejected when the pipeline is loaded (`mas-lab benchmark pipeline validate`, `mas-lab validate`)
+and again when the step runs; `--var` values may appear inside a relative path but the
+resolved path must stay under the level folder.
+
+The single-brace `{output_dir}/...` prefix is a deprecated alias for one release: it is
+rewritten to the relative form with a deprecation warning. `{{run.output_dir}}`-style values
+were never supported and are rejected.
 
 ### Level-scoped steps (`scope:` / `in:` / `out:`)
 
@@ -97,7 +113,7 @@ spec:
       type: extract_trace_stats
       depends_on: [extract]
       config:
-        output: "{output_dir}/results/trace_stats.csv"
+        subdir: results
 ```
 
 UI may emit `x-canvas-positions` (stripped before execution).

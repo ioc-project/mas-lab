@@ -81,11 +81,11 @@ def test_show_plots_ignores_undeclared_pipeline_output_files(tmp_path, capsys):
         "      - name: figure-fork\n"
         "        type: plotnine\n"
         "        config:\n"
-        "          output: '{output_dir}/fig-fork.png'\n"
+        "          output: 'fig-fork.png'\n"
         "      - name: extract-stats\n"
         "        type: extract_trace_stats\n"
         "        config:\n"
-        "          output: '{output_dir}/trace_stats.csv'\n",
+        "          output: 'trace_stats.csv'\n",
         encoding="utf-8",
     )
     _write(tmp_path / "fig-fork.png")

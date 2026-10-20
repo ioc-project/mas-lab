@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 
 logger = logging.getLogger(__name__)
 
@@ -104,11 +105,9 @@ class GatherLevelStep(PipelineStep):
             rows = gather_records([df.to_dict(orient="records")], annotate=annotate)
             df = pd.DataFrame(rows) if rows else df.iloc[0:0]
 
-        output_dir = Path(config["output_dir"]) if config.get("output_dir") else ctx.output_dir
-        output_path = Path(config.get("output", f"data.{fmt}"))
-        if not output_path.is_absolute():
-            output_path = output_dir / output_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, f"data.{fmt}", config, name_keys=(), mkdir=True
+        )
         if fmt == "parquet":
             df.to_parquet(output_path, index=False)
         else:

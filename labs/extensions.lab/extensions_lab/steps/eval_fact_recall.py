@@ -33,10 +33,9 @@ Configuration
     - name: eval-fact-recall
       type: eval_fact_recall
       config:
-        runs_dir: "{output_dir}"
         dataset: ./datasets/fact-recall.yaml
-        output_runs: "{output_dir}/results/fact_recall_runs.csv"
-        output_summary: "{output_dir}/results/fact_recall_summary.csv"
+        output_runs: "results/fact_recall_runs.csv"
+        output_summary: "results/fact_recall_summary.csv"
 """
 from __future__ import annotations
 
@@ -45,6 +44,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import (
     PipelineStep,
     StepOutput,
@@ -241,10 +244,7 @@ class EvalFactRecallStep(PipelineStep):
         cfg = self.config
 
         # Resolve paths
-        runs_dir_raw = cfg.get("runs_dir") or ""
-        runs_dir = Path(runs_dir_raw).expanduser() if runs_dir_raw else getattr(ctx, "output_dir", Path("."))
-        if not runs_dir.is_absolute() and ctx.pipeline.config_path:
-            runs_dir = (ctx.pipeline.config_path.parent / runs_dir).resolve()
+        runs_dir = resolve_step_input_path(ctx, self.name, cfg, "runs_dir", ".")
 
         dataset_raw = cfg.get("dataset", "")
         dataset_path = Path(str(dataset_raw)).expanduser()
@@ -300,20 +300,19 @@ class EvalFactRecallStep(PipelineStep):
         df = pd.DataFrame(rows)
 
         # Write per-run CSV
-        output_runs_raw = cfg.get("output_runs", "{output_dir}/results/fact_recall_runs.csv")
-        output_runs = Path(str(output_runs_raw)).expanduser()
-        if not output_runs.is_absolute() and hasattr(ctx, "output_dir"):
-            output_runs = ctx.output_dir / output_runs
-        output_runs.parent.mkdir(parents=True, exist_ok=True)
+        output_runs = resolve_step_artifact_path(
+            ctx, None, self.name, "fact_recall_runs.csv", cfg,
+            key="output_runs", default_subdir="results", name_keys=(), mkdir=True,
+        )
         df.to_csv(output_runs, index=False)
 
         # Build summary: mean ± std per (scenario, group)
         files = [output_runs]
         summary_df = pd.DataFrame()
-        output_summary_raw = cfg.get("output_summary", "{output_dir}/results/fact_recall_summary.csv")
-        output_summary = Path(str(output_summary_raw)).expanduser()
-        if not output_summary.is_absolute() and hasattr(ctx, "output_dir"):
-            output_summary = ctx.output_dir / output_summary
+        output_summary = resolve_step_artifact_path(
+            ctx, None, self.name, "fact_recall_summary.csv", cfg,
+            key="output_summary", default_subdir="results", name_keys=(), mkdir=True,
+        )
 
         if not df.empty:
             numeric_cols = ["precision", "recall", "f1", "hit_at_1", "n_retrieved", "n_expected", "n_correct"]
@@ -326,7 +325,6 @@ class EvalFactRecallStep(PipelineStep):
                         row[f"{col}_std"] = round(gdf[col].std(), 4)
                 summary_rows.append(row)
             summary_df = pd.DataFrame(summary_rows)
-            output_summary.parent.mkdir(parents=True, exist_ok=True)
             summary_df.to_csv(output_summary, index=False)
             files.append(output_summary)
 

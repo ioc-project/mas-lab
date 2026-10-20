@@ -82,17 +82,15 @@ experiment:
   post:
     - name: extract-trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}
 
     - name: eval-fact-recall
       type: extensions_lab.steps.eval_fact_recall:EvalFactRecallStep
       depends_on: [extract-trace-stats]
       config:
-        runs_dir: "{output_dir}"
         dataset: ./datasets/fact-recall-smoke.yaml
-        output_runs: "{output_dir}/results/fact_recall_runs.csv"
-        output_summary: "{output_dir}/results/fact_recall_summary.csv"
+        output_runs: "results/fact_recall_runs.csv"
+        output_summary: "results/fact_recall_summary.csv"
         letta_scenarios: [with-letta-factrecall]
         n_seeded_facts: 100
 
@@ -100,25 +98,25 @@ experiment:
       type: extensions_lab.steps.figure_recall_summary:FigureRecallSummaryStep
       depends_on: [eval-fact-recall]
       config:
-        summary_csv: "{output_dir}/results/fact_recall_summary.csv"
-        output:      "{output_dir}/results/fig_recall_summary.png"
+        summary_csv: "results/fact_recall_summary.csv"
+        output:      "results/fig_recall_summary.png"
         dpi: 150
 
     - name: figure-evidence
       type: extensions_lab.steps.figure_smoke_evidence:FigureSmokeEvidenceStep
       depends_on: [eval-fact-recall]
       config:
-        runs_csv:          "{output_dir}/results/fact_recall_runs.csv"
-        results_csv:       "{output_dir}/results.csv"
-        output_provenance: "{output_dir}/results/fig_smoke_provenance.png"
-        output_calls:      "{output_dir}/results/fig_smoke_calls.png"
+        runs_csv:          "results/fact_recall_runs.csv"
+        results_csv:       "results.csv"
+        output_provenance: "results/fig_smoke_provenance.png"
+        output_calls:      "results/fig_smoke_calls.png"
         dpi: 150
 
     - name: figure-provenance-record
       type: extensions_lab.steps.figure_provenance_record:FigureProvenanceRecordStep
       depends_on: [eval-fact-recall]
       config:
-        results_csv: "{output_dir}/results.csv"
+        results_csv: "results.csv"
         item_id: k1_q04
-        output: "{output_dir}/results/fig_provenance_record.png"
+        output: "results/fig_provenance_record.png"
         dpi: 150

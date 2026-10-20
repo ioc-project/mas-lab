@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Optional
 # resolves one of its steps at startup, so any import problem surfaces there —
 # never mid-execution. (The framework base is import-light and mas.runtime-free.)
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.lab.benchmark.pipeline.run_artifacts import run_dir_from_ctx
 
 from mas.library.telemetry.artifact import OtelSpanSet
@@ -94,7 +95,9 @@ class EventsToOtelStep(PipelineStep):
             )
 
         output_dir = ctx.get_step_output_dir(self.name)
-        out_name = config.get("output_filename") or "otel_sdk_spans.jsonl"
+        out_name = check_simple_name(
+            self.name, "output_filename", config.get("output_filename") or "otel_sdk_spans.jsonl"
+        )
         layers = parse_export_layers(config)
         span_set = run_convert(
             events_path,
@@ -290,7 +293,9 @@ class ClickhouseDumpStep(PipelineStep):
         )
         output_dir = ctx.get_step_output_dir(self.name)
         out_path = span_set.save(
-            output_dir / (config.get("output_filename") or "otel_sdk_spans.jsonl")
+            output_dir / check_simple_name(
+                self.name, "output_filename", config.get("output_filename") or "otel_sdk_spans.jsonl"
+            )
         )
         return StepOutput(
             data={"otel_path": str(out_path), "span_count": span_set.span_count},

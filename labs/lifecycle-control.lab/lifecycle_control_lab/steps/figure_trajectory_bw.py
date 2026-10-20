@@ -3,23 +3,18 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path
+from ._helpers import execute_trace_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
 
-logger = logging.getLogger(__name__)
-
-
 def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: Path) -> None:
     import pathlib, re, inspect, math
-
 
     # ---------------------------------------------------------------------------
     # B&W colour map — dark hex → print-ready greyscale
@@ -56,13 +51,11 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         "#ffffff": "#ffffff",  # keep white
     }
 
-
     def bw(svg: str) -> str:
         """Replace hex colour values in SVG with B&W equivalents."""
         def _sub(m: re.Match) -> str:
             return BW.get(m.group(0).lower(), m.group(0))
         return re.sub(r"#[0-9a-fA-F]{6}", _sub, svg)
-
 
     # ---------------------------------------------------------------------------
     # Patch the multilevel_trajectory renderer
@@ -100,7 +93,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         load_trace,
     )
 
-
     def gen_panel(trace_path: pathlib.Path, title: str) -> str:
         """Generate one B&W SVG panel from a trace file."""
         trace = load_trace(trace_path)
@@ -113,7 +105,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         svg = re.sub(r'font-size="1[0-9]"', 'font-size="9"', svg)
         return svg
 
-
     def parse_svg(svg: str) -> tuple[float, float, str]:
         """Return (width, height, inner_content)."""
         m = re.search(r'viewBox="0 0 ([0-9.]+) ([0-9.]+)"', svg)
@@ -121,7 +112,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         w, h = float(m.group(1)), float(m.group(2))
         inner = re.sub(r"<svg[^>]+>", "", svg).replace("</svg>", "").strip()
         return w, h, inner
-
 
     def combine(inner_b: str, wb: float, hb: float,
                 inner_g: str, wg: float, hg: float) -> str:
@@ -178,27 +168,10 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         return "\n".join(lines)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-
 class FigureTrajectoryBwStep(PipelineStep):
     type = "figure_trajectory_bw"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        trace_baseline_path = resolve_path(
-            cfg.get("trace_baseline", "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        trace_guardrail_path = resolve_path(
-            cfg.get("trace_guardrail", "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig_trajectory.svg"), out_dir)
-        render(output_path, trace_baseline_path, trace_guardrail_path)
-        logger.info("Wrote %s", output_path)
-        files = [output_path]
-        pdf = output_path.with_suffix(".pdf")
-        if pdf.exists():
-            files.append(pdf)
-        return StepOutput(files=files, metadata={"output": str(output_path)})
-
+        return execute_trace_figure(ctx, self, render)
 
 register_step_type("figure_trajectory_bw", FigureTrajectoryBwStep)

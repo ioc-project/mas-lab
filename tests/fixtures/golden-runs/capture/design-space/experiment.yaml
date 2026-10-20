@@ -26,5 +26,4 @@ experiment:
   post:
     - name: trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}

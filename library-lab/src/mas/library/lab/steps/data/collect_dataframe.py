@@ -70,6 +70,11 @@ if TYPE_CHECKING:
     import pandas as pd
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_root,
+    step_artifact_relpath,
+)
 from mas.lab.benchmark.pipeline.resources import Artifact, Scope
 from mas.lab.benchmark.results import ExperimentResults
 
@@ -114,14 +119,9 @@ class CollectDataFrameStep(PipelineStep):
 
     @property
     def output_artifacts(self) -> List[Tuple[str, Artifact]]:
-        output_raw = self.config.get("output", "results.csv")
-        output_path = Path(output_raw)
-        artifact = Artifact(name=output_path.stem, format="csv", scope=Scope.EXPERIMENT)
-        output_dir_raw = self.config.get("output_dir", "")
-        if output_dir_raw and not output_path.is_absolute():
-            artifact._resolved_path = Path(output_dir_raw) / output_path  # type: ignore[attr-defined]
-        elif output_path.is_absolute():
-            artifact._resolved_path = output_path  # type: ignore[attr-defined]
+        rel = step_artifact_relpath(self.name, "results.csv", self.config, name_keys=())
+        artifact = Artifact(name=Path(rel).stem, format="csv", scope=Scope.EXPERIMENT)
+        artifact._relative_path = rel  # type: ignore[attr-defined]
         return [("csv_path", artifact)]
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
@@ -131,13 +131,10 @@ class CollectDataFrameStep(PipelineStep):
         filename: str = config.get("filename", "metrics.json")
         flatten: Optional[str] = config.get("flatten")
 
-        output_dir_raw = config.get("output_dir", "")
-        output_dir = Path(output_dir_raw) if output_dir_raw else ctx.output_dir
-
-        output_raw = config.get("output", "results.csv")
-        output_path = Path(output_raw)
-        if not output_path.is_absolute():
-            output_path = output_dir / output_path
+        output_dir = resolve_step_root(ctx, config, step=self.name)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "results.csv", config, name_keys=(), mkdir=True
+        )
 
         # ── Mode 1: stream — fan-in from upstream step outputs ───────────────
         # When depends_on is set the runner has already expanded each per-run /
@@ -193,7 +190,6 @@ class CollectDataFrameStep(PipelineStep):
         if df.empty:
             logger.warning("collect_dataframe: no data found in %s", output_dir)
         else:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
             df.to_csv(output_path, index=False)
             logger.info(
                 "collect_dataframe: wrote %d rows × %d cols to %s",
@@ -203,5 +199,5 @@ class CollectDataFrameStep(PipelineStep):
         return StepOutput(
             data={"df": df, "csv_path": str(output_path)},
             files=[output_path] if output_path.exists() else [],
-            metadata={"rows": len(df), "cols": len(df.columns), "source": output_dir_raw or str(output_dir)},
+            metadata={"rows": len(df), "cols": len(df.columns), "source": str(output_dir)},
         )

@@ -30,6 +30,11 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    check_simple_name,
+    resolve_step_folder,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 
 if TYPE_CHECKING:
@@ -105,8 +110,8 @@ class PlotPipelineStep(PipelineStep):
                     self.name, len(upstream_data) if hasattr(upstream_data, "__len__") else "?",
                 )
 
-        out_dir = ctx.output_dir / "plots"
-        stem    = self.config.get("stem",    self.name)
+        out_dir = resolve_step_folder(ctx, self.name, self.config, "plots", mkdir=True)
+        stem    = check_simple_name(self.name, "stem", self.config.get("stem", self.name))
         formats = self.config.get("formats", plot.default_formats)
         width   = self.config.get("width")
         height  = self.config.get("height")
@@ -156,10 +161,10 @@ class PlotPipelineStep(PipelineStep):
                 f"'{class_path}' is not a MASPlot subclass."
             )
         target = self.config.get("target", cls.default_target)
-        results_dir = self.config.get("results_dir")
+        results_dir = resolve_step_input_path(ctx, self.name, self.config, "results_dir")
         data = None
-        if results_dir:
-            data = Path(results_dir).expanduser()
+        if results_dir is not None:
+            data = results_dir
         elif ctx.output_dir and ctx.output_dir.exists():
             data = ctx.output_dir
         return cls(data=data, target=target)

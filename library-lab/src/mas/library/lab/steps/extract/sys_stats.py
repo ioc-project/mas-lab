@@ -33,9 +33,8 @@ denials           int    Number of policy-denial outcomes.
 
 Configuration
 -------------
-output_dir   str   Root directory to scan. Defaults to ``ctx.output_dir``.
-output       str   Output CSV path (default: ``sys_stats.csv`` in
-                   ``<output_dir>/results/``).
+output       str   Relative output path (default: ``sys_stats.csv`` in
+                   ``<level folder>/results/``).
 scenarios    list  Optional list of scenario IDs to include.
 item_glob    str   Glob pattern for item directories (default: ``item*``).
 run_glob     str   Glob pattern for run dirs (default: ``r*``).
@@ -44,8 +43,7 @@ Example YAML::
 
     - name: extract-sys-stats
       type: extract_sys_stats
-      config:
-        output: "{output_dir}/results/sys_stats.csv"
+      config: {}   # writes results/sys_stats.csv
 """
 
 import csv
@@ -56,6 +54,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -146,19 +148,10 @@ class ExtractSysStatsStep(PipelineStep):
     async def execute(self, ctx: "Any") -> StepOutput:  # noqa: F821
         config = self.config
 
-        output_dir_raw = config.get("output_dir", "")
-        output_dir = (
-            Path(output_dir_raw).expanduser() if output_dir_raw else ctx.output_dir
+        output_dir = resolve_step_root(ctx, config, step=self.name)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "sys_stats.csv", config, default_subdir="results", mkdir=True
         )
-
-        output_raw = config.get("output", "")
-        if output_raw:
-            output_path = Path(output_raw).expanduser()
-            if not output_path.is_absolute():
-                output_path = output_dir / output_path
-        else:
-            output_path = output_dir / "results" / "sys_stats.csv"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         scenario_filter: Optional[List[str]] = config.get("scenarios")
         item_glob: str = config.get("item_glob", "item*")

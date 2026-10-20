@@ -11,7 +11,7 @@ any JSON artifacts, not just metrics.json.
 
 Configuration
 -------------
-input_dir    str           Root directory to scan.
+input_dir    str           Folder to scan, relative to the level folder (default: ".").
 glob         str           Glob pattern for JSON files (default: "**/*.json").
 columns      dict          Column mapping: {csv_col: json_path}.
                            JSON paths use dot notation: "session.goal_success_rate.value".
@@ -22,7 +22,7 @@ columns      dict          Column mapping: {csv_col: json_path}.
                            Pipe transforms (append after path):
                              ``|re:PATTERN``  — apply regex; use first capture group
                              e.g.  ``_parent.1|re:(\\d+)``  →  "item1" becomes "1"
-output       str           Output CSV path (default: "data.csv").
+output       str           Relative output path (default: "data.csv").
 flatten      str           If set, flatten a nested dict into rows.
                            E.g. ``flatten: session`` expands session keys into
                            rows with ``_key`` and ``_entry.*`` columns.
@@ -32,7 +32,6 @@ Example YAML::
     - name: collect
       type: to_dataframe
       config:
-        input_dir: "{output_dir}"
         glob: "*/item*/r*/metrics.json"
         flatten: session
         columns:
@@ -41,7 +40,6 @@ Example YAML::
           run_idx: "_parent.0|re:(\\d+)"
           metric: _key
           value: _entry.value
-        output: results.csv
 """
 
 import csv
@@ -52,6 +50,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+    step_artifact_relpath,
+)
 from mas.lab.benchmark.pipeline.resources import Artifact, Scope
 
 logger = logging.getLogger(__name__)
@@ -99,31 +102,24 @@ class ToDataFrameStep(PipelineStep):
 
     @property
     def output_artifacts(self) -> List[Tuple[str, Artifact]]:
-        input_dir = Path(self.config.get("input_dir", ""))
-        output_raw = self.config.get("output", "data.csv")
-        output_path = Path(output_raw)
-        artifact = Artifact(name=output_path.stem, format="csv", scope=Scope.EXPERIMENT)
-        base = input_dir if input_dir else None
-        if base is not None and not output_path.is_absolute():
-            artifact._resolved_path = base / output_path  # type: ignore[attr-defined]
-        elif output_path.is_absolute():
-            artifact._resolved_path = output_path  # type: ignore[attr-defined]
+        rel = step_artifact_relpath(self.name, "data.csv", self.config)
+        artifact = Artifact(name=Path(rel).stem, format="csv", scope=Scope.EXPERIMENT)
+        artifact._relative_path = rel  # type: ignore[attr-defined]
         return [("csv_path", artifact)]
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
         config = self.config
 
-        input_dir = Path(config.get("input_dir", ""))
-        if not input_dir or not input_dir.exists():
-            raise ValueError(f"ToDataFrameStep '{self.name}': input_dir required and must exist")
+        input_dir = resolve_step_input_path(ctx, self.name, config, "input_dir", ".")
+        if input_dir is None or not input_dir.exists():
+            raise ValueError(f"ToDataFrameStep '{self.name}': input_dir must exist")
 
         glob_pattern = config.get("glob", "**/*.json")
         columns: Dict[str, str] = config.get("columns", {})
         flatten_key: Optional[str] = config.get("flatten")
-        output_raw = config.get("output", "data.csv")
-        output_path = Path(output_raw)
-        if not output_path.is_absolute():
-            output_path = input_dir / output_path
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "data.csv", config, mkdir=True
+        )
 
         json_files = sorted(input_dir.glob(glob_pattern))
         if not json_files:
@@ -187,7 +183,6 @@ class ToDataFrameStep(PipelineStep):
             return StepOutput(data={"rows": 0}, metadata={"error": "no data"})
 
         fieldnames = list(columns.keys()) if columns else list(rows[0].keys())
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()

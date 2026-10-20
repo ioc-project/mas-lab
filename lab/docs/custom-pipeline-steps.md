@@ -227,14 +227,13 @@ register_step_type("my_eval", MyEvalStep)
 }
 ```
 
-`collect_metrics` picks this up automatically when its `output_dir` points at
-the benchmark root:
+`collect_metrics` picks this up automatically from the benchmark output folder:
 
 ```yaml
 - name: collect-metrics
   type: collect_metrics
   config:
-    output: "{output_dir}/results/tidy.csv"
+    output: results/tidy.csv
 ```
 
 Downstream `compute_ci` and `plotnine` steps can then reference `@collect-metrics`:
@@ -248,7 +247,7 @@ Downstream `compute_ci` and `plotnine` steps can then reference `@collect-metric
     groupby: [scenario]
     metrics: [my_metric]
     extra_cols: [latency_s]
-    output: "{output_dir}/results/ci.csv"
+    output: results/ci.csv
 
 - name: figure
   type: plotnine
@@ -257,7 +256,18 @@ Downstream `compute_ci` and `plotnine` steps can then reference `@collect-metric
     data: "@compute-ci"
     mapping: { x: latency_s_mean, y: mean, color: scenario }
     geom: point
-    output: "{output_dir}/results/figure.png"
+    output: results/figure.png
+```
+
+Step output locations are relative to the level folder; never build absolute paths in a
+custom step. Resolve them with the framework helper, which applies the default name, the
+optional `subdir` / `filename` / relative `output` and rejects anything outside the folder:
+
+```python
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
+
+out = resolve_step_artifact_path(ctx, None, self.name, "tidy.csv", self.config,
+                                 default_subdir="results")
 ```
 
 ---

@@ -63,7 +63,7 @@ Declare figures on experiment-level `post:` (CLI `--depth exp`), not a
       type: plotnine
       depends_on: [gather-experiment, compute-ci]
       config:
-        output: '{output_dir}/results/figure-02-overhead-quality.png'
+        output: results/figure-02-overhead-quality.png
 ```
 
 ## Example labs

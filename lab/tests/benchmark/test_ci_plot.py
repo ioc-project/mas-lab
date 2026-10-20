@@ -71,7 +71,8 @@ class TestComputeCI:
 # ---------------------------------------------------------------------------
 
 class FakeExecutionContext:
-    pass
+    def __init__(self, output_dir=None):
+        self.output_dir = output_dir
 
 
 def _write_fake_results(path: Path) -> None:
@@ -109,14 +110,14 @@ async def test_ci_step_writes_summary_csv(tmp_path):
     step = CIPlotStep(
         name="ci-test",
         config={
-            "data": str(data_csv),
+            "data": "results.csv",
             "metrics": ["goal_success_rate"],
             "groupby": ["scenario", "item_group", "metric"],
             "ci_method": "t",
             "ci_level": 0.95,
         },
     )
-    output = await step.execute(FakeExecutionContext())
+    output = await step.execute(FakeExecutionContext(tmp_path))
 
     summary_path = tmp_path / "ci_summary.csv"
     assert summary_path.exists(), "ci_summary.csv should be created"
@@ -149,7 +150,7 @@ async def test_ci_step_warns_on_single_run(tmp_path, caplog):
     step = CIPlotStep(
         name="ci-warn",
         config={
-            "data": str(data_csv),
+            "data": "results.csv",
             "groupby": ["scenario", "metric"],
             "ci_method": "t",
             "ci_level": 0.95,
@@ -157,7 +158,7 @@ async def test_ci_step_warns_on_single_run(tmp_path, caplog):
         },
     )
     with caplog.at_level(logging.WARNING, logger="mas.library.lab.steps.viz.ci_plot"):
-        await step.execute(FakeExecutionContext())
+        await step.execute(FakeExecutionContext(tmp_path))
 
     assert any("only 1 run" in rec.message for rec in caplog.records)
 
@@ -168,10 +169,10 @@ async def test_ci_step_missing_data_raises(tmp_path):
 
     step = CIPlotStep(
         name="ci-missing",
-        config={"data": str(tmp_path / "nonexistent.csv"), "groupby": ["scenario"]},
+        config={"data": "nonexistent.csv", "groupby": ["scenario"]},
     )
     with pytest.raises(FileNotFoundError):
-        await step.execute(FakeExecutionContext())
+        await step.execute(FakeExecutionContext(tmp_path))
 
 
 @pytest.mark.asyncio
@@ -187,10 +188,10 @@ async def test_ci_step_invalid_metric_filter_raises(tmp_path):
     step = CIPlotStep(
         name="ci-bad-filter",
         config={
-            "data": str(data_csv),
+            "data": "results.csv",
             "metrics": ["nonexistent_metric"],
             "groupby": ["scenario"],
         },
     )
     with pytest.raises(ValueError, match="no rows remain"):
-        await step.execute(FakeExecutionContext())
+        await step.execute(FakeExecutionContext(tmp_path))

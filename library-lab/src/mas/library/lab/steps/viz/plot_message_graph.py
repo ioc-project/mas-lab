@@ -32,10 +32,11 @@ Example pipeline YAML::
 """
 
 import logging
-from pathlib import Path
 
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_named_file
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
+from mas.library.lab.steps._io import path_from_config_or_deps
 
 logger = logging.getLogger(__name__)
 
@@ -59,40 +60,10 @@ class PlotMessageGraphStep(PipelineStep):
 
         config   = self.config
         fmt      = config.get("format", "svg").lower()
-        filename = config.get("filename", "message-graph")
         title    = config.get("title", "")
-
-        # ── resolve kg_path ───────────────────────────────────────────────
-        kg_path: str | None = config.get("kg_path")
-
-        if not kg_path:
-            for dep_name in self.depends_on:
-                dep_out = ctx.step_outputs.get(dep_name)
-                if dep_out:
-                    if "kg_path" in dep_out.data:
-                        kg_path = dep_out.data["kg_path"]
-                        logger.info(
-                            "Step '%s': using kg_path from dependency '%s': %s",
-                            self.name, dep_name, kg_path,
-                        )
-                        break
-
-        if not kg_path:
-            raise ValueError(
-                f"Step '{self.name}': no kg_path in config and no 'kg_path' "
-                "found in dependency outputs."
-            )
-
-        # ── resolve relative paths ────────────────────────────────────────
-        resolved_path = Path(kg_path).expanduser()
-        if not resolved_path.is_absolute():
-            pipeline_dir = (
-                ctx.pipeline.config_path.parent
-                if ctx.pipeline.config_path
-                else Path.cwd()
-            )
-            candidate = (pipeline_dir / resolved_path).resolve()
-            resolved_path = candidate if candidate.exists() else (Path.cwd() / resolved_path).resolve()
+        resolved_path = path_from_config_or_deps(
+            self, ctx, config, ("kg_path",), ("kg_path",)
+        )
 
         # ── load & render ────────────────────────────────────────────────
         kg = load_kg(resolved_path)
@@ -111,9 +82,9 @@ class PlotMessageGraphStep(PipelineStep):
 
         # ── write output ─────────────────────────────────────────────────
         ext = ".html" if fmt == "html" else ".svg"
-        output_dir = ctx.output_dir / "plots"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        out_file = output_dir / f"{filename}{ext}"
+        out_file = resolve_step_named_file(
+            ctx, self.name, config, "message-graph", default_subdir="plots", suffix=ext
+        )
         out_file.write_text(content, encoding="utf-8")
 
         logger.info(

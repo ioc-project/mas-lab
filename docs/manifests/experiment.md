@@ -254,7 +254,7 @@ A step's `in:` names an artifact declared at the level **below** its own scope â
 executor resolves every child instance's file path and passes them as
 `config["artifact_paths"]`. `out:` just documents which of this level's own declared
 artifacts the step produces; nothing enforces it beyond the step's own config
-(`output:`/`output_dir:`).
+(`output:` / `subdir:`, relative to the level folder).
 
 ---
 

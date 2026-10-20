@@ -12,8 +12,8 @@ No extra dependencies — pure-stdlib SVG generation.
 Configuration
 -------------
 output     str     Output path (.svg or .png via cairosvg if installed).
-                   Supports ``{output_dir}`` placeholder.
-                   Default: ``"{output_dir}/results/pipeline.svg"``
+                   Relative path under the level folder.
+                   Default: ``results/pipeline.svg``
 direction  str     ``"LR"`` (left-to-right) or ``"TB"`` (top-to-bottom).
                    Default: ``"LR"``
 theme      str     ``"dark"`` (matches studio) or ``"light"``.
@@ -32,7 +32,6 @@ Example YAML — auto-diagram of the running pipeline::
         - name: pipeline-diagram
           type: pipeline_diagram
           config:
-            output: "{output_dir}/results/pipeline.svg"
             title: "Post-processing pipeline"
 
 Example YAML — explicit step list (for documentation)::
@@ -44,7 +43,6 @@ Example YAML — explicit step list (for documentation)::
           - {name: collect-metrics, type: collect_metrics}
           - {name: compute-ci,      type: compute_ci,      depends_on: [collect-metrics]}
           - {name: ci-figure,       type: plotnine,        depends_on: [compute-ci]}
-        output: "{output_dir}/results/pipeline.svg"
 """
 
 import logging
@@ -54,6 +52,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 
 logger = logging.getLogger(__name__)
 
@@ -520,11 +519,9 @@ class PipelineDiagramStep(PipelineStep):
             steps = [anchor] + steps
 
         # ── Output path ───────────────────────────────────────────────────────
-        raw_out = cfg.get("output", "{output_dir}/results/pipeline.svg")
-        output_dir: Path = getattr(ctx, "output_dir", Path("."))
-        raw_out = raw_out.replace("{output_dir}", str(output_dir))
-        output_path = Path(raw_out)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "pipeline.svg", cfg, default_subdir="results", mkdir=True
+        )
 
         # ── Render ────────────────────────────────────────────────────────────
         direction = cfg.get("direction", "LR")

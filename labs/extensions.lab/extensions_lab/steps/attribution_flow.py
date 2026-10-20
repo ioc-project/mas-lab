@@ -29,9 +29,8 @@ Configuration
     - name: attribution-data
       type: attribution_flow
       config:
-        runs_dir: "{output_dir}"
         dataset: ./datasets/extensions-queries.yaml
-        output: "{output_dir}/results/attribution.csv"
+        output: "results/attribution.csv"
 """
 from __future__ import annotations
 
@@ -41,6 +40,10 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import (
     PipelineStep,
     StepOutput,
@@ -150,10 +153,7 @@ class AttributionFlowStep(PipelineStep):
         import pandas as pd
 
         cfg = self.config
-        runs_dir_raw = cfg.get("runs_dir") or ""
-        runs_dir = Path(runs_dir_raw).expanduser() if runs_dir_raw else getattr(ctx, "output_dir", Path("."))
-        if not runs_dir.is_absolute() and ctx.pipeline.config_path:
-            runs_dir = (ctx.pipeline.config_path.parent / runs_dir).resolve()
+        runs_dir = resolve_step_input_path(ctx, self.name, cfg, "runs_dir", ".")
 
         dataset_path_raw = cfg.get("dataset", "")
         dataset_path = Path(str(dataset_path_raw)).expanduser() if dataset_path_raw else None
@@ -186,11 +186,9 @@ class AttributionFlowStep(PipelineStep):
             return StepOutput(data={"df": None}, metadata={"warning": "empty"})
 
         df = pd.DataFrame(rows)
-        output_raw = cfg.get("output", "attribution.csv")
-        output_path = Path(str(output_raw)).expanduser()
-        if not output_path.is_absolute() and hasattr(ctx, "output_dir"):
-            output_path = ctx.output_dir / output_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "attribution.csv", cfg, name_keys=(), mkdir=True
+        )
         df.to_csv(output_path, index=False)
         logger.info("AttributionFlowStep '%s': %d runs → %s", self.name, len(df), output_path)
         return StepOutput(

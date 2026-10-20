@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_input_path
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 
 logger = logging.getLogger(__name__)
@@ -99,15 +100,15 @@ class ExtractTrajectoriesStep(PipelineStep):
 
         # Locate the benchmark output dir (parent of this step's output dir)
         bench_dir = ctx.output_dir
-        runs_dir = self.config.get("runs_dir", "runs")
         overwrite = self.config.get("overwrite", False)
 
         # --- Load the results CSV(s) ---
         import glob
         import csv
 
-        csv_pattern = self.config.get("csv_file", "results.csv")
-        csv_path_fixed = bench_dir / csv_pattern
+        csv_path_fixed = resolve_step_input_path(
+            ctx, self.name, self.config, "csv_file", "results.csv"
+        )
         if csv_path_fixed.exists():
             csv_matches = [str(csv_path_fixed)]
         else:
@@ -126,7 +127,7 @@ class ExtractTrajectoriesStep(PipelineStep):
 
         # Fallback: discover orphaned run dirs that have an events.jsonl but no
         # CSV entry (e.g. the process was killed before the CSV was written).
-        runs_base = bench_dir / runs_dir
+        runs_base = resolve_step_input_path(ctx, self.name, self.config, "runs_dir", "runs")
         if runs_base.is_dir():
             for run_dir in sorted(runs_base.iterdir()):
                 if not run_dir.is_dir():

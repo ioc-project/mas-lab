@@ -48,8 +48,8 @@
       "config": {
         "output": {
           "type": "string",
-          "default": "{output_dir}/results/trace_stats.csv",
-          "description": "Output CSV path"
+          "default": "results/trace_stats.csv",
+          "description": "Output CSV path, relative to the level folder (no absolute paths, no '..')"
         },
         "scenarios": {
           "type": "array",
@@ -484,20 +484,15 @@
       "phase": "post",
       "category": "evaluation",
       "config": {
-        "output_dir": {
-          "type": "string",
-          "default": "",
-          "description": "Root output directory (defaults to pipeline output_dir)"
-        },
         "output": {
           "type": "string",
-          "default": "metrics_results.csv",
-          "description": "Output CSV path (avoid 'results.csv' — reserved by benchmark engine)"
+          "default": "results.csv",
+          "description": "Output CSV path, relative to the level folder (no absolute paths, no '..')"
         },
         "run_glob": {
           "type": "string",
           "default": "*/*/r*",
-          "description": "Glob for run directories relative to output_dir"
+          "description": "Glob for run directories relative to the level folder"
         },
         "scenarios": {
           "type": "array",
@@ -567,8 +562,8 @@
         },
         "output": {
           "type": "string",
-          "default": "{output_dir}/ci_summary.csv",
-          "description": "Output CSV path"
+          "default": "ci_summary.csv",
+          "description": "Output CSV path, relative to the level folder (no absolute paths, no '..')"
         }
       }
     },
@@ -641,8 +636,8 @@
         },
         "output": {
           "type": "string",
-          "default": "{output_dir}/results/plot.png",
-          "description": "Output file path (png/svg/pdf)"
+          "default": "plot.png",
+          "description": "Output file path (png/svg/pdf), relative to the level folder (no absolute paths, no '..')"
         },
         "mapping": {
           "type": "object",

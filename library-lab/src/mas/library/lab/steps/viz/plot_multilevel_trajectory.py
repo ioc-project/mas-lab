@@ -37,10 +37,11 @@ Example pipeline YAML::
 
 import logging
 from pathlib import Path
-from typing import Any, Dict
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_named_file
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
+from mas.library.lab.steps._io import pipeline_config_dir, resolve_pipeline_relative
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +112,7 @@ class PlotMultilevelTrajectoryStep(PipelineStep):
         show_user_actors = bool(config.get("show_user_actors", True))
         show_provenance = bool(config.get("show_provenance", True))
 
-        pipeline_dir: Path | None = (
-            ctx.pipeline.config_path.parent
-            if ctx.pipeline is not None and getattr(ctx.pipeline, "config_path", None)
-            else None
-        )
-        annotations = _load_annotations(config, pipeline_dir)
+        annotations = _load_annotations(config, pipeline_config_dir(ctx))
 
         from mas.lab.benchmark.pipeline.run_artifacts import (
             resolve_run_events,
@@ -162,13 +158,7 @@ class PlotMultilevelTrajectoryStep(PipelineStep):
                 + missing_run_events_message(self.name, ctx)
             )
 
-        # --- Resolve relative paths ---
-        resolved_path = Path(log_path).expanduser()
-        if not resolved_path.is_absolute() and pipeline_dir:
-            candidate = (pipeline_dir / resolved_path).resolve()
-            resolved_path = candidate if candidate.exists() else (Path.cwd() / resolved_path).resolve()
-        elif not resolved_path.is_absolute():
-            resolved_path = (Path.cwd() / resolved_path).resolve()
+        resolved_path = resolve_pipeline_relative(ctx, log_path)
 
         # --- Load & render ---
         events = load_trace(resolved_path)
@@ -187,10 +177,16 @@ class PlotMultilevelTrajectoryStep(PipelineStep):
         artifact_key = str(config.get("artifact", "trajectory_native"))
         out_file = resolve_run_artifact(ctx, artifact_key, config)
         if not (ctx.scope_context.scenario and ctx.scope_context.test and ctx.scope_context.run):
-            output_dir = ctx.output_dir / "trajectories"
-            filename = str(config.get("filename", "trajectory-native"))
             ext = ".html" if fmt == "html" else ".svg"
-            out_file = output_dir / f"{filename}{ext}"
+            out_file = resolve_step_named_file(
+                ctx,
+                self.name,
+                config,
+                "trajectory-native",
+                default_subdir="trajectories",
+                suffix=ext,
+                mkdir=False,
+            )
         out_file.parent.mkdir(parents=True, exist_ok=True)
         out_file.write_text(rendered, encoding="utf-8")
 

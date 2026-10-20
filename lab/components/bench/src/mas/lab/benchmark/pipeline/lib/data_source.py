@@ -47,7 +47,7 @@ produces multiple named DataFrames, use descriptive keys and document them.
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -64,12 +64,16 @@ def resolve_dataframe(
     ctx: Optional["ExecutionContext"] = None,
     *,
     df_key: str = _DEFAULT_DF_KEY,
+    config: Optional[dict] = None,
+    step: Any = "",
 ) -> "pd.DataFrame":
     """Resolve *source* to a pandas DataFrame.
 
     Parameters
     ----------
     source  : ``@step-name``, ``@step-name:field``, or a file path string.
+              With a *ctx*, a file path must be relative and is read from the
+              level folder of the step (see ``artifact_paths``).
     ctx     : ExecutionContext — required for ``@`` references.
     df_key  : Default key to look up when using ``@step-name`` (no field part).
     """
@@ -147,7 +151,14 @@ def resolve_dataframe(
 
     # File path
     import pandas as pd
-    path = Path(source)
+    if ctx is not None:
+        from mas.lab.benchmark.pipeline.artifact_paths import (
+            resolve_step_input_path,
+        )
+
+        path = resolve_step_input_path(ctx, step or "data", {**(config or {}), "data": source}, "data")
+    else:
+        path = Path(source)
     if not path.exists():
         raise FileNotFoundError(f"resolve_dataframe: file not found: {path}")
 

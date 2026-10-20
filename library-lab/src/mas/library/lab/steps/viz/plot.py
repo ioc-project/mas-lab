@@ -36,6 +36,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name, resolve_step_folder
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 
@@ -90,8 +91,10 @@ class PlotStep(PipelineStep):
                 f"Step '{self.name}': no dependency data found for plot spec '{spec_name}'"
             )
 
-        output_dir = ctx.output_dir / "plots"
+        output_dir = resolve_step_folder(ctx, self.name, config, "plots", mkdir=True)
         filename = config.get("filename")
+        if filename:
+            check_simple_name(self.name, "filename", filename)
         output_file = render_plot(spec, data, output_dir, filename=filename)
 
         return StepOutput(

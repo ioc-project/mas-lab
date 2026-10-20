@@ -113,7 +113,7 @@ def _resolve_df(source: str, ctx: Any):
         raise ValueError(
             f"GovernanceOverheadStep: no DataFrame in step '{step_name}'"
         )
-    return __import__("pandas").read_csv(source)
+    return __import__("pandas").read_csv(source)  # a confined, resolved path
 
 
 def _short(name: str) -> str:
@@ -434,6 +434,10 @@ def _build_figure(
 
 try:
     from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
+    from mas.lab.benchmark.pipeline.artifact_paths import (
+        resolve_step_artifact_path,
+        resolve_step_input_path,
+    )
 
     class GovernanceOverheadStep(PipelineStep):
         """Render the governance-overhead dual-panel figure."""
@@ -446,15 +450,13 @@ try:
             if not data_source:
                 raise ValueError("GovernanceOverheadStep requires 'data' config key")
 
-            output_raw: str = cfg.get("output", "")
-            output_dir: Path = ctx.output_dir
-            if output_raw:
-                output_path = Path(output_raw.format(output_dir=str(output_dir))).expanduser()
-                if not output_path.is_absolute():
-                    output_path = output_dir / output_path
-            else:
-                output_path = output_dir / "results" / "fig_governance_overhead.png"
+            output_path = resolve_step_artifact_path(
+                ctx, None, self.name, "fig_governance_overhead.png", cfg,
+                default_subdir="results", name_keys=(), mkdir=True,
+            )
 
+            if not data_source.startswith("@"):
+                data_source = str(resolve_step_input_path(ctx, self.name, cfg, "data"))
             df = _resolve_df(data_source, ctx)
 
             _build_figure(

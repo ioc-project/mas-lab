@@ -3,19 +3,15 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path, resolve_trace_path
+from ._helpers import execute_trace_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
-
-logger = logging.getLogger(__name__)
-
 
 def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: Path) -> None:
     import json
@@ -80,7 +76,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
 
     FONT = "ui-monospace,SFMono-Regular,Consolas,Liberation Mono,monospace"
 
-
     # ---------------------------------------------------------------------------
     # Trace extraction
     # ---------------------------------------------------------------------------
@@ -88,7 +83,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
     def _load(path: pathlib.Path) -> list[dict]:
         with open(path) as f:
             return [json.loads(ln) for ln in f if ln.strip()]
-
 
     def extract_calls(events: list[dict]) -> dict[str, list[dict]]:
         """Return per-agent ordered call list from raw events.
@@ -139,7 +133,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
 
         return per_agent
 
-
     # ---------------------------------------------------------------------------
     # Geometry helpers
     # ---------------------------------------------------------------------------
@@ -148,18 +141,14 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         """SVG x-centre of column col (0-indexed from left of timeline)."""
         return LABEL_W + col * COL_W + COL_W / 2
 
-
     def bar_x(col: int) -> float:
         return LABEL_W + col * COL_W + BAR_GAP / 2
-
 
     def lane_top(lane_idx: int) -> float:
         return TITLE_H + lane_idx * LANE_H
 
-
     def lane_cy(lane_idx: int) -> float:
         return lane_top(lane_idx) + LANE_H / 2
-
 
     def call_col(agent_id: str, call_idx: int) -> int:
         """Map a call index to a global column number."""
@@ -169,14 +158,12 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             return N_INIT + N_PARALLEL + (call_idx - N_INIT)
         return N_INIT + call_idx
 
-
     # ---------------------------------------------------------------------------
     # SVG primitives
     # ---------------------------------------------------------------------------
 
     def _esc(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
 
     def rect(x: float, y: float, w: float, h: float, fill: str,
              stroke: str = "none", sw: float = 0.6, rx: float = 1.0,
@@ -191,7 +178,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f' fill="{fill}" rx="{rx:.1f}"{stroke_attr}/>'
         )
 
-
     def text(x: float, y: float, s: str, size: float, fill: str,
              anchor: str = "middle", weight: str = "normal",
              font: str = FONT) -> str:
@@ -201,7 +187,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f' fill="{fill}" font-family="{font}">{_esc(s)}</text>'
         )
 
-
     def line(x1: float, y1: float, x2: float, y2: float, stroke: str,
              sw: float = 0.5, dash: str = "") -> str:
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
@@ -209,7 +194,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}"'
             f' stroke="{stroke}" stroke-width="{sw:.1f}"{dash_attr}/>'
         )
-
 
     def arrow_down(x: float, y1: float, y2: float,
                    stroke: str = COL_DELEG, sw: float = 0.7) -> str:
@@ -221,7 +205,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f'<polygon points="{x:.2f},{y2:.2f} {x-ah:.2f},{y2-ah*1.6:.2f} {x+ah:.2f},{y2-ah*1.6:.2f}"'
             f' fill="{stroke}"/>'
         )
-
 
     # ---------------------------------------------------------------------------
     # Panel renderer
@@ -373,7 +356,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
 
         return "\n".join(parts)
 
-
     # ---------------------------------------------------------------------------
     # Combine two panels side-by-side
     # ---------------------------------------------------------------------------
@@ -399,7 +381,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         ]
         return "\n".join(lines)
 
-
     # ---------------------------------------------------------------------------
     # Main
     # ---------------------------------------------------------------------------
@@ -414,27 +395,10 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
     output_path.write_text(combined, encoding="utf-8")
     print(f"Saved → {output_path}")
 
-
 class FigureTrajectorySwimlaneStep(PipelineStep):
     type = "figure_trajectory_swimlane"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        trace_baseline_path = resolve_trace_path(
-            cfg.get("trace_baseline", "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        trace_guardrail_path = resolve_trace_path(
-            cfg.get("trace_guardrail", "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig_trajectory.svg"), out_dir)
-        render(output_path, trace_baseline_path, trace_guardrail_path)
-        logger.info("Wrote %s", output_path)
-        files = [output_path]
-        pdf = output_path.with_suffix(".pdf")
-        if pdf.exists():
-            files.append(pdf)
-        return StepOutput(files=files, metadata={"output": str(output_path)})
-
+        return execute_trace_figure(ctx, self, render)
 
 register_step_type("figure_trajectory_swimlane", FigureTrajectorySwimlaneStep)

@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_root
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.reproducibility import OutputSchema
 
@@ -36,7 +37,7 @@ class ValidateOutputsStep(PipelineStep):
 
     async def execute(self, ctx: Any) -> StepOutput:
         config: Dict[str, Any] = self.config
-        output_dir = Path(config["output_dir"]) if config.get("output_dir") else ctx.output_dir
+        output_dir = resolve_step_root(ctx, config, step=self.name)
         warn_only = bool(config.get("warn_only", True))
 
         schema_dict = config.get("schema")

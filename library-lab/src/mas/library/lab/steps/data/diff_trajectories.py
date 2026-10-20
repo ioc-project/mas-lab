@@ -7,7 +7,7 @@ Configuration
 -------------
 baseline_dir    str   Directory containing baseline run folders (required)
 candidate_dir   str   Directory containing candidate run folders (required)
-output          str   Output JSON path (default: trajectory_diff.json)
+output          str   Relative output path (default: trajectory_diff.json)
 match_on        list  Path segments to pair runs (default: [scenario, item_id, run])
 
 Example YAML::
@@ -25,6 +25,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, TYPE_CHECKING
 
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 
 if TYPE_CHECKING:
@@ -83,7 +84,9 @@ class DiffTrajectoriesStep(PipelineStep):
             )
 
         match_on = list(cfg.get("match_on", ["item", "r"]))
-        output_path = Path(cfg.get("output", "trajectory_diff.json"))
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "trajectory_diff.json", cfg, name_keys=(), mkdir=True
+        )
 
         baseline = _collect_trajectories(baseline_dir)
         candidate = _collect_trajectories(candidate_dir)

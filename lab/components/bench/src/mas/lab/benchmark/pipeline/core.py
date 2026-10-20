@@ -453,7 +453,10 @@ class Pipeline:
             }
 
         config = PipelineConfig.from_dict(pipeline_data)
-        steps = [PipelineStep.from_dict(step_data) for step_data in pipeline_data.get("steps", [])]
+        from mas.lab.benchmark.pipeline.artifact_paths import validate_step_dicts
+
+        step_dicts = validate_step_dicts(pipeline_data.get("steps", []))
+        steps = [PipelineStep.from_dict(step_data) for step_data in step_dicts]
 
         return cls(config=config, steps=steps, config_path=path)
 

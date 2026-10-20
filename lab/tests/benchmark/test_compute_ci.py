@@ -224,15 +224,15 @@ async def test_compute_ci_step_from_csv_file(tmp_path):
     step = ComputeCIStep(
         name="compute-ci",
         config={
-            "data": str(csv_path),
+            "data": "results.csv",
             "metrics": ["goal_success_rate"],
             "groupby": ["scenario", "item_group", "metric"],
             "ci_method": "t",
             "ci_level": 0.95,
-            "output": str(tmp_path / "ci_summary.csv"),
+            "output": "ci_summary.csv",
         },
     )
-    out = await step.execute(FakeExecutionContext())
+    out = await step.execute(FakeExecutionContext(output_dir=tmp_path))
 
     assert "df" in out.data
     summary = out.data["df"]
@@ -311,7 +311,7 @@ async def test_compute_ci_step_no_data_raises():
 async def test_compute_ci_step_missing_file_raises(tmp_path):
     step = ComputeCIStep(
         name="ci",
-        config={"data": str(tmp_path / "ghost.csv"), "groupby": ["scenario"]},
+        config={"data": "ghost.csv", "groupby": ["scenario"]},
     )
     with pytest.raises(FileNotFoundError):
-        await step.execute(FakeExecutionContext())
+        await step.execute(FakeExecutionContext(output_dir=tmp_path))

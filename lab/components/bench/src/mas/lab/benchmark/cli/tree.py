@@ -175,15 +175,15 @@ _PIPELINE_ARTIFACT_SCHEMA: dict = {
     },
     "collect_metrics": {
         "inputs":  [("metrics.json per run", True, "**/metrics.json")],
-        "outputs": [("results.csv", True, "output", "{output_dir}/results.csv", None)],
+        "outputs": [("results.csv", True, "output", "results.csv", None)],
     },
     "to_dataframe": {
         "inputs":  [("metrics.json per run", True, "**/metrics.json")],
-        "outputs": [("data.csv", True, "output", "{output_dir}/data.csv", None)],
+        "outputs": [("data.csv", True, "output", "data.csv", None)],
     },
     "join_dataframe": {
         "inputs":  [("data.csv", True, None)],
-        "outputs": [("joined.csv", True, "output", "{output_dir}/joined.csv", None)],
+        "outputs": [("joined.csv", True, "output", "joined.csv", None)],
     },
     "plotnine": {
         "inputs":  [("results.csv", True, None)],
@@ -191,7 +191,7 @@ _PIPELINE_ARTIFACT_SCHEMA: dict = {
     },
     "metrics_comparison_plot": {
         "inputs":  [("results.csv", True, None)],
-        "outputs": [("comparison.png", True, "output", "{output_dir}/comparison.png", None)],
+        "outputs": [("comparison.png", True, "output", "topology-comparison.png", None)],
     },
 }
 
@@ -212,7 +212,9 @@ def _render_pipeline_dag(
     """
 
     def _subst(s: str) -> str:
-        return s.replace("{output_dir}", str(data_dir))
+        # configured / default locations are relative to the level folder
+        s = s.replace("{output_dir}/", "").replace("{output_dir}", ".")
+        return str(Path(data_dir) / s)
 
     def _fmt_path(p: "Path") -> str:
         try:

@@ -22,13 +22,13 @@ Statistical methods
 
 Output files
 ------------
-<output_dir>/ci_summary.csv    Aggregated table: group columns + mean, std,
+<level folder>/ci_summary.csv    Aggregated table: group columns + mean, std,
                                n, ci_low, ci_high, ci_half.
 <output>                       PNG/SVG figure with geom_col + geom_errorbar.
 
 Configuration
 -------------
-data         str            Path to input CSV (from collect_metrics).
+data         str            Input CSV, relative to the level folder (from collect_metrics).
 value_col    str            Column to aggregate (default: "value").
 metric_col   str            Column that names each metric (default: "metric").
 metrics      list[str]      Optional: restrict to these metric values.
@@ -36,8 +36,8 @@ groupby      list[str]      Grouping columns (default: ["scenario", "metric"]).
 ci_method    str            "t" | "bootstrap" | "normal" (default: "t").
 ci_level     float          Confidence level, e.g. 0.95 (default: 0.95).
 min_runs     int            Warn when a group has fewer runs (default: 2).
-output       str            Figure path (png/svg/pdf).
-summary_out  str            Optional: override path for ci_summary.csv.
+output       str            Relative figure path (png/svg/pdf).
+summary_out  str            Optional: relative path for ci_summary.csv.
 mapping      dict           Extra aes() overrides passed to the plot.
 facet        str            Optional facet formula: "~ metric" or "metric ~ .".
 labels       dict           {title, x, y, fill, subtitle}.
@@ -50,7 +50,7 @@ Example YAML — Lab 3 reproducibility figure::
     - name: ci-plot
       type: ci_plot
       config:
-        data: "{output_dir}/results.csv"
+        data: "results.csv"
         metrics: [goal_success_rate, response_completeness]
         groupby: [scenario, item_group, metric]
         ci_method: t
@@ -61,7 +61,7 @@ Example YAML — Lab 3 reproducibility figure::
           subtitle: "Mean ± 95% CI (Student's t,  n=3)"
           x: ""
           y: "MCE score"
-        output: "{output_dir}/results/figure-ci.png"
+        output: results/figure-ci.png
       depends_on: [collect-metrics]
 
 Example YAML — minimal, single metric::
@@ -69,10 +69,10 @@ Example YAML — minimal, single metric::
     - name: ci-plot
       type: ci_plot
       config:
-        data: "{output_dir}/results.csv"
+        data: "results.csv"
         metrics: [goal_success_rate]
         groupby: [scenario]
-        output: "{output_dir}/results/figure-ci.png"
+        output: results/figure-ci.png
       depends_on: [collect-metrics]
 """
 
@@ -81,6 +81,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.library.lab.steps.services.plot_stream import image_html_shell, post_plot_tick
 
 logger = logging.getLogger(__name__)
@@ -160,10 +164,9 @@ class CIPlotStep(PipelineStep):
         config = self.config
 
         # ── Input ──────────────────────────────────────────────────────
-        data_path_raw = config.get("data", "")
-        if not data_path_raw:
+        data_path = resolve_step_input_path(ctx, self.name, config, "data")
+        if data_path is None:
             raise ValueError(f"CIPlotStep '{self.name}': 'data' (CSV path) required")
-        data_path = Path(data_path_raw)
         if not data_path.exists():
             raise FileNotFoundError(f"CIPlotStep '{self.name}': {data_path} not found")
 
@@ -230,24 +233,20 @@ class CIPlotStep(PipelineStep):
         summary_df = pd.DataFrame(rows)
 
         # ── Write summary CSV ──────────────────────────────────────────
-        summary_out_raw = config.get("summary_out", "")
-        if summary_out_raw:
-            summary_path = Path(summary_out_raw)
-        else:
-            summary_path = data_path.parent / "ci_summary.csv"
-
-        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path = resolve_step_artifact_path(
+            ctx, None, self.name, "ci_summary.csv", config,
+            key="summary_out", name_keys=(), mkdir=True,
+        )
         summary_df.to_csv(summary_path, index=False)
         logger.info("CIPlotStep '%s': wrote CI summary to %s (%d rows)", self.name, summary_path, len(summary_df))
 
         # ── Render figure ──────────────────────────────────────────────
-        output_raw = config.get("output", "")
         files = [summary_path]
 
-        if output_raw:
-            output_path = Path(output_raw)
-            if not output_path.is_absolute():
-                output_path = data_path.parent / output_path
+        if config.get("output"):
+            output_path = resolve_step_artifact_path(
+                ctx, None, self.name, "ci_plot.png", config, name_keys=(), mkdir=True
+            )
 
             _render_ci_figure(
                 summary_df=summary_df,
@@ -377,7 +376,6 @@ def _render_ci_figure(
         p = p + scale_fill_brewer(type="qual", palette="Set2")
 
     # ── Save ───────────────────────────────────────────────────────────
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     dpi = config.get("dpi", 150)
     p.save(str(output_path), dpi=dpi, verbose=False)
     logger.info("CIPlotStep '%s': saved figure to %s", step_name, output_path)

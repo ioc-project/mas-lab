@@ -53,7 +53,7 @@ def test_catalog_from_yaml_reads_level_artifacts(tmp_path: Path) -> None:
         "    artifacts:\n"
         "      figure-02:\n"
         "        type: plot\n"
-        "        path: '{output_dir}/figure-02.png'\n"
+        "        path: 'figure-02.png'\n"
         "  run:\n"
         "    artifacts:\n"
         "      metrics: metrics\n",

@@ -3,19 +3,15 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path
+from ._helpers import execute_trace_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
-
-logger = logging.getLogger(__name__)
-
 
 def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: Path) -> None:
     import pathlib, re, inspect, math
@@ -99,27 +95,10 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
     except Exception as e:
         print("PDF:", e)
 
-
 class FigureTrajectoryBwPlotStep(PipelineStep):
     type = "figure_trajectory_bw_plot"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        trace_baseline_path = resolve_path(
-            cfg.get("trace_baseline", "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        trace_guardrail_path = resolve_path(
-            cfg.get("trace_guardrail", "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig_trajectory.svg"), out_dir)
-        render(output_path, trace_baseline_path, trace_guardrail_path)
-        logger.info("Wrote %s", output_path)
-        files = [output_path]
-        pdf = output_path.with_suffix(".pdf")
-        if pdf.exists():
-            files.append(pdf)
-        return StepOutput(files=files, metadata={"output": str(output_path)})
-
+        return execute_trace_figure(ctx, self, render)
 
 register_step_type("figure_trajectory_bw_plot", FigureTrajectoryBwPlotStep)

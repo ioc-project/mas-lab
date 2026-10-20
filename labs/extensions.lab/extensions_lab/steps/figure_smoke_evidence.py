@@ -21,13 +21,13 @@ Figure 2 — Retrieval call decomposition (output_calls)
 Configuration
 -------------
 runs_csv          str   Path to fact_recall_runs.csv.
-                        Default: "{output_dir}/results/fact_recall_runs.csv"
+                        Default: "results/fact_recall_runs.csv"
 results_csv       str   Path to benchmark results.csv.
-                        Default: "{output_dir}/results.csv"
+                        Default: "results.csv"
 output_provenance str   Provenance heatmap PNG path.
-                        Default: "{output_dir}/results/fig_smoke_provenance.png"
+                        Default: "results/fig_smoke_provenance.png"
 output_calls      str   Call-count bar chart PNG path.
-                        Default: "{output_dir}/results/fig_smoke_calls.png"
+                        Default: "results/fig_smoke_calls.png"
 dpi               int   DPI for PNG. Default: 150
 """
 from __future__ import annotations
@@ -38,6 +38,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
 if TYPE_CHECKING:
@@ -59,11 +63,6 @@ LABELS = {
     "vector-multistep": "RAG-decomposed\n(k=6, multi-q)",
     "vector-bigk":      "RAG-wide\n(k=20)",
 }
-
-
-def _resolve(raw: str, output_dir: Path) -> Path:
-    """Substitute {output_dir} and resolve."""
-    return Path(str(raw).replace("{output_dir}", str(output_dir))).expanduser()
 
 
 def _load_csv(path: Path) -> List[Dict[str, str]]:
@@ -118,10 +117,16 @@ class FigureSmokeEvidenceStep(PipelineStep):
         cfg = self.config
         output_dir = ctx.output_dir
 
-        runs_csv           = _resolve(cfg.get("runs_csv",          "{output_dir}/results/fact_recall_runs.csv"),   output_dir)
-        results_csv        = _resolve(cfg.get("results_csv",       "{output_dir}/results.csv"),                     output_dir)
-        output_provenance  = _resolve(cfg.get("output_provenance", "{output_dir}/results/fig_smoke_provenance.png"), output_dir)
-        output_calls       = _resolve(cfg.get("output_calls",      "{output_dir}/results/fig_smoke_calls.png"),      output_dir)
+        runs_csv           = resolve_step_input_path(ctx, self.name, cfg, "runs_csv", "results/fact_recall_runs.csv")
+        results_csv        = resolve_step_input_path(ctx, self.name, cfg, "results_csv", "results.csv")
+        output_provenance = resolve_step_artifact_path(
+            ctx, None, self.name, "fig_smoke_provenance.png", cfg,
+            key="output_provenance", default_subdir="results", name_keys=(), mkdir=True,
+        )
+        output_calls = resolve_step_artifact_path(
+            ctx, None, self.name, "fig_smoke_calls.png", cfg,
+            key="output_calls", default_subdir="results", name_keys=(), mkdir=True,
+        )
         dpi                = int(cfg.get("dpi", 150))
 
         runs            = _load_csv(runs_csv)
@@ -194,7 +199,6 @@ class FigureSmokeEvidenceStep(PipelineStep):
         ax1.legend(handles=legend_patches, loc="upper center",
                    bbox_to_anchor=(0.5, -0.22), ncol=3, fontsize=7.5, frameon=False)
 
-        output_provenance.parent.mkdir(parents=True, exist_ok=True)
         fig1.savefig(output_provenance, dpi=dpi, bbox_inches="tight")
         plt.close(fig1)
         logger.info("FigureSmokeEvidenceStep: wrote provenance figure %s", output_provenance)
@@ -225,7 +229,6 @@ class FigureSmokeEvidenceStep(PipelineStep):
         ymax = max(mem[i] + oth[i] for i in range(len(SCENARIOS_ALL))) if any(mem[i] + oth[i] for i in range(len(SCENARIOS_ALL))) else 4
         ax2.set_ylim(0, max(ymax * 1.4, 4))
 
-        output_calls.parent.mkdir(parents=True, exist_ok=True)
         fig2.savefig(output_calls, dpi=dpi, bbox_inches="tight")
         plt.close(fig2)
         logger.info("FigureSmokeEvidenceStep: wrote calls figure %s", output_calls)

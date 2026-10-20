@@ -35,7 +35,7 @@ pipeline:
     config:
       processor: trajectory_plotter_native
       input: "{output_dir}/scenario/item0/r0/traces/events.jsonl"
-      output: "{output_dir}/results/trajectory.svg"
+      output: results/trajectory.svg
       format: svg
 ```
 
@@ -60,7 +60,7 @@ pipeline:
     config:
       processor: multilevel_trajectory_plotter
       input: "{output_dir}/scenario/item0/r0/traces/events.jsonl"
-      output: "{output_dir}/results/trajectory_multilevel.html"
+      output: results/trajectory_multilevel.html
       format: html
 ```
 

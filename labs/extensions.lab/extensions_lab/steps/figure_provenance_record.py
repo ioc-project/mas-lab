@@ -7,11 +7,11 @@ retrieval) for a single query item (default ``k1_q04``).
 
 Configuration
 -------------
-results_csv   str   Benchmark ``results.csv`` (default ``{output_dir}/results.csv``).
+results_csv   str   Benchmark ``results.csv`` (default ``results.csv``).
 item_id       str   Dataset item id (default ``k1_q04``).
 letta_scenario str  Letta scenario id (default ``with-letta-factrecall``).
 rag_scenario  str   RAG scenario id (default ``vector-baseline``).
-output        str   PNG path (default ``{output_dir}/results/fig_provenance_record.png``).
+output        str   PNG path (default ``results/fig_provenance_record.png``).
 dpi           int   Figure DPI (default 150).
 """
 from __future__ import annotations
@@ -22,6 +22,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
 if TYPE_CHECKING:
@@ -40,10 +44,6 @@ C_ABSENT = "#FFF5F5"
 C_BORDER = "#CBD5E0"
 C_TEXT = "#1A202C"
 C_LIGHT = "#718096"
-
-
-def _resolve(raw: str, output_dir: Path) -> Path:
-    return Path(str(raw).replace("{output_dir}", str(output_dir))).expanduser()
 
 
 def _load_events(rows: List[Dict[str, str]], scenario: str, item_id: str) -> List[dict]:
@@ -189,13 +189,13 @@ class FigureProvenanceRecordStep(PipelineStep):
         matplotlib.use("Agg")
         cfg = self.config
         output_dir = Path(ctx.output_dir)
-        results_csv = _resolve(cfg.get("results_csv", "{output_dir}/results.csv"), output_dir)
+        results_csv = resolve_step_input_path(ctx, self.name, cfg, "results_csv", "results.csv")
         item_id = str(cfg.get("item_id", "k1_q04"))
         letta_scenario = str(cfg.get("letta_scenario", "with-letta-factrecall"))
         rag_scenario = str(cfg.get("rag_scenario", "vector-baseline"))
-        output = _resolve(
-            cfg.get("output", "{output_dir}/results/fig_provenance_record.png"),
-            output_dir,
+        output = resolve_step_artifact_path(
+            ctx, None, self.name, "fig_provenance_record.png", cfg,
+            key="output", default_subdir="results", name_keys=(), mkdir=True,
         )
         dpi = int(cfg.get("dpi", 150))
 
@@ -232,7 +232,6 @@ class FigureProvenanceRecordStep(PipelineStep):
             fontsize=11, y=0.97,
         )
 
-        output.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
         logger.info("Wrote provenance record figure: %s", output)

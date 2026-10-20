@@ -3,19 +3,15 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path, resolve_trace_path
+from ._helpers import execute_trace_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
-
-logger = logging.getLogger(__name__)
-
 
 def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: Path) -> None:
     import json
@@ -100,7 +96,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         with open(path) as f:
             return [json.loads(ln) for ln in f if ln.strip()]
 
-
     def extract_calls(events: list[dict]) -> dict[str, list[dict]]:
         """Extract per-agent call list (LLM, Tool, Blocked only — proc filtered)."""
         INTERESTING = {"llm_call_start": "llm", "tool_call_start": "tool",
@@ -169,7 +164,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
 
         return per_agent
 
-
     # ---------------------------------------------------------------------------
     # SVG helpers
     # ---------------------------------------------------------------------------
@@ -177,12 +171,10 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
     def _esc(s: str) -> str:
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-
     def _circle(cx: float, cy: float, r: float = STATE_R,
                 fill: str = COL_STATE, stroke: str = "none") -> str:
         s = f' stroke="{stroke}" stroke-width="0.5"' if stroke != "none" else ""
         return f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r:.1f}" fill="{fill}"{s}/>'
-
 
     def _double_circle(cx: float, cy: float) -> str:
         """Accepting state: outer + inner circle."""
@@ -190,7 +182,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             _circle(cx, cy, STATE_R + 1.8, "none", COL_STATE)
             + _circle(cx, cy, STATE_R)
         )
-
 
     def _arrow_h(x1: float, cy: float, x2: float, stroke: str, sw: float,
                  label: str = "", dash: str = "", head: str = "open") -> str:
@@ -225,7 +216,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             )
         return "\n".join(parts)
 
-
     def _cross(cx: float, cy: float) -> str:
         """× marker."""
         s = CROSS_S
@@ -237,7 +227,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f' stroke="{COL_BLOCKED}" stroke-width="{sw:.1f}"/>'
         )
 
-
     def _vline(x: float, y1: float, y2: float,
                stroke: str = COL_SEP, sw: float = 0.4, dash: str = "") -> str:
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
@@ -246,7 +235,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f' stroke="{stroke}" stroke-width="{sw:.1f}"{dash_attr}/>'
         )
 
-
     def _hline(y: float, x1: float, x2: float,
                stroke: str = COL_LIFELINE, sw: float = 0.5, dash: str = "") -> str:
         dash_attr = f' stroke-dasharray="{dash}"' if dash else ""
@@ -254,7 +242,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f'<line x1="{x1:.2f}" y1="{y:.2f}" x2="{x2:.2f}" y2="{y:.2f}"'
             f' stroke="{stroke}" stroke-width="{sw:.1f}"{dash_attr}/>'
         )
-
 
     def _arrow_v_down(x: float, y1: float, y2: float,
                       stroke: str = COL_DELEG, sw: float = 0.6) -> str:
@@ -269,7 +256,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f'<line x1="{x + AH_W:.2f}" y1="{shaft_end:.2f}"'
             f' x2="{x:.2f}" y2="{tip:.2f}" stroke="{stroke}" stroke-width="{sw:.1f}"/>'
         )
-
 
     def _arrow_v_up(x: float, y1: float, y2: float,
                     stroke: str = COL_DELEG, sw: float = 0.6,
@@ -287,14 +273,12 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             f' x2="{x:.2f}" y2="{tip:.2f}" stroke="{stroke}" stroke-width="{sw:.1f}"/>'
         )
 
-
     # ---------------------------------------------------------------------------
     # Call-sequence rendering (per lane)
     # ---------------------------------------------------------------------------
 
     def _lane_cy(li: int) -> float:
         return TITLE_H + li * LANE_H + LANE_H / 2
-
 
     def _render_calls(calls: list[dict], x0: float, cy: float) -> str:
         """Draw state circles and typed arrows for one agent's call sequence.
@@ -368,7 +352,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             parts.append(_circle(x0, cy))  # empty agent: just start circle
 
         return "\n".join(parts)
-
 
     # ---------------------------------------------------------------------------
     # Panel renderer
@@ -576,7 +559,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
 
         return "\n".join(parts)
 
-
     # ---------------------------------------------------------------------------
     # Combine two panels
     # ---------------------------------------------------------------------------
@@ -603,7 +585,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
             "</svg>",
         ])
 
-
     # ---------------------------------------------------------------------------
     # PDF export
     # ---------------------------------------------------------------------------
@@ -622,7 +603,6 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
         else:
             print(f"PDF skipped: {r.stderr[:120]}")
 
-
     # ---------------------------------------------------------------------------
     # Main
     # ---------------------------------------------------------------------------
@@ -638,27 +618,10 @@ def render(output_path: Path, trace_baseline_path: Path, trace_guardrail_path: P
     print(f"Saved → {output_path}")
     _write_pdf(output_path, output_path.with_suffix(".pdf"))
 
-
 class FigureTrajectoryAutomatonStep(PipelineStep):
     type = "figure_trajectory_automaton"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        trace_baseline_path = resolve_trace_path(
-            cfg.get("trace_baseline", "{output_dir}/baseline/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        trace_guardrail_path = resolve_trace_path(
-            cfg.get("trace_guardrail", "{output_dir}/with-guardrail/itemf-guardrail/r1/traces/events.jsonl"), out_dir
-        )
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig_trajectory.svg"), out_dir)
-        render(output_path, trace_baseline_path, trace_guardrail_path)
-        logger.info("Wrote %s", output_path)
-        files = [output_path]
-        pdf = output_path.with_suffix(".pdf")
-        if pdf.exists():
-            files.append(pdf)
-        return StepOutput(files=files, metadata={"output": str(output_path)})
-
+        return execute_trace_figure(ctx, self, render)
 
 register_step_type("figure_trajectory_automaton", FigureTrajectoryAutomatonStep)

@@ -14,8 +14,6 @@ pipeline:
     - name: trace-stats
       type: extract_trace_stats
       depends_on: [extract]
-      config:
-        output: "{{run.output_dir}}/results/trace_stats.csv"
 
     - name: plot-svg
       type: plot_multilevel_trajectory

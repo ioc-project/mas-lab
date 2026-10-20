@@ -21,9 +21,9 @@ the complete scientific story for the vector-memory overlay smoke test.
 Configuration
 -------------
 summary_csv   str   Path to fact_recall_summary.csv.
-                    Default: "{output_dir}/results/fact_recall_summary.csv"
+                    Default: "results/fact_recall_summary.csv"
 output        str   Output PNG path.
-                    Default: "{output_dir}/results/fig_recall_summary.png"
+                    Default: "results/fig_recall_summary.png"
 dpi           int   PNG DPI. Default: 150
 """
 from __future__ import annotations
@@ -33,6 +33,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List
 
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_input_path,
+)
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
 if TYPE_CHECKING:
@@ -56,10 +60,6 @@ LABELS = {
 GROUPS = ["k1", "k2", "k3"]
 
 
-def _resolve(raw: str, output_dir: Path) -> Path:
-    return Path(str(raw).replace("{output_dir}", str(output_dir))).expanduser()
-
-
 def _load_csv(path: Path) -> List[Dict[str, str]]:
     if not path.exists():
         return []
@@ -81,13 +81,10 @@ class FigureRecallSummaryStep(PipelineStep):
         cfg = self.config
         output_dir = ctx.output_dir
 
-        summary_csv = _resolve(
-            cfg.get("summary_csv", "{output_dir}/results/fact_recall_summary.csv"),
-            output_dir,
-        )
-        output_path = _resolve(
-            cfg.get("output", "{output_dir}/results/fig_recall_summary.png"),
-            output_dir,
+        summary_csv = resolve_step_input_path(ctx, self.name, cfg, "summary_csv", "results/fact_recall_summary.csv")
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "fig_recall_summary.png", cfg,
+            key="output", default_subdir="results", name_keys=(), mkdir=True,
         )
         dpi = int(cfg.get("dpi", 150))
 
@@ -181,7 +178,6 @@ class FigureRecallSummaryStep(PipelineStep):
             y=1.02,
         )
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
         plt.close(fig)
         logger.info("FigureRecallSummaryStep: wrote %s", output_path)

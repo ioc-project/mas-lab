@@ -50,7 +50,7 @@ experiment:
           - call_id
           - parent_call_id
           - context.run_id
-        output: '{output_dir}/results/trace-diff.csv'
+        output: 'results/trace-diff.csv'
     - name: figure-bars
       type: bar_plot
       depends_on:
@@ -64,4 +64,4 @@ experiment:
         ylim:
         - 0
         - 1
-        output: '{output_dir}/results/figure-bit-exactness.png'
+        output: 'results/figure-bit-exactness.png'

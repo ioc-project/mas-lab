@@ -114,6 +114,9 @@ def resolve_run_artifact(
     artifact = spec.artifact
     stem = cfg.get("artifact_name")
     if stem:
+        from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
+
+        check_simple_name(cfg.get("name") or key, "artifact_name", stem)
         artifact = Artifact(name=str(stem), format=artifact.format, scope=artifact.scope)
     return artifact.resolve_path(ctx)
 

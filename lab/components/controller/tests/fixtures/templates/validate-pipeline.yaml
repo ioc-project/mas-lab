@@ -17,7 +17,6 @@ spec:
       depends_on:
         - extract-trajectories
       config:
-        output: "{output_dir}/results/trace_stats.csv"
         item_glob: item*
         run_glob: r*
     - name: eval-mce
@@ -54,4 +53,4 @@ spec:
         ci_method: t
         ci_level: 0.95
         min_runs: 2
-        output: "{output_dir}/ci_summary.csv"
+        output: "ci_summary.csv"

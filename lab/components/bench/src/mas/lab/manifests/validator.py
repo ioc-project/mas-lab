@@ -288,12 +288,23 @@ def validate_manifest(
             logger.warning("[manifest][%s] %s: %s", kind, source, msg)
 
     deprecations: List[str] = []
+    if kind in ("experiment", "pipeline"):
+        # Step output locations must stay inside the level folder.
+        from mas.lab.benchmark.pipeline.artifact_paths import collect_manifest_path_issues
+
+        path_violations, path_deprecations = collect_manifest_path_issues(data)
+        if path_violations:
+            if effective_strict:
+                raise ManifestValidationError(source, path_violations)
+            for msg in path_violations:
+                logger.warning("[manifest][%s] %s: %s", kind, source, msg)
+        deprecations.extend(path_deprecations)
     if kind == "experiment":
         schema = _load_kind_schema(kind)
         if schema is not None:
             from mas.ctl.validate.deprecations import collect_experiment_deprecations
 
-            deprecations = collect_experiment_deprecations(data, schema)
+            deprecations = deprecations + collect_experiment_deprecations(data, schema)
             for msg in deprecations:
                 logger.warning("[manifest][%s] %s: deprecated: %s", kind, source, msg)
 

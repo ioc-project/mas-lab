@@ -114,13 +114,11 @@ experiment:
   post:
     - name: extract-trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}
 
     - name: extract-mealy-stats
       type: extract_mealy_stats
-      config:
-        output: "{output_dir}/results/mealy_stats.csv"
+      config: {}
 
     # --- Fig 2a: per-call latency across governance escalation stack ---
     # Claim: governance adds negligible per-call overhead; raw duration
@@ -143,7 +141,7 @@ experiment:
           subtitle: "Mean wall-clock seconds per LLM call (nominal items, n1-n6)"
           x: ""
           y: "Duration per call (s)"
-        output: "{output_dir}/results/fig-moodbar.png"
+        output: "results/fig-moodbar.png"
         width: 5.5
         height: 3.0
         hide_x_labels: true
@@ -179,7 +177,7 @@ experiment:
           subtitle: "Mean policy evaluations per LLM call (nominal items, n1-n6)"
           x: ""
           y: "Policy evals per LLM call"
-        output: "{output_dir}/results/fig-stacking.png"
+        output: "results/fig-stacking.png"
         width: 5.5
         height: 3.0
         hide_x_labels: true
@@ -225,7 +223,7 @@ experiment:
           x: ""
           y: ""
         palette: ["#dddddd", "#1a9850"]
-        output: "{output_dir}/results/fig-precision-recall.png"
+        output: "results/fig-precision-recall.png"
         width: 9.0
         height: 3.2
         factor_levels:
@@ -262,50 +260,50 @@ experiment:
       type: lifecycle_control_lab.steps.figure_call_counts:FigureCallCountsStep
       depends_on: [extract-trace-stats]
       config:
-        trace_stats: "{output_dir}/results/trace_stats.csv"
-        output: "{output_dir}/results/fig-call-counts.png"
+        trace_stats: "results/trace_stats.csv"
+        output: "results/fig-call-counts.png"
 
     - name: figure-governance-overhead-detail
       type: lifecycle_control_lab.steps.figure_governance_overhead:FigureGovernanceOverheadStep
       depends_on: [extract-trace-stats]
       config:
-        trace_stats: "{output_dir}/results/trace_stats.csv"
-        output: "{output_dir}/results/fig-governance-overhead-percall.png"
+        trace_stats: "results/trace_stats.csv"
+        output: "results/fig-governance-overhead-percall.png"
 
     - name: figure-precision-recall-detail
       type: lifecycle_control_lab.steps.figure_precision_recall_detail:FigurePrecisionRecallDetailStep
       depends_on: [extract-trace-stats]
       config:
-        trace_stats: "{output_dir}/results/trace_stats.csv"
-        output: "{output_dir}/results/fig-precision-recall-detail.png"
+        trace_stats: "results/trace_stats.csv"
+        output: "results/fig-precision-recall-detail.png"
 
     - name: figure-moodbar-detail
       type: lifecycle_control_lab.steps.figure_moodbar_detail:FigureMoodbarDetailStep
       depends_on: [extract-mealy-stats]
       config:
-        mealy_stats: "{output_dir}/results/mealy_stats.csv"
-        output: "{output_dir}/results/fig-moodbar-detail.png"
+        mealy_stats: "results/mealy_stats.csv"
+        output: "results/fig-moodbar-detail.png"
 
     - name: figure-stacking-detail
       type: lifecycle_control_lab.steps.figure_stacking_detail:FigureStackingDetailStep
       depends_on: [extract-mealy-stats]
       config:
-        mealy_stats: "{output_dir}/results/mealy_stats.csv"
-        output: "{output_dir}/results/fig-stacking-detail.png"
+        mealy_stats: "results/mealy_stats.csv"
+        output: "results/fig-stacking-detail.png"
 
     - name: figure-per-call
       type: lifecycle_control_lab.steps.figure_per_call:FigurePerCallStep
       depends_on: [extract-mealy-stats]
       config:
-        mealy_stats: "{output_dir}/results/mealy_stats.csv"
-        output: "{output_dir}/results/fig-per-call.png"
+        mealy_stats: "results/mealy_stats.csv"
+        output: "results/fig-per-call.png"
 
     - name: figure-nonllm
       type: lifecycle_control_lab.steps.figure_nonllm:FigureNonllmStep
       depends_on: [extract-mealy-stats]
       config:
-        mealy_stats: "{output_dir}/results/mealy_stats.csv"
-        output: "{output_dir}/results/fig-nonllm.png"
+        mealy_stats: "results/mealy_stats.csv"
+        output: "results/fig-nonllm.png"
 
   # ------------------------------------------------------------------
   # Flavours

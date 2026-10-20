@@ -44,7 +44,7 @@ Register that folder in `lab-config.yaml` and give it `library.yaml`:
        type: my_lab.steps.my_step:MyStep
        depends_on: [gather-experiment]
        config:
-         output: "{output_dir}/results/my-figure.png"
+         output: results/my-figure.png
    ```
 
 Do not create a separate top-level plugins folder. Pipeline steps and

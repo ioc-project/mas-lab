@@ -791,7 +791,7 @@ $defs:
               type: string
               description: >
                 Output path template.  Supports variables: {run_dir}, {test_dir},
-                {scenario_dir}, {output_dir}, {scenario_id}, {item_id}, {run_idx}.
+                {scenario_dir}, {scenario_id}, {item_id}, {run_idx}.
                 Default is derived from the artifact type.
             validate:
               type: boolean

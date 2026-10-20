@@ -3,19 +3,15 @@
 """Pipeline figure step (migrated from lab script)."""
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from ._helpers import resolve_path
+from ._helpers import execute_csv_figure
 
 if TYPE_CHECKING:
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
-
-logger = logging.getLogger(__name__)
-
 
 def render(output_path: Path, trace_stats_path: Path) -> None:
     import pandas as pd
@@ -202,22 +198,17 @@ def render(output_path: Path, trace_stats_path: Path) -> None:
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"Saved → {output_path}")
 
-
 class FigureGovernanceOverheadStep(PipelineStep):
     type = "figure_governance_overhead"
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        import matplotlib
-        matplotlib.use("Agg")
-
-        cfg = self.config
-        out_dir = Path(ctx.output_dir)
-        trace_stats_path = resolve_path(cfg.get("trace_stats", "{output_dir}/results/trace_stats.csv"), out_dir)
-        output_path = resolve_path(cfg.get("output", "{output_dir}/results/fig-governance-overhead-percall.png"), out_dir)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        render(output_path, trace_stats_path)
-        logger.info("Wrote %s", output_path)
-        return StepOutput(files=[output_path], metadata={"output": str(output_path)})
-
+        return execute_csv_figure(
+            ctx,
+            self,
+            input_key="trace_stats",
+            input_default="results/trace_stats.csv",
+            output_name="fig-governance-overhead-percall.png",
+            render=render,
+        )
 
 register_step_type("figure_governance_overhead", FigureGovernanceOverheadStep)

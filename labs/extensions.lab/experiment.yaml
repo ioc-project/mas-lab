@@ -171,7 +171,6 @@ experiment:
     - name: collect-metrics
       type: collect_metrics
       config:
-        output_dir: "{output_dir}"
         dataset: ./datasets/extensions-queries.yaml
       depends_on: [eval-quality]
 
@@ -188,7 +187,7 @@ experiment:
         groupby: [scenario, group, metric]
         ci_method: t
         ci_level: 0.95
-        output: "{output_dir}/results/ci_summary.csv"
+        output: "results/ci_summary.csv"
       depends_on: [collect-metrics]
 
     # Paper figure: quality improvement by memory model and query group.
@@ -210,13 +209,12 @@ experiment:
           subtitle: "Mean ± 95% CI (Student's t, n=3) | baseline / active-retrieval / passive-injection"
           x: ""
           y: "MCE score"
-        output: "{output_dir}/results/figure-3-memory-extension.png"
+        output: "results/figure-3-memory-extension.png"
       depends_on: [compute-ci]
 
     - name: extract-trace-stats
       type: extract_trace_stats
-      config:
-        output: "{output_dir}/results/trace_stats.csv"
+      config: {}
 
     # Fig 3b: reproducibility — mean run duration per scenario × query group
     - name: figure-reproducibility
@@ -236,7 +234,7 @@ experiment:
           subtitle: "Mean duration (s) across query groups and runs"
           x: ""
           y: "Duration (s)"
-        output: "{output_dir}/results/fig_extensions_reproducibility.png"
+        output: "results/fig_extensions_reproducibility.png"
         width: 6.0
         height: 3.5
         hide_x_labels: true
@@ -274,7 +272,7 @@ experiment:
           subtitle: "Mean llm_call_start events across query groups"
           x: ""
           y: "LLM calls / run"
-        output: "{output_dir}/results/fig_extensions_llm_calls.png"
+        output: "results/fig_extensions_llm_calls.png"
         width: 6.0
         height: 3.5
         hide_x_labels: true
@@ -305,7 +303,7 @@ experiment:
           subtitle: "governance_policy fired events \u2014 g1 (forbidden destination)"
           x: ""
           y: "Fired events"
-        output: "{output_dir}/results/fig_extensions_governance.png"
+        output: "results/fig_extensions_governance.png"
         width: 4.5
         height: 3.0
         hide_x_labels: true

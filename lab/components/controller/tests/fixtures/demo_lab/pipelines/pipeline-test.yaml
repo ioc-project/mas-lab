@@ -8,7 +8,6 @@ pipeline:
       depends_on:
         - extract-trajectories
       config:
-        output: "{output_dir}/results/trace_stats.csv"
         item_glob: item*
         run_glob: r*
     - name: extract-trajectories
@@ -33,7 +32,7 @@ pipeline:
         - compute-ci
       config:
         data: "@compute-ci"
-        output: "{output_dir}/results/plot.png"
+        output: "results/plot.png"
         mapping:
           x: scenario
           y: mean
@@ -65,7 +64,7 @@ pipeline:
         ci_method: t
         ci_level: 0.95
         min_runs: 2
-        output: "{output_dir}/ci_summary.csv"
+        output: "ci_summary.csv"
     - name: eval-mce
       type: eval_mce
       scope: run

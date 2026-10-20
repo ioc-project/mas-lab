@@ -9,8 +9,7 @@ PNG with one subplot per metric.
 
 Configuration
 -------------
-output_dir     str           Root benchmark output directory.
-output         str           Path for the output PNG (resolved from output_dir).
+output         str           Relative path for the output PNG (default topology-comparison.png).
 scenarios      list[str]     Scenario IDs to compare (optional, auto-detected).
 metrics        list[str]     Metric IDs to plot (default: all found in metrics.json).
 """
@@ -22,6 +21,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import (
+    resolve_step_artifact_path,
+    resolve_step_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +37,10 @@ class MetricsComparisonPlotStep(PipelineStep):
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
         config = self.config
 
-        output_dir_raw = config.get("output_dir", "")
-        if not output_dir_raw:
-            raise ValueError(f"MetricsComparisonPlotStep '{self.name}': 'output_dir' required")
-        output_dir = Path(output_dir_raw)
-
-        output_path_raw = config.get("output", "topology-comparison.png")
-        output_path = Path(output_path_raw)
-        if not output_path.is_absolute():
-            output_path = output_dir / output_path
+        output_dir = resolve_step_root(ctx, config, step=self.name)
+        output_path = resolve_step_artifact_path(
+            ctx, None, self.name, "topology-comparison.png", config, mkdir=True
+        )
 
         scenario_filter: Optional[List[str]] = config.get("scenarios")
 
@@ -152,7 +150,6 @@ class MetricsComparisonPlotStep(PipelineStep):
             fontsize=13, fontweight="bold",
         )
         plt.tight_layout()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(str(output_path), dpi=150)
         plt.close(fig)
 

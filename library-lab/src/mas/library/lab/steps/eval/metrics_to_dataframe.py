@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
+from mas.lab.benchmark.pipeline.artifact_paths import confine_under, step_artifact_relpath
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.run_artifacts import run_dir_from_ctx
 
@@ -91,10 +92,11 @@ class MetricsToDataFrameStep(PipelineStep):
             metrics_filename=config.get("metrics_filename", "metrics.json"),
         )
 
-        output_path = Path(config.get("output", "data.csv"))
-        if not output_path.is_absolute():
-            output_path = run_dir / output_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = confine_under(
+            self.name, "output", run_dir,
+            step_artifact_relpath(self.name, "data.csv", config, name_keys=()),
+            mkdir=True,
+        )
 
         import pandas as pd
 
