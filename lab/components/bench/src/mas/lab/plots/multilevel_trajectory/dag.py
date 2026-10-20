@@ -64,6 +64,17 @@ from mas.lab.plots.multilevel_trajectory.tree import (
 _ALL_FACETS = frozenset({"cpr", "governance", "annotations", "thinking"})
 
 
+def _mas_lane_span(
+    start_ts: float,
+    end_ts: float,
+    prev_end: Optional[float],
+) -> tuple[float, float]:
+    """Keep one MAS bar from starting before the previous bar ended."""
+    if prev_end is not None and start_ts < prev_end:
+        return prev_end, max(end_ts, prev_end)
+    return start_ts, end_ts
+
+
 def _build_dag(
     records: list[dict],
     events:  list[dict],
@@ -767,12 +778,18 @@ def _build_dag(
     mas_lane = LaneDef("mas", "mas", "MAS")
     if mas_records:
         elems: list = [state(t_min, s_in, "session")]
+        _prev_mas_end: Optional[float] = None
         for i, mrec in enumerate(mas_records):
             end_ts = mrec["end_ts"] if mrec.get("end_ts", 0) > 0 else t_max
+            start_ts, end_ts = _mas_lane_span(mrec["start_ts"], end_ts, _prev_mas_end)
             elems.append(trans(mrec, lane_level="mas", node_id=f"tr-mas-{i}",
                                call_type="MASCall", label="MAS",
-                               end_ts=end_ts))
+                               start_ts=start_ts, end_ts=end_ts))
             elems.append(state(end_ts, mrec.get("output", ""), "mas"))
+            _prev_mas_end = end_ts
+            if i + 1 < len(mas_records) and mas_records[i + 1]["start_ts"] < end_ts:
+                # Overlapping invocations: there is no human gap to show.
+                continue
             if i + 1 < len(mas_records):
                 nxt = mas_records[i + 1]
                 hitl_rec: dict = {"input": "", "output": "", "agent_id": ""}

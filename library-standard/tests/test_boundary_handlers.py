@@ -9,6 +9,8 @@ not catch a wrong dict key or a dropped field in any single handler.
 
 from __future__ import annotations
 
+from typing import Any
+
 from mas.library.standard.lib.observability.native.boundary_handlers import dispatch_boundary
 from mas.library.standard.lib.observability.native.transform import TransformContext
 
@@ -330,3 +332,40 @@ def test_dispatch_boundary_uses_real_timestamp_not_export_time() -> None:
     out = dispatch_boundary(record, ctx=_ctx())
     assert out
     assert all(rec["timestamp"] == 12345.6789 for rec in out), out
+
+
+def _assembled_record(cid: int, text: str) -> dict[str, Any]:
+    return {
+        "kind": "context.assembled",
+        "correlation_id": cid,
+        "payload": {
+            "agent_id": "moderator",
+            "messages": [{"role": "user", "content": text}],
+            "segments": [],
+            "total_tokens": 1,
+            "message_count": 1,
+        },
+    }
+
+
+def _proc_ids(out: list[dict[str, Any]]) -> list[str]:
+    return [ev["call_id"] for ev in out if ev.get("kind") == "processing_call_start"]
+
+
+def test_context_assembly_call_id_is_stable_per_correlation_id() -> None:
+    ctx = _ctx()
+    first = dispatch_boundary(_assembled_record(2, "a"), ctx=ctx)
+    other = dispatch_boundary(_assembled_record(3, "a"), ctx=ctx)
+    assert _proc_ids(first) != _proc_ids(other)
+    start = next(ev for ev in first if ev["kind"] == "processing_call_start")
+    end = next(ev for ev in first if ev["kind"] == "processing_call_end")
+    assert start["call_id"] == end["call_id"]
+
+
+def test_second_assembly_for_same_correlation_id_gets_distinct_call_id() -> None:
+    ctx = _ctx()
+    first = dispatch_boundary(_assembled_record(2, "a"), ctx=ctx)
+    second = dispatch_boundary(_assembled_record(2, "b"), ctx=ctx)
+    assert len(set(_proc_ids(first) + _proc_ids(second))) == 2
+    ends = [ev["call_id"] for ev in first + second if ev["kind"] == "processing_call_end"]
+    assert ends == _proc_ids(first) + _proc_ids(second)

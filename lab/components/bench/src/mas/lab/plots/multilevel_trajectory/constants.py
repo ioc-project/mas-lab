@@ -148,3 +148,9 @@ _PROC_TYPE_LABEL: dict[str, str] = {
     "content_propagation":    "⚙ prop",
     "mitm_rewrite":           "⚠ MITM",
 }
+
+# Laid out after the LLM that requested them, not as nested spans of it.
+_LLM_FOLLOW_UP_TYPES = frozenset({"ToolCall", "MemoryCall", "RAGQuery"})
+
+# Longest unspanned adjacent-boundary gap still drawn as a connector column.
+_EMPTY_GAP_MAX_S = 0.005

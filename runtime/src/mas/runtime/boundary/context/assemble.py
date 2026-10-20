@@ -11,6 +11,7 @@ rewrite stored history to the context manager's recency cap.
 from __future__ import annotations
 
 import inspect
+import json
 from typing import Any
 
 from mas.runtime.boundary.context.assembly_cache import cached_assembler
@@ -41,6 +42,34 @@ def _openai_tool_names(tools: list[dict[str, Any]] | None) -> list[str] | None:
         if name:
             names.append(name)
     return names
+
+
+def _assembly_key(
+    correlation_id: int,
+    messages: list[dict[str, Any]],
+    tool_names: list[str] | None,
+) -> tuple[Any, ...]:
+    """Comparable identity of one assembly (correlation id, messages, tools)."""
+    return (
+        correlation_id,
+        json.dumps(messages, sort_keys=True, default=str, separators=(",", ":")),
+        tuple(tool_names or ()),
+    )
+
+
+def _remember_assembly(ctx: Any, key: tuple[Any, ...]) -> bool:
+    """Remember *key* on ``ctx``. Return True if it is new (should be recorded).
+
+    One LLM call is assembled up to three times; only the first report is kept.
+    A later assembly with a different key is new and is still recorded.
+    """
+    if getattr(ctx, "_recorded_assembly_key", None) == key:
+        return False
+    try:
+        ctx._recorded_assembly_key = key
+    except (AttributeError, TypeError):
+        pass
+    return True
 
 
 def assemble_llm_messages(
@@ -78,13 +107,18 @@ def assemble_llm_messages(
 
     obs = getattr(ctx, "observability", None)
     cid = correlation_id or int(getattr(ctx, "_assembly_correlation_id", 0) or 0)
+    tool_names = _openai_tool_names(tools)
+    if obs is not None and messages and not _remember_assembly(
+        ctx, _assembly_key(cid, messages, tool_names)
+    ):
+        obs = None
     context_usage = record_context_assembly(
         obs,
         correlation_id=cid,
         messages=messages,
         turn_index=int(getattr(ctx, "turn_index", 0) or 0),
         agent_id=str(getattr(ctx, "agent_id", "agent") or "agent"),
-        tools=_openai_tool_names(tools),
+        tools=tool_names,
         tool_schemas=tools,
         model=resolved_model or "",
         context_window=context_window,

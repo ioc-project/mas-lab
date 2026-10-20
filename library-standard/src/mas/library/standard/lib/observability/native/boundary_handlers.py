@@ -6,19 +6,21 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING
 
 from mas.library.standard.lib.observability.native.tool_name import resolve_tool_name
+from mas.library.standard.lib.observability.native.transform import (
+    TransformContext,
+    _SYNTHETIC_SPAN_DURATION_S,
+    _event_kind,
+    _interval_call_id,
+    _resolve_call_id,
+    _with_parent,
+)
 from mas.runtime.schema.observability import ObsEventKind
-
-if TYPE_CHECKING:
-    from mas.library.standard.lib.observability.native.transform import TransformContext
 
 
 def dispatch_boundary(record: dict, *, ctx: TransformContext) -> list[dict]:
     """Route one boundary record to its kind handler."""
-    from mas.library.standard.lib.observability.native.transform import _event_kind
-
     kind = _event_kind(record)
     handler = _BOUNDARY_KIND_HANDLERS.get(kind)
     if handler is None:
@@ -46,8 +48,6 @@ def _boundary_engine_io(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    from mas.library.standard.lib.observability.native.transform import _resolve_call_id, _with_parent
-
     out: list[dict] = []
     op = payload.get("op", "")
     key = (cid, op)
@@ -113,8 +113,6 @@ def _boundary_engine_io_return(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    from mas.library.standard.lib.observability.native.transform import _resolve_call_id, _with_parent
-
     out: list[dict] = []
     op = payload.get("op", "LLM_CALL")
     key = (cid, op)
@@ -195,13 +193,6 @@ def _boundary_envelope_activity(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    from mas.library.standard.lib.observability.native.transform import (
-        _SYNTHETIC_SPAN_DURATION_S,
-        _interval_call_id,
-        _resolve_call_id,
-        _with_parent,
-    )
-
     activity = payload.get("activity", "")
     boundary = payload.get("boundary", "")
     op_name = payload.get("op", "")
@@ -376,31 +367,14 @@ def _boundary_context_assembled(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    from mas.library.standard.lib.observability.native.transform import (
-        _SYNTHETIC_SPAN_DURATION_S,
-        _interval_call_id,
-        _resolve_call_id,
-        _with_parent,
-    )
-
-    # Real call_id when the runtime resolved one (now always does — see
-    # ObservabilityOperator.record_context_assembled/_resolve_transition_ids'
-    # CONTEXT_ASSEMBLED branch, the same (correlation_id, "LLM_CALL") key
-    # llm_call_start/end use). Falls back to the old synthetic "llm-{cid}"
-    # only for a record that somehow arrives without one (defensive, not
-    # expected on any current path).
     llm_call_id = _resolve_call_id(record, ctx, cid, "LLM_CALL") if cid else ""
     segments = payload.get("segments") or []
-    # Carry the assembled prompt into the event so records.py can attach it to
-    # the LLM call (matched by correlation_id) — the engine InvokeEngineIo
-    # boundary does not include the messages, so this is the only place the
-    # prompt text is available. (trace_content is honoured upstream: the
-    # operator omits messages when content tracing is disabled.)
+    # Prompt text lives here; InvokeEngineIo does not include messages.
     _asm_msgs = payload.get("messages") or []
     _operation = _context_assembly_operation(_asm_msgs)
-    _proc_call_id = _interval_call_id(ctx, cid, "PROCESSING_CALL:context_assembly") if cid else ""
-    
-    # Common fields for processing call start/end
+    _proc_call_id = (
+        ctx.next_interval_call_id(cid, "PROCESSING_CALL:context_assembly") if cid else ""
+    )
     _proc_common = {
         **base,
         "call_id": _proc_call_id,
@@ -506,8 +480,6 @@ def _boundary_cache_lookup(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    from mas.library.standard.lib.observability.native.transform import _resolve_call_id, _with_parent
-
     event = {
         "kind": "cache_lookup",
         **base,
@@ -528,11 +500,6 @@ def _boundary_context_mutation(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    from mas.library.standard.lib.observability.native.transform import (
-        _SYNTHETIC_SPAN_DURATION_S,
-        _with_parent,
-    )
-
     action = payload.get("action", "mutation")
     state_call_id = f"state-{cid}-{action}-{payload.get('turn_index', 0)}"
     return [

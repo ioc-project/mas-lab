@@ -35,6 +35,14 @@ class TransformContext:
     _seen_engine_ops: set[tuple[int, str]] = field(default_factory=set)
     _seen_engine_returns: set[tuple[int, str]] = field(default_factory=set)
     _call_ids: dict[tuple[int, str], str] = field(default_factory=dict)
+    _op_seq: dict[tuple[int, str], int] = field(default_factory=dict)
+
+    def next_interval_call_id(self, correlation_id: int, op_key: str) -> str:
+        """UUID for ``(correlation_id, op_key)``; later events get ``op_key#n``."""
+        n = self._op_seq.get((correlation_id, op_key), 0) + 1
+        self._op_seq[(correlation_id, op_key)] = n
+        key = op_key if n == 1 else f"{op_key}#{n}"
+        return _interval_call_id(self, correlation_id, key)
 
 
 def _parent_call_id(record: dict, ctx: TransformContext) -> str | None:
@@ -122,12 +130,14 @@ def _sh_user_input(record: dict, ctx: TransformContext) -> list[dict]:
     if turn_id:
         ctx.turn_id = turn_id
     # Reset per-turn tracking state
-    if hasattr(ctx._seen_engine_ops, 'clear'):
+    if hasattr(ctx._seen_engine_ops, "clear"):
         ctx._seen_engine_ops.clear()
-    if hasattr(ctx._seen_engine_returns, 'clear'):
+    if hasattr(ctx._seen_engine_returns, "clear"):
         ctx._seen_engine_returns.clear()
-    if hasattr(ctx._call_ids, 'clear'):
+    if hasattr(ctx._call_ids, "clear"):
         ctx._call_ids.clear()
+    if hasattr(ctx._op_seq, "clear"):
+        ctx._op_seq.clear()
     rec: dict = {
         "kind": "execution_start",
         "agent_id": ctx.agent_id,

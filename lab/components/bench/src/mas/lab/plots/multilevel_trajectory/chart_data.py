@@ -7,15 +7,29 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Union
 
-from mas.lab.plots.multilevel_trajectory.constants import _TS_TOL
+from mas.lab.plots.multilevel_trajectory.constants import _EMPTY_GAP_MAX_S, _TS_TOL
 from mas.lab.plots.multilevel_trajectory.dag import _build_dag
 from mas.lab.plots.multilevel_trajectory.models import LaneDef, StateNode, TransNode
 from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 from mas.lab.plots.multilevel_trajectory.svg import _esc
 from mas.lab.plots.trajectory import load_trace
+
+
+def _trans_time_pairs(
+    lanes: list[LaneDef],
+    keep: Callable[[TransNode], bool],
+) -> set[tuple[float, float]]:
+    return {
+        (el.start_ts, el.end_ts)
+        for lane in lanes
+        for el in lane.sequence
+        if isinstance(el, TransNode) and keep(el)
+    }
+
 
 def _build_chart_data(
     state_reg: dict[float, StateNode],
@@ -114,7 +128,6 @@ def _build_chart_data(
     parallel_groups = sorted(_pg_catalog.values(), key=lambda d: (d.get("forkTs") or 0.0, d.get("groupId") or ""))
 
     ann = annotations or {}
-    hl_agents = {str(a).lower() for a in (ann.get("highlight_agents") or [])}
 
     # gap_ts_set: timestamps where at least one pin was resolved.
     # ALL lanes sharing that timestamp get gapMarker=true (visible ring).
@@ -283,19 +296,12 @@ def _build_chart_data(
     # full INSTANT_COL_W — otherwise it reserves a visibly empty dashed gap
     # roughly as wide as a normal content column (e.g. between a WAIT state
     # and the delegate's own first state right after it).
-    _connector_pairs: set[tuple[float, float]] = {
-        (el.start_ts, el.end_ts)
-        for lane in lanes
-        for el in lane.sequence
-        if isinstance(el, TransNode) and el.connector_only
-    }
-    _instant_pairs: set[tuple[float, float]] = {
-        (el.start_ts, el.end_ts)
-        for lane in lanes
-        for el in lane.sequence
-        if isinstance(el, TransNode) and el.is_instant and el.call_type != "ProcessingCall"
-        and (el.start_ts, el.end_ts) not in _connector_pairs
-    }
+    _connector_pairs = _trans_time_pairs(lanes, lambda el: el.connector_only)
+    _span_pairs = _trans_time_pairs(lanes, lambda el: not el.connector_only)
+    _instant_pairs = _trans_time_pairs(
+        lanes,
+        lambda el: el.is_instant and el.call_type != "ProcessingCall",
+    ) - _connector_pairs
 
     # Parallel tool-call batches can create DFS-adjacent bucket pairs whose
     # real timestamps go backward/near-equal (same parent agent launches
@@ -386,6 +392,11 @@ def _build_chart_data(
             _gap["kind"] = "connector"
         elif (_prev_ts, _ts) in _instant_pairs:
             _gap["kind"] = "instant"
+        elif (_prev_ts, _ts) not in _span_pairs and (_ts - _prev_ts) < _EMPTY_GAP_MAX_S:
+            # A sub-5 ms step that no transition spans (agent start overhead
+            # before its first call) would otherwise get a full proportional
+            # column — hundreds of empty pixels in front of the first bar.
+            _gap["kind"] = "connector"
         else:
             _gap["kind"] = "normal"
         bucket_gaps.append(_gap)

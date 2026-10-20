@@ -13,7 +13,6 @@ from mas.lab.plots.multilevel_trajectory.constants import (
     _CALL_TYPE_TO_LEVEL,
     _KIND_BASE_TO_TYPE,
     _PROC_TYPE_LABEL,
-    _TS_TOL,
     PROCESSING_NAME_CONTEXT_ASSEMBLY,
 )
 from mas.lab.plots.multilevel_trajectory.annotations import _derive_context_semantics
@@ -22,6 +21,28 @@ from mas.lab.plots.multilevel_trajectory.annotations import _derive_context_sema
 def _normalized_str(s: Any, default: str = "?") -> str:
     """Normalize a value to lowercase string, with default fallback."""
     return str(s or default).strip().lower() if s else default
+
+
+def _event_loc(idx: Any, ev: dict[str, Any] | None = None, *, kind: Any = "", ts: Any = "") -> str:
+    if ev is not None:
+        kind = ev.get("kind", "")
+        ts = ev.get("timestamp", "")
+    return f"event #{idx} (kind={kind}, ts={ts})"
+
+
+def _event_sig(ev: dict[str, Any]) -> str:
+    return (
+        f"kind={ev.get('kind','')} agent_id={ev.get('agent_id','')} "
+        f"call_id={ev.get('call_id','')} parent_call_id={ev.get('parent_call_id','')} "
+        f"ts={ev.get('timestamp','')}"
+    )
+
+
+def _dict_list(value: Any) -> list[dict] | None:
+    if not isinstance(value, list):
+        return None
+    items = [item for item in value if isinstance(item, dict)]
+    return items or None
 
 
 def _normalize_context_messages(messages: Any) -> list[dict[str, str]]:
@@ -154,13 +175,6 @@ def _build_call_records(events: list[dict]) -> list[dict]:
     but this path is never used once the runtime assigns real ids.
     """
     records: list[dict] = []
-
-    def _event_sig(ev: dict[str, Any]) -> str:
-        return (
-            f"kind={ev.get('kind','')} agent_id={ev.get('agent_id','')} "
-            f"call_id={ev.get('call_id','')} parent_call_id={ev.get('parent_call_id','')} "
-            f"ts={ev.get('timestamp','')}"
-        )
     open_by_id: dict[str, dict] = {}
     open_calls: dict[tuple, list[dict]] = defaultdict(list)
     call_seq:   dict[tuple, int]        = defaultdict(int)
@@ -222,7 +236,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
     # changed (newly added context) vs what was carried over.
     _prev_context_by_agent: dict[str, list[dict[str, str]]] = {}
 
-    for ev in sorted(events, key=lambda e: float(e.get("timestamp") or 0)):
+    for _ev_idx, ev in sorted(enumerate(events), key=lambda p: float(p[1].get("timestamp") or 0)):
         kind      = ev.get("kind", "")
         kind_base = kind.replace("_start", "").replace("_end", "")
         agent_id  = ev.get("agent_id", "")
@@ -240,7 +254,8 @@ def _build_call_records(events: list[dict]) -> list[dict]:
         if call_type in _STRICT_ID_TYPES and not ev.get("call_id"):
             raise ValueError(
                 "Trajectory parsing requires runtime call_id on all call boundary events; "
-                f"missing call_id for {_event_sig(ev)}"
+                f"missing call_id for {_event_sig(ev)} ({_event_loc(_ev_idx, ev)}). "
+                "Likely cause: the trace predates call ids or was produced by a non-runtime writer"
             )
         # Drop duplicate engine-op emissions (see _seen_engine_io above).
         # Key on agent_id too: correlation_id restarts per agent, so a peer's
@@ -326,11 +341,10 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                     record["wait_note"] = str(ev.get("wait_note") or "")
                 if ev.get("wait_scope") is not None:
                     record["wait_scope"] = str(ev.get("wait_scope") or "")
-            # Preserve per-actor context segments from ProcessingCall events
-            # so the trajectory card can build CPR data directly.
-            if call_type == "ProcessingCall" and ev.get("segments"):
-                record["segments"] = ev["segments"]
             if call_type == "ProcessingCall":
+                parts = _dict_list(ev.get("segments"))
+                if parts:
+                    record["segments"] = parts
                 record["context_operation"] = str(ev.get("context_operation") or "")
                 _ctx_msgs = _normalize_context_messages(
                     ev.get("messages")
@@ -424,11 +438,15 @@ def _build_call_records(events: list[dict]) -> list[dict]:
             if _real_id and call_id in open_by_id:
                 _stale = open_by_id[call_id]
                 if _stale.get("level") != "agent":
+                    first = _stale.get("_opened_by", ("?", "", ""))
                     raise ValueError(
                         "Duplicate open call_id for non-agent record; this indicates broken "
                         "runtime boundaries. "
                         f"existing={_stale.get('call_type')} new={record.get('call_type')} "
-                        f"call_id={call_id}"
+                        f"call_id={call_id}: first opened by "
+                        f"{_event_loc(first[0], kind=first[1], ts=first[2])}, opened again by "
+                        f"{_event_loc(_ev_idx, ev)} before the first one ended. "
+                        "Likely cause: the same call was recorded twice"
                     )
                 # Agent-level id reuse is expected in some runtimes (e.g.
                 # repeated delegate invocations sharing an execution id).
@@ -439,6 +457,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                 _stale.setdefault("parent_call_id", None)
                 records.append(_stale)
             if _real_id:
+                record["_opened_by"] = (_ev_idx, kind, ev.get("timestamp", ""))
                 open_by_id[call_id] = record
             else:
                 open_calls[key].append(record)
@@ -463,7 +482,8 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                 if call_type in _STRICT_ID_TYPES:
                     raise ValueError(
                         "Orphan end event: no matching open start with same call_id; "
-                        f"{_event_sig(ev)}"
+                        f"{_event_sig(ev)} ({_event_loc(_ev_idx, ev)}). "
+                        "Likely cause: start missing, end recorded twice, or truncated trace"
                     )
                 continue
             record["end_ts"] = float(ev.get("timestamp") or 0)
@@ -741,8 +761,29 @@ def _build_call_records(events: list[dict]) -> list[dict]:
         _seen_ids.add(str(rec["call_id"]))
 
     records.extend(_synthesize_context_processing_records(events, records, _prev_context_by_agent))
+    _attach_parentless_calls(records)
 
     return sorted(records, key=lambda r: r["start_ts"])
+
+
+def _attach_parentless_calls(records: list[dict]) -> None:
+    """If exactly one agent execution contains a parentless call, make it the parent."""
+    by_agent: dict[str, list[dict]] = defaultdict(list)
+    for rec in records:
+        if rec.get("level") == "agent":
+            by_agent[str(rec.get("agent_id") or "")].append(rec)
+    for rec in records:
+        if rec.get("level") != "call" or rec.get("parent_call_id"):
+            continue
+        start = float(rec.get("start_ts") or 0)
+        owners = [
+            agent
+            for agent in by_agent.get(str(rec.get("agent_id") or ""), [])
+            if float(agent.get("start_ts") or 0) <= start <= float(agent.get("end_ts") or 0)
+        ]
+        if len(owners) == 1:
+            rec["parent_call_id"] = owners[0]["call_id"]
+            rec["_parent_inferred"] = True
 
 
 def _synthesize_context_processing_records(

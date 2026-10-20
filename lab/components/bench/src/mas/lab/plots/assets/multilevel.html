@@ -414,6 +414,14 @@ function computeMinZoom(base) {
   return Math.max(0.05, maxRatio);
 }
 
+// Shorten a label to at most n characters, marking the cut with an ellipsis so
+// a clipped name ("context as") is not mistaken for the full text.
+function _fitLabel(label, n) {
+  const t=String(label);
+  if (t.length<=n) return t;
+  return n>=3 ? t.slice(0,n-1)+'\u2026' : t.slice(0,n);
+}
+
 function snap(ts, buckets) {
   return buckets.reduce((b,c)=>Math.abs(c-ts)<Math.abs(b-ts)?c:b);
 }
@@ -1914,6 +1922,7 @@ function redraw(xPos) {
     }
     return [_fullTopY,_fullBotY];
   };
+  let _lastBrLabelEnd=-Infinity;
   CHART.buckets.forEach((b,i)=>{
     if (i===0) return;
     const gap=CHART.bucketGaps && CHART.bucketGaps[i-1];
@@ -1926,11 +1935,24 @@ function redraw(xPos) {
       .attr('stroke-dasharray','6,4').attr('opacity',0.55)
       .attr('pointer-events','none');
     if (gap.branchId) {
+      // Flip the label to the left of the separator when it would run past
+      // the right edge of the chart (the last reset line sits near it).
+      // Drop the uuid from runtime ids ("agent-<uuid>-exec" -> "agent-exec")
+      // and skip a label that would print on top of the previous one — a long
+      // run has dozens of separators and the full ids pile up into noise.
+      const _brLabel=`branch: ${String(gap.branchId).replace(/-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,'')}`;
+      const _brW=_brLabel.length*4.9;
+      const _brFlip=x+4+_brW>totalW;
+      const _brLeft=_brFlip?x-4-_brW:x+4;
+      if (_brLeft>=_lastBrLabelEnd+4) {
+      _lastBrLabelEnd=_brLeft+_brW;
       ph0.append('text')
-        .attr('x',x+4).attr('y',lineTopY+12)
+        .attr('x',_brFlip?x-4:x+4).attr('y',lineTopY+12)
+        .attr('text-anchor',_brFlip?'end':'start')
         .attr('font-size',8).attr('fill','#f59e0b').attr('opacity',0.8)
         .attr('pointer-events','none').attr('font-family','ui-monospace,monospace')
-        .text(`branch: ${gap.branchId}`);
+        .text(_brLabel);
+      }
     }
   });
 
@@ -2030,7 +2052,11 @@ function redraw(xPos) {
       const barMid=(barLeft+barRight)/2;
       ph1.append('rect').attr('x',barLeft).attr('y',ty).attr('width',Math.max(2,barRight-barLeft)).attr('height',TRH)
         .attr('rx',4).attr('fill',tr.color)
-        .attr('stroke','none')
+        // A call whose end event was never recorded has an approximate
+        // duration (it is drawn up to the next known boundary): dashed outline.
+        .attr('stroke',(tr.missingTelemetry||[]).includes('end_event')?'#f8fafc':'none')
+        .attr('stroke-width',1.2)
+        .attr('stroke-dasharray',(tr.missingTelemetry||[]).includes('end_event')?'4,3':null)
         .style('cursor','pointer')
         .on('mousemove',e=>showTip(e,tr.label,popupContent,tr.callType,null,null,popupCpr)).on('mouseleave',hideTip)
         .on('click',e=>{e.stopPropagation();pinTip(e,tr.label,popupContent,tr.callType,null,null,popupCpr,tr.model,popupHoverOut,tr.governance);});
@@ -2041,7 +2067,7 @@ function redraw(xPos) {
         ph1.append('text').attr('x',barMid).attr('y',cy+4)
           .attr('text-anchor','middle').attr('font-size',10).attr('font-weight','bold')
           .attr('fill','#fff').attr('pointer-events','none')
-          .attr('font-family','ui-monospace,monospace').text(tr.label.slice(0,maxC));
+          .attr('font-family','ui-monospace,monospace').text(_fitLabel(tr.label,maxC));
       // Badge
       const bx=Math.min(barLeft+(barRight-barLeft)*0.82, barRight-BR-1), by=ty-BR-1;
       ph1.append('circle').attr('cx',bx).attr('cy',by).attr('r',BR).attr('fill',C.badge);
@@ -2203,7 +2229,7 @@ function redraw(xPos) {
           ph2b.append('text').attr('x',labelX).attr('y',by+bs-2)
             .attr('font-size',9).attr('font-weight','bold').attr('fill',color)
             .attr('font-family','ui-monospace,monospace').attr('pointer-events','none')
-            .text(g.label.slice(0,maxC));
+            .text(_fitLabel(g.label,maxC));
       }
     });
   });

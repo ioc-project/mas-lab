@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import Optional
 
 from mas.lab.plots.multilevel_trajectory.constants import (
+    _LLM_FOLLOW_UP_TYPES,
     _TS_TOL,
     PROCESSING_TYPE_WAIT_STATE,
 )
@@ -19,6 +20,20 @@ from mas.lab.plots.multilevel_trajectory.constants import (
 # lane marker itself the matching nonzero width). Both must agree exactly, or
 # the Agents lane and Calls lane disagree about when the handoff happens.
 _MARKER_DUR = 0.001
+
+
+def _layout_parent_id(rec: dict, by_id: dict[str, dict]) -> Optional[str]:
+    """Parent used for lane layout: LLM follow-ups sit beside the LLM, not inside it."""
+    pid = rec.get("parent_call_id")
+    parent = by_id.get(pid) if pid is not None else None
+    if (
+        parent is not None
+        and parent.get("call_type") == "LLMCall"
+        and rec.get("call_type") in _LLM_FOLLOW_UP_TYPES
+        and parent.get("parent_call_id") is not None
+    ):
+        return parent["parent_call_id"]
+    return pid
 
 
 def _build_call_tree(
@@ -45,8 +60,9 @@ def _build_call_tree(
     children_of: dict[str, list[dict]] = defaultdict(list)
     parent_of:   dict[str, Optional[str]] = {}
 
+    by_id = {r["call_id"]: r for r in records}
     for rec in records:
-        pid = rec.get("parent_call_id")
+        pid = _layout_parent_id(rec, by_id)
         parent_of[rec["call_id"]] = pid
         if pid is not None:
             children_of[pid].append(rec)
