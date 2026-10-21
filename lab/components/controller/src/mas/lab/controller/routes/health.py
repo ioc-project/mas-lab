@@ -6,14 +6,12 @@ from __future__ import annotations
 
 import json as _json
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-
 from mas.lab.controller.constants import (
     PIPELINE_STEP_TYPES_POST_PATH,
     PIPELINE_STEP_TYPES_PRE_PATH,
 )
-from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
 
 router = APIRouter()
 
@@ -29,12 +27,48 @@ async def api_health():
 
 
 @router.get("/api/info")
-async def info():
-    """Return server configuration and paths."""
-    libraries_dir = LIBRARIES_DIR
+async def info(request: Request):
+    """Capabilities the UI uses to bootstrap a connection."""
+    settings = getattr(request.app.state, "settings", None)
+    auth = getattr(settings, "auth_mode", "none") if settings else "none"
+    api_version = getattr(settings, "api_version", "0.3.0") if settings else "0.3.0"
+    cors_ok = True
+    if settings is not None:
+        cors_ok = bool(settings.cors_allow_origins)
+    from mas.lab.controller.deps import store_from_request
+    from mas.lab.controller.routes.scopes import _kinds_for
+    from mas.lab.controller.scope_catalog import get_scope_catalog
+
+    catalog = get_scope_catalog(store_from_request(request))
+    edit_targets = [
+        {
+            "id": scope.id,
+            "kind": scope.kind,
+            "name": scope.name,
+            "origin": scope.origin,
+            "kinds": _kinds_for(scope),
+            "owner": scope.owner,
+        }
+        for scope in catalog.all()
+        if scope.writable
+    ]
     return {
-        "libraries_dir": str(libraries_dir),
-        "libraries_dir_exists": libraries_dir.exists(),
+        "api_version": api_version,
+        "features": [
+            "scopes",
+            "items",
+            "runs",
+            "artifacts",
+            "uploads",
+            "choices",
+            "sse",
+            "edit_targets",
+            "create_scope",
+        ],
+        "auth": auth,
+        "cors_ok": cors_ok,
+        "writable_default": any(scope.writable for scope in catalog.all()),
+        "edit_targets": edit_targets,
     }
 
 
@@ -63,7 +97,6 @@ async def get_manifest_schema(
         Uses the same loader as ``mas.ctl.validate`` — no filesystem access in the browser.
     """
     import yaml as _yaml
-
     from mas.ctl.validate.schemas import load_schema, schema_path_for_kind
     from mas.lab.controller.schema_registry import read_schema_text
 
@@ -83,7 +116,7 @@ async def get_manifest_schema(
     try:
         entry, text = read_schema_text(schema_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Unknown schema: {schema_id}")
+        raise HTTPException(status_code=404, detail=f"Unknown schema: {schema_id}") from None
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

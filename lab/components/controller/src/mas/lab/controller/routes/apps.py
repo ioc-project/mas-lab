@@ -10,55 +10,17 @@ from pathlib import Path
 import yaml
 from fastapi import APIRouter, HTTPException
 
-from mas.ctl.overlay.canvas import (
-    apply_ui_canvas_to_yaml,
-    extract_ui_canvas_overlay,
-    write_ui_canvas_overlay,
-)
+from mas.ctl.overlay.canvas import apply_ui_canvas_to_yaml, persist_ui_canvas_yaml
+from mas.lab.controller.lab_registry import LabRegistry
 from mas.lab.controller.models import SaveMASResourceRequest
 from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
 
 router = APIRouter()
 
 
-def _parse_agents(agents: dict[str, str]) -> dict[str, dict] | None:
-    """Parse every agent YAML. Return None if any document is unreadable."""
-    parsed: dict[str, dict] = {}
-    for name, text in agents.items():
-        try:
-            doc = yaml.safe_load(text) or {}
-        except Exception:
-            return None
-        if not isinstance(doc, dict):
-            return None
-        parsed[name] = doc
-    return parsed
-
-
-def _dump_yaml(doc: dict) -> str:
-    return yaml.dump(doc, sort_keys=False, allow_unicode=True, width=100)
-
-
 def _persist_ui_canvas(app_dir: Path, mas_yaml: str, agents: dict[str, str], mas_name: str) -> tuple[str, dict[str, str]]:
-    """Move canvas ``x-*`` fields from MAS/agent YAML into overlays/ui-canvas.yaml.
-
-    If MAS or agent YAML cannot be parsed, write the originals unchanged so a
-    canvas save cannot drop an agent file.
-    """
-    try:
-        mas_doc = yaml.safe_load(mas_yaml) or {}
-    except Exception:
-        return mas_yaml, agents
-    if not isinstance(mas_doc, dict):
-        return mas_yaml, agents
-    agent_docs = _parse_agents(agents)
-    if agent_docs is None:
-        return mas_yaml, agents
-    overlay = extract_ui_canvas_overlay(mas_doc, agent_docs, mas_name=mas_name)
-    if overlay is None:
-        return mas_yaml, agents
-    write_ui_canvas_overlay(app_dir, overlay)
-    return _dump_yaml(mas_doc), {name: _dump_yaml(doc) for name, doc in agent_docs.items()}
+    """Move canvas ``x-*`` fields from MAS/agent YAML onto a layout-only Overlay."""
+    return persist_ui_canvas_yaml(app_dir, mas_yaml, agents, mas_name=mas_name)
 
 
 def _write_mas_resource(apps_dir: Path, mas_name: str, mas_yaml: str, agents: dict[str, str]) -> dict:
@@ -172,10 +134,32 @@ async def get_mas_resource(library_name: str, mas_name: str):
 
     mas_yaml = entry["mas_yaml"]
     agents = dict(entry.get("agents") or {})
+    store = deps.get_manifest_store()
     lib_dir = deps.get_library_path(library_name)
     mas_path = entry.get("path")
     mas_dir = (lib_dir / mas_path).parent if mas_path else lib_dir / "apps" / mas_name
-    mas_yaml, agents, overlay_path = apply_ui_canvas_to_yaml(mas_dir, mas_yaml, agents)
+    registry = getattr(store, "_registry", None)
+    if not isinstance(registry, LabRegistry):
+        registry = LabRegistry._ephemeral()
+    target_name = mas_name
+    try:
+        mas_doc = yaml.safe_load(mas_yaml) or {}
+        if isinstance(mas_doc, dict):
+            target_name = str((mas_doc.get("metadata") or {}).get("name") or mas_name).strip() or mas_name
+    except Exception:
+        pass
+    seen: set[Path] = set()
+    matched: list[tuple[Path, dict]] = []
+    for name in (target_name, mas_name):
+        for path, doc in registry.layout_overlays_targeting(lib_dir, kind="MAS", name=name):
+            key = path.resolve()
+            if key in seen:
+                continue
+            seen.add(key)
+            matched.append((path, doc))
+    mas_yaml, agents, overlay_path = apply_ui_canvas_to_yaml(
+        mas_dir, mas_yaml, agents, overlays=matched
+    )
     body: dict = {
         "mas_name": mas_name,
         "mas_yaml": mas_yaml,

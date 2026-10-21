@@ -1,7 +1,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_b1cdfc1a
   name: concierge_agent
 spec:
   description: Fare lookup specialist.
@@ -28,6 +27,3 @@ spec:
     - ref: ../../../tools/get_attraction_fare.tool.yaml
     - ref: ../../../tools/query_graph_database.tool.yaml
     - ref: ../../../tools/calc.tool.yaml
-x-canvas-node-ids:
-  model: node_ccdf15ec
-  tools: node_a804a19f

@@ -3,7 +3,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_8335d6ff
   name: schedule_agent
 spec:
   models:
@@ -29,6 +28,3 @@ spec:
       \ information.\n      When you have gathered sufficient information, provide\
       \ a clear overview of relevant\n      transport schedules and attractions for\
       \ each city on the itinerary."
-x-canvas-node-ids:
-  model: node_074e0028
-  tools: node_737d0489

@@ -1,20 +1,16 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
-import { useCallback, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useCallback, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Tooltip } from "@mui/material";
-import { useParams } from "react-router";
 import type { ToolNodeType } from "../types";
-import { useTools } from "@/api/apiCalls";
+import { useToolChoices } from "@/api/choices";
+import { useScopeId } from "@/api/scope";
 
 export function ToolNode({ data, id, selected }: NodeProps<ToolNodeType>) {
   const [inputValue, setInputValue] = useState("");
-  const { library = "", id: masName } = useParams();
-  const namespaces = useMemo(
-    () => (masName ? ["global", masName] : ["global"]),
-    [masName],
-  );
-  const { data: toolOptions = [] } = useTools(library, namespaces);
+  const library = useScopeId();
+  const { tools: toolOptions = [] } = useToolChoices(library);
 
   const toolDescMap = new Map(
     toolOptions.map((t) => [t.name, t.description]),

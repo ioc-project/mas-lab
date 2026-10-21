@@ -43,6 +43,7 @@ When you add or rename a doc page, update **`mkdocs.yml` nav** and cross-links i
 - **[Web UI](ui/index.md)**
 - [Terminal UI (TUI)](ctl/tui.md)
 - [Glossary](glossary.md)
+- [ADR 0003 — UI backend contract](references/adr-0003-ui-backend-contract.md)
 
 ### Tutorials
 

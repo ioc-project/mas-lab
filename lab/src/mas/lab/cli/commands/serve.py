@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 
@@ -23,10 +25,34 @@ import click
     "--host",
     default="127.0.0.1",
     show_default=True,
-    help="Bind address. Non-loopback requires TLS and MAS_DEMO_UI_TOKEN.",
+    help="Bind address. Non-loopback binds require --cors-origin for browser UIs.",
+)
+@click.option(
+    "--cors-origin",
+    "cors_origins",
+    multiple=True,
+    help="Allowed CORS origin (repeatable). Default: permissive on loopback, none otherwise.",
+)
+@click.option(
+    "--token-file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="File whose contents are the bearer token. Unset = open API.",
+)
+@click.option(
+    "--state-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Directory for the run store, job store, and uploads.",
+)
+@click.option(
+    "--workspace",
+    type=click.Path(file_okay=False, exists=True, path_type=Path),
+    default=None,
+    help="Project folder for config.yaml, labs, libraries, and the writable Workspace library. Sets MAS_WORKSPACE_ROOT.",
 )
 @click.pass_context
-def serve_cmd(ctx: click.Context, port: int, host: str) -> None:
+def serve_cmd(ctx: click.Context, port: int, host: str, cors_origins, token_file, state_dir, workspace) -> None:
     """Launch the MAS Lab controller daemon.
 
     \b
@@ -34,6 +60,8 @@ def serve_cmd(ctx: click.Context, port: int, host: str) -> None:
     --------
     mas-lab serve
     mas-lab serve -p 8090
+    mas-lab serve --workspace ./labs/ioc-motivation.lab
+    mas-lab serve --host 0.0.0.0 --token-file ./token --cors-origin http://localhost:8080
     """
     click.echo()
     click.echo("=" * 60)
@@ -46,4 +74,13 @@ def serve_cmd(ctx: click.Context, port: int, host: str) -> None:
 
     from mas.lab.controller.daemon import main as daemon_main
 
-    raise SystemExit(daemon_main(["--host", host, "--port", str(port)]))
+    argv = ["--host", host, "--port", str(port)]
+    for origin in cors_origins:
+        argv.extend(["--cors-origin", origin])
+    if token_file is not None:
+        argv.extend(["--token-file", str(token_file)])
+    if state_dir is not None:
+        argv.extend(["--state-dir", str(state_dir)])
+    if workspace is not None:
+        argv.extend(["--workspace", str(workspace)])
+    raise SystemExit(daemon_main(argv))

@@ -64,7 +64,7 @@ export function Sidebar() {
               style={{ color: CATEGORY_COLORS[cat] ?? "#999" }}
             >
               {CATEGORY_ICONS[cat] ?? "📦"}{" "}
-              {registry?.categories.find((c) => c.id === cat)?.label ?? cat}
+              {registry?.categories?.find((c) => c.id === cat)?.label ?? cat}
             </div>
             {grouped[cat].map((entry) => (
               <div

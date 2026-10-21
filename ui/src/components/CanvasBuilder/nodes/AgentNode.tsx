@@ -165,7 +165,7 @@ export function AgentNode({ data, selected }: NodeProps<AgentNodeType>) {
           />
           <span className="agent-node__slot-label">MODEL</span>
           <span className="agent-node__slot-value">
-            {data.connectedModel || "gpt-4o-mini"}
+            {data.connectedModel || "—"}
           </span>
         </div>
 

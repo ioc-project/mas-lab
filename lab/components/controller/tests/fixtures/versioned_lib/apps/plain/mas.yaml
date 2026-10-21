@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: MAS
+metadata:
+  name: plain
+  description: 'plain application'
+spec:
+  agency:
+    agents:
+      - id: plain
+        ref: plain.agent
+  workflow:
+    entry: plain
+    nodes:
+      - id: plain
+        role: specialist

@@ -80,6 +80,7 @@ class WorkerRecord:
         origin = _ui_origin(self.spec)
         summary = {
             "id": self.id,
+            "kind": self.kind.value,
             "endpoint": self.endpoint,
             "command": self.command,
             "status": self._job_status(),

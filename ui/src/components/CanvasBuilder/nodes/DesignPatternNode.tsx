@@ -3,12 +3,10 @@
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { useCallback, type ChangeEvent } from "react";
 import type { DesignPatternNodeType } from "../types";
-import { FALLBACK_PATTERN_GROUPS } from "@/utils/designPatternOptions";
+import { useDesignPatternChoices } from "@/api/choices";
 
 export function DesignPatternNode({ data, id, selected }: NodeProps<DesignPatternNodeType>) {
-  // Static list until the backend serves GET /api/design-patterns; then swap
-  // back to useDesignPatterns() + buildPatternGroups().
-  const groups = FALLBACK_PATTERN_GROUPS;
+  const { groups } = useDesignPatternChoices();
 
   const handleChange = useCallback(
     (field: string) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {

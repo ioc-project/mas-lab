@@ -1,7 +1,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_3d1113bc
   name: qa-agent
 spec:
   description: answer user's questions
@@ -13,9 +12,3 @@ spec:
     - ref: ../../../tools/web-search.tool.yaml
   skills:
     - global/answer-formatting
-x-text-input: what are the top attractions to visit in Paris?
-x-canvas-node-ids:
-  role: node_db6794a6
-  model: node_98e08fad
-  tools: node_f665d7f6
-  promptSkills: node_02f6d7ad

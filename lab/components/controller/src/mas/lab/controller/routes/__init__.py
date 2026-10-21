@@ -7,18 +7,31 @@ from __future__ import annotations
 from fastapi import FastAPI
 from mas.lab.controller.routes import (
     apps,
+    artifacts,
     benchmark,
+    choices,
     datasets,
+    design_patterns,
     eval_output,
     experiments,
     health,
+    items,
     jobs,
     libraries,
     overlays,
     pipelines,
     registry,
     run,
+    runs,
+    scopes,
+    uploads,
     validate,
+)
+
+_DEPRECATED_PREFIXES = (
+    "/api/libraries",
+    "/api/jobs",
+    "/api/experiments",
 )
 
 
@@ -37,6 +50,33 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(eval_output.router)
     app.include_router(apps.router)
     app.include_router(health.router)
-    from mas.lab.controller.ui_stream import mount_ui_stream
+    app.include_router(scopes.router)
+    app.include_router(items.router)
+    app.include_router(choices.router)
+    app.include_router(design_patterns.router)
+    app.include_router(runs.router)
+    app.include_router(artifacts.router)
+    app.include_router(uploads.router)
+    _mark_app_deprecated(app)
 
-    mount_ui_stream(app)
+
+def _iter_api_routes(node) -> list:
+    routes = []
+    for route in getattr(node, "routes", []) or []:
+        original = getattr(route, "original_router", None)
+        if original is not None:
+            routes.extend(_iter_api_routes(original))
+            continue
+        nested = getattr(route, "app", None)
+        if nested is not None and hasattr(nested, "routes") and nested is not node:
+            routes.extend(_iter_api_routes(nested))
+        routes.append(route)
+    return routes
+
+
+def _mark_app_deprecated(app: FastAPI) -> None:
+    for route in _iter_api_routes(app):
+        path = getattr(route, "path", "") or ""
+        if any(path == prefix or path.startswith(prefix + "/") for prefix in _DEPRECATED_PREFIXES):
+            if hasattr(route, "deprecated"):
+                route.deprecated = True

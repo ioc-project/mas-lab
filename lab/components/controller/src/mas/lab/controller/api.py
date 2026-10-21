@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _INSTANCE: "ControllerAPI | None" = None
 
 
-def set_controller_api(api: "ControllerAPI") -> None:
+def set_controller_api(api: Optional["ControllerAPI"]) -> None:
     global _INSTANCE
     _INSTANCE = api
 

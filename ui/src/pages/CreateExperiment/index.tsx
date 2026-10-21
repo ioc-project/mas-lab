@@ -42,6 +42,9 @@ import {
   updateExperimentApi,
   type OverlayEntry,
 } from "@/api/apiCalls";
+import { fetchItems, type ItemRef } from "@/api/items";
+import { scopeHref, useScopeId } from "@/api/scope";
+import { useVisibleLibraries } from "@/api/scopes";
 import { isUiCanvasOverlay } from "@/utils/uiCanvasOverlay";
 import {
   Button,
@@ -67,11 +70,8 @@ interface ScenarioFormData {
 
 /**
  * Convert an overlay display name (used in the UI multi-select) back to a
- * ``{ref: path}`` object for the experiment YAML.
- *
- * Display names use the ``global/`` prefix for library-root overlays;
- * app-scoped overlays use their bare name.  The ``path`` field from the
- * OverlayEntry carries the filesystem-relative path.
+ * ``{ref}`` object for the experiment YAML. The stored value is the backend
+ * item ref, never a server path.
  */
 function overlayDisplayNameToRef(
   displayName: string,
@@ -80,36 +80,35 @@ function overlayDisplayNameToRef(
   const match = overlayOptions.find(
     (o) => overlayDisplayName(o) === displayName,
   );
-  if (match?.path) return { ref: match.path };
+  const itemRef = match?.ref || match?.path;
+  if (itemRef) return { ref: itemRef };
   return displayName;
 }
 
-/** Build a UI display name for an overlay entry: ``global/name`` or bare ``name``. */
+/** Build a UI display name for an overlay entry. */
 function overlayDisplayName(entry: OverlayEntry): string {
-  if (!entry.namespace || entry.namespace === "global") {
-    return `global/${entry.name}`;
+  if (entry.namespace && entry.namespace !== "global") {
+    return `${entry.namespace}/${entry.name}`;
   }
   return entry.name;
 }
 
 /**
  * Convert an ``OverlayRef`` from an experiment YAML (either a bare string or
- * ``{ref: path}``) back to a UI display name for the multi-select.
+ * ``{ref}``) back to a UI display name for the multi-select.
  */
 function overlayRefToDisplayName(
   ref: OverlayRef,
   overlayOptions: OverlayEntry[],
 ): string {
   if (typeof ref === "string") return ref;
-  const path = ref.ref;
-  const match = overlayOptions.find((o) => o.path === path);
+  const stored = ref.ref;
+  const match = overlayOptions.find(
+    (o) => o.ref === stored || o.path === stored || o.name === stored,
+  );
   if (match) return overlayDisplayName(match);
-  const stem =
-    path
-      .replace(/\.yaml$/, "")
-      .split("/")
-      .pop() ?? path;
-  return stem;
+  const stem = stored.split("/").pop() ?? stored;
+  return stem.replace(/\.ya?ml$/i, "");
 }
 
 function OverlaySelect({
@@ -157,9 +156,8 @@ function OverlaySelect({
 
 // ── Pipeline hooks ──────────────────────────────────────────────────────────
 // Experiment manifests carry per-level lifecycle hooks (application / scenario /
-// test / run), each with `pre:` and `post:` arrays of pipelines.  We only author
-// the reference form: { ref: "pipelines/<name>.yaml" } (library-root-relative,
-// matching how datasets/apps are referenced).  Inline steps / {id} are never
+// test / run), each with `pre:` and `post:` arrays of pipelines. We only author
+// the reference form `{ ref: <item-ref> }`. Inline steps / {id} are never
 // emitted; any such hand-written entries are preserved untouched.
 
 const HOOK_LEVELS = ["application", "scenario", "test", "run"] as const;
@@ -172,7 +170,7 @@ type HookSelections = Record<HookLevel, Record<HookPhase, string[]>>;
 type HookOpaque = Record<HookLevel, Record<HookPhase, PipelineHookEntry[]>>;
 
 interface PipelineOption {
-  /** File stem — the value written into `pipelines/<stem>.yaml`. */
+  /** Item id / stem stored as the hook ref. */
   stem: string;
   /** Human label — pipeline metadata name, falling back to the stem. */
   label: string;
@@ -245,17 +243,15 @@ function splitHookPhase(
 
 /**
  * Build a serialized pre/post array from picker values + preserved opaque
- * entries.  Known stems become `{ ref: "pipelines/<stem>.yaml" }`; unmatched raw
- * values are re-emitted as `{ ref: <raw> }`.  Returns undefined when empty.
+ * entries. Known stems and unmatched raw values are both `{ ref: <item-ref> }`.
+ * Returns undefined when empty.
  */
 function buildHookPhase(
   values: string[],
   opaque: PipelineHookEntry[],
-  stems: Set<string>,
+  _stems: Set<string>,
 ): PipelineHookEntry[] | undefined {
-  const out: PipelineHookEntry[] = values.map((v) =>
-    stems.has(v) ? { ref: `pipelines/${v}.yaml` } : { ref: v },
-  );
+  const out: PipelineHookEntry[] = values.map((v) => ({ ref: v }));
   for (const entry of opaque) out.push(entry);
   return out.length ? out : undefined;
 }
@@ -368,12 +364,11 @@ const CreateExperiment = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const library = useScopeId();
   const {
-    library = "",
     id: routeName,
     experimentTab,
   } = useParams<{
-    library: string;
     id: string;
     experimentTab: string;
   }>();
@@ -385,7 +380,7 @@ const CreateExperiment = () => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
-  const [configsDir, setConfigsDir] = useState("apps");
+  const [configsDir, setConfigsDir] = useState("");
   const [masManifest, setMasManifest] = useState("");
   const [usePatchOverlays, setUsePatchOverlays] = useState(false);
 
@@ -425,6 +420,30 @@ const CreateExperiment = () => {
     usePipelines(library);
   const { data: editContent, isLoading: editContentLoading } =
     useExperimentContent(library, editingName);
+  const { data: visibleLibraries = [] } = useVisibleLibraries(library);
+  const [applicationOptions, setApplicationOptions] = useState<ItemRef[]>([]);
+
+  useEffect(() => {
+    const scopes = visibleLibraries.length
+      ? visibleLibraries.map((s) => s.id)
+      : library
+        ? [library]
+        : [];
+    if (!scopes.length) {
+      setApplicationOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      scopes.map((id) => fetchItems(id, "application").catch(() => [])),
+    ).then((groups) => {
+      if (cancelled) return;
+      setApplicationOptions(groups.flatMap((g) => g.flatMap((item) => item.items)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleLibraries, library]);
 
   // Available pipelines as picker options: value = file stem, label = name.
   const pipelinePickerOptions = useMemo<PipelineOption[]>(
@@ -476,14 +495,8 @@ const CreateExperiment = () => {
       setName(exp.name);
       setDescription(exp.description ?? "");
       const app0 = exp.applications?.[0];
-      setConfigsDir(app0?.configs_dir ?? "apps");
-      const rawManifest = app0?.manifest ?? "";
-      setMasManifest(
-        rawManifest
-          .replace(/^apps\//, "")
-          .replace(/\/mas\.yaml$/, "")
-          .replace(/\.yaml$/, ""),
-      );
+      setConfigsDir(app0?.configs_dir ?? "");
+      setMasManifest(app0?.app || app0?.manifest || "");
 
       const hasOverlays =
         exp.scenarios?.some((s) => {
@@ -533,9 +546,8 @@ const CreateExperiment = () => {
         exp.execution?.emulation?.runtime?.cache ?? "content-addressed",
       );
 
-      // Level hooks: map each `{ref: pipelines/<name>.yaml}` back to its stem
-      // (matched against known pipelines); unmatched refs and inline entries are
-      // preserved so nothing hand-authored is lost.
+      // Level hooks: map each `{ref}` back to a known pipeline stem; unmatched
+      // refs and inline entries are preserved so nothing hand-authored is lost.
       const nextHooks: HookSelections = emptyHookMap();
       const nextOpaque: HookOpaque = emptyHookMap();
       for (const level of HOOK_LEVELS) {
@@ -626,8 +638,7 @@ const CreateExperiment = () => {
     if (description.trim()) experiment.description = description.trim();
 
     const appEntry: Record<string, unknown> = {};
-    if (usePatchOverlays && masManifest.trim())
-      appEntry.manifest = `apps/${masManifest.trim()}/mas.yaml`;
+    if (usePatchOverlays && masManifest.trim()) appEntry.app = masManifest.trim();
     if (!usePatchOverlays && configsDir.trim())
       appEntry.configs_dir = configsDir.trim();
     if (Object.keys(appEntry).length) experiment.applications = [appEntry];
@@ -649,9 +660,9 @@ const CreateExperiment = () => {
       },
     };
 
-    // Level hooks: emit `experiment.<level>.{pre,post}` as `{ref: pipelines/…}`
-    // lists; skip empty phases so no bare pre:/post: keys appear.  The run level
-    // is merged onto the existing run object (which already carries n_runs).
+    // Level hooks: emit `experiment.<level>.{pre,post}` as `{ref}` lists; skip
+    // empty phases so no bare pre:/post: keys appear. The run level is merged
+    // onto the existing run object (which already carries n_runs).
     for (const level of HOOK_LEVELS) {
       const pre = buildHookPhase(
         hooks[level].pre,
@@ -732,7 +743,7 @@ const CreateExperiment = () => {
 
   const handlePatchOverlaysToggle = (checked: boolean) => {
     setUsePatchOverlays(checked);
-    setConfigsDir(checked ? "overlays" : "apps");
+    setConfigsDir("");
     setScenarios([{ id: "", description: "", tags: "", overlays: [] }]);
   };
 
@@ -773,7 +784,7 @@ const CreateExperiment = () => {
       queryClient.resetQueries({ queryKey: ["experiments"] });
       queryClient.resetQueries({ queryKey: ["experiment"] });
       queryClient.resetQueries({ queryKey: ["experiment-content"] });
-      navigate(`/${library}/experiments`);
+      navigate(scopeHref(library, "/experiments"));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save experiment.",
@@ -792,7 +803,7 @@ const CreateExperiment = () => {
   ]);
 
   const handleCancel = useCallback(() => {
-    navigate(`/${library}/experiments`);
+    navigate(scopeHref(library, "/experiments"));
   }, [navigate, library]);
 
   const pageTitle = isEditing ? `Edit Experiment` : "Add Experiment";
@@ -1066,9 +1077,9 @@ const CreateExperiment = () => {
                         );
                       }}
                     >
-                      {scenarioOptions.map((s) => (
-                        <MenuItem key={s.name} value={s.name}>
-                          {s.name}
+                      {applicationOptions.map((item) => (
+                        <MenuItem key={item.id} value={item.ref}>
+                          {item.ref}
                         </MenuItem>
                       ))}
                     </SelectField>
@@ -1084,7 +1095,7 @@ const CreateExperiment = () => {
                   Dataset
                 </Typography>
                 <SelectField
-                  label="Dataset Path"
+                  label="Dataset"
                   required
                   fullWidth
                   clearable={false}
@@ -1092,16 +1103,11 @@ const CreateExperiment = () => {
                   value={datasetPath}
                   onChange={(e) => setDatasetPath(e.target.value)}
                 >
-                  {datasetOptions
-                    .filter(
-                      (d) =>
-                        d.name.endsWith(".yaml") || d.name.endsWith(".yml"),
-                    )
-                    .map((d) => (
-                      <MenuItem key={d.path} value={d.path}>
-                        {d.path.replace(/^datasets\//, "")}
-                      </MenuItem>
-                    ))}
+                  {datasetOptions.map((d) => (
+                    <MenuItem key={d.path || d.name} value={d.path || d.name}>
+                      {d.name}
+                    </MenuItem>
+                  ))}
                 </SelectField>
 
                 <Divider />

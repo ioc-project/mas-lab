@@ -11,11 +11,22 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _reset_controller_api():
+    yield
+    from mas.lab.controller.api import set_controller_api
+    from mas.lab.controller.run_bridge import reset_follow_state
+
+    set_controller_api(None)
+    reset_follow_state()
+
+
+@pytest.fixture(autouse=True)
 def _controller_test_defaults(monkeypatch: pytest.MonkeyPatch):
     """Speed up controller tests by disabling startup discovery noise and churn."""
     monkeypatch.setenv("MAS_CONTROLLER_DISABLE_STARTUP_DISCOVERY", "1")
     monkeypatch.setenv("MAS_CONTROLLER_REFRESH_INTERVAL_S", "5")
     monkeypatch.setenv("MAS_LAB_REGISTRY_EAGER_REFRESH", "0")
+    monkeypatch.delenv("MAS_WORKSPACE_ROOT", raising=False)
 
 
 @pytest.fixture(autouse=True)

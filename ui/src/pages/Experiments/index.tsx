@@ -9,20 +9,17 @@ import {
 import type { ExperimentJobStatus } from "@/components/ExperimentsTable/ExperimentsTable";
 import { Alert, Box, Stack, Typography, useTheme } from "@mui/material";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
-import { useNavigate, useParams } from "react-router";
-import { parse } from "yaml";
+import { useNavigate } from "react-router";
+import { scopeHref, toScopeId, useScopeId } from "@/api/scope";
 import {
   useExperiments,
   type ExperimentSummary,
-  fetchExperimentContent,
   deleteExperimentApi,
-  runBenchmark,
   pollJob,
-  fetchJobs,
-  fetchJobDetail,
   deleteExperimentCache,
   downloadBenchmarkExport,
 } from "@/api/apiCalls";
+import { fetchRuns, startRun } from "@/api/runs";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Tab, Tabs } from "@open-ui-kit/core";
 
@@ -34,7 +31,7 @@ const experimentJobKey = (exp: Pick<ExperimentSummary, "name" | "library">) =>
 const Experiments = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { library = "" } = useParams<{ library: string }>();
+  const library = useScopeId();
   const queryClient = useQueryClient();
 
   const { data: experiments = [], isLoading } = useExperiments(library);
@@ -59,7 +56,7 @@ const Experiments = () => {
   const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const handleAdd = () => {
-    navigate(`/${library}/experiments/new/setup`);
+    navigate(scopeHref(library, "/experiments/new"));
   };
 
   const resolveExperiment = useCallback(
@@ -75,9 +72,7 @@ const Experiments = () => {
     (name: string) => {
       const exp = resolveExperiment(name);
       const expLibrary = exp?.library ?? library;
-      navigate(
-        `/${expLibrary}/experiments/${encodeURIComponent(name)}/edit/setup`,
-      );
+      navigate(scopeHref(expLibrary, `/experiments/${encodeURIComponent(name)}/edit`));
     },
     [library, navigate, resolveExperiment],
   );
@@ -154,81 +149,39 @@ const Experiments = () => {
   useEffect(() => {
     const recoverJobs = async () => {
       try {
-        const allJobs = [
-          ...(await fetchJobs("pending")),
-          ...(await fetchJobs("running")),
-          ...(await fetchJobs("completed")),
-          ...(await fetchJobs("failed")),
-        ];
-
-        const benchmarkJobs = allJobs
-          .filter((j) => j.endpoint?.includes("/benchmark/run"))
-          .sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() -
-              new Date(a.created_at).getTime(),
-          );
-
+        const runs = (await fetchRuns()).filter((r) => r.kind === "experiment");
         const seen = new Set<string>();
-        for (const job of benchmarkJobs) {
-          const detail = await fetchJobDetail(job.id);
-          const body = detail.request_body as
-            | Record<string, unknown>
-            | undefined;
-          const experimentYaml = body?.experiment_yaml as string | undefined;
-          if (!experimentYaml) continue;
-
-          let experimentName: string | undefined;
-          try {
-            const parsed = parse(experimentYaml) as Record<string, unknown>;
-            const inner = (parsed?.experiment ?? parsed) as
-              | Record<string, unknown>
-              | undefined;
-            experimentName = inner?.name as string | undefined;
-          } catch {
-            /* ignore parse errors */
-          }
-          if (!experimentName) experimentName = job.id;
-
-          const jobLibrary =
-            job.endpoint?.match(
-              /\/api\/libraries\/([^/]+)\/benchmark\/run/,
-            )?.[1] ?? library;
+        for (const run of runs) {
           const jobKey = experimentJobKey({
-            name: experimentName,
-            library: jobLibrary,
+            name: run.item,
+            library: run.scope || library,
           });
-
           if (seen.has(jobKey)) continue;
           seen.add(jobKey);
-
           const isTerminal =
-            job.status === "completed" ||
-            job.status === "failed" ||
-            job.status === "cancelled" ||
-            job.status === "timeout";
-
+            run.status === "completed" ||
+            run.status === "failed" ||
+            run.status === "cancelled" ||
+            run.status === "timeout";
           if (isTerminal) {
             setRunningJobs((prev) => ({
               ...prev,
               [jobKey]: {
-                jobId: job.id,
-                status: job.status as ExperimentJobStatus["status"],
+                jobId: run.id,
+                status: run.status as ExperimentJobStatus["status"],
                 progress: 100,
-                stdout: detail.stdout || undefined,
-                stderr: detail.stderr || undefined,
               },
             }));
           } else if (!pollTimers.current[jobKey]) {
             setRunningJobs((prev) => ({
               ...prev,
               [jobKey]: {
-                jobId: job.id,
-                status: job.status as ExperimentJobStatus["status"],
+                jobId: run.id,
+                status: run.status as ExperimentJobStatus["status"],
                 progress: 0,
               },
             }));
-            startPolling(jobKey, job.id);
+            startPolling(jobKey, run.id);
           }
         }
       } catch {
@@ -237,6 +190,10 @@ const Experiments = () => {
     };
 
     recoverJobs();
+    const timer = window.setInterval(() => {
+      void recoverJobs();
+    }, POLL_INTERVAL);
+    return () => window.clearInterval(timer);
   }, [library, startPolling]);
 
   const handleRun = useCallback(
@@ -251,11 +208,12 @@ const Experiments = () => {
       }));
 
       try {
-        const detail = await fetchExperimentContent(expLibrary, name);
-        const { job_id } = await runBenchmark({
-          library: expLibrary,
-          experiment_yaml: detail.content,
+        const started = await startRun({
+          scope: toScopeId(expLibrary),
+          kind: "experiment",
+          item: name,
         });
+        const job_id = started.id;
 
         setRunningJobs((prev) => ({
           ...prev,
@@ -277,7 +235,7 @@ const Experiments = () => {
   const handleDeleteCache = useCallback(
     async (experimentName: string) => {
       try {
-        await deleteExperimentCache(experimentName);
+        await deleteExperimentCache(library, experimentName);
         queryClient.invalidateQueries({
           queryKey: ["experiment", experimentName],
         });
@@ -301,7 +259,7 @@ const Experiments = () => {
       const exp = resolveExperiment(experimentName);
       const expLibrary = exp?.library ?? library;
       navigate(
-        `/${expLibrary}/experiments/${encodeURIComponent(experimentName)}`,
+        scopeHref(expLibrary, `/experiments/${encodeURIComponent(experimentName)}`),
       );
     },
     [library, navigate, resolveExperiment],

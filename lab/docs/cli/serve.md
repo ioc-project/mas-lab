@@ -23,6 +23,11 @@ Start the benchmark UI server.
 | Flag | Meaning |
 |------|------|
 | `--port`, `-p` | TCP port for the controller HTTP API. |
+| `--host` | Bind address. Loopback stays CORS-permissive; non-loopback binds send no CORS headers unless `--cors-origin` is set. |
+| `--cors-origin URL` | Repeatable. Allowed browser origin for a remote UI. |
+| `--token-file PATH` | Bearer token. Clients send `Authorization: Bearer`. None = open (warning on non-loopback). |
+| `--state-dir PATH` | Persist jobs, runs, and uploads. |
+| `--workspace PATH` | Project folder for `config.yaml`, labs, libraries, and the writable Workspace library. Sets `MAS_WORKSPACE_ROOT`. |
 
 ## SEE ALSO
 

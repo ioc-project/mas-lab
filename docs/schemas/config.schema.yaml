@@ -95,8 +95,12 @@ properties:
             items:
               type: string
         description: >-
-          Directories (relative to workspace root) scanned for ``*.lab`` folders
-          and experiment YAML. Separate from ``paths.labs_dir`` (benchmark output).
+          Directories scanned for ``*.lab`` folders (relative to the config file,
+          or absolute). An entry may itself be a ``*.lab`` directory. When this
+          key is present (including an empty list) it is the exclusive lab
+          catalog. When omitted, installed packages and cwd-walk stay additive.
+          Separate from ``paths.labs_dir`` (benchmark output). New labs are
+          created under the first entry.
 
   plugins:
     description: >-

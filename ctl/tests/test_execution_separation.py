@@ -52,3 +52,15 @@ def test_overlay_separation_rejects_patch_execution():
         "overlay",
     )
     assert any("spec.patch.execution" in v for v in violations)
+
+
+def test_overlay_separation_ignores_canvas_node_id_model_slot():
+    violations = check_separation(
+        {
+            "kind": "Overlay",
+            "spec": {"target": {"kind": "MAS", "name": "qa-mas"}, "patch": {}},
+            "x-canvas-node-ids": {"qa-agent": {"model": "node_98e08fad"}},
+        },
+        "overlay",
+    )
+    assert violations == []

@@ -27,13 +27,12 @@ _code_fingerprint: str | None = None
 _env_fingerprint: dict[str, str] | None = None
 
 
-def _serve_http(*, host: str, port: int) -> None:
+def _serve_http(*, host: str, port: int, settings=None) -> None:
     import uvicorn
-    from mas.lab.controller.fastapi_app import app
-    from mas.lab.controller.ui_stream.auth import assert_ui_bind, ssl_uvicorn_kwargs
+    from mas.lab.controller.fastapi_app import create_app
 
-    assert_ui_bind(host)
-    uvicorn.run(app, host=host, port=port, log_level="info", **ssl_uvicorn_kwargs())
+    app = create_app(settings) if settings is not None else create_app()
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 def _handle_request(payload: dict) -> dict:
@@ -52,7 +51,6 @@ def _handle_request(payload: dict) -> dict:
         "get_worker": lambda p: _api.get_worker(p["worker_id"]),
         "cancel_worker": lambda p: {"ok": _api.cancel_worker(p["worker_id"])},
         "submit_benchmark": lambda p: _api.submit_benchmark(p),
-        "submit_experiment": lambda p: _api.submit_experiment(p),
         "submit_application": lambda p: _api.submit_application(p),
         "submit_pipeline": lambda p: _api.submit_pipeline(p),
         "list_libraries": lambda _p: _api.list_libraries(),
@@ -111,15 +109,28 @@ def _serve_socket(path: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="MAS Lab controller daemon")
     parser.add_argument("--port", type=int, default=int(os.environ.get("MAS_CONTROLLER_PORT", DEFAULT_HTTP_PORT)))
-    parser.add_argument(
-        "--host",
-        default=os.environ.get("MAS_CONTROLLER_HOST", "127.0.0.1"),
-        help="HTTP bind address (non-loopback requires TLS and MAS_DEMO_UI_TOKEN).",
-    )
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--socket", type=Path, default=None)
     parser.add_argument("--no-http", action="store_true")
+    parser.add_argument("--cors-origin", action="append", default=[])
+    parser.add_argument("--token-file", type=Path, default=None)
+    parser.add_argument("--state-dir", type=Path, default=None)
+    parser.add_argument("--workspace", type=Path, default=None)
     args = parser.parse_args(argv)
+    if args.workspace is not None:
+        os.environ["MAS_WORKSPACE_ROOT"] = str(Path(args.workspace).expanduser().resolve())
     socket = args.socket or cfg.socket_path()
+
+    from mas.lab.controller.settings import ControllerSettings, load_token_file
+
+    token = load_token_file(args.token_file) if args.token_file else None
+    http_settings = ControllerSettings(
+        host=args.host,
+        port=args.port,
+        cors_origins=list(args.cors_origin or []),
+        token=token,
+        state_dir=args.state_dir or (cfg.controller_dir() / "state"),
+    )
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     ensure_mas_dirs()
@@ -152,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         threads.append(
             threading.Thread(
                 target=_serve_http,
-                kwargs={"host": args.host, "port": args.port},
+                kwargs={"host": args.host, "port": args.port, "settings": http_settings},
                 daemon=True,
                 name="http",
             )

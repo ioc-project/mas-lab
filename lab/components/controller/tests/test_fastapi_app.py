@@ -61,12 +61,6 @@ def test_health(client):
     assert client.get("/api/health").json() == {"status": "ok"}
 
 
-def test_ui_plugins_route(client):
-    res = client.get("/api/plugins")
-    assert res.status_code == 200
-    assert "plugins" in res.json()
-
-
 # -- Libraries ----------------------------------------------------------------
 
 def test_list_libraries(client):
@@ -259,20 +253,26 @@ def test_mas_canvas_persists_to_ui_canvas_overlay(client, demo_lab):
     app_dir = demo_lab / "apps" / "canvas-app"
     on_disk = (app_dir / "mas.yaml").read_text(encoding="utf-8")
     assert "x-canvas-positions" not in on_disk
-    overlay_path = app_dir / "overlays" / "ui-canvas.yaml"
+    overlay_path = app_dir / "overlays" / "canvas-app.yaml"
     assert overlay_path.is_file()
     overlay_text = overlay_path.read_text(encoding="utf-8")
-    assert "x-ui-canvas: true" in overlay_text
+    assert "kind: Overlay" in overlay_text
+    assert "name: canvas-app" in overlay_text
     assert "x-canvas-positions" in overlay_text
+    assert "x-ui-canvas" not in overlay_text
 
     listed = client.get("/api/libraries/demo/overlays").json()["overlays"]
-    canvas_rows = [o for o in listed if o["name"] == "ui-canvas"]
+    canvas_rows = [
+        o
+        for o in listed
+        if o["name"] == "canvas-app" and str(o.get("path", "")).endswith("overlays/canvas-app.yaml")
+    ]
     assert canvas_rows
     assert canvas_rows[0]["ui_canvas"] is True
 
     detail = client.get("/api/libraries/demo/apps/canvas-app").json()
     assert "x-canvas-positions" in detail["mas_yaml"]
-    assert detail["ui_canvas_overlay"].endswith("overlays/ui-canvas.yaml")
+    assert detail["ui_canvas_overlay"].endswith("overlays/canvas-app.yaml")
     assert "hello" in detail["agents"]["coordinator"]
 
     # Unparseable agent YAML must not drop the agent on save.

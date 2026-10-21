@@ -1,6 +1,12 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import type { DesignPatternEntry } from "@/api/apiCalls";
+export interface DesignPatternEntry {
+  type: string;
+  label: string;
+  library: string;
+  description?: string;
+  config_keys?: string[];
+}
 
 export interface PatternOption {
   value: string;
@@ -12,20 +18,7 @@ export interface PatternGroup {
   options: PatternOption[];
 }
 
-/**
- * Static fallback used while the API is loading or on error, so the design
- * pattern dropdown never renders empty and the canvas keeps working offline.
- */
-export const FALLBACK_PATTERN_GROUPS: PatternGroup[] = [
-  {
-    label: "Standard",
-    options: [
-      { value: "react", label: "ReAct" },
-      { value: "cot", label: "Chain of Thought" },
-      { value: "reflection", label: "Reflection" },
-    ],
-  },
-];
+/** Empty catalog while `/api/choices/design-patterns` is loading. */
 
 /** Human label for a library grouping key returned by the backend. */
 function groupLabel(library: string): string {
@@ -36,14 +29,13 @@ function groupLabel(library: string): string {
 
 /**
  * Reshape the API pattern list into `<optgroup>`-friendly groups, grouping by
- * library ("Standard" vs "Experimental"). Falls back to the static list when
- * no patterns are available.
+ * library ("Standard" vs "Experimental").
  */
 export function buildPatternGroups(
   patterns: DesignPatternEntry[] | undefined,
 ): PatternGroup[] {
   if (!patterns || patterns.length === 0) {
-    return FALLBACK_PATTERN_GROUPS;
+    return [];
   }
 
   const byLibrary = new Map<string, PatternOption[]>();

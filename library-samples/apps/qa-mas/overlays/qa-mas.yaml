@@ -1,0 +1,35 @@
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  name: qa-mas
+  description: UI-only canvas layout for qa-mas. Ignored by the runtime.
+spec:
+  target:
+    kind: MAS
+    name: qa-mas
+  patch: {}
+x-canvas-positions:
+  node_3d1113bc:
+    x: 624
+    y: 64
+  node_98e08fad:
+    x: 112
+    y: 96
+  node_f665d7f6:
+    x: 96
+    y: 400
+  node_02f6d7ad:
+    x: 112
+    y: 656
+  node_db6794a6:
+    x: 144
+    y: 928
+x-canvas-node-ids:
+  qa-agent:
+    role: node_db6794a6
+    model: node_98e08fad
+    tools: node_f665d7f6
+    promptSkills: node_02f6d7ad
+    agent: node_3d1113bc
+x-text-input:
+  qa-agent: what are the top attractions to visit in Paris?

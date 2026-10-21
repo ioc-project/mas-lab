@@ -1,0 +1,8 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Library
+name: x_lib
+description: Lab-local library
+apps:
+  hello: apps/hello

@@ -135,6 +135,13 @@ library-root `datasets/`.
 
 Rules for writing these references: [writing-manifests.md](manifests/writing-manifests.md).
 
+## In the UI
+
+`GET /api/scopes` lists libraries and labs from the same search order. Lab-local
+libraries appear with `origin: lab` and `owner: lab:<name>`. Installed packages
+are `origin: package` and read-only. The UI copies an item into a writable
+workspace scope instead of editing a package in place.
+
 ---
 
 ## See also

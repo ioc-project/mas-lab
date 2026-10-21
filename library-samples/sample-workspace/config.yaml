@@ -21,6 +21,13 @@ mas_ctl:
 mas_lab:
   flavour: local
   benchmark_flavour: local-benchmark
+  # Extra lab roots the UI/controller should list. Relative to this file, or
+  # absolute. An entry may be a parent of *.lab folders or a *.lab directory.
+  # Empty list = no labs. Pin this folder with `mas-lab serve --workspace .`
+  # (or MAS_WORKSPACE_ROOT) so the catalog is these paths only.
+  # labs_search_paths:
+  #   - labs
+  #   - /path/to/another/checkout/labs
 
 # OSS dev / CI: set default_infra in user config (Tutorial 0) or:
 #   infra_refs: [standard:openai]

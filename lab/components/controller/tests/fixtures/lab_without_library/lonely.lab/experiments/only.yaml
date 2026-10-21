@@ -1,0 +1,11 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+experiment:
+  name: only
+  description: the only experiment
+  application:
+    app: unset
+  dataset:
+    path: queries
+  run:
+    n_runs: 1

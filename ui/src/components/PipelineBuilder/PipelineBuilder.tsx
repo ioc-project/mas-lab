@@ -27,7 +27,7 @@ import { Sidebar } from "./Sidebar";
 import { StepNode } from "./nodes";
 import type { PipelineBuilderProps, StepNodeData } from "./types";
 import { useExperiments, type PipelineStepTypeEntry } from "@/api/apiCalls";
-import { useParams } from "react-router";
+import { useScopeId } from "@/api/scope";
 import "./pipelineBuilder.css";
 
 function generateNodeId(): string {
@@ -81,10 +81,6 @@ function serializeGraphToYaml(
     steps.push(step);
   }
 
-  const baseDirValue = experimentName
-    ? `~/.local/share/mas/labs/${experimentName}`
-    : "";
-
   const resolvedMetadata =
     metadata && Object.keys(metadata).length > 0
       ? metadata
@@ -97,10 +93,7 @@ function serializeGraphToYaml(
     api_version: "pipeline/v1",
     kind: "Pipeline",
     metadata: resolvedMetadata,
-    spec: {
-      output: { base_dir: baseDirValue },
-      steps,
-    },
+    spec: { steps },
     "x-canvas-positions": canvasPositions,
   };
 
@@ -356,7 +349,7 @@ function PipelineFlow({
       });
 
       const existingNames = nodes.map((n) => (n.data as StepNodeData).name);
-      let baseName = stepTypeDef?.type?.replace(/_/g, "-") ?? "step";
+      const baseName = stepTypeDef?.type?.replace(/_/g, "-") ?? "step";
       let name = baseName;
       let counter = 1;
       while (existingNames.includes(name)) {
@@ -370,9 +363,6 @@ function PipelineFlow({
             defaultConfig[key] = fieldDef.default;
           }
         }
-        if ("folder" in stepTypeDef.config && experimentNameRef.current) {
-          defaultConfig.folder = `~/.local/share/mas/labs/${experimentNameRef.current}`;
-        }
         if (
           "metric_kwargs" in stepTypeDef.config &&
           (!defaultConfig.metric_kwargs ||
@@ -380,7 +370,7 @@ function PipelineFlow({
               Object.keys(defaultConfig.metric_kwargs as object).length === 0))
         ) {
           defaultConfig.metric_kwargs = {
-            model: "azure/gpt-4o",
+            model: "",
           };
         }
       }
@@ -445,22 +435,6 @@ function PipelineFlow({
   const handleExperimentChange = useCallback(
     (name: string) => {
       experimentNameRef.current = name;
-      const folderValue = name ? `~/.local/share/mas/labs/${name}` : "";
-      setNodes((nds) =>
-        nds.map((node) => {
-          const data = node.data as StepNodeData;
-          if ("folder" in data.config) {
-            return {
-              ...node,
-              data: {
-                ...data,
-                config: { ...data.config, folder: folderValue },
-              },
-            };
-          }
-          return node;
-        }),
-      );
       if (onYamlChange) {
         const yaml = serializeGraphToYaml(
           nodes,
@@ -472,7 +446,7 @@ function PipelineFlow({
       }
       onExperimentChangeProp?.(name);
     },
-    [nodes, edges, onYamlChange, setNodes, onExperimentChangeProp],
+    [nodes, edges, onYamlChange, onExperimentChangeProp],
   );
 
   return (
@@ -555,7 +529,7 @@ function ExperimentSelector({
 }
 
 function useExperimentNames(): string[] {
-  const { library = "" } = useParams<{ library: string }>();
+  const library = useScopeId();
   const { data: experiments = [] } = useExperiments(library);
   return experiments.map((e) => e.name);
 }

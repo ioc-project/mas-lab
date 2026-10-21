@@ -13,13 +13,8 @@ import Application from "@/pages/Application";
 import type { AppRoute } from "@/routes/types.ts";
 import Playground from "@/pages/Playground";
 import { Transport as PlaygroundIcon } from "@/assets/icons";
-import {
-  Flaky as ExperimentsIcon,
-  AccountTree as PipelinesIcon,
-  Storage as DatasetsIcon,
-  Settings as ControlPanelIcon,
-  Layers as OverlaysIcon,
-} from "@mui/icons-material";
+import { Flaky as ExperimentsIcon, AccountTree as PipelinesIcon, Storage as DatasetsIcon, Settings as ControlPanelIcon, Layers as OverlaysIcon, Science as LabsIcon } from "@mui/icons-material";
+import Labs from "@/pages/Labs";
 import Experiments from "@/pages/Experiments";
 import Experiment from "@/pages/Experiment";
 import CreateExperiment from "@/pages/CreateExperiment";
@@ -31,35 +26,37 @@ import Dataset from "@/pages/Dataset";
 import ControlPanel from "@/pages/ControlPanel";
 import Overlays from "@/pages/Overlays";
 import Overlay from "@/pages/Overlay";
-import { LibraryRedirect } from "./LibraryRedirect";
+import Connect from "@/pages/Connect";
+import { LegacyScopeRedirect } from "./LegacyScopeRedirect";
 
 export const PATHS = {
-  applications: "/:library/applications",
-  application: "/:library/applications/:id",
-  applicationTab: "/:library/applications/:id/:applicationTab",
-  playground: "/:library/playground",
-  playgroundTab: "/:library/playground/:playgroundTab",
-  experiments: "/:library/experiments",
-  createExperiment: "/:library/experiments/new",
-  createExperimentTab: "/:library/experiments/new/:experimentTab",
-  editExperiment: "/:library/experiments/:id/edit",
-  editExperimentTab: "/:library/experiments/:id/edit/:experimentTab",
-  experiment: "/:library/experiments/:id",
-  pipelines: "/:library/pipelines",
-  createPipeline: "/:library/pipelines/new",
-  createPipelineTab: "/:library/pipelines/new/:pipelineTab",
-  pipeline: "/:library/pipelines/:id",
-  pipelineTab: "/:library/pipelines/:id/:pipelineTab",
-  datasets: "/:library/datasets",
-  createDataset: "/:library/datasets/_create",
-  dataset: "/:library/datasets/*",
-  controlPanel: "/:library/control-panel",
-  overlays: "/:library/overlays",
-  createOverlay: "/:library/overlays/new",
-  createOverlayTab: "/:library/overlays/new/:overlayTab",
-  overlay: "/:library/overlays/:name",
-  overlayTab: "/:library/overlays/:name/:overlayTab",
+  labsIndex: "/labs",
+  applications: "/:scopeType/:scope/applications",
+  application: "/:scopeType/:scope/applications/:id",
+  applicationTab: "/:scopeType/:scope/applications/:id/:applicationTab",
+  playground: "/:scopeType/:scope/playground",
+  playgroundTab: "/:scopeType/:scope/playground/:playgroundTab",
+  experiments: "/:scopeType/:scope/experiments",
+  createExperiment: "/:scopeType/:scope/experiments/new",
+  editExperiment: "/:scopeType/:scope/experiments/:id/edit",
+  experiment: "/:scopeType/:scope/experiments/:id",
+  pipelines: "/:scopeType/:scope/pipelines",
+  createPipeline: "/:scopeType/:scope/pipelines/new",
+  createPipelineTab: "/:scopeType/:scope/pipelines/new/:pipelineTab",
+  pipeline: "/:scopeType/:scope/pipelines/:id",
+  pipelineTab: "/:scopeType/:scope/pipelines/:id/:pipelineTab",
+  datasets: "/:scopeType/:scope/datasets",
+  createDataset: "/:scopeType/:scope/datasets/_create",
+  dataset: "/:scopeType/:scope/datasets/*",
+  controlPanel: "/:scopeType/:scope/control-panel",
+  overlays: "/:scopeType/:scope/overlays",
+  createOverlay: "/:scopeType/:scope/overlays/new",
+  createOverlayTab: "/:scopeType/:scope/overlays/new/:overlayTab",
+  overlay: "/:scopeType/:scope/overlays/:name",
+  overlayTab: "/:scopeType/:scope/overlays/:name/:overlayTab",
 };
+
+export { KIND_TO_PATH } from "./kinds";
 
 export const routes: {
   authenticated: AppRoute[];
@@ -67,6 +64,15 @@ export const routes: {
 } = {
   authenticated: [],
   unauthenticated: [
+    {
+      name: "Labs",
+      path: PATHS.labsIndex,
+      element: <Labs />,
+      sideBarProps: {
+        title: "Labs",
+        icon: LabsIcon,
+      },
+    },
     {
       name: "Applications",
       path: PATHS.applications,
@@ -115,18 +121,8 @@ export const routes: {
       element: <CreateExperiment />,
     },
     {
-      name: "CreateExperimentTab",
-      path: PATHS.createExperimentTab,
-      element: <CreateExperiment />,
-    },
-    {
       name: "EditExperiment",
       path: PATHS.editExperiment,
-      element: <CreateExperiment />,
-    },
-    {
-      name: "EditExperimentTab",
-      path: PATHS.editExperimentTab,
       element: <CreateExperiment />,
     },
     {
@@ -235,9 +231,11 @@ const renderRoute = (route: AppRoute) => (
 
 const AppRoutes = () => (
   <Routes>
+    <Route path="/connect" element={<Connect />} />
     <Route path="/" element={<LayoutWithSideNav />}>
-      <Route index element={<LibraryRedirect />} />
+      <Route index element={<Labs />} />
       {[...unauthenticatedRoutes, ...authenticatedRoutes].map(renderRoute)}
+      <Route path=":library/*" element={<LegacyScopeRedirect />} />
     </Route>
     <Route path="*" element={<Four0Four />} />
   </Routes>

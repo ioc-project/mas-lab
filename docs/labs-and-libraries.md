@@ -177,6 +177,16 @@ for a library.
 
 ---
 
+## In the UI
+
+The studio lists **scopes**, not folders. A lab with a local library (`lab.libraries`)
+shows the lab's experiments under `lab:<name>` and the local library's applications
+under `library:<that-library>` nested in the lab picker. A lab with only
+`lab-config.yaml` is still a valid scope — it has no applications of its own.
+A lab root is never reported as a library.
+
+---
+
 ## See also
 
 - [How to write manifests](manifests/writing-manifests.md) — inline vs file vs `LIBRARY:` id

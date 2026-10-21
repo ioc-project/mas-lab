@@ -1,7 +1,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_c9b85594
   name: itinerary_agent
 spec:
   description: Route planner and itinerary specialist.
@@ -20,6 +19,3 @@ spec:
   tools:
     - ref: ../../../tools/query_graph_database.tool.yaml
     - ref: ../../../tools/get_fares.tool.yaml
-x-canvas-node-ids:
-  model: node_8ffb0998
-  tools: node_2b577041

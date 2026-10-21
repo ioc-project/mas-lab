@@ -1,7 +1,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_2d0f65ca
   name: schedule_agent
 spec:
   description: Transport schedule and attractions specialist.
@@ -28,6 +27,3 @@ spec:
     - ref: ../../../tools/lookup_schedule.tool.yaml
     - ref: ../../../tools/get_attractions.tool.yaml
     - ref: ../../../tools/get_attractions_description.tool.yaml
-x-canvas-node-ids:
-  model: node_90a5ff40
-  tools: node_f450b48c

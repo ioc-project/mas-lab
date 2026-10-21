@@ -1,11 +1,11 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
-import { useCallback, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useCallback, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Tooltip } from "@mui/material";
-import { useParams } from "react-router";
 import type { PromptSkillsNodeType } from "../types";
-import { useSkills } from "@/api/apiCalls";
+import { useSkillChoices } from "@/api/choices";
+import { useScopeId } from "@/api/scope";
 
 const INFO_TEXT =
   "Prompt Skills are injected directly into the agent's system prompt as domain knowledge. " +
@@ -14,12 +14,8 @@ const INFO_TEXT =
 
 export function PromptSkillNode({ data, id, selected }: NodeProps<PromptSkillsNodeType>) {
   const [inputValue, setInputValue] = useState("");
-  const { library = "", id: masName } = useParams();
-  const namespaces = useMemo(
-    () => (masName ? ["global", masName] : ["global"]),
-    [masName],
-  );
-  const { data: skillOptions = [] } = useSkills(library, namespaces);
+  const library = useScopeId();
+  const { skills: skillOptions = [] } = useSkillChoices(library);
 
   const skillDescMap = new Map(
     skillOptions.map((s) => [s.name, s.description]),

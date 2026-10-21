@@ -56,6 +56,120 @@ def nested_lab(tmp_path: Path) -> Path:
     return lab
 
 
+def test_pinned_workspace_skips_cwd_walk_and_entry_points(tmp_path: Path, monkeypatch):
+    """MAS_WORKSPACE_ROOT + labs_search_paths is the catalog; repo labs stay out."""
+    install = tmp_path / "opt" / "mas-lab"
+    extra = install / "labs" / "design-space.lab"
+    extra.mkdir(parents=True)
+    (extra / "lab-config.yaml").write_text("lab:\n  name: design-space\n", encoding="utf-8")
+    project = tmp_path / "project"
+    mine = project / "mine.lab"
+    mine.mkdir(parents=True)
+    (mine / "lab-config.yaml").write_text("lab:\n  name: mine\n", encoding="utf-8")
+    (project / "config.yaml").write_text(
+        "mas_lab:\n  labs_search_paths:\n    - mine.lab\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(project))
+    monkeypatch.chdir(install)
+    reset_lab_registry()
+    reg = LabRegistry()
+    reg.refresh()
+    slugs = set(reg.library_paths())
+    assert "mine" in slugs
+    assert "design-space" not in slugs
+    reset_lab_registry()
+
+
+def test_empty_labs_search_paths_lists_no_labs(tmp_path: Path, monkeypatch):
+    project = tmp_path / "workshop"
+    project.mkdir()
+    (project / "config.yaml").write_text(
+        "mas_lab:\n  labs_search_paths: []\nmanifest_libraries:\n  - part2\n",
+        encoding="utf-8",
+    )
+    part2 = project / "part2"
+    part2.mkdir()
+    (part2 / "library.yaml").write_text("name: part2\n", encoding="utf-8")
+    extra = tmp_path / "checkout" / "labs" / "extensions.lab"
+    extra.mkdir(parents=True)
+    (extra / "lab-config.yaml").write_text("lab:\n  name: extensions\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(project))
+    monkeypatch.chdir(tmp_path / "checkout")
+    reset_lab_registry()
+    reg = LabRegistry()
+    reg.refresh()
+    slugs = set(reg.library_paths())
+    assert slugs == {"part2"}
+    reset_lab_registry()
+
+
+def test_workspace_env_without_search_paths_keeps_cwd_labs(tmp_path: Path, monkeypatch):
+    """MAS_WORKSPACE_ROOT alone (Docker default) does not hide checkout labs."""
+    install = tmp_path / "opt" / "mas-lab"
+    extra = install / "labs" / "design-space.lab"
+    extra.mkdir(parents=True)
+    (extra / "lab-config.yaml").write_text("lab:\n  name: design-space\n", encoding="utf-8")
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(project))
+    monkeypatch.chdir(install)
+    reset_lab_registry()
+    reg = LabRegistry()
+    reg.refresh()
+    assert "design-space" in set(reg.library_paths())
+    reset_lab_registry()
+
+
+def test_mas_library_paths_with_workspace_pin(tmp_path: Path, monkeypatch):
+    project = tmp_path / "ws"
+    project.mkdir()
+    lib = tmp_path / "part2"
+    lib.mkdir()
+    (lib / "library.yaml").write_text("name: part2\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(project))
+    monkeypatch.setenv("MAS_LIBRARY_PATHS", str(lib))
+    reset_lab_registry()
+    reg = LabRegistry()
+    libraries, sources = reg._discover_library_paths()
+    assert libraries["part2"] == lib.resolve()
+    assert sources["part2"] in {"MAS_LIBRARY_PATHS", "manifest_libraries"}
+    reset_lab_registry()
+
+
+def test_labs_search_paths_absolute_and_lab_dir(tmp_path: Path):
+    """config.yaml labs_search_paths may be a parent dir, a *.lab dir, or absolute."""
+    ws = tmp_path / "workspace"
+    nested = ws / "labs" / "nested.lab"
+    nested.mkdir(parents=True)
+    (nested / "lab-config.yaml").write_text("lab:\n  name: nested\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere" / "mine.lab"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "lab-config.yaml").write_text("lab:\n  name: mine\n", encoding="utf-8")
+    ws_obj = type(
+        "Ws",
+        (),
+        {
+            "_path": ws,
+            "_data": {
+                "mas_lab": {
+                    "labs_search_paths": [
+                        "labs",
+                        str(elsewhere),
+                    ]
+                }
+            },
+        },
+    )()
+    reset_lab_registry()
+    reg = LabRegistry(workspace=ws_obj)
+    reg.refresh()
+    paths = {p.resolve() for p in reg.library_paths().values()}
+    assert nested.resolve() in paths
+    assert elsewhere.resolve() in paths
+    reset_lab_registry()
+
+
 def test_schema_discovery_custom_filenames(tmp_path: Path):
     """Any YAML name works when the document matches the experiment schema."""
     lab = tmp_path / "custom.lab"

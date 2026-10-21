@@ -266,6 +266,41 @@ Agent overlays cannot patch tool provider or connection configuration. Remote MC
 
 ---
 
+## UI canvas layout
+
+Canvas coordinates (`x-canvas-positions`, `x-canvas-node-ids`, `x-text-input`)
+live only on a **layout-only** Overlay — never on `mas.yaml`, Agent YAML, or a
+spec overlay that carries `spec.patch`.
+
+The UI does not look up a reserved filename. While scanning a library, the lab
+registry indexes every Overlay — including layout-only canvas overlays — by
+`spec.target`. GET application / overlay attaches matching layout overlays from
+that index once both the document and the canvas overlay exist, in either order.
+A layout overlay may sit next to the app (`apps/<id>/overlays/`) or in the
+library `overlays/` folder; association is the target, not the folder.
+
+The selector is the same one experiments already use:
+
+```yaml
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  name: trip-planner
+spec:
+  target:
+    kind: MAS            # or Overlay, when laying out OverlayBuilder
+    name: trip-planner   # metadata.name of the document being laid out
+  patch: {}              # empty: layout only, no runtime change
+x-canvas-positions:
+  node_1: {x: 0, y: 0}
+```
+
+Opening a MAS (or a spec overlay) copies those `x-*` keys onto the YAML the
+builder edits. Saving peels them back onto the layout overlay. Layout-only
+overlays are omitted from overlay catalogs and experiment stacks.
+
+---
+
 ## See also
 
 - [plugin-bindings.md](plugin-bindings.md) — string shorthand vs `{type, params}`

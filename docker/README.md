@@ -17,7 +17,11 @@ docker compose up --build
 ```
 
 - **UI:** http://localhost:8080 (host port `MAS_UI_PORT`)
-- **API:** http://localhost:8090 (host port `MAS_BACKEND_PORT`; `/api/health`, `/api/registry`, …)
+- **API:** http://localhost:8090 (host port `MAS_BACKEND_PORT`; `/api/health`, `/api/info`, `/api/scopes`, …)
+
+For a UI on another origin, pass `--cors-origin` and `--token-file` to the
+controller and set `MAS_LAB_TOKEN` / `MAS_LAB_DEFAULT_SCOPE` for
+`env-config.js` (see `docker/ui/entrypoint-ui.sh`).
 
 Docker setup in the context of the tutorials:
 [Tutorial 0](../docs/tutorials/00-environment-setup/README.md).
@@ -82,7 +86,7 @@ Run `mas-lab init` on the host to update this shared user config. For a self-con
 | Variable | Default (container) | Purpose |
 |----------|---------------------|---------|
 | `OPENAI_API_KEY` | — | LLM API key in `docker/.env` (canonical; shell exports are ignored) |
-| `MAS_WORKSPACE_ROOT` | `/workspace` | Directory for `config.yaml` discovery |
+| `MAS_WORKSPACE_ROOT` | `/workspace` | Project folder for `config.yaml` and the writable Workspace library |
 | `MAS_DATA_ROOT` | `/data` | Root for lab data |
 | `MAS_TRACE_CACHE` | `/data/trace-cache` | Benchmark trace cache |
 | `MAS_LABS_ROOT` | `/data/labs` | Experiment outputs under labs hierarchy |

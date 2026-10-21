@@ -3,7 +3,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: qa-agent
   name: qa-agent
 spec:
   context:
@@ -23,9 +22,3 @@ spec:
   - ref: ../../../../../library-samples/tools/web-search.tool.yaml
   - ref: ../../../../../library-samples/tools/calc.tool.yaml
   description: Answer general knowledge questions.
-x-text-input: what is the weather in Paris today?
-x-text-input: what is the weather in Paris today?
-x-canvas-node-ids:
-  role: node_515c961a
-  model: node_cb0e6f39
-  tools: node_3e21b256

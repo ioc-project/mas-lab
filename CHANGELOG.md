@@ -12,12 +12,50 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- Scope-based controller API (`/api/scopes`, `/api/kinds`,
+  `/api/scopes/{scope_id}/items`, `/api/choices`, `/api/runs`,
+  `/api/artifacts`, `/api/uploads`, `/api/info`)
+  so the UI never sees a server path. Labs and libraries are distinct scopes;
+  applications are versioned (`name@vN`).
+- `mas-lab serve --cors-origin`, `--token-file`, `--state-dir`, `--workspace`, `--host`.
+  `--workspace` (and `MAS_WORKSPACE_ROOT`) is the project folder for
+  `config.yaml` and the writable Workspace library (`<workspace>/library`).
+  An explicit `mas_lab.labs_search_paths` (including `[]`) is the exclusive
+  catalog; without it, installed packages and cwd-walk stay in the list.
+  Benchmark trees under `paths.labs_dir` appear on the matching experiment
+  page.
+- UI connection screen, Vitest/MSW/Playwright, and `yarn verify:api`.
+- Default UI scope from `window.__MAS_LAB_DEFAULT_SCOPE__` (alias
+  `__MAS_LAB_DEFAULT_LIBRARY__`), else the first scope that has items.
+- Labs catalog at `/` and `/labs` lists every lab the controller discovered.
+  `POST /api/scopes` creates a lab (optional local library) on the first
+  `mas_lab.labs_search_paths` entry. New experiments are created inside the
+  selected lab.
 - Output-token limits are configurable through model and infra manifests.
   `on_truncation` supports `ignore`, `warn`, `error`, and bounded `escalate`;
   `--max-tokens N` aliases the agent models `--override` path. Requests omit
   both output-token fields by default, never send both together, and fit a
   configured budget to `context_window`. See
   [Output-token limits](docs/manifests/agent.md#output-token-limits).
+
+### Changed
+
+- UI routes are `/libraries/:scope/…` and `/labs/:scope/…`. Create/edit flows
+  use `POST/PUT /api/scopes/{id}/items`. Picker lists come from `/api/choices`.
+  Opening the UI without a scope stays on the labs catalog instead of jumping
+  into the first library. Create/copy from a lab prefers that lab and its
+  local library; other writable libraries stay available.
+- Canvas layout binds through Overlay `spec.target` and an empty `spec.patch`.
+  The lab registry indexes layout overlays by that target and GET attaches
+  them when both the app and the overlay exist, in any order.
+  Canvas `x-*` keys live only on that layout overlay, never on spec overlays.
+  Sample MAS snapshots keep canvas coordinates on those overlays.
+
+### Deprecated
+
+- `/api/libraries/**`, `/api/jobs/**`, and `/api/experiments/**` (results tree).
+  They remain for one release as adapters. `__MAS_LAB_DEFAULT_LIBRARY__` is an
+  alias of `__MAS_LAB_DEFAULT_SCOPE__`.
 
 ### Breaking
 

@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from mas.lab.controller.constants import HIDDEN_FILES, LIBRARIES_DIR
 
@@ -31,6 +32,11 @@ def _refresh_interval_seconds() -> float:
     except ValueError:
         return 1.0
     return max(0.0, interval)
+
+
+def store_from_request(request: Request):
+    """Prefer the app-injected store (tests); else the process singleton."""
+    return getattr(request.app.state, "manifest_store", None) or get_manifest_store()
 
 
 def get_manifest_store():

@@ -1,7 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useCallback, useRef, useMemo, useEffect, useState } from "react";
-import { useParams } from "react-router";
 import { stringify, parse } from "yaml";
 import { AgentChatDrawer } from "./AgentChatDrawer";
 import {
@@ -42,51 +41,26 @@ import {
 } from "./types";
 import { autoLayoutYamlMap } from "./autoLayout";
 import "./canvasBuilder.css";
+import { useScopeId } from "@/api/scope";
 
 function generateNodeId(): string {
   return `node_${crypto.randomUUID().slice(0, 8)}`;
 }
 
-/**
- * Convert manifest ``{ ref: path }`` tool entries to display names for the canvas.
- *
- * Refs pointing to ``../../../tools/<name>.tool.yaml`` (global tools) are
- * returned as ``global/<name>``.  Refs pointing to ``../tools/<name>.tool.yaml``
- * (app-local tools) are returned as ``<name>``.
- */
+/** Keep backend refs as-is (the UI never composes folder conventions). */
 function normalizeToolRefs(tools: unknown): string[] {
   if (!Array.isArray(tools)) return [];
   return tools.map((entry) => {
     if (entry && typeof entry === "object") {
       const obj = entry as Record<string, unknown>;
-      if (typeof obj.ref === "string") {
-        const ref = obj.ref;
-        const stem = ref.split("/").pop()?.replace(".tool.yaml", "") ?? ref;
-        if (ref.startsWith("../../../tools/")) {
-          return `global/${stem}`;
-        }
-        return stem;
-      }
+      if (typeof obj.ref === "string") return obj.ref;
     }
     return String(entry);
   });
 }
 
-/**
- * Convert canvas display tool names back to ``{ ref: path }`` entries for
- * agent YAML serialization.
- *
- * ``global/<name>`` -> ``{ ref: ../../../tools/<name>.tool.yaml }``
- * ``<name>``        -> ``{ ref: ../tools/<name>.tool.yaml }``
- */
 function toolDisplayNamesToRefs(tools: string[]): Array<{ ref: string }> {
-  return tools.map((name) => {
-    if (name.startsWith("global/")) {
-      const bare = name.slice("global/".length);
-      return { ref: `../../../tools/${bare}.tool.yaml` };
-    }
-    return { ref: `../tools/${name}.tool.yaml` };
-  });
+  return tools.map((ref) => ({ ref }));
 }
 
 function normalizeIntent(intent: unknown): string {
@@ -115,7 +89,7 @@ function getDefaultDataForType(type: string): Record<string, unknown> {
         connectedMemory: "",
       };
     case "model":
-      return { model: "gpt-4o-mini", temperature: 0.7, max_tokens: 4096 };
+      return { model: "", temperature: 0.7, max_tokens: 4096 };
     case "designPattern":
       return { type: "react", max_steps: 10 };
     case "tool":
@@ -565,7 +539,7 @@ function serializeGraphToYamls(
       const agentId = getAgentId(agentNode);
       return {
         id: agentId,
-        ref: `agents/${agentId}.yaml`,
+        ref: `${agentId}.agent`,
       };
     });
 
@@ -974,7 +948,7 @@ function CanvasFlow({
   initialYamlMap?: YamlOutputMap;
   masName?: string;
 }) {
-  const { library = "" } = useParams();
+  const library = useScopeId();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const initialGraph = useMemo(
     () =>

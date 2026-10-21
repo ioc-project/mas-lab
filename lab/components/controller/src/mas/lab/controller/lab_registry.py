@@ -12,6 +12,7 @@ import contextlib
 import importlib.resources
 import logging
 import os
+import re
 from functools import lru_cache
 from importlib.metadata import entry_points as _entry_points
 from pathlib import Path
@@ -22,10 +23,12 @@ from mas.runtime.constants import (
     LIBRARY_MANIFEST_FILENAME,
     WORKSPACE_CONFIG_FILENAME,
 )
-from mas.ctl.overlay.canvas import is_ui_canvas_overlay
+from mas.ctl.overlay.canvas import overlay_is_layout_only
 from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
+
+_VERSION_DIR = re.compile(r"^v\d+")
 
 
 def _library_description(path: Path) -> str:
@@ -82,6 +85,38 @@ from mas.runtime.agent_defaults import (
     resolve_default_model,
 )
 
+
+def _resolve_configured_path(entry: str, base: Path | None) -> Path:
+    """Resolve a config.yaml path: absolute stays absolute, else relative to *base*."""
+    path = Path(str(entry).strip()).expanduser()
+    if not path.is_absolute() and base is not None:
+        path = base / path
+    return path.resolve()
+
+
+def _iter_lab_dirs(search: Path):
+    """Yield lab roots under *search*.
+
+    *search* may be a directory of ``*.lab`` folders, a ``*.lab`` folder itself,
+    or any directory that contains ``lab-config.yaml``.
+    """
+    if not search.exists() or not search.is_dir():
+        return
+    if search.name.endswith(".lab") or (search / LAB_CONFIG_FILENAME).is_file():
+        yield search
+        return
+    seen: set[Path] = set()
+    for path in sorted(search.glob("*.lab")):
+        if path.is_dir():
+            seen.add(path.resolve())
+            yield path
+    for path in sorted(search.iterdir()):
+        if not path.is_dir() or path.resolve() in seen:
+            continue
+        if (path / LAB_CONFIG_FILENAME).is_file():
+            yield path
+
+
 _YAML_SUFFIXES = frozenset({".yaml", ".yml"})
 """Directories that group manifests by role (path convention — filenames are free)."""
 _TYPED_DIRS = frozenset({"datasets", "overlays", "flavours", "infra", "apps"})
@@ -129,6 +164,46 @@ def _iter_manifest_files(lib_dir: Path, expected_kind: str, *, parent_dir: str |
             yield path
 
 
+def _mas_name_from_overlay_path(path: Path, lib_dir: Path) -> str | None:
+    """Return ``apps/<id>`` when *path* sits in that app's ``overlays/`` folder."""
+    try:
+        parts = list(path.resolve().relative_to(lib_dir.resolve()).parts)
+    except ValueError:
+        parts = list(path.parts)
+    if "apps" not in parts:
+        return None
+    rest = parts[parts.index("apps") + 1 :]
+    if len(rest) < 2:
+        return None
+    app_id = rest[0]
+    if rest[1] == "overlays":
+        return app_id
+    if _VERSION_DIR.match(rest[1]) and len(rest) >= 3 and rest[2] == "overlays":
+        return app_id
+    return None
+
+
+def infer_overlay_target(
+    path: Path, doc: dict[str, Any], *, lib_dir: Path
+) -> tuple[str, str] | None:
+    """``(kind, name)`` this overlay attaches to, filling an empty MAS name from the path."""
+    if not isinstance(doc, dict) or str(doc.get("kind") or "") != "Overlay":
+        return None
+    spec = doc.get("spec") if isinstance(doc.get("spec"), dict) else {}
+    target = spec.get("target") if isinstance(spec.get("target"), dict) else {}
+    kind = str(target.get("kind") or "").strip()
+    name = str(target.get("name") or "").strip()
+    if not kind:
+        inferred = _mas_name_from_overlay_path(path, lib_dir)
+        return ("MAS", inferred) if inferred else None
+    if name:
+        return kind, name
+    if kind.lower() == "mas":
+        inferred = _mas_name_from_overlay_path(path, lib_dir)
+        return ("MAS", inferred) if inferred else None
+    return None
+
+
 class LabRegistry:
     """Lab-facing registry: runtime objects + workspace libraries + lab artifacts."""
 
@@ -145,6 +220,7 @@ class LabRegistry:
         # every YAML file to reclassify its declared kind, even though the
         # result is invariant until the next explicit refresh().
         self._manifest_file_cache: Dict[tuple[Path, str, str | None], List[Path]] = {}
+        self._overlay_record_cache: Dict[Path, List[Dict[str, Any]]] = {}
         eager = os.environ.get("MAS_LAB_REGISTRY_EAGER_REFRESH", "1").strip().lower()
         if eager not in {"0", "false", "no"}:
             self.refresh()
@@ -158,6 +234,7 @@ class LabRegistry:
     def refresh(self) -> None:
         self._libraries, self._library_sources = self._discover_library_paths()
         self._manifest_file_cache = {}
+        self._overlay_record_cache = {}
         self._log_discovery()
         self._refreshed = True
 
@@ -170,6 +247,7 @@ class LabRegistry:
         returning a listing cached from before the write.
         """
         self._manifest_file_cache = {}
+        self._overlay_record_cache = {}
 
     def _cached_manifest_files(
         self, lib_dir: Path, expected_kind: str, *, parent_dir: str | None = None
@@ -337,25 +415,76 @@ class LabRegistry:
     def list_overlays(self, library: str) -> List[Dict[str, Any]]:
         root = self.library_root(library)
         overlays: List[Dict[str, Any]] = []
-        for path in self._iter_overlay_files(root):
+        for rec in self.overlay_records(root):
+            path = rec["path"]
             rel = str(path.relative_to(root))
-            entry: Dict[str, Any] = {
-                "name": path.stem,
-                "filename": path.name,
-                "path": rel,
-                "ui_canvas": False,
-            }
-            try:
-                data = load_yaml_file(path)
-                meta = data.get("metadata", {})
-                entry["description"] = str(meta.get("description", "") or "")
-                entry["namespace"] = str((data.get("metadata") or {}).get("namespace", "global") or "global")
-                entry["ui_canvas"] = is_ui_canvas_overlay(data, path=path)
-            except Exception:
-                entry["description"] = ""
-                entry["namespace"] = "global"
-            overlays.append(entry)
+            data = rec["doc"]
+            meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+            overlays.append(
+                {
+                    "name": path.stem,
+                    "filename": path.name,
+                    "path": rel,
+                    "ui_canvas": rec["layout_only"],
+                    "description": str(meta.get("description", "") or ""),
+                    "namespace": str(meta.get("namespace", "global") or "global"),
+                    "target_kind": rec["target_kind"],
+                    "target_name": rec["target_name"],
+                }
+            )
         return overlays
+
+    def overlay_records(self, lib_dir: Path) -> List[Dict[str, Any]]:
+        """Every Overlay under *lib_dir*, indexed by inferred ``spec.target``.
+
+        Layout-only canvas overlays are included. Target name is taken from
+        ``spec.target.name`` when set; otherwise a MAS overlay sitting in
+        ``apps/<id>/[vN/]overlays/`` inherits *id*. The app does not need to
+        exist yet — GET attaches later, once both records are present.
+        """
+        cache = getattr(self, "_overlay_record_cache", None)
+        if cache is None:
+            self._overlay_record_cache = {}
+            cache = self._overlay_record_cache
+        cached = cache.get(lib_dir)
+        if cached is not None:
+            return cached
+        records: List[Dict[str, Any]] = []
+        for path in self._iter_overlay_files(lib_dir):
+            try:
+                doc = load_yaml_file(path)
+            except Exception:
+                continue
+            if not isinstance(doc, dict):
+                continue
+            target = infer_overlay_target(path, doc, lib_dir=lib_dir)
+            records.append(
+                {
+                    "path": path,
+                    "doc": doc,
+                    "layout_only": overlay_is_layout_only(doc),
+                    "target_kind": target[0] if target else "",
+                    "target_name": target[1] if target else "",
+                }
+            )
+        cache[lib_dir] = records
+        return records
+
+    def layout_overlays_targeting(
+        self, lib_dir: Path, *, kind: str, name: str
+    ) -> List[tuple[Path, Dict[str, Any]]]:
+        """Layout-only overlays registered against *kind*/*name*."""
+        want_kind = kind.lower()
+        matched: List[tuple[Path, Dict[str, Any]]] = []
+        for rec in self.overlay_records(lib_dir):
+            if not rec["layout_only"]:
+                continue
+            if str(rec["target_kind"]).lower() != want_kind:
+                continue
+            if rec["target_name"] != name:
+                continue
+            matched.append((rec["path"], rec["doc"]))
+        return matched
 
     def collect_mas_resources(self, library: str) -> Dict[str, Dict[str, Any]]:
         # Only discover apps from the library filesystem.  The mas.apps
@@ -363,7 +492,35 @@ class LabRegistry:
         # CLI / experiment resolution; mixing it in here would create
         # duplicates and break CRUD operations that expect filesystem paths.
         root = self.library_root(library)
+        return self.collect_apps_in(root)
+
+    def collect_apps_in(self, root: Path) -> Dict[str, Dict[str, Any]]:
+        """MAS apps under ``root``. Safe to call without a populated registry."""
         return self._collect_mas_resources(root)
+
+    @classmethod
+    def _ephemeral(cls) -> "LabRegistry":
+        """Isolated registry that scans a directory without process discovery."""
+        helper = cls.__new__(cls)
+        helper._workspace = None
+        helper._libraries = {}
+        helper._library_sources = {}
+        helper._refreshed = True
+        helper._manifest_file_cache = {}
+        helper._overlay_record_cache = {}
+        return helper
+
+    @classmethod
+    def apps_in_directory(cls, root: Path) -> Dict[str, Dict[str, Any]]:
+        """Discover MAS apps under ``root`` without refreshing the process registry."""
+        return cls._ephemeral().collect_apps_in(root)
+
+    @classmethod
+    def layout_overlays_in_directory(
+        cls, root: Path, *, kind: str, name: str
+    ) -> List[tuple[Path, Dict[str, Any]]]:
+        """Layout-only overlays under ``root`` whose ``spec.target`` selects *kind*/*name*."""
+        return cls._ephemeral().layout_overlays_targeting(root, kind=kind, name=name)
 
     def list_all_experiments(self) -> List[Dict[str, Any]]:
         """All experiment definitions across discovered libraries."""
@@ -430,43 +587,78 @@ class LabRegistry:
     # ── Discovery internals ─────────────────────────────────────────────
 
     def _workspace_root(self) -> Optional[Path]:
-        if self._workspace is None:
-            try:
-                from mas.lab.workspace import WorkspaceConfig
+        if self._workspace is not None:
+            base = getattr(self._workspace, "_path", None)
+            return Path(base) if base is not None else None
+        try:
+            from mas.lab.workspace import project_workspace_root
 
-                ws = WorkspaceConfig.load()
-                if ws.found and ws._path is not None:
-                    return ws._path
-            except Exception:
-                return None
+            return project_workspace_root()
+        except Exception:
             return None
-        base = getattr(self._workspace, "_path", None)
-        return Path(base) if base is not None else None
+
+    def _workspace_data(self) -> dict:
+        if self._workspace is not None:
+            data = getattr(self._workspace, "_data", None)
+            if isinstance(data, dict):
+                return data
+            return {}
+        root = self._workspace_root()
+        if root is None:
+            return {}
+        config = root / WORKSPACE_CONFIG_FILENAME
+        if not config.is_file():
+            return {}
+        try:
+            data = load_yaml_file(config)
+        except Exception:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _catalog_constrained(self) -> bool:
+        """True when ``mas_lab.labs_search_paths`` is set on the project config.
+
+        That key is the opt-in exclusive catalog (including ``[]`` = no labs).
+        ``MAS_WORKSPACE_ROOT`` / ``--workspace`` only chooses *where* those
+        paths resolve. Without the key, discovery stays additive: installed
+        packages, entry-point apps, and cwd-walk — same as the studio before
+        the two use-case pins.
+        """
+        return self._configured_labs_search_paths() is not None
+
+    def _configured_labs_search_paths(self) -> Optional[List[str]]:
+        """Return ``mas_lab.labs_search_paths`` when the key is present.
+
+        An empty list is intentional (no labs). ``None`` means use the
+        default ``labs`` folder under the workspace and keep additive
+        discovery.
+        """
+        mas_lab = self._workspace_data().get("mas_lab") or {}
+        if not isinstance(mas_lab, dict) or "labs_search_paths" not in mas_lab:
+            return None
+        paths = mas_lab.get("labs_search_paths")
+        if paths is None:
+            return None
+        if isinstance(paths, str):
+            return [paths]
+        return [str(item) for item in paths]
 
     def _labs_search_paths(self) -> List[str]:
-        if self._workspace is not None:
-            mas_lab = getattr(self._workspace, "_data", {}).get("mas_lab") or {}
-            paths = mas_lab.get("labs_search_paths")
-            if paths:
-                return [paths] if isinstance(paths, str) else list(paths)
-            if hasattr(self._workspace, "mas_lab"):
-                return list(self._workspace.mas_lab.labs_search_paths)
-        try:
-            from mas.lab.workspace import WorkspaceConfig
-
-            ws = WorkspaceConfig.load()
-            if ws.found:
-                mas_lab = ws._data.get("mas_lab") or {}
-                paths = mas_lab.get("labs_search_paths")
-                if paths:
-                    return [paths] if isinstance(paths, str) else list(paths)
-        except Exception:
-            pass
+        configured = self._configured_labs_search_paths()
+        if configured is not None:
+            return configured
         return ["labs"]
+
+    def _raw_manifest_libraries(self) -> Any:
+        ws = self._workspace
+        if ws is not None and hasattr(ws, "raw_manifest_libraries"):
+            return ws.raw_manifest_libraries
+        return self._workspace_data().get("manifest_libraries")
 
     def _discover_library_paths(self) -> tuple[Dict[str, Path], Dict[str, str]]:
         libraries: Dict[str, Path] = {}
         sources: Dict[str, str] = {}
+        constrained = self._catalog_constrained()
 
         def _add(slug: str, path: Path, source: str) -> None:
             resolved = path.resolve()
@@ -485,17 +677,18 @@ class LabRegistry:
                     source,
                 )
 
-        for name, path in self.runtime_objects("app").items():
-            _add(name, path, f"entry-point:mas.apps:{name}")
+        if not constrained:
+            for name, path in self.runtime_objects("app").items():
+                _add(name, path, f"entry-point:mas.apps:{name}")
 
-        try:
-            from mas.library_roots import discover_library_roots
+            try:
+                from mas.library_roots import discover_library_roots
 
-            for root in discover_library_roots():
-                for slug in _manifest_library_names(root):
-                    _add(slug, root, "manifest_libraries")
-        except Exception as exc:
-            logger.debug("manifest library discovery failed: %s", exc)
+                for root in discover_library_roots():
+                    for slug in _manifest_library_names(root):
+                        _add(slug, root, "manifest_libraries")
+            except Exception as exc:
+                logger.debug("manifest library discovery failed: %s", exc)
 
         for entry in os.environ.get("MAS_LIBRARY_PATHS", "").split(os.pathsep):
             entry = entry.strip()
@@ -522,25 +715,18 @@ class LabRegistry:
             from mas.library_roots import iter_libraries_in_search_path
             from mas.runtime.workspace_config import library_search_paths
 
-            ws = self._workspace
-            if ws is not None and hasattr(ws, "raw_manifest_libraries"):
-                # Preferred: the public accessor (real WorkspaceConfig instances).
-                raw_libs = ws.raw_manifest_libraries
-            else:
-                # Fallback for duck-typed workspace stand-ins (e.g. tests) that
-                # only carry ``_data``.
-                raw_libs = (getattr(ws, "_data", {}) or {}).get("manifest_libraries")
-            for rel in library_search_paths(raw_libs):
+            for rel in library_search_paths(self._raw_manifest_libraries()):
                 path = Path(rel).expanduser()
                 search = path if path.is_absolute() else (ws_root / rel)
                 for lib in iter_libraries_in_search_path(search):
                     _add(lib.name, lib, f"manifest_libraries:{rel}")
 
             for rel in self._labs_search_paths():
-                labs_dir = (ws_root / rel).resolve()
-                if labs_dir.is_dir():
-                    for path in sorted(labs_dir.glob("*.lab")):
-                        _add(path.stem, path, f"labs_search_paths:{rel}")
+                for path in _iter_lab_dirs(_resolve_configured_path(rel, ws_root)):
+                    _add(path.stem, path, f"labs_search_paths:{rel}")
+
+        if constrained:
+            return libraries, sources
 
         try:
             from mas.lab.workspace import find_workspace_root
@@ -548,10 +734,8 @@ class LabRegistry:
             ws = find_workspace_root()
             if ws is not None:
                 for rel in self._labs_search_paths():
-                    labs_dir = ws / rel
-                    if labs_dir.exists():
-                        for path in sorted(labs_dir.glob("*.lab")):
-                            _add(path.stem, path, f"workspace.find_workspace_root:{rel}")
+                    for path in _iter_lab_dirs(_resolve_configured_path(rel, ws)):
+                        _add(path.stem, path, f"workspace.find_workspace_root:{rel}")
         except Exception as exc:
             logger.debug("studio workspace discovery failed: %s", exc)
 

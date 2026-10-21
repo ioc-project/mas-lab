@@ -13,6 +13,8 @@ build/
 config.yaml
 !lab/src/mas/lab/templates/**/config.yaml
 !docs/tutorials/**/config.yaml
+!labs/**/config.yaml
+!library-samples/sample-workspace/config.yaml
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/

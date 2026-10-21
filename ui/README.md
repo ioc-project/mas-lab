@@ -49,7 +49,7 @@ fallback.
 
 ### 3. Smoke test
 
-1. Library picker lists labs from `labs_dir` / workspace discovery.
+1. Home (`/`) lists labs from the pinned workspace (`mas-lab serve --workspace` / `mas_lab.labs_search_paths`).
 2. Open a library → Agent or MAS canvas loads.
 3. Save / validate uses controller `POST /api/.../validate` plus client-side Ajv.
 4. DevTools → Network: on page load you should see `GET /api/health`, then
@@ -61,12 +61,20 @@ fallback.
 
 ```text
 mas-lab-ui (browser)
-    │  /api/libraries, /api/jobs, /api/schemas/{agent,mas}?resolved=1
+    │  /api/info, /api/scopes, /api/scopes/{id}/items, /api/choices, /api/runs, /api/artifacts
     ▼
 mas-lab-controller :8090  (mas-lab serve; daemon-only default is :9000)
     ▼
 mas-runtime + mas-ctl + mas-lab-bench
 ```
+
+The UI never reads the server filesystem. Run locally (`yarn dev` + `mas-lab serve`),
+in Docker, or against a remote controller (connection screen: address + token).
+`env-config.js`: `__MAS_LAB_API_BASE_URL__`, `__MAS_LAB_DEFAULT_SCOPE__` (alias
+`__MAS_LAB_DEFAULT_LIBRARY__`), `__MAS_LAB_TOKEN__`.
+
+Scripts: `yarn test`, `yarn e2e`, `yarn verify:api`, `yarn lint` (includes the
+no-paths grep gate).
 
 **Schemas:** `src/lib/loadManifestSchemas.ts` loads resolved JSON Schemas exclusively from
 `GET /api/schemas/{agent,mas}?format=json&resolved=1`. The controller inlines fragment refs
@@ -81,8 +89,12 @@ cd ui
 yarn dev
 yarn build
 yarn lint
+yarn test
+yarn e2e
+yarn verify:api
 yarn verify:schemas   # requires running controller
 yarn generate:types   # fetches resolved schemas from API → json2ts
+yarn generate:api     # controller OpenAPI → src/api/generated
 ```
 
 ---

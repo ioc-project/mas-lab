@@ -23,6 +23,9 @@ spec:
 ```
 
 Field lists for each kind live in this folder ([README](README.md)). This page covers only how to write references.
+In the UI, copy the `ref` field from an item (for example `part2:sre-triage@v2`)
+and paste it into the experiment or overlay that should point at it. Versions
+and ranges are resolved by `GET /api/resolve?ref=`.
 
 ---
 

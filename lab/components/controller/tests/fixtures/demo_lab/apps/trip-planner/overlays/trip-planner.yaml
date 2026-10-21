@@ -1,0 +1,64 @@
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  name: trip-planner
+  description: UI-only canvas layout for trip-planner. Ignored by the runtime.
+spec:
+  target:
+    kind: MAS
+    name: trip-planner
+  patch: {}
+x-canvas-positions:
+  node_c976ef3d:
+    x: 288
+    y: 96
+  node_0474aab9:
+    x: -320
+    y: 128
+  node_da912f59:
+    x: -288
+    y: 448
+  node_2d0f65ca:
+    x: 1376
+    y: -272
+  node_90a5ff40:
+    x: 720
+    y: -336
+  node_f450b48c:
+    x: 608
+    y: -16
+  node_c9b85594:
+    x: 1792
+    y: 864
+  node_8ffb0998:
+    x: 1088
+    y: 688
+  node_2b577041:
+    x: 1184
+    y: 992
+  node_b1cdfc1a:
+    x: 1712
+    y: 1840
+  node_ccdf15ec:
+    x: 608
+    y: 2128
+  node_a804a19f:
+    x: 672
+    y: 2608
+x-canvas-node-ids:
+  concierge_agent:
+    model: node_ccdf15ec
+    tools: node_a804a19f
+    agent: node_b1cdfc1a
+  itinerary_agent:
+    model: node_8ffb0998
+    tools: node_2b577041
+    agent: node_c9b85594
+  moderator:
+    model: node_0474aab9
+    design_pattern: node_da912f59
+    agent: node_c976ef3d
+  schedule_agent:
+    model: node_90a5ff40
+    tools: node_f450b48c
+    agent: node_2d0f65ca

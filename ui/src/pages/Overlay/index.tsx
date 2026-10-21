@@ -1,6 +1,10 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { PageWithTitle, CodeBlock, TabPanel } from "@/components";
+import {
+  PageWithTitle,
+  CodeBlock,
+  TabPanel,
+} from "@/components";
 import { OverlayBuilder } from "@/components/OverlayBuilder/OverlayBuilder";
 import {
   useOverlay,
@@ -13,6 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { parse, stringify } from "yaml";
+import { scopeHref, useScopeId } from "@/api/scope";
 import {
   InputField,
   Button,
@@ -32,15 +37,8 @@ const Overlay = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const {
-    library = "",
-    name: routeName,
-    overlayTab,
-  } = useParams<{
-    library: string;
-    name: string;
-    overlayTab: string;
-  }>();
+  const library = useScopeId();
+  const { name: routeName, overlayTab } = useParams();
 
   const isNew = !routeName;
   const overlayName = isNew ? "" : decodeURIComponent(routeName);
@@ -82,7 +80,10 @@ const Overlay = () => {
     setNameInput(overlayName);
   }, [overlayName]);
 
-  const selectedTab = Math.max(0, TAB_KEYS.indexOf(overlayTab as OverlayTab));
+  const selectedTab = Math.max(
+    0,
+    TAB_KEYS.indexOf(overlayTab as OverlayTab),
+  );
 
   const handleTabChange = useCallback(
     (_event: React.SyntheticEvent, newValue: number) => {
@@ -122,7 +123,7 @@ const Overlay = () => {
       return;
     }
 
-    let finalYaml = overlayYaml;
+    let finalYaml: string;
     try {
       const doc = parse(overlayYaml);
       if (!doc.metadata) doc.metadata = {};
@@ -168,28 +169,18 @@ const Overlay = () => {
         message: `Overlay "${trimmedName}" saved.`,
       });
 
-      const newRoute = `/${library}/overlays/${encodeURIComponent(trimmedName)}`;
+      const newRoute = scopeHref(library, `/overlays/${encodeURIComponent(trimmedName)}`);
       if (isNew || trimmedName !== overlayName) {
         navigate(newRoute, { replace: true });
       }
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to save overlay.";
+      const msg = err instanceof Error ? err.message : "Failed to save overlay.";
       setSaveError(msg);
       setAlertMessage({ severity: "error", message: msg });
     } finally {
       setSaving(false);
     }
-  }, [
-    overlayYaml,
-    nameInput,
-    descriptionInput,
-    isNew,
-    library,
-    overlayName,
-    navigate,
-    queryClient,
-  ]);
+  }, [overlayYaml, nameInput, descriptionInput, isNew, library, overlayName, navigate, queryClient]);
 
   const handleSaveClick = useCallback(() => {
     setSaveError("");
@@ -234,7 +225,7 @@ const Overlay = () => {
               Save
             </Button>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleValidate}
               disabled={!overlayYaml || validateMutation.isPending}
             >
@@ -243,7 +234,6 @@ const Overlay = () => {
           </Stack>
         </Stack>
       }
-      showBreadcrumbs={false}
     >
       <Stack direction="column" sx={{ width: "100%", height: "100%" }}>
         {alertMessage && (
@@ -302,10 +292,7 @@ const Overlay = () => {
         <TabPanel value={selectedTab} index={0} sx={{ flex: 1 }}>
           <Box sx={{ height: "100%", paddingTop: "8px" }}>
             {isLoading ? (
-              <Typography
-                variant="body2"
-                sx={{ color: "text.secondary", py: 2 }}
-              >
+              <Typography variant="body2" sx={{ color: "text.secondary", py: 2 }}>
                 Loading overlay...
               </Typography>
             ) : (
@@ -338,7 +325,7 @@ const Overlay = () => {
                     color: theme.palette.warning.main,
                   }}
                 >
-                  {overlayName ? `${overlayName}.yaml` : "overlay.yaml"}
+                  {overlayName || "overlay"}
                 </Typography>
                 <CodeBlock code={overlayYaml} language="yaml" />
               </Box>
@@ -360,7 +347,7 @@ const Overlay = () => {
               {saveError}
             </Alert>
           )}
-          <Stack direction="column" sx={{ gap: "8px" }}>
+          <Stack direction="column" sx={{ gap: "16px" }}>
             <InputField
               autoFocus
               label="Overlay Name"
@@ -391,11 +378,7 @@ const Overlay = () => {
           <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>
             Cancel
           </Button>
-          <Button
-            variant="gradient"
-            onClick={handleDialogSave}
-            disabled={saving}
-          >
+          <Button variant="gradient" onClick={handleDialogSave} disabled={saving}>
             {saving ? "Saving..." : "Save"}
           </Button>
         </DialogActions>

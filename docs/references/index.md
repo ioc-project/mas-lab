@@ -66,6 +66,7 @@ Experiments, datasets, pipelines, and analysis (`mas-lab`).
 
 - [ADR 0001 — lab terminology](adr-0001-lab-terminology.md)
 - [ADR 0002 — observability event model](adr-0002-observability-event-model.md)
+- [ADR 0003 — UI backend contract](adr-0003-ui-backend-contract.md)
 
 ---
 

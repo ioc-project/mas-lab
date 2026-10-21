@@ -10,7 +10,12 @@ import {
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router";
 import { useCallback, useMemo, useState } from "react";
-import { useExperimentDetail, fetchExperimentFile } from "@/api/apiCalls";
+import {
+  useExperimentDetail,
+  fetchExperimentFile,
+  findArtifactId,
+} from "@/api/apiCalls";
+import { scopeHref, useScopeId } from "@/api/scope";
 import {
   Panel,
   Group as PanelGroup,
@@ -26,8 +31,8 @@ import { groupOutputs, hiddenSummary } from "./utils";
 const Experiment = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { library = "", id = "" } = useParams<{
-    library: string;
+  const library = useScopeId();
+  const { id = "" } = useParams<{
     id: string;
   }>();
   const {
@@ -57,7 +62,12 @@ const Experiment = () => {
       setFileContent(null);
       setFileLoading(true);
       try {
-        const result = await fetchExperimentFile(id, path);
+        const artifactId = findArtifactId(experiment?.tree, path);
+        if (!artifactId) {
+          setFileContent("No artifact id for this file.");
+          return;
+        }
+        const result = await fetchExperimentFile(id, artifactId);
         setFileContent(result.content);
       } catch {
         setFileContent("Error loading file.");
@@ -65,7 +75,7 @@ const Experiment = () => {
         setFileLoading(false);
       }
     },
-    [id],
+    [id, experiment],
   );
 
   if (isLoading) {
@@ -97,7 +107,7 @@ const Experiment = () => {
         <Typography variant="h6">
           Experiment not found or not yet executed.
         </Typography>
-        <Button onClick={() => navigate(`/${library}/experiments`)}>
+        <Button onClick={() => navigate(scopeHref(library, "/experiments"))}>
           Back to Experiments
         </Button>
       </Box>
@@ -118,7 +128,7 @@ const Experiment = () => {
     >
       {useGrouped && (
         <ResultsOverviewCards
-          metadata={experiment.metadata}
+          metadata={experiment.metadata ?? {}}
           plots={plots}
           outputFiles={outputFiles}
           runGroups={runGroups}
@@ -131,7 +141,7 @@ const Experiment = () => {
             <Box sx={{ height: "100%", overflow: "auto", pr: 1 }}>
               <GroupedResults
                 experimentId={id}
-                tree={experiment.tree}
+                tree={experiment.tree ?? []}
                 plots={plots}
                 outputFiles={outputFiles}
                 runGroups={runGroups}

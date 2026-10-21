@@ -1,0 +1,5259 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MAS Lab API",
+    "description": "REST interface for mas-lab \u2014 scope-based HTTP API with persisted runs",
+    "version": "0.3.0"
+  },
+  "paths": {
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "List Jobs",
+        "description": "List FastAPI jobs plus in-process controller workers.",
+        "operationId": "list_jobs_api_jobs_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Clear Finished Jobs",
+        "description": "Remove jobs. With origin, UI-owned runs are dropped even if still running.",
+        "operationId": "clear_finished_jobs_api_jobs_delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Get Job",
+        "description": "Get full details of a specific job (including stdout/stderr).",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Cancel Job",
+        "description": "Cancel a running job and drop it from the in-memory list.",
+        "operationId": "cancel_job_api_jobs__job_id__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/registry": {
+      "get": {
+        "tags": [
+          "Registry"
+        ],
+        "summary": "List Registry",
+        "description": "Unified lab + runtime registry catalog.",
+        "operationId": "list_registry_api_registry_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/defaults": {
+      "get": {
+        "tags": [
+          "Registry"
+        ],
+        "summary": "Get Defaults",
+        "description": "Agent and infra defaults (design pattern, model) for UI and playground.",
+        "operationId": "get_defaults_api_defaults_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/discovery": {
+      "get": {
+        "tags": [
+          "Registry"
+        ],
+        "summary": "Get Discovery Report",
+        "description": "Paths scanned, libraries resolved, and runtime entry points (debug).",
+        "operationId": "get_discovery_report_api_discovery_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Libraries",
+        "description": "List available MAS libraries.",
+        "operationId": "list_libraries_api_libraries_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/api/runtime-runners": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "summary": "List Runtime Runners",
+        "description": "List registered lab runtime plugins (mas, langgraph, autogen, \u2026).",
+        "operationId": "list_runtime_runners_api_runtime_runners_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/tools": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Library Tools",
+        "description": "List available tools for a specific library.\n\nThe *namespaces* query parameter is a comma-separated list of scopes.\n``\"global\"`` returns tools under the library root ``tools/`` folder\n(prefixed with ``global/``).  Any other value is treated as an app\nname and returns tools under ``apps/{name}/tools/``.",
+        "operationId": "list_library_tools_api_libraries__library_name__tools_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "namespaces",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "global",
+              "title": "Namespaces"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/skills": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Library Skills",
+        "description": "List available skills for a specific library.\n\n``namespaces`` is a comma-separated list of scopes: ``global`` for\nlibrary-root skills (prefixed ``global/``), or an app name for\napp-scoped skills (no prefix).  Defaults to ``global``.",
+        "operationId": "list_library_skills_api_libraries__library_name__skills_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "namespaces",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "global",
+              "title": "Namespaces"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/documents": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Read Library Document",
+        "description": "Read a file under the library root (MAS YAML, agent YAML, overlays).",
+        "operationId": "read_library_document_api_libraries__library_name__documents_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/topologies": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Library Topologies",
+        "description": "List available topology manifests in a library.",
+        "operationId": "list_library_topologies_api_libraries__library_name__topologies_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/config-files": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Get Library Config Files",
+        "description": "Return infra, flavour, and workspace config files for the control panel.",
+        "operationId": "get_library_config_files_api_libraries__library_name__config_files_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/pipelines": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Library Pipelines",
+        "description": "List available pipeline definitions with metadata.",
+        "operationId": "list_library_pipelines_api_libraries__library_name__pipelines_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Create Pipeline",
+        "description": "Create a new pipeline definition in the library's pipelines/ directory.",
+        "operationId": "create_pipeline_api_libraries__library_name__pipelines_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePipelineRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/scenarios": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Scenarios",
+        "description": "List available MAS scenario files (mas.yaml in apps/<name>/).",
+        "operationId": "list_scenarios_api_libraries__library_name__scenarios_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/overlays/validate": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Validate Overlay",
+        "description": "Validate a kind: Overlay overlay manifest.\n\nUses the same schema (overlay.schema.yaml) regardless of whether the overlay\nis intended for mas-ctl run-mas or mas-lab benchmark run \u2014 the schema does\nnot differentiate between the two usage contexts.",
+        "operationId": "validate_overlay_api_libraries__library_name__overlays_validate_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/overlays": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Library Overlays",
+        "description": "List available overlay files with name and description (includes nested lab modules).",
+        "operationId": "list_library_overlays_api_libraries__library_name__overlays_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Create Overlay",
+        "description": "Create a new overlay definition.\n\nStorage location is determined by ``metadata.namespace`` in the YAML content:\n``global`` \u2192 ``{lib}/overlays/``, otherwise \u2192 ``{lib}/apps/{ns}/overlays/``.",
+        "operationId": "create_overlay_api_libraries__library_name__overlays_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveOverlayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/overlays/{overlay_name}": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Get Overlay",
+        "description": "Return the content of a specific overlay definition.",
+        "operationId": "get_overlay_api_libraries__library_name__overlays__overlay_name__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "overlay_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Overlay Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Update Overlay",
+        "description": "Update an existing overlay definition. Supports rename and namespace change.",
+        "operationId": "update_overlay_api_libraries__library_name__overlays__overlay_name__put",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "overlay_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Overlay Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveOverlayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Delete Overlay",
+        "description": "Delete an overlay definition.",
+        "operationId": "delete_overlay_api_libraries__library_name__overlays__overlay_name__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "overlay_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Overlay Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/validate": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Validate Manifest",
+        "description": "Validate an agent or MAS manifest in-process. Resolves refs relative to the library dir.",
+        "operationId": "validate_manifest_api_libraries__library_name__validate_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/run": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Run Agent",
+        "description": "Run an agent with a single query in-process. Returns a job_id for polling.",
+        "operationId": "run_agent_api_libraries__library_name__run_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunAgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/run/multi-turn": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Run Agent Multi Turn",
+        "description": "Run an agent with multiple sequential queries. Returns a job_id for polling.",
+        "operationId": "run_agent_multi_turn_api_libraries__library_name__run_multi_turn_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultiTurnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/run-mas": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Run Mas",
+        "description": "Run a MAS with a single query. Returns a job_id for polling.",
+        "operationId": "run_mas_api_libraries__library_name__run_mas_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunMASRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/datasets": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Datasets",
+        "description": "List available dataset YAML files under datasets/.",
+        "operationId": "list_datasets_api_libraries__library_name__datasets_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Create Dataset",
+        "description": "Create a new dataset file in the library's datasets/ directory.",
+        "operationId": "create_dataset_api_libraries__library_name__datasets_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDatasetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/datasets/{dataset_name}": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Get Dataset",
+        "description": "Return the content of a specific dataset.",
+        "operationId": "get_dataset_api_libraries__library_name__datasets__dataset_name__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Update Dataset",
+        "description": "Update an existing dataset. Supports rename via req.name.",
+        "operationId": "update_dataset_api_libraries__library_name__datasets__dataset_name__put",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveDatasetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Delete Dataset",
+        "description": "Delete a dataset file.",
+        "operationId": "delete_dataset_api_libraries__library_name__datasets__dataset_name__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "dataset_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/benchmark/run": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Benchmark Run",
+        "description": "Run a benchmark experiment. Returns a job_id for polling.",
+        "operationId": "benchmark_run_api_libraries__library_name__benchmark_run_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/benchmark/analyze": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Benchmark Analyze",
+        "description": "Regenerate statistics/plots for an existing benchmark run.",
+        "operationId": "benchmark_analyze_api_libraries__library_name__benchmark_analyze_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkAnalyzeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/benchmark/export": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Benchmark Export",
+        "description": "Export a benchmark run to a portable .tar.gz archive.",
+        "operationId": "benchmark_export_api_libraries__library_name__benchmark_export_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/benchmark/download": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Benchmark Download",
+        "description": "Export and download a benchmark run as a .tar.gz file.",
+        "operationId": "benchmark_download_api_libraries__library_name__benchmark_download_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "benchmark_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Benchmark Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/benchmark/import": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Benchmark Import",
+        "description": "Import a benchmark archive produced by benchmark export.",
+        "operationId": "benchmark_import_api_libraries__library_name__benchmark_import_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/benchmark/upload-import": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Benchmark Upload Import",
+        "description": "Accept a .tar.gz upload and import it as a benchmark run.",
+        "operationId": "benchmark_upload_import_api_libraries__library_name__benchmark_upload_import_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_benchmark_upload_import_api_libraries__library_name__benchmark_upload_import_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "summary": "List Experiments",
+        "description": "List all experiment runs with metadata.",
+        "operationId": "list_experiments_api_experiments_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/api/experiments/definitions": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List All Experiment Definitions",
+        "description": "All experiment definitions across discovered libraries.",
+        "operationId": "list_all_experiment_definitions_api_experiments_definitions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/api/experiments/{experiment_name}": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "summary": "Get Experiment",
+        "description": "Return experiment metadata and file tree.",
+        "operationId": "get_experiment_api_experiments__experiment_name__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "experiment_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Benchmark"
+        ],
+        "summary": "Delete Experiment",
+        "description": "Delete an experiment's results and clear the trace cache.",
+        "operationId": "delete_experiment_api_experiments__experiment_name__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "experiment_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/experiments/{experiment_name}/file": {
+      "get": {
+        "tags": [
+          "Benchmark"
+        ],
+        "summary": "Get Experiment File",
+        "description": "Read a file from an experiment's output directory.\n\nPass the relative path as a query parameter, e.g.\n``?path=metrics/answer_relevancy.csv``",
+        "operationId": "get_experiment_file_api_experiments__experiment_name__file_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "experiment_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Name"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/experiment/run": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Experiment Run",
+        "description": "Start an in-process experiment worker that streams live to demo-ui.",
+        "operationId": "experiment_run_api_libraries__library_name__experiment_run_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/experiments": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Library Experiments",
+        "description": "List available experiment definitions with metadata.",
+        "operationId": "list_library_experiments_api_libraries__library_name__experiments_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Create Experiment",
+        "description": "Create a new experiment definition in the library's experiments/ directory.",
+        "operationId": "create_experiment_api_libraries__library_name__experiments_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveExperimentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/experiments/{experiment_name}": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Get Library Experiment",
+        "description": "Return the content of a specific experiment definition.",
+        "operationId": "get_library_experiment_api_libraries__library_name__experiments__experiment_name__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "experiment_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Update Experiment",
+        "description": "Update an existing experiment definition. Supports rename via req.name.",
+        "operationId": "update_experiment_api_libraries__library_name__experiments__experiment_name__put",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "experiment_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveExperimentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Delete Library Experiment",
+        "description": "Delete an experiment definition.",
+        "operationId": "delete_library_experiment_api_libraries__library_name__experiments__experiment_name__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "experiment_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/pipeline/run": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Pipeline Run",
+        "description": "Run an analysis pipeline. Returns a job_id for polling.",
+        "operationId": "pipeline_run_api_libraries__library_name__pipeline_run_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/pipelines/validate": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Validate Pipeline",
+        "description": "Validate a pipeline manifest against the schema and check DAG integrity.",
+        "operationId": "validate_pipeline_api_libraries__library_name__pipelines_validate_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/pipelines/{pipeline_name}": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Get Pipeline",
+        "description": "Return the content of a specific pipeline definition.",
+        "operationId": "get_pipeline_api_libraries__library_name__pipelines__pipeline_name__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pipeline Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Update Pipeline",
+        "description": "Update an existing pipeline definition. Supports rename via req.name.",
+        "operationId": "update_pipeline_api_libraries__library_name__pipelines__pipeline_name__put",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pipeline Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePipelineRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Delete Pipeline",
+        "description": "Delete a pipeline definition.",
+        "operationId": "delete_pipeline_api_libraries__library_name__pipelines__pipeline_name__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "pipeline_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pipeline Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/eval-output": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Eval Output",
+        "description": "Run LLM-as-judge evaluation on an events file. Returns a job_id for polling.",
+        "operationId": "eval_output_api_libraries__library_name__eval_output_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalOutputRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/apps": {
+      "post": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Save Mas Resource",
+        "description": "Save a MAS manifest + agent files under apps/<mas_name>/.",
+        "operationId": "save_mas_resource_api_libraries__library_name__apps_post",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMASResourceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "List Mas Resources",
+        "description": "List all MAS resources with their manifests and agents.",
+        "operationId": "list_mas_resources_api_libraries__library_name__apps_get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/apps/{old_mas_name}": {
+      "put": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Update Mas Resource",
+        "description": "Update a MAS resource. Overwrites mas.yaml and agents/ only, preserving other app contents.",
+        "operationId": "update_mas_resource_api_libraries__library_name__apps__old_mas_name__put",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "old_mas_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Old Mas Name"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMASResourceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/libraries/{library_name}/apps/{mas_name}": {
+      "get": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Get Mas Resource",
+        "description": "Return a single MAS resource (manifest + agents).",
+        "operationId": "get_mas_resource_api_libraries__library_name__apps__mas_name__get",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "mas_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mas Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Libraries"
+        ],
+        "summary": "Delete Mas Resource",
+        "description": "Delete a MAS app folder (manifest + agents).",
+        "operationId": "delete_mas_resource_api_libraries__library_name__apps__mas_name__delete",
+        "deprecated": true,
+        "parameters": [
+          {
+            "name": "library_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Library Name"
+            }
+          },
+          {
+            "name": "mas_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mas Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Api Health",
+        "operationId": "api_health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/info": {
+      "get": {
+        "summary": "Info",
+        "description": "Capabilities the UI uses to bootstrap a connection.",
+        "operationId": "info_api_info_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schemas": {
+      "get": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "List Manifest Schemas",
+        "description": "List manifest schemas resolved from installed packages (runtime, bench, core).\n\nmas-lab-ui should fetch schemas here instead of bundling copies.",
+        "operationId": "list_manifest_schemas_api_schemas_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/schemas/{schema_id}": {
+      "get": {
+        "tags": [
+          "Schemas"
+        ],
+        "summary": "Get Manifest Schema",
+        "description": "Return a manifest schema by registry id.\n\nQuery params:\n  - ``format=json`` \u2014 JSON body (required for ``resolved=1``).\n  - ``resolved=1`` \u2014 JSON Schema with local ``./`` refs inlined (for UI Ajv).\n    Uses the same loader as ``mas.ctl.validate`` \u2014 no filesystem access in the browser.",
+        "operationId": "get_manifest_schema_api_schemas__schema_id__get",
+        "parameters": [
+          {
+            "name": "schema_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Schema Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Format"
+            }
+          },
+          {
+            "name": "resolved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Resolved"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pipeline-step-types": {
+      "get": {
+        "summary": "Get Pipeline Step Types",
+        "description": "Return the registry of all pipeline step types with config schemas for the React UI.\n\nQuery params:\n    phase: \"pre\" | \"post\" \u2014 return only pre-phase or post-phase step types.\n           If omitted, returns the post-phase step types.",
+        "operationId": "get_pipeline_step_types_api_pipeline_step_types_get",
+        "parameters": [
+          {
+            "name": "phase",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics/eval": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Get Eval Metrics",
+        "description": "Return available metrics for the annotate_metrics pipeline step.\n\nKeys are the metric_class values to use in pipeline YAML config.\nValues are human-readable display names.\nUsed by step type: annotate_metrics (config.metric_class).",
+        "operationId": "get_eval_metrics_api_metrics_eval_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics/mce": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Get Mce Metrics",
+        "description": "Return available MCE metrics for eval_batch steps.\n\nKeys are the metric name strings to use in pipeline YAML config.metrics array.\nValues are human-readable display names.\nUsed by step type: eval_batch (config.metrics).",
+        "operationId": "get_mce_metrics_api_metrics_mce_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes": {
+      "get": {
+        "tags": [
+          "Scopes"
+        ],
+        "summary": "List Scopes",
+        "operationId": "list_scopes_api_scopes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Scopes"
+        ],
+        "summary": "Create Scope",
+        "operationId": "create_scope_api_scopes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}": {
+      "get": {
+        "tags": [
+          "Scopes"
+        ],
+        "summary": "Get Scope",
+        "operationId": "get_scope_api_scopes__scope_id__get",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/config": {
+      "get": {
+        "tags": [
+          "Scopes"
+        ],
+        "summary": "Scope Config",
+        "description": "Infra / flavour / workspace YAML for the control panel (basename keys only).",
+        "operationId": "scope_config_api_scopes__scope_id__config_get",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/visible-libraries": {
+      "get": {
+        "tags": [
+          "Scopes"
+        ],
+        "summary": "Visible Libraries",
+        "operationId": "visible_libraries_api_scopes__scope_id__visible_libraries_get",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kinds": {
+      "get": {
+        "tags": [
+          "Kinds"
+        ],
+        "summary": "Get Kinds",
+        "operationId": "get_kinds_api_kinds_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/items": {
+      "get": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "List Items",
+        "operationId": "list_items_api_scopes__scope_id__items_get",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Create Item",
+        "operationId": "create_item_api_scopes__scope_id__items_post",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/items/{kind}/{item_id}": {
+      "get": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Get Item",
+        "operationId": "get_item_api_scopes__scope_id__items__kind___item_id__get",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Update Item",
+        "operationId": "update_item_api_scopes__scope_id__items__kind___item_id__put",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Delete Item",
+        "operationId": "delete_item_api_scopes__scope_id__items__kind___item_id__delete",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/items/{kind}/{item_id}/fork": {
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Fork Item",
+        "operationId": "fork_item_api_scopes__scope_id__items__kind___item_id__fork_post",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForkItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/items/{kind}/{item_id}/rename": {
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Rename Item",
+        "operationId": "rename_item_api_scopes__scope_id__items__kind___item_id__rename_post",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/items/check": {
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Check Item",
+        "operationId": "check_item_api_scopes__scope_id__items_check_post",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resolve": {
+      "get": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Resolve",
+        "operationId": "resolve_api_resolve_get",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scopes/{scope_id}/validate": {
+      "post": {
+        "tags": [
+          "Items"
+        ],
+        "summary": "Validate In Scope",
+        "operationId": "validate_in_scope_api_scopes__scope_id__validate_post",
+        "parameters": [
+          {
+            "name": "scope_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scope Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidateScopeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/choices/{choice_kind}": {
+      "get": {
+        "tags": [
+          "Choices"
+        ],
+        "summary": "Get Choices",
+        "operationId": "get_choices_api_choices__choice_kind__get",
+        "parameters": [
+          {
+            "name": "choice_kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Choice Kind"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/design-patterns": {
+      "get": {
+        "tags": [
+          "Registry"
+        ],
+        "summary": "List Design Patterns",
+        "description": "Design-pattern plugins for the agent / overlay canvas builders.\n\nReshapes ``LabRegistry.list(\"design_pattern\")`` into a UI-friendly catalog:\neach entry carries a manifest ``type``, a display ``label``, the source\n``library`` (so the UI can group OSS vs experimental patterns) and the\n``config_keys`` a pattern may accept.",
+        "operationId": "list_design_patterns_api_design_patterns_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "List Runs",
+        "operationId": "list_runs_api_runs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Start Run",
+        "operationId": "start_run_api_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_api_runs__run_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Delete Run",
+        "operationId": "delete_run_api_runs__run_id__delete",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/events": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Run Events",
+        "operationId": "run_events_api_runs__run_id__events_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runs/{run_id}/artifacts": {
+      "get": {
+        "tags": [
+          "Runs"
+        ],
+        "summary": "Run Artifacts",
+        "operationId": "run_artifacts_api_runs__run_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts/{artifact_id}": {
+      "get": {
+        "tags": [
+          "Artifacts"
+        ],
+        "summary": "Get Artifact",
+        "operationId": "get_artifact_api_artifacts__artifact_id__get",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          },
+          {
+            "name": "download",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Download"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads": {
+      "post": {
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Upload",
+        "operationId": "upload_api_uploads_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_api_uploads_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BenchmarkAnalyzeRequest": {
+        "properties": {
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id",
+            "description": "Benchmark run id (short or full)"
+          },
+          "experiment_yaml": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experiment Yaml",
+            "description": "Optional experiment YAML path when auto-detect fails"
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 120
+          }
+        },
+        "type": "object",
+        "required": [
+          "benchmark_id"
+        ],
+        "title": "BenchmarkAnalyzeRequest"
+      },
+      "BenchmarkExportRequest": {
+        "properties": {
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id",
+            "description": "Benchmark run id (short, full, last, or latest)"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output",
+            "description": "Output .tar.gz path (default: cwd)"
+          },
+          "include_trace_cache": {
+            "type": "boolean",
+            "title": "Include Trace Cache",
+            "description": "Pack trace-cache entries",
+            "default": true
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "List archive contents without writing",
+            "default": false
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 300
+          }
+        },
+        "type": "object",
+        "required": [
+          "benchmark_id"
+        ],
+        "title": "BenchmarkExportRequest"
+      },
+      "BenchmarkImportRequest": {
+        "properties": {
+          "tarball": {
+            "type": "string",
+            "title": "Tarball",
+            "description": "Path to .tar.gz produced by benchmark export"
+          },
+          "output_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Dir",
+            "description": "Restore benchmark output here"
+          },
+          "trace_cache_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Cache Dir",
+            "description": "Restore trace-cache entries here"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "description": "Inspect archive without writing",
+            "default": false
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 300
+          }
+        },
+        "type": "object",
+        "required": [
+          "tarball"
+        ],
+        "title": "BenchmarkImportRequest"
+      },
+      "BenchmarkRunRequest": {
+        "properties": {
+          "experiment_yaml": {
+            "type": "string",
+            "title": "Experiment Yaml",
+            "description": "Full experiment YAML content, or a filename relative to the library dir"
+          },
+          "progress": {
+            "type": "boolean",
+            "title": "Progress",
+            "description": "Show progress bar",
+            "default": true
+          },
+          "max_runs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Runs",
+            "description": "Override n_runs from config"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Force a new run even if a previous exists",
+            "default": true
+          },
+          "flavour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flavour",
+            "description": "Flavour name"
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 1800
+          }
+        },
+        "type": "object",
+        "required": [
+          "experiment_yaml"
+        ],
+        "title": "BenchmarkRunRequest"
+      },
+      "Body_benchmark_upload_import_api_libraries__library_name__benchmark_upload_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_benchmark_upload_import_api_libraries__library_name__benchmark_upload_import_post"
+      },
+      "Body_upload_api_uploads_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_api_uploads_post"
+      },
+      "CheckItemRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "CheckItemRequest"
+      },
+      "CreateItemRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent"
+          },
+          "upload_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upload Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "CreateItemRequest"
+      },
+      "CreateScopeRequest": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": "lab"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "default": ""
+          },
+          "local_library": {
+            "type": "boolean",
+            "title": "Local Library",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateScopeRequest"
+      },
+      "EvalOutputRequest": {
+        "properties": {
+          "events_file": {
+            "type": "string",
+            "title": "Events File",
+            "description": "Path to events.jsonl (relative to library dir or absolute)"
+          },
+          "metrics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metrics",
+            "description": "Metric names to compute",
+            "default": [
+              "answer_relevancy"
+            ]
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "LLM judge model",
+            "default": "azure/gpt-4o"
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 90
+          }
+        },
+        "type": "object",
+        "required": [
+          "events_file"
+        ],
+        "title": "EvalOutputRequest"
+      },
+      "ExperimentRunRequest": {
+        "properties": {
+          "experiment_yaml": {
+            "type": "string",
+            "title": "Experiment Yaml",
+            "description": "Experiment filename or path relative to the library root"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Optional prompt override shown in the demo-ui selector",
+            "default": ""
+          },
+          "infra_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Infra Refs",
+            "description": "Extra infra files relative to the library root (LLM cache, model pin)"
+          },
+          "pre": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Pre",
+            "description": "Inline pipeline-style steps run in the library cwd before the worker starts"
+          },
+          "demo_ui_ingest_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demo Ui Ingest Url",
+            "description": "When set, the in-process worker POSTs live native records here"
+          },
+          "demo_ui_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demo Ui Ref",
+            "description": "Data-source ref stamped onto live ingest records"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "description": "Force a new run even if a previous exists",
+            "default": true
+          },
+          "max_runs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Runs",
+            "description": "Cap n_runs for a live experiment",
+            "default": 1
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 1800
+          }
+        },
+        "type": "object",
+        "required": [
+          "experiment_yaml"
+        ],
+        "title": "ExperimentRunRequest"
+      },
+      "ForkItemRequest": {
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "target_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Scope"
+          }
+        },
+        "type": "object",
+        "title": "ForkItemRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MultiTurnRequest": {
+        "properties": {
+          "manifest_yaml": {
+            "type": "string",
+            "title": "Manifest Yaml",
+            "description": "Full agent YAML manifest content to run"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Queries",
+            "description": "Ordered list of queries for a multi-turn conversation"
+          },
+          "overlays": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Overlays",
+            "description": "Overlay filenames to apply (relative to library dir)"
+          },
+          "flavour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flavour",
+            "description": "Flavour name"
+          },
+          "verbose": {
+            "type": "boolean",
+            "title": "Verbose",
+            "description": "Enable verbose output",
+            "default": true
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 90
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_yaml",
+          "queries"
+        ],
+        "title": "MultiTurnRequest"
+      },
+      "PipelineRunRequest": {
+        "properties": {
+          "pipeline_yaml": {
+            "type": "string",
+            "title": "Pipeline Yaml",
+            "description": "Pipeline YAML path (relative to library dir)",
+            "default": "pipelines/full-pipeline-topology-comparison.yaml"
+          },
+          "only": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Only",
+            "description": "Run only these steps (e.g., ['extract', 'evaluate'])"
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 1800
+          }
+        },
+        "type": "object",
+        "title": "PipelineRunRequest"
+      },
+      "RenameItemRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "RenameItemRequest"
+      },
+      "RunAgentRequest": {
+        "properties": {
+          "manifest_yaml": {
+            "type": "string",
+            "title": "Manifest Yaml",
+            "description": "Full agent YAML manifest content to run"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The question to send to the agent"
+          },
+          "flavour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flavour",
+            "description": "Flavour name (e.g., 'local', 'local-benchmark')"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id",
+            "description": "Stable session id for multi-turn chat memory"
+          },
+          "verbose": {
+            "type": "boolean",
+            "title": "Verbose",
+            "description": "Deprecated: chat runs in-process without CLI stdout",
+            "default": false
+          },
+          "no_cache": {
+            "type": "boolean",
+            "title": "No Cache",
+            "description": "Clear web search cache before running",
+            "default": true
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 60
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_yaml",
+          "query"
+        ],
+        "title": "RunAgentRequest"
+      },
+      "RunMASRequest": {
+        "properties": {
+          "manifest_yaml": {
+            "type": "string",
+            "title": "Manifest Yaml",
+            "description": "Full MAS YAML. Ignored when mas_path is set.",
+            "default": ""
+          },
+          "mas_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mas Path",
+            "description": "MAS file relative to the library root (preferred: keeps agent refs valid)."
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The question to send to the MAS"
+          },
+          "overlays": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Overlays",
+            "description": "Overlay names or paths relative to the library dir"
+          },
+          "infra_refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Infra Refs",
+            "description": "If set, only these infra files are passed to mas-ctl (no directory glob)."
+          },
+          "pre": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Pre",
+            "description": "Inline pipeline-style steps run in the library cwd before mas-ctl (type: shell)."
+          },
+          "demo_ui_ingest_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demo Ui Ingest Url",
+            "description": "When set, mas-ctl POSTs live native records to this demo-ui ingest URL."
+          },
+          "demo_ui_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demo Ui Ref",
+            "description": "Data-source ref stamped onto live ingest records."
+          },
+          "flavour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flavour",
+            "description": "Flavour name"
+          },
+          "verbose": {
+            "type": "boolean",
+            "title": "Verbose",
+            "description": "Enable verbose output",
+            "default": true
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "description": "Timeout in seconds",
+            "default": 90
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "RunMASRequest"
+      },
+      "SaveDatasetRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Dataset filename (e.g. my-dataset.yaml)"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Full dataset YAML content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "SaveDatasetRequest"
+      },
+      "SaveExperimentRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Experiment name (used as filename, without .yaml)"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Full experiment YAML content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "SaveExperimentRequest"
+      },
+      "SaveMASResourceRequest": {
+        "properties": {
+          "mas_name": {
+            "type": "string",
+            "title": "Mas Name",
+            "description": "MAS name (becomes the app folder name under apps/)"
+          },
+          "mas_yaml": {
+            "type": "string",
+            "title": "Mas Yaml",
+            "description": "MAS manifest YAML content"
+          },
+          "agents": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Agents",
+            "description": "Map of agent name \u2192 agent YAML content (stored in apps/<mas_name>/agents/)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mas_name",
+          "mas_yaml"
+        ],
+        "title": "SaveMASResourceRequest"
+      },
+      "SaveOverlayRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Overlay name (used as filename, without .yaml)"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Full overlay YAML content"
+          },
+          "run_validation": {
+            "type": "boolean",
+            "title": "Run Validation",
+            "description": "Validate against schema before saving",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "SaveOverlayRequest"
+      },
+      "SavePipelineRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Pipeline name (used as filename, without .yaml)"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "Full pipeline YAML content"
+          },
+          "run_validation": {
+            "type": "boolean",
+            "title": "Run Validation",
+            "description": "Validate against schema before saving",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "SavePipelineRequest"
+      },
+      "StartRunRequest": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "item": {
+            "type": "string",
+            "title": "Item"
+          },
+          "overlays": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Overlays"
+          },
+          "bind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bind"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "manifest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manifest"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": "run"
+          },
+          "timeout": {
+            "type": "integer",
+            "maximum": 1800.0,
+            "minimum": 1.0,
+            "title": "Timeout",
+            "default": 1800
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "kind",
+          "item"
+        ],
+        "title": "StartRunRequest"
+      },
+      "UpdateItemRequest": {
+        "properties": {
+          "manifest": {
+            "type": "string",
+            "title": "Manifest"
+          },
+          "children": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Children"
+          },
+          "revision": {
+            "type": "string",
+            "title": "Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest",
+          "revision"
+        ],
+        "title": "UpdateItemRequest"
+      },
+      "ValidateRequest": {
+        "properties": {
+          "manifest_yaml": {
+            "type": "string",
+            "title": "Manifest Yaml",
+            "description": "Full YAML manifest content to validate (agent or MAS)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest_yaml"
+        ],
+        "title": "ValidateRequest"
+      },
+      "ValidateScopeRequest": {
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "manifest": {
+            "type": "string",
+            "title": "Manifest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "manifest"
+        ],
+        "title": "ValidateScopeRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

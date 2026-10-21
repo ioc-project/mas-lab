@@ -7,6 +7,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
+# Keep in sync with mas.ctl.overlay.canvas.CANVAS_EXTENSION_KEYS.
+_CANVAS_EXTENSION_KEYS = ("x-canvas-positions", "x-canvas-node-ids", "x-text-input")
+
 
 def _is_set(val: Any) -> bool:
     return val is not None and val != "" and val is not False
@@ -144,6 +147,8 @@ class OverlaySeparationValidator(MASSeparationValidator):
             )
         for path, val in _iter_paths(data):
             if "agency.agents[" in path:
+                continue
+            if any(path == key or path.startswith(f"{key}.") for key in _CANVAS_EXTENSION_KEYS):
                 continue
             key = path.rsplit(".", 1)[-1].split("[")[0]
             if key in cls._ACCESS_KEYS and _is_set(val):

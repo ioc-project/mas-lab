@@ -100,7 +100,7 @@ The exchange log is for humans. Tools read `events.jsonl` and `mas-lab telemetry
 | `benchmark_flavour` | string | none | Flavour for `mas-lab benchmark run` |
 | `benchmark.clean_stale_outputs` | bool | `false` | Drop output folders for scenarios no longer in `experiment.yaml` |
 | `benchmark.clean_stale_trace_cache` | bool | `true` | When cleaning stale outputs, also drop unused trace-cache entries. The trace cache stores completed run traces. |
-| `labs_search_paths` | string or list | none | Extra dirs to scan for `*.lab` / experiment YAML (not `paths.labs_dir`) |
+| `labs_search_paths` | string or list | none | Dirs (relative to the config file, or absolute) scanned for `*.lab` folders. An entry may itself be a `*.lab` directory. When this key is present (including an empty list), it is the exclusive lab catalog — installed packages and cwd-walk of the mas-lab checkout stay out. When the key is omitted, those sources stay additive. Not `paths.labs_dir` (benchmark output). `POST /api/scopes` writes a new `{name}.lab` to the first entry. |
 
 ---
 

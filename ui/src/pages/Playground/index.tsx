@@ -12,12 +12,9 @@ import { useLocation, useNavigate, useParams } from "react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parse, stringify } from "yaml";
 import { validateManifests } from "@/utils/manifestValidator";
-import {
-  useValidateAgent,
-  useValidateMas,
-  createMasResource,
-} from "@/api/apiCalls";
+import { useValidateAgent, useValidateMas, createMasResource } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
+import { useScopeId } from "@/api/scope";
 import {
   Button,
   Dialog,
@@ -34,7 +31,8 @@ type PlaygroundTab = (typeof PLAYGROUND_TAB_KEYS)[number];
 
 const Playground = () => {
   const theme = useTheme();
-  const { playgroundTab, library } = useParams();
+  const library = useScopeId();
+  const { playgroundTab } = useParams();
   const queryClient = useQueryClient();
 
   const [yamlOutputMap, setYamlOutputMap] = useState<YamlOutputMap>({});
@@ -220,7 +218,7 @@ const Playground = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleOpenSaveDialog}
               disabled={sortedKeys.length === 0}
             >
@@ -228,7 +226,7 @@ const Playground = () => {
             </Button>
 
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleValidate}
               disabled={!selectedAgentName || validateMutation.isPending}
             >
@@ -236,7 +234,7 @@ const Playground = () => {
             </Button>
 
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleValidateMas}
               disabled={!yamlOutputMap["mas"] || validateMasMutation.isPending}
             >
@@ -372,9 +370,7 @@ const Playground = () => {
                         : theme.palette.info.main,
                   }}
                 >
-                  {key === "mas"
-                    ? "mas.yaml"
-                    : `${key.replace("agent:", "")}.agent.yaml`}
+                  {key === "mas" ? "application" : key}
                 </Typography>
                 <CodeBlock code={yamlOutputMap[key]} language="yaml" />
               </Box>

@@ -16,7 +16,8 @@ experiments and telemetry, and sets up a workspace. Start with `mas-ctl chat`.
 | `mas-ctl --help` / `mas-ctl COMMAND --help` | — | Always-current flag list |
 
 **mas-lab man pages** live with the owning package ([index](mas-lab.md)).
-**Complete mas-ctl option tables:** [mas-ctl.md](mas-ctl.md).
+**Complete mas-ctl option tables:** [mas-ctl.md](mas-ctl.md). Controller HTTP:
+[`mas-lab serve`](serve.md).
 **Workspace file:** [config.yaml reference](../references/config.yaml.md).
 **Machine run logs:** [observability.md](observability.md) (`events.jsonl`).
 

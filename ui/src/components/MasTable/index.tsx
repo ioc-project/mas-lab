@@ -4,10 +4,11 @@ import { useCallback, useMemo } from "react";
 import type { MASManifest } from "@/types/mas-types";
 import { Stack } from "@mui/material";
 import { MasTable } from "./MasTable";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate } from "react-router";
 import { parse, stringify } from "yaml";
 import { useMasResources, deleteMasResource, createMasResource } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
+import { scopeHref, useScopeId } from "@/api/scope";
 
 interface MasTablePropsWrapper {
   defaultHiddenColumns?: string[];
@@ -19,28 +20,30 @@ export const MasTableWrapper = ({
   title,
 }: MasTablePropsWrapper) => {
   const navigate = useNavigate();
-  const { library = "" } = useParams();
+  const library = useScopeId();
   const queryClient = useQueryClient();
 
   const { data: masResourceMap = {}, isLoading } = useMasResources(library);
 
   const masList = useMemo<MASManifest[]>(() => {
-    return Object.values(masResourceMap)
-      .map((entry) => {
+    return Object.entries(masResourceMap)
+      .map(([itemId, entry]) => {
         try {
           const doc = parse(entry.mas_yaml) as {
             kind?: string;
             metadata?: MASManifest["metadata"];
             spec?: MASManifest["spec"];
           };
-          if (doc.kind === "Agent" && doc.metadata?.name) {
+          const metadata = { ...(doc.metadata ?? {}), name: itemId };
+          if (doc.kind === "Agent") {
             return {
               ...doc,
               kind: "MAS",
+              metadata,
               spec: doc.spec ?? {},
             } as MASManifest;
           }
-          return doc as MASManifest;
+          return { ...doc, metadata } as MASManifest;
         } catch {
           return null;
         }
@@ -49,7 +52,7 @@ export const MasTableWrapper = ({
   }, [masResourceMap]);
 
   const handleMasClick = (mas: MASManifest) => {
-    navigate(`/${library}/applications/${mas.metadata?.name}`);
+    navigate(scopeHref(library, `/applications/${mas.metadata?.name}`));
   };
 
   const handleDelete = useCallback(
@@ -92,7 +95,7 @@ export const MasTableWrapper = ({
         library,
         mas_name: params.masName,
         mas_yaml: stringify(masDoc),
-        agents: sourceEntry.agents,
+        agents: sourceEntry.agents ?? {},
       });
       queryClient.invalidateQueries({ queryKey: ["apps", library] });
     },

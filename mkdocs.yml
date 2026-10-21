@@ -110,6 +110,7 @@ nav:
           - Overview: cli/index.md
           - mas-lab index: cli/mas-lab.md
           - mas-ctl: cli/mas-ctl.md
+          - "mas-lab serve": cli/serve.md
           - Observability / run logs: cli/observability.md
           - compile: cli/compile.md
           - Overrides: cli/overrides.md
@@ -138,6 +139,7 @@ nav:
       - Overview: references/index.md
       - "ADR 0001 — lab terminology": references/adr-0001-lab-terminology.md
       - "ADR 0002 — observability event model": references/adr-0002-observability-event-model.md
+      - "ADR 0003 — UI backend contract": references/adr-0003-ui-backend-contract.md
       - A2A:
           - Overview: a2a/README.md
           - Developer reference: a2a/developer.md

@@ -1,5 +1,11 @@
 # Release Notes
 
+## Unreleased
+
+The web UI talks only to the controller (`/api/scopes`, items, runs, artifacts).
+`mas-lab serve` gains `--cors-origin`, `--token-file`, `--state-dir`, and `--workspace`.
+`/api/libraries`, `/api/jobs`, and `/api/experiments` are deprecated.
+
 ## v0.2.0
 
 This branch is the MAS-Lab v0.2 release-prep branch after rebasing onto the

@@ -12,6 +12,12 @@ node_modules
 dist
 dist-ssr
 *.local
+package-lock.json
+.npm-cache
+.yarn-cache
+test-results
+playwright-report
+blob-report
 
 # Editor directories and files
 .vscode/*

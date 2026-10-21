@@ -17,6 +17,7 @@ LIBRARIES_DIR = Path(
 )
 
 MAX_TIMEOUT = 1800
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 MAS_LAB_ROOT = Path(os.environ.get("MAS_LAB_ROOT", mas_data_root()))
 

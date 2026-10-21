@@ -18,7 +18,7 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useParams } from "react-router";
+import { useScopeId } from "@/api/scope";
 
 import { DnDProvider, useDnD } from "./DnDContext";
 import { Sidebar } from "./Sidebar";
@@ -39,45 +39,16 @@ import { NamespaceProvider } from "./NamespaceContext";
 import { useMasResources } from "@/api/apiCalls";
 import "../CanvasBuilder/canvasBuilder.css";
 
-/**
- * Convert overlay tool display names to ``{ ref: path }`` entries.
- * Refs are relative to the agent directory (``apps/{ns}/agents/``).
- *
- * - ``global/web-search``  → ``{ ref: ../../../tools/web-search.tool.yaml }``
- * - ``web-search``         → ``{ ref: ../tools/web-search.tool.yaml }``
- */
-function overlayToolDisplayNamesToRefs(
-  tools: string[],
-): Array<{ ref: string }> {
-  return tools.map((name) => {
-    if (name.startsWith("global/")) {
-      const bare = name.slice("global/".length);
-      return { ref: `../../../tools/${bare}.tool.yaml` };
-    }
-    return { ref: `../tools/${name}.tool.yaml` };
-  });
+function overlayToolDisplayNamesToRefs(tools: string[]): Array<{ ref: string }> {
+  return tools.map((ref) => ({ ref }));
 }
 
-/**
- * Convert ``{ ref: path }`` tool entries back to display names for the UI.
- *
- * - ``{ ref: ../../../tools/web-search.tool.yaml }``  → ``global/web-search``
- * - ``{ ref: ../tools/web-search.tool.yaml }``        → ``web-search``
- * - bare string ``"web-search"``                      → ``"web-search"`` (legacy)
- */
 function normalizeOverlayToolRefs(tools: unknown): string[] {
   if (!Array.isArray(tools)) return [];
   return tools.map((entry) => {
     if (entry && typeof entry === "object") {
       const obj = entry as Record<string, unknown>;
-      if (typeof obj.ref === "string") {
-        const ref = obj.ref;
-        const stem = ref.split("/").pop()?.replace(".tool.yaml", "") ?? ref;
-        if (ref.startsWith("../../../tools/")) {
-          return `global/${stem}`;
-        }
-        return stem;
-      }
+      if (typeof obj.ref === "string") return obj.ref;
     }
     return String(entry);
   });
@@ -410,7 +381,7 @@ function NamespaceSelector({
   value: string;
   onChange: (ns: string) => void;
 }) {
-  const { library = "" } = useParams<{ library: string }>();
+  const library = useScopeId();
   const { data: masResources } = useMasResources(library);
   const appNames = useMemo(
     () => (masResources ? Object.keys(masResources) : []),

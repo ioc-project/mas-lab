@@ -55,6 +55,17 @@ These test the controller's REST API surface — the same endpoints the UI
 | `test_fastapi_app.py`        | Core CRUD endpoints: libraries, experiments, pipelines, overlays, datasets, tools, skills, config files, MAS resources |
 | `test_fastapi_extended.py`   | Jobs, validate, overlays conflict, topologies, scenarios                                                               |
 | `test_api_calls_contract.py` | Contract tests mirroring every call in `apiCalls.ts` — ensures the UI HTTP surface stays compatible                    |
+| `test_scopes_api.py`         | `/api/scopes` for versioned/lab/readonly/root-app fixtures                                                             |
+| `test_items_read.py` / `test_items_write.py` | Item list/get/create/fork/rename/delete, no paths in JSON |
+| `test_layout_locate.py` / `test_write_safety.py` | Catalog locate + name/symlink safety |
+| `test_choices_api.py`        | Models, design patterns, tools/skills/overlays with refs                                                               |
+| `test_runs_api.py` / `test_artifacts_api.py` / `test_uploads_api.py` | Runs, artifacts, uploads |
+| `test_auth_cors.py`          | `--token-file` and CORS                                                                                                |
+| `test_openapi_contract.py`   | Committed `docs/schemas/controller-openapi.json`                                                                       |
+| `test_deprecated_routes.py`  | Old `/api/libraries` adapters still work and are deprecated                                                            |
+| `test_job_store.py`          | Persistent job store                                                                                                   |
+
+Scope fixtures: `fixtures/versioned_lib`, `lab_with_local_lib`, `lab_without_library`, `readonly_lib`, `root_app_lib`.
 | `test_schema_registry.py`    | `/api/schemas` endpoint and schema resolution across packages                                                          |
 
 ### Other

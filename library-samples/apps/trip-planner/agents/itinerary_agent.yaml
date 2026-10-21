@@ -3,7 +3,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_e6eac2eb
   name: itinerary_agent
 spec:
   models:
@@ -21,6 +20,3 @@ spec:
       \ their\n      travel times.\n\n      Use this tool to find feasible routes\
       \ and their corresponding average travel\n      times. Present your findings\
       \ clearly."
-x-canvas-node-ids:
-  model: node_d01ccd30
-  tools: node_19931790

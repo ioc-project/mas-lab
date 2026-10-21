@@ -1,22 +1,16 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
-import { useCallback, useMemo, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { useCallback, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { Tooltip } from "@mui/material";
-import { useParams } from "react-router";
 import type { OverlayToolNodeType } from "../types";
-import { useTools } from "@/api/apiCalls";
-import { useNamespace } from "../NamespaceContext";
+import { useToolChoices } from "@/api/choices";
+import { useScopeId } from "@/api/scope";
 
 export function OverlayToolNode({ data, id, selected }: NodeProps<OverlayToolNodeType>) {
   const [inputValue, setInputValue] = useState("");
-  const { library = "" } = useParams();
-  const namespace = useNamespace();
-  const namespaces = useMemo(
-    () => (namespace === "global" ? ["global"] : ["global", namespace]),
-    [namespace],
-  );
-  const { data: toolOptions = [] } = useTools(library, namespaces);
+  const library = useScopeId();
+  const { tools: toolOptions = [] } = useToolChoices(library);
 
   const toolDescMap = new Map(
     toolOptions.map((t) => [t.name, t.description]),

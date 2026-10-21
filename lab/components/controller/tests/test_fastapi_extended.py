@@ -243,7 +243,8 @@ async def test_lifespan_enabled_emits_discovery_report(monkeypatch):
 
 def test_api_info_and_topologies(client, demo_lab):
     info = client.get("/api/info").json()
-    assert "libraries_dir" in info
+    assert "edit_targets" in info
+    assert "writable_default" in info
 
     (demo_lab / "topologies").mkdir(exist_ok=True)
     (demo_lab / "topologies" / "linear.yaml").write_text("kind: Topology\n", encoding="utf-8")

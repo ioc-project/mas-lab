@@ -7,10 +7,11 @@ import {
   type MRT_RowSelectionState,
   type MRT_SortingState,
 } from "material-react-table";
-import { CreateTableInstance, EmptyState, Button } from "@open-ui-kit/core";
+import { CreateTableInstance, EmptyState } from "@open-ui-kit/core";
 import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
 import {
   Box,
+  Button,
   Stack,
   Typography,
   useTheme,
@@ -22,7 +23,7 @@ import {
   DialogContentText,
   DialogActions,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate } from "react-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   useOverlays,
@@ -30,13 +31,18 @@ import {
   type OverlayEntry,
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
+import { scopeHref, useScopeId } from "@/api/scope";
+import { CreateItemDialog } from "@/components/CreateItemDialog";
+
+const TABLE_BG = "transparent";
+
 type OverlayRow = Pick<OverlayEntry, "name" | "description" | "namespace">;
 
 const Overlays = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { library = "" } = useParams();
+  const library = useScopeId();
 
   const { data: overlayEntries = [], isLoading } = useOverlays(library);
   const overlays = useMemo<OverlayRow[]>(
@@ -49,6 +55,7 @@ const Overlays = () => {
     [overlayEntries],
   );
 
+  const [createOpen, setCreateOpen] = useState(false);
   const [sorting, setSorting] = useState<MRT_SortingState>([]);
   const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -92,6 +99,11 @@ const Overlays = () => {
               color: theme.palette.vars.interactivePrimaryDefaultDefault,
               "&:hover": { textDecoration: "underline" },
             }}
+            onClick={() =>
+              navigate(
+                scopeHref(library, `/overlays/${encodeURIComponent(row.original.name)}`),
+              )
+            }
           >
             {row.original.name}
           </Typography>
@@ -107,7 +119,7 @@ const Overlays = () => {
         header: "Description",
       },
     ],
-    [theme],
+    [library, navigate, theme],
   );
 
   const tableRef = CreateTableInstance<OverlayRow>({
@@ -134,7 +146,7 @@ const Overlays = () => {
         key="edit"
         onClick={() => {
           navigate(
-            `/${library}/overlays/${encodeURIComponent(row.original.name)}`,
+            scopeHref(library, `/overlays/${encodeURIComponent(row.original.name)}`),
           );
           closeMenu();
         }}
@@ -174,15 +186,32 @@ const Overlays = () => {
         </Button>
       );
     },
-    muiTableBodyRowProps: ({ row }) => ({
-      onClick: () =>
-        navigate(
-          `/${library}/overlays/${encodeURIComponent(row.original.name)}`,
-        ),
+    muiTableBodyRowProps: () => ({
       sx: {
         cursor: "pointer",
+        backgroundColor: TABLE_BG,
+        "& > td": {
+          backgroundColor: `${TABLE_BG} !important`,
+        },
       },
     }),
+    muiTablePaperProps: {
+      sx: {
+        padding: 0,
+        backgroundColor: TABLE_BG,
+        elevation: 0,
+      },
+    },
+    muiTableHeadCellProps: {
+      sx: { backgroundColor: TABLE_BG, color: "#ffffff" },
+    },
+    muiTableBodyCellProps: {
+      sx: {
+        backgroundColor: TABLE_BG,
+        color: "#ffffff",
+        height: "40px",
+      },
+    },
   });
 
   return (
@@ -205,12 +234,7 @@ const Overlays = () => {
             >
               Overlays
             </Typography>
-            <Button
-              variant="gradient"
-              onClick={() => navigate(`/${library}/overlays/new`)}
-            >
-              New Overlay
-            </Button>
+            <Button onClick={() => setCreateOpen(true)}>New Overlay</Button>
           </Stack>
         }
       >
@@ -229,9 +253,7 @@ const Overlays = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} disabled={deleting}>
-            Cancel
-          </Button>
+          <Button onClick={handleCancelDelete} disabled={deleting}>Cancel</Button>
           <Button
             variant="primary"
             color="negative"
@@ -242,6 +264,15 @@ const Overlays = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <CreateItemDialog
+        open={createOpen}
+        kind="overlay"
+        scopeId={library}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(sid, id) =>
+          navigate(scopeHref(sid, `/overlays/${encodeURIComponent(id)}`))
+        }
+      />
     </Box>
   );
 };

@@ -3,22 +3,10 @@
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { useCallback, type ChangeEvent } from "react";
 import type { ModelNodeType } from "../types";
-
-const MODEL_OPTIONS = [
-  "vertex_ai/gemini-2.5-pro",
-  "vertex_ai/gemini-2.5-flash",
-  "vertex_ai/gemini-2.0-flash",
-  "onprem/gemma4",
-  "azure/gpt-4o",
-  "azure/gpt-4o-mini",
-  "azure/gpt-4.1",
-  "azure/gpt-5",
-  "bedrock/global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-  "bedrock/mistral.ministral-3-8b-instruct",
-  "bedrock/amazon.titan-embed-text-v2:0",
-];
+import { useModelChoices } from "@/api/choices";
 
 export function ModelNode({ data, id, selected }: NodeProps<ModelNodeType>) {
+  const { models, defaultModel } = useModelChoices();
   const handleChange = useCallback(
     (field: string) => (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       data.onChange?.(
@@ -28,6 +16,9 @@ export function ModelNode({ data, id, selected }: NodeProps<ModelNodeType>) {
     },
     [data],
   );
+
+  const options = models.map((m) => m.id);
+  const current = data.model || defaultModel || "";
 
   return (
     <div className={`canvas-node model-node${data.disabled ? " canvas-node--disabled" : ""}`}>
@@ -48,15 +39,18 @@ export function ModelNode({ data, id, selected }: NodeProps<ModelNodeType>) {
           Model
           <select
             className="canvas-node__select nodrag"
-            value={data.model}
+            value={current}
             onChange={handleChange("model")}
           >
             <option value="">Select model...</option>
-            {MODEL_OPTIONS.map((m) => (
+            {options.map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
+            {current && !options.includes(current) && (
+              <option value={current}>{current}</option>
+            )}
           </select>
         </label>
         <label className="canvas-node__label">

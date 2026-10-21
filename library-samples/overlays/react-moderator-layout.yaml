@@ -1,0 +1,21 @@
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  name: react-moderator
+  description: UI-only canvas layout for Overlay react-moderator. Ignored by the runtime.
+spec:
+  target:
+    kind: Overlay
+    name: react-moderator
+  patch: {}
+x-canvas-positions:
+  node_0ae0343f:
+    x: 912
+    y: 96
+  node_3eedcf04:
+    x: 496
+    y: 96
+x-canvas-node-ids:
+  moderator:
+    agent: node_0ae0343f
+    designPattern: node_3eedcf04

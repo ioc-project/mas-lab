@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 from mas.lab.controller.lab_registry import LabRegistry, _library_description
 from mas.lab.controller.lab_registry import get_lab_registry
-from mas.ctl.overlay.canvas import is_ui_canvas_overlay
+from mas.ctl.overlay.canvas import overlay_is_layout_only
 from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ class ManifestStore:
                 meta = data.get("metadata", {})
                 entry["description"] = str(meta.get("description", "") or "")
                 entry["namespace"] = str((data.get("metadata") or {}).get("namespace", "global") or "global")
-                entry["ui_canvas"] = is_ui_canvas_overlay(data, path=path)
+                entry["ui_canvas"] = overlay_is_layout_only(data)
             except Exception:
                 entry["description"] = ""
                 entry["namespace"] = "global"

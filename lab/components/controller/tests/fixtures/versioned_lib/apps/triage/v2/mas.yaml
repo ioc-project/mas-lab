@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: MAS
+metadata:
+  name: triage
+  description: 'triage application'
+spec:
+  agency:
+    agents:
+      - id: triage
+        ref: triage.agent
+  workflow:
+    entry: triage
+    nodes:
+      - id: triage
+        role: specialist

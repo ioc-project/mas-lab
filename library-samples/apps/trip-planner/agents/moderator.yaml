@@ -3,7 +3,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_ae0f3975
   name: moderator
 spec:
   models:
@@ -36,8 +35,3 @@ spec:
       \ ALWAYS include the exact\n      route_id values from the itinerary-agent's\
       \ response (e.g. 'CF-train', 'VL', 'LF').\n      The concierge-agent needs these\
       \ exact IDs to look up fares correctly."
-x-text-input: What trains run from Celestia to Verdantia?
-x-canvas-node-ids:
-  role: node_6f5cc735
-  model: node_41250ae4
-  design_pattern: node_2d8bb164

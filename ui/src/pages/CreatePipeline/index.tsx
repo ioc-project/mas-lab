@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useValidatePipeline, createPipeline } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
 import { parse, stringify } from "yaml";
+import { scopeHref, useScopeId } from "@/api/scope";
 import {
   Button,
   InputField,
@@ -30,7 +31,8 @@ const CreatePipeline = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
-  const { library = "", pipelineTab } = useParams();
+  const library = useScopeId();
+  const { pipelineTab } = useParams();
   const queryClient = useQueryClient();
 
   const [pipelineYaml, setPipelineYaml] = useState("");
@@ -115,7 +117,7 @@ const CreatePipeline = () => {
       await createPipeline(library, { name: trimmedName, content: finalYaml });
       queryClient.invalidateQueries({ queryKey: ["pipelines", library] });
       handleCloseSaveDialog();
-      navigate(`/${library}/pipelines`);
+      navigate(scopeHref(library, "/pipelines"));
     } catch (err) {
       setSaveError(
         err instanceof Error ? err.message : "Failed to save pipeline.",
@@ -160,14 +162,14 @@ const CreatePipeline = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleOpenSaveDialog}
               disabled={!pipelineYaml || !hasExperiment}
             >
               Save
             </Button>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleValidate}
               disabled={
                 !pipelineYaml || !hasExperiment || validateMutation.isPending
@@ -178,7 +180,6 @@ const CreatePipeline = () => {
           </Stack>
         </Stack>
       }
-      showBreadcrumbs={false}
     >
       <Stack direction="column" sx={{ width: "100%", height: "100%" }}>
         {validateMutation.isSuccess && (
@@ -246,7 +247,7 @@ const CreatePipeline = () => {
                     color: theme.palette.warning.main,
                   }}
                 >
-                  pipeline.yaml
+                  pipeline
                 </Typography>
                 <CodeBlock code={pipelineYaml} language="yaml" />
               </Box>
@@ -268,31 +269,31 @@ const CreatePipeline = () => {
               {saveError}
             </Alert>
           )}
-          <InputField
-            autoFocus
-            margin="dense"
-            label="Pipeline Name"
-            placeholder="Enter a name for the pipeline"
-            autoComplete="off"
-            fullWidth
-            value={pipelineName}
-            onChange={(e) => {
-              setPipelineName(e.target.value);
-              setSaveError("");
-            }}
-          />
-          <InputField
-            margin="dense"
-            label="Description"
-            placeholder="Optional description for the pipeline"
-            autoComplete="off"
-            fullWidth
-            multiline
-            minRows={2}
-            maxRows={4}
-            value={pipelineDescription}
-            onChange={(e) => setPipelineDescription(e.target.value)}
-          />
+          <Stack direction="column" sx={{ gap: "16px" }}>
+            <InputField
+              autoFocus
+              label="Pipeline Name"
+              placeholder="Enter a name for the pipeline"
+              autoComplete="off"
+              fullWidth
+              value={pipelineName}
+              onChange={(e) => {
+                setPipelineName(e.target.value);
+                setSaveError("");
+              }}
+            />
+            <InputField
+              label="Description"
+              placeholder="Optional description for the pipeline"
+              autoComplete="off"
+              fullWidth
+              multiline
+              minRows={2}
+              maxRows={4}
+              value={pipelineDescription}
+              onChange={(e) => setPipelineDescription(e.target.value)}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseSaveDialog}>Cancel</Button>

@@ -244,6 +244,24 @@ tasks:
         {{.VENV}}/mas-ctl validate "$T01/agent.yaml" -o "$T01/overlays/tools.yaml"
         {{.VENV}}/pytest tests/test_hitl_tool_gate.py::test_cli_batch_hitl_emits_hitl_gate -q --tb=short
 
+  ui-test:
+    desc: "UI unit tests (Vitest + MSW)"
+    dir: ui
+    cmds:
+      - ./node_modules/.bin/vitest run
+
+  ui-e2e:
+    desc: "UI Playwright smoke (starts Vite unless PLAYWRIGHT_SKIP_WEBSERVER=1)"
+    dir: ui
+    cmds:
+      - ./node_modules/.bin/playwright test --grep-invert remote
+
+  ui-remote-test:
+    desc: "UI remote e2e — requires MAS_LAB_REMOTE_API (and optional MAS_LAB_REMOTE_TOKEN)"
+    dir: ui
+    cmds:
+      - ./node_modules/.bin/playwright test e2e/remote.spec.ts
+
   verify:
     desc: "Full pre-commit gate — CI gates + local env check, version check"
     deps: [install-dev]
@@ -251,6 +269,8 @@ tasks:
       - python3 scripts/version_manager.py check
       - task: verify-ctl-env
       - task: ci
+      - task: ui-test
+      - task: ui-e2e
 
   test:
     desc: "Run full verify suite (verbose tutorials)"

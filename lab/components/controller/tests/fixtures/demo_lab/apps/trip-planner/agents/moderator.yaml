@@ -1,7 +1,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_c976ef3d
   name: moderator
 spec:
   description: |-
@@ -34,6 +33,3 @@ spec:
     type: react
     params:
       max_steps: 10
-x-canvas-node-ids:
-  model: node_0474aab9
-  design_pattern: node_da912f59

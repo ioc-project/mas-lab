@@ -6,6 +6,7 @@ from __future__ import annotations
 """Lab workspace helpers — project ``config.yaml`` accessors (not runtime shims)."""
 
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -43,9 +44,32 @@ def find_workspace_root(start: Path | None = None) -> Path | None:
     return None
 
 
+def project_workspace_root(start: Path | None = None) -> Path | None:
+    """Project folder the controller should list from.
+
+    ``MAS_WORKSPACE_ROOT`` / ``mas-lab serve --workspace`` wins even when
+    that folder has no ``config.yaml``. Otherwise walk from *start* (cwd)
+    for a project ``config.yaml``, stopping at ``.git``. User
+    ``$XDG_CONFIG_HOME/mas/config.yaml`` is not a project pin — it must
+    not shrink or flood the catalog.
+    """
+    env = os.environ.get("MAS_WORKSPACE_ROOT", "").strip()
+    if env:
+        path = Path(env).expanduser().resolve()
+        return path if path.is_dir() else None
+    current = (start or Path.cwd()).resolve()
+    for directory in [current, *current.parents]:
+        if (directory / _CONFIG_FILE).is_file():
+            return directory
+        if (directory / ".git").exists():
+            break
+    return None
+
+
 __all__ = [
     "WorkspaceConfig",
     "find_workspace_root",
+    "project_workspace_root",
     "workspace_get",
     "workspace_resolve_path",
     "_find_config",

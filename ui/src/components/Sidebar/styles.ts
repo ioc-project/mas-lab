@@ -26,7 +26,7 @@ export const sideBarListItemTextStyle = (): React.CSSProperties => {
 
 export const siteBarItemStyle = (
   theme: Theme,
-  selected: Boolean,
+  selected: boolean,
   itemLevel = 0,
 ) => ({
   listItem: {

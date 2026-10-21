@@ -9,6 +9,11 @@ up here when another page uses it without explanation.
 
 | Term | Meaning |
 |------|---------|
+| **Scope** | A place the controller can list catalog items from: a **library** (`library:<name>`) or a **lab** (`lab:<name>`). The UI never builds a server path. |
+| **Catalog item** | One catalog entry of a kind (application, agent, overlay, pipeline, experiment, dataset, tool, skill, scenario). Distinct from a dataset **item** below. |
+| **Item id** | `<name>` or `<name>@<version>`. Opaque to the UI: it comes from the backend and is sent back. Never derived from `metadata.name`. |
+| **Ref** | The string another manifest uses to point at a catalog item (`samples:calc@v1`). The backend returns `item.ref`; the UI never composes one. |
+| **Artifact id** | Opaque id of a file the backend serves (a run output, a trace, a plot). Never a path. |
 | **Manifest** | A YAML file that declares one thing: an agent (`agent.yaml`), a multi-agent team (`mas.yaml`), an experiment (`experiment.yaml`), an overlay, a flavour, and so on. |
 | **MAS** | Multi-agent system: several agents plus a workflow that says who talks to whom. Declared in a `mas.yaml` manifest. |
 | **Agent** | One LLM-driven actor with tools, skills, and plugins. Declared in an `agent.yaml` manifest. |

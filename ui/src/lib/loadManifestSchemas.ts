@@ -4,7 +4,7 @@ import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import type { ValidateFunction } from "ajv";
 
-import { API_BASE_URL } from "@/api/apiCalls";
+import { apiFetch, getApiBaseUrl } from "@/api/client";
 
 export type ManifestValidators = {
   validateMas: ValidateFunction;
@@ -53,22 +53,22 @@ function compileValidators(
 }
 
 async function assertControllerReachable(): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/health`);
+  const base = getApiBaseUrl();
+  const response = await apiFetch("/api/health");
   if (!response.ok) {
     throw new Error(
-      `mas-lab controller not reachable at ${API_BASE_URL} (GET /api/health → ${response.status}). ` +
+      `mas-lab controller not reachable at ${base} (GET /api/health → ${response.status}). ` +
         "Start it from the repo root: mas-lab serve",
     );
   }
 }
 
 async function fetchResolvedSchema(id: string): Promise<Record<string, unknown>> {
-  const response = await fetch(
-    `${API_BASE_URL}/api/schemas/${id}?format=json&resolved=1`,
-  );
+  const base = getApiBaseUrl();
+  const response = await apiFetch(`/api/schemas/${id}?format=json&resolved=1`);
   if (!response.ok) {
     throw new Error(
-      `Failed to load schema "${id}" from ${API_BASE_URL}/api/schemas/${id} (${response.status})`,
+      `Failed to load schema "${id}" from ${base}/api/schemas/${id} (${response.status})`,
     );
   }
   const body = await response.json();

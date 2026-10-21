@@ -13,9 +13,12 @@ import {
   Stack,
   Typography,
   useTheme,
+  MenuItem,
+  Select,
   Alert,
 } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
+import { toTitleCase } from "@/utils/string";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parse, stringify } from "yaml";
 import { validateManifests } from "@/utils/manifestValidator";
@@ -28,6 +31,9 @@ import {
   pollJob,
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
+import { scopeHref, useScopeId } from "@/api/scope";
+import { forkItem, useItem } from "@/api/items";
+import { CreateItemDialog } from "@/components/CreateItemDialog";
 import {
   Button,
   Dialog,
@@ -39,12 +45,13 @@ import {
   Tabs,
 } from "@open-ui-kit/core";
 
-const APPLICATION_TAB_KEYS = ["graph", "yaml", "output"] as const;
+const APPLICATION_TAB_KEYS = ["graph", "yaml"] as const;
 type ApplicationTab = (typeof APPLICATION_TAB_KEYS)[number];
 
 const Application = () => {
   const theme = useTheme();
-  const { id, applicationTab, library } = useParams();
+  const library = useScopeId();
+  const { id, applicationTab } = useParams();
   const queryClient = useQueryClient();
 
   const [yamlOutputMap, setYamlOutputMap] = useState<YamlOutputMap>({});
@@ -57,13 +64,13 @@ const Application = () => {
   const [masIntent, setMasIntent] = useState("");
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [isRunningMas, setIsRunningMas] = useState(false);
-  const [runOutput, setRunOutput] = useState<{
-    stdout: string;
-    stderr: string;
-    status: "success" | "error";
+  const [runMasError, setRunMasError] = useState<string | null>(null);
+  const [runMasResult, setRunMasResult] = useState<{
+    message: string;
+    severity: "success" | "error";
   } | null>(null);
-  const [outputSubTab, setOutputSubTab] = useState(0);
+  const [isRunningMas, setIsRunningMas] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   const validateMutation = useValidateAgent();
   const validateMasMutation = useValidateMas();
@@ -91,6 +98,16 @@ const Application = () => {
     isLoading: isMasLoading,
     isError: isMasError,
   } = useMasResourceDetail(library ?? "", id ?? "");
+  const { data: itemMeta } = useItem(library ?? "", "application", id ?? "");
+
+  useEffect(() => {
+    if (itemMeta?.resolved_id && id && itemMeta.resolved_id !== id) {
+      navigate(
+        scopeHref(library ?? "", `/applications/${encodeURIComponent(itemMeta.resolved_id)}`),
+        { replace: true },
+      );
+    }
+  }, [itemMeta?.resolved_id, id, library, navigate]);
 
   const initialYamlMap = useMemo<YamlOutputMap>(() => {
     if (!masResource) return {};
@@ -98,7 +115,7 @@ const Application = () => {
     const map: YamlOutputMap = {};
     if (!masResource.mas_yaml) return map;
 
-    let masDoc: Record<string, unknown> | null = null;
+    let masDoc: Record<string, unknown> | null;
     try {
       masDoc = parse(masResource.mas_yaml) as Record<string, unknown>;
     } catch {
@@ -150,68 +167,44 @@ const Application = () => {
     return () => clearTimeout(timer);
   }, [validateMasMutation.isSuccess, validateMasMutation.isError]);
 
-  const navigateToOutputTab = useCallback(() => {
-    const basePath = applicationTab
-      ? location.pathname.replace(/\/[^/]+$/, "/output")
-      : `${location.pathname}/output`;
-    navigate(basePath, { replace: true });
-  }, [navigate, location.pathname, applicationTab]);
-
   const handleRunMas = useCallback(async () => {
     if (!library) return;
     const masYaml = yamlOutputMap["mas"];
     if (!masYaml) {
-      setRunOutput({
-        stdout: "",
-        stderr: "No MAS manifest available.",
-        status: "error",
-      });
-      navigateToOutputTab();
+      setRunMasError("No MAS manifest available.");
       return;
     }
 
     const masDoc = parse(masYaml);
     const entryAgentId = masDoc?.spec?.workflow?.entry;
     if (!entryAgentId) {
-      setRunOutput({
-        stdout: "",
-        stderr: "MAS manifest has no workflow entry agent defined.",
-        status: "error",
-      });
-      navigateToOutputTab();
+      setRunMasError("MAS manifest has no workflow entry agent defined.");
       return;
     }
 
     const entryAgentYaml = yamlOutputMap[`agent:${entryAgentId}`];
     if (!entryAgentYaml) {
-      setRunOutput({
-        stdout: "",
-        stderr: `Entry agent "${entryAgentId}" manifest not found.`,
-        status: "error",
-      });
-      navigateToOutputTab();
+      setRunMasError(`Entry agent "${entryAgentId}" manifest not found.`);
       return;
     }
 
     const entryDoc = parse(entryAgentYaml);
     const textInput = entryDoc?.spec?.["x-text-input"];
     if (!textInput || !textInput.trim()) {
-      setRunOutput({
-        stdout: "",
-        stderr: `A Text Input node with content must be connected to the entry agent "${entryAgentId}" before running the MAS.`,
-        status: "error",
-      });
-      navigateToOutputTab();
+      setRunMasError(
+        `A Text Input node with content must be connected to the entry agent "${entryAgentId}" before running the MAS.`,
+      );
       return;
     }
 
-    setRunOutput(null);
+    setRunMasError(null);
+    setRunMasResult(null);
     setIsRunningMas(true);
 
     try {
       const { job_id } = await runMas({
         library,
-        manifest_yaml: masYaml,
+        item: id,
         query: textInput.trim(),
       });
 
@@ -222,28 +215,43 @@ const Application = () => {
         result = await pollJob(job_id);
       }
 
-      const failed = result.status !== "completed" || result.exit_code !== 0;
-      setRunOutput({
-        stdout:
-          result.stdout ||
-          result.response ||
-          (failed ? "" : "MAS run completed successfully."),
-        stderr: result.stderr || result.error || "",
-        status: failed ? "error" : "success",
-      });
-      navigateToOutputTab();
+      if (result.status !== "completed" || result.exit_code !== 0) {
+        setRunMasResult({
+          message: result.stderr || result.error || "MAS run failed.",
+          severity: "error",
+        });
+      } else {
+        const stderrErrors = result.stderr
+          ? result.stderr
+              .split("\n")
+              .filter(
+                (line: string) =>
+                  /\bError[:\s]|\bfailed\b|\bnot found\b|\bTraceback\b/i.test(
+                    line,
+                  ) && !/tool\(.*\) Error:/i.test(line),
+              )
+              .join("\n")
+              .trim()
+          : "";
+        if (stderrErrors) {
+          setRunMasError(stderrErrors);
+        }
+        setRunMasResult({
+          message:
+            result.stdout ||
+            result.response ||
+            "MAS run completed successfully.",
+          severity: "success",
+        });
+      }
     } catch (err) {
-      setRunOutput({
-        stdout: "",
-        stderr:
-          err instanceof Error ? err.message : "An unexpected error occurred.",
-        status: "error",
-      });
-      navigateToOutputTab();
+      setRunMasError(
+        err instanceof Error ? err.message : "An unexpected error occurred.",
+      );
     } finally {
       setIsRunningMas(false);
     }
-  }, [library, yamlOutputMap, navigateToOutputTab]);
+  }, [library, yamlOutputMap, id]);
 
   const handleValidateMas = useCallback(() => {
     if (!library) return;
@@ -306,15 +314,6 @@ const Application = () => {
         } else {
           delete masDoc.intent;
         }
-        const agentsList = masDoc.spec?.agency?.agents ?? masDoc.spec?.agents;
-        if (agentsList) {
-          for (const agent of agentsList) {
-            if (agent.ref) {
-              const filename = agent.ref.split("/").pop() ?? agent.ref;
-              agent.ref = `agents/${filename}`;
-            }
-          }
-        }
         finalYamlMap[key] = stringify(masDoc);
       } else {
         finalYamlMap[key] = yamlOutputMap[key];
@@ -356,7 +355,7 @@ const Application = () => {
       handleCloseSaveDialog();
 
       if (trimmedName !== id) {
-        navigate(`/${library}/applications/${trimmedName}`, { replace: true });
+        navigate(scopeHref(library, `/applications/${trimmedName}`), { replace: true });
       }
     } catch (err) {
       setSaveError(
@@ -410,8 +409,8 @@ const Application = () => {
           The application &quot;{id}&quot; does not exist or has been deleted.
         </Typography>
         <Button
-          variant="gradient"
-          onClick={() => navigate(`/${library}/applications`)}
+          variant="primary"
+          onClick={() => navigate(scopeHref(library, "/applications"))}
         >
           Back to Applications
         </Button>
@@ -421,7 +420,6 @@ const Application = () => {
 
   return (
     <PageWithTitle
-      showBreadcrumbs={false}
       title={
         <Stack
           direction="row"
@@ -431,29 +429,73 @@ const Application = () => {
             width: "100%",
           }}
         >
-          <Typography
-            variant={"h5"}
-            sx={{ color: theme.palette.vars.interactivePrimaryDefaultDefault }}
-          >
-            {id ?? ""}
-          </Typography>
+          <Stack direction="row" sx={{ alignItems: "center", gap: 2 }}>
+            <Typography
+              variant={"h5"}
+              sx={{ color: theme.palette.vars.interactivePrimaryDefaultDefault }}
+            >
+              {toTitleCase(itemMeta?.name ?? id ?? "")}
+            </Typography>
+            {(itemMeta?.versions?.length ?? 0) > 0 && (
+              <Select
+                size="small"
+                value={itemMeta?.version || itemMeta?.latest || ""}
+                onChange={(e) =>
+                  navigate(
+                    scopeHref(
+                      library ?? "",
+                      `/applications/${encodeURIComponent(`${itemMeta?.name}@${e.target.value}`)}`,
+                    ),
+                  )
+                }
+              >
+                {itemMeta?.versions.map((v) => (
+                  <MenuItem key={v} value={v}>
+                    {v}
+                  </MenuItem>
+                ))}
+              </Select>
+            )}
+            {itemMeta?.ref && (
+              <Typography variant="caption" sx={{ fontFamily: "monospace" }}>
+                {itemMeta.ref}
+              </Typography>
+            )}
+          </Stack>
           <Stack direction="row" sx={{ gap: "8px" }}>
+            {itemMeta && !itemMeta.writable && (
+              <>
+                <Alert severity="info">Read-only — copy into a writable scope.</Alert>
+                <Button onClick={() => setCopyOpen(true)}>Copy into…</Button>
+              </>
+            )}
+            {itemMeta && (
+              <Button
+                onClick={() => {
+                  void forkItem(library ?? "", "application", id ?? "", {}).then((created) =>
+                    navigate(scopeHref(library ?? "", `/applications/${encodeURIComponent(created.id)}`)),
+                  );
+                }}
+              >
+                New version
+              </Button>
+            )}
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleOpenSaveDialog}
               disabled={sortedKeys.length === 0}
             >
               Save
             </Button>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleValidate}
               disabled={!selectedAgentName || validateMutation.isPending}
             >
               {validateMutation.isPending ? "Validating..." : "Validate"}
             </Button>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleValidateMas}
               disabled={!yamlOutputMap["mas"] || validateMasMutation.isPending}
             >
@@ -462,7 +504,7 @@ const Application = () => {
                 : "Validate MAS"}
             </Button>
             <Button
-              variant="gradient"
+              variant="primary"
               onClick={handleRunMas}
               disabled={isRunningMas}
             >
@@ -542,11 +584,40 @@ const Application = () => {
                 validateMasMutation.data.stdout}
           </Alert>
         )}
+        {runMasError && (
+          <Alert
+            severity="error"
+            onClose={() => setRunMasError(null)}
+            sx={{
+              whiteSpace: "pre-wrap",
+              position: "absolute",
+              top: 0,
+              right: 0,
+              zIndex: 1000,
+            }}
+          >
+            {runMasError}
+          </Alert>
+        )}
+        {runMasResult && !runMasError && (
+          <Alert
+            severity={runMasResult.severity}
+            onClose={() => setRunMasResult(null)}
+            sx={{
+              whiteSpace: "pre-wrap",
+              position: "absolute",
+              top: 0,
+              right: 0,
+              zIndex: 1000,
+            }}
+          >
+            {runMasResult.message}
+          </Alert>
+        )}
         <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
           <Tabs value={selectedTab} onChange={handleTabChange}>
             <Tab label="Graph" id="application-tab-0" />
             <Tab label="Yaml" id="application-tab-1" />
-            <Tab label="Run Output" id="application-tab-2" />
           </Tabs>
         </Box>
 
@@ -584,86 +655,12 @@ const Application = () => {
                         : theme.palette.info.main,
                   }}
                 >
-                  {key === "mas"
-                    ? "mas.yaml"
-                    : `${key.replace("agent:", "")}.agent.yaml`}
+                  {key === "mas" ? "application" : key}
                 </Typography>
                 <CodeBlock code={yamlOutputMap[key]} language="yaml" />
               </Box>
             ))}
           </Stack>
-        </TabPanel>
-
-        <TabPanel value={selectedTab} index={2} sx={{ flex: 1 }}>
-          {!runOutput && !isRunningMas ? (
-            <Typography
-              variant="body2"
-              sx={{ color: "text.secondary", py: 4, textAlign: "center" }}
-            >
-              No run output yet. Use the Run button to execute the MAS.
-            </Typography>
-          ) : isRunningMas ? (
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 2,
-                py: 4,
-              }}
-            >
-              <CircularProgress size={20} />
-              <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                Running MAS...
-              </Typography>
-            </Box>
-          ) : (
-            <Stack direction="column" sx={{ gap: 0, flex: 1, minHeight: 0 }}>
-              {runOutput?.status === "error" && (
-                <Alert severity="error" sx={{ mb: 1 }}>
-                  MAS run failed.
-                </Alert>
-              )}
-              <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
-                <Tabs
-                  value={outputSubTab}
-                  onChange={(_e, v) => setOutputSubTab(v)}
-                  sx={{ minHeight: 36 }}
-                >
-                  <Tab label="Output" sx={{ minHeight: 36, py: 0.5 }} />
-                  <Tab label="Verbose" sx={{ minHeight: 36, py: 0.5 }} />
-                </Tabs>
-              </Box>
-              <Box
-                sx={{
-                  flex: 1,
-                  minHeight: 0,
-                  pt: 1,
-                }}
-              >
-                {outputSubTab === 0 && (
-                  <CodeBlock
-                    code={runOutput?.stdout || "No output."}
-                    language="text"
-                    preStyle={{
-                      height: "calc(100vh - 300px)",
-                      overflow: "auto",
-                    }}
-                  />
-                )}
-                {outputSubTab === 1 && (
-                  <CodeBlock
-                    code={runOutput?.stderr || "No verbose output."}
-                    language="text"
-                    preStyle={{
-                      height: "calc(100vh - 300px)",
-                      overflow: "auto",
-                    }}
-                  />
-                )}
-              </Box>
-            </Stack>
-          )}
         </TabPanel>
       </Stack>
 
@@ -722,6 +719,16 @@ const Application = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <CreateItemDialog
+        open={copyOpen}
+        kind="application"
+        scopeId={library ?? ""}
+        copyFrom={id ? { scopeId: library ?? "", itemId: id } : undefined}
+        onClose={() => setCopyOpen(false)}
+        onCreated={(sid, createdId) =>
+          navigate(scopeHref(sid, `/applications/${encodeURIComponent(createdId)}`))
+        }
+      />
     </PageWithTitle>
   );
 };

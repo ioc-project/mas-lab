@@ -1,0 +1,21 @@
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  name: cot-moderator
+  description: UI-only canvas layout for Overlay cot-moderator. Ignored by the runtime.
+spec:
+  target:
+    kind: Overlay
+    name: cot-moderator
+  patch: {}
+x-canvas-positions:
+  node_a397686f:
+    x: 704
+    y: 80
+  node_f6c4550e:
+    x: 288
+    y: 96
+x-canvas-node-ids:
+  moderator:
+    agent: node_a397686f
+    designPattern: node_f6c4550e

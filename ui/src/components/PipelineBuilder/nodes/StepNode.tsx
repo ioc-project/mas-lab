@@ -197,7 +197,7 @@ export function StepNode({ data, selected }: NodeProps<StepNodeType>) {
   const { data: registry } = usePipelineStepTypes();
 
   const stepDef = useMemo(
-    () => registry?.step_types.find((s) => s.type === data.type),
+    () => (registry?.step_types ?? []).find((s) => s.type === data.type),
     [registry, data.type],
   );
 

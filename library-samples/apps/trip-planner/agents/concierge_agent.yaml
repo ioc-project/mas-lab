@@ -3,7 +3,6 @@
 apiVersion: mas/v1
 kind: Agent
 metadata:
-  x-node-id: node_ed20e5ed
   name: concierge_agent
 spec:
   models:
@@ -30,6 +29,3 @@ spec:
       \ guess route IDs.\n\n      Use these tools to find train and airplane fares\
       \ as well as attraction entry\n      prices. When you have gathered sufficient\
       \ information, provide a clear overview\n      of the prices for each itinerary."
-x-canvas-node-ids:
-  model: node_09e219dd
-  tools: node_33334abf

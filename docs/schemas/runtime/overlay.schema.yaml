@@ -50,6 +50,9 @@ properties:
         type: string
         description: "Namespace scope for the overlay (global or app name). Defaults to global."
         default: "global"
+      x-namespace:
+        type: string
+        description: "UI namespace hint (global or application id). Ignored by the runtime."
 
   spec:
     type: object

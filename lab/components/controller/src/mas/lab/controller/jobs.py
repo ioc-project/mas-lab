@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -25,6 +25,25 @@ class JobStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     TIMEOUT = "timeout"
+    INTERRUPTED = "interrupted"
+
+
+TERMINAL_STATUSES = {
+    JobStatus.COMPLETED,
+    JobStatus.FAILED,
+    JobStatus.CANCELLED,
+    JobStatus.TIMEOUT,
+    JobStatus.INTERRUPTED,
+}
+
+
+def _job_origin(request_body: dict | None) -> str | None:
+    body = request_body or {}
+    ref = body.get("demo_ui_ref")
+    if isinstance(ref, dict):
+        origin = ref.get("origin")
+        return str(origin) if origin else None
+    return None
 
 
 @dataclass
@@ -46,11 +65,17 @@ class Job:
     error_detail: str = ""
     session_id: str = ""
     request_body: dict = field(default_factory=dict)
-    events_path: str = ""
+    log_path: Optional[str] = None
     _proc: Optional[asyncio.subprocess.Process] = field(default=None, repr=False)
     _task: Optional[asyncio.Task] = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
+        stdout = self.stdout
+        if not stdout and self.log_path:
+            try:
+                stdout = Path(self.log_path).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                stdout = ""
         return {
             "id": self.id,
             "endpoint": self.endpoint,
@@ -61,7 +86,7 @@ class Job:
             "finished_at": self.finished_at,
             "pid": self.pid,
             "exit_code": self.exit_code,
-            "stdout": self.stdout,
+            "stdout": stdout,
             "stderr": self.stderr,
             "error": self.error,
             "response": self.response,
@@ -69,7 +94,7 @@ class Job:
             "error_detail": self.error_detail,
             "session_id": self.session_id,
             "request_body": self.request_body,
-            "events_path": self.events_path,
+            "log_path": self.log_path,
         }
 
     def to_summary(self) -> dict:
@@ -83,33 +108,8 @@ class Job:
             "finished_at": self.finished_at,
             "pid": self.pid,
             "exit_code": self.exit_code,
-            "error": self.error,
             "origin": _job_origin(self.request_body),
         }
-
-
-def _job_origin(request_body: dict | None) -> str | None:
-    ref = (request_body or {}).get("demo_ui_ref") if isinstance(request_body, dict) else None
-    if not isinstance(ref, dict) or not ref:
-        return None
-    return str(ref.get("origin") or "demo-ui")
-
-
-def _summarize_command_failure(returncode: int, stderr: str, stdout: str) -> str:
-    blob = f"{stderr or ''}\n{stdout or ''}"
-    for line in reversed(blob.splitlines()):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        low = stripped.lower()
-        if "llm_cache miss" in low:
-            match = re.search(r"\b([a-f0-9]{12,})\b", stripped, re.I)
-            if match:
-                return f"llm_cache miss · {match.group(1)[:12]}…"
-            return stripped[:200]
-        if low.startswith("error:") or low.startswith("runtimeerror:"):
-            return stripped[:240]
-    return f"Command failed with exit code {returncode}"
 
 
 _jobs: dict[str, Job] = {}
@@ -149,7 +149,7 @@ async def run_job(
         job.stderr = stderr.decode(errors="replace")
         job.status = JobStatus.COMPLETED if proc.returncode == 0 else JobStatus.FAILED
         if proc.returncode != 0:
-            job.error = _summarize_command_failure(proc.returncode, job.stderr, job.stdout)
+            job.error = f"Command failed with exit code {proc.returncode}"
 
     except asyncio.TimeoutError:
         if job._proc:
@@ -176,9 +176,13 @@ async def run_job(
     finally:
         job.finished_at = now_iso()
         job._proc = None
+        _persist(job)
         if cleanup_paths:
             for p in cleanup_paths:
-                p.unlink(missing_ok=True)
+                if p.is_dir():
+                    shutil.rmtree(p, ignore_errors=True)
+                else:
+                    p.unlink(missing_ok=True)
 
 
 async def run_agent_chat_job(
@@ -238,6 +242,7 @@ async def run_agent_chat_job(
 
     finally:
         job.finished_at = now_iso()
+        _persist(job)
 
 
 def submit_agent_chat_job(
@@ -272,6 +277,7 @@ def submit_agent_chat_job(
     job._task = task
 
     logger.info("Agent chat job %s submitted (session=%s)", job.id, sid)
+    _persist(job)
     return job
 
 
@@ -296,7 +302,6 @@ def submit_job(
         status=JobStatus.PENDING,
         created_at=now_iso(),
         request_body=request_body or {},
-        events_path="" if env.get("MAS_DEMO_UI_INGEST_URL") else str(env.get("MAS_EVENTS_FILE") or ""),
     )
     _jobs[job.id] = job
 
@@ -304,4 +309,67 @@ def submit_job(
     job._task = task
 
     logger.info("Job %s submitted: %s", job.id, job.command)
+    _persist(job)
     return job
+
+
+def get_job(job_id: str) -> Job | None:
+    return _jobs.get(job_id)
+
+
+def _persist(job: Job) -> None:
+    try:
+        from mas.lab.controller.job_store import get_job_store
+
+        get_job_store().save(job.to_dict())
+    except Exception as exc:
+        logger.debug("job persist skipped: %s", exc)
+
+
+def load_jobs_from_store() -> None:
+    """Hydrate the in-memory map from the durable store (controller restart)."""
+    from mas.lab.controller.job_store import get_job_store
+
+    for record in get_job_store().load_all():
+        status_raw = str(record.get("status") or "failed")
+        try:
+            status = JobStatus(status_raw)
+        except ValueError:
+            status = JobStatus.FAILED
+        job = Job(
+            id=str(record.get("id") or ""),
+            endpoint=str(record.get("endpoint") or ""),
+            command=str(record.get("command") or ""),
+            status=status,
+            created_at=str(record.get("created_at") or now_iso()),
+            started_at=record.get("started_at"),
+            finished_at=record.get("finished_at"),
+            pid=record.get("pid"),
+            exit_code=record.get("exit_code"),
+            error=record.get("error"),
+            request_body=record.get("request_body") or {},
+            log_path=record.get("log_path"),
+        )
+        if job.id:
+            _jobs[job.id] = job
+
+
+def reconcile_jobs() -> None:
+    """After a restart, mark in-flight jobs interrupted unless results exist."""
+    for job in list(_jobs.values()):
+        if job.status in TERMINAL_STATUSES:
+            continue
+        workspace = (job.request_body or {}).get("workspace")
+        completed = False
+        if workspace:
+            results = Path(workspace) / "out" / "results"
+            if results.is_dir() and any(results.iterdir()):
+                completed = True
+        if completed:
+            job.status = JobStatus.COMPLETED
+            job.finished_at = now_iso()
+        else:
+            job.status = JobStatus.INTERRUPTED
+            job.error = "Job interrupted because the server restarted"
+            job.finished_at = now_iso()
+        _persist(job)
