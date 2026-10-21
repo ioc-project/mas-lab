@@ -91,7 +91,10 @@ class CacheLLMProvider:
                 return cached
             if self.raise_on_miss:
                 key = llm_cache_key(model, messages, tools, params=params)
-                raise RuntimeError(f"llm_cache miss (raise_on_miss=true) for key {key}")
+                raise RuntimeError(
+                    f"llm_cache miss (raise_on_miss=true) for key {key}: no recorded answer for this prompt. "
+                    "To call the model, turn read-only mode off (no --cache-read-only, no `cache: read-only` in config.yaml) and set an API key."
+                )
         message = self.inner.chat_completion(
             model=model,
             messages=messages,
@@ -130,7 +133,10 @@ class CacheLLMProvider:
                 return cached
             if self.raise_on_miss:
                 key = llm_cache_key(model, messages, tools, params=params)
-                raise RuntimeError(f"llm_cache miss (raise_on_miss=true) for key {key}")
+                raise RuntimeError(
+                    f"llm_cache miss (raise_on_miss=true) for key {key}: no recorded answer for this prompt. "
+                    "To call the model, turn read-only mode off (no --cache-read-only, no `cache: read-only` in config.yaml) and set an API key."
+                )
         message = await self.inner.achat_completion(
             model=model,
             messages=messages,

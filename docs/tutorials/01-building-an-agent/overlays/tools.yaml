@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Overlay: add web-search + calculator tools
+# Overlay: add web-search + calculator tools.
+# No prompt text is needed: each tool's name, description and parameters are sent to the model.
 apiVersion: mas/v1
 kind: Overlay
 metadata:
@@ -9,10 +10,6 @@ spec:
   target:
     kind: Agent
   patch:
-    context:
-      tool_usage: |
-        When you need to perform calculations, use the calc tool.
-        When you need current information from the web, use the web-search tool.
     tools:
       $op:
         add:

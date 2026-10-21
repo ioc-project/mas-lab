@@ -1,13 +1,13 @@
 {
-  "run_hash": "9ebdbb27cb8e0abeb670",
+  "run_hash": "370b077ffa9395fe15bf",
   "experiment": "golden-extensions",
   "scenario": "golden",
   "item_id": "1",
   "run_idx": 0,
-  "referenced_at": "2026-10-03T15:04:52.823625Z",
+  "referenced_at": "2026-10-21T09:59:22.413165Z",
   "mas": {
     "app": "trip-planner",
-    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-control-debug-script/library-samples/apps/trip-planner/mas.yaml",
+    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-cache-without-key/library-samples/apps/trip-planner/mas.yaml",
     "overlay": "golden"
   }
 }

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 from mas.ctl.infra.resolve import resolve_infra_refs
-from mas.ctl.overrides import apply_cli_overrides, expand_binds
+from mas.ctl.overrides import apply_cli_overrides, expand_binds, expand_listens
 from mas.ctl.overrides.bind import combine_overrides
 from mas.ctl.session.flavour import resolve_flavour
 from mas.ctl.workspace.config import WorkspaceConfig
@@ -157,3 +157,45 @@ def test_public_live_commands_expose_bind_option() -> None:
         result = CliRunner().invoke(getattr(importlib.import_module(module_name), attr), ["--help"])
         assert result.exit_code == 0, result.output
         assert "--bind NAME=URI" in result.output
+
+
+def test_expand_listens_a2a_is_infra_deploy_the_mirror_of_bind() -> None:
+    overrides = expand_listens(("qa-agent=a2a://127.0.0.1:9006",))
+    document = {
+        "apiVersion": "infra/v1",
+        "kind": "InfraBundle",
+        "metadata": {"name": "merged"},
+        "spec": {"endpoints": {}, "tool_servers": []},
+    }
+
+    result = apply_cli_overrides(document, overrides, root="infra")
+
+    assert result["spec"]["endpoints"]["qa-agent"] == {
+        "protocol": "a2a",
+        "usage": "deploy",
+        "url": "http://127.0.0.1:9006/",
+    }
+
+
+def test_expand_listens_rejects_mcp() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="mas-mcp"):
+        expand_listens(("calc=mcp://127.0.0.1:9001/mcp",))
+
+
+def test_combine_overrides_orders_binds_listens_then_explicit() -> None:
+    combined = combine_overrides(
+        binds=("peer=a2a://h:1/",), listens=("me=a2a://h:2/",), overrides=("infra:spec.x=1",)
+    )
+    assert "usage" in combined[0] and combined[-1] == "infra:spec.x=1"
+    assert "deploy" in combined[1]
+
+
+def test_serve_exposes_listen_and_cache_read_only_flags() -> None:
+    from click.testing import CliRunner
+    from mas.ctl.cli.commands.serve import serve_agent_cmd
+
+    result = CliRunner().invoke(serve_agent_cmd, ["--help"])
+    assert result.exit_code == 0
+    assert "--listen" in result.output and "--cache-read-only" in result.output

@@ -74,7 +74,6 @@ def test_system_prompt_is_single_message_with_section_tags(
     body = system_msgs[0]["content"]
     assert "[intent]" in body
     assert "[role]" in body
-    assert "[tool_usage]" in body
 
 
 def test_preview_keeps_tools_on_followup_react_turn(

@@ -54,6 +54,63 @@ def test_build_engine_live_requires_api_key(monkeypatch, tmp_path):
         build_engine(ctx, {"spec": {}}, infra, anchor=tmp_path)
 
 
+def test_build_engine_cache_read_only_needs_no_api_key(monkeypatch, tmp_path):
+    """Exclusive replay answers from the cache only, so it asks for no key."""
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.library.standard.plugins.llm.cache import CacheLLMProvider
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+
+    sel = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+        cache_read_only=True,
+    )
+    provider = sel.engine.llm_provider
+    assert sel.mode == "replay"
+    assert isinstance(provider, CacheLLMProvider)
+    assert provider.raise_on_miss is True and provider.allow_write is False
+
+
+def test_build_engine_live_with_cache_still_requires_api_key(monkeypatch, tmp_path):
+    """A readable cache does not excuse a missing key: a miss would fail mid-run."""
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    cache = tmp_path / "mas" / "llm_cache.json"
+    cache.parent.mkdir(parents=True)
+    cache.write_text('{"some-key": {"content": "Paris", "usage": {}, "source": "cache"}}', encoding="utf-8")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is unset"):
+        build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+
+
+def test_build_engine_rejects_a_placeholder_api_key(monkeypatch, tmp_path):
+    """A pasted placeholder such as '…' used to fail deep inside the HTTP client."""
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_API_KEY", "\u2026")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+
+    with pytest.raises(RuntimeError, match="non-ASCII"):
+        build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+
+
 def test_parse_execution_rejects_removed_mocking_key():
     from mas.ctl.manifest.spec_bindings import SpecBindingError, parse_execution
 

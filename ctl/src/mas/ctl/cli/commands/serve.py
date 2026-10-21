@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, with_binds
+from mas.ctl.cli.bind_flags import bind_option, listen_option, with_binds
 from mas.ctl.cli.obs_flags import resolve_observability_config
 from mas.ctl.env import load_dotenv
 from mas.ctl.infra.resolve import application_endpoint_is_deployed
@@ -35,11 +35,18 @@ _make_runtime_handler = make_runtime_handler
     help="Schema-validated overlay override (repeatable; applied last).",
 )
 @bind_option
+@listen_option
 @click.option(
     "--infra-ref",
     "infra_refs_cli",
     multiple=True,
     help="Infrastructure manifest/bundle containing the agent's exposed Application endpoint",
+)
+@click.option(
+    "--cache-read-only",
+    is_flag=True,
+    help="Answer only from the recorded answers: never call the LLM, never write the cache, "
+    "fail at once on an unrecorded prompt. Needs no API key.",
 )
 @click.option("--flavour", default="local", show_default=True)
 @click.option(
@@ -55,7 +62,9 @@ def serve_agent_cmd(
     overlays: tuple[str, ...],
     overrides: tuple[str, ...],
     binds: tuple[str, ...],
+    listens: tuple[str, ...],
     infra_refs_cli: tuple[str, ...],
+    cache_read_only: bool,
     flavour: str,
     control_dir: Path | None,
     no_control: bool,
@@ -63,12 +72,13 @@ def serve_agent_cmd(
     """Serve an agent through the agent_expose plugin selected by its infra endpoint."""
     from mas.ctl.paths import manifest_cwd
 
-    overrides = with_binds(binds, overrides)
+    overrides = with_binds(binds, overrides, listens)
 
     with manifest_cwd(agent, overlay_paths=overlays) as session:
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)
         workspace = WorkspaceConfig.load(session.manifest_dir or session.original_cwd)
         workspace = workspace.with_cli_overrides(overrides)
+        cache_read_only = cache_read_only or workspace.cache_read_only
         user = UserConfig.load()
         manifest, pattern_plugin_id = load_merged_agent_manifest(
             session.local_manifest,
@@ -110,6 +120,7 @@ def serve_agent_cmd(
                 manifest_dir=session.manifest_dir,
                 resolved_infra=infra,
                 workspace=workspace,
+                cache_read_only=cache_read_only,
             )
         )
         obs_config = resolve_observability_config(

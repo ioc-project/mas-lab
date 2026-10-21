@@ -180,6 +180,7 @@ How the patching flags work:
 | --- | --- | --- |
 | `--cache-read` / `--no-cache-read` | RuntimeEngine, true | Look up the cache before the LLM call. |
 | `--cache-write` / `--no-cache-write` | RuntimeEngine, true | Persist the result after the LLM call. |
+| `--cache-read-only` | off | Exclusive replay: answer from the cache only, never write, fail at once on an unrecorded prompt; needs no API key. `mas_ctl.cache: read-only` in `config.yaml` makes it the workspace default. |
 | `--stream` / `--no-stream` | RuntimeEngine, false | Stream responses over SSE. |
 | `--without-obs` | off | Disable the observability summand (`M_obs`) and event recording. |
 | `--without-gov` | off | Disable the governance summand (`M_gov`) and HITL chokepoints. |
@@ -288,12 +289,21 @@ It needs an Application endpoint named after the agent's `metadata.name`, with `
 mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
 ```
 
+The same without an infra file: `--listen NAME=a2a://host:port` is the shortcut for the
+`usage: deploy` Application row, the mirror of `--bind` (which *uses* a remote peer).
+
+```bash
+mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
+```
+
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
 | `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: deploy`. Expands to `--override infra:…`. |
 | `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
+| `--cache-read-only` | off | Exclusive replay (see `chat`): answer from the cache only, no API key needed. |
 | `--flavour NAME` | `local` | Flavour. |
 | `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the A2A `contextId`. |
 | `--no-control` | off | Do not advertise a control endpoint. |

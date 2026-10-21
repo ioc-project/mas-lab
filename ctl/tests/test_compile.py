@@ -232,7 +232,7 @@ def test_compile_tutorial_1_stacks_overlays() -> None:
     assert "samples:tools/calc.tool.yaml" in refs
     assert "samples:tools/memory-search.tool.yaml" in refs
     context = spec["context"]
-    assert "tool_usage" in context
+    assert "tool_usage" not in context  # tool descriptions reach the model on their own
     assert "memory_usage" in context
     assert spec["models"][0]["model"] == "gpt-4o"
     assert spec["design_pattern"]["type"]

@@ -217,6 +217,7 @@ def build_engine(
     kernel_config: KernelConfig | None = None,
     cache_read_override: bool | None = None,
     cache_write_override: bool | None = None,
+    cache_read_only: bool = False,
     stream_override: bool | None = None,
     runtime_refs_cli: list[str] | None = None,
     model_override: str | None = None,
@@ -252,27 +253,42 @@ def build_engine(
 
         reliability = ReliabilitySettings.from_spec(spec, llm_proxy=llm_proxy)
     llm_proxy["retry"] = reliability.llm_retry.to_mapping()
-    strict_replay = _strict_replay(llm_proxy)
+    if cache_read_only:
+        # Exclusive replay: answer from the cache only, never write, never call the provider.
+        cache_read_override, cache_write_override = True, False
+    strict_replay = _strict_replay(llm_proxy) or cache_read_only
 
     api_base = str(llm_proxy.get("api_base") or "").strip()
     api_key_env = str(llm_proxy.get("api_key_env") or "OPENAI_API_KEY")
     http_timeout = float(llm_proxy["timeout"]) if llm_proxy.get("timeout") is not None else None
 
     api_key = api_key_for_infra(llm_proxy)
+    if api_key and not api_key.isascii() and not strict_replay:
+        env_name = llm_proxy.get("api_key_env") or "OPENAI_API_KEY"
+        raise RuntimeError(
+            f"{env_name} contains characters that cannot be in an API key (non-ASCII). "
+            "Did you paste a placeholder such as '…' instead of your key?"
+        )
     if not api_base and not strict_replay:
         raise RuntimeError(
             "No LLM configured: resolve infra (workspace infra_refs or --infra-ref). "
             "For offline CI, attach llm_cache replay (raise_on_miss) recorded against a live provider."
         )
+    cache_raw = llm_proxy.get("cache_path")
+    runtime_engine = dict(resolved.runtime_engine or {})
+    cache_read = _cache_read_enabled(runtime_engine, override=cache_read_override)
+    cache_write = _cache_write_enabled(runtime_engine, override=cache_write_override)
+    cache_active = (cache_read or cache_write) and not (llm_proxy.get("pipeline"))
+    cache_path = Path(str(cache_raw)) if cache_raw else resolve_cache_path() if cache_active else None
     if not api_key and not strict_replay:
         env_name = llm_proxy.get("api_key_env") or "OPENAI_API_KEY"
         raise RuntimeError(
             f"Live LLM configured ({api_base}) but {env_name} is unset. "
-            "Set the API key, or replay from an llm_cache fixture with raise_on_miss: true."
+            "Set the API key, or replay recorded answers only with --cache-read-only (or an llm_cache fixture with raise_on_miss: true)."
         )
     if strict_replay:
         mode = "replay"
-        reason = "llm_cache raise_on_miss"
+        reason = "cache read-only" if cache_read_only else "llm_cache raise_on_miss"
     else:
         mode = "live"
         reason = f"resolved infra → {api_base}"
@@ -285,12 +301,6 @@ def build_engine(
         parent_default=parent_default_model,
         experiment_default=experiment_default_model,
     )
-    cache_raw = llm_proxy.get("cache_path")
-    runtime_engine = dict(resolved.runtime_engine or {})
-    cache_read = _cache_read_enabled(runtime_engine, override=cache_read_override)
-    cache_write = _cache_write_enabled(runtime_engine, override=cache_write_override)
-    cache_active = (cache_read or cache_write) and not (llm_proxy.get("pipeline"))
-    cache_path = Path(str(cache_raw)) if cache_raw else resolve_cache_path() if cache_active else None
     stream = _stream_enabled(runtime_engine, override=stream_override)
 
     from mas.runtime.registry.llm_provider_registry import llm_provider_from_infra
@@ -306,6 +316,7 @@ def build_engine(
         wrap_cache=cache_active,
         cache_read=cache_read,
         cache_write=cache_write,
+        cache_raise_on_miss=cache_read_only,
     )
     engine = _wrap_with_infra_pipeline(
         LiveLlmEngine(

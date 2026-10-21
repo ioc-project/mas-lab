@@ -29,14 +29,11 @@ spec:
   models:
     - model: gpt-4o
 
-  # ── Context (merged from agent.yaml + tools overlay + skills overlay + memory overlay) ─
+  # ── Context (merged from agent.yaml + skills overlay + memory overlay) ─
   context:
     intent: "Answer general knowledge questions."
     role: |
       Answer questions clearly and concisely.
-    tool_usage: |
-      When you need to perform calculations, use the calc tool.
-      When you need current information from the web, use the web-search tool.
     memory_usage: |
       IMPORTANT — You have a long-term memory. Relevant memories are shown in context.
       When the user corrects you or shares a preference, store it with memory_store.

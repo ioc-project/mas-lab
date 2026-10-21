@@ -35,6 +35,13 @@ properties:
       runtime_profile:
         type: string
         description: Path to runtime-profile manifest (relative to workspace).
+      cache:
+        type: string
+        enum: [read-only]
+        description: >-
+          Default cache mode for mas-ctl chat / serve. `read-only` answers from the recorded
+          answers only (no LLM call, no cache write, no API key), like `--cache-read-only`.
+          Omit it to call the model on a cache miss.
       trace:
         description: >-
           Human exchange log on stderr for mas-ctl chat / run-mas. `summary`

@@ -12,6 +12,13 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- `mas-ctl chat --cache-read-only` (and `mas-ctl serve --cache-read-only`) replays recorded answers only: no LLM call, no cache write,
+  no API key, and an immediate error on an unrecorded prompt. Without it, a live run still
+  requires the key up front.
+- `mas_ctl.cache: read-only` in `config.yaml` makes `--cache-read-only` the default for `mas-ctl chat`
+  and `serve` in that workspace (an explicit `--cache-write` or `--no-cache-read` wins).
+- `mas-ctl serve --listen NAME=a2a://host:port` serves an agent without an infra file, the
+  mirror of `--bind` (`usage: deploy` instead of `usage: use`).
 - Scope-based controller API (`/api/scopes`, `/api/kinds`,
   `/api/scopes/{scope_id}/items`, `/api/choices`, `/api/runs`,
   `/api/artifacts`, `/api/uploads`, `/api/info`)
@@ -65,6 +72,12 @@ reconciling the release notes with the code and docs currently on that branch.
   entries recorded with the implicit 2000 no longer match.
 
 ### Fixed
+
+- A non-ASCII API key (for example a pasted `…` placeholder) is rejected up front with a clear message
+  instead of failing inside the HTTP client.
+- Tutorial 1 no longer repeats the tools' descriptions in a `tool_usage` prompt (they are
+  sent to the model with every request), and the sample `calc` tool describes itself
+  generically instead of as a travel-fare helper.
 
 - Activated skill content is no longer summarized or dropped by history
   compaction (agentskills.io Step 5). `summarising`, `sliding_window`, and

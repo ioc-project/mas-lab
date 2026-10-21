@@ -309,6 +309,7 @@ def wrap_llm_provider_cache(
     cache_path: Path | None = None,
     cache_read: bool = True,
     cache_write: bool = True,
+    cache_raise_on_miss: bool = False,
 ) -> Any:
     """Decorator: disk cache in front of a routed protocol plugin (not a protocol)."""
     if inner is None:
@@ -323,6 +324,7 @@ def wrap_llm_provider_cache(
             "cache_path": cache_path,
             "allow_read": cache_read,
             "allow_write": cache_write,
+            "raise_on_miss": cache_raise_on_miss,
         },
     )
 
@@ -337,6 +339,7 @@ def llm_provider_from_infra(
     wrap_cache: bool = False,
     cache_read: bool = True,
     cache_write: bool = True,
+    cache_raise_on_miss: bool = False,
     manifest: dict[str, Any] | None = None,
 ) -> Any:
     """Build the routed protocol provider, optionally wrapping it with cache."""
@@ -354,4 +357,5 @@ def llm_provider_from_infra(
         cache_path=cache_path,
         cache_read=cache_read,
         cache_write=cache_write,
+        cache_raise_on_miss=cache_raise_on_miss,
     )

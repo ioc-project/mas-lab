@@ -98,6 +98,7 @@ class InstantiationOptions:
     user_io_contract: object | None = None
     cache_read_override: bool | None = None
     cache_write_override: bool | None = None
+    cache_read_only: bool = False
     stream_override: bool | None = None
     engine: Any | None = None
     runtime_refs_cli: tuple[str, ...] = ()
@@ -259,6 +260,7 @@ def instantiate_runtime(
             kernel_config=_kernel_cfg,
             cache_read_override=options.cache_read_override,
             cache_write_override=options.cache_write_override,
+            cache_read_only=options.cache_read_only,
             stream_override=options.stream_override,
             runtime_refs_cli=list(options.runtime_refs_cli),
             model_override=options.model_override,

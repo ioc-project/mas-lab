@@ -223,6 +223,11 @@ class WorkspaceConfig:
         return dict(raw) if isinstance(raw, dict) else {}
 
     @property
+    def cache_read_only(self) -> bool:
+        """True when ``mas_ctl.cache: read-only`` makes recorded answers the default."""
+        return str(self.mas_ctl.get("cache") or "").strip().lower() == "read-only"
+
+    @property
     def paths(self) -> dict[str, str]:
         raw = self._data.get("paths") or {}
         return {str(k): str(v) for k, v in raw.items()} if isinstance(raw, dict) else {}

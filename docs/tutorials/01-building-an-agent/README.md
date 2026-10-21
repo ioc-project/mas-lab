@@ -140,7 +140,7 @@ mas-ctl chat agent.yaml -o overlays/tools.yaml \
   -q "If Tokyo has 14 million people and Paris has 2.1 million, how many times larger is Tokyo?"
 ```
 
-Without a key, only `validate` runs. `overlays/tools.yaml` (shortened) adds tool guidance and the tools:
+Without a key, only `validate` runs. `overlays/tools.yaml` (shortened) adds tools; it does not add prompt text:
 
 ```yaml
 apiVersion: mas/v1
@@ -151,10 +151,6 @@ spec:
   target:
     kind: Agent            # use MAS to overlay a MAS
   patch:
-    context:
-      tool_usage: |
-        When you need to perform calculations, use the calc tool.
-        When you need current information from the web, use the web-search tool.
     tools:
       $op:
         add:               # append to the list; a plain list would replace it
@@ -167,6 +163,7 @@ spec:
 ```
 
 A `ref` points to a `kind: Tool` manifest that names the tool, describes its parameters, and points at its Python implementation.
+The name, description and parameters of every tool are sent to the model with each request (the `tools` field of the chat call), so you only add prompt text if you want to steer *when* to use a tool beyond what its description says.
 The exchange log now shows the tool request and result (values abridged):
 
 ```text

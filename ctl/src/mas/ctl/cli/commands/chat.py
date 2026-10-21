@@ -107,6 +107,12 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
     help="Persist a response to the cache after calling the LLM (default: RuntimeEngine cache.write, else true)",
 )
 @click.option(
+    "--cache-read-only",
+    is_flag=True,
+    help="Answer only from the recorded answers: never call the LLM, never write the cache, "
+    "fail at once on an unrecorded prompt. Needs no API key.",
+)
+@click.option(
     "--stream/--no-stream",
     default=None,
     help="Stream the LLM response over SSE instead of waiting for the full "
@@ -164,6 +170,7 @@ def chat_cmd(
     no_validate: bool,
     cache_read: bool | None,
     cache_write: bool | None,
+    cache_read_only: bool,
     stream: bool | None,
     without_obs: bool,
     without_gov: bool,
@@ -191,6 +198,8 @@ def chat_cmd(
     from mas.ctl.session.infra_resolve import resolve_session_infra
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
+    if cache_read_only and (cache_write or cache_read is False):
+        raise click.UsageError("--cache-read-only cannot be combined with --cache-write or --no-cache-read")
     overrides = with_binds(binds, (*max_tokens_overrides(max_tokens), *overrides))
     verbose = int(ctx.obj.get("verbose", 0) if ctx.obj else 0)
 
@@ -202,6 +211,8 @@ def chat_cmd(
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)
         workspace = WorkspaceConfig.load(session.manifest_dir or session.original_cwd)
         workspace = workspace.with_cli_overrides(overrides)
+        if workspace.cache_read_only and cache_write is not True and cache_read is not False:
+            cache_read_only = True
         user = UserConfig.load()
         overlay_strs = tuple(str(p) for p in session.overlays)
         agent_data, plugin = load_merged_agent_manifest(
@@ -360,6 +371,7 @@ def chat_cmd(
                     validate_manifests=not no_validate,
                     cache_read_override=cache_read,
                     cache_write_override=cache_write,
+                    cache_read_only=cache_read_only,
                     stream_override=stream,
                     hitl_contract=hitl_contract,
                     user_io_contract=user_io_contract,

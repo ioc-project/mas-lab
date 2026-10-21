@@ -5,22 +5,22 @@ kind: Tool
 
 metadata:
   name: calc
-  description: "Simple arithmetic calculator for cost aggregation."
+  description: "Simple arithmetic calculator."
   version: "1.0.0"
-  tags: [travel, math, cost]
+  tags: [math]
 
 spec:
   description: >
     Evaluate a basic arithmetic expression and return the numeric result.
-    Use to sum fare_usd values, multiply daily costs, and compute totals.
+    Use it for any sum, ratio or product instead of computing it yourself.
     Supports +, -, *, / and parentheses. No external calls.
 
   parameters:
     - name: expression
       type: string
-      description: "Arithmetic expression to evaluate (e.g. '28 + 22 + 125 * 3')."
+      description: "Arithmetic expression to evaluate (e.g. '14 / 2.1')."
       required: true
-      examples: ["28 + 22", "125 * 3 + 42", "(55 + 33) * 2"]
+      examples: ["28 + 22", "14 / 2.1", "(55 + 33) * 2"]
 
   impl:
     kind: python

@@ -74,11 +74,36 @@ def expand_binds(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
     return tuple(overrides)
 
 
+def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
+    """Turn ``NAME=a2a://host:port/path`` into ``infra:`` overrides that serve ``NAME``.
+
+    The mirror of :func:`expand_binds`: ``--bind`` says where to *use* a remote
+    peer (``usage: use``), ``--listen`` says where to *serve* an agent
+    (``usage: deploy``). Same Application endpoint field, same merge path.
+    """
+    overrides: list[str] = []
+    for source in assignments:
+        name, uri = _split_assignment(source)
+        parsed = urlparse(uri)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in {"a2a", "a2as"}:
+            raise ValueError(
+                f"listen {source!r} must use a2a:// or a2as:// "
+                f"(got {scheme or 'no scheme'!r}); serve an MCP tool with mas-mcp"
+            )
+        endpoint = {"protocol": "a2a", "usage": "deploy", "url": _http_url(parsed)}
+        overrides.append(f"infra:spec.endpoints[{name!r}]={_yaml_flow(endpoint)}")
+    return tuple(overrides)
+
+
 def combine_overrides(
-    *, binds: Sequence[str] | Iterable[str] = (), overrides: Sequence[str] | Iterable[str] = ()
+    *,
+    binds: Sequence[str] | Iterable[str] = (),
+    overrides: Sequence[str] | Iterable[str] = (),
+    listens: Sequence[str] | Iterable[str] = (),
 ) -> tuple[str, ...]:
-    """``--bind`` expansions first, then explicit ``--override`` (later wins)."""
-    return expand_binds(binds) + tuple(overrides)
+    """``--bind`` and ``--listen`` expansions first, then explicit ``--override`` (later wins)."""
+    return expand_binds(binds) + expand_listens(listens) + tuple(overrides)
 
 
 def _split_assignment(source: str) -> tuple[str, str]:
