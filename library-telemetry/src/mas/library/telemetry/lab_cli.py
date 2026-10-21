@@ -23,6 +23,7 @@ import click
 
 from mas.library.telemetry.collector.clickhouse import dump_spans, list_apps
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
+from mas.library.telemetry import inspection
 from mas.library.telemetry.steps.compare_spans import run_compare_spans
 from mas.library.telemetry.steps.convert import run_convert
 from mas.library.telemetry.steps.push_otlp import run_push_otlp
@@ -167,6 +168,50 @@ def _inspect(spans_file: str) -> None:
             indent=2,
         )
     )
+
+
+def _clip(text: str, width: int) -> str:
+    text = " ".join(str(text).split())
+    return text if width <= 0 or len(text) <= width else text[: width - 1] + "…"
+
+
+@telemetry_group.command("errors")
+@click.argument("spans_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--fail", is_flag=True, help="Exit 1 when the file holds any ERROR span.")
+def _errors(spans_file: str, fail: bool) -> None:
+    """Count spans by status: did the runtime report any error?"""
+    report = inspection.error_report(load_spans(Path(spans_file)))
+    click.echo(f"spans          {report['spans']}")
+    click.echo(f"status counts  {report['status_counts']}")
+    click.echo(f"ERROR spans    {report['error_spans']}")
+    if fail and report["error_spans"]:
+        sys.exit(1)
+
+
+@telemetry_group.command("conversation")
+@click.argument("spans_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--no-tools", is_flag=True, help="Show LLM replies only.")
+@click.option("--width", default=170, show_default=True, help="Clip each line (0 = no clip).")
+def _conversation(spans_file: str, no_tools: bool, width: int) -> None:
+    """Print what each agent said and which tools it called, in order."""
+    for turn in inspection.conversation(load_spans(Path(spans_file)), with_tools=not no_tools):
+        click.echo(f"{turn.index:03d}  {turn.agent:16}  {turn.kind:4}  {_clip(turn.text, width)}")
+
+
+@telemetry_group.command("calls")
+@click.argument("spans_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--tool", "tools", multiple=True, required=True, help="Tool name to list (repeatable).")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON instead of text.")
+def _calls(spans_file: str, tools: tuple[str, ...], as_json: bool) -> None:
+    """List the calls to named tools, with their inputs (e.g. the tool that commits a decision)."""
+    found = inspection.tool_calls(load_spans(Path(spans_file)), list(tools))
+    if as_json:
+        click.echo(json.dumps(found, indent=2))
+        return
+    if not found:
+        click.echo("no matching tool call")
+    for call in found:
+        click.echo(f"{call['index']:03d}  {call['agent']:16}  {call['tool']}  {_clip(call['input'], 0)}")
 
 
 @telemetry_group.command("push")

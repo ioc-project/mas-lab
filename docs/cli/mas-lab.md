@@ -33,7 +33,7 @@ Pipeline shortcuts (which YAML each command wraps):
 | [`telemetry push`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/push.md) | OTLP collector serialize |
 | [`telemetry dump`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/dump.md) | ClickHouse deserialize |
 | [`telemetry compare`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/compare.md) | Span-file parity |
-| [`telemetry inspect`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/inspect.md) / [`kinds`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/kinds.md) / [`list-apps`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/list-apps.md) | Inspection |
+| [`telemetry inspect`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/inspect.md) / [`errors`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/errors.md) / [`conversation`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/conversation.md) / [`calls`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/calls.md) / [`kinds`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/kinds.md) / [`list-apps`](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/cli/list-apps.md) | Inspection |
 | [`telemetry show`](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/cli/telemetry-show.md) | Native events.jsonl summary |
 
 ## kg

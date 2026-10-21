@@ -12,6 +12,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
+  file: count spans by status, print the conversation in order, and list the
+  calls to named tools with their inputs.
 - `mas-ctl chat --cache-read-only` (and `mas-ctl serve --cache-read-only`) replays recorded answers only: no LLM call, no cache write,
   no API key, and an immediate error on an unrecorded prompt. Without it, a live run still
   requires the key up front.

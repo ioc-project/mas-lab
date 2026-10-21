@@ -151,6 +151,15 @@ mas-lab telemetry verify otel_sdk_spans.jsonl --level L3 [--spanspec PATH] [--fa
 # Quick summary (no validation)
 mas-lab telemetry inspect otel_sdk_spans.jsonl
 
+# Did the runtime report an error? (--fail exits 1 on any ERROR span)
+mas-lab telemetry errors otel_sdk_spans.jsonl [--fail]
+
+# What was said and called, in order (LLM replies and tool calls)
+mas-lab telemetry conversation otel_sdk_spans.jsonl [--no-tools] [--width N]
+
+# Calls to named tools with their inputs (e.g. the tool that commits a decision)
+mas-lab telemetry calls otel_sdk_spans.jsonl --tool run_action [--json]
+
 # Structural parity of two span files
 mas-lab telemetry compare reference.jsonl candidate.jsonl
 

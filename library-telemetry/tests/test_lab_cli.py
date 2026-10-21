@@ -240,3 +240,45 @@ def test_push_app_name_sets_service_name(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0
     assert seen["service.name"] == "my-app"
+
+
+def _span(name, agent, **attrs):
+    return {"name": name, "status": {"status_code": attrs.pop("status", "UNSET")},
+            "attributes": {"mas.agent.id": agent, **attrs}}
+
+
+def _write_conversation(path):
+    spans = [
+        _span("a.chat", "lead", **{"gen_ai.completion.0.content": "I will ask the specialist."}),
+        _span("lookup.tool", "lead", **{"mas.tool.name": "lookup", "mas.tool.input": '{"q": 1}'}),
+        _span("commit.tool", "lead", **{"mas.tool.name": "commit", "mas.tool.input": '{"action": "go"}'}),
+        _span("b.chat", "specialist", status="ERROR", **{"gen_ai.completion.0.content": "Done."}),
+    ]
+    path.write_text("\n".join(json.dumps(s) for s in spans) + "\n")
+
+
+def test_errors_counts_and_fails_on_request(tmp_path):
+    spans = tmp_path / "s.jsonl"
+    _write_conversation(spans)
+    ok = runner.invoke(telemetry_group, ["errors", str(spans)])
+    assert ok.exit_code == 0 and "ERROR spans    1" in ok.output
+    assert runner.invoke(telemetry_group, ["errors", str(spans), "--fail"]).exit_code == 1
+
+
+def test_conversation_orders_replies_and_tools(tmp_path):
+    spans = tmp_path / "s.jsonl"
+    _write_conversation(spans)
+    lines = runner.invoke(telemetry_group, ["conversation", str(spans)]).output.splitlines()
+    assert [ln.split()[2] for ln in lines] == ["LLM", "TOOL", "TOOL", "LLM"]
+    only_llm = runner.invoke(telemetry_group, ["conversation", str(spans), "--no-tools"]).output.splitlines()
+    assert len(only_llm) == 2
+
+
+def test_calls_lists_named_tool_only(tmp_path):
+    spans = tmp_path / "s.jsonl"
+    _write_conversation(spans)
+    out = runner.invoke(telemetry_group, ["calls", str(spans), "--tool", "commit", "--json"]).output
+    found = json.loads(out)
+    assert [(c["agent"], c["tool"]) for c in found] == [("lead", "commit")]
+    miss = runner.invoke(telemetry_group, ["calls", str(spans), "--tool", "nothing"])
+    assert "no matching tool call" in miss.output

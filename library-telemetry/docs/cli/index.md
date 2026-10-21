@@ -34,6 +34,9 @@ stubs for `push` / `verify` / `dump` and **keeps** core inspection commands
 | `convert` | events.jsonl → otel_sdk_spans.jsonl | [convert](convert.md) |
 | `verify` | Structural + SpanSpec | [verify](verify.md) |
 | `inspect` | Span-file summary | [inspect](inspect.md) |
+| `errors` | Count spans by status; `--fail` on ERROR | [errors](errors.md) |
+| `conversation` | LLM replies and tool calls in order | [conversation](conversation.md) |
+| `calls` | Calls to named tools with their inputs | [calls](calls.md) |
 | `push` | Serialize to an OTLP collector | [push](push.md) |
 | `dump` | ClickHouse → JSONL | [dump](dump.md) |
 | `compare` | Span-file parity | [compare](compare.md) |
