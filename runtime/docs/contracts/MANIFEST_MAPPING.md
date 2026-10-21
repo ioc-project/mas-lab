@@ -39,7 +39,7 @@ Resolution: `mas.ctl.compose` → `run-mas`.
 | Field | Binds to |
 |-------|----------|
 | `dataset` | Bench dataset loader |
-| `scenarios` | Overlay matrix |
+| `scenarios` | Overlay matrix (one scenario = one set of overlays) |
 | `run` | `n_runs`, per-run artifacts and hooks |
 | `execution` | Batch concurrency, timeouts, and ordering |
 | Level `pre` / `post` steps | `mas.lab.benchmark.pipeline` step types |
@@ -54,7 +54,7 @@ Entry: `mas-lab benchmark run`.
 |----------|------|
 | `flavour/*.yaml` | Protocol, observability, control, and tool deployment posture |
 | `infra/*.yaml` | Provider endpoints, tool servers, middleware, and data connections |
-| `config.yaml` | `MAS_INFRA_REFS`, default flavour |
+| `config.yaml` | Workspace defaults: infra refs, default model, aliases |
 
 Schema: [docs/schemas/config.schema.yaml](../../../docs/schemas/config.schema.yaml).
 

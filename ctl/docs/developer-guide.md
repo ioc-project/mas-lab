@@ -4,17 +4,13 @@
 -->
 # mas-ctl Developer Guide
 
-This guide covers extending orchestration behavior while keeping `mas-ctl` declarative and library-centric.
-
-## Architecture
-
-`mas-ctl` should remain a thin CLI over reusable orchestration library code.
+This guide is for developers who extend `mas-ctl` while keeping it declarative. `mas-ctl` stays a thin CLI over reusable orchestration library code.
 
 ## Development principles
 
 - Keep orchestration logic in library modules, not command handlers.
 - Model topology and policy in manifests first.
-- Preserve deterministic resolution order (base + flavour + scenario).
+- Preserve deterministic resolution order (base + flavour + overlays + overrides).
 
 ## Extension areas
 
@@ -30,7 +26,7 @@ This guide covers extending orchestration behavior while keeping `mas-ctl` decla
 
 ### Placement
 
-- Only `local-inproc` is OSS-supported; other strategies are planned for a later release.
+- Only `local-inproc` is OSS-supported; other strategies are planned for a later release (see `ctl/docs/schemas/component-registry.yaml`).
 - Validate placement strategy at compose time via `placement_validate.validate_placement_strategy`.
 
 ### Policy enforcement

@@ -4,7 +4,9 @@
 -->
 # mas-lab documentation
 
-Docs for **benchmarks**, **pipelines**, and validation.
+This section covers `mas-lab` benchmarks, pipelines, and validation. Read it to run a lab or write your own pipeline steps.
+
+Smallest working command: `mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --progress`.
 
 **Start:** [labs-quickstart.md](labs-quickstart.md) · **Terms:**
 [glossary.md](../../docs/glossary.md) · **Site docs:** [docs/index.md](../../docs/index.md).

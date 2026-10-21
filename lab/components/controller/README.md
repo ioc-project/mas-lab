@@ -4,13 +4,13 @@
 -->
 # mas-lab-controller
 
-> Controller daemon, background workers, and HTTP API for the mas-lab CLI and mas-lab-ui.
+`mas-lab-controller` is the control plane for MAS Lab experiments. It runs long-lived work (benchmarks, agent runs, pipelines) in background workers, exposes a REST API for the web UI, and provides Unix-socket inter-process communication (IPC) for the CLI.
 
-`mas-lab-controller` is the control plane for MAS Lab experiments. It runs long-lived
-work (benchmarks, agent runs, pipelines) in background workers, exposes a REST API for
-the web UI, and provides Unix-socket IPC for the CLI.
+Use it when you start experiments through `mas-lab benchmark run` or the `ui/` web app; both talk to this daemon.
 
----
+```bash
+mas-lab serve    # foreground controller; HTTP API on http://localhost:8090
+```
 
 ## Overview
 
@@ -22,11 +22,8 @@ the web UI, and provides Unix-socket IPC for the CLI.
 | **ManifestStore** | Reads/writes lab library YAML (experiments, pipelines, overlays, …) |
 | **ControllerClient** | CLI helper: auto-start daemon, submit jobs, poll workers |
 
-The CLI and UI share the same job model: submit → receive `job_id` / `worker_id` → poll
-until `completed` | `failed` | `cancelled`. Job polling is REST today; WebSocket/SSE
-streams for live logs and pipeline progress are planned without changing the worker model.
+The CLI and UI share one job model: submit, receive a `job_id` / `worker_id`, then poll until the state is `completed`, `failed` or `cancelled`. Polling uses REST.
 
----
 
 ## Installation
 
@@ -67,7 +64,7 @@ Stop: `mas-lab control stop`
 
 ### 2. Connect mas-lab-ui (frontend)
 
-In the **`ui/`** directory at the mas-lab repo root (formerly a separate repo):
+In the `ui/` directory at the mas-lab repo root:
 
 ```bash
 yarn install
@@ -111,8 +108,8 @@ mas-lab worker follow <worker_id>
 │  mas-lab-ui │ ───────────────────► │  FastAPI app     │
 │  (React)    │   /api/jobs/{id}     │  schema_registry │
 └─────────────┘   /api/schemas/*     └────────┬─────────┘
-     poll today ─────────────────────────────┤
-     (WebSocket/SSE later)                    ▼
+     polls ──────────────────────────────────┤
+                                              ▼
                                     benchmark / application / pipeline workers
                                     (stdout/stderr → pollable buffers)
 ```
@@ -180,7 +177,7 @@ components/controller/src/mas/lab/controller/
 
 | Document | Description |
 |----------|-------------|
-| [../../docs/manifest-schemas.md](../../docs/manifest-schemas.md) | Package-owned schemas, `/api/schemas`, UI vs runtime |
+| [../../../docs/references/schemas.md](../../../docs/references/schemas.md) | Package-owned schemas, `/api/schemas`, UI vs runtime |
 | [../../../runtime/docs/dev/schemas/agent-manifest.md](../../../runtime/docs/dev/schemas/agent-manifest.md) | Runtime agent manifest reference |
 | [../../../runtime/docs/dev/schemas/mas-topology.md](../../../runtime/docs/dev/schemas/mas-topology.md) | MAS topology / workflow reference |
 | [../bench/README.md](../bench/README.md) | Experiment and post-processing pipeline YAML |

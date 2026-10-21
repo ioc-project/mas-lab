@@ -67,6 +67,9 @@ exclude_docs: |
   doc-map.md
   blog/README.md
   REVIEW-2026-06-29.md
+  design/IMPLEMENTATION-SUMMARY.md
+  design/agent-driven-hitl-impl-plan.md
+  includes/
 
 markdown_extensions:
   - admonition
@@ -92,8 +95,13 @@ nav:
   - MAS-Lab:
       - MAS-Lab: index.md
       - Overview: overview.md
+      - Architecture: architecture.md
+      - Labs: labs.md
   - User guide:
       - user-guide.md
+      - Writing manifests: manifests/writing-manifests.md
+      - Packages reference: packages-reference.md
+      - Plugins reference: plugins-reference.md
       - Labs vs libraries: labs-and-libraries.md
       - user-config.md
       - "config.yaml": references/config.yaml.md
@@ -104,8 +112,10 @@ nav:
           - mas-ctl: cli/mas-ctl.md
           - Observability / run logs: cli/observability.md
           - compile: cli/compile.md
+          - Overrides: cli/overrides.md
       - Web UI: ui/index.md
       - Live dashboard: ui/live.md
+      - Live dashboard reference: ui/live-reference.md
       - ctl/tui.md
       - glossary.md
   - Tutorials:
@@ -127,23 +137,28 @@ nav:
   - References:
       - Overview: references/index.md
       - "ADR 0001 — lab terminology": references/adr-0001-lab-terminology.md
+      - "ADR 0002 — observability event model": references/adr-0002-observability-event-model.md
+      - A2A:
+          - Overview: a2a/README.md
+          - Developer reference: a2a/developer.md
       - Specifications:
           - Agent:
               - Overview: manifests/agent.md
               - Governance: manifests/governance.md
               - Session checkpoints: manifests/checkpoint.md
               - Subagents: manifests/subagents.md
+          - Tool: manifests/tool.md
           - System tools: manifests/system-tools.md
           - Plugin bindings: manifests/plugin-bindings.md
           - Context assembly: manifests/context-assembly.md
           - Summarization: manifests/summarization.md
           - "Compiled agent defaults": references/defaults.md
           - MAS: manifests/mas.md
-          - Topology & workflow: manifests/topology-and-workflow.md
-          - Workflow: manifests/workflow.md
           - Overlay: manifests/overlay.md
           - Flavour: manifests/flavour.md
           - Infra: manifests/infra.md
+          - Tool server registry: references/tool-server-registry.md
+          - Tool contract: references/tool-contract.md
           - RuntimeEngine: manifests/runtime-engine.md
           - "LLM cache (guide)": manifests/llm-cache.md
           - "LLM reasoning / thinking": manifests/llm-reasoning.md
@@ -166,6 +181,8 @@ nav:
           - Dataset: manifests/dataset.md
           - Pipeline: manifests/pipeline.md
           - Lab folder: manifests/lab.md
+          - Execution: manifests/execution.md
+          - Dataset migration: manifests/dataset-migration.md
           - Library discovery: library-discovery.md
           - Package documentation: references/lab.md
   - Paper: paper/index.md

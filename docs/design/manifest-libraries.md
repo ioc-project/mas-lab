@@ -1,123 +1,78 @@
-# Folder-based manifest libraries + plugin availability
+Status: Implemented. User-facing reference: [Library discovery](../library-discovery.md) and the runtime [plugin registry manifests](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/plugin-registry-manifests.md#availability-gate-requiresextra-for-optional-dependencies) page.
 
-Status: Phase 1 implemented — folder-based `library.yaml` discovery
-(goals 1-3) already shipped via `mas.library_roots`/`mas.runtime.
-package_refs` (see [`docs/library-discovery.md`](../library-discovery.md));
-the availability gate and `mas-ctl plugin` CLI (goals 4-5, and the `mas
-plugin` section below) now ship too — see
-[`runtime/docs/plugin-registry-manifests.md`](../../runtime/docs/plugin-registry-manifests.md#availability-gate-requiresextra-for-optional-dependencies)
-for the actual `requires:`/`extra:` schema, `PluginUnavailable`, and CLI
-usage, with `mas.observability.otel` in `library-standard/library.yaml` as
-a real, shipping example. Library alignment and the phase 2/3 rollout
-below (retiring the central catalog for every internal library, flipping
-resolution to scan-first) remain future work.
+# Folder-based manifest libraries and plugin availability
 
-## Goals
+A *library* is a folder of reusable apps, tools, plugins, and datasets. A *plugin* is a unit of behaviour that a manifest selects by name. This note records how the runtime finds libraries and decides whether a plugin is usable.
 
-1. A **library is a folder tree with a `library.yaml` at its root** — not a
-   Python package. It is discovered by *scanning* known roots, not by importing
-   a module.
-2. **Discovery is decoupled from availability.** Discovery is a filesystem scan
-   (no import, no install). Availability applies only to plugins that carry code
-   with third-party dependencies.
-3. **Declarative manifests** (infra bundles, app manifests, pipeline YAMLs) have
-   no code and no deps — they resolve by scan alone, with nothing installed.
-4. **Code plugins declare their deps** and are *discovered always* but *enabled
-   only when their deps import*. A missing dep surfaces a clear, actionable
-   message **at startup** — never deep inside a run.
-5. Dependencies are **opt-in** (never auto-installed on library install).
-   `mas-ctl plugin enable <urn>` installs a plugin's declared extra on demand.
+## The problem
 
-## `library.yaml` schema
+A library may ship plugins whose third-party dependencies are not installed. Importing every library at startup would fail on the first missing dependency. It would also hide the other libraries.
 
-At the root of every library folder:
+## Decision
+
+1. A **library is a folder tree with a `library.yaml` at its root**. It is not a Python package. The runtime discovers it by *scanning* known roots. It does not import a module.
+2. **Discovery is separate from availability.** Discovery is a filesystem scan. It imports no plugin and installs nothing. Availability applies only to plugins that carry code with third-party dependencies.
+3. **Declarative manifests** (infra bundles, app manifests, datasets, pipeline YAMLs) have no code and no dependencies. They resolve by scan alone.
+4. **Code plugins declare their dependencies.** The runtime always discovers them. It lets you use one only when its dependencies import. A missing dependency produces a clear, actionable message **at startup**, never deep inside a run.
+5. Dependencies are **opt-in**. Installing a library never installs them. `mas-ctl plugin enable <urn>` installs a plugin's declared extra on demand.
+
+## `library.yaml`
+
+Every library in the repository has a root `library.yaml`: `library-standard`, `library-samples`, `library-skills`, `library-eval`, `library-ioa`, `library-lab`, `library-telemetry`, and `library-kg`. The schema is [`docs/schemas/library.schema.yaml`](../schemas/library.schema.yaml). The runtime ships no central plugin catalog of its own.
+
+A trimmed example:
 
 ```yaml
-name: mas-library-kg
-description: "KG normalization, verification, neo4j."
+apiVersion: mas/v1
+kind: Library
+name: mas-library-telemetry
 version: "0.1.0"
-module_base: mas.library.kg          # optional; only for code plugins
+module_base: mas.library.telemetry   # optional; only for code plugins
 
-# Plugins provided by this library (folder-declared, discovered by scan).
+types:
+  - observability
+
 plugins:
-  design_patterns:
-    mas.dp.react:
-      module: mas.library.standard.plugins.design_patterns.react
-      class: ReactPlugin
-      shortcuts: [react, react@v1]
-      requires: []                   # runtime deps (import names); [] = always available
-  codecs:
-    mas.codec.kg-neo4j:
-      module: mas.library.kg.codecs
-      class: Neo4jKGCodec
-      artifact: kg
-      target: neo4j
-      requires: [neo4j]              # disabled unless `neo4j` imports
-      extra: "mas-library-kg[neo4j]" # what `mas-ctl plugin enable` installs
-
-# Declarative bundles — pure data, no deps, resolved by scan.
-infra:   { llm-proxy: libs/claris/llm-proxy.yaml }   # optional explicit catalog
+  - type: observability
+    name: otel
+    urn: mas.observability.otel
+    module: mas.library.telemetry.plugins.otel_plugin
+    class: OtelObservabilityPlugin
+    requires: [opentelemetry.sdk.trace]       # import names; omitted = always available
+    extra: "mas-library-telemetry[convert]"   # what `mas-ctl plugin enable` installs
 ```
 
-`infra`/`apps`/`pipelines` may be an explicit name→path catalog or resolved by
-directory convention (`libs/<lib>/<name>.yaml`, `infra/<name>.yaml`, …). The
-`requires`/`extra` keys apply only to code plugins.
+Other top-level keys: `schemes`, `description`, `dependencies`, `apps`, `datasets`, `tools`, `plugin_manifests`, `aliases`, `defaults`.
 
-## Discovery — scan, don't import
+`apps`, `datasets`, and `tools` may be an explicit name-to-path catalog. They may also resolve by directory convention, for example `apps/<name>/v<N>/`. `requires` and `extra` apply only to code plugins.
 
-`mas.runtime.library_roots` gains a scan that collects library roots from, in
-order:
+## Discovery: scan, do not import
 
-1. `MAS_LIBRARY_PATHS` (path-separated dirs) — local/dev libraries.
-2. Workspace members (when in a workspace checkout).
-3. `mas.runtime.manifest_libraries` entry points — but treated purely as a
-   **locator** for installed libraries (resolve the folder, then read its
-   `library.yaml`; do not rely on `package_root()` or importing plugin code).
+`mas.library_roots` collects library roots in this order. The first-seen name wins.
 
-For each root, read `library.yaml`; register its scheme (`name` tail / dir
-name), plugins, and declarative catalogs. No plugin code is imported during
-discovery. This is additive: the existing entry-point path keeps working, so
-`standard:`/`samples:` continue to resolve during the transition.
+1. **Lab-local** libraries from the enclosing `lab-config.yaml`.
+2. **Workspace config**: the `config.yaml` `manifest_libraries:` search folders.
+3. **Installed libraries**: the `mas.runtime.manifest_libraries` entry points. They serve only as a **locator** for the library folder. The runtime does not import plugin code to find it.
+4. **`MAS_LIBRARY_PATHS`**: path-separated directories for local and development libraries.
+5. **Ancestor walk** from the anchor or current directory, looking for a `library.yaml`. It stops at `.git`.
 
-A local, unpackaged plugin is therefore just a folder on `MAS_LIBRARY_PATHS`
-with a `library.yaml` — no `pip install`, no entry point.
+A local, unpackaged plugin library is therefore a folder with a `library.yaml` on one of these paths. It needs no `pip install` and no entry point. One library with a broken import never prevents discovery of the others.
 
 ## Availability gate
 
-`PluginRegistry` records each plugin's `requires`. Resolution:
+`PluginRegistry` records each plugin's `requires`.
 
-- `resolve()/get_instance()` on a plugin whose `requires` don't import raises
-  `PluginUnavailable(urn, missing=[...], extra="…")` with the exact install
-  hint. Discovery/listing still shows it (marked `disabled`, with reason).
-- **Startup validation:** when a spec/experiment is loaded, the plugins it
-  references have their `requires` checked immediately, so a missing dep fails
-  fast with the install hint rather than mid-run.
-- Declarative refs (infra/app/pipeline) are never gated — they have no deps.
+- Resolving or instantiating a plugin whose `requires` do not import raises `PluginUnavailable` (`mas.runtime.registry`). The error names the missing modules and the install hint. Listing still shows the plugin, marked `disabled`.
+- The gate never applies to declarative refs (infra, app, dataset, pipeline). They have no dependencies.
 
 ## `mas-ctl plugin` CLI
 
-- `mas-ctl plugin list [--type codec|design_pattern|…]` — every discovered plugin,
-  its library, `available|disabled`, and (if disabled) the missing deps + extra.
-- `mas-ctl plugin enable <urn>` — read the plugin's `extra` (or `requires`) and
-  install it into the active environment (`uv pip install <extra>`), then
-  re-check. Explicit and opt-in; nothing is auto-installed on library install.
-- `mas-ctl plugin doctor` — validate every referenced plugin's deps for a given
-  spec, printing install hints for anything disabled.
+- `mas-ctl plugin list [--type <category>] [--json]`: every discovered plugin, marked `available` or `disabled`. For a disabled plugin it shows the missing dependencies and the extra.
+- `mas-ctl plugin enable <urn>`: install the plugin's `extra` into the active environment, then re-check. This is explicit and opt-in.
+- `mas-ctl plugin doctor [MANIFEST...]`: check the plugins that the given spec or experiment files reference. With no files, check every registered plugin. Print install hints for anything disabled.
 
-## Library alignment
+## See also
 
-Each library (OSS: standard, samples; internal: kg, telemetry, claris, ioc,
-analysis, ioa, memory, openclaw) gets a root `library.yaml` with `plugins:` and
-declarative catalogs, and per-plugin `requires`/`extra`. The central runtime
-`plugin_registry.yaml` is retired (its content moves into `library-standard`),
-so the kernel ships no catalog — consistent with the pure-kernel work.
-
-## Backward compatibility & rollout
-
-- Phase 1 (done): scan discovery, the availability gate, and `mas-ctl plugin`
-  all shipped additively; entry-point discovery is still active alongside
-  them.
-- Phase 2 (future work): add `library.yaml` to every library; move
-  built-ins into `library-standard`; retire the central catalog.
-- Phase 3 (future work): flip resolution to scan-first; entry points
-  become locators only.
+- [Library discovery](../library-discovery.md)
+- [Libraries and labs](../labs-and-libraries.md)
+- [Schema index](../references/schemas.md)

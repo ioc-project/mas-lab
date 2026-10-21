@@ -1,146 +1,147 @@
-# KG Query Layer — Reference & Examples
+# KG query layer
 
-**Module:** `mas.library.kg.core.query`  
-**Top-level imports:** `from mas.library.kg import KGIndex, FacetQuery, KGSource, KGView`
+Four pure-Python classes that load, filter, index and search a knowledge graph (KG) in
+memory: `KGIndex`, `FacetQuery`, `KGSource` and `KGView`. Use them in notebooks,
+evaluation scripts and CI to slice a `kg.jsonld` file without Neo4j.
 
----
+**Module:** `mas.library.kg.core.query`.
+**Import:** `from mas.library.kg import KGIndex, FacetQuery, KGSource, KGView`.
 
-## Overview
+A `kg.jsonld` file records one multi-agent system (MAS) run as a `{nodes, edges}` JSON
+document: every `AgentCall`, `LLMCall`, `ToolCall` and supporting node, plus the edges for
+containment, delegation and state transitions. The query layer works on these raw dicts
+with the standard library only (`KGSource.from_file` also reads the file through
+`KGArtifact`). It opens no network connection.
 
-The `mas-library-kg` query layer provides four pure-Python classes for loading,
-filtering, indexing, and searching knowledge graphs produced by multi-agent system
-(MAS) executions. A *knowledge graph* (`kg.jsonld`) is the canonical record of a single
-agent run: it captures every AgentCall, LLMCall, ToolCall, and supporting node in a
-`{nodes, edges}` JSON document along with the edges that encode delegation, containment,
-and state-transition relationships. The query layer operates entirely on these raw dicts
-— no Neo4j driver, no network I/O, no external dependencies — making it fast to import
-and easy to embed in notebooks, evaluation scripts, and CI pipelines.
+Smallest example:
+
+```python
+from mas.library.kg import KGSource, KGIndex, FacetQuery
+
+sub = KGSource.from_file("kg.jsonld").subgraph(FacetQuery(agent_ids=["planner"]))
+idx = KGIndex.from_doc(sub)
+print(len(idx.llm_calls), "LLM calls by planner")
+```
+
+| Class | Use it to |
+|-------|-----------|
+| `KGSource` | Apply a `FacetQuery` to a document and get a filtered subgraph. |
+| `KGIndex` | Traverse edges: parents, children, delegation chains, the root call. |
+| `KGView` | Search nodes of one type by attribute values. |
+| `FacetQuery` | Describe a filter as a JSON-serializable value. |
+
+Contents: [Edge format note](#edge-format-note) · [KGIndex](#kgindex) ·
+[FacetQuery](#facetquery) · [KGSource](#kgsource) · [KGView](#kgview) ·
+[Common patterns](#common-patterns) · [Document structure](#full-kgjsonld-document-structure)
 
 ---
 
 ## Edge format note
 
-Edges in `kg.jsonld` documents may use one of three key conventions depending on which
-version of the event-normalization pipeline produced the file:
+`KGIndex` and `KGSource` accept three key conventions for edges, so older or hand-built
+files still load. Files written by the current pipeline use the canonical names.
 
 | Canonical (preferred) | Legacy alias | Second legacy alias |
 |-----------------------|--------------|---------------------|
 | `from_id`             | `source`     | `from`              |
 | `to_id`               | `target`     | `to`                |
-| `edge_type`           | `type`       | —                   |
+| `edge_type`           | `type`       | none                |
 
-All four classes in this module transparently handle every variant. When constructing
-your own dicts or tests, prefer `from_id` / `to_id` / `edge_type`. When filtering by
-edge type, always pass the `edge_type` string value (e.g. `"contains"`).
+`KGView` reads only nodes. When you build your own dicts or tests, use `from_id`,
+`to_id` and `edge_type`. Node types are read from `node_type` only (not `nodeType` or
+`type`). To filter by edge type, pass the `edge_type` string, for example `"hasLLMCall"`.
 
-Common edge types found in real KGs:
+Edge types come from the vocabulary of the Observe and eXplain Platform (OXP, the
+open-source observability platform whose `oxp-ontology` package is a hard dependency of
+this library and ships the ontology and SHACL shapes). Common edge types in a generated
+KG, verified on `examples/qa-agent/kg-native.jsonld` (direction is `from_id` to `to_id`):
 
-| Edge type        | Meaning                                           |
-|------------------|---------------------------------------------------|
-| `contains`       | Parent call contains a child call                 |
-| `hasCall`        | Session or Agent node links to an AgentCall       |
-| `leadsTo`        | One AgentCall delegates to the next               |
-| `contributesTo`  | A ContextContribution flows into a call           |
-| `annotates`      | A CallAnnotation annotates a call node            |
-| `realizes`       | A Transition realizes an AgentCall                |
-| `fromState`      | Transition's origin State                         |
-| `toState`        | Transition's destination State                    |
-| `ofToolType`     | ToolCall links to its catalog Tool node           |
-| `ofLLMType`      | LLMCall links to its catalog LLM node             |
-| `invokesSkill`   | ToolCall that invokes a skill                     |
-| `executedBy`     | Call executed by a Worker                         |
+| Edge type | Meaning |
+|-----------|---------|
+| `hasMASCall` | Session to MASCall |
+| `hasAgentCall` | MASCall (or a parent AgentCall) to AgentCall |
+| `hasLLMCall` | AgentCall to LLMCall |
+| `hasToolCall` | Parent call to ToolCall |
+| `hasProcessingCall` | Parent call to ProcessingCall |
+| `hasMemoryCall`, `hasSkillCall`, `hasRAGQuery` | Parent call to memory, skill or RAG call |
+| `annotates` | CallAnnotation to the call it annotates |
+| `contributesTo` | ContextContribution to the call it flows into |
+| `hasState` | Agent or call to State |
+| `hasInitialState`, `hasFinalState` | Call to its first or last State |
+| `leadsTo` | State to the next State (via a Transition) |
+| `inputTo` | State to the Transition that consumes it |
+| `correspondsToTransition` | Call or annotation to the Transition it corresponds to |
+| `executes`, `executesAgent`, `executesLLM`, `executesMAS`, `executesSession` | Execution record to the entity it runs |
+| `usesLLM` | AgentCall to LLM catalog node |
+| `callsAgent` | ToolCall (delegation) to target Agent |
+
+The edge types present depend on the layers in the run. List the ones in your graph with
+`collections.Counter(e["edge_type"] for e in kg_doc["edges"])`.
 
 ---
 
 ## `KGIndex`
 
-### Purpose
+An in-memory graph index with O(1) lookups. It indexes nodes by `id` and `node_type`, and
+edges by source and target, so typed lookups and adjacency queries never scan the lists.
+Use it to walk parent and child relationships, follow delegation chains and find the root
+of an execution tree.
 
-`KGIndex` is a lightweight, O(1) in-memory graph index. It pre-indexes all nodes by
-`id` and `node_type`, and all edges by their source and target, so that typed lookups
-and adjacency queries never require a linear scan. It is the right tool when you need
-to traverse the graph (walk parent/child relationships, follow delegation chains, find
-the root of an execution tree).
+`KGIndex` does not filter. It holds every node and edge you pass in. To filter first, use
+`KGSource` and pass the result to `KGIndex.from_doc`.
 
-`KGIndex` does not filter — it always holds all nodes and edges passed to it. Use
-`KGSource` to produce a filtered subgraph first, then hand the result to `KGIndex`.
+| Constructor | Description |
+|-------------|-------------|
+| `KGIndex(nodes: list[dict], edges: list[dict])` | Build from raw lists. |
+| `KGIndex.from_doc(doc: dict)` | Build from a `kg.jsonld` dict (reads `doc["nodes"]` and `doc["edges"]`). |
 
-### Constructors
+| Property | Type | Description |
+|----------|------|-------------|
+| `session` | `dict \| None` | The single `Session` node, or `None`. |
+| `agent_calls` | `list[dict]` | All `AgentCall` nodes. |
+| `llm_calls` | `list[dict]` | All `LLMCall` nodes. |
+| `tool_calls` | `list[dict]` | All `ToolCall` nodes. |
+| `calls_by_time` | `list[dict]` | All AgentCall, LLMCall, ToolCall and ProcessingCall nodes sorted by `startTime` ascending. |
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `KGIndex(nodes, edges)` | `__init__(nodes: list[dict], edges: list[dict])` | Build from raw lists. |
-| `KGIndex.from_doc(doc)` | `classmethod(doc: dict) -> KGIndex` | Build from a `kg.jsonld` dict (reads `doc["nodes"]` and `doc["edges"]`). |
+| Method | Description |
+|--------|-------------|
+| `nodes_of_type(ntype: str) -> list[dict]` | All nodes whose `node_type` equals `ntype`; `[]` if none. |
+| `node(nid: str) -> dict \| None` | Exact lookup by `id`. |
+| `out_neighbors(nid, edge_type=None) -> list[dict]` | Nodes reachable from `nid`, optionally restricted to one `edge_type`. |
+| `in_neighbors(nid, edge_type=None) -> list[dict]` | Nodes with an edge into `nid`, optionally restricted to one `edge_type`. |
+| `find_root_agent_call(agent_id=None) -> dict \| None` | Outermost AgentCall. Without `agent_id`, the AgentCall with no `parentCallId`. With `agent_id`, the earliest AgentCall of that agent, falling back to the globally earliest AgentCall if the agent is not found. |
 
-### Properties
-
-| Property | Return type | Description |
-|----------|-------------|-------------|
-| `session` | `dict \| None` | The single `Session` node, or `None` if absent. |
-| `agent_calls` | `list[dict]` | All nodes with `node_type == "AgentCall"`. |
-| `llm_calls` | `list[dict]` | All nodes with `node_type == "LLMCall"`. |
-| `tool_calls` | `list[dict]` | All nodes with `node_type == "ToolCall"`. |
-| `calls_by_time` | `list[dict]` | All AgentCall, LLMCall, ToolCall, and ProcessingCall nodes sorted by `startTime` ascending. |
-
-### Methods
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `nodes_of_type` | `(ntype: str) -> list[dict]` | All nodes whose `node_type` equals `ntype`. Returns `[]` if none found. |
-| `node` | `(nid: str) -> dict \| None` | Exact node lookup by `id`. Returns `None` if not found. |
-| `out_neighbors` | `(nid: str, edge_type: str \| None = None) -> list[dict]` | Nodes reachable from `nid`. Optionally restrict by `edge_type`. |
-| `in_neighbors` | `(nid: str, edge_type: str \| None = None) -> list[dict]` | Nodes with an edge pointing into `nid`. Optionally restrict by `edge_type`. |
-| `find_root_agent_call` | `(agent_id: str \| None = None) -> dict \| None` | Find the outermost AgentCall. Without `agent_id`, returns the AgentCall with no `parentCallId`. With `agent_id`, returns the earliest AgentCall for that agent. Falls back to the globally earliest AgentCall if the `agent_id` is not found. |
-
-### Examples
-
-**Example 1 — Load and inspect a KG**
+**Load and inspect** (values are what the bundled `qa-agent` example prints):
 
 ```python
 import json
 from mas.library.kg import KGIndex
 
-with open("path/to/kg.jsonld") as f:
+with open("library-kg/examples/qa-agent/kg-native.jsonld") as f:
     kg_doc = json.load(f)
 
 idx = KGIndex.from_doc(kg_doc)
-
-print("Session ID:", idx.session["sessionId"] if idx.session else "none")
-print("AgentCalls:", len(idx.agent_calls))
-print("LLMCalls:  ", len(idx.llm_calls))
-print("ToolCalls: ", len(idx.tool_calls))
+print("Session ID:", idx.session["sessionId"] if idx.session else "none")  # session-t8-native
+print("AgentCalls:", len(idx.agent_calls))   # 1
+print("LLMCalls:  ", len(idx.llm_calls))     # 1
+print("ToolCalls: ", len(idx.tool_calls))    # 0
 ```
 
-**Example 2 — Walk the call tree from the root**
+**Walk the containment tree.** `out_neighbors` takes one edge type, so a helper collects
+children over the containment edge types:
 
 ```python
-from mas.library.kg import KGIndex
+CONTAINS = ("hasAgentCall", "hasLLMCall", "hasToolCall", "hasProcessingCall")
 
-idx = KGIndex.from_doc(kg_doc)
-
-root = idx.find_root_agent_call()
-print(f"Root agent: {root['agentId']}  id={root['id']}")
-
-# Direct children of the root AgentCall
-children = idx.out_neighbors(root["id"], edge_type="contains")
-for child in children:
-    print(f"  {child['node_type']}  {child['id']}  agent={child.get('agentId','')}")
-```
-
-**Example 3 — Traverse a delegation chain**
-
-```python
-from mas.library.kg import KGIndex
-
-idx = KGIndex.from_doc(kg_doc)
+def children(nid: str) -> list[dict]:
+    return [c for et in CONTAINS for c in idx.out_neighbors(nid, edge_type=et)]
 
 def walk(nid: str, depth: int = 0) -> None:
     node = idx.node(nid)
     if node is None:
         return
-    indent = "  " * depth
-    print(f"{indent}{node['node_type']}  {node.get('agentId', '')}  id={nid}")
-    for child in idx.out_neighbors(nid, edge_type="contains"):
+    print("  " * depth + f"{node['node_type']}  {node.get('agentId', '')}  id={nid}")
+    for child in children(nid):
         walk(child["id"], depth + 1)
 
 root = idx.find_root_agent_call()
@@ -148,48 +149,21 @@ if root:
     walk(root["id"])
 ```
 
-**Example 4 — Find the parent call for every ToolCall**
+**Find the parent of every ToolCall:**
 
 ```python
-from mas.library.kg import KGIndex
-
-idx = KGIndex.from_doc(kg_doc)
-
 for tc in idx.tool_calls:
-    parents = idx.in_neighbors(tc["id"], edge_type="contains")
-    parent_label = parents[0]["id"] if parents else "—"
-    print(f"{tc.get('toolName','?'):30s}  parent={parent_label}")
-```
-
-**Example 5 — List all calls in chronological order**
-
-```python
-from mas.library.kg import KGIndex
-import datetime
-
-idx = KGIndex.from_doc(kg_doc)
-
-for call in idx.calls_by_time:
-    ts = call.get("startTime") or 0
-    dt = datetime.datetime.fromtimestamp(ts).isoformat(timespec="seconds")
-    print(f"{dt}  {call['node_type']:15s}  {call.get('agentId',''):20s}  {call['id'][:8]}")
+    parents = idx.in_neighbors(tc["id"], edge_type="hasToolCall")
+    print(f"{tc.get('toolName', '?'):30s}  parent={parents[0]['id'] if parents else '-'}")
 ```
 
 ---
 
 ## `FacetQuery`
 
-### Purpose
-
-`FacetQuery` is a lightweight, immutable dataclass that describes a filter to be applied
-to a `kg.jsonld` document. It is the parameter type consumed by `KGSource.subgraph()` and
-`KGSource.load()`. All fields are optional; an omitted field (or `None`) means "no
-constraint on that dimension."
-
-`FacetQuery` is JSON-serializable through `to_dict()` / `from_dict()`, which makes it
-easy to store alongside experiment configs or pass over a network API.
-
-### Constructor
+A mutable dataclass (treat it as a value) that describes a filter for a `kg.jsonld`
+document. `KGSource.subgraph()` and `KGSource.load()` consume it. Every field is optional;
+`None` means no constraint on that dimension.
 
 ```python
 @dataclass
@@ -203,239 +177,104 @@ class FacetQuery:
     time_range:  tuple[float, float] | None = None
 ```
 
-### Fields
+| Field | Description |
+|-------|-------------|
+| `session_id` | Keep nodes whose `sessionId` matches (case-insensitive). Nodes without a `sessionId` are kept. |
+| `run_id` | Keep nodes whose `runId` matches (case-insensitive). Nodes without a `runId` are kept. |
+| `agent_ids` | Keep call nodes whose `agentId` is in the list (case-insensitive). Non-call nodes are kept. |
+| `call_types` | Node-type whitelist restricted to the known call types (below); other names are ignored. `["LLMCall", "ToolCall"]` keeps only those two types and drops every other node, including non-call nodes. |
+| `node_types` | Explicit node-type whitelist (any type). Unioned with `call_types` when both are set. |
+| `edge_types` | Keep edges whose `edge_type` is in the list. Applied after node filtering; dangling edges are always removed. |
+| `time_range` | `(t0, t1)` in Unix epoch seconds. Keep nodes whose window `[startTime, endTime]` overlaps `[t0, t1]`. A missing `endTime` falls back to `startTime`; a missing `startTime` counts as 0, so such nodes are dropped unless `t0 <= 0`. |
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `session_id` | `str \| None` | Keep only nodes whose `sessionId` matches (case-insensitive). Nodes with no `sessionId` field are always kept. |
-| `run_id` | `str \| None` | Keep only nodes whose `runId` matches (case-insensitive). Nodes with no `runId` field are always kept. |
-| `agent_ids` | `list[str] \| None` | Keep only call nodes whose `agentId` is in this list (case-insensitive). Non-call nodes are always kept. |
-| `call_types` | `list[str] \| None` | Convenience alias for node-type filtering restricted to known call types. E.g. `["LLMCall", "ToolCall"]` keeps those call types and drops other call types, but leaves all non-call nodes unchanged. |
-| `node_types` | `list[str] \| None` | Explicit node_type whitelist. Merged with `call_types` when both are set. |
-| `edge_types` | `list[str] \| None` | Keep only edges whose `edge_type` is in this list. Applied after node filtering; dangling edges are always removed. |
-| `time_range` | `tuple[float, float] \| None` | `(t0, t1)` in Unix epoch seconds. Keep nodes whose time window `[startTime, endTime]` overlaps `[t0, t1]`. |
-
-### Methods
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `to_dict` | `() -> dict` | Serialize to a plain dict. Fields that are `None` are omitted. |
-| `FacetQuery.from_dict` | `classmethod(d: dict) -> FacetQuery` | Deserialize from a dict. Accepts both `snake_case` and `camelCase` key names. |
+| Method | Description |
+|--------|-------------|
+| `to_dict() -> dict` | Serialize to a plain dict; `None` fields are omitted. |
+| `FacetQuery.from_dict(d: dict)` | Deserialize. Accepts `snake_case` and `camelCase` keys. |
 
 ### `call_types` vs `node_types`
 
-`call_types` is a convenience field that maps directly to node type names but applies
-only within the set of recognized call node types:
-
-```
-AgentCall, LLMCall, ToolCall, SkillCall,
-ProcessingCall, ThinkingCall, MITMCall, MASCall, TaskCall
-```
-
-When you pass `call_types=["LLMCall", "ToolCall"]`, non-call nodes (Session, State,
-Transition, Agent, Tool, …) are not filtered out. This makes it safe to extract a
-"calls only" view without accidentally stripping the structural backbone.
-
-When both `call_types` and `node_types` are set, their allowed type sets are unioned.
-
-### Examples
-
-**Example 1 — Filter by session and agent**
+The recognised call types are `AgentCall`, `LLMCall`, `ToolCall`, `SkillCall`,
+`ProcessingCall`, `ThinkingCall`, `MITMCall`, `MASCall` and `TaskCall`. With
+`call_types=["LLMCall", "ToolCall"]` the type whitelist is exactly those two types, so
+Session, State, Transition, Agent and the other call types are removed. To keep
+structural nodes, add them through `node_types`:
 
 ```python
-from mas.library.kg import FacetQuery
+FacetQuery(call_types=["LLMCall"], node_types=["Session", "Agent"])
+```
 
+Passing only unrecognised names in `call_types` (for example `["Foo"]`) gives an empty
+whitelist and an empty subgraph. `agent_ids` is the opposite: it filters call nodes only
+and keeps every non-call node that survived the type whitelist.
+
+```python
 q = FacetQuery(
     session_id="session-abc-123",
     agent_ids=["orchestrator", "analyst"],
-)
-```
-
-**Example 2 — LLM and Tool calls only in a time window**
-
-```python
-from mas.library.kg import FacetQuery
-
-q = FacetQuery(
     call_types=["LLMCall", "ToolCall"],
     time_range=(1_716_000_000.0, 1_716_000_060.0),
 )
+
+# Round trip; both key styles load (a JavaScript client may send camelCase)
+q1 = FacetQuery(session_id="s1", agent_ids=["cra"], time_range=(0.0, 100.0))
+d = q1.to_dict()   # {'session_id': 's1', 'agent_ids': ['cra'], 'time_range': (0.0, 100.0)}
+assert FacetQuery.from_dict(d) == q1                       # time_range stays a tuple; json.dump writes a list
+q2 = FacetQuery.from_dict({"sessionId": "s1", "agentIds": ["cra"], "timeRange": [0.0, 100.0]})
 ```
 
-**Example 3 — Serialize and deserialize (snake_case and camelCase both work)**
-
-```python
-from mas.library.kg import FacetQuery
-
-q = FacetQuery(session_id="s1", agent_ids=["cra"], time_range=(0.0, 100.0))
-d = q.to_dict()
-# {"session_id": "s1", "agent_ids": ["cra"], "time_range": [0.0, 100.0]}
-
-# Round-trip with snake_case keys
-q2 = FacetQuery.from_dict(d)
-assert q2 == q
-
-# Also works with camelCase (e.g., from a JavaScript client)
-q3 = FacetQuery.from_dict({"sessionId": "s1", "agentIds": ["cra"], "timeRange": [0.0, 100.0]})
-assert q3.session_id == "s1"
-```
-
-**Example 4 — Restrict to specific edge types**
-
-```python
-from mas.library.kg import FacetQuery
-
-# Keep only containment edges (drops contributesTo, annotates, etc.)
-q = FacetQuery(edge_types=["contains", "hasCall"])
-```
-
-**Example 5 — Store a query config in JSON**
-
-```python
-import json
-from mas.library.kg import FacetQuery
-
-config = {
-    "sessionId": "my-session",
-    "callTypes": ["AgentCall", "LLMCall"],
-    "timeRange": [1_716_000_000.0, 1_716_003_600.0],
-}
-
-# Save to disk
-with open("filter.json", "w") as f:
-    json.dump(config, f, indent=2)
-
-# Reload later
-with open("filter.json") as f:
-    q = FacetQuery.from_dict(json.load(f))
-```
+To store a preset, `json.dump` a dict such as
+`{"sessionId": "my-session", "callTypes": ["AgentCall", "LLMCall"]}` and reload it with
+`FacetQuery.from_dict(json.load(f))`.
 
 ---
 
 ## `KGSource`
 
-### Purpose
+The data-access layer. It applies a `FacetQuery` to a `kg.jsonld` dict and returns a
+filtered subgraph with the same top-level keys as the input (`@context`, `nodes`,
+`edges`, `metadata`; `nodes` and `edges` replaced). Use it to narrow a full execution
+trace to a relevant slice before analysis or indexing. It builds no index and is cheap to
+construct.
 
-`KGSource` is the data-access layer that applies a `FacetQuery` to a `kg.jsonld` document
-and returns a filtered `{nodes, edges, run_id, meta}` subgraph dict. It is the entry
-point for any pipeline that needs to narrow a full execution trace to a relevant slice
-before further analysis or indexing.
+| Constructor | Description |
+|-------------|-------------|
+| `KGSource(kg: dict)` | Wrap an already-loaded `kg.jsonld` dict. |
+| `KGSource.from_file(path: str \| Path)` | Read a `*.jsonld` file via `KGArtifact` (see [steps.md](steps.md#kgartifact)). Other suffixes raise `ValueError`. Expands `~` and resolves symlinks. |
 
-Unlike `KGIndex`, `KGSource` does not build any in-memory index — it operates directly
-on the raw lists and is inexpensive to construct.
+| Method | Description |
+|--------|-------------|
+| `subgraph(query: FacetQuery \| None = None) -> dict` | Filtered copy of the document. With `query=None`, a shallow copy of the full document. |
+| `load(query: FacetQuery \| None = None) -> tuple[list[dict], list[dict]]` | Returns `(nodes, edges)` after applying the query. |
 
-### Constructors
+**Filtering order.** A node must survive every active filter. Edges are filtered last, and
+an edge whose source or target was removed is dropped.
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `KGSource(kg_doc)` | `__init__(kg: dict)` | Wrap an already-loaded `kg.jsonld` dict. |
-| `KGSource.from_file(path)` | `classmethod(path: str \| Path) -> KGSource` | Read a `kg.jsonld` file from disk (UTF-8). Expands `~` and resolves symlinks. |
-
-### Methods
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `subgraph` | `(query: FacetQuery \| None = None) -> dict` | Return a filtered `{nodes, edges, run_id, meta}` dict. With `query=None` returns the full document (shallow copy). |
-| `load` | `(query: FacetQuery \| None = None) -> tuple[list[dict], list[dict]]` | Convenience wrapper: returns `(nodes, edges)` after applying the query. |
-
-### Filtering order
-
-Filters are applied sequentially in a fixed order. A node must survive every active
-filter to remain in the output. Edges are always filtered last and any edge whose
-source or target was removed by a prior step is dropped automatically.
-
-```
-1. node_types / call_types  — node-type whitelist
-2. agent_ids                — call nodes must match agentId
-3. session_id               — nodes with sessionId must match
-4. run_id                   — nodes with runId must match
-5. time_range               — startTime/endTime must overlap window
-6. edge_types               — edge-type whitelist
-7. dangling edge removal    — edges with missing endpoints are dropped
-```
-
-### Examples
-
-**Example 1 — Load from file and extract a full subgraph**
-
-```python
-from mas.library.kg import KGSource
-
-src = KGSource.from_file("/data/runs/run-001/kg.jsonld")
-sub = src.subgraph()
-
-print(f"Nodes: {len(sub['nodes'])}  Edges: {len(sub['edges'])}")
-```
-
-**Example 2 — Filter to calls from a single agent**
-
-```python
-from mas.library.kg import KGSource, FacetQuery
-
-src = KGSource.from_file("kg.jsonld")
-nodes, edges = src.load(
-    FacetQuery(
-        agent_ids=["moderator"],
-        call_types=["AgentCall", "LLMCall", "ToolCall"],
-    )
-)
-
-print(f"Kept {len(nodes)} call nodes from agent 'moderator'")
-```
-
-**Example 3 — Slice a time window for replay analysis**
+1. `node_types` / `call_types`: node-type whitelist.
+2. `agent_ids`: call nodes must match `agentId` (case-insensitive).
+3. `session_id`: nodes with a `sessionId` must match; nodes without one are kept.
+4. `run_id`: nodes with a `runId` must match; nodes without one are kept.
+5. `time_range`: `startTime` / `endTime` must overlap the window.
+6. `edge_types`: edge-type whitelist.
+7. Dangling edge removal.
 
 ```python
 from mas.library.kg import KGSource, FacetQuery
 
 src = KGSource.from_file("kg.jsonld")
 
-# Examine only the first 30 seconds of the run
-sub = src.subgraph(FacetQuery(time_range=(1_716_000_000.0, 1_716_000_030.0)))
-print(f"Nodes in first 30 s: {len(sub['nodes'])}")
-```
-
-**Example 4 — Extract only structural nodes (no call nodes)**
-
-```python
-from mas.library.kg import KGSource, FacetQuery
-
-src = KGSource.from_file("kg.jsonld")
-
-sub = src.subgraph(
-    FacetQuery(node_types=["Session", "Agent", "State", "Transition"])
-)
-print("Structural node types:", {n["node_type"] for n in sub["nodes"]})
-```
-
-**Example 5 — Chain two filters: agents then time**
-
-```python
-from mas.library.kg import KGSource, FacetQuery
-
-src = KGSource.from_file("kg.jsonld")
-
-# A single FacetQuery applies all active filters in one pass
-q = FacetQuery(
+# All active filters apply in one pass
+nodes, edges = src.load(FacetQuery(
     agent_ids=["orchestrator"],
     call_types=["LLMCall"],
     time_range=(1_716_000_010.0, 1_716_000_050.0),
-)
-nodes, edges = src.load(q)
+))
 
-print(f"LLMCalls from orchestrator in window: {len(nodes)}")
-```
+# Structural nodes only
+sub = src.subgraph(FacetQuery(node_types=["Session", "Agent", "State", "Transition"]))
 
-**Example 6 — Keep only containment edges and inspect**
-
-```python
-from mas.library.kg import KGSource, FacetQuery
-
-src = KGSource.from_file("kg.jsonld")
-sub = src.subgraph(FacetQuery(edge_types=["contains"]))
-
-print(f"Edges remaining after edge_types filter: {len(sub['edges'])}")
-# All remaining edges will have edge_type == "contains"
+# One edge type; every remaining edge has edge_type == "hasLLMCall"
+sub = src.subgraph(FacetQuery(edge_types=["hasLLMCall"]))
 for e in sub["edges"][:5]:
     print(e["from_id"], "->", e["to_id"])
 ```
@@ -444,368 +283,185 @@ for e in sub["edges"][:5]:
 
 ## `KGView`
 
-### Purpose
+An equality-based search over a flat list of nodes: "all nodes of type X where field Y
+equals Z". Use it to explore node attributes; combine it with `KGIndex` to traverse
+edges. It indexes nodes by `node_type` and `id` at construction time.
 
-`KGView` is a predicate-based search layer over a flat list of KG nodes. It is
-optimized for repeated queries of the form "give me all nodes of type X where field Y
-equals Z." It is the right tool when you are exploring or analyzing node attributes
-rather than traversing edges. For edge traversal, combine it with `KGIndex`.
+| Constructor | Description |
+|-------------|-------------|
+| `KGView(nodes: list[dict])` | Build from a raw list of node dicts. |
+| `KGView.from_kg(kg: dict)` | Build from a `kg.jsonld` dict (reads `kg["nodes"]`). |
 
-`KGView` pre-indexes nodes by `node_type` and `id` at construction time, so individual
-`query()` and `get()` calls are fast.
+| Method | Description |
+|--------|-------------|
+| `query(node_type: str, **field_filters) -> list[dict]` | Nodes of `node_type` matching every keyword filter, sorted by `startTime` ascending. |
+| `get(node_id: str \| None) -> dict \| None` | Node by `id`. `None` returns `None`. |
+| `types() -> list[str]` | The `node_type` values present in the view. |
 
-### Constructors
+Each keyword filter of `query()` is matched against the node field, and all filters must
+match (logical AND). With no filters, `query()` returns every node of the type.
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `KGView(nodes)` | `__init__(nodes: list[dict])` | Build from a raw list of node dicts. |
-| `KGView.from_kg(kg_doc)` | `classmethod(kg: dict) -> KGView` | Build from a `kg.jsonld` dict (reads `kg["nodes"]`). |
-
-### Methods
-
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `query` | `(node_type: str, **field_filters) -> list[dict]` | Return all nodes of `node_type` matching every keyword filter. Results are sorted by `startTime` ascending. |
-| `get` | `(node_id: str \| None) -> dict \| None` | Return the node with the given `id`, or `None`. Passing `None` also returns `None`. |
-| `types` | `() -> list[str]` | Return all `node_type` values present in this view. |
-
-### `query()` field filter semantics
-
-Each keyword argument to `query()` is matched against the corresponding field of the
-node dict:
-
-| Filter value type | Matching behavior |
-|-------------------|-------------------|
-| `str` | Case-insensitive equality: `str(field_value).lower() == filter_value.lower()` |
-| `None` | Field is absent or empty string: `field_value in (None, "")` |
-| Any callable | Called as `predicate(field_value)` — return `True` to keep the node |
-| Any other type | Strict equality: `field_value == filter_value` |
-
-All filters must match simultaneously (logical AND). Passing no keyword arguments
-returns all nodes of the specified type.
-
-### Examples
-
-**Example 1 — All LLM calls in chronological order**
+| Filter value | Matching |
+|--------------|----------|
+| `str` | Case-insensitive equality: `str(field_value).lower() == filter_value.lower()`. |
+| `None` | The field is absent or an empty string. |
+| Any other type (int, float, bool, list, ...) | Strict equality. Callables are not predicates; filter in Python instead. |
 
 ```python
 from mas.library.kg import KGView
 
 view = KGView.from_kg(kg_doc)
 
-for call in view.query("LLMCall"):
+for call in view.query("LLMCall"):                       # chronological
     print(call["id"], call.get("modelName"), call.get("startTime"))
+
+sre_tools = view.query("ToolCall", agentId="sre")        # "SRE" and "sre" both match
+
+# Predicates run in Python: LLMCalls with a prompt over 500 characters
+long_inputs = [n for n in view.query("LLMCall")
+               if isinstance(n.get("prompt"), str) and len(n["prompt"]) > 500]
+
+for t in sorted(view.types()):                           # node types present
+    print(f"{t:25s}  {len(view.query(t)):4d}")
+
+node = view.get("agentcall:t8-native:agent:agent-u1-exec")   # a node id, not a callId
 ```
 
-**Example 2 — Root AgentCalls (no parentCallId)**
-
-```python
-from mas.library.kg import KGView
-
-view = KGView.from_kg(kg_doc)
-
-# Passing None matches fields that are absent or empty string
-root_calls = view.query("AgentCall", parentCallId=None)
-print(f"Root agent calls: {len(root_calls)}")
-```
-
-**Example 3 — Tool calls for a specific agent (case-insensitive)**
-
-```python
-from mas.library.kg import KGView
-
-view = KGView.from_kg(kg_doc)
-
-# "SRE", "sre", "Sre" all match
-sre_tools = view.query("ToolCall", agentId="sre")
-for tc in sre_tools:
-    print(f"  {tc.get('toolName'):30s}  {tc['id'][:8]}")
-```
-
-**Example 4 — Find calls matching a custom predicate**
-
-```python
-from mas.library.kg import KGView
-
-view = KGView.from_kg(kg_doc)
-
-# LLMCalls whose input was longer than 500 characters
-long_inputs = view.query(
-    "LLMCall",
-    inputContent=lambda v: isinstance(v, str) and len(v) > 500,
-)
-print(f"Long-context LLM calls: {len(long_inputs)}")
-```
-
-**Example 5 — Inspect present node types**
-
-```python
-from mas.library.kg import KGView
-
-view = KGView.from_kg(kg_doc)
-
-print("Node types in this KG:")
-for t in sorted(view.types()):
-    count = len(view.query(t))
-    print(f"  {t:25s}  {count:4d}")
-```
-
-**Example 6 — Get a specific node by ID**
-
-```python
-from mas.library.kg import KGView
-
-view = KGView.from_kg(kg_doc)
-
-call_id = "c608346f-9c67-45e7-bfb9-de37ddf3e722"
-node = view.get(call_id)
-if node:
-    print(f"Found: {node['node_type']}  agent={node.get('agentId')}")
-else:
-    print("Node not found")
-```
+**Root AgentCalls.** `parentCallId` holds the parent's `callId`, not its node `id`. In a
+generated KG every AgentCall sits under a MASCall, so its `parentCallId` is the MASCall's
+`callId`. `view.query("AgentCall", parentCallId=None)` therefore returns an empty list on
+generated KGs and is useful on hand-built or older ones. Use
+`KGIndex.find_root_agent_call()` for the outermost AgentCall in either case.
 
 ---
 
 ## Common patterns
 
-### Pattern 1 — Filter with KGSource, then index with KGIndex
-
-`KGSource` and `KGIndex` complement each other: `KGSource` narrows the data, `KGIndex`
-makes it traversable. The handoff is a plain subgraph dict.
+**Filter with `KGSource`, then index with `KGIndex`.** `KGSource` narrows the data and
+`KGIndex` makes it traversable. The hand-off is a plain subgraph dict.
 
 ```python
 from mas.library.kg import KGSource, KGIndex, FacetQuery
 
-# Step 1: load and filter
-src = KGSource.from_file("kg.jsonld")
-sub = src.subgraph(
+sub = KGSource.from_file("kg.jsonld").subgraph(
     FacetQuery(agent_ids=["orchestrator"], call_types=["AgentCall", "LLMCall", "ToolCall"])
 )
-
-# Step 2: index the filtered subgraph for graph traversal
 idx = KGIndex.from_doc(sub)
-
 root = idx.find_root_agent_call("orchestrator")
-print(f"Orchestrator root call: {root['id']}")
-
-children = idx.out_neighbors(root["id"], edge_type="contains")
-print(f"Direct children: {len(children)}")
+print(len(idx.out_neighbors(root["id"], edge_type="hasLLMCall")), "direct LLM calls")
 ```
 
-### Pattern 2 — Filter with KGSource, then query attributes with KGView
-
-When you don't need to traverse edges but want to search and filter nodes by their
-fields, hand the subgraph to `KGView`.
-
-```python
-from mas.library.kg import KGSource, KGView, FacetQuery
-
-src = KGSource.from_file("kg.jsonld")
-sub = src.subgraph(FacetQuery(time_range=(1_716_000_000.0, 1_716_000_300.0)))
-
-view = KGView(sub["nodes"])
-
-# Find all tool calls to "search" in this time window
-search_calls = view.query("ToolCall", toolName="search")
-print(f"'search' tool calls in first 5 min: {len(search_calls)}")
-```
-
-### Pattern 3 — Use KGIndex and KGView together for annotated traversal
-
-Build both from the same (optionally filtered) subgraph and use each for what it's
-good at: `KGIndex` for edges, `KGView` for node lookups.
+**Filter, then search attributes with `KGView`.** `KGIndex` and `KGView` can share one
+subgraph: `KGIndex` for edges, `KGView` for node lookups.
 
 ```python
 from mas.library.kg import KGSource, KGIndex, KGView, FacetQuery
 
-src = KGSource.from_file("kg.jsonld")
-sub = src.subgraph()
+sub = KGSource.from_file("kg.jsonld").subgraph(
+    FacetQuery(time_range=(1_716_000_000.0, 1_716_000_300.0))
+)
+idx, view = KGIndex.from_doc(sub), KGView(sub["nodes"])
 
-idx = KGIndex.from_doc(sub)
-view = KGView(sub["nodes"])
-
-# Walk each AgentCall and report its LLM children
+print(len(view.query("ToolCall", toolName="search")), "search calls in the window")
 for agent_call in view.query("AgentCall"):
-    llm_children = [
-        n for n in idx.out_neighbors(agent_call["id"], edge_type="contains")
-        if n.get("node_type") == "LLMCall"
-    ]
+    llm_children = idx.out_neighbors(agent_call["id"], edge_type="hasLLMCall")
     print(f"{agent_call['agentId']:20s}  LLM calls: {len(llm_children)}")
 ```
 
-### Pattern 4 — Multi-agent comparative analysis
-
-Compare how much each agent contributed in a single run by slicing per agent.
+**Compare agents.** Slice per agent and count calls:
 
 ```python
-from mas.library.kg import KGSource, KGView, FacetQuery
-
 src = KGSource.from_file("kg.jsonld")
-
-# Discover which agents appear in this KG
-full_view = KGView.from_kg(src.subgraph())
-all_agents = {n.get("agentId") for n in full_view.query("AgentCall") if n.get("agentId")}
+all_agents = {n.get("agentId") for n in KGView.from_kg(src.subgraph()).query("AgentCall")
+              if n.get("agentId")}
 
 for agent_id in sorted(all_agents):
-    nodes, _ = src.load(
-        FacetQuery(
-            agent_ids=[agent_id],
-            call_types=["AgentCall", "LLMCall", "ToolCall"],
-        )
-    )
-    agent_view = KGView(nodes)
-    print(
-        f"{agent_id:20s}  "
-        f"AgentCalls={len(agent_view.query('AgentCall'))}  "
-        f"LLMCalls={len(agent_view.query('LLMCall'))}  "
-        f"ToolCalls={len(agent_view.query('ToolCall'))}"
-    )
+    nodes, _ = src.load(FacetQuery(agent_ids=[agent_id],
+                                   call_types=["AgentCall", "LLMCall", "ToolCall"]))
+    v = KGView(nodes)
+    print(f"{agent_id:20s}  AgentCalls={len(v.query('AgentCall'))}  "
+          f"LLMCalls={len(v.query('LLMCall'))}  ToolCalls={len(v.query('ToolCall'))}")
 ```
 
-### Pattern 5 — FacetQuery round-trip with a config file
-
-Store filter presets in JSON and restore them at runtime. Useful for reproducible
-evaluation scripts that need consistent filtering across multiple runs.
+**Apply one stored filter to many runs:**
 
 ```python
 import json
-from mas.library.kg import KGSource, FacetQuery
+from pathlib import Path
 
-# Load a stored filter preset (camelCase from a JS-generated config is fine)
 with open("experiment-filter.json") as f:
-    preset = json.load(f)  # e.g. {"agentIds": ["cra"], "callTypes": ["LLMCall"]}
-
-q = FacetQuery.from_dict(preset)
+    q = FacetQuery.from_dict(json.load(f))   # e.g. {"agentIds": ["cra"], "callTypes": ["LLMCall"]}
 
 for run_path in sorted(Path("runs/").glob("*/kg.jsonld")):
-    src = KGSource.from_file(run_path)
-    nodes, edges = src.load(q)
+    nodes, edges = KGSource.from_file(run_path).load(q)
     print(f"{run_path.parent.name:30s}  nodes={len(nodes):4d}  edges={len(edges):4d}")
 ```
 
-### Pattern 6 — Build a delegation tree with KGIndex
-
-Reconstruct the full parent/child AgentCall hierarchy as a nested dict using
-`find_root_agent_call` and recursive `out_neighbors`.
+**Build a delegation tree** (nested AgentCall hierarchy) with `find_root_agent_call` and
+recursive `out_neighbors` over `hasAgentCall` edges:
 
 ```python
-from mas.library.kg import KGIndex
-
-idx = KGIndex.from_doc(kg_doc)
+import json
 
 def build_tree(nid: str) -> dict:
-    node = idx.node(nid)
+    node = idx.node(nid) or {}
     return {
         "id": nid,
-        "agentId": node.get("agentId", "") if node else "",
-        "node_type": node.get("node_type", "") if node else "",
-        "children": [
-            build_tree(child["id"])
-            for child in idx.out_neighbors(nid, edge_type="contains")
-            if child.get("node_type") == "AgentCall"
-        ],
+        "agentId": node.get("agentId", ""),
+        "node_type": node.get("node_type", ""),
+        "children": [build_tree(c["id"])
+                     for c in idx.out_neighbors(nid, edge_type="hasAgentCall")],
     }
 
 root = idx.find_root_agent_call()
 if root:
-    import json
     print(json.dumps(build_tree(root["id"]), indent=2))
 ```
 
-### Pattern 7 — Verify edge consistency after a custom filter
-
-When you apply a node filter manually outside of `KGSource`, use `KGIndex` to verify
-that all edge endpoints are still present in your working set.
+**Check that a filter leaves no dangling edges.** `KGSource` always removes them; this
+check works as a sanity test in your own pipelines:
 
 ```python
-from mas.library.kg import KGSource, KGIndex, FacetQuery
-
-src = KGSource.from_file("kg.jsonld")
-
-# KGSource always removes dangling edges automatically
-sub = src.subgraph(FacetQuery(node_types=["AgentCall", "LLMCall"]))
-idx = KGIndex.from_doc(sub)
-
-kept_ids = {n["id"] for n in sub["nodes"]}
-dangling = [
-    e for e in sub["edges"]
-    if e.get("from_id") not in kept_ids or e.get("to_id") not in kept_ids
-]
-print(f"Dangling edges (should be 0): {len(dangling)}")
+sub = KGSource.from_file("kg.jsonld").subgraph(FacetQuery(node_types=["AgentCall", "LLMCall"]))
+kept = {n["id"] for n in sub["nodes"]}
+dangling = [e for e in sub["edges"] if e.get("from_id") not in kept or e.get("to_id") not in kept]
+print("Dangling edges (expect 0):", len(dangling))
 ```
 
 ---
 
 ## Full `kg.jsonld` document structure
 
-A minimal valid `kg.jsonld` document that all four classes can consume:
+A minimal document that all four classes accept. Documents written by the pipeline carry
+more fields: `@context`, a `metadata` object with counts and ontology information,
+`canonicalId`, `@type`, `spanId` and others. In generated KGs, node `id`s are prefixed
+(for example `agentcall:<run>:<agent>:<callId>`), `callId` is the bare call identifier,
+and `parentCallId` refers to the parent's `callId`. The short ids below are for
+readability.
 
 ```json
 {
-  "run_id": "my-run-001",
-  "meta": {
-    "events": 12,
-    "nodes": 6,
-    "edges": 3,
-    "source": "events.jsonl"
-  },
+  "metadata": {"events": 12, "nodes": 4, "edges": 3, "source": "events.jsonl"},
   "nodes": [
-    {
-      "id": "sess-1",
-      "node_type": "Session",
-      "sessionId": "sess-1",
-      "runId": "my-run-001",
-      "startTime": 1716000000.0,
-      "endTime": 1716000060.0,
-      "inputQuery": "What is the weather in Paris?",
-      "finalResponse": "The weather is sunny."
-    },
-    {
-      "id": "ac-1",
-      "node_type": "AgentCall",
-      "callId": "ac-1",
-      "agentId": "orchestrator",
-      "agentName": "orchestrator",
-      "sessionId": "sess-1",
-      "runId": "my-run-001",
-      "parentCallId": "",
-      "startTime": 1716000001.0,
-      "endTime": 1716000055.0
-    },
-    {
-      "id": "llm-1",
-      "node_type": "LLMCall",
-      "callId": "llm-1",
-      "agentId": "orchestrator",
-      "sessionId": "sess-1",
-      "runId": "my-run-001",
-      "parentCallId": "ac-1",
-      "startTime": 1716000002.0,
-      "endTime": 1716000010.0,
-      "modelName": "azure/gpt-4o",
-      "inputContent": "What is the weather in Paris?",
-      "outputContent": "I will call the weather tool."
-    },
-    {
-      "id": "tc-1",
-      "node_type": "ToolCall",
-      "callId": "tc-1",
-      "agentId": "orchestrator",
-      "sessionId": "sess-1",
-      "runId": "my-run-001",
-      "parentCallId": "llm-1",
-      "startTime": 1716000011.0,
-      "endTime": 1716000020.0,
-      "toolName": "get_weather",
-      "inputContent": "{\"city\": \"Paris\"}",
-      "outputContent": "Sunny, 22°C"
-    }
+    {"id": "sess-1", "node_type": "Session", "sessionId": "sess-1", "runId": "my-run-001",
+     "startTime": 1716000000.0, "endTime": 1716000060.0,
+     "inputQuery": "What is the weather in Paris?", "finalResponse": "The weather is sunny."},
+    {"id": "ac-1", "node_type": "AgentCall", "callId": "ac-1", "agentId": "orchestrator",
+     "agentName": "orchestrator", "sessionId": "sess-1", "runId": "my-run-001",
+     "parentCallId": "", "startTime": 1716000001.0, "endTime": 1716000055.0},
+    {"id": "llm-1", "node_type": "LLMCall", "callId": "llm-1", "agentId": "orchestrator",
+     "sessionId": "sess-1", "runId": "my-run-001", "parentCallId": "ac-1",
+     "startTime": 1716000002.0, "endTime": 1716000010.0, "modelName": "azure/gpt-4o",
+     "prompt": "What is the weather in Paris?", "completion": "I will call the weather tool."},
+    {"id": "tc-1", "node_type": "ToolCall", "callId": "tc-1", "agentId": "orchestrator",
+     "sessionId": "sess-1", "runId": "my-run-001", "parentCallId": "llm-1",
+     "startTime": 1716000011.0, "endTime": 1716000020.0, "toolName": "get_weather",
+     "toolArguments": "{\"city\": \"Paris\"}", "toolOutput": "Sunny, 22°C"}
   ],
   "edges": [
-    {"edge_type": "contains", "from_id": "ac-1",  "to_id": "llm-1"},
-    {"edge_type": "contains", "from_id": "llm-1", "to_id": "tc-1"},
-    {"edge_type": "hasCall",  "from_id": "sess-1", "to_id": "ac-1"}
+    {"edge_type": "hasLLMCall",  "from_id": "ac-1",  "to_id": "llm-1"},
+    {"edge_type": "hasToolCall", "from_id": "llm-1", "to_id": "tc-1"},
+    {"edge_type": "hasMASCall",  "from_id": "sess-1", "to_id": "ac-1"}
   ]
 }
 ```
@@ -814,96 +470,36 @@ A minimal valid `kg.jsonld` document that all four classes can consume:
 
 | Field | Present on | Description |
 |-------|-----------|-------------|
-| `id` | All nodes | Unique node identifier |
-| `node_type` | All nodes | Node type string (see below) |
-| `sessionId` | Most nodes | Parent session identifier |
-| `runId` | Most nodes | Run identifier |
-| `agentId` | Call nodes | Agent that owns this call |
-| `parentCallId` | Call nodes | ID of the enclosing call; root calls have `""` or absent |
-| `startTime` | Call nodes | Unix epoch (float seconds) |
-| `endTime` | Call nodes | Unix epoch (float seconds) |
-| `toolName` | ToolCall | Name of the tool invoked |
-| `modelName` | LLMCall | Model identifier (e.g. `"azure/gpt-4o"`) |
-| `inputContent` | Call nodes | Input payload (may be truncated) |
-| `outputContent` | Call nodes | Output payload (may be truncated) |
+| `id` | All nodes | Unique node identifier. |
+| `node_type` | All nodes | Node type string (see below). |
+| `sessionId`, `runId` | Most nodes | Session and run identifiers. |
+| `agentId` | Call nodes | Agent that owns the call. |
+| `parentCallId` | Call nodes | `callId` of the enclosing call; `""` or absent for root calls. |
+| `startTime`, `endTime` | Call nodes | Unix epoch, float seconds. |
+| `toolName` | ToolCall | Name of the tool invoked. |
+| `modelName` | LLMCall | Model identifier (for example `"azure/gpt-4o"`). |
+| `inputContent` / `outputContent` | AgentCall, ProcessingCall | Input and output payload (may be truncated). |
+| `toolArguments` / `toolOutput` | ToolCall | JSON-encoded arguments and the tool result. |
+| `prompt` / `completion` | LLMCall | Prompt and completion text. |
 
 ### Common node types
 
 | `node_type` | Category | Description |
 |-------------|----------|-------------|
 | `Session` | Structural | Top-level session record |
-| `Run` | Structural | Run metadata node |
+| `Run` | Structural | Run metadata |
 | `Agent` | Structural | Agent catalog entry |
 | `AgentCall` | Call | One invocation of an agent |
 | `LLMCall` | Call | One call to a language model |
 | `ToolCall` | Call | One tool or function call |
 | `ProcessingCall` | Call | A processing step (design patterns, etc.) |
 | `SkillCall` | Call | A skill invocation |
+| `MASCall` | Call | One run of the whole MAS |
 | `ThinkingCall` | Call | An extended-thinking step |
-| `State` | State machine | State node in the agent state machine |
-| `Transition` | State machine | Edge between two State nodes |
+| `State` | State machine | State in the agent state machine |
+| `Transition` | State machine | Transition between two State nodes |
 | `ContextContribution` | Annotation | Context segment contributed to a call |
-| `CallAnnotation` | Annotation | Rich annotation attached to a call |
+| `CallAnnotation` | Annotation | Annotation attached to a call |
 | `Tool` | Catalog | Tool catalog entry |
 | `LLM` | Catalog | LLM catalog entry |
-
----
-
-## Quick reference
-
-```python
-# Load
-from mas.library.kg import KGIndex, FacetQuery, KGSource, KGView
-import json
-
-kg_doc = json.loads(open("kg.jsonld").read())
-
-# ---- KGSource ---------------------------------------------------------------
-src = KGSource(kg_doc)                         # from dict
-src = KGSource.from_file("kg.jsonld")           # from file
-
-sub  = src.subgraph()                          # full graph (dict)
-sub  = src.subgraph(FacetQuery(...))           # filtered graph (dict)
-nodes, edges = src.load(FacetQuery(...))       # filtered (nodes, edges)
-
-# ---- KGIndex ----------------------------------------------------------------
-idx = KGIndex(nodes, edges)                    # from lists
-idx = KGIndex.from_doc(sub)                    # from subgraph dict
-
-idx.session                                    # Session node | None
-idx.agent_calls                                # list of AgentCall dicts
-idx.llm_calls                                  # list of LLMCall dicts
-idx.tool_calls                                 # list of ToolCall dicts
-idx.calls_by_time                              # all calls sorted by startTime
-
-idx.node("some-id")                            # dict | None
-idx.nodes_of_type("State")                     # list[dict]
-idx.out_neighbors("nid", edge_type="contains") # list[dict]
-idx.in_neighbors("nid", edge_type="contains")  # list[dict]
-idx.find_root_agent_call()                     # outermost AgentCall | None
-idx.find_root_agent_call("analyst")            # earliest AgentCall for agent
-
-# ---- FacetQuery -------------------------------------------------------------
-q = FacetQuery(
-    session_id="sess-1",
-    run_id="run-001",
-    agent_ids=["orchestrator"],
-    call_types=["LLMCall", "ToolCall"],
-    node_types=["State"],
-    edge_types=["contains"],
-    time_range=(1716000000.0, 1716000060.0),
-)
-d = q.to_dict()                                # dict (None fields omitted)
-q = FacetQuery.from_dict(d)                    # accepts snake_case + camelCase
-
-# ---- KGView -----------------------------------------------------------------
-view = KGView(nodes)                           # from list
-view = KGView.from_kg(kg_doc)                  # from dict
-
-view.types()                                   # ["Session", "AgentCall", ...]
-view.query("LLMCall")                          # all LLMCall nodes (sorted)
-view.query("AgentCall", parentCallId=None)     # root agent calls
-view.query("ToolCall", agentId="analyst")      # case-insensitive string match
-view.query("LLMCall", inputContent=lambda v: len(v or "") > 200)  # callable
-view.get("some-node-id")                       # dict | None
-```
+| `MAS` | Catalog | MAS entry |

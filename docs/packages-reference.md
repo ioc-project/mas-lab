@@ -68,7 +68,7 @@ them conflict with core workspace dependencies.  They are declared in
 task install-lab LAB=labs/extensions.lab
 ```
 
-Extended OTel/KG observability is **not** an OSS extra — see `mas-lab-internal`.
+OpenTelemetry export and knowledge-graph normalisation ship as separate libraries (`mas-library-telemetry`, `mas-library-kg`), not as extras of this package.
 
 ---
 

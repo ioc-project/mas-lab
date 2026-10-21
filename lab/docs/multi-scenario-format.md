@@ -4,7 +4,9 @@
 -->
 # Multi-scenario experiment format
 
-How an **experiment manifest** combines **scenarios**, a **dataset**, and **runs**.
+This page explains how an **experiment manifest** combines **scenarios**, a **dataset**, and **runs**. Read it when you write or edit `experiment.yaml`.
+
+Smallest working example: the `scenarios:` block below, plus a `dataset:` path.
 
 Terms: [glossary.md](../../docs/glossary.md). Schema:
 [manifests/experiment.md](../../docs/manifests/experiment.md).
@@ -18,25 +20,22 @@ for scenario in scenarios:
       execute (scenario overlays × item)
 ```
 
-On disk, the directory tree *is* the artifact tree — each level (`application` /
-`scenario` / `test` / `run`) owns whatever artifacts it declares in its own
-`artifacts:` block:
+On disk, the directory tree is the artifact tree. Each level (experiment, scenario, item, run) owns the artifacts it declares in its own `artifacts:` block:
 
 ```text
 <output_dir>/
-  data.csv                              # application-level artifact (e.g. gathered df)
+  data.csv                              # experiment-level artifact (e.g. gathered df)
   <scenario-id>/
     data.csv                            # scenario-level artifact
     item<N>/
-      data.csv                          # test-level artifact
+      data.csv                          # item-level artifact
       r<R>/
         traces/events.jsonl             # run-level artifact (trace)
         metrics.json                    # run-level artifact (eval_mce output)
         data.csv                        # run-level artifact (metrics_to_dataframe output)
 ```
 
-A `gather_level` step placed at `test:`/`scenario:`/`application:` fans the
-level below's named artifact upward (see [pipeline-steps.md](pipeline-steps.md)
+A `gather_level` step at `item:`, `scenario:` or experiment `post:` collects the named artifact of the level below and passes it upward (see [pipeline-steps.md](pipeline-steps.md)
 and the `in:`/`out:`/`scope:` fields in
 [manifests/pipeline.md](../../docs/manifests/pipeline.md)).
 
@@ -62,7 +61,7 @@ experiment:
 |-------|---------|
 | `id` | Folder name and table key |
 | `overlays` | Layered stacks (`logic`, `control`, `infra`) from `configs_dir` |
-| `tags` | Filter in CLI (`--limit-scenarios`, …) |
+| `tags` | Free-form labels for grouping. Stored with the scenario; not a CLI filter. To select scenarios, use `--scenario-id` or `--limit-scenarios` |
 
 ## `dataset:`
 
@@ -75,13 +74,15 @@ Format: [dataset.md](../../docs/manifests/dataset.md).
 
 ## MAS binding
 
+The `application:` key names the MAS or agent under test:
+
 ```yaml
   application:
     app: trip-planner
     configs_dir: ./overlays
 ```
 
-Or explicit manifest:
+Or point at an explicit manifest:
 
 ```yaml
   application:
@@ -93,9 +94,7 @@ Or explicit manifest:
 
 ## Post-run pipeline
 
-Hooks use CLI names (`run:` / `item:` / `scenario:` / experiment `post:`).
-Run-scoped steps write one artifact; higher levels `gather_level` concatenate
-one child layer only.
+Hooks use the level names `run:`, `item:`, `scenario:` and experiment `post:`. Run-scoped steps write one artifact. At higher levels, `gather_level` concatenates one child layer only.
 
 ```yaml
   run:

@@ -4,10 +4,11 @@
 -->
 # Replay equivalence checklist
 
-Use this when claiming two runs (or two builds) produce **bit-exact** or
-**behaviourally equivalent** traces.
+This page is a checklist for comparing two runs, or two builds. Use it before you claim their traces are **bit-exact** (identical byte for byte) or **behaviourally equivalent** (same events and decisions, values may differ).
 
-**Prerequisite:** [docs/cli/observability.md](../../docs/cli/observability.md) —
+Smallest working command: the bit-exactness lab below.
+
+Prerequisite: [docs/cli/observability.md](../../docs/cli/observability.md) —
 what `events.jsonl` contains.
 
 ## Before comparing
@@ -27,8 +28,7 @@ Extract tables: `extract_trace_stats`, `extract_mealy_stats` pipeline steps.
 
 ## Bit-exactness lab
 
-Sub-experiment:
-[lifecycle-control.lab/02-bit-exactness](../../labs/lifecycle-control.lab/02-bit-exactness/).
+This sub-experiment tests bit-exactness: [lifecycle-control.lab/02-bit-exactness](../../labs/lifecycle-control.lab/02-bit-exactness/).
 
 ```bash
 mas-lab benchmark run labs/lifecycle-control.lab/02-bit-exactness/experiment.yaml --progress

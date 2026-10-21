@@ -4,7 +4,7 @@
 -->
 # qa-agent example traces and graphs
 
-Same Tutorial 1 `qa-agent` run as `library-telemetry/examples/qa-agent/`
+Same `qa-agent` run as `library-telemetry/examples/qa-agent/`
 (native events + replayed OTel). This folder is the library-kg copy, matching
 `examples/trip-planner/`.
 
@@ -16,4 +16,4 @@ Same Tutorial 1 `qa-agent` run as `library-telemetry/examples/qa-agent/`
 | `kg-otel.jsonld` | `run_normalize_otel` on `otel_spans.jsonl` |
 
 Used by `library-kg/tests/kg/test_native_otel_norm_equivalence.py` and
-`tests/tutorials/test_tutorial_08.py`.
+`tests/tutorials/test_tutorial_09.py`.

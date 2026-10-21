@@ -100,6 +100,42 @@ class TestExperimentConfig:
         assert e.get("pipeline", e.get("application", {}).get("post", [])) == []
 
 
+class TestServiceBundle:
+    """The shipped service-bundle example (infra/ + experiment-services.yaml)."""
+
+    def test_bundle_declares_process_service(self):
+        bundle = load_yaml(T03 / "infra" / "local-http.yaml")
+        assert bundle["kind"] == "ServiceBundle"
+        svc = bundle["spec"]["services"]["local-http"]
+        assert svc["backend"] == "process"
+        assert svc["command"][0] == "python3"
+
+    def test_experiment_wires_start_and_stop(self):
+        e = load_yaml(T03 / "experiment-services.yaml")["experiment"]
+        assert e["default_infra"] == "local-http"
+        assert [s["type"] for s in e["pre"]] == ["service_start"]
+        assert [s["type"] for s in e["post"]] == ["service_stop"]
+        for step in e["pre"] + e["post"]:
+            assert step["config"] == {"service": "local-http", "infra": "local-http"}
+
+    def test_service_manager_loads_bundle(self):
+        from mas.lab.benchmark.service_manager import ServiceManager
+
+        mgr = ServiceManager(T03 / "infra" / "local-http.yaml")
+        assert "local-http" in mgr._services
+
+    def test_dry_run_shows_both_steps(self):
+        r = run_cli(
+            ["mas-lab", "benchmark", "run", "experiment-services.yaml",
+             "--infra", "local-http", "--dry-run"],
+            cwd=T03,
+            timeout=30,
+        )
+        assert r.returncode == 0, r.stderr
+        assert "2 steps" in r.stdout
+        assert "Configuration valid" in r.stdout
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. Dataset files (Python)
 # ═══════════════════════════════════════════════════════════════════════════

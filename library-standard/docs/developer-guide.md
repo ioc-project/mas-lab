@@ -4,7 +4,7 @@
 -->
 # mas-library-standard Developer Guide
 
-This guide describes how to extend `mas-library-standard` safely.
+This guide is for contributors who add plugins or tools to `mas-library-standard`. Each plugin or tool needs an implementation, a test and (for plugins) a card and manifest example; the steps below list them.
 
 ## Module map
 
@@ -39,11 +39,7 @@ Use stable prefixes by capability:
 3. Document config keys and defaults. Add a plugin card next to the
    implementation and, for overlays, a row in
    [overlays/README.md](../src/mas/library/standard/overlays/README.md).
-   4. Add unit tests for success and failure paths. When the plugin exists to
-   stop a specific failure mode, add a small Agent or MAS under
-   `examples/<category>/` (see `examples/governance/undeclared-tool/` and
-   `examples/context/summarizer-override/`).
-   Real use-case MAS belong in `library-samples/apps/`, not here.
+4. Add unit tests for success and failure paths. When the plugin exists to stop a specific failure mode, add a small Agent or MAS under `examples/<category>/` (see `examples/governance/undeclared-tool/` and `examples/context/summarizer-override/`). Real use-case MAS belong in `library-samples/apps/`, not here.
 
 ## Add a tool
 

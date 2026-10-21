@@ -4,7 +4,7 @@
 -->
 # mas-runtime API Reference
 
-Library API for the v2 Mealy kernel, contracts, and embeddable runtime instances.
+Library API for the Mealy kernel, contracts and embeddable runtime instances. This page is for developers who embed the kernel in tests, benchmarks or custom hosts; to run agents, use `mas-ctl chat` or `mas-ctl run-mas`.
 
 ## Overview
 
@@ -13,9 +13,6 @@ Library API for the v2 Mealy kernel, contracts, and embeddable runtime instances
 | Kernel | `mas.runtime` | `RuntimeKernel`, `IngressSymbol`, `EgressSymbol`, `StepResult` |
 | Embed | `mas.runtime.factory.builder` | `RuntimeBuilder` → `RuntimeInstance` |
 | Session (recommended) | `mas.ctl` | `instantiate_runtime`, `SessionController` |
-
-**User-facing runs** should use `mas-ctl chat` or `mas-ctl run-mas`. Use the APIs below when embedding
-the kernel in tests, benchmarks, or custom hosts.
 
 ---
 

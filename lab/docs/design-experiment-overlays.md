@@ -2,191 +2,109 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Design: Experiment overlays
+# Experiment overlays
 
-**Status**: Draft  
-**Branch**: `feat/experiment-overlays`  
-**Relates to**: §5b FT3 (flavour/infra/overlay boundary)
+This page explains experiment overlays. Read it when the same experiment must run differently in CI, local development, and full benchmarks.
 
----
+An **experiment overlay** amends an `experiment.yaml` at load time without editing it. The overlay changes how the experiment runs: parallelism, timeouts, cache posture, number of runs, dataset size. The experiment file keeps describing what is measured: scenarios, dataset, design, pipeline hooks.
 
-## Problem
-
-`experiment.yaml` mixes two distinct concerns:
-
-**Spec** (invariant — *what* to measure):
-```yaml
-scenarios: [baseline, design-pattern, ...]
-dataset: { path: hybrid-regression.yaml }
-design: { mode: coupled, couplings: [...] }
-```
-
-**Execution properties** (operational — *how* to run):
-```yaml
-execution:
-  parallel_scenarios: 2
-  timeout: 600
-  emulation:
-    runtime:
-      cache: disabled    # ← this buried option caused silent re-execution of ALL experiments
-```
-
-The mixing means:
-1. A `cache: disabled` buried deep in the YAML silently bypasses the trace cache,
-   causing every `benchmark run` to make fresh LLM calls — even when debugging a
-   pipeline step.
-2. The CLI has no way to override `emulation.*` properties — it cannot say "use
-   the cache" without editing the YAML.
-3. Different run environments (CI fast-pass, local dev, full benchmark) require
-   separate experiment files or in-place edits, both of which pollute history.
-
-**Principle violated**: CLI should always have the last word.  
-In every other MAS Lab surface (`mas-ctl chat`, `mas-ctl run`, `benchmark run`)
-the CLI overrides YAML.  `emulation.runtime.cache` is the only exception.
-
----
-
-## Proposed solution: experiment overlays
-
-Parallel to agent/MAS overlays, an **experiment overlay** amends the experiment
-spec at load time without modifying the base YAML.
-
-```
-experiment.yaml          ← the spec (scenarios, dataset, design)
-execution/
-  local-dev.yaml         ← cache=content-addressed, parallel=4, timeout=120
-  ci-fast.yaml           ← n_runs=1, single scenario, llm_cache replay
-  full-benchmark.yaml    ← n_runs=10, all scenarios, live LLM
-```
-
-CLI composition:
+Smallest working command:
 
 ```bash
-# Local dev (fast iteration on pipeline)
-mas-lab benchmark run experiment.yaml -x execution/local-dev.yaml
-
-# CI gate
-mas-lab benchmark run experiment.yaml -x execution/ci-fast.yaml --max-runs 1
-
-# Full benchmark
-mas-lab benchmark run experiment.yaml -x execution/full-benchmark.yaml
+mas-lab benchmark run experiment.yaml -x overlays/local-dev.yaml
 ```
 
-The `-x`/`--experiment-overlay` flag (new) applies the overlay before resolving
-any other CLI overrides.  CLI flags (`--max-runs`, `--set`, etc.) still win over
-the overlay.
+Agent and MAS overlays work the same way, on other manifests. Schema of the base file: [manifests/experiment.md](../../docs/manifests/experiment.md).
 
----
+## Why
 
-## Overlay schema (draft)
+An experiment YAML is the hypothesis under test. It should stay stable across environments. Operational settings differ by context:
 
-An experiment overlay is a YAML file with the same keys as `experiment:` but
-all fields optional.  Deep merge semantics (same as agent overlays):
-- scalar → replace
-- dict → recursive merge
-- list → replace (explicit `$append`/`$op` for incremental updates)
+- A CI gate wants one run of one item.
+- Local development wants the trace cache on and moderate parallelism.
+- A full benchmark wants many runs.
+
+Keeping these settings in the experiment file forces edits and noisy history on every environment change. A buried setting, such as a disabled trace cache, silently makes every `benchmark run` execute fresh LLM calls.
+
+## Format
+
+An overlay is a YAML file. Its `spec:` holds any keys valid inside `experiment:`. All fields are optional.
 
 ```yaml
-# execution/local-dev.yaml
+# overlays/local-dev.yaml
 apiVersion: mas/v1
 kind: ExperimentOverlay
 metadata:
   name: local-dev
 spec:
-  execution:
+  schedule:
     parallel_scenarios: 4
     timeout: 120
-    emulation:
-      runtime:
-        cache: content-addressed   # never disable in local dev
+  bench_emulation:
+    runtime:
+      cache: content-addressed   # reuse recorded traces; never disable in local dev
   run:
-    n_runs: 1                      # override default 3
+    n_runs: 1
 ```
 
 ```yaml
-# execution/ci-fast.yaml
+# overlays/ci-fast.yaml
 apiVersion: mas/v1
 kind: ExperimentOverlay
 metadata:
   name: ci-fast
 spec:
   dataset:
-    limit: 1                       # first item only
-  execution:
+    limit: 1                     # first dataset item only
+  schedule:
     parallel_scenarios: 1
-    emulation:
-      runtime:
-        cache: content-addressed
   run:
     n_runs: 1
 ```
 
----
+`runtime.cache` is `content-addressed` (default), `disabled` or `forced`. `bench_emulation` is the block that configures how the benchmark emulates the runtime. See the `bench_emulation` section of [manifests/experiment.md](../../docs/manifests/experiment.md).
 
-## CLI override chain (precedence, lowest → highest)
+The loader also accepts a bare overlay (the `spec:` keys at top level) and an `experiment:` wrapper. `kind` should be `ExperimentOverlay`. Other kinds log a warning.
 
-```
-experiment.yaml defaults
-  → experiment overlay (-x / --experiment-overlay)
-    → --infra <bundle>
-      → --flavour <name>
-        → --max-runs N
-          → --set KEY=VALUE       (highest, always wins)
-```
+## Merge rules
 
-This matches the agent/MAS override chain and makes the system predictable.
+The loader applies the overlay as a JSON Merge Patch (RFC 7386):
 
----
+- A mapping merges recursively into the base.
+- A scalar replaces the base value.
+- A **list replaces the base list**. To add a pipeline hook, give the full list, including the base entries you keep.
 
-## Alternative: `--set` on experiment keys
-
-A lighter alternative (no new overlay format): extend `--set` to apply to
-experiment-level keys, not just pipeline steps:
+## Using overlays
 
 ```bash
-mas-lab benchmark run experiment.yaml \
-  --set experiment.execution.emulation.runtime.cache=content-addressed \
-  --set experiment.run.n_runs=1
+# local development
+mas-lab benchmark run experiment.yaml -x overlays/local-dev.yaml
+
+# CI gate: overlay plus a CLI limit
+mas-lab benchmark run experiment.yaml -x overlays/ci-fast.yaml --max-runs 1
+
+# several overlays, applied left to right
+mas-lab benchmark run experiment.yaml -x overlays/local-dev.yaml -x overlays/ci-fast.yaml
 ```
 
-This is lower implementation cost but less ergonomic for multi-key overrides.
-A `--set-experiment KEY=VALUE` flag (separate namespace from `--set`) avoids
-ambiguity with pipeline step names.
+Relative overlay paths resolve from the directory of `experiment.yaml`. `--dry-run` validates the merged result without running anything.
 
----
+## Precedence (lowest to highest)
 
-## Related prior art
+```text
+experiment.yaml
+  -> experiment overlays (-x, in order)
+    -> --infra
+      -> --flavour
+        -> --max-runs
+          -> --set STEP_TYPE.KEY=VALUE
+```
 
-- Agent overlays (`overlays/*.yaml`) — same deep-merge pattern
-- `--flavour` — selects deployment posture for the LLM layer
-- `--infra` — selects infrastructure bundle (OTel, storage)
-- `emulation:` block — execution properties that should be overlay-able
+CLI flags always override an overlay. Flag reference:
+[cli-reference.md](cli-reference.md).
 
-The gap: `--flavour` and `--infra` both have CLI flags; `emulation.*` does not.
+## Related
 
----
-
-## Implementation sketch
-
-1. `ExperimentOverlay` manifest kind (new, trivial schema)
-2. `load_experiment_with_overlays(yaml_path, overlay_paths)` in `experiment_base.py`
-3. `-x` / `--experiment-overlay` flag on `benchmark run`
-4. Precedence: overlays applied in order, then CLI overrides on top
-5. `--dry-run` prints the merged config (not just the base) so the effective
-   state is auditable
-
-Estimated scope: small (the merge machinery already exists for agent overlays).
-
----
-
-## Why this matters for reproducibility
-
-An experiment YAML describes the *hypothesis being tested*.  It should be stable
-across environments.  The execution properties (cache, parallelism, llm_cache
-replay vs live) are *infrastructure concerns* that vary by context.
-
-Mixing them in one file means the experiment YAML changes when the environment
-changes — making git history less meaningful and reproducibility harder.
-
-Separating them (via overlays or `--set`) makes each concern independently
-versionable and auditable.
+- Agent and MAS overlays: [manifests/overlay.md](../../docs/manifests/overlay.md)
+- `--flavour` selects the runtime posture. `--infra` selects the infrastructure bundle (collector, storage) for service steps.
+- [designing-experiments.md](designing-experiments.md): one canonical experiment file plus CLI flags for smoke runs.

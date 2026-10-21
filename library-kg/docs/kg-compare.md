@@ -1,48 +1,32 @@
-# KG Comparison Module — Reference & Examples
+# KG comparison API
 
-**Module:** `mas.library.kg.core.compare`  
-**Top-level import:** `from mas.library.kg import compare_kg, KGCompareResult`
+`mas.library.kg.core.compare` compares two knowledge graphs (KGs, JSON-LD documents of nodes and edges built from a multi-agent system run) and reports structural differences. Use it for regression tests, CI parity gates, and checking that a new MAS implementation behaves like an old one. For running it as a pipeline step, see [compare-kg.md](compare-kg.md) and [steps.md](steps.md#run_compare_kg).
 
----
+```python
+import json
+from mas.library.kg import compare_kg
 
-## Overview
+reference = json.load(open("golden.kg.jsonld"))
+candidate = json.load(open("run_output.kg.jsonld"))
 
-The KG comparison module provides structural regression testing for knowledge graphs
-produced by multi-agent systems (MAS). Given two `kg.jsonld` documents — a *candidate*
-produced by the system under test and a *reference* representing the expected ground
-truth — `compare_kg` runs seven checks and returns a single `KGCompareResult` that
-captures overall pass/fail, per-check detail, and graph statistics for both sides.
+result = compare_kg(candidate, reference)
+print(result.passed, result.summary)
+# True {'total_checks': 7, 'passed': 7, 'failed': 0}
+```
 
-### When to use this module
+Top-level import: `from mas.library.kg import compare_kg, KGCompareResult`.
 
-**Regression testing between runs.** After refactoring a MAS pipeline, verify that
-the new KG is structurally equivalent to a stored golden reference. IDs and timestamps
-change on every run and are automatically excluded from comparison; the checks focus on
-structural properties that should remain stable.
+**Contents:** [`compare_kg`](#compare_kg) · [`KGCompareResult`](#kgcompareresult) · [Check functions](#individual-check-functions) · [Strict mode](#strict-mode) · [Volatile fields](#volatile-fields) · [Quick reference](#quick-reference)
 
-**CI parity gate.** Serialize a reference KG from a known-good run and commit it to
-your repository. Add a CI step that calls `compare_kg` on each new run and asserts
-`result.passed is True`. Any structural regression (missing agents, dropped tools,
-shallower call depth) fails the build.
+## What "structural" means
 
-**Evaluating a new MAS implementation.** When replacing one framework backend with
-another, use the golden KG from the old implementation as the reference and run
-`compare_kg` against the new implementation's output to confirm behavioral parity
-before shipping.
+`compare_kg` takes a *candidate* (the system under test) and a *reference* (the expected ground truth) and runs seven checks. They cover the agent set, tool set, node and edge type counts, containment depth, delegation pairs, and element-level identity (type, agent, tool, and a hash of the non-volatile fields).
 
-### What "structural" means
+The comparison ignores run-specific *volatile* fields: span, trace, session and call identifiers, timestamps, and durations. See [Volatile fields](#volatile-fields).
 
-The comparison operates on the graph topology, agent set, tool set, node type
-distribution, edge type distribution, delegation patterns, and element-level identity
-(type + stable fields). It deliberately ignores run-specific volatile fields: all
-span/trace/session/call identifiers, timestamps, and durations. See
-[Volatile fields](#volatile-fields) for the complete list.
+<a id="compare_kg"></a>
 
----
-
-## `compare_kg` — full reference
-
-### Signature
+## `compare_kg`
 
 ```python
 def compare_kg(
@@ -53,72 +37,25 @@ def compare_kg(
 ) -> KGCompareResult:
 ```
 
-### Parameters
-
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `candidate` | `dict` | KG document produced by the system under test. Must have `"nodes"` and `"edges"` keys (lists of dicts). Missing keys are treated as empty lists. |
-| `reference` | `dict` | Ground-truth KG. Same format as `candidate`. |
-| `strict` | `bool` | When `True`, check 7 (`element_level_diff`) is included in the pass/fail decision. Default `False`: only checks 1–6 determine `KGCompareResult.passed`. |
+| `candidate` | `dict` | KG document loaded from a `.jsonld` file. Reads the `"nodes"` and `"edges"` keys (lists of dicts); missing or empty keys count as empty lists. |
+| `reference` | `dict` | Ground-truth KG, same format. |
+| `strict` | `bool` | When `True`, check 7 (`element_level_diff`) counts toward `passed`. Default `False`: only checks 1-6 decide `passed`. |
 
-### Return value
-
-A `KGCompareResult` dataclass. See [KGCompareResult](#kgcompareresult) below.
-
-### Checks performed
-
-| # | Name | What it tests |
-|---|------|---------------|
+| # | Name | Tests |
+|---|------|-------|
 | 1 | `agent_coverage` | Candidate contains every agent ID present in reference |
-| 2 | `node_distribution` | Candidate has ≥ reference count for each node type |
-| 3 | `edge_distribution` | Candidate has ≥ reference count for each edge type |
-| 4 | `call_depth` | Candidate's max containment nesting depth ≥ reference |
+| 2 | `node_distribution` | Candidate has >= reference count for each node type |
+| 3 | `edge_distribution` | Candidate has >= reference count for each edge type |
+| 4 | `call_depth` | Candidate's maximum containment depth >= reference |
 | 5 | `tool_coverage` | Candidate contains every tool name present in reference |
-| 6 | `delegation_topology` | All agent-to-agent delegation pairs from reference appear in candidate |
-| 7 | `element_level_diff` | Node-by-node and edge-by-edge diff (volatile fields excluded) |
-
-Checks 1–6 always count toward `passed`. Check 7 only counts when `strict=True`.
-
----
-
-### Example: basic comparison
-
-```python
-import json
-from mas.library.kg import compare_kg
-
-with open("golden.kg.jsonld") as f:
-    reference = json.load(f)
-
-with open("run_output.kg.jsonld") as f:
-    candidate = json.load(f)
-
-result = compare_kg(candidate, reference)
-
-print(f"Passed: {result.passed}")
-print(f"Summary: {result.summary}")
-# Passed: True
-# Summary: {'total_checks': 7, 'passed': 7, 'failed': 0}
-```
-
----
+| 6 | `delegation_topology` | Every agent-to-agent delegation pair in reference appears in candidate |
+| 7 | `element_level_diff` | Node-by-node and edge-by-edge multiset diff (volatile fields excluded) |
 
 ### Example: CI assertion
 
-Use `assert` (or your test framework's equivalent) to fail a CI build on structural
-regression:
-
 ```python
-import json
-import pytest
-from mas.library.kg import compare_kg
-
-
-def load_kg(path: str) -> dict:
-    with open(path) as f:
-        return json.load(f)
-
-
 def test_kg_parity():
     reference = load_kg("tests/fixtures/golden.kg.jsonld")
     candidate = load_kg("artifacts/latest_run.kg.jsonld")
@@ -132,40 +69,15 @@ def test_kg_parity():
     )
 ```
 
-Run with strict mode to also gate on exact element-level equivalence:
+Here `load_kg` is a helper that returns `json.load(open(path))`. Pass `strict=True` to also gate on element-level equality.
+
+### Example: save a report
 
 ```python
-def test_kg_parity_strict():
-    reference = load_kg("tests/fixtures/golden.kg.jsonld")
-    candidate = load_kg("artifacts/latest_run.kg.jsonld")
-
-    result = compare_kg(candidate, reference, strict=True)
-    assert result.passed, result.to_dict()
-```
-
----
-
-### Example: saving a report to disk
-
-```python
-import json
-from mas.library.kg import compare_kg
-
-reference = json.load(open("golden.kg.jsonld"))
-candidate = json.load(open("candidate.kg.jsonld"))
-
 result = compare_kg(candidate, reference, strict=True)
-
-report_path = "compare_report.json"
-with open(report_path, "w") as f:
+with open("compare_report.json", "w") as f:
     json.dump(result.to_dict(), f, indent=2)
-
-print(f"Report saved to {report_path}")
-print(f"Overall: {'PASS' if result.passed else 'FAIL'}")
-print(f"Checks passed: {result.summary['passed']}/{result.summary['total_checks']}")
 ```
-
----
 
 ## `KGCompareResult`
 
@@ -181,94 +93,28 @@ class KGCompareResult:
     def to_dict(self) -> dict: ...
 ```
 
-### Fields
+| Field | Content |
+|-------|---------|
+| `passed` | `True` when all checks that count pass: checks 1-6 by default, all 7 when `strict=True`. |
+| `checks` | One dict per check, in order 1-7. Every dict has `name` (str) and `passed` (bool); the other keys are check-specific. There is no generic `message` or `detail` key. |
+| `summary` | `{"total_checks": 7, "passed": int, "failed": int}`. Counts all 7 checks regardless of `strict`, so `passed` can be `True` while `summary["failed"]` is 1. |
+| `reference_stats` | `{"nodes": int, "edges": int, "agents": list[str]}`; `agents` is the sorted list of unique agent IDs. |
+| `candidate_stats` | Same shape, for the candidate. |
 
-#### `passed: bool`
+`to_dict()` returns all five fields as a JSON-serializable dict.
 
-`True` when all checks that count toward pass/fail passed.  
-- In default mode (`strict=False`): checks 1–6 must all pass.  
-- In strict mode (`strict=True`): all 7 checks must pass.
-
-#### `checks: list[dict]`
-
-One dict per check, in the order checks were run (1–7). Every dict contains at minimum:
-
-```python
-{
-    "name": str,    # check name, e.g. "agent_coverage"
-    "passed": bool,
-}
-```
-
-Additional keys are check-specific. See [Individual check functions](#individual-check-functions)
-for the full dict shape of each check.
-
-#### `summary: dict`
-
-```python
-{
-    "total_checks": 7,
-    "passed": int,   # number of checks that passed (always 0–7)
-    "failed": int,   # number of checks that failed (always 0–7)
-}
-```
-
-Note: `summary` counts all 7 checks regardless of `strict`. The `passed` field on the
-result uses only the relevant subset.
-
-#### `reference_stats: dict`
-
-```python
-{
-    "nodes": int,         # total node count in reference
-    "edges": int,         # total edge count in reference
-    "agents": list[str],  # sorted list of unique agent IDs
-}
-```
-
-#### `candidate_stats: dict`
-
-Same structure as `reference_stats`, for the candidate graph.
-
-#### `.to_dict() -> dict`
-
-Returns a fully JSON-serializable dict containing all five fields. Suitable for
-logging, storing in a database, or writing to disk.
-
----
-
-### Example: iterating and printing checks
-
-```python
-from mas.library.kg import compare_kg
-
-result = compare_kg(candidate, reference)
-
-for check in result.checks:
-    status = "PASS" if check["passed"] else "FAIL"
-    print(f"[{status}] {check['name']}")
-
-# [PASS] agent_coverage
-# [PASS] node_distribution
-# [FAIL] edge_distribution
-# [PASS] call_depth
-# [PASS] tool_coverage
-# [PASS] delegation_topology
-# [PASS] element_level_diff
-```
-
-Print details only for failing checks:
+Print only the failing checks:
 
 ```python
 for check in result.checks:
     if not check["passed"]:
-        print(f"\n--- FAILED: {check['name']} ---")
+        print(f"FAILED: {check['name']}")
         for key, value in check.items():
             if key not in ("name", "passed"):
                 print(f"  {key}: {value}")
 ```
 
-Access a specific check by name:
+Access one check by name:
 
 ```python
 checks_by_name = {c["name"]: c for c in result.checks}
@@ -277,11 +123,9 @@ if not edge_check["passed"]:
     print("Edge type deficits:", edge_check["deficits"])
 ```
 
----
-
 ## Individual check functions
 
-All seven check functions are importable directly from the module:
+All seven are importable from the module and take plain lists of dicts:
 
 ```python
 from mas.library.kg.core.compare import (
@@ -295,41 +139,33 @@ from mas.library.kg.core.compare import (
 )
 ```
 
-All functions accept nodes and/or edges as plain lists of dicts. Edges may use either
-`from_id`/`to_id` or `source`/`target` field names — both formats are recognized.
+Edge endpoints are read from `from_id`/`to_id` (the names KGs written by the library use), then `source`/`target`, then `from`/`to`. Node types are read from `node_type`, `nodeType` or `type`; edge types from `edge_type`, `edgeType` or `type`.
 
----
+Signatures take `candidate_*` arguments before `reference_*` arguments, with nodes before edges:
+
+```python
+check_agent_coverage(candidate_nodes, reference_nodes)
+check_node_distribution(candidate_nodes, reference_nodes)
+check_edge_distribution(candidate_edges, reference_edges)
+check_call_depth(candidate_nodes, candidate_edges, reference_nodes, reference_edges)
+check_tool_coverage(candidate_nodes, reference_nodes)
+check_delegation_topology(candidate_nodes, candidate_edges, reference_nodes, reference_edges)
+check_element_diff(candidate_nodes, candidate_edges, reference_nodes, reference_edges)
+```
+
+Call one directly when you care about a single dimension:
+
+```python
+topo = check_delegation_topology(
+    candidate["nodes"], candidate["edges"],
+    reference["nodes"], reference["edges"],
+)
+print("Missing from candidate:", topo["missing"])
+```
 
 ### Check 1: `check_agent_coverage`
 
-```python
-def check_agent_coverage(
-    candidate_nodes: list[dict],
-    reference_nodes: list[dict],
-) -> dict:
-```
-
-**What it tests.** Extracts the set of agent IDs from both graphs (via `agentId` or
-`agent_id` field on any node) and verifies that every agent ID in the reference also
-appears in the candidate.
-
-**Pass condition.** `missing` is empty — the candidate contains all reference agent IDs.
-Extra agents in the candidate do not cause failure.
-
-**Result dict shape:**
-
-```python
-{
-    "name": "agent_coverage",
-    "passed": bool,
-    "reference_agents": ["orchestrator", "planner", "executor"],
-    "candidate_agents": ["executor", "orchestrator", "planner", "reviewer"],
-    "missing": [],          # agents in reference but not in candidate
-    "extra":   ["reviewer"] # agents in candidate but not in reference (informational)
-}
-```
-
-**Example with failure:**
+Collects agent IDs (the `agentId` or `agent_id` field on any node) from both graphs. Passes when `missing` is empty. Extra candidate agents do not fail the check.
 
 ```python
 {
@@ -337,143 +173,50 @@ Extra agents in the candidate do not cause failure.
     "passed": False,
     "reference_agents": ["orchestrator", "planner", "executor"],
     "candidate_agents": ["orchestrator", "executor"],
-    "missing": ["planner"],
-    "extra": []
+    "missing": ["planner"],   # in reference, not in candidate
+    "extra": []               # in candidate, not in reference (informational)
 }
 ```
 
----
-
 ### Check 2: `check_node_distribution`
 
-```python
-def check_node_distribution(
-    candidate_nodes: list[dict],
-    reference_nodes: list[dict],
-) -> dict:
-```
-
-**What it tests.** Counts nodes by type (`nodeType`, `node_type`, or `type` field) in
-both graphs and checks that the candidate has at least as many nodes of each type as the
-reference.
-
-**Pass condition.** `deficits` is empty — for every node type in the reference, the
-candidate count is ≥ the reference count.
-
-**Result dict shape:**
+Counts nodes by type in both graphs. Passes when `deficits` is empty, that is, the candidate has at least as many nodes of each reference type. `deficits[type]` is `reference_count - candidate_count`.
 
 ```python
 {
     "name": "node_distribution",
-    "passed": bool,
+    "passed": False,
     "reference": {"AgentCall": 3, "ToolCall": 8, "LLMCall": 3},
     "candidate": {"AgentCall": 4, "ToolCall": 8, "LLMCall": 2},
-    "deficits":  {"LLMCall": 1}  # shortfall per type; empty when passed
+    "deficits":  {"LLMCall": 1}
 }
 ```
 
-The `deficits` value for each type is `reference_count - candidate_count`.
-
----
-
 ### Check 3: `check_edge_distribution`
 
-```python
-def check_edge_distribution(
-    candidate_edges: list[dict],
-    reference_edges: list[dict],
-) -> dict:
-```
-
-**What it tests.** Mirrors check 2 for edges. Counts edges by type (`edgeType`,
-`edge_type`, or `type` field) and checks that the candidate has at least as many edges
-of each type as the reference.
-
-**Pass condition.** `deficits` is empty.
-
-**Result dict shape:**
+Same as check 2 for edges.
 
 ```python
 {
     "name": "edge_distribution",
-    "passed": bool,
-    "reference": {"contains": 10, "callsAgent": 2, "invokes": 8},
-    "candidate": {"contains": 10, "callsAgent": 2, "invokes": 7},
-    "deficits":  {"invokes": 1}
+    "passed": False,
+    "reference": {"hasAgentCall": 2, "hasToolCall": 8, "hasLLMCall": 3},
+    "candidate": {"hasAgentCall": 2, "hasToolCall": 7, "hasLLMCall": 3},
+    "deficits":  {"hasToolCall": 1}
 }
 ```
-
----
 
 ### Check 4: `check_call_depth`
 
-```python
-def check_call_depth(
-    candidate_nodes: list[dict],
-    candidate_edges: list[dict],
-    reference_nodes: list[dict],
-    reference_edges: list[dict],
-) -> dict:
-```
-
-**What it tests.** Computes the maximum containment nesting depth in both graphs by
-traversing `contains` and `hasCall` edges. This reflects how deeply nested the call
-hierarchy is — a shallow candidate suggests truncated or missing sub-calls.
-
-**Pass condition.** `candidate_depth >= reference_depth`.
-
-**Result dict shape:**
+Computes the maximum containment nesting depth by walking containment edges from the roots (nodes that no containment edge points to). Containment edges are `contains`, `hasCall`, and the ontology properties the builders emit: `hasAgentCall`, `hasLLMCall`, `hasToolCall`, `hasMASCall`, `hasProcessingCall`, `hasMemoryCall`, `hasSkillCall`, `hasRAGQuery`, `contributesTo`, `annotates` (`CONTAINMENT_EDGE_TYPES` in `mas.library.kg.core.ontology_align`). A shallow candidate suggests truncated or missing sub-calls. Passes when `candidate_depth >= reference_depth`.
 
 ```python
-{
-    "name": "call_depth",
-    "passed": bool,
-    "reference_depth": 4,
-    "candidate_depth": 4,
-}
+{"name": "call_depth", "passed": False, "reference_depth": 4, "candidate_depth": 2}
 ```
-
-**Example with failure:**
-
-```python
-{
-    "name": "call_depth",
-    "passed": False,
-    "reference_depth": 4,
-    "candidate_depth": 2,
-}
-```
-
----
 
 ### Check 5: `check_tool_coverage`
 
-```python
-def check_tool_coverage(
-    candidate_nodes: list[dict],
-    reference_nodes: list[dict],
-) -> dict:
-```
-
-**What it tests.** Collects tool names from nodes of type `ToolCall` (via `toolName` or
-`tool_name` field) in both graphs. Verifies every tool present in the reference also
-appears in the candidate.
-
-**Pass condition.** `missing` is empty.
-
-**Result dict shape:**
-
-```python
-{
-    "name": "tool_coverage",
-    "passed": bool,
-    "reference_tools": ["file_search", "python_interpreter", "web_search"],
-    "candidate_tools": ["file_search", "python_interpreter", "web_search"],
-    "missing": []
-}
-```
-
-**Example with failure:**
+Collects tool names (`toolName` or `tool_name`) from `ToolCall` nodes. Passes when `missing` is empty.
 
 ```python
 {
@@ -485,42 +228,11 @@ appears in the candidate.
 }
 ```
 
----
-
 ### Check 6: `check_delegation_topology`
 
-```python
-def check_delegation_topology(
-    candidate_nodes: list[dict],
-    candidate_edges: list[dict],
-    reference_nodes: list[dict],
-    reference_edges: list[dict],
-) -> dict:
-```
+Extracts delegation pairs from edges of type `callsAgent` or `delegates_to`, then resolves the source and target node `id`s to agent IDs through the `agentId`/`agent_id` field. The native builder emits `callsAgent` from a delegating `ToolCall` to the target agent. Edges whose endpoints carry no agent ID are skipped, so a graph without `callsAgent` edges has an empty delegation set and the check passes trivially. Self-loops are excluded. Passes when `missing` is empty.
 
-**What it tests.** Extracts agent-to-agent delegation pairs by finding edges of type
-`callsAgent` or `delegates_to`, then resolving source and target node IDs to agent IDs
-via the `agentId`/`agent_id` field on nodes. Checks that every delegation pair in the
-reference appears in the candidate.
-
-**Pass condition.** `missing` is empty.
-
-**Result dict shape:**
-
-```python
-{
-    "name": "delegation_topology",
-    "passed": bool,
-    "reference": ["orchestrator→executor", "orchestrator→planner"],
-    "candidate": ["orchestrator→executor", "orchestrator→planner", "planner→executor"],
-    "missing":   []
-}
-```
-
-Pairs are formatted as `"source_agent→target_agent"` strings. Self-loops (same agent on
-both sides) are excluded.
-
-**Example with failure:**
+Pairs are formatted `"source_agent→target_agent"`.
 
 ```python
 {
@@ -532,213 +244,68 @@ both sides) are excluded.
 }
 ```
 
----
-
 ### Check 7: `check_element_diff`
 
-```python
-def check_element_diff(
-    candidate_nodes: list[dict],
-    candidate_edges: list[dict],
-    reference_nodes: list[dict],
-    reference_edges: list[dict],
-) -> dict:
-```
+Identifies each node by the key `node_type|agentId|toolName|hash`, where `hash` is the first 16 hex characters of a SHA-256 over the node's non-volatile fields. Identifies each edge by `edge_type|source_id|target_id` using the raw endpoint IDs. Edge IDs are not stripped, so edges match only when node IDs match. Keys are compared as multisets, so two identical calls count twice.
 
-**What it tests.** A node-by-node and edge-by-edge structural diff. Each node is
-identified by a stable key: `nodeType|agentId|toolName`. Each edge is identified by
-`edgeType|source_id|target_id`. All volatile fields (IDs, timestamps, durations) are
-excluded before keying.
-
-Nodes or edges in the reference that have no matching key in the candidate appear in
-`missing_nodes`/`missing_edges`. Elements in the candidate with no reference counterpart
-appear in `spurious_nodes`/`spurious_edges`.
-
-**Pass condition.** All four lists (`missing_nodes`, `spurious_nodes`, `missing_edges`,
-`spurious_edges`) are empty.
-
-**Important:** this check is **not included in pass/fail by default**. It is included
-only when `strict=True` is passed to `compare_kg`. You can still run it independently
-or inspect its result from `KGCompareResult.checks` regardless of strict mode.
-
-**Result dict shape:**
+Reference keys with no candidate match go to `missing_nodes`/`missing_edges`. Candidate keys with no reference match go to `spurious_nodes`/`spurious_edges`. The check passes when all four lists are empty.
 
 ```python
 {
     "name": "element_level_diff",
-    "passed": bool,
-    "missing_nodes":  ["LLMCall|orchestrator|"],    # in reference, not in candidate
-    "spurious_nodes": [],                            # in candidate, not in reference
-    "missing_edges":  [],
-    "spurious_edges": ["invokes|node-42|node-99"],  # unexpected edge in candidate
-}
-```
-
-**Example when identical:**
-
-```python
-{
-    "name": "element_level_diff",
-    "passed": True,
-    "missing_nodes":  [],
+    "passed": False,
+    "missing_nodes":  ["LLMCall|orchestrator||3f9a1c0d5b7e2a64"],
     "spurious_nodes": [],
     "missing_edges":  [],
-    "spurious_edges": [],
+    "spurious_edges": ["hasToolCall|node-42|node-99"],
 }
 ```
 
----
+This check always runs and always appears in `result.checks`, but it decides `passed` only when `strict=True`.
 
 ## Strict mode
 
-By default, `compare_kg` determines `KGCompareResult.passed` from checks 1–6 only.
-Check 7 (`element_level_diff`) is always run and always appears in `result.checks`, but
-a failure there does not set `passed = False` unless `strict=True`.
+By default `passed` depends on checks 1-6 only.
 
-**When to use default mode.** Regression suites that tolerate minor graph variations —
-extra context nodes, diagnostic annotations, or framework-specific auxiliary edges —
-should use default mode. Structural shape (agent set, tool set, delegation, depth) is
-enforced; exact element identity is not.
-
-**When to use strict mode.** Golden-file parity tests where the candidate must be
-byte-for-byte structurally identical to the reference (minus volatile fields). Use this
-when validating a deterministic pipeline where no structural variation is expected.
+- **Default mode:** use it for suites that tolerate extra context nodes, diagnostic annotations, or framework-specific auxiliary edges. The agent set, tool set, delegation, and depth are enforced; exact element identity is not.
+- **Strict mode:** use it for golden-file tests of a deterministic pipeline, where the candidate must match the reference node for node and edge for edge, minus volatile fields.
 
 ```python
-# Default: checks 1–6 govern pass/fail
-result = compare_kg(candidate, reference)
-assert result.passed
+result = compare_kg(candidate, reference)                 # checks 1-6 decide
+result = compare_kg(candidate, reference, strict=True)    # all 7 decide
 
-# Strict: all 7 checks govern pass/fail
-result = compare_kg(candidate, reference, strict=True)
-assert result.passed
-```
-
-You can also check strict-mode independently of how compare_kg was called:
-
-```python
-result = compare_kg(candidate, reference)  # strict=False
-
-# Manually inspect element diff without strict mode affecting result.passed
+# Inspect the element diff without it affecting result.passed
 diff = next(c for c in result.checks if c["name"] == "element_level_diff")
 if not diff["passed"]:
-    print("Element diff detected (informational):")
-    print("  Missing nodes:", diff["missing_nodes"])
-    print("  Spurious nodes:", diff["spurious_nodes"])
+    print("Missing nodes:", diff["missing_nodes"])
+    print("Spurious nodes:", diff["spurious_nodes"])
 ```
-
----
-
-## Using individual checks
-
-Import and call any check function directly without going through `compare_kg`. This is
-useful in custom evaluation loops, Jupyter notebooks, or when you only care about one
-dimension of comparison.
-
-```python
-from mas.library.kg.core.compare import check_tool_coverage
-
-candidate_nodes = kg_candidate["nodes"]
-reference_nodes = kg_reference["nodes"]
-
-result = check_tool_coverage(candidate_nodes, reference_nodes)
-
-if not result["passed"]:
-    print(f"Missing tools: {result['missing']}")
-```
-
-```python
-from mas.library.kg.core.compare import check_delegation_topology
-
-topo = check_delegation_topology(
-    candidate["nodes"], candidate["edges"],
-    reference["nodes"], reference["edges"],
-)
-print("Reference delegation pairs:", topo["reference"])
-print("Missing from candidate:", topo["missing"])
-```
-
-All functions accept raw lists of dicts and return plain dicts — no library objects
-required.
-
----
 
 ## Volatile fields
 
-The following fields are stripped from node and edge dicts before any identity-based
-comparison (check 7 and the stable key computation used in check 6). Checks 1–5 do not
-do field-level comparison and are unaffected.
+These node fields are removed before the content hash of check 7 is computed. Checks 1-6 compare no fields and are unaffected. Edge keys use only type and endpoint IDs, so this list does not affect them.
 
-**Run-specific identifiers:**
+| Group | Fields (snake_case alias in parentheses where accepted) |
+|-------|--------|
+| Run-specific identifiers | `id`, `callId` (`call_id`), `parentCallId` (`parent_call_id`), `spanId` (`span_id`), `traceId` (`trace_id`), `sourceRecordIds`, `runId` (`run_id`), `sessionId` (`session_id`), `executionId`, `sourceCallId`, `stateNodeId`, `fromState`, `toState`, `annotationId`, `transitionId`, `realizesCallId`, `contentHash` |
+| Timestamps and durations | `timestamp`, `startTime` (`start_time`), `endTime` (`end_time`), `durationMs` (`duration_ms`), `transitionTimestamp`, `transitionDuration` |
+| Token counts and segments | `segments` (raw LLM message segments, variable per run), `totalTokens` (may vary with model version) |
 
-| Field | Also accepted as |
-|-------|-----------------|
-| `id` | — |
-| `callId` | `call_id` |
-| `parentCallId` | `parent_call_id` |
-| `spanId` | `span_id` |
-| `traceId` | `trace_id` |
-| `sourceRecordIds` | — |
-| `runId` | `run_id` |
-| `sessionId` | `session_id` |
-| `executionId` | — |
-| `sourceCallId` | — |
-| `stateNodeId` | — |
-| `fromState` | — |
-| `toState` | — |
-| `annotationId` | — |
-| `transitionId` | — |
-| `realizesCallId` | — |
-| `contentHash` | — |
+Fields such as `canonicalId`, `name` and `description` of generated nodes often embed run or call IDs but are not in the list. Because they are hashed, they can make `element_level_diff` fail between equivalent runs. This is why the check is informational by default.
 
-**Timestamps and durations:**
-
-| Field | Also accepted as |
-|-------|-----------------|
-| `timestamp` | — |
-| `startTime` | `start_time` |
-| `endTime` | `end_time` |
-| `durationMs` | `duration_ms` |
-| `transitionTimestamp` | — |
-| `transitionDuration` | — |
-
-**Token counts and segments:**
-
-| Field | Notes |
-|-------|-------|
-| `segments` | Raw LLM message segments (variable per run) |
-| `totalTokens` | Token count (may vary with model version) |
-
-Any field not in this list is treated as stable and participates in identity comparison.
-If your graph contains additional run-specific fields not listed here, strip them before
-calling `compare_kg` or use default mode (strict=False) to avoid spurious diff failures.
-
----
+Any field not listed is treated as stable. If your graph has other run-specific fields, strip them before calling `compare_kg`, or keep `strict=False`.
 
 ## Quick reference
 
 ```python
-# Full comparison (default mode)
 from mas.library.kg import compare_kg, KGCompareResult
-result: KGCompareResult = compare_kg(candidate_kg, reference_kg)
+result: KGCompareResult = compare_kg(candidate_kg, reference_kg)           # default
+result = compare_kg(candidate_kg, reference_kg, strict=True)               # strict
 
-# Full comparison (strict mode — check 7 counts toward pass/fail)
-result = compare_kg(candidate_kg, reference_kg, strict=True)
-
-# Key result attributes
-result.passed                # bool
-result.checks                # list of 7 dicts
-result.summary               # {"total_checks": 7, "passed": N, "failed": N}
-result.reference_stats       # {"nodes": N, "edges": N, "agents": [...]}
-result.candidate_stats       # {"nodes": N, "edges": N, "agents": [...]}
-result.to_dict()             # fully serializable dict of all of the above
-
-# Individual checks (from mas.library.kg.core.compare)
-check_agent_coverage(cand_nodes, ref_nodes)
-check_node_distribution(cand_nodes, ref_nodes)
-check_edge_distribution(cand_edges, ref_edges)
-check_call_depth(cand_nodes, cand_edges, ref_nodes, ref_edges)
-check_tool_coverage(cand_nodes, ref_nodes)
-check_delegation_topology(cand_nodes, cand_edges, ref_nodes, ref_edges)
-check_element_diff(cand_nodes, cand_edges, ref_nodes, ref_edges)
+result.passed            # bool
+result.checks            # list of 7 dicts
+result.summary           # {"total_checks": 7, "passed": N, "failed": N}
+result.reference_stats   # {"nodes": N, "edges": N, "agents": [...]}
+result.candidate_stats   # same shape
+result.to_dict()         # serializable dict of all of the above
 ```

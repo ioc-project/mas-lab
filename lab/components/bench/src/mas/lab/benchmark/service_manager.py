@@ -282,8 +282,9 @@ class ServiceManager:
 
     def _load(self, path: Path) -> None:
         with open(path) as f:
-            data = yaml.safe_load(f)
-        services_raw = (data or {}).get("services", {})
+            data = yaml.safe_load(f) or {}
+        spec = data.get("spec") if isinstance(data.get("spec"), dict) else {}
+        services_raw = spec.get("services") or data.get("services") or {}
         base_dir = path.parent
 
         for name, spec in services_raw.items():

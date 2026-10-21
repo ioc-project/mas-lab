@@ -2,11 +2,17 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Agent Identity and Naming Standards
+# Agent identity and naming standards
 
-## URN Standard Scheme
+This page describes a recommended identity scheme for addressing agents, tools and resources in observability,
+governance and transport. It is for teams that run several agents and need stable ids in traces and policies.
+The runtime does not enforce the scheme. Plugin identifiers (`mas.dp.react`, ...) are a separate, simpler
+namespace; see
+[semantic-protocols.md](semantic-protocols.md) and [plugin-aliases.md](plugin-aliases.md).
 
-To ensure observability, security, and unique addressability across distributed MAS, all entities MUST be identified by a URN following this scheme:
+## URN scheme
+
+A URN (uniform resource name) gives each entity a unique address across a distributed MAS (multi-agent system):
 
 ```text
 urn:mas:{realm}:{class}:{type}:{name}:{instance}
@@ -26,13 +32,13 @@ urn:mas:{realm}:{class}:{type}:{name}:{instance}
 
 ### Examples
 
-* **Logic Role**: `urn:mas:prod:agent:travel:planner` (The broad concept of the trip planner).
+* **Logical role**: `urn:mas:prod:agent:travel:planner` (the trip planner role).
 * **Specific Agent**: `urn:mas:prod:agent:travel:planner:01` (A specific deployed agent).
-* **Runtime Instance**: `urn:mas:prod:agent:travel:planner:01:c29dfb02-318e-4ca8` (This exact process).
+* **Runtime Instance**: `urn:mas:prod:agent:travel:planner:01:c29dfb02-318e-4ca8` (this exact process).
 * **Tool**: `urn:mas:global:tool:api:github:v3`.
 * **Resource**: `urn:mas:prod:resource:db:users:primary`.
 
-## Identity Lifecycle
+## Identity lifecycle
 
 1. **Allocation**:
     * **Static IDs** (Role/Name) are defined in the agent manifest or MAS topology configuration.
@@ -40,14 +46,9 @@ urn:mas:{realm}:{class}:{type}:{name}:{instance}
 
 2. **Resolution**:
     * Agents address each other by **Logical ID** (`urn:mas:prod:agent:travel:planner`).
-    * The `CommunicationPlane` (agent-remote Plugin) resolves Logical ID -> Instance ID(s) via the Service Registry.
+    * An `agent_comm` plugin (for example `mas.agent_comm.local` or `mas.agent_comm.a2a`) resolves a logical ID to the target agent instance.
 
 3. **Governance**:
     * Policies are usually bound to **Type** or **Name** (e.g., "Allow `agent:travel:*` to call `tool:github:*`").
     * Audit logs record **Instance IDs** for forensics.
 
-## Task-Based Access Control (TBAC)
-
-Task-scoped governance (TBAC) and execution sandboxing are **not** part of the
-OSS release. See `mas-lab-internal` (`docs/contracts/tbac-contract.md`,
-`sandbox-contract.md`).

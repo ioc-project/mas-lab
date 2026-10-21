@@ -19,7 +19,7 @@ mas-lab otel [COMMAND] [ARGS]...
 
 Library CLI component (entry point `mas.lab.cli.components`). There is no
 separate `mas-telemetry` binary. Commands call the same functions as the
-[pipeline YAML](../pipelines/README.md).
+[pipeline YAML](../../pipelines/README.md).
 
 `mas-lab otel` is an alias of this group ([otel.md](otel.md)).
 

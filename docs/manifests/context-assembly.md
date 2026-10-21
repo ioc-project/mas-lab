@@ -4,37 +4,60 @@
 -->
 # Context assembly
 
-**Code:** `ContextAssemblerPlugin.assemble_messages` · kernel dispatcher
-`mas.runtime.boundary.context.assemble` · **Schema:** `agent.schema.yaml`
-(`spec.assembler`, `spec.context_manager`) · **Bindings:** [plugin-bindings.md](plugin-bindings.md)
+Context assembly decides which messages each LLM call receives.
+Configure it on an Agent manifest with two fields:
 
-For request composition, pinning, resolved model limits, context snapshots,
-cache metrics, and cost accounting, see the full
-[context-management reference](../references/context-management.md).
+- `spec.assembler` builds the message list.
+- `spec.context_manager` trims or summarizes the history.
 
-Each LLM call builds `messages[]` in a fixed order (`spec.assembler`, default
-`assembler`):
+Change them when conversations outgrow the model's **context window** (the maximum tokens the model reads in one request) or when you need to control what the model sees.
+The defaults need no configuration.
 
-1. System band (injected context, memory seeds, `collect_context` parts)
-2. **Committed history** — after `ContextManagerContract.manage_history`
-3. Current user turn (`last_user_text`)
-4. **In-turn working memory** (assistant/tool rows from the dispatch loop)
+Both lines below restate the defaults:
 
-`context_manager` plugins slice committed history by **user turn**. After
-working memory is appended, assembly runs one pairing pass (one result per
-tool call). See [Tool-call pairing](#tool-call-pairing).
+```yaml
+spec:
+  assembler: assembler
+  context_manager: summarising
+```
 
-Compaction is not a mutation of in-turn working memory. `manage_history`
-bounds the LLM view; after each turn commit the same cap is written back to
-the stored log. The summarising plugin caches the last summary
-(**hysteresis**) so the summarizer LLM is not called on every in-turn step.
+Code: `ContextAssemblerPlugin.assemble_messages` and kernel dispatcher `mas.runtime.boundary.context.assemble`.
+Schema: `agent.schema.yaml`.
+Bindings: [plugin-bindings.md](plugin-bindings.md).
+For request composition, pinning, resolved model limits, context snapshots, cache metrics, and cost accounting, see the [context-management reference](../references/context-management.md).
 
----
+## Contents
+
+- [`assembler`](#assembler-required-default)
+- [`context_manager` plugins](#context_manager-plugins)
+- [Assembly token trim](#assembly-token-trim-model-context-window)
+- [Working memory count cap](#working-memory-count-cap)
+- [Tool-call pairing](#tool-call-pairing)
+- [See also](#see-also)
+
+## Message order
+
+Each LLM call builds `messages[]` in a fixed order:
+
+1. System band: injected context, memory seeds, and `collect_context` parts.
+2. **Committed history**, after `ContextManagerContract.manage_history`.
+3. The current user turn (`last_user_text`).
+4. **In-turn working memory**: the assistant and tool rows from the dispatch loop.
+
+`context_manager` plugins slice committed history by **user turn**.
+After the runtime appends working memory, assembly runs one pairing pass (one result per tool call).
+See [Tool-call pairing](#tool-call-pairing).
+
+Compaction (shrinking history so it fits the window) does not mutate in-turn working memory.
+`manage_history` bounds the LLM view.
+After each turn commit, the runtime writes the same cap back to the stored log.
+The summarising plugin caches the last summary (**hysteresis**), so the summariser LLM is not called on every in-turn step.
 
 ## `assembler` (required default)
 
-Builds `messages[]`. Omit the field, write `assembler: assembler`, or write
-the object — same behaviour.
+The assembler builds `messages[]`.
+Omit the field, write `assembler: assembler`, or write the object.
+All three behave the same.
 
 ```yaml
 # default (all three equivalent)
@@ -49,28 +72,26 @@ spec:
       # token_budget: omit = no part-eviction budget
 ```
 
-There is one shipped assembler (`ContextAssemblerPlugin`). History policy is
-**not** assembler params; it is `spec.context_manager`.
-
----
+One assembler ships (`ContextAssemblerPlugin`).
+History policy is not an assembler param.
+It belongs to `spec.context_manager`.
 
 ## `context_manager` plugins
 
-Each manager **is** a plugin with strategy code (not an empty shell). The
-summarising manager additionally composes a **summarizer sub-plugin**
-(registry type `summarizer`: `llm` | `drop`).
+Each manager is a plugin with strategy code.
+The summarising manager also composes a **summarizer sub-plugin** (registry type `summarizer`: `llm` or `drop`).
+A summariser is the component that compresses older turns into a short text.
 
-System context parts are rebuilt for each LLM request. Skills and other
-`ContextPart`s marked `pinned` stay outside conversation summarization; tool
-schemas are sent separately and also count toward the request budget. See the
-[Context Management reference](../references/context-management.md) for the
-complete ordering and pinning rules.
+The runtime rebuilds system context parts for each LLM request.
+Skills and other `ContextPart`s marked `pinned` stay outside conversation summarization.
+Tool schemas are sent separately and also count toward the request budget.
+The [context-management reference](../references/context-management.md) gives the complete ordering and pinning rules.
 
-Instance is cached per `(ctx, manifest)` so hysteresis can reuse a summary.
+The runtime caches one manager instance per `(ctx, manifest)`, so hysteresis can reuse a summary.
 
 ### `summarising` (package default)
 
-Omit `context_manager`, write `context_manager: summarising`, or:
+Omit `context_manager`, write `context_manager: summarising`, or write the full form:
 
 ```yaml
 spec:
@@ -86,20 +107,24 @@ spec:
         safety_margin_ratio: 0.1
 ```
 
-The plugin keeps the last `keep_turns` user turns verbatim, then asks the
-summarizer to compress older turns. `summarizer: llm` uses this agent's
-model; without a live engine it behaves like `drop`. Hysteresis (0.2) is the
-cache: a new summary is not computed until the managed payload exceeds
-budget × 1.2.
+The plugin keeps the last `keep_turns` user turns verbatim.
+It then asks the summarizer to compress older turns.
+`summarizer: llm` uses this agent's model.
+Without a live engine it behaves like `drop`.
+Hysteresis (`hysteresis_ratio`, default `0.1`) acts as the cache.
+The plugin computes no new summary until the managed payload exceeds the budget times 1.1.
 
 ### `sliding-window`
+
+This plugin drops older turns.
+It has no summarizer.
 
 ```yaml
 spec:
   context_manager: sliding-window   # ≡ {type: sliding-window, params: {keep_turns: 10}}
 ```
 
-Explicit:
+The explicit form:
 
 ```yaml
 spec:
@@ -109,18 +134,17 @@ spec:
       keep_turns: 10            # aliases: window_size, max_turns
 ```
 
-Older turns are **dropped** (no summarizer).
-
 ### Summarizer sub-plugins
 
-Not a top-level spec key. Bound only on `type: summarising`:
+Summarizer is not a top-level spec key.
+Bind it only on `type: summarising`:
 
 | Plugin | Omit / shorthand | Equivalent | Behaviour |
 |--------|------------------|------------|-----------|
-| `llm` (default) | `summarizer: llm` | `{type: llm}` | Summarizer slot else agent's live engine; degrades to drop without one |
+| `llm` (default) | `summarizer: llm` | `{type: llm}` | Summarizer slot, else the agent's live engine; degrades to drop without one |
 | `drop` | `summarizer: drop` | `{type: drop}` | Discard older turns |
 
-Optional cheaper summary model (`params.model` is a `spec.models[].id` or LiteLLM string):
+Use a cheaper summary model with `params.model`, a `spec.models[].id` or a LiteLLM string:
 
 ```yaml
 params:
@@ -131,11 +155,13 @@ params:
 ```
 
 The context manager owns recency (`keep_turns`) and the hysteresis cache.
-The summarizer only returns summary text (or nothing, which means drop).
-The live engine is bound when the context manager is instantiated from
-`ctx.engine`, not stored in the spec.
+The summarizer returns only summary text, or nothing, which means drop.
+The runtime binds the live engine from `ctx.engine` when it instantiates the context manager.
+The spec does not store it.
 
 ### `stack` (alias `full-history`)
+
+This plugin keeps the full history.
 
 ```yaml
 spec:
@@ -150,15 +176,17 @@ spec:
       max_messages: 200         # omit = no recency cap; pairing still repaired
 ```
 
----
-
 ## Assembly token trim (model context window)
 
-The automatic cap is derived from the **effective model** after infra mappings.
-It counts fixed system/context, current input, working memory, and tool schemas,
-reserves completion tokens, then leaves a safety margin. Override with
-`spec.models[].context_window`, infra `generation.context_window`, or
-`spec.context_manager.params.trimmer`:
+The runtime derives the automatic cap from the **effective model** after infra mappings.
+The cap counts fixed system and context parts, the current input, working memory, and tool schemas.
+It reserves completion tokens, then leaves a safety margin.
+
+Override the cap in one of three places:
+
+- `spec.models[].context_window`
+- infra `spec.models.generation.context_window` ([infra.md](infra.md#llm-output-token-policy))
+- `spec.context_manager.params.trimmer`
 
 ```yaml
 spec:
@@ -183,64 +211,62 @@ spec:
 | `trimmer.token_budget` | Alias for `max_tokens` |
 | `trimmer.reserve_tokens` | Completion reserve. Defaults to the effective output budget. |
 | `trimmer.safety_margin_ratio` | Fraction held back for estimate error and provider overhead (default `0.1`). |
-| `keep_turns` | Last N committed user turns kept verbatim (default 10). Older turns are summarized (or dropped). |
+| `keep_turns` | Last N committed user turns kept verbatim (default 10). Older turns are summarized or dropped. |
 | `hysteresis_ratio` | Reuse the summary until near the safety-bounded hard budget (default `0.1`). |
 
-In-turn working memory is passed as **`pin_tail`**: oldest tool-call groups in
-history are dropped first; WM can be trimmed by group only after history is
-exhausted. That is what keeps the live tool round intact for the provider.
+The runtime passes in-turn working memory as **`pin_tail`**.
+It drops the oldest tool-call groups in history first.
+It trims working memory by group only after history is exhausted.
+This keeps the live tool round intact for the provider.
 
-The trim implementation lives in **mas-library-standard**
-(`trim_messages_to_budget`). Pairing repair, history slicing, working-memory
-caps, and compile defaults live under `lib/context/`. The assembler plugin
-uses those helpers; `mas-ctl compile` uses the same defaults. The kernel does
-not. The kernel raises `ProviderPayloadError` if pairing is still broken after
-the plugin returns (survives `python -O`). Custom `spec.assembler` plugins must
-produce a paired payload; they can call `sanitize_provider_messages`.
+The trim implementation lives in **mas-library-standard** (`trim_messages_to_budget`).
+Pairing repair, history slicing, working-memory caps, and compile defaults live under `lib/context/`.
+The assembler plugin uses those helpers, and `mas-ctl compile` uses the same defaults.
+The kernel does not.
 
-After each turn commit the kernel asks the assembler plugin to apply the same
-recency policy to `committed_messages` and conversation chunks. Folded prefix
-data is dropped, so snapshots stay bounded (`keep_turns` / `max_turns` /
-`max_messages`). Hysteresis still avoids re-summarizing every in-turn LLM call.
+The kernel raises `ProviderPayloadError` if pairing is still broken after the plugin returns, even under `python -O`.
+Custom `spec.assembler` plugins must produce a paired payload.
+They can call `sanitize_provider_messages`.
 
-A `context_manager` value that is neither a plugin name nor a `{type, ref,
-params}` object is a hard error at `mas-ctl compile`/`validate` time. At
-assemble time the kernel is lenient instead: a malformed value that reached
-the runtime anyway (bypassing `mas-ctl`) is treated as omission and the
-default context manager is used, so one bad field cannot fail every turn.
+After each turn commit, the kernel asks the assembler plugin to apply the same recency policy to `committed_messages` and conversation chunks.
+The runtime drops folded prefix data, so snapshots stay bounded (`keep_turns`, `max_turns`, `max_messages`).
+Hysteresis still avoids re-summarizing on every in-turn LLM call.
+
+A `context_manager` value must be a plugin name or a `{type, ref, params}` object.
+Any other value is a hard error at `mas-ctl compile` or `validate` time.
+At assemble time the kernel is lenient.
+It treats a malformed value that bypassed `mas-ctl` as omitted and uses the default context manager, so one bad field cannot fail every turn.
 See [plugin-bindings.md](plugin-bindings.md#two-shapes).
-
----
 
 ## Working memory count cap
 
-`working_memory_messages` (default **20**) limits how many WM rows are considered
-for assembly (tool groups are atomic). This is independent of `trimmer`.
+`working_memory_messages` limits how many in-turn working-memory (WM) rows assembly considers.
+The default is **20**, and the alias is `max_in_turn_messages`.
+Tool groups are atomic.
+The limit is independent of `trimmer`.
+When neither key is set, a `max_messages` value (the `stack` cap) sets this limit too.
 
----
+### Not used yet
+
+The schema accepts `spec.context_manager.params.working_memory_ref` and `spec.context_manager.memory`.
+The shipped assembler does not read them.
 
 ## Tool-call pairing
 
-Canonical rules for plugin authors:
-[ContextManagerContract](../../runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract)
-(two layers: protocol vs tokens; ask-then-results).
+The HTTP API is stateless.
+If the model asked for tools A and B, the next request must contain that assistant message and then those two results.
+Assembly runs one pairing pass after `manage_history` and working memory (one result per tool call).
+The kernel then raises `ProviderPayloadError` if the payload is still unpaired.
+The server checks **ids and counts**, not the text inside a tool result.
 
-The HTTP API is stateless. If the model asked for tools A and B, the next
-request we build must contain that assistant message and then those two
-results. Assembly runs one pairing pass after `manage_history` and working
-memory (one result per tool call). The kernel then raises
-`ProviderPayloadError` if the payload is still unpaired. The server checks
-**ids and counts**, not the text inside a tool result.
+Plugin authors find the canonical rules in the [ContextManagerContract](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract): two layers, protocol versus tokens, and ask-then-results.
 
----
+## See also
 
-## Related
-
-- [Compiled agent defaults](../references/defaults.md) — `assembler` + `context_manager` + `summarizer`, fully expanded
-- [plugin-bindings.md](plugin-bindings.md) — string shorthand vs `{type, params}` vs list slots
-- [summarization.md](summarization.md) — thresholds, which model, MCE judge, logs
-- [agent.md](agent.md) — `working_memory` (live round + persistent buffer; compaction is sugar)
-- [ContextManagerContract](../../runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract)
+- [Compiled agent defaults](../references/defaults.md): `assembler`, `context_manager`, and `summarizer`, fully expanded
+- [plugin-bindings.md](plugin-bindings.md): string shorthand vs `{type, params}` vs list slots
+- [summarization.md](summarization.md): thresholds, which model, MCE judge, logs
+- [agent.md](agent.md): `working_memory` (live round plus persistent buffer; compaction is sugar)
+- [ContextManagerContract](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract)
 - [working-memory-compaction.md](../design/working-memory-compaction.md)
 - [plugins-reference.md](../plugins-reference.md)
-

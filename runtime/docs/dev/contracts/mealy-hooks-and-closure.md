@@ -2,25 +2,14 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Mealy, Hooks, and Contract Closure
+# Mealy, hooks and contract closure
 
-This note explains how contracts, hooks, and the Mealy machine fit together
-without turning the runtime into an unbounded taxonomy of contract types.
+This page explains how contracts, hooks, chokepoints and the Mealy machine fit together, and defines closure.
+It is for contributors deciding whether a change needs a new contract or a new hook.
+The short answer: five chokepoint families do not limit the runtime to five contracts.
 
-It also defines the target notion of **closure** for the runtime.
-
-## Short answer
-
-Having **5 chokepoints** does not mean the runtime can only have **5 contracts**.
-
-The two concepts live at different levels:
-
-- a **chokepoint** is a runtime execution site that every critical operation
-  must pass through
-- a **contract** is a typed protocol exposed to developers and implemented by
-  plugins or facades
-
-The clean model is:
+- A chokepoint is a runtime execution site that every critical operation must pass through.
+- A contract is a typed protocol exposed to developers and implemented by plugins or facades.
 
 ```text
 Mealy machine
@@ -29,25 +18,13 @@ Mealy machine
   -> one or more contracts participate at that chokepoint
 ```
 
-## Why more contracts than chokepoints is normal
+Several contracts share a chokepoint family:
 
-Several contracts can share the same chokepoint.
-
-Examples:
-
-- the tool chokepoint may involve `ToolContract`, `BudgetContract`, and HITL plugins
-- the model chokepoint may involve `ModelContract`, `BudgetContract`,
-  `RecorderContract`, and cache plugins
-- the state chokepoint may involve `MemoryContract`, `SessionContract`,
-  `ExecutionSessionContract`, and `SharedContextContract`
-
-So the intended relationship is **many contracts to one chokepoint family**,
-not one contract to one chokepoint.
+- Tool: `ToolContract`, `BudgetTracker`, HITL plugins.
+- Model: the engine (`EngineContract`), budget governance, `RecorderContract`, cache plugins.
+- State: `MemoryContract` and kernel session state.
 
 ## The five chokepoint families
-
-The closure model is easiest to reason about if the runtime is reduced to five
-families of mandatory chokepoints.
 
 | Chokepoint family | Runtime meaning | Base operation |
 | --- | --- | --- |
@@ -57,25 +34,13 @@ families of mandatory chokepoints.
 | Communication | Sending work or messages across agent boundaries | `send_message()` |
 | State | Reading or mutating durable or shared state | `memory_read()`, `memory_write()` and higher-level state services |
 
-In the current Python code, scheduled egress operations are executed through the
-kernel envelope (`mas.runtime.kernel.envelope`) and engine IO
-(`mas.runtime.engine`).
+In the Python code, scheduled egress operations run through the kernel envelope (`mas.runtime.kernel.envelope`)
+and engine IO (`mas.runtime.engine`).
 
-## The Mealy role
+## Roles
 
-The Mealy machine should stay responsible for **execution lifecycle and state
-transitions**, not for modeling every plugin API directly.
-
-The practical interpretation is:
-
-- the Mealy machine decides when the runtime is in execution, reasoning,
-  acting, waiting, interrupted, or terminated states
-- chokepoints are the places where those states interact with the outside world
-  or durable state
-- hooks make these crossings observable and governable
-- contracts provide typed protocols for the participants at those crossings
-
-That gives a clean separation:
+The Mealy machine owns execution lifecycle and state transitions, not every plugin API. It decides when the
+runtime is in an execution, reasoning, acting, waiting, interrupted or terminated state.
 
 | Concern | Role |
 | --- | --- |
@@ -84,124 +49,58 @@ That gives a clean separation:
 | Hooks | Interception and observability around those crossings |
 | Contracts | Developer-facing typed interfaces |
 
-## Target closure model
+Developers program against contracts. The runtime routes contracts through a fixed set of chokepoints.
+The Mealy machine and hooks stay internal, which keeps the boundaries portable to a multi-process deployment.
 
-The target architecture is **perfect closure**.
+## Closure
 
-That means:
+The target is perfect closure:
 
-1. every critical side effect must pass through a canonical chokepoint
-2. every chokepoint must dispatch the corresponding hooks
-3. every plugin must interact with the runtime through contracts or runtime
-   facades rather than direct concrete backends
-4. bypassing a chokepoint is considered an architectural violation
+1. Every critical side effect passes through a canonical chokepoint.
+2. Every chokepoint dispatches the corresponding hooks.
+3. Every plugin interacts with the runtime through contracts or runtime facades, not concrete backends.
+4. Bypassing a chokepoint is an architectural violation.
 
-In practice, perfect closure means that a future Rust runtime or a
-multi-process gRPC runtime could enforce the same boundaries much more
-strictly than Python can.
+The current architecture is closure-oriented, not perfectly closed.
 
-## What is currently enforceable vs aspirational
+Already in place:
 
-### Already in the right direction
+- Scheduled egress and ingress crossings run through the envelope in
+  [kernel/envelope.py](../../../src/mas/runtime/kernel/envelope.py).
+- State transitions are a single pure function in
+  [kernel/orchestrator.py](../../../src/mas/runtime/kernel/orchestrator.py) (`RuntimeKernel.transition`).
+- Governance decisions are made at the egress and ingress gates under
+  [boundary/gov/](../../../src/mas/runtime/boundary/gov/).
+- The design-pattern contract that schedules operations is in
+  [machines/design_pattern/protocol.py](../../../src/mas/runtime/machines/design_pattern/protocol.py).
 
-- standard hook definitions exist in
-  [src/mas/runtime/core/hooks.py](../../src/mas/runtime/core/hooks.py)
-- hook dispatch is centralized in
-  [src/mas/runtime/core/plugin_registry.py](../../src/mas/runtime/core/plugin_registry.py)
-- the base runtime operations are visible in
-  [src/mas/runtime/core/base_agent.py](../../src/mas/runtime/core/base_agent.py)
-- design-pattern mapping to hooks and Mealy states is explicit in
-  [src/mas/runtime/contracts/dp_contract.py](../../src/mas/runtime/contracts/dp_contract.py)
+Not yet closed in Python:
 
-### Not yet perfectly closed in Python
+- A plugin can still import and call a lower-level component directly.
+- Not all stateful operations go through one normalized state facade.
+- Several domain-specific hooks exist in parallel with the chokepoint model.
 
-- a plugin can still import and call a lower-level component directly
-- not all stateful operations are forced through one single normalized state
-  facade yet
-- several domain-specific hooks still exist in parallel with the chokepoint
-  model
+## Why memory is not a tool call
 
-So the current architecture is best described as **closure-oriented**, not yet
-**perfectly closed**.
+Memory differs from a tool: it is part of the agent's internal or semi-internal state, it needs provenance and
+versioning, it benefits from interpretability and replay, and it changes what the agent later knows rather than
+performing an external action. `MemoryContract` therefore stays distinct from `ToolContract`.
 
-## Should we remove dedicated hooks and architectural conventions?
+## Rules for new contracts and hooks
 
-As a target direction: mostly yes.
+Add a contract only if all of these hold:
 
-The cleaner long-term model is:
+1. It models a stable developer-facing protocol.
+2. It participates at a canonical chokepoint, or justifies a new one.
+3. It has at least two plausible implementations or backends.
+4. A plugin, profile or facade above an existing contract cannot express it cleanly.
 
-- keep a small fixed set of chokepoint hooks
-- let multiple contracts plug into those chokepoints
-- avoid adding a dedicated hook every time a new feature appears
+Add a hook only if at least one of these holds:
 
-That does **not** mean every hook should disappear immediately. It means the
-runtime should converge toward a small canonical set and treat any extra hook
-as suspect until justified.
+1. A canonical chokepoint lacks interception.
+2. The existing hook family cannot express a required policy or observability guarantee.
+3. The hook corresponds to a state transition the Mealy machine must expose.
 
-## Why memory is not just a tool call
-
-Treating memory as a tool call would collapse two different semantics.
-
-Memory has different properties from tools:
-
-- it is part of the agent's internal or semi-internal state semantics
-- it needs provenance and versioning semantics
-- it often benefits from richer interpretability and replay semantics
-- it is not just an external action; it changes what the agent knows or can
-  later recall
-
-So keeping `MemoryContract` distinct from `ToolContract` is a good idea.
-
-In fact, if interpretability matters, memory should probably become **more**
-semantically explicit, not less.
-
-## The developer model
-
-From a developer perspective, contracts remain useful because they are the
-typed interface surface.
-
-That is compatible with a small chokepoint model:
-
-- developers program against contracts
-- the runtime routes those contracts through a fixed set of chokepoints
-- the Mealy machine and hooks stay internal execution machinery
-
-This is exactly the direction that will transfer well to Rust processes
-communicating through gRPC.
-
-## Rule for new contracts
-
-A new contract should exist only if all of the following are true:
-
-1. it models a stable developer-facing protocol
-2. it participates at one of the canonical chokepoints, or justifies a new one
-3. it has at least two plausible implementations or backends
-4. it cannot be expressed cleanly as a plugin, profile, or facade above an
-   existing contract
-
-If those conditions are not met, do not create a contract.
-
-## Rule for new hooks
-
-A new hook should exist only if at least one of these is true:
-
-1. a canonical chokepoint currently lacks interception
-2. the runtime cannot express a required policy or observability guarantee
-   with the existing hook family
-3. the hook corresponds to a state transition the Mealy machine must expose
-
-Otherwise, prefer reusing an existing chokepoint hook.
-
-## Practical conclusion
-
-The clean target architecture is not:
-
-- infinitely many contracts
-- infinitely many hooks
-- conventions that developers are merely asked to respect
-
-The clean target architecture is:
-
-- a small fixed set of chokepoints
-- a bounded set of typed contracts that plug into them
-- explicit tests that treat bypass paths as architectural failures
+Otherwise reuse an existing chokepoint hook. The target is a small fixed set of chokepoints, a bounded set of
+typed contracts that plug into them, and tests that treat bypass paths as architectural failures. Existing extra
+hooks stay until justified; the runtime converges toward a small canonical set.

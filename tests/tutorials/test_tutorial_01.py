@@ -426,3 +426,32 @@ class TestBuiltinTools:
         provider = self._tutorial_tools_provider()
         names = [t["name"] for t in provider.list_tools()]
         assert "web-search" in names
+
+
+class TestPersistentMemory:
+    """The memory-search sample tool persists to a SQLite file under the data root."""
+
+    def test_store_survives_a_new_tool_instance(self, tmp_path, monkeypatch):
+        import sys
+        from types import SimpleNamespace
+
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.syspath_prepend(str(T01.parents[2] / "library-samples" / "tools"))
+        sys.modules.pop("memory_search", None)
+        from memory_search import MemorySearchTool
+
+        ctx = SimpleNamespace(agent_id="qa-agent")
+        MemorySearchTool().on_execute_tool(
+            "memory_store", {"content": "User prefers Apple the fruit"}, ctx=ctx
+        )
+        db = tmp_path / "mas" / "memory" / "semantic" / "qa-agent.sqlite"
+        assert db.is_file()
+        found = MemorySearchTool().on_execute_tool("memory-search", {"query": "Apple"}, ctx=ctx)
+        assert "Apple the fruit" in found["text"]
+
+    def test_db_path_is_a_plugin_parameter(self, tmp_path):
+        import inspect
+
+        from mas.library.standard.plugins.memory.memory_semantic import SemanticMemoryPlugin
+
+        assert "db_path" in inspect.signature(SemanticMemoryPlugin.__init__).parameters

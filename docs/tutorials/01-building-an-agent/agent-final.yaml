@@ -2,16 +2,18 @@
 #  SPDX-License-Identifier: Apache-2.0
 # agent-final.yaml — READ-ONLY reference
 #
-# This is what the runtime sees after merging all four Tutorial 1 overlays:
+# Hand-written reading aid: roughly what the runtime sees after merging the
+# tools, skills and memory overlays of Tutorial 1 (run `mas-ctl compile` for the
+# exact, fully expanded result):
 #
 #   mas-ctl chat agent.yaml -i \
-#     --overlay overlays/tools.yaml   \
-#     --overlay overlays/skills.yaml  \
-#     --overlay overlays/memory.yaml
+#     -o overlays/tools.yaml   \
+#     -o overlays/skills.yaml  \
+#     -o overlays/memory.yaml
 #
 # DO NOT run this file directly — it exists only so you can visualise
 # the fully-assembled agent in one place.  The real workflow is:
-#   base (agent.yaml) + overlays stacked with --overlay.
+#   base (agent.yaml) + overlays stacked with -o / --overlay.
 #
 apiVersion: mas/v1
 kind: Agent
@@ -25,7 +27,7 @@ spec:
 
   # ── Model (from agent.yaml) ─────────────────────────────────────────────
   models:
-    - model: gpt-4o-mini
+    - model: gpt-4o
 
   # ── Context (merged from agent.yaml + tools overlay + skills overlay + memory overlay) ─
   context:
@@ -36,23 +38,22 @@ spec:
       When you need to perform calculations, use the calc tool.
       When you need current information from the web, use the web-search tool.
     memory_usage: |
-      IMPORTANT — You have a long-term memory.  Relevant memories are shown
-      in the "Semantic Memory" section of this system prompt.  You MUST read
-      and apply them before answering.  If a memory records a user preference
-      or correction it overrides your default interpretation.
-
-      When the user corrects you or shares a preference, store it using the
-      memory_store tool so you remember in future sessions.
+      IMPORTANT — You have a long-term memory. Relevant memories are shown in context.
+      When the user corrects you or shares a preference, store it with memory_store.
 
   # ── Skills (from skills overlay) ──────────────────────────────────────────
   skills:
     - answer-formatting
 
-  # ── Tools (from tools overlay + memory overlay, deduplicated) ─────────────
+  # ── Tools (from tools overlay + memory overlay) ───────────────────────────
   # memory-search provider exposes: memory_search, memory_get, memory_store
   tools:
     - ref: samples:tools/web-search.tool.yaml
     - ref: samples:tools/calc.tool.yaml
+    - kind: system
+      name: request_human_input
+    - kind: system
+      name: inform_user
     - ref: samples:tools/memory-search.tool.yaml
 
   # ── Memory (from memory overlay) ─── ephemeral (in-memory, no filesystem)

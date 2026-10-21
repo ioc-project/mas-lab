@@ -4,6 +4,8 @@
 -->
 # mas-library-skills Developer Guide
 
+This guide explains how the skills plugins are built and how to extend them. It is for contributors who add a context source or a skill tool. Run the tests with `uv run pytest library-skills/tests/ -v`; user-facing usage is in the [user guide](user-guide.md).
+
 ## Module map
 
 ```
@@ -27,15 +29,14 @@ overlays/
 examples/
 └── quickstart/                   runnable before/after example
 docs/
-├── user-guide.md                 (this file's companion)
+├── user-guide.md
+├── spec-coverage.md
 └── developer-guide.md            (this file)
 ```
 
----
-
 ## FSM integration
 
-The plugin participates in two points of the MAS product machine:
+The plugin participates in two points of the MAS finite state machine (FSM):
 
 ### `ctx_collect_execute` (tier 1 — catalog injection)
 
@@ -50,34 +51,23 @@ assemble_llm_messages()
                  └─ SkillCatalogPlugin.collect_context() → [ContextPart.skills(...)]
 ```
 
-Parts are sorted by `ContextPlacement` band + priority before injection.
-`SYSTEM_SKILLS` (priority 40) is placed between `SYSTEM_TOOLS` (30–39) and
-`SYSTEM_ONTOLOGY` (50–59).
-
-When `ContextAssemblerPlugin.on_pre_llm_call()` is eventually wired into the
-kernel, it will call `agent.plugin_collection.collect_results("collect_context")`
-using the same `PluginCollection` interface — the plugin code is unchanged.
+Parts are sorted by `ContextPlacement` band and priority before injection. `SYSTEM_SKILLS` (priority 40) sits between `SYSTEM_TOOLS` (30-39) and `SYSTEM_ONTOLOGY` (50-59).
 
 ### `tool_execute` (tier 2/3 — stochastic path)
 
-`SkillToolsPlugin(ToolContract)` fires when the model calls `activate_skill`,
-`list_skill_files`, or `read_skill_file`.  The tool receives `ctx` as a kwarg
-in `on_execute_tool(**kwargs)` and reads `ctx.skill_registry` to look up paths.
+`SkillToolsPlugin(ToolContract)` fires when the model calls `activate_skill`, `list_skill_files` or `read_skill_file`. The tool receives `ctx` as a kwarg in `on_execute_tool(**kwargs)` and reads `ctx.skill_registry` to look up paths.
 
 ---
 
 ## PluginCollection
 
-`runtime.boundary.context.plugin_collection.PluginCollection` is the v0.1
-bridge between the library plugin and the assembly pipeline.  It implements:
+`runtime.boundary.context.plugin_collection.PluginCollection` connects the library plugin to the context assembly pipeline. It implements:
 
 - `register(plugin)` — append to ordered collection
 - `collect_results(hook_name)` — call `on_{hook_name}()` on all registered plugins, flatten results
 - `get_plugins_by_type(contract_type)` — filter by type
 
-This is the same interface `ContextAssemblerPlugin` (library-standard) expects
-as `agent.registry`.  When the full assembler is wired, `PluginCollection` can
-serve as the agent registry without modification.
+This is the interface `ContextAssemblerPlugin` (library-standard) expects as `agent.registry`.
 
 ---
 
@@ -106,9 +96,7 @@ rec.base_dir  # parent of SKILL.md — root for resource paths
 3. Closing `---`
 4. Markdown body
 
-**Lenient fallback:** Values with unquoted colons (common in descriptions
-from other clients) are re-quoted before retry.  This improves cross-client
-compatibility at minimal cost.
+**Lenient fallback:** values with unquoted colons (common in descriptions from other clients) are re-quoted and parsed again.
 
 **Validation policy:**
 - Missing/unparseable YAML → `{}` meta, full text as body; warn
@@ -143,8 +131,6 @@ ctx.plugin_collection.register(MySourcePlugin())
 5. Add to `library.yaml` under `plugins:`
 6. Add tests in `tests/test_my_tool.py`
 
----
-
 ## Testing approach
 
 ```
@@ -155,13 +141,6 @@ tests/
 ├── test_skill_shell.py      Unit: RunSkillScriptPlugin (exec, traversal guard, timeout)
 └── test_quickstart.py       Integration: before/after skill overlay
 ```
-
-Run:
-```bash
-uv run pytest library-skills/tests/ -v
-```
-
----
 
 ## Naming conventions
 

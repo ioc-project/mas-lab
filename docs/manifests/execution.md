@@ -2,17 +2,30 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Execution tuning (removed from Agent manifests)
+# Execution tuning (not an Agent field)
 
-**`spec.execution` on `kind: Agent` and overlay `spec.patch.execution` are not supported.**
-Engine queue depth, cache policy, streaming, and parallel tool dispatch
-are configured only through **`kind: RuntimeEngine`** manifests resolved like
-infra: workspace `runtime_refs`, `$XDG_CONFIG_HOME/mas/runtime/`, or CLI
-`--runtime-ref`.
+This page tells you where engine tuning goes.
+`spec.execution` on `kind: Agent` and `spec.patch.execution` in an overlay are not supported.
+Put engine queue depth, cache policy, streaming, and parallel tool dispatch in a `kind: RuntimeEngine` manifest.
+
+The runtime resolves a `RuntimeEngine` the same way as infra. It looks in workspace `runtime_refs`, then in `$XDG_CONFIG_HOME/mas/runtime/`, or takes the CLI flag `--runtime-ref`.
+
+Smallest replacement for an old `spec.execution` block:
+
+```yaml
+apiVersion: infra/v1
+kind: RuntimeEngine
+metadata:
+  name: my-runtime
+spec:
+  engine:
+    queue_depth: 64
+  stream: false
+```
 
 See [runtime-engine.md](runtime-engine.md) and [user-config.md](../user-config.md).
 
-## Migration (removed agent fields)
+## Migration table
 
 | Old (invalid on `kind: Agent` / overlay patch) | Replacement |
 | --- | --- |
@@ -21,9 +34,21 @@ See [runtime-engine.md](runtime-engine.md) and [user-config.md](../user-config.m
 | `spec.infra_refs` / `spec.runtime_refs` on Agent, MAS, or overlay | `config.yaml`, `--infra-ref` / `--runtime-ref` |
 | `spec.infra_interceptors` on Agent | workspace / CLI infra resolution (same as infra refs) |
 
-**Not the same:** `experiment.execution` in `mas-lab benchmark` YAML is the **batch
-orchestration** block (parallel scenarios, timeouts, trace-cache emulation). It does
-not replace `RuntimeEngine` and is documented in [experiment.md](experiment.md#execution-batch-orchestration).
+## Do not confuse with experiment settings
 
-`mas-ctl validate` and separation checks fail closed on forbidden keys so outdated
-examples surface immediately.
+Batch orchestration for `mas-lab benchmark run` lives on the experiment manifest, not on agents.
+The deprecated `experiment.execution` block is split into three keys:
+
+- `experiment.design`: what the experiment compares.
+- `experiment.schedule`: parallelism, timeouts, ordering, and retries.
+- `experiment.bench_emulation`: the trace-cache posture (how runs reuse stored traces).
+
+None of them replaces `RuntimeEngine`. See [Design vs schedule](experiment.md#design-vs-schedule).
+
+`mas-ctl validate` and the separation checks reject the old keys, so outdated examples fail at once.
+
+## See also
+
+- [runtime-engine.md](runtime-engine.md)
+- [experiment.md](experiment.md#design-vs-schedule)
+- [llm-cache.md](llm-cache.md)

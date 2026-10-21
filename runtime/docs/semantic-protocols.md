@@ -14,14 +14,15 @@ traces.
 Plugins register with stable URNs:
 
 ```text
-mas.dp.react@v1
-mas.cm.stack@v1
-mas.gov.policy_engine@v1
+mas.dp.react
+mas.cm.stack
+mas.gov.no_undeclared_tool
 ```
 
-Manifests reference plugins by **shortcut** (`react`, `stack`) or full URN.
-The registry (`mas.runtime.registry`) resolves shortcuts to implementation
-classes. Prefer URNs in published overlays for reproducibility.
+Manifests reference plugins by **alias** (`react`, `stack`) or full URN.
+The registry (`mas.runtime.registry`) resolves aliases to implementation
+classes (see [plugin-aliases.md](plugin-aliases.md)). Prefer URNs in published overlays for reproducibility.
+`mas-ctl registry list` prints the registered URNs.
 
 ---
 
@@ -50,9 +51,9 @@ HITL scopes use `HitlQuestionType` — user resolution flows through
 | Field | Convention |
 |-------|------------|
 | `metadata.name` | Lowercase kebab (`trip-planner`) |
-| `spec.agents[].name` | Stable agent id in topology |
+| `spec.agency.agents[].id` | Stable agent id in a MAS manifest |
 | Tool names | Snake or kebab matching `ToolContract.get_name()` |
-| Scenario ids | Overlay filename stem |
+| Overlay names | Overlay file name without extension |
 
 See [naming-standards.md](naming-standards.md) for span names and event kinds.
 

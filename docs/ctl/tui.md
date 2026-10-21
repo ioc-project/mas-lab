@@ -4,23 +4,24 @@
 -->
 # `mas-ctl` terminal UI (TUI)
 
-`mas-ctl tui` is a curses chat UI with the same bootstrap as `mas-ctl chat`:
-**manifest** merge, **overlays**, infra refs, HITL, and **observability**.
+`mas-ctl tui` is a full-screen terminal chat. It starts like `mas-ctl chat`: it
+merges the manifest and its overlays, resolves infra refs, and enables
+human-in-the-loop (HITL) approval and observability. Terms: [glossary.md](../glossary.md).
 
-Terms: [glossary.md](../glossary.md).
+Use the TUI for long interactive sessions. For other jobs:
 
-Use the TUI for long interactive sessions. Use `mas-ctl chat` for scripts and
-`--trace` (exchange log). Use the [web UI](../ui/index.md) to browse **benchmark**
-history. Use `mas-lab benchmark run` for **experiments** with level hooks.
+- Scripts and the `--trace` exchange log: `mas-ctl chat`.
+- Past benchmark runs: the [web UI](../ui/index.md).
+- Experiments with level hooks: `mas-lab benchmark run`.
 
-You need an **agent** or **MAS** manifest first
+You need an agent or MAS manifest first
 ([Tutorial 1](../tutorials/01-building-an-agent/README.md)).
 
 ## Basic usage
 
 ```bash
 mas-ctl tui agent.yaml
-mas-ctl tui mas.yaml -o overlays/hitl-on-tool.yaml
+mas-ctl tui agent.yaml -o overlays/governance-hitl.yaml   # any overlay you have; here a HITL one
 mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.yaml
 ```
 
@@ -29,8 +30,13 @@ mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.ya
 | Flag | Description |
 |------|-------------|
 | `-o / --overlay` | **Overlay** YAML (repeatable) |
-| `--pattern` | Design-pattern plugin alias |
-| `--infra-ref` | Infra bundle (`standard:openai`, …) |
+| `--override ROOT:PATH=VALUE` | Schema-backed patch, applied last ([overrides](../cli/overrides.md)) |
+| `--bind NAME=URI` | Shortcut for an A2A / MCP `usage: use` infra row |
+| `--pattern` | Design-pattern plugin id |
+| `--flavour` | Flavour (default `local`) |
+| `--infra-ref` / `--infra` | Infra bundle (`standard:openai`, …); repeatable |
+| `--runtime-ref` | RuntimeEngine manifest ref; repeatable |
+| `--model ID` · `--max-tokens N` | Force the model / output-token cap for this run |
 | `--memory-seed` | Seed file for memory plugins |
 | `--single-turn` | Exit after one user turn |
 | `--no-validate` | Skip manifest validation |
@@ -41,7 +47,7 @@ mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.ya
 |------|-------------|
 | `--events` / `--no-events` | Override manifest **observability** |
 | `--events-file PATH` | **`events.jsonl`** output path |
-| `--events-stdout` | Stream JSONL on stderr |
+| `--events-stderr` | Also stream JSONL on stderr (`--events-stdout` is a legacy alias) |
 | `--events-format` | `native` · `boundary` · `both` · `otel` |
 
 Full reference: [cli/observability.md](../cli/observability.md) ·
@@ -56,7 +62,7 @@ mas-ctl tui agent.yaml --events --events-file traces/events.jsonl
 
 ## HITL
 
-Governance **overlays** that require human approval work in the TUI like in chat.
+Governance overlays that require human approval work in the TUI as they do in chat.
 
 ## When to use what
 
@@ -73,3 +79,5 @@ Governance **overlays** that require human approval work in the TUI like in chat
 - [cli/mas-ctl.md](../cli/mas-ctl.md) — flags (`tui` has `--events*`, not `--trace`)
 - [cli/observability.md](../cli/observability.md)
 - [Tutorial 1](../tutorials/01-building-an-agent/README.md)
+
+Next: [Tutorial 14 — Governance and HITL](../tutorials/14-governance-hitl/README.md).

@@ -42,6 +42,8 @@ properties:
     $ref: "../infra.schema.yaml#/properties/spec/properties/token_refs"
   stores:
     $ref: "../infra.schema.yaml#/properties/spec/properties/stores"
+  services:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/services"
   provider:
     $ref: "../infra.schema.yaml#/properties/spec/properties/provider"
   params:

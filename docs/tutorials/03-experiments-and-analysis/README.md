@@ -2,514 +2,277 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Tutorial 3 — Experiments, Analysis & Evaluation
+# Tutorial 3 — Experiments, Analysis and Evaluation
 
 > **Packages:** `mas-lab`, `mas-runtime`
-> **Time:** ~60 min hands-on
-> **Prerequisite:** [Tutorial 0](../00-environment-setup/) (data paths),
-> [Tutorial 1](../01-building-an-agent/), and [Tutorial 2](../02-creating-a-mas/).
-> Run `mas-lab config` to see where this machine stores labs output and trace cache.
+> **Time:** ~60 min
+
+## Goal
+
+You run an experiment, analyze its traces, and compare three MAS topologies on the trip planner.
+An experiment is a YAML file that runs a MAS over a dataset under several overlays.
+Each run writes `events.jsonl`, the machine-readable event log.
+
+## What you need
+
+- [Tutorial 0](../00-environment-setup/README.md) (data paths), [Tutorial 1](../01-building-an-agent/README.md), [Tutorial 2](../02-creating-a-mas/README.md).
+- `OPENAI_API_KEY` for the live benchmarks (Parts A and C). Steps marked "offline" need no key.
+- `mas-lab config` shows where your machine stores lab output and the trace cache.
+
+A lab is a pack of experiments. A library is reusable YAML and code. See [labs-and-libraries.md](../../labs-and-libraries.md).
+
+| Part | What you do |
+|------|-------------|
+| A | Analyze traces by hand on a QA agent (ReAct, chain of thought, Reflection variants) |
+| B | Turn those steps into a declarative pipeline |
+| C | Compare single-agent, linear, and moderator topologies on the trip planner (one-item smoke run) |
 
 ---
 
-## Overview
+## Part A — Analyze traces by hand
 
-In Tutorials 1 and 2 you built an agent and composed a MAS.
-Now you'll learn how to **run experiments and analyze the output**: define
-benchmarks with `experiment.yaml`, inspect raw **`events.jsonl`** traces,
-evaluate answer quality with MCE, and generate plots — first
-manually, then via reusable pipelines, and finally in a full experiment
-comparing three MAS topologies on the trip planner.
-
-A **lab** is this experiment pack. A **library** is reusable YAML and code
-(`samples:tools/calc.tool.yaml`). When to create each:
-[labs-and-libraries.md](../../labs-and-libraries.md).
-
-1. **Part A** — Manual trace analysis on a QA agent (CLI commands one by one)
-2. **Part B** — Turning those manual steps into a declarative pipeline
-3. **Part C** — Trip planner experiment: single-agent vs. linear vs. moderator, evaluated with MCEv1 `AnswerRelevancyMetric` and compared in a grouped ggplot2 plot
-
----
-
-## Part A — Manual Trace Analysis
-
-Part A uses the same Q&A agent from Tutorial 1, running three design
-pattern variants (ReAct, CoT, Reflection) so you can inspect the
-differences in raw traces. **You must run this tutorial's benchmark first**
-— the traces don't come from Tutorial 1's output.
+Run this tutorial's benchmark first. The traces do not come from Tutorial 1.
 
 ```bash
-# From repository root (or cd into the tutorial directory)
-mas-lab benchmark run docs/tutorials/03-experiments-and-analysis/experiment.yaml --progress
+# From the repository root. Dry run is offline: 3 scenarios x 2 items x 1 run = 6 executions
+mas-lab benchmark run docs/tutorials/03-experiments-and-analysis/experiment.yaml --dry-run
+mas-lab benchmark run docs/tutorials/03-experiments-and-analysis/experiment.yaml
 ```
 
-Offline analysis (no LLM) uses the bundled fixture trace — see `demo/scenario.yaml` and:
-
-```bash
-pytest tests/tutorials/test_scenario_commands.py -v -k tuto-03
-```
+The dry run prints the experiment name, the scenarios (`cot`, `react`, `reflection`), `Total : 6 executions`, and `✓ Configuration valid`.
+The live run makes real LLM calls (6 short runs) and prints `Results: …/results.csv` when it ends.
+`--no-progress` turns off the progress bar. The first `benchmark` command starts the local controller daemon.
+For offline analysis, use `fixtures/events.jsonl`, a hand-written trace of this tutorial's QA agent
+(tool `calculator`, fixed timestamps).
 
 ### Where traces are stored
 
-The runner **auto-derives** the output directory from the experiment's
-`name:` field.  No `output_dir:` is needed in `experiment.yaml`.
-
-**Check your machine first** (paths depend on `--8<-- "includes/mas-paths.md:xdg-user-config"`):
+The runner derives the output directory from the experiment's `name:` field (`t3-observability-patterns`).
+It lands in `<labs_root>/t3-observability-patterns/`, by default `$XDG_DATA_HOME/mas/labs/`.
+Override with `labs_dir` / `cache_dir` in `$XDG_CONFIG_HOME/mas/config.yaml` or the workspace `config.yaml`.
+Inside a `.lab` workspace the path is `<labs_root>/<lab_name>/<experiment_name>/`. No config file? See Tutorial 0.
 
 ```bash
 mas-lab config
-```
-
-| Config | Labs root | Trace cache |
-|--------|-----------|---------------|
-| `--8<-- "includes/mas-paths.md:xdg-user-config"` with `labs_dir` / `cache_dir` | `--8<-- "includes/mas-paths.md:xdg-labs-dir"` | `--8<-- "includes/mas-paths.md:xdg-trace-cache"` |
-
-Create `--8<-- "includes/mas-paths.md:xdg-user-config"` if it does not exist — see [Tutorial 0](../00-environment-setup/README.md) or run `mas-lab config` to inspect paths.
-
-Tutorial 3's experiment (`name: "t3-observability-patterns"`) writes to:
-
-```
-<labs_root>/t3-observability-patterns/
-```
-
-For example, with default user config: `--8<-- "includes/mas-paths.md:xdg-labs-dir"`/t3-observability-patterns/.
-
-> **Override:** `labs_dir` / `cache_dir` in `--8<-- "includes/mas-paths.md:xdg-user-config"`
-> or workspace `config.yaml`.  Inside a `.lab`
-> workspace the path becomes `<labs_root>/<lab_name>/<experiment_name>/`.
-
-Resolve paths once per shell session (values depend on your `--8<-- "includes/mas-paths.md:xdg-user-config"`):
-
-```bash
 export LABS_ROOT="$(python -c 'from mas.lab.paths import labs_root; print(labs_root())')"
 export TRACE="$LABS_ROOT/t3-observability-patterns/react/item1/r1/traces/events.jsonl"
 ```
 
-The runner creates a directory tree mirroring the experiment hierarchy
-(`scenario / item / run`):
-
 ```
-$LABS_ROOT/t3-observability-patterns/                  ← auto-derived from name
-├── metadata.yaml                                      ← experiment metadata
-├── react/                                             ← scenario
-│   ├── item1/                                         ← dataset item
-│   │   └── r1/                                        ← run number
-│   │       ├── traces/                                ← trace artifacts (*)
-│   │       │   └── events.jsonl                       ← raw event stream
-│   │       ├── run_info.json                          ← timing, status, config
-│   │       └── .run_ref                               ← cache hash pointer
-│   └── item2/
-│       └── r1/
-│           └── ...
-├── cot/
-│   └── ...
-└── reflection/
-    └── ...
+$LABS_ROOT/t3-observability-patterns/
+├── metadata.yaml
+├── react/                    ← scenario
+│   └── item1/r1/             ← dataset item, run number
+│       ├── traces/events.jsonl   (*)
+│       ├── run_info.json         ← timing, status, config
+│       └── .run_ref              ← cache hash pointer
+├── cot/ ...
+└── reflection/ ...
 ```
 
-**(\*) `traces/` is a symlink.** The actual `events.jsonl` lives in a
-content-addressed **trace cache** (see `mas-lab config` for the path, typically
-`--8<-- "includes/mas-paths.md:xdg-trace-cache"`/<hash>/traces/).
-The runner hashes deterministic inputs (resolved config, prompt, model, run
-index) and stores the trace once. The symlink in the output dir points to the
-cache entry:
-
-```
-traces/ → <trace_cache>/<hash>/traces/
-```
-
-This deduplication means: if you re-run the same experiment with the same
-inputs, the cache is hit and no new trace is produced. To force a fresh run,
-delete the `.run_ref` file (breaks the link) and re-execute, or set
+(\*) `traces/` is a symlink to `<trace_cache>/<hash>/traces/`. The runner hashes the deterministic inputs
+(resolved config, prompt, model, run index) and stores each trace once. Re-running with the same inputs hits the cache.
+`--force` rebuilds the output tree but still serves cache hits. To call the LLM again, set
 `bench_emulation.runtime.cache: disabled` in the experiment manifest.
 
-> **Not to be confused with the LLM response cache.** This trace cache
-> deduplicates whole *experiment runs*. Each individual LLM call within a run
-> has its own separate **LLM response cache** (policy from workspace
-> `runtime_refs` / `standard:runtime-default`, or `--cache-read` /
-> `--cache-write` on `mas-ctl chat`). Offline CI replay uses
-> [llm_cache](../../manifests/llm-cache.md) (`raise_on_miss`) recorded against
-> a live provider. Tutorial 0 `config.yaml` inherits user `default_infra`.
-> See [runtime-engine.md](../../manifests/runtime-engine.md) and
-> [llm-cache.md](../../manifests/llm-cache.md).
+> **The trace cache is not the LLM response cache.** The trace cache deduplicates whole runs.
+> Each LLM call has its own response cache (`runtime_refs`, or `--cache-read` / `--cache-write` on `mas-ctl chat`).
+> Offline CI replay uses [llm_cache](../../manifests/llm-cache.md). See [runtime-engine.md](../../manifests/runtime-engine.md).
 
-### A.1 — The raw event stream
-
-Every agent run produces an `events.jsonl` — one JSON object per line, one
-event per runtime boundary crossing (LLM call, tool call, session lifecycle):
+### A.1 — Read the raw event stream
 
 ```bash
 head -5 "$TRACE"
 # offline: head -5 docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl
 ```
 
+Each line is one event at a runtime boundary. These are the fixture's first lines (abridged):
+
 ```json
-{"event": "session_start", "agent": "qa-agent", "timestamp": "2026-04-19T10:23:01Z", "trace_id": "a1b2c3"}
-{"event": "llm_call_start", "agent": "qa-agent", "model": "gpt-4o-mini", "dp_state": {"phase": "think", "iteration": 1}}
-{"event": "llm_call_end", "agent": "qa-agent", "tokens": {"prompt": 312, "completion": 87}, "duration_ms": 1240}
-{"event": "tool_call_start", "agent": "qa-agent", "tool": "calculator", "args": {"expression": "17 * 23"}}
-{"event": "tool_call_end", "agent": "qa-agent", "tool": "calculator", "result": {"value": 391}, "duration_ms": 2}
+{"kind":"user_input","agent_id":"mas","call_id":"t3-mas-001","session_id":"t3-session-001","content":"What is 17 × 23? ...","timestamp":1716200000.0}
+{"kind":"mas_call_start","agent_id":"mas","call_id":"t3-mas-001",...}
+{"kind":"llm_call_start","agent_id":"qa-agent-t3","call_id":"t3-llm-001","parent_call_id":"t3-exec-001","model":"openai/gpt-4o-mini",...}
+{"kind":"llm_call_end","agent_id":"qa-agent-t3","call_id":"t3-llm-001","status":"success",...}
 ```
 
-Key fields:
+| Field | Meaning |
+|-------|---------|
+| `kind` | Event type: `mas_call_*`, `execution_*`, `llm_call_*`, `tool_call_*`, ... |
+| `agent_id` | Agent that emitted the event |
+| `call_id` / `parent_call_id` | A call and the call containing it. `*_start`/`*_end` pairs share a `call_id` |
+| `session_id` | Links all events of one session |
+| `timestamp` | Seconds since the epoch |
 
-| Field | Description |
-|-------|-------------|
-| `event` | Event type — `session_start`, `llm_call_start/end`, `tool_call_start/end`, `session_end` |
-| `agent` | Which agent emitted this event |
-| `dp_state` | Design pattern state — phase (`think`/`act`/`observe`), iteration number |
-| `trace_id` | Correlation ID linking all events in the same session |
-
-### A.2 — Telemetry summary
+### A.2 — Summarize the telemetry
 
 ```bash
 mas-lab telemetry show "$TRACE"
 # offline: mas-lab telemetry show docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl
+mas-lab telemetry show "$TRACE" --filter tool_call
 ```
 
-Output: event count, agents involved, time range, token usage, event
-breakdown by type. This is the quickest way to sanity-check a run.
+You get the event count, agents, time range, and a breakdown by kind. `--filter tool_call` lists only the matching events, one line each.
+On the fixture you see a multiply step (`17 * 23`), a modulo check (`391 % 17`), then the final answer.
 
-Inspect tool calls directly:
+### A.3 — Score answer quality (MCEv1)
+
+MCEv1 is the first version of the MCE metrics. They are LLM-as-judge scores, so they need a model key. List them offline first:
 
 ```bash
-grep '"tool_call_start"' "$TRACE" \
-  | python3 -c "
-import sys, json
-for line in sys.stdin:
-    e = json.loads(line)
-    args = e.get('arguments') or e.get('args') or {}
-    print(f\"  {e.get('tool_name') or e.get('tool')}({args})\")
-"
+mas-lab eval --list-metrics        # ids: answer_relevancy, goal_success_rate, groundedness, ...
 ```
 
-On the bundled ReAct trace you should see a multiply step (`17 * 23`) followed
-by a modulo check (`391 % 17`) before the final answer.
-
-### A.3 — Evaluation (MCEv1)
-
-Evaluation measures **answer quality**. The `answer_relevancy` metric uses an
-LLM-as-judge to score how well the agent's response addresses the input:
+Then score a trace. Metric ids are snake_case (`goal_success_rate`, `groundedness`, `answer_relevancy`):
 
 ```bash
-mas-lab eval "$TRACE" \
-  --metric answer_relevancy \
-  --model gpt-4o \
-  --api-key-env OPENAI_API_KEY
+export OPENAI_API_KEY=...          # judge key; --api-key-env names another variable
+mas-lab eval docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl \
+  --metric goal_success_rate --metric groundedness --model gpt-4o
 ```
 
-Output: a JSON object with `score` (0–1), `reason` (explanation from the judge),
-and metadata:
+You get one row per metric: a score from 0 to 1 and the judge's reasoning. `--json` gives machine-readable output.
+Scoring calls the judge model, so it needs a working key. An unknown name prints the list of valid ids.
+Add `--recursive` to score every trace under a directory.
 
-```json
-{
-  "metric": "answer_relevancy",
-  "score": 0.92,
-  "reason": "The response correctly computes 17*23=391 and accurately verifies primality.",
-  "model": "gpt-4o",
-  "session_id": "a1b2c3"
-}
-```
+### A.4 — Plot trajectories
 
-### A.4 — Trajectory plots
-
-#### Compact delegation diagram (SVG)
+Set `TRACE` as in Part A. Offline, use `docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl` instead.
 
 ```bash
-mas-lab plot trajectory "$TRACE" \
-  --format svg -o output/trajectory-item1.svg
+mas-lab plot trajectory "$TRACE" --format svg -o output/trajectory-item1.svg
+mas-lab plot multilevel-trajectory "$TRACE" --format html -o output/swimlane-item1.html
 ```
 
-For a single agent this is a linear sequence; for a MAS (Tutorial 2) it
-shows delegation arrows between agents.
+The SVG is a compact delegation diagram. The HTML swimlane has one lane per agent, tool calls as blocks, and clickable events.
+Both run offline on the fixture. Open the HTML in a browser.
 
-#### Interactive swimlane (HTML)
+### The experiment.yaml hierarchy
 
-```bash
-mas-lab plot multilevel-trajectory "$TRACE" \
-  --format html -o output/swimlane-item1.html
-```
-
-The HTML view has:
-
-- Horizontal lanes per agent
-- Tool calls as blocks within lanes
-- `dp_state` annotations on each block (ReAct iteration, think/act/observe)
-- Clickable events for full detail
-
----
-
-## The experiment.yaml hierarchy
-
-Before diving into pipelines and full experiments, let's understand the
-**four-level hierarchy** that structures every benchmark:
-
-```
-EXPERIMENT ─── the top-level unit of work (experiment-level post: --depth exp)
-├── APPLICATION ── MAS binding (application.app / manifest + configs_dir)
-├── SCENARIO ───── overlay column (scenarios: + scenario.post)
-│   └── TEST / ITEM ── one dataset item (dataset: + item.post)
-│       └── RUN ────── one execution (run.n_runs + run.post)
-└── EXECUTION ──── batch orchestration only (last in the file)
-```
+A benchmark has four levels. **Total executions = M scenarios × D items × N runs.**
 
 | Level | Defined by | Multiplicity |
 |-------|-----------|--------------|
-| **Experiment** | `experiment.yaml` + root `post:` | 1 |
-| **Application** | `application:` (`app` or `manifest`, `configs_dir`) | 1 |
-| **Scenario** | `scenarios:` list — each entry is an overlay stack | M scenarios |
-| **Test / item** | one item in `dataset:` (`item:` hooks, CLI `--item`) | D items per dataset |
-| **Run** | `run.n_runs` | N repetitions per item |
-
-**Total executions = M × D × N**
-
-Pin LLMs on the experiment, not in overlays. `experiment.models` is a
-**slot map**: `main` (turns), `summarizer` (history summary), `judge`
-(MCE). Scalar `experiment.model` is shorthand for `models.main`. Agents
-that say `model: any` inherit these slots. See
-[experiment.md](../../manifests/experiment.md#model-slots-models--model).
-
-The output directory mirrors this structure:
-
-```
-$LABS_ROOT/<experiment_name>/
-└── <scenario_id>/
-    └── <item_id>/
-        └── r<N>/
-            └── traces/events.jsonl
-```
-
-### What lives at each level
-
-**Scenarios** define the **independent variable** — the configuration change
-you're testing. Each scenario explicitly declares its **overlays** — configuration
-patches applied on top of the base MAS manifest:
+| Experiment | `experiment.yaml` + root `post:`. `application:` binds the MAS under test | 1 |
+| Scenario | `scenarios:` list. Each entry is an overlay stack (the independent variable) | M |
+| Item | One entry in `dataset:` | D |
+| Run | `run.n_runs` repetitions, to measure variance | N |
 
 ```yaml
 scenarios:
-  - id: baseline
-    overlays: {logic: [], control: [], infra: []}
-    tags: [reference]
   - id: cot
     overlays: {logic: [cot], control: [], infra: []}
-    tags: [cot]
-```
-
-**Tests** come from the dataset, which is **app-specific** — a Q&A agent
-gets prompts, a trip planner gets trip requests (destination, dates,
-budget):
-
-```yaml
 dataset:
   path: "dataset.yaml"          # items: [{id: "item1", prompt: "..."}, ...]
-```
-
-**Runs** repeat each test to measure variance:
-
-```yaml
 run:
-  n_runs: 3                     # 3 repetitions per (scenario × item) — design
+  n_runs: 3
 schedule:
-  ordering: coverage            # breadth-first: one round across all conditions
+  ordering: coverage            # breadth-first across all conditions
 ```
 
-### Named resources and pipelines
+Older names call the MAS binding "application" and an item a "test". `application:` is still current.
+Pin LLMs on the experiment, not in overlays: `experiment.models` has slots `main` (turns), `summarizer`, and `judge` (MCE).
+`experiment.model` is shorthand for `models.main`. Agents with `model: any` inherit them
+([experiment.md](../../manifests/experiment.md#model-slots-models-model)).
 
-Pipeline steps run after the benchmark and operate at a specific
-**scope** in the hierarchy. For the OSS release profile, Tutorial 3 keeps
-inline pipelines empty and uses a standalone, re-runnable analysis pipeline.
+Pipeline steps run after the benchmark, each at one scope. This tutorial keeps the experiment's inline pipelines empty.
 
-```yaml
-post:
-  - name: extract
-    type: extract_trajectories
-    config:
-      runs_dir: runs
-      csv_file: mas_benchmark_*.csv
-```
-
-| Scope | YAML / CLI | Template variables available |
-|-------|------|-----------------------------|
+| Scope | YAML / CLI | Template variables |
+|-------|------------|--------------------|
 | `run` | `run.post` / `--depth run` | `{scenario_id}`, `{item_id}`, `{run_dir}`, `{events_jsonl}` |
 | `item` | `item.post` / `--depth item` | `{scenario_id}`, `{item_id}` |
 | `scenario` | `scenario.post` / `--depth scenario` | `{scenario_id}` |
 | `exp` | root `post:` / `--depth exp` | (none; artifact paths are relative to the level folder) |
-
-### Tutorial artifacts vs. design-space lab
-
-This tutorial is **self-contained** under `docs/tutorials/03-experiments-and-analysis/`.
-For larger sweeps (100-item QA dataset, trip-planner topologies), see
-`labs/design-space.lab/` in the repository root.
 
 | Tutorial file | Experiment `name:` | Output directory |
 |---------------|-------------------|------------------|
 | `experiment.yaml` | `t3-observability-patterns` | `$LABS_ROOT/t3-observability-patterns/` |
 | `experiment-topology.yaml` | `t3-topology-comparison` | `$LABS_ROOT/t3-topology-comparison/` |
 
-The experiment `name:` field drives the auto-derived output directory under
-`labs_dir` from `--8<-- "includes/mas-paths.md:xdg-user-config"`.
-
 ---
 
-## Part B — From Manual Commands to Pipelines
+## Part B — Turn the commands into a pipeline
 
-Part A used manual CLI commands. A **pipeline** declares the same steps in
-YAML, with explicit dependencies, so they run automatically after every
-benchmark.
-
-### B.1 — Pipeline structure
+A pipeline declares the Part A steps in YAML with explicit dependencies, so they run after every benchmark.
 
 ```yaml
-# pipelines/analysis.yaml
-api_version: "pipeline/v1"
-kind: Pipeline
-
-metadata:
-  name: t3-observability-patterns
-  description: "Release-safe analysis: extract trajectories"
-
-spec:
+# pipelines/analysis.yaml (abridged)
+pipeline:
+  name: t3-analysis
   steps:
-    - name: extract
-      type: extract_trajectories
-      config:
-        runs_dir: runs
-        csv_file: mas_benchmark_*.csv
+    - {name: extract, type: extract_trajectories}
+    - name: trace-stats
+      type: extract_trace_stats
+      depends_on: [extract]
+      config: {output: "results/trace_stats.csv"}
+    - {name: plot-svg,  type: plot_multilevel_trajectory, depends_on: [extract], config: {format: svg,  filename: trajectory}}
+    - {name: plot-html, type: plot_multilevel_trajectory, depends_on: [extract], config: {format: html, filename: swimlane}}
 ```
 
-### B.2 — One step per manual command
+`extract` runs first. The other three steps are independent and may run in parallel.
 
-| Manual command (Part A) | Pipeline step type | Produces |
-|------------------------|-------------------|----------|
-| benchmark post-processing | `extract_trajectories` | `trajectories.jsonl` + per-run `trajectory.json` |
+| Manual command (Part A) | Step type | Produces |
+|-------------------------|-----------|----------|
+| gather each run's trajectory | `extract_trajectories` | `trajectories.jsonl`, per-run `trajectory.json` |
+| `mas-lab telemetry show` | `extract_trace_stats` | `results/trace_stats.csv` |
+| `mas-lab plot multilevel-trajectory` | `plot_multilevel_trajectory` | `trajectory.svg`, `swimlane.html` |
 
-### B.3 — Dependencies
+`mas-lab benchmark step-info STEP_TYPE` lists a step's parameters.
 
-```
-extract
-```
-
-The standalone pipeline is intentionally minimal for release validation and
-clean-environment reproducibility.
-
-### B.4 — Running the pipeline
-
-Point the pipeline at a completed benchmark's output with `-o` so its steps can
-read that run's `results.csv` and traces (the benchmark prints the lab dir as
-`Results: …/results.csv` when it finishes):
+Point the pipeline at a completed benchmark's output with `-o`. The benchmark prints it as `Results: …/results.csv`:
 
 ```bash
 T03=docs/tutorials/03-experiments-and-analysis
-LAB=~/.local/share/mas/labs/t3-observability-patterns   # from the benchmark output
+LABS_ROOT="$(python -c 'from mas.lab.paths import labs_root; print(labs_root())')"
+LAB="$LABS_ROOT/t3-observability-patterns"
 
-# Full pipeline (extract → trace-stats → plot-svg → plot-html)
-mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml" -o "$LAB"
-
-# Single step (re-run one step only — steps: extract, trace-stats, plot-svg, plot-html)
-mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml" -o "$LAB" --only extract
-
-# Dry run (no -o needed — nothing is read or written)
-mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml" --dry-run
+mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml" -o "$LAB"                      # full pipeline
+mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml" -o "$LAB" --only extract       # one step plus dependencies
+mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml" -o "$LAB" --force plot-html    # recompute one step
 ```
 
-The plots land under `$LAB/trajectories/` (`trajectory.svg`, `swimlane.html`).
-
-### B.5 — Inline vs. standalone pipelines
-
-Pipelines can also be **inlined** in the experiment YAML (`post:` at
-experiment level, plus `scenario.post` / `item.post` / `run.post`). Use inline for simple post-processing;
-use standalone `.yaml` files when you want to re-run analysis without
-re-executing the benchmark.
+The plots land in `$LAB/trajectories/` and the statistics in `$LAB/results/trace_stats.csv`.
+The pipeline definition is [pipelines/analysis.yaml](pipelines/analysis.yaml). Without a completed benchmark, plot steps fail with "no trace discoverable".
+Use an inline pipeline (`post:` in the experiment) for simple post-processing. Use a standalone file to re-run analysis without re-running the benchmark.
 
 ---
 
-## Part C — Trip Planner Topology Comparison
+## Part C — Compare trip planner topologies
 
-Now for a real experiment. The trip planner MAS
-([`library-samples/apps/trip-planner/`](../../../library-samples/apps/trip-planner/)) uses a moderator + 3 specialists. But is
-that topology actually better? Let's compare three approaches:
+The [trip planner](https://github.com/outshift-open/mas-lab/tree/main/library-samples/apps/trip-planner) uses a moderator and three specialists.
+Is that better than the alternatives? Each topology is an overlay in `topologies/`:
 
-| Topology | Schema-backed fields | Description | Config |
-|----------|----------------------|-------------|--------|
-| **Single-agent** | One `workflow.entry` and one node | One agent handles the request | `topologies/single-agent.yaml` |
-| **Delegation chain** | `nodes[].delegates_to` | Each node names its allowed next peer; this alone does not enforce execution order | `topologies/linear.yaml` |
-| **Moderator** | Entry node with multiple `delegates_to` targets | The entry agent chooses which peer tools to call | `topologies/moderator.yaml` |
+| Topology | Fields | Behaviour |
+|----------|--------|-----------|
+| Single-agent (`single-agent.yaml`) | One `workflow.entry`, one node | One generalist handles the request |
+| Deterministic linear (`linear.yaml`) | `delegates_to` plus entry `design_pattern: deterministic_linear` | Plugin calls specialists in declared order |
+| Moderator (`moderator.yaml`) | Entry `delegates_to` targets, `design_pattern: react` | Entry agent's LLM picks peers |
 
-The MAS schema has no `workflow.type` or embedded `workflow.edges` field.
-`delegates_to` declares allowed peers; it does not itself guarantee a sequence.
-Parallel fan-out is expressed with node `dispatch: parallel`; deterministic
-ordering depends on the entry agent's `design_pattern`.
+`delegates_to` declares allowed peers, not a sequence. Parallel fan-out uses `dispatch: parallel` on a node.
+The schema has no `workflow.type` or `workflow.edges`.
 
-### C.1 — Workflow shapes
-
-#### Single-agent overlay
-
-The overlay replaces the participant list with one generalist and updates the
-entry node:
+### C.1 — Read the overlays
 
 ```yaml
-# topologies/single-agent.yaml
-apiVersion: mas/v1
-kind: Overlay
-metadata:
-  name: single-agent
-spec:
-  target: {kind: MAS}
-  patch:
-    agents:
-      $op:
-        remove: [moderator, schedule_agent, itinerary_agent, concierge_agent]
-        add:
-          - id: generalist
-            ref: agents/generalist/agent.yaml
-    workflow: {entry: generalist, nodes: [{id: generalist}]}
+# topologies/single-agent.yaml (patch)
+agents:
+  $op:
+    remove: [moderator, schedule_agent, itinerary_agent, concierge_agent]
+    add:
+      - id: generalist
+        ref: ../../../library-samples/apps/trip-planner/agents/generalist/agent.yaml
+workflow: {entry: generalist, nodes: [{id: generalist}]}
 ```
 
-#### Deterministic-linear overlay
+Files: [single-agent](topologies/single-agent.yaml), [linear](topologies/linear.yaml), [moderator](topologies/moderator.yaml).
+`topologies/linear.yaml` is the same overlay as `overlays/linear.yaml` in [Tutorial 2](../02-creating-a-mas/README.md).
+`topologies/moderator.yaml` keeps LLM-directed delegation. See the
+[trip-planner manifest](https://github.com/outshift-open/mas-lab/blob/main/library-samples/apps/trip-planner/mas.yaml) for the full roster.
 
-The overlay keeps the roster, declares its peer targets, and selects the entry
-agent's deterministic-linear design pattern:
+### C.2 — Read the dataset and experiment
 
-```yaml
-# topologies/linear.yaml
-apiVersion: mas/v1
-kind: Overlay
-metadata:
-  name: linear
-spec:
-  target: {kind: MAS}
-  patch:
-    workflow:
-      entry: moderator
-      nodes:
-        - id: moderator
-          delegates_to: [schedule_agent, itinerary_agent, concierge_agent]
-        - id: schedule_agent
-        - id: itinerary_agent
-        - id: concierge_agent
-    agents:
-      moderator:
-        design_pattern: deterministic_linear
-```
-
-#### Moderator overlay
-
-The moderator overlay preserves LLM-directed delegation: the embedded MAS
-workflow schema has no strategy selector. It declares the entry agent and peers
-it may call; the entry agent's LLM chooses which peer tools to invoke. See the
-current [trip-planner MAS manifest](../../../library-samples/apps/trip-planner/mas.yaml)
-for the complete participant roster.
-
-### C.2 — The dataset
-
-The shipped smoke dataset uses the canonical Dataset envelope. Larger
-trip-planning datasets use the same `inputs.user` + `expectations` shape:
+`dataset-topology.yaml` has one item (larger datasets use the same `inputs.user` / `expectations` shape):
 
 ```yaml
-apiVersion: lab/v1
-kind: Dataset
-metadata:
-  name: trip-planner-topology
 spec:
   items:
     - id: item1
@@ -517,355 +280,131 @@ spec:
         user: Plan a weekend trip from Arborville to Coastport. Include transport options and one restaurant recommendation.
 ```
 
-### C.3 — The experiment manifest
-
-> The shipped `experiment-topology.yaml` is a runnable one-item smoke comparison
-> using the trip-planner MAS and these overlays. The larger topology experiment
-> lives in `labs/design-space.lab/02-topologies/`.
-
 ```yaml
-# experiment-topology.yaml
+# experiment-topology.yaml (abridged)
 experiment:
   name: "t3-topology-comparison"
-  description: Compare the trip-planner topology overlays on one smoke item.
-
   default_flavour: local
+  models: {main: gpt-4o-mini}
   application:
-    app: trip-planner
-    configs_dir: ./topologies
-
+    app: trip-planner            # library-samples/apps/trip-planner
+    configs_dir: ./topologies    # scenario overlays are looked up by name here
   scenarios:
-    - id: single-agent
-      description: "One agent with all tools — no delegation"
-      overlays: {logic: [single-agent], control: [], infra: []}
-      tags: [single, baseline]
-    - id: linear
-      description: "Fixed chain: schedule → itinerary → concierge"
-      overlays: {logic: [linear], control: [], infra: []}
-      tags: [linear, sequential]
-    - id: moderator
-      description: "Dynamic delegation to specialists"
-      overlays: {logic: [moderator], control: [], infra: []}
-      tags: [moderator, broker]
-
-  dataset:
-    path: ./dataset-topology.yaml
-
-  run:
-    n_runs: 1
-  schedule:
-    ordering: coverage
+    - {id: single-agent, overlays: {logic: [single-agent], control: [], infra: []}}
+    - {id: linear,       overlays: {logic: [linear],       control: [], infra: []}}
+    - {id: moderator,    overlays: {logic: [moderator],    control: [], infra: []}}
+  dataset: {path: ./dataset-topology.yaml}
+  run: {n_runs: 1}
+  post: []
 ```
 
-### C.4 — Running the experiment
+### C.3 — Run and inspect
 
 ```bash
 T03=docs/tutorials/03-experiments-and-analysis
-
-# Run the one-item topology smoke comparison
-mas-lab benchmark run "$T03/experiment-topology.yaml" --dry-run
-
-# Full trip-planner topology sweep (larger dataset) — design-space lab:
-mas-lab benchmark run labs/design-space.lab/02-topologies/experiment.yaml --progress
-```
-
-Expected output:
-
-```
-Running MAS benchmark 't3-topology-comparison'
-  3 scenarios × 1 item × 1 run(s) = 3 executions
-
-  ✅ [single-agent] item=item1 run=1 (...)
-  ✅ [linear] item=item1 run=1 (...)
-  ✅ [moderator] item=item1 run=1 (...)
-
-MAS BENCHMARK COMPLETE — t3-topology-comparison
-  Total: 3   OK: 3   Errors: 0
-```
-
-### C.5 — Inspecting the smoke run
-
-The smoke manifest does not run an evaluator or plotting pipeline. Inspect
-the run summary and traces:
-
-```bash
+mas-lab benchmark run "$T03/experiment-topology.yaml" --dry-run   # offline: 3 x 1 x 1 = 3 executions
+mas-lab benchmark run "$T03/experiment-topology.yaml"             # live
 mas-lab benchmark show last -v
 ```
 
-Use the generated benchmark output as the source of truth for your run; values
-depend on flavour, model, and runtime conditions.
+`benchmark show last -v` prints the latest run's status, scenarios, and per-run details.
+The dry run prints:
 
-### C.6 — Full topology experiment
-
-For the larger topology matrix, use the design-space lab command above; it
-includes the experiment pipelines for evaluation and plots.
-
-```
-Answer Relevancy by Topology (MCEv1, n=3 runs)
-
-  1.0 ┤
-      │                                          ┌───────┐
-  0.9 ┤                              ┌───────┐   │       │
-      │                              │       │   │  0.89 │
-  0.8 ┤              ┌───────┐       │  0.78 │   │   ±   │
-      │              │       │       │   ±   │   │ 0.03  │
-  0.7 ┤  ┌───────┐   │  0.78 │       │ 0.05  │   │       │
-      │  │       │   │   ±   │       │       │   │       │
-  0.6 ┤  │  0.71 │   │ 0.04  │       │       │   │       │
-      │  │   ±   │   │       │       │       │   │       │
-  0.5 ┤  │ 0.08  │   │       │       │       │   │       │
-      │  │       │   │       │       │       │   │       │
-  0.0 ┼──┴───────┴───┴───────┴───────┴───────┴───┴───────┴──
-      single-agent    linear          moderator
+```text
+Experiment : t3-topology-comparison
+Scenarios  : ['single-agent', 'linear', 'moderator']
+Dataset    : 1 items
+Total      : 3 executions
+✓ Configuration valid — ready to run
 ```
 
-The ggplot2 code behind this (generated by `mas-lab benchmark analyze`):
+The smoke manifest runs no evaluator or plot pipeline. Your run's output is the source of truth, and it depends on flavour, model, and conditions.
 
-```python
-from plotnine import *
-import pandas as pd
-
-df = pd.read_csv("results.csv")
-
-plot = (
-    ggplot(df, aes(x='scenario', y='answer_relevancy', fill='scenario'))
-    + geom_boxplot(alpha=0.7)
-    + stat_summary(fun_y=np.mean, geom='point', shape='D', size=3)
-    + labs(
-        title="Answer Relevancy by Topology (MCEv1, n=3 runs)",
-        x="Topology",
-        y="Answer Relevancy Score"
-    )
-    + scale_fill_brewer(type='qual', palette='Set2')
-    + theme_minimal()
-    + theme(
-        axis_text_x=element_text(angle=0, hjust=0.5),
-        legend_position='none'
-    )
-)
-plot.save("plots/answer_relevancy_by_scenario.svg", width=10, height=6, dpi=150)
-```
-
-### C.7 — Interpreting the results
-
-The plot tells a clear story:
-
-- **Single-agent** (0.71 ± 0.08): handles simple queries well, but drops quality
-  on complex multi-step trips — one LLM with all tools lacks the focused
-  instructions that specialized agents carry.
-- **Sequential** (0.78 ± 0.04): the automaton-driven pipeline preserves
-  information better (each agent adds to the context), but the fixed
-  ordering means the concierge sometimes receives incomplete context from
-  earlier stages — no opportunity to loop back.
-- **Moderator** (0.89 ± 0.03): the LLM-driven moderator routes each sub-task
-  to the most appropriate specialist dynamically. Higher latency (the
-  moderator adds a coordination turn), but measurably better answer quality.
-
-The variance (error bars) is also informative: the moderator has the tightest
-confidence interval — its quality is more consistent across runs.
-
-### C.8 — Drilling into individual runs
-
-When the aggregate plot reveals a difference, you can drill down:
+### C.4 — Drill into individual runs
 
 ```bash
-# Compare trajectory of same item across topologies (after a benchmark run)
-mas-lab plot multilevel-trajectory \
-  "$LABS_ROOT/t3-topology-comparison/single-agent/item1/r1/traces/events.jsonl" \
-  --format html -o output/single-item1.html
-
+LABS_ROOT="$(python -c 'from mas.lab.paths import labs_root; print(labs_root())')"
 mas-lab plot multilevel-trajectory \
   "$LABS_ROOT/t3-topology-comparison/moderator/item1/r1/traces/events.jsonl" \
   --format html -o output/moderator-item1.html
 ```
 
-Item 11 (a complex 3-day trip) is where the moderator shines: the trajectory
-shows parallel delegation to all 3 specialists, while the single-agent
-trajectory shows a long serial chain of tool calls with no specialization.
+Repeat with `single-agent` in the path. The moderator trajectory shows `delegate_to_<agent>` handoffs.
+The single-agent trajectory shows one lane with every tool call in a serial chain.
+
+### C.5 — The full sweep and how to read it
+
+`labs/design-space.lab/02-topologies/experiment.yaml` runs five topologies (linear pipeline, parallel, moderator-broker,
+supervised, verifier) over the full dataset. Its pipelines score MCEv1 and plot a grouped comparison with confidence intervals.
+It has hundreds of live executions. The lab's trace cache makes re-runs cheap.
+Regenerate statistics and plots from existing results with `mas-lab benchmark analyze BENCHMARK_ID`.
+
+```bash
+mas-lab benchmark run labs/design-space.lab/02-topologies/experiment.yaml
+```
+
+Read results along three axes:
+
+- **Quality:** the MCE score per scenario with its confidence interval.
+- **Cost:** tokens, tool calls, and latency from `extract_trace_stats`. A moderator adds LLM turns.
+- **Behaviour:** which agents were called, in what order, and where the time went.
+
+Treat one number as a hypothesis. Models, prompts, and datasets change rankings. This tutorial ships no result numbers.
 
 ---
 
-## Key takeaways
+## Service bundles
 
-1. **`events.jsonl` is the universal artifact**: every run produces one; all analysis starts here
-2. **Manual analysis steps (OSS)**: telemetry show → plot trajectory → eval mce
-3. **Pipelines make analysis reproducible**: same steps in YAML, with dependencies, run automatically
-4. **MCEv1 `AnswerRelevancyMetric`**: LLM-as-judge scores answer quality (0–1 per session)
-5. **Grouped plots reveal topology differences**: boxplot by scenario with confidence intervals
-6. **Aggregate → drill-down**: start with the comparison plot, then inspect individual trajectories
-
----
-
-## Infra bundles — declarative service provisioning
-
-An **infra bundle** is a YAML file (analogous to a flavour) that declares the
-infrastructure services an experiment needs — OTel collectors, databases,
-port-forwards.  Services are started before the benchmark loop and stopped after
-via the `service_start` / `service_stop` pipeline steps.
-
-### Anatomy of a bundle
-
-```
-labs/my-experiment.lab/infra/
-├── local-test.yaml     # Docker-based fake OTel collector
-└── staging.yaml        # team staging infra (port-forward or direct)
-```
+A benchmark can start supporting services (a collector, a database) before the runs and stop them after.
+A **service bundle** is an `infra/v1` document (`kind: ServiceBundle`) in
+`<experiment_dir>/infra/`. Lab `--infra NAME` selects it for `service_start` /
+`service_stop`. It is not an LLM `--infra-ref` (Tutorial 0).
+This one runs a local HTTP server as a background process, with no Docker:
 
 ```yaml
-# infra/local-test.yaml
-services:
-  otel-collector:
-    description: "Fake OTel collector for local testing"
-    backend: docker-compose
-    compose_file: "../../../infra/docker-compose.otel.yml"
-    env:
-      OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318"
-      OTEL_COLLECTOR_DIR: "/private/tmp/mas-otel"
-    health_check:
-      url: "http://localhost:13133/"
-      timeout: 30
+# infra/local-http.yaml
+apiVersion: infra/v1
+kind: ServiceBundle
+metadata:
+  name: local-http
+spec:
+  services:
+    local-http:
+      backend: process
+      command: [python3, -m, http.server, "8765", --bind, 127.0.0.1]
+      env: {T3_SERVICE_URL: "http://127.0.0.1:8765"}
+      health_check: {url: "http://127.0.0.1:8765/", timeout: 15}
 ```
 
-### Wiring bundle → pipeline
-
-Declare lifecycle steps under experiment-level `pre:` / `post:` and
-per-run hooks under `run.post`:
-
-```yaml
-experiment:
-  default_infra: local-test    # selected when --infra is omitted
-
-  pre:
-    - type: service_start
-      name: start-otel
-      config:
-        service: otel-collector
-        health_timeout: 30
-  post:
-    - type: service_stop
-      name: stop-otel
-      config:
-        service: otel-collector
-
-  run:
-    post:
-      - type: export_otel
-        config:
-          events_jsonl: "{events_jsonl}"
-          destination: otlp    # reads OTEL_EXPORTER_OTLP_ENDPOINT from env
-          service_name: "my-experiment"
-          overwrite: true
-```
-
-### Selecting the bundle
-
-`--infra` is the CLI flag orthogonal to `--flavour`:
-
-| Flag | Selects |
-|------|---------|
-| `--flavour local` | LLM / model configuration |
-| `--infra local-test` | Infrastructure services (OTel, storage, …) |
+`experiment-services.yaml` adds a `service_start` step under `pre:` and a `service_stop` step under `post:`.
+It selects the bundle with `default_infra: local-http`; `--infra NAME` overrides it.
 
 ```bash
-# Local run — Docker collector auto-provisioned
-mas-lab benchmark run experiment.yaml --infra local-test --single-run
-
-# to the production collector endpoint)
-mas-lab benchmark run experiment.yaml --infra staging
-
-# No infra (destination: json — file output only, no network)
-mas-lab benchmark run experiment.yaml
+cd docs/tutorials/03-experiments-and-analysis
+mas-lab benchmark run experiment-services.yaml --infra local-http --dry-run
 ```
 
-### How env vars flow
-
-1. `service_start` calls `ServiceManager.start()` → runs `docker compose up -d`
-2. The bundle's `env:` block is injected into the **current process** environment
-3. `export_otel` with `destination: otlp` reads `OTEL_EXPORTER_OTLP_ENDPOINT`
-   automatically from `os.environ`
-4. `service_stop` runs `docker compose down` after all runs complete
-
-> The same mechanism works for **port-forward backends** (k8s services, remote gateways,
-> port-forward) — the bundle sets `OTEL_EXPORTER_OTLP_ENDPOINT` to the
-> tunnelled address; no change to the experiment YAML is needed.
-
-### Smoke test
-
-The full end-to-end smoke test lives at
-`labs/otel-smoke-test.lab/experiment.yaml` and demonstrates all four modes
-(JSON file, managed Docker, dry-run, external backend).  Run it with:
-
-```bash
-# Mode 2: Docker auto-provisioned
-mas-lab benchmark run labs/otel-smoke-test.lab/experiment.yaml \
-    --infra local-test --single-run --force
-
-# Inspect spans
-cat /private/tmp/mas-otel/traces.jsonl | python3 -m json.tool | head -40
-```
+The dry run prints `Pipeline   : 2 steps (2 experiment)` and `Configuration valid`, and starts nothing.
+Drop `--dry-run` to start the server and export `T3_SERVICE_URL` to later steps. `mas-lab benchmark step-info service_start` lists parameters.
 
 ---
 
-## Running the experiments
+## Going further
 
-### QA agent analysis (Part A/B)
+- **Telemetry export:** [Tutorial 8](../08-telemetry/README.md) covers `export_otel` and service bundles end to end.
+- **Knowledge graph:** [Tutorial 9](../09-kg-oxp/README.md) normalizes traces into a graph.
+- **Larger experiments:** `labs/design-space.lab/` (patterns and topologies).
+- **CI:** `pytest tests/tutorials/test_scenario_commands.py -v -k tuto-03` replays the offline steps from `demo/scenario.yaml`.
 
-```bash
-T03=docs/tutorials/03-experiments-and-analysis
+## What you learned
 
-# Run the QA benchmark (3 scenarios × 2 items × 1 run = 6 executions)
-mas-lab benchmark run "$T03/experiment.yaml" --progress
-
-# Run the analysis pipeline
-mas-lab benchmark pipeline run "$T03/pipelines/analysis.yaml"
-```
-
-### Topology comparison (Part C)
-
-```bash
-# Tutorial scaffold (dry-run / small dataset)
-mas-lab benchmark run "$T03/experiment-topology.yaml" --dry-run
-
-# Full trip-planner comparison — design-space lab
-mas-lab benchmark run labs/design-space.lab/02-topologies/experiment.yaml --progress
-
-# Inspect benchmark metadata and outputs
-mas-lab benchmark show last -v
-```
-
----
-
-## File structure
-
-Tutorial artifacts live beside this README:
-
-```
-docs/tutorials/03-experiments-and-analysis/
-├── README.md
-├── agent.yaml                       # Q&A agent (Tutorial 1 style)
-├── mas.yaml                         # single-agent MAS wrapper
-├── dataset.yaml                     # 2 QA items
-├── experiment.yaml                  # Part A/B — pattern sweep
-├── experiment-topology.yaml         # Part C scaffold
-├── pipelines/analysis.yaml          # post-benchmark analysis
-├── overlays/                        # CoT, ReAct, Reflection
-├── fixtures/events.jsonl            # offline trace for demo/scenario.yaml
-└── demo/scenario.yaml               # CI command replay + expected exit codes
-```
-
-Larger experiments: `labs/design-space.lab/` (patterns + topologies).
-
----
+- A benchmark expands Experiment, Scenario, Item, Run. Each level writes its own output and `events.jsonl` traces.
+- You can analyze a trace by hand (telemetry, plots, MCE scoring) and turn those steps into a re-runnable pipeline.
+- You can compare MAS topologies with overlays, from a smoke run to the design-space lab.
 
 ## Next
 
-[Tutorial 8 — Telemetry](../08-telemetry/) converts these native traces to
-OTel (live plugin or replay). [Tutorial 9 — KG & OXP](../09-kg-oxp/)
-normalizes OTel or native events into a knowledge graph and checks the two
-KG paths match.
+- [Tutorial 4 — MCP tools](../04-mcp-tools/README.md) and [Tutorial 5 — A2A agents](../05-a2a-agents/README.md) move tools and peers behind protocols.
+- [Tutorial 8 — Telemetry](../08-telemetry/README.md) and [Tutorial 9 — KG and OXP](../09-kg-oxp/README.md) build on these traces.
 
-Use the labs as your base to create additional experiments:
-
-- duplicate an existing `labs/*.lab/experiment.yaml`
-- point it to a new dataset or topology overlay
-- run `mas-lab benchmark run ...` and compare outputs
+To build your own experiment, duplicate a `labs/*.lab/experiment.yaml`, point it at a new dataset or overlay, and run `mas-lab benchmark run ...`.

@@ -4,14 +4,14 @@
 -->
 # agentskills.io Specification Coverage
 
-This document tracks `mas-library-skills` coverage of the
+This page lists which parts of the agentskills.io specification `mas-library-skills` implements. It is for contributors and for users who port skills from other clients. It follows the
 [agentskills.io client implementation guide](https://agentskills.io/client-implementation/adding-skills-support)
 and [specification](https://agentskills.io/specification).
 
 **Last reviewed:** 2026-08-26  
 **Spec version:** agentskills.io (2026-08)
 
-Legend: ✅ Implemented · ⚠️ Partial · ❌ Not yet · 🔲 Out of scope
+Legend: ✅ implemented, ⚠️ partial, ❌ not implemented, 🔲 out of scope.
 
 ---
 
@@ -140,10 +140,10 @@ Legend: ✅ Implemented · ⚠️ Partial · ❌ Not yet · 🔲 Out of scope
 
 | Feature | Decision |
 |---------|----------|
-| `metadata` + `allowed-tools` fields | Stored in raw `meta` dict; not yet wired to anything useful. A design sketch (`SkillGovernancePolicy`) was written and evaluated, but wiring it into the real `GovernancePolicyEngine` is not low-complexity — that engine is declarative/YAML-driven (trigger/condition/action, see `runtime/src/mas/runtime/boundary/gov/policy_engine.py`), not the imperative `authorize()`-hook design the sketch assumed. Parked on the `skill-governance-policy-future` branch as a starting point until skill/activation state is threaded into `evaluate_trigger()`'s condition data. |
-| User-explicit skill activation (`/skill-name`) | Requires session-layer hook. Implement as a `mas-ctl chat` pre-processor when CLI skill UX is prioritised. |
-| Skill filtering / disable flag | No per-skill disable mechanism in MAS Lab manifests today. Use `spec.skills` ref list as the allowlist (simply don't include unwanted skills). |
+| `metadata` + `allowed-tools` fields | Stored in raw `meta` dict; not yet wired to anything useful. Wiring them into `GovernancePolicyEngine` needs skill and activation state in the condition data of `evaluate_trigger()`; that engine is declarative and YAML-driven (trigger, condition, action; see `runtime/src/mas/runtime/boundary/gov/policy_engine.py`). |
+| User-explicit skill activation (`/skill-name`) | Needs a session-layer hook (for example a `mas-ctl chat` pre-processor). |
+| Skill filtering / disable flag | No per-skill disable mechanism in MAS Lab manifests today. Use `spec.skills` ref list as the allowlist (omit unwanted skills). |
 | `activate_skill` JSON Schema `enum` | `ManifestToolProvider` loads tools without access to a live registry at schema time. Workaround: description text lists valid names. Full enum requires registry-aware tool loading. |
-| Trust level for project skills | MAS Lab uses explicit manifest refs only (no auto-discovery of untrusted repos). Not applicable for the current deployment model. |
+| Trust level for project skills | MAS Lab uses explicit manifest refs only (no auto-discovery of untrusted repos). Not applicable. |
 | Subagent delegation | Supported generically by MAS Lab multi-agent patterns; no skill-specific delegate wrapper needed. |
-| Cloud/sandboxed skill discovery | Skills travel with manifests in MAS Lab. Remote registries are out of scope for v0.1. |
+| Cloud/sandboxed skill discovery | Skills travel with manifests in MAS Lab. Remote registries are out of scope. |

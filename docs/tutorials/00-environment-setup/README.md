@@ -4,421 +4,183 @@
 -->
 # Tutorial 0 — Environment Setup
 
-> **Packages:** `mas-runtime`, `mas-ctl`, `mas-lab` (PyPI, Docker, or source checkout)
-> **Time:** ~10 min (Docker fast path) · ~20 min (developer path)
-> **Goal:** Install MAS Lab, configure LLM access, and run your first
-> `mas-ctl` commands before Tutorial 1.
+> **Packages:** `mas-runtime`, `mas-ctl`, `mas-lab` (Docker or source checkout; PyPI upload pending)
+> **Time:** ~10 min (Docker) · ~20 min (developer)
 
----
+You install MAS Lab, give it access to an LLM, and run your first `mas-ctl` commands.
+`mas-ctl` runs one agent or one multi-agent system (MAS). `mas-lab` runs experiments and manages configuration.
+
+## What you need
+
+- A clone of the repository: `git clone https://github.com/outshift-open/mas-lab.git && cd mas-lab`
+- An `OPENAI_API_KEY` for live LLM runs. Offline, only `mas-ctl validate` works.
 
 ## Choose your path
 
 | Path | Best for | You need |
-| ------ | ---------- | ---------- |
-| **[Path 0 — PyPI packages](#path-0-pypi-packages)** | Users running a published release | Python ≥ 3.11, `uv` |
-| **[Fast path — Docker only](#fast-path-docker-only)** | Users, demos, benchmarks | Docker, git, `OPENAI_API_KEY` for live LLM runs |
-| **[Path A — Docker (full)](#path-a-docker-users)** | Same as fast path + CLI patterns, mounts, `task` helpers | Docker, optional [go-task](https://taskfile.dev/) |
-| **[Path B — Developers](#path-b-developers-uv-task)** | Patching runtime, ctl, or lab | Python ≥ 3.11, `uv`, `task`, [direnv](https://direnv.net/) recommended |
+| ---- | -------- | -------- |
+| [Path 0 — PyPI](#path-0-pypi-packages) (not yet published) | Running a published release | Python ≥ 3.11, `uv` |
+| [Path 1 — Docker](#path-1-docker) | Users, demos, benchmarks | Docker, optional [go-task](https://taskfile.dev/) |
+| [Path 2 — Developer](#path-2-developers-uv-task) | Patching runtime, ctl, or lab | Python ≥ 3.11, `uv`, `task`, [direnv](https://direnv.net/) (recommended) |
 
-Both paths use the **same manifests and tutorials**. Developers can still use Docker
-for the UI (`task start`) while editing Python sources on the host.
-
-**Infrastructure defaults** (`standard:openai`, `standard:ollama`, bundles, trace cache)
-are documented in [§ Infrastructure](#infrastructure-llm-endpoints-and-data-paths) below —
-not in the root README, because they only matter once you are setting up a run.
-
----
+If unsure, pick Docker. All paths use the same manifests. Then do [Verify your install](#verify-your-install).
 
 ## Path 0 — PyPI packages
 
-<!-- TEMPORARY: remove this note after the first successful public PyPI upload. -->
-> **PyPI publication pending:** this path documents the intended release
-> experience, but the packages are not uploaded yet. Use the Docker or developer
-> paths below until the first public PyPI release is complete.
-
-Use this path to run a published release without cloning or editing the
-MAS-Lab source tree. The packages are installed into a local venv; the console
-scripts are the same as in the source and Docker paths.
-
-### 1 — Create a venv and install the release
+The packages are not uploaded yet. Use Docker or the developer path until the first release.
 
 ```bash
 uv venv .venv
 uv pip install mas-lab mas-library-standard mas-library-samples
 export PATH="$PWD/.venv/bin:$PATH"
-```
-
-For a specific release, add a version constraint to each package, for example
-`mas-lab==0.2.0`. These are the public PyPI names and do not require a Cisco
-checkout or internal package index.
-
-### 2 — Configure and test the installed CLI
-
-```bash
 mas-lab init
 export OPENAI_API_KEY=<your-key>
-mas-ctl validate path/to/agent.yaml
-mas-ctl chat path/to/agent.yaml -q "What is the capital of France?"
 ```
 
-Use `mas-ctl validate` for an offline schema/ref check. Use `mas-ctl chat` or
-`mas-ctl run-mas` only when the selected infra bundle has a reachable provider.
+`mas-lab` installs `mas-runtime` and `mas-ctl`. To pin a release, use `mas-lab==0.2.0`.
+The tutorial manifests live in the repository, not in the packages. Clone it to follow Tutorial 1.
 
----
+## Path 1 — Docker
 
-## Fast path — Docker only
+### Step 1 — Configure LLM access
 
-No `uv`, no `task`, no direnv. You will configure LLM access, build the Docker
-images, and run a few `mas-ctl` commands to confirm the install.
-
-### 1 — Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or Docker Engine
-- `git clone https://github.com/outshift-open/mas-lab.git && cd mas-lab`
-
-### 2 — Configure LLM access (read this first)
-
-Three separate concerns — never mix secrets into YAML:
+LLM access has three parts. Keep secrets out of YAML.
 
 | Piece | What it is | Where it lives |
-| ------- | ------------ | ---------------- |
-| **Infra manifest** | Non-secret endpoint config (API base URL, allowed models, `api_key_env` name) | `infra_refs` in `config.yaml` or `--infra-ref` on CLI |
-| **Credential** | API key or token | `docker/.env` (Docker) or gitignored `.env` (developers) |
-| **Flavour** | Runtime environment bundle (`local` = default in `library-standard`) | `mas_ctl.flavour` / `mas_lab.flavour` in workspace, or manifest |
+| ----- | ---------- | -------------- |
+| **Infra manifest** | Endpoint settings: API base URL, allowed models, `api_key_env` name (no secret) | `infra_refs` in `config.yaml`, or `--infra-ref` |
+| **Credential** | API key or token | `docker/.env` (Docker) or a gitignored `.env` (developers) |
+| **Flavour** | Named runtime environment; `local` is the default | `mas_ctl.flavour` / `mas_lab.flavour`, or the manifest |
 
-For the bundled `standard:openai` or `standard:ollama` providers, no host CLI
-installation or `mas-lab init` step is required. Set the API key in the Docker
-environment file:
+The bundled `standard:openai` and `standard:ollama` infra need no `mas-lab init`. Set the key:
 
 ```bash
 cp docs/tutorials/00-environment-setup/.env.example docker/.env
 # Edit docker/.env — set OPENAI_API_KEY=sk-...
 ```
 
-For a custom provider, place the project `config.yaml` on the mounted workspace
-or bind-mount a host config tree as described in the repository's Docker README.
+For an OpenAI-compatible proxy, pass `--infra-ref standard:llm-proxy` and set `LLM_PROXY_API_BASE` next to the key.
+Schema: [`config.schema.yaml`](../../schemas/config.schema.yaml). Reference: [user-config.md](../../user-config.md).
 
-The host-side initialization choices are:
-
-- `mas-lab init` writes the shared XDG config, which Docker mounts read-only as
-  its user-config fallback.
-- `mas-lab init --local` writes `config.yaml` and `infra/<name>.yaml` in the
-  project root; Docker sees these through `/workspace`, and they take priority.
-
-The generated `~/.config/mas/config.yaml` sets:
-
-- `infra_refs` — the manifest(s) to register (your custom file or a bundled ref like `standard:openai`)
-- **`default_infra`** — which registered manifest is used by default when no `--infra-ref` flag is given
-
-Keep secrets out of YAML: the infra manifest sources the key from an env var
-(`api_key_env: OPENAI_API_KEY`) — the key is never written in the file.
-
-Schema: [`docs/schemas/config.schema.yaml`](../../schemas/config.schema.yaml).
-Full reference: [user-config.md](../../user-config.md).
-
-### 3 — Build images
+### Step 2 — Build the images
 
 ```bash
 cd docker
-docker compose build backend   # CLI + controller API
+docker compose build backend   # CLI + controller API; first build takes several minutes
 # UI (optional): docker compose build ui
 ```
 
-Tags: `mas-lab-backend:local` (required), `mas-lab-ui:local` (optional UI). First backend build takes several minutes.
+For a clean rebuild, run `task docker-rebuild`.
 
-Clean rebuild (remove old images first):
+### Step 3 — Run the CLI
 
-```bash
-task docker-rebuild
-# or: docker compose down --rmi local && docker rmi mas-lab-backend:local mas-lab-ui:local
-#     && docker compose build --no-cache
-```
-
-### 4 — Verify the CLI (offline)
-
-These commands confirm that Docker can run `mas-ctl` and read tutorial manifests.
-They do **not** call an LLM, so you can run them before adding an API key.
+Prefix every `mas-ctl` / `mas-lab` command with the `cli` service (profile `tools`):
 
 ```bash
 docker compose --profile tools run --rm --no-deps cli mas-lab config
 docker compose --profile tools run --rm --no-deps cli mas-ctl validate \
   docs/tutorials/01-building-an-agent/agent.yaml
-```
-
-**Live LLM** (after `OPENAI_API_KEY` is in `docker/.env`):
-
-```bash
 docker compose --profile tools run --rm --no-deps cli mas-ctl chat \
-  docs/tutorials/01-building-an-agent/agent.yaml \
-  -q "What is the capital of France?"
+  docs/tutorials/01-building-an-agent/agent.yaml -q "What is the capital of France?"
 ```
 
-**Corporate / OpenAI-compatible proxy** — set `infra_refs: [standard:llm-proxy]` in
-`~/.config/mas/config.yaml` (via `mas-lab init`) and
-`LLM_PROXY_API_BASE` in `.env` / `docker/.env`. See
-[`.env.example`](.env.example).
+The first two commands run offline. `chat` needs the key or an [llm_cache](../../manifests/llm-cache.md) replay.
+Use `cli`, not `backend` (the long-running API service).
 
-**Offline** (no network — validate only; chat needs a live provider or llm_cache replay):
+Two more checks, both from `docker/`. The dry run plans an experiment without calling the LLM. `run-mas` runs a multi-agent system and needs a key or a cache replay.
 
 ```bash
-docker compose --profile tools run --rm --no-deps cli mas-ctl validate \
-  docs/tutorials/01-building-an-agent/agent.yaml
+docker compose --profile tools run --rm --no-deps cli mas-lab benchmark run \
+  labs/design-space.lab/01-design-patterns/experiment.yaml --dry-run
+docker compose --profile tools run --rm --no-deps cli mas-ctl run-mas path/to/mas.yaml -q "Hello"
 ```
 
-| CLI | What it does |
-| ----- | ---------------- |
-| `mas-ctl validate <agent.yaml>` | Schema + refs without running |
-| `mas-ctl chat <agent.yaml> -q "…"` | Single agent, one turn |
-| `mas-ctl run-mas <mas.yaml> -q "…"` | Full MAS workflow |
-| `mas-ctl list-bundles` | Installed infra bundles (`standard:openai`, …) |
-| `mas-lab config` | Effective data paths and overrides |
+In the container, the working directory `/opt/mas-lab` is a copy of the repository baked into the image.
+Your host checkout is mounted at `/workspace`. Use `/workspace/<path>` for files you edited after the build.
 
-On `mas-ctl`, **`-o` / `--overlay`** applies a manifest overlay (not an output path).
-To write the trace elsewhere, use **`--events-file /path/to/events.jsonl`**.
-
-### 5 — Trace cache and finding results
-
-| Store | Default location | Purpose |
-| ------- | ------------------ | --------- |
-| **Trace cache** | `$XDG_CACHE_HOME/mas/traces/` (default `~/.cache/mas/traces/`) | Content-addressed LLM traces — **re-runs skip cached completions** |
-| **Lab outputs** | `$XDG_DATA_HOME/mas/labs/<lab>/<experiment>/…` | Benchmark trees: `…/itemN/rN/traces/events.jsonl`, `results/` |
-| **CLI chat traces** | Next to manifest: `traces/events.jsonl` unless `--events-file` set | Ad-hoc `mas-ctl chat` runs |
-
-Confirm paths:
-
-```bash
-mas-lab config
-```
-
-**Override output location**
-
-| Tool | Flag | Effect |
-| ------ | ------ | -------- |
-| `mas-lab benchmark run` | `-o` / `--output-dir PATH` | Write this experiment under `PATH` instead of the global labs tree |
-| `mas-lab benchmark run` | `--trace-cache PATH` | Separate trace cache (bypass shared cache) |
-| `mas-ctl chat` | `--events-file PATH` | Write `events.jsonl` to `PATH` |
-
-Workspace `paths:` keys in `config.yaml` mirror `$XDG_CONFIG_HOME/mas/config.yaml`
-when you want per-project defaults (schema: `paths.labs_dir`, `paths.cache_dir`,
-`paths.runs_dir`).
-
-### 6 — Start the web UI
-
-The browser UI is the easiest way to browse manifests and benchmark results after
-install. It uses the same Docker stack as the CLI.
-
-```bash
-cd docker && docker compose up -d
-# or from repo root: task start
-```
-
-| Service | URL |
-|---------|-----|
-| **Web UI** | <http://localhost:8080> |
-| Controller API | <http://localhost:8090/api/health> |
-
-What to try: open an experiment under `labs/` or `docs/tutorials/`, validate it,
-and inspect `results/` from a completed run. Guide: [Web UI](../../ui/index.md).
-
-### 7 — Next
-
-→ [Tutorial 1 — Building an Agent](../01-building-an-agent/) — prefix commands with
-`docker compose --profile tools run --rm --no-deps cli` when staying on Docker.
-
----
-
-## Path A — Docker users
-
-Everything in the [fast path](#fast-path-docker-only), plus how mounts and config work.
-
-### Volume mounts
-
-| Container | Host (default) | Purpose |
-|-----------|----------------|---------|
-| `/workspace` | Repository root (`..` from `docker/`) | `labs/`, `infra/`, tutorials |
+| Container path | Host (default) | Purpose |
+| -------------- | -------------- | ------- |
+| `/workspace` | Repository root | `labs/`, `infra/`, tutorials |
 | `/data` | `docker/data/` | Trace cache, benchmark outputs |
 
-Override in `docker/.env`:
+Override the mounts in `docker/.env` with `MAS_WORKSPACE_MOUNT` and `MAS_DATA_MOUNT`.
+Configuration priority: `/workspace/config.yaml`, then the mounted `~/.config/mas/config.yaml`, then the baked `/opt/mas-lab/config.yaml`.
+
+### Step 4 — Start the web UI (optional)
 
 ```bash
-MAS_WORKSPACE_MOUNT=/path/to/your/project
-MAS_DATA_MOUNT=/path/to/persistent-data
+cd docker && docker compose up -d      # or from the repo root: task start
 ```
 
-The sample workspace is at [`library-samples/sample-workspace/`](../../../library-samples/sample-workspace/).
-Copy `config.yaml` to your project root, or run commands from
-`library-samples/sample-workspace/` when working from this checkout.
-
-`mas-lab init` uses templates bundled in the `mas-lab` package (no `library-samples` install required):
-- [`lab/src/mas/lab/templates/init/config.yaml`](../../../lab/src/mas/lab/templates/init/config.yaml)
-- [`lab/src/mas/lab/templates/infra/llmprovider.yaml`](../../../lab/src/mas/lab/templates/infra/llmprovider.yaml)
-
-### Configuration priority (inside Docker)
-
-```
-/workspace/config.yaml   ← project copy (highest; optional on host mount)
-/opt/mas-lab/config.yaml ← baked sample when mount has no project file
-docker/.env                     ← OPENAI_API_KEY
-/data/                            ← trace cache & benchmark outputs
-```
-
-`MAS_WORKSPACE_ROOT=/workspace` is set in the container. The runtime does **not**
-read a host `$XDG_CONFIG_HOME/mas/config.yaml` when that env var is set.
-
-### One-off CLI commands
-
-```bash
-cd docker
-
-# Benchmark (uses trace cache under /data)
-docker compose run --rm cli mas-lab benchmark run \
-  labs/design-space.lab/01-design-patterns/experiment.yaml --dry-run
-
-# Multi-agent
-docker compose run --rm cli mas-ctl run-mas path/to/mas.yaml -q "Hello"
-```
-
-The `cli` service uses the **tools** profile — it is the service for one-off CLI commands (`docker compose --profile tools run --rm cli …`). Don't use `backend` (the long-running API service) for CLI commands.
-
-### Taskfile helpers (optional)
-
-Install [go-task](https://taskfile.dev/), then from the **repository root**:
+Open the UI at <http://localhost:8080>. The controller API is at <http://localhost:8090/api/health>. See the [Web UI guide](../../ui/index.md).
 
 | Task | Purpose |
-| ------ | --------- |
-| `task start` | Build if needed, start UI + backend detached |
-| `task restart` | Rebuild + recreate after `docker/.env` or code changes |
-| `task verify-env` | Confirm `OPENAI_API_KEY` inside the running backend container |
-| `task docker-rebuild` | Remove local images and `docker compose build --no-cache` |
+| ---- | ------- |
+| `task start` / `task restart` | Start the stack; rebuild after `docker/.env` or code changes |
+| `task verify-env` | Confirm `OPENAI_API_KEY` inside the backend container |
 
-Secrets belong in `docker/.env` only — shell `export OPENAI_API_KEY` is **not**
-passed into containers (avoids stale keys). After editing `.env`, run `task restart`.
+Put secrets in `docker/.env` only. A shell `export` does not reach containers. Details: `docker/README.md`.
 
-Full reference: `docker/README.md` in the repository.
+## Path 2 — Developers (uv + task)
 
----
+Use this path to change the Python sources in `runtime/`, `ctl/`, or `lab/`.
 
-## Path B — Developers (uv + task)
+### Step 1 — Install
 
-Use this path when you change Python sources in `runtime/`, `ctl/`, or `lab/`.
-
-### 1 — Prerequisites (one-time)
-
-| Tool | Purpose | Install |
-| ------ | --------- | --------- |
-| **Python ≥ 3.11** | Runtime | `python3 --version` |
-| **uv** | Fast installs | `brew install uv` or [astral.sh/uv](https://astral.sh/uv/) |
-| **task** | Repo automation | `brew install go-task` |
-| **direnv** (recommended) | Auto-activate `.venv` | `brew install direnv` + hook in `~/.zshrc` |
-
-### 2 — Clone and install
+Install Python ≥ 3.11, `uv` (`brew install uv`), `task` (`brew install go-task`), and optionally `direnv`.
 
 ```bash
-git clone https://github.com/outshift-open/mas-lab.git
-cd mas-lab
-direnv allow          # recommended; uses committed .envrc → ./.venv
-uv sync               # workspace packages are installed editable by default
-```
-
-Without direnv, run `uv venv .venv` once and then `uv sync` from the repository
-root. `uv run` executes commands in the synchronized workspace environment:
-
-```bash
-uv run mas-lab --help
-uv run mas-ctl validate docs/tutorials/01-building-an-agent/agent.yaml
-uv run pytest library-skills/tests -q
-```
-
-For the explicit editable-install workflow used by CI and the Taskfile:
-
-```bash
+git clone https://github.com/outshift-open/mas-lab.git && cd mas-lab
+direnv allow          # recommended; uses the committed .envrc -> ./.venv
+uv sync               # workspace packages install editable
 task install-dev      # editable packages plus test and sample dependencies
-task verify-unit      # unit and package boundary tests
 ```
 
-Verify CLIs:
+Without direnv, run `uv venv .venv` once, then `uv sync`. `uv run <cmd>` runs a command in that environment.
+`task install-all` adds every optional library.
+
+Check the install. `command -v` prints three paths, and `--help` lists the commands. `task verify-unit` runs unit and package-boundary tests.
 
 ```bash
 command -v mas-lab mas-ctl mas-runtime
 mas-lab --help
+task verify-unit
 ```
 
-For evaluation metrics, tutorials, and sample apps:
-
-```bash
-task install-dev      # install + pytest, pyarrow, library-samples
-# or full optional libraries:
-task install-all
-```
-
-Manifest reference: [references/index.md](../../references/index.md).
-
-### 3 — direnv and `.env`
-
-The committed `.envrc` sets `UV_PROJECT_ENVIRONMENT=./.venv` so this checkout
-never shadows another project's venv.
-
-Create a **gitignored** `.env` at the repo root for secrets:
+### Step 2 — Set the key
 
 ```bash
 cp docs/tutorials/00-environment-setup/.env.example .env
 # Edit .env and set OPENAI_API_KEY=sk-...
 ```
 
-`mas-lab benchmark run` and `mas-ctl chat` walk up from the cwd and load `.env`
-automatically. **Never** commit API keys.
+`mas-ctl` and `mas-lab benchmark run` load `.env` from the current directory. `mas-ctl` also searches
+from the manifest's directory up to the repository root. Use `mas-ctl --env FILE …` to name one. Never commit keys.
 
-### 4 — Per-run overrides
-
-Configure LLM access via `mas-lab init` (writes `~/.config/mas/config.yaml`) or
-workspace `config.yaml`. For a single run, use CLI flags — they are visible in
-the command and do not leak into other runs:
-
-| Flag | Purpose |
-| ---------- | --------- |
-| `--infra-ref REF` | Use another infra bundle (e.g. `standard:llm-proxy`) |
-| `--model ID` (`mas-ctl chat` / `tui`) | Override the agent model (e.g. `gpt-4o-mini`, or a provider-prefixed id via a proxy gateway) |
-
-The environment is for secrets only:
-
-| Variable | Purpose |
-| ---------- | --------- |
-| `LLM_PROXY_API_BASE` | API base for `standard:llm-proxy` (read from `.env`) |
-| `OPENAI_API_KEY` | Credential named by the LLMProxy manifest |
-
-`MAS_*` override variables exist for test harnesses only; see
-[Environment overrides](../../user-config.md#environment-overrides-last-resort).
-
-### 5 — User config (`$XDG_CONFIG_HOME/mas/config.yaml`)
-
-Machine-wide paths and default infra bundle:
+### Step 3 — Set the user config
 
 ```bash
-mas-lab init
-# Interactive: sets up ~/.config/mas/config.yaml and optionally ~/.config/mas/infra/<name>.yaml
+mas-lab init          # writes ~/.config/mas/config.yaml (and optionally infra/<name>.yaml)
+mas-lab config        # show effective paths
 ```
 
-Check effective paths:
+The user config holds two keys: `infra_refs` (manifests to register, such as `standard:openai`) and
+`default_infra` (used when you pass no `--infra-ref`). To write it by hand, start from
+[`config.example.yaml`](config.example.yaml) (user config) or
+[`config.openai.example.yaml`](config.openai.example.yaml) (project config).
 
-```bash
-mas-lab config
-```
+`mas-lab init --local` writes `config.yaml` and `infra/<name>.yaml` in the project root instead. Those take priority.
 
-### 6 — Self-contained projects (`mas-lab init --local`)
+### Step 4 — Make a self-contained project (optional)
 
-For a project you want to zip up, commit fixtures for, or hand to someone
-else unchanged, keep every path inside the project folder instead of
-`$XDG_DATA_HOME` / `$XDG_CACHE_HOME`:
+To hand a project to someone unchanged, keep all paths inside it:
 
 ```bash
 mkdir my-project && cd my-project
 mas-lab init --local --yes
 ```
 
-`--local` writes `config.yaml` and `infra/<name>.yaml` under the current
-directory instead of `$XDG_CONFIG_HOME/mas/`. Add a `paths:` block so traces,
-the trace cache, and benchmark runs all resolve under a local `data/` folder —
-see [config.local-example.yaml](config.local-example.yaml):
+Add a `paths:` block ([`config.local-example.yaml`](config.local-example.yaml)) and `data/` to `.gitignore`:
 
 ```yaml
 paths:
@@ -427,152 +189,99 @@ paths:
   runs_dir: ./data/runs
 ```
 
-Confirm every path now resolves inside the project:
+Precedence: CLI flag, `MAS_*` variable, `paths:`, user config, XDG defaults. See [user-config.md § Data paths](../../user-config.md#data-paths).
 
-```bash
-mas-lab config
-```
+### Step 5 — Common tasks
 
-`.gitignore` the `data/` directory and the project is fully portable: anyone
-who checks it out gets the same layout, and nothing is written outside the
-repo. Full precedence ladder (CLI flag → `MAS_*` env → `paths:` → user
-config → XDG defaults): [user-config.md § Data paths](../../user-config.md#data-paths).
-
-### 7 — Taskfile overview
-
-Run `task --list` from the repo root. Common tasks:
+Run `task --list` for all tasks. The useful ones:
 
 | Task | Purpose |
-| ------ | --------- |
-| `task install` / `install-dev` / `install-all` | Editable package installs |
-| `uv sync` / `uv run ...` | Synchronized editable workspace commands |
-| `task verify` | Pre-commit gate (unit + tutorial manifests + smoke) |
-| `task ci` | CI-parity suite, including functional and smoke gates |
-| `task verify-tutorials` | Replay tutorial `demo/scenario.yaml` commands |
-| `task reproduce` | Run all paper lab experiments |
-| `task start` / `restart` | Docker UI stack |
-| `task docs-serve` | Local MkDocs site (`http://127.0.0.1:8000`) |
-| `task docs-build` | Build site to `site/` (same as GitHub Pages CI) |
+| ---- | ------- |
+| `task verify` | Pre-commit gate: version and env checks, then `task ci` |
+| `task ci` | CI-parity suite |
+| `task verify-tutorials` | Replay each tutorial's `demo/scenario.yaml` commands |
+| `task docs-serve` | Local MkDocs site at `http://127.0.0.1:8000` |
 
-### 8 — Smoke test
+After `git pull`, run `task install` only if dependencies changed.
 
-```bash
-uv run mas-ctl validate docs/tutorials/01-building-an-agent/agent.yaml
-uv run mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
-  -q "What is the capital of France?"
-```
+## Verify your install
 
-Offline (no network — validate only; chat needs a live provider or [llm_cache](../../manifests/llm-cache.md) replay):
+Run this from the repository root (prefix with `uv run` or the Docker command if needed):
 
 ```bash
-uv run mas-ctl validate docs/tutorials/01-building-an-agent/agent.yaml
+mas-ctl validate docs/tutorials/01-building-an-agent/agent.yaml
+mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml -q "What is the capital of France?"
 ```
 
-### 9 — Keeping up to date
+`validate` works offline and prints a success line. `chat` prints an answer that names Paris.
 
-```bash
-git pull
-task install      # only if pyproject.toml dependencies changed
-```
+## Where things go
 
-Editable installs pick up **code** changes immediately; dependency changes need `task install`.
+A trace is the record of a run. `events.jsonl` is its machine-readable form: one JSON event per line.
+The trace cache stores LLM completions so repeated runs skip the LLM call.
 
----
+| Store | Default location |
+| ----- | ---------------- |
+| Trace cache | `$XDG_CACHE_HOME/mas/traces/` (default `~/.cache/mas/traces/`) |
+| Lab outputs | `$XDG_DATA_HOME/mas/labs/<lab>/<experiment>/…/itemN/rN/traces/events.jsonl` |
+| `mas-ctl chat` traces | `traces/events.jsonl` next to the manifest |
 
-## Infrastructure: LLM endpoints and data paths
+Run `mas-lab config` to confirm paths. To change them:
 
-The runtime needs a non-secret **infra reference** (where to call the LLM) and a
-secret **API key** in `.env` or `docker/.env`.
+| Tool | Flag | Effect |
+| ---- | ---- | ------ |
+| `mas-lab benchmark run` | `-o` / `--output-dir PATH` | Write the experiment under `PATH` |
+| `mas-lab benchmark run` | `--trace-cache PATH` | Use a separate trace cache |
+| `mas-ctl chat` | `--events-file PATH` | Write `events.jsonl` to `PATH` |
 
-### OSS infra bundles (`library-standard`)
+For per-project defaults, set `paths.labs_dir`, `paths.cache_dir`, and `paths.runs_dir` in the workspace `config.yaml`.
+On `mas-ctl`, `-o` / `--overlay` applies an overlay (a small YAML file that changes a manifest at run time). It is not an output path.
+
+## Infrastructure: LLM endpoints
+
+The infra reference says where to call the LLM. The key lives in `.env` or `docker/.env`.
 
 | Bundle | Use when |
-| -------- | ---------- |
+| ------ | -------- |
 | `standard:openai` | OpenAI API (`OPENAI_API_KEY`) |
 | `standard:ollama` | Local Ollama at `http://localhost:11434/v1` (no key) |
-| `standard:production` | **Default for tutorials** — wraps `standard:openai` |
+| `standard:production` | Tutorial default. Wraps `standard:openai`. |
 | `standard:development` | Local Ollama bundle |
 
-List installed bundles:
-
-```bash
-mas-ctl list-bundles
-# Docker:
-docker compose -f docker/compose.yaml run --rm --no-deps cli mas-ctl list-bundles
-```
-
-Set the default in `$XDG_CONFIG_HOME/mas/config.yaml` (`default_infra: standard:production`) or
-per-project in `config.yaml` (`infra_refs:`). CLI `--infra-ref` overrides
-for one run.
-
-### Inline URL (quickest smoke test)
+List them with `mas-ctl list-bundles`. Set the default with `default_infra: standard:production` in the user config,
+or `infra_refs:` in a project `config.yaml`. `--infra-ref` overrides it for one run, including an inline URL:
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
   --infra-ref http://localhost:11434/v1 -q "Hello"
 ```
 
-### Data directories
-
-| Setting | Contents |
-| --------- | ---------- |
-| `labs_dir` | Experiment trees (`<name>/<scenario>/itemN/rN/traces/events.jsonl`) |
-| `cache_dir/traces/` | Content-addressed trace store |
-| `cache_dir/artifacts/` | Pipeline step cache |
-
-Override: fields in `$XDG_CONFIG_HOME/mas/config.yaml` or workspace `config.yaml`.
-Always confirm with `mas-lab config`.
-
-More detail: [user-config.md](../../user-config.md).
-
----
+Use `--model ID` on `chat` / `tui` to override the agent model. `MAS_*` override variables exist for test harnesses only:
+see [Environment overrides](../../user-config.md#environment-overrides-last-resort).
 
 ## Verify this tutorial (CI)
 
-**Developer path (no Docker):**
-
 ```bash
-pytest tests/tutorials/test_scenario_commands.py -v -k "tuto-00 and Developer"
+pytest tests/tutorials/test_scenario_commands.py -v -k "tuto-00 and Developer"   # no Docker
+pytest tests/tutorials/test_scenario_commands.py -v -k tuto-00                   # Docker (skipped without a daemon)
+TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-00 # live LLM
 ```
-
-**Docker path** (skipped automatically when the daemon is not running):
-
-```bash
-pytest tests/tutorials/test_scenario_commands.py -v -k tuto-00
-```
-
-Full tutorial gate: `task verify-tutorials`.
-
-**Live LLM** (requires `OPENAI_API_KEY` in `.env` or `docker/.env`):
-
-```bash
-TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-00
-```
-
----
 
 ## Common errors
 
-### `command not found: mas-lab`
+| Symptom | Fix |
+| ------- | --- |
+| `command not found: mas-lab` | Run `direnv allow` or `source .venv/bin/activate`, then `task install`. |
+| `401` from the LLM | Set `OPENAI_API_KEY` in `docker/.env` then `task restart` (Docker), or in the repo `.env` (source). Check `default_infra` with `mas-lab config`. |
+| Docker build fails | Run `docker compose` from `docker/`. The first `uv sync` in the image needs network access. |
+| Wrong benchmark output path | Run `mas-lab config`. Outputs go to `$XDG_DATA_HOME/mas/labs/` unless the user config says otherwise. |
 
-Activate the venv: `direnv allow` or `source .venv/bin/activate`, then `task install`.
+## What you learned
 
-### `401` from the LLM
+- MAS Lab needs an infra manifest (where to call), a credential (the key), and a flavour (environment).
+- `mas-ctl validate` works offline; `chat` and `run-mas` need a provider or a cache replay.
+- `mas-lab config` shows where traces, cache, and results go.
 
-- Docker: set `OPENAI_API_KEY` in `docker/.env`, then `task restart`
-- Source: set `OPENAI_API_KEY` in repo `.env` or `source .env`
-- Check bundle: `mas-lab config` and `default_infra` in `$XDG_CONFIG_HOME/mas/config.yaml`
+## Next step
 
-### Docker build fails
-
-Ensure you run `docker compose` from `docker/` (or use `docker compose -f docker/compose.yaml` from repo root). Network is required for the first `uv sync` inside the image.
-
-### Wrong benchmark output path
-
-Run `mas-lab config` — outputs go to `$XDG_DATA_HOME/mas/labs/` by default (or paths from user config).
-
----
-
-## Next
-
-→ [Tutorial 1 — Building an Agent](../01-building-an-agent/)
+[Tutorial 1 — Building an Agent](../01-building-an-agent/README.md). On Docker, prefix its commands with `docker compose --profile tools run --rm --no-deps cli`.

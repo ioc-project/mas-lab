@@ -299,7 +299,7 @@ def generate_packages_reference(packages: list[Package]) -> str:
         task install-lab LAB=labs/extensions.lab
         ```
 
-        Extended OTel/KG observability is **not** an OSS extra — see `mas-lab-internal`.
+        OpenTelemetry export and knowledge-graph normalisation ship as separate libraries (`mas-library-telemetry`, `mas-library-kg`), not as extras of this package.
 
         ---
 
@@ -385,8 +385,8 @@ def generate_plugins_reference(
 
         Or by short name when using a flavour that already activates it.
 
-        See [flavours documentation](../library-standard/docs/user-guide.md) and
-        [Tutorial 2 — Creating a MAS](tutorials/02-creating-a-mas/) for
+        See [flavours documentation](https://github.com/outshift-open/mas-lab/blob/main/library-standard/docs/user-guide.md) and
+        [Tutorial 2 — Creating a MAS](tutorials/02-creating-a-mas/README.md) for
         practical examples.
 
         ---

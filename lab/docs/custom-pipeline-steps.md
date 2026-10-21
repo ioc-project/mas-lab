@@ -4,11 +4,18 @@
 -->
 # Custom pipeline steps
 
-A **custom pipeline step** is a `PipelineStep` subclass defined in the
-experiment's `lib/steps/` directory.  It integrates with the benchmark
-lifecycle identically to built-in steps — it can be `per_run: true`, produce
-artifacts, depend on other steps, and run inside `application.post` or
-`run.post` hooks.
+This page shows how to write a custom pipeline step in Python. Read it when no built-in step does what you need.
+
+A **custom pipeline step** is a `PipelineStep` subclass. It lives next to the experiment (this page uses a `lib/steps/` folder) or in a lab-local library. It behaves like a built-in step. It can be `per_run: true`, produce artifacts, depend on other steps, and run in `run.post` or experiment-level `post:` hooks.
+
+Smallest working example: the [minimal step](#minimal-step) below, referenced as `type: lib/steps/my_eval.py:MyEvalStep`.
+
+There are two ways to ship a step:
+
+- **File reference** (this page): point `type:` at `path/to/file.py:ClassName`. The path resolves from the experiment directory. Nothing to register.
+- **Lab-local library** (recommended for steps you reuse): put the class in a package listed under `lab.libraries`. Reference it as `package.module:ClassName` or by registered name. See [labs-going-further.md](labs-going-further.md).
+
+Step types already shipped: [pipeline-steps.md](pipeline-steps.md).
 
 ---
 
@@ -16,14 +23,11 @@ artifacts, depend on other steps, and run inside `application.post` or
 
 Write one when:
 
-- You need **deterministic fixture evaluation** (e.g. compare `run_action` tool
-  calls against ground-truth labels) without a round-trip to an LLM judge.
-- You need a **domain-specific plot** that standard `plotnine` config can't
-  express.
+- You need **deterministic fixture evaluation**, for example comparing `run_action` tool calls to ground-truth labels, without an LLM judge.
+- You need a **domain-specific plot** that the standard `plotnine` config cannot express.
 - You need to call an external service or library that has no built-in step.
 
-For everything else prefer built-in steps — `eval_mce`, `collect_metrics`,
-`plotnine`, `extract_trace_stats`.
+Otherwise use built-in steps: `eval_mce`, `collect_metrics`, `plotnine`, `extract_trace_stats`.
 
 ---
 
@@ -36,17 +40,15 @@ my-experiment/
 │   ├── __init__.py              # empty — makes lib/ a Python package
 │   └── steps/
 │       ├── __init__.py          # empty
-│       ├── my_custom_step.py    # one or more PipelineStep subclasses
-│       └── register_steps.py   # optional — registers types for standalone CLI use
+│       └── my_custom_step.py    # one or more PipelineStep subclasses
+├── register_steps.py            # optional — registers types for standalone CLI use
 ├── pipelines/
 │   ├── post-run.yaml            # per-run hooks
 │   └── post-experiment.yaml    # experiment-level hooks
 └── ...
 ```
 
-The `lib/` directory lives next to `experiment.yaml`.  Its parent is
-`experiment_yaml.parent`, which is the `base_dir` used by
-`build_runtime_pipeline` when resolving file-path step types.
+The `lib/` directory sits next to `experiment.yaml`. Its parent is `experiment_yaml.parent`. `build_runtime_pipeline` uses that directory as `base_dir` to resolve file-path step types.
 
 ---
 
@@ -76,7 +78,7 @@ class MyEvalStep(PipelineStep):
     type = "my_eval"        # registered name (used in YAML)
 
     async def execute(self, ctx: Any) -> StepOutput:
-        # ── 1. Get the run directory from execution context ───────────────
+        # 1. Get the run directory from execution context ───────────────
         run_dir = run_dir_from_ctx(ctx, self.config)
         if run_dir is None:
             raise ValueError(
@@ -84,7 +86,7 @@ class MyEvalStep(PipelineStep):
                 "Declare with 'per_run: true'."
             )
 
-        # ── 2. Resolve events.jsonl (handles .run_ref and inline traces) ──
+        # 2. Resolve events.jsonl (handles .run_ref and inline traces) ──
         events_path = resolve_run_events(ctx, self.config)
         if events_path is None or not events_path.exists():
             logger.warning("Step '%s': no trace for %s — skipping", self.name, run_dir)
@@ -96,10 +98,10 @@ class MyEvalStep(PipelineStep):
             if line.strip()
         ]
 
-        # ── 3. Evaluate ───────────────────────────────────────────────────
+        # 3. Evaluate
         score = _my_score(events)
 
-        # ── 4. Write metrics.json (MCE format — collect_metrics reads this) ──
+        # 4. Write metrics.json (MCE format — collect_metrics reads this) ──
         metrics_path = run_dir / "metrics.json"
         metrics_path.write_text(
             json.dumps({"session": {"my_metric": {"value": float(score)}}}, indent=2),
@@ -117,7 +119,7 @@ class MyEvalStep(PipelineStep):
 
 | Rule | Why |
 |------|-----|
-| Use `run_dir_from_ctx(ctx, config)` — not `config.get("run_dir")` | Uses `ctx.scope_context` (set by `per_run: true`); degrades gracefully to config fallback |
+| Use `run_dir_from_ctx(ctx, config)` — not `config.get("run_dir")` | Reads `ctx.scope_context` (set by `per_run: true`). Falls back to config |
 | Use `resolve_run_events(ctx, config)` — not `.run_ref` directly | Handles all storage modes: inline trace, symlinked `traces/`, and `.run_ref` cache indirection |
 | Write outputs to `run_dir` | `collect_metrics` looks for `metrics.json` at `<run_dir>/metrics.json` |
 | Never parse `events_path.parent.parent` to infer scenario | Use `ctx.scope_context.scenario` instead |
@@ -154,9 +156,8 @@ experiment:
     post:
       - ref: pipelines/post-run.yaml
 
-  application:
-    post:
-      - ref: pipelines/post-experiment.yaml
+  post:
+    - ref: pipelines/post-experiment.yaml
 ```
 
 > **Path resolution**: `base_dir` is always `experiment_yaml.parent`, for both
@@ -164,14 +165,14 @@ experiment:
 >
 > | Value | Resolves to |
 > |---|---|
-> | `lib/steps/my_eval.py` | `<experiment_dir>/lib/steps/my_eval.py` ✓ |
-> | `datasets/reference/fares.yaml` | `<experiment_dir>/datasets/reference/fares.yaml` ✓ |
-> | `../lib/steps/my_eval.py` | one level above the experiment dir ✗ |
-> | `../datasets/reference/fares.yaml` | one level above the experiment dir ✗ |
+> | `lib/steps/my_eval.py` | `<experiment_dir>/lib/steps/my_eval.py` (correct) |
+> | `datasets/reference/fares.yaml` | `<experiment_dir>/datasets/reference/fares.yaml` (correct) |
+> | `../lib/steps/my_eval.py` | one level above the experiment dir (wrong) |
+> | `../datasets/reference/fares.yaml` | one level above the experiment dir (wrong) |
 
 ### Inline (no separate YAML file)
 
-For a single step you can inline it directly in `experiment.yaml`:
+For a single step, declare it directly in `experiment.yaml`:
 
 ```yaml
 experiment:
@@ -188,36 +189,35 @@ experiment:
 
 ## `register_steps.py` — standalone CLI registration
 
-When running `mas-lab benchmark pipeline run pipelines/post-run.yaml -o ...`
-**directly** (not via `benchmark run`), the CLI calls `_load_lab_custom_steps`
-which searches upward from the pipeline file for `register_steps.py`.
+You run `mas-lab benchmark pipeline run pipelines/post-run.yaml -o ...` directly, not through `benchmark run`. Then the CLI loads the first `register_steps.py` it finds. It searches the pipeline file's directory and up to five parent directories.
 
-Create one so the type is recognized by the standalone pipeline CLI:
+Create one at the experiment root so the standalone pipeline CLI recognizes the type:
 
 ```python
-# lib/steps/register_steps.py
+# register_steps.py  (next to experiment.yaml)
 import sys
 from pathlib import Path
 
 # Make lib/ importable as a package when using the standalone CLI.
-_lib_root = Path(__file__).resolve().parents[2]   # experiment_dir
-if str(_lib_root) not in sys.path:
-    sys.path.insert(0, str(_lib_root))
+_root = Path(__file__).resolve().parent   # experiment_dir
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
 
-from mas.lab.benchmark.pipeline import register_step_type
+from mas.lab.benchmark.pipeline import register_step
 from lib.steps.my_eval import MyEvalStep
 
-register_step_type("my_eval", MyEvalStep)
+register_step("my_eval", MyEvalStep)
 ```
 
-> `register_steps.py` is **not needed** when running via `benchmark run`
-> because `build_runtime_pipeline` always passes `base_dir=experiment_yaml.parent`.
+With the type registered, the standalone pipeline YAML can say `type: my_eval` instead of the file reference. `register_step_type` is a deprecated alias of `register_step`.
+
+`register_steps.py` is not needed with `benchmark run`. `build_runtime_pipeline` always passes `base_dir=experiment_yaml.parent`.
 
 ---
 
 ## Downstream: aggregating per-run metrics
 
-`metrics.json` written by the step uses the MCE session schema:
+The step writes `metrics.json` in the MCE session schema:
 
 ```json
 {
@@ -227,7 +227,7 @@ register_step_type("my_eval", MyEvalStep)
 }
 ```
 
-`collect_metrics` picks this up automatically from the benchmark output folder:
+`collect_metrics` reads this file automatically from the benchmark output folder:
 
 ```yaml
 - name: collect-metrics
@@ -236,7 +236,7 @@ register_step_type("my_eval", MyEvalStep)
     output: results/tidy.csv
 ```
 
-Downstream `compute_ci` and `plotnine` steps can then reference `@collect-metrics`:
+Downstream `compute_ci` and `plotnine` steps then reference `@collect-metrics`:
 
 ```yaml
 - name: compute-ci
@@ -274,9 +274,7 @@ out = resolve_step_artifact_path(ctx, None, self.name, "tidy.csv", self.config,
 
 ## Deterministic evaluation pattern (no LLM judge)
 
-Deterministic evaluation scores a structured tool call against the
-app-specific ground truth on the Dataset item (`expectations.details`), e.g.
-for the trip planner's booking tool:
+Deterministic evaluation scores a structured tool call against the ground truth on the dataset item (`expectations.details`). Example for the trip planner's booking tool:
 
 ```yaml
 # dataset.yaml item
@@ -295,10 +293,9 @@ The step:
 4. Compares against `expectations.details` with exact string matching (`str.strip().lower()`).
 5. Writes `metrics.json` with `booking_correct: 1.0` or `0.0`.
 
-This produces the same output format as `eval_mce` so `collect_metrics` and
-`compute_ci` work identically for both evaluation modes.
+The output format matches `eval_mce`. `collect_metrics` and `compute_ci` treat both evaluation modes the same.
 
-**Advantages over MCE (`eval_mce`):**
+Compared with MCE (`eval_mce`):
 
 | | Deterministic evaluation | MCE (`eval_mce`) |
 |---|---|---|
@@ -307,9 +304,7 @@ This produces the same output format as `eval_mce` so `collect_metrics` and
 | Reproducibility | 100% | Model-version dependent |
 | Coverage | Structured tool calls | Free-form text output |
 
-Use deterministic evaluation when the task has an unambiguous correct answer that is
-expressed as a structured tool call.  Use `eval_mce` for free-form quality
-metrics (goal success rate, groundedness, response completeness).
+Use deterministic evaluation when the correct answer is unambiguous and arrives as a structured tool call. Use `eval_mce` for free-form quality metrics: goal success rate (GSR), groundedness, and response completeness.
 
 ---
 
@@ -318,29 +313,27 @@ metrics (goal success rate, groundedness, response completeness).
 When referencing a library tool file in an overlay:
 
 ```yaml
-# ✗ Wrong — importlib.resources.files("skills") resolves to a local
+# WRONG: importlib.resources.files("skills") resolves to a local
 #   directory named skills/ if one exists (namespace package collision):
 - ref: "pkg://skills/tools/run-skill-script.tool.yaml"
 
-# ✓ Correct — entry-point scheme resolution via mas.runtime.manifest_libraries:
+# CORRECT: entry-point scheme resolution via mas.runtime.manifest_libraries:
 - ref: "skills:tools/run-skill-script.tool.yaml"
 ```
 
-`pkg://NAME/path` calls `importlib.resources.files(NAME)` which resolves the
-**Python package name** directly.  If a local directory with that name exists
-on `sys.path` (e.g. `trip-planner/skills/`), Python treats it as a namespace
-package and `pkg://` resolves to the local directory instead of the installed
-library.
+`pkg://NAME/path` calls `importlib.resources.files(NAME)`. That call resolves the Python package name directly. A local directory with that name on `sys.path` (for example `trip-planner/skills/`) becomes a namespace package. Then `pkg://` resolves to the local directory instead of the installed library.
 
-`NAME:path` uses `mas.runtime.package_refs.resolve_library_scheme_root(NAME)`,
-which resolves the library root via `mas.library_roots.resolve_named_library_root`
-(lab-local libraries, workspace config, installed libraries, `MAS_LIBRARY_PATHS`,
-then an ancestor `library.yaml` walk) — always resolving to the library's real
-root regardless of local directory names.
+`NAME:path` calls `mas.runtime.package_refs.resolve_library_scheme_root(NAME)`. That function resolves the library root through `mas.library_roots.resolve_named_library_root`. The lookup order is:
 
-**Rule**: use `skills:tools/...`, `standard:...`, `lab:...` etc. (colon scheme)
-for tool refs that come from installed manifest libraries.  Reserve `pkg://`
-for direct Python package resource access where no name collision is possible.
+1. Lab-local libraries
+2. Workspace config
+3. Installed libraries
+4. `MAS_LIBRARY_PATHS`
+5. An ancestor `library.yaml` walk
+
+The result is the library's real root, whatever local directories exist.
+
+Rule: use the colon scheme (`skills:tools/...`, `standard:...`, `lab:...`) for tool refs from installed manifest libraries. Use `pkg://` only for direct Python package resources where no name collision is possible.
 
 ---
 

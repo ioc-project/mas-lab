@@ -4,11 +4,9 @@
 -->
 # mas-runtime Developer Guide
 
-This guide covers extending `mas-runtime` with plugins, tools, and overlays while preserving contract and hook semantics.
+This guide is for developers who extend `mas-runtime` with plugins, tools and overlays without breaking contract and hook semantics.
 
-## Architecture snapshot
-
-`mas-runtime` is a library-first runtime. The CLI wraps builder/runtime APIs and should not own core orchestration logic.
+`mas-runtime` is a library with no CLI of its own. `mas-ctl` wraps the builder and runtime APIs and must not own core orchestration logic.
 
 ## Extension points
 
@@ -21,7 +19,7 @@ in a third top-level plugins folder. Discovery order:
 
 - Implement plugin interfaces using runtime contract expectations.
 - Keep plugin responsibilities narrow (governance, memory, observability, tools, transport).
-- Use consistent naming prefixes when relevant (`gov_`, `ctx_`, `obs_`, `tool_`, `dp_`).
+- Follow the naming conventions in [naming-standards.md](naming-standards.md).
 
 ### Tools
 
@@ -32,14 +30,14 @@ in a third top-level plugins folder. Discovery order:
 ### Overlays and flavours
 
 - Overlays compose behavior (reasoning or policy) without mutating base manifests.
-- Flavours separate environment concerns from application concerns.
+- Flavours separate environment concerns from agent definitions.
 
 ## Dev workflow
 
 1. Implement feature in `src/`.
 2. Register/export in package entrypoints.
 3. Add unit tests in `tests/` for happy path + failure path.
-4. Validate with CLI smoke test.
+4. Validate with a `mas-ctl chat` smoke test.
 
 ## Testing guidance
 
@@ -50,11 +48,11 @@ in a third top-level plugins folder. Discovery order:
 
 ## API and contract references
 
-- `docs/dev/contracts/index.md`
-- `docs/dev/contracts/taxonomy.md`
-- `docs/dev/schemas/agent-manifest.md`
-- `docs/dev/schemas/tool-definition.md`
-- `docs/dev/api-reference/mas-runtime-api.md`
+- [dev/contracts/index.md](dev/contracts/index.md)
+- [dev/contracts/taxonomy.md](dev/contracts/taxonomy.md)
+- [dev/schemas/agent-manifest.md](dev/schemas/agent-manifest.md)
+- [dev/schemas/tool-definition.md](dev/schemas/tool-definition.md)
+- [dev/api-reference/mas-runtime-api.md](dev/api-reference/mas-runtime-api.md)
 
 ## Quality bar
 

@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Copy to $XDG_CONFIG_HOME/mas/config.yaml (Tutorial 0 §2a)
+# Copy to $XDG_CONFIG_HOME/mas/config.yaml
 # Secrets go in .env — never in this file.
 
 apiVersion: mas.config/v1

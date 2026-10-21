@@ -2,84 +2,50 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Execution Control and Observability Contracts
+# Execution control and observability contracts
 
-This document covers runtime control and structured event recording.
+`ControlContract` is the pluggable execution control plane; `RecorderContract` is the structured event-recording
+boundary. This page is for contributors who pause, steer or record agent runs.
+
+```python
+from mas.runtime.boundary.control.contract import ControlContract
+
+
+def interrupt_for_review(control: ControlContract, session_id: str):
+    control.pause(session_id, reason="Human approval required")
+```
 
 ## ControlContract
 
-`ControlContract` is the pluggable execution control plane.
+Purpose: pause or resume a session, inject steering, snapshot and navigate
+checkpoints, and send inbound user turns (`send_message` is A2A `message/send`).
 
-### ControlContract purpose
+| Method | Notes |
+| --- | --- |
+| `pause(session_id, reason=...)` | Temporary halt |
+| `resume(session_id)` | Resume paused session |
+| `send_message(session_id, text=...)` | Inbound user turn |
+| `steer(session_id, text=..., mode=...)` | Mid-flight steering |
+| `inspect(session_id)` / `inspect_context(session_id)` | Snapshot views |
+| `snapshot` / `persist` / `list_checkpoints` / `navigate` | Checkpoint walk |
+| `cancel_inflight(session_id)` | Drop the in-flight generation |
 
-- pause or resume execution
-- abort runs with explicit reasons
-- create and restore checkpoints
-- inject steering directives into active runs
-
-### ControlContract primary methods and parameters
-
-| Method | Parameters | Notes |
-| --- | --- | --- |
-| `pause(reason=None, agent_id=None)` | optional reason and agent | Temporary halt |
-| `resume(agent_id=None)` | optional agent | Resume paused run |
-| `abort(reason=None, agent_id=None)` | optional reason and agent | Permanent stop |
-| `checkpoint(label=None)` | optional label | Returns checkpoint metadata |
-| `restore_checkpoint(checkpoint_id)` | checkpoint ID | Roll back to checkpoint |
-| `steer(directive, agent_id=None, priority="normal")` | directive text, optional target, priority | Mid-flight steering |
-| `drain_steering(agent_id=None)` | optional target | Consumed before next LLM step |
-
-### ControlContract hook helpers
-
-- `pre_control_action(action, reason, agent_id)`
-- `post_control_action(action, success, agent_id)`
-
-### ControlContract example
-
-```python
-from mas.runtime.contracts import ControlContract
-
-
-def interrupt_for_review(control: ControlContract):
-    control.pause(reason="Human approval required", agent_id="agent-123")
-```
+Import from `mas.runtime.boundary.control.contract`, not `mas.runtime.contracts`.
 
 ## RecorderContract
 
-`RecorderContract` is the structured event-recording boundary.
-
-### RecorderContract purpose
-
-- capture hook and runtime events
-- support pluggable backends such as JSONL or OpenTelemetry
-- keep observability detached from business logic
-
-### RecorderContract primary methods and parameters
+Purpose: capture hook and runtime events, support pluggable backends such as JSONL or OpenTelemetry, and keep
+observability detached from business logic.
 
 | Method | Parameters | Notes |
 | --- | --- | --- |
 | `emit(event)` | event dict | Core write operation |
 | `flush()` | none | Flush buffered events |
 | `close()` | none | Close resources |
-| `query(*, kind, agent_id, since, until, call_id, extra_filter)` | all optional | Read back recorded events matching filters |
-| `replay(from_call_id)` | optional call ID | Replay events from a point onwards |
+| `query(*, kind, agent_id, call_id)` | all optional | Optional read-back; default empty |
 
-### RecorderContract typical event parameters
-
-Common fields described by the contract include:
-
-- `kind`
-- `timestamp`
-- `trace_id`
-- `span_id`
-- `parent_span_id`
-- `agent_id`
-- `hook_name`
-- `plugin_name`
-- `error`
-- `metadata`
-
-### RecorderContract example
+Common event fields: `kind`, `timestamp`, `trace_id`, `span_id`, `parent_span_id`, `agent_id`, `hook_name`,
+`plugin_name`, `error`, `metadata`.
 
 ```python
 from mas.runtime.contracts import RecorderContract
@@ -90,14 +56,14 @@ def emit_tool_event(recorder: RecorderContract):
         {
             "kind": "hook_start",
             "hook_name": "pre_tool_call",
-            "plugin_name": "sandbox",
+            "plugin_name": "budget",
             "agent_id": "agent-123",
             "timestamp": 0.0,
         }
     )
 ```
 
-## Control and recorder interaction
+## Interaction
 
 ```text
 ControlContract.pause()
@@ -105,6 +71,6 @@ ControlContract.pause()
   -> RecorderContract.emit() records the intervention
 
 ControlContract.steer()
-  -> runtime drains directives before the next LLM step
+  -> runtime applies the directive before the next LLM step
   -> RecorderContract.emit() records the steering event
 ```

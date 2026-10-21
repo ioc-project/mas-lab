@@ -4,15 +4,15 @@
 -->
 # Web UI
 
-The **MAS Lab web UI** is a browser studio for working with manifests, launching
-benchmarks, and inspecting run artifacts. It talks to **mas-lab-controller**
-over HTTP — the same controller that backs `mas-lab serve`. For a **live**
-topology / native-event / chat dashboard, use the [live dashboard](live.md)
-instead; that app does not replace this authoring studio.
+The MAS Lab web UI is a browser studio. You use it to edit manifests, launch
+experiments, and inspect the files a run produced.
 
+It talks over HTTP to `mas-lab-controller`, the same controller that backs
+`mas-lab serve`. To watch a running system (topology, events, chat), use the
+[live dashboard](live.md). It does not replace this studio.
 
-Use the UI when you prefer visual browsing over the CLI. Paper reproduction and
-CI still use `mas-lab benchmark run` and `task reproduce`.
+Use the UI to browse visually. Paper reproduction and CI use the CLI
+(`mas-lab benchmark run`, `task reproduce`).
 
 **Related:** [Terminal UI (TUI)](../ctl/tui.md) · [Observability](../cli/observability.md) ·
 [Docker setup](https://github.com/outshift-open/mas-lab/blob/main/docker/README.md)
@@ -38,15 +38,15 @@ Equivalent from repo root: `task start` (builds images if needed, starts detache
 
 ### What you can do in the UI
 
-- Browse and open **agent**, **MAS**, and **experiment** manifests from the mounted workspace
-- **Validate** manifests (same checks as `mas-ctl validate`)
-- Submit **benchmark** jobs — equivalent to `mas-lab benchmark run experiment.yaml`
-- Inspect recent **runs**, open **`events.jsonl`**, and view **pipeline** outputs under `results/`
-- Edit library objects (datasets, pipelines, experiments) when developing new labs
+- Browse and open agent, MAS, and experiment manifests from the mounted workspace.
+- Validate manifests with the same checks as `mas-ctl validate`.
+- Submit benchmark jobs, equivalent to `mas-lab benchmark run experiment.yaml`.
+- Inspect recent runs, open `events.jsonl` (the machine-readable trace of a run), and view pipeline outputs under `results/`.
+- Edit library objects (datasets, pipelines, experiments) when you develop a lab.
 
 ### Workspace and data mounts
 
-Docker mounts two host folders into every backend/UI container:
+Docker mounts two host folders into the backend and UI containers:
 
 | Container path | Host (default) | Holds |
 |----------------|----------------|-------|
@@ -62,15 +62,15 @@ OPENAI_API_KEY=sk-...
 ```
 
 Project `config.yaml` on the workspace mount (copy from
-[`library-samples/sample-workspace/config.yaml`](../../library-samples/sample-workspace/config.yaml))
-takes precedence over `$XDG_CONFIG_HOME/mas/config.yaml`. Without a project file, the Docker
-image falls back to the baked sample. See [user-config.md](../user-config.md).
+[`library-samples/sample-workspace/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/sample-workspace/config.yaml))
+takes precedence over `$XDG_CONFIG_HOME/mas/config.yaml`. Without a project file,
+the Docker image uses a built-in sample. See [user-config.md](../user-config.md).
 
 ---
 
 ## Local development (UI + controller on the host)
 
-When hacking on the UI or controller packages:
+Use this when you change the UI or controller packages:
 
 ```bash
 # Terminal 1 — controller API
@@ -84,8 +84,8 @@ export VITE_API_BASE_URL=http://localhost:8090
 yarn dev
 ```
 
-Open http://localhost:5173 (Vite prints the port). The UI **requires** a running
-controller — there is no offline schema fallback.
+Open http://localhost:5173 (Vite prints the port). The UI needs a running
+controller. There is no offline fallback.
 
 Developer details: [`ui/README.md`](https://github.com/outshift-open/mas-lab/blob/main/ui/README.md) in the source tree.
 
@@ -105,9 +105,10 @@ Detached daemon variant: `mas-lab control start` (default port **9000**).
 
 ## Traces and results
 
-Each benchmark run writes `traces/events.jsonl` under the lab output tree (or
-reuses a **trace cache** entry). In the UI, open a completed run to browse events
-and pipeline CSVs/figures.
+Each benchmark run writes `traces/events.jsonl` under the lab output tree. If an
+identical run is in the trace cache (the store of completed runs), MAS Lab reuses
+that entry instead of calling the model again. In the UI, open a completed run
+to browse its events and the pipeline CSVs and figures.
 
 CLI equivalent:
 
@@ -132,6 +133,8 @@ See [cli/observability.md](../cli/observability.md) for trace flags on `mas-ctl 
 ---
 
 ## Next steps
+
+Next: [Live dashboard](live.md), or one of these.
 
 - [Tutorial 0](../tutorials/00-environment-setup/README.md) — Docker install and API keys
 - [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md) — experiments the UI can launch

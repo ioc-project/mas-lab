@@ -157,7 +157,6 @@ at the repository root — Tutorials 0–3 cover environment, agent, MAS, and ex
 | [docs/context-segmentation.md](docs/context-segmentation.md) | Context assembly and provenance |
 | [docs/semantic-protocols.md](docs/semantic-protocols.md) | Governance scopes and URNs |
 | [docs/naming-standards.md](docs/naming-standards.md) | Naming conventions |
-| [../docs/data-management.md](../docs/data-management.md) | `events.jsonl`, trace cache |
 
 ### Contributors
 

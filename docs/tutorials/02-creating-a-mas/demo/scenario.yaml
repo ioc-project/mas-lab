@@ -42,8 +42,8 @@ sections:
           |-------|------|
           | `moderator` | Orchestrates delegation |
           | `schedule_agent` | Finds transport schedules |
-          | `itinerary_agent` | Builds day-by-day plans |
-          | `concierge_agent` | Recommends restaurants and hotels |
+          | `itinerary_agent` | Plans routes between cities |
+          | `concierge_agent` | Looks up fares and costs |
 
           You will run the same query through **three topologies** using
           overlays — no changes to the agent manifests:
@@ -64,8 +64,8 @@ sections:
       - type: narrative
         title: "Validating a MAS manifest"
         content: |
-          `mas.yaml` declares the full MAS: agent refs, workflow type, and
-          entry point.  Validate it before running to catch schema errors
+          `mas.yaml` declares the full MAS: agent refs, the workflow
+          (entry agent and delegation graph).  Validate it before running to catch schema errors
           or missing agent files:
 
           ```bash
@@ -93,8 +93,9 @@ sections:
           The default topology uses a **moderator** agent that reads the query
           and decides which specialists to call, in what order.
 
-          Watch the `[moderator] -> [schedule_agent]` delegation lines in the
-          verbose output to see how the moderator routes the request.
+          Watch the `delegate_to_schedule_agent` (and the other
+          `delegate_to_*`) tool calls in the exchange log on stderr to see
+          how the moderator routes the request.
 
       - type: command
         title: "Run MAS — dynamic topology"
@@ -173,8 +174,7 @@ sections:
            └─ mas-lab plot multilevel-trajectory  → swimlane HTML
           ```
 
-          Knowledge-graph normalisation (`mas-lab graph`) is not part of
-          this open-source repository.
+          Knowledge-graph normalisation is covered in Tutorial 9.
 
       - type: command
         title: "Telemetry summary (fixture trace)"
@@ -215,20 +215,20 @@ sections:
            + overlays/linear.yaml            → fixed sequential pipeline
           ```
 
-          For each topology you inspected the trace with telemetry, KG
-          normalisation, and an interactive multilevel swimlane.
+          For each topology you can inspect the trace with telemetry and an
+          interactive multilevel swimlane.
 
       - type: narrative
         title: "Next steps"
         content: |
-          **Tutorial 03 — Plugins & Observability**
+          **Tutorial 03 — Experiments, Analysis & Evaluation**
 
-          Load a pre-recorded trace, run a full analysis pipeline, and
-          compare design patterns (ReAct vs CoT vs Reflection) with
-          automated metrics.
+          Define an experiment, run it over a dataset, and compare design
+          patterns (ReAct vs CoT vs Reflection) with automated metrics.
 
           ```bash
-          mas-tutorial run docs/tutorials/03-experiments-and-analysis/demo/scenario.yaml
+          cd docs/tutorials/03-experiments-and-analysis
+          mas-lab benchmark run experiment.yaml --dry-run
           ```
 
           **Benchmarks**

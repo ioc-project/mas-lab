@@ -6,9 +6,9 @@
 
 This document has moved.
 
-**Authoritative reference:** [docs/manifests/agent.md](../../../docs/manifests/agent.md)
+**Authoritative reference:** [docs/manifests/agent.md](../../../../docs/manifests/agent.md)
 
-**JSON Schema (YAML):** `runtime/src/mas/runtime/manifest/schema/agent.schema.yaml`
+**JSON Schema (YAML):** [`docs/schemas/runtime/agent.schema.yaml`](../../../../docs/schemas/runtime/agent.schema.yaml)
 
 **HTTP:** `GET /api/schemas/agent` on the mas-lab controller (when running).
 

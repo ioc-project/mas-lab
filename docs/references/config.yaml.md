@@ -4,16 +4,20 @@
 -->
 # `config.yaml` reference
 
-Workspace (and user) YAML for **`mas-ctl`** / **`mas-lab`** defaults. Schema:
-[`docs/schemas/config.schema.yaml`](../schemas/config.schema.yaml)
-(`additionalProperties: false` on the workspace file).
+`config.yaml` sets workspace and user defaults for **`mas-ctl`** and **`mas-lab`**. A *workspace* is the project folder where you run the CLIs. The schema is [`docs/schemas/config.schema.yaml`](../schemas/config.schema.yaml). It sets `additionalProperties: false` on the workspace file, so unknown keys fail validation.
 
-**Secrets never belong in this file.** Put API keys in the dotenv named by
-`mas_ctl.env` (default `.env`) or the process environment. Infra manifests
-reference the env **name** (`api_key_env`), not the value.
+Example: a minimal workspace file.
 
-Paths / XDG layout: [user-config.md](../user-config.md).
-CLI flags that override these keys: [mas-ctl.md](../cli/mas-ctl.md).
+```yaml
+mas_ctl:
+  flavour: local
+  env: .env
+  trace: summary
+```
+
+**Secrets never belong in this file.** Put API keys in the dotenv file named by `mas_ctl.env` (default `.env`), or in the process environment. Infra manifests reference the env **name** (`api_key_env`), not the value.
+
+Paths and XDG layout: [user-config.md](../user-config.md). CLI flags that override these keys: [mas-ctl.md](../cli/mas-ctl.md).
 
 ---
 
@@ -21,23 +25,23 @@ CLI flags that override these keys: [mas-ctl.md](../cli/mas-ctl.md).
 
 | File | Role |
 |------|------|
-| `<project>/config.yaml` | Workspace — walk up from cwd, or `MAS_WORKSPACE_ROOT` |
-| `$XDG_CONFIG_HOME/mas/config.yaml` | User fallback (`mas-lab init` writes this) |
+| `<project>/config.yaml` | Workspace. The CLI walks up from the current directory, or uses `MAS_WORKSPACE_ROOT`. |
+| `$XDG_CONFIG_HOME/mas/config.yaml` | User fallback. `mas-lab init` writes it. |
 
 Canonical samples:
 
-- [`library-samples/sample-workspace/config.yaml`](../../library-samples/sample-workspace/config.yaml)
-- Tutorials 0–3 under `docs/tutorials/*/config.yaml` (and Tutorial 0 `config.*.example.yaml`)
-- Init template: [`lab/src/mas/lab/templates/init/config.yaml`](../../lab/src/mas/lab/templates/init/config.yaml)
+- [`library-samples/sample-workspace/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
+- Tutorials 1–3 under `docs/tutorials/*/config.yaml` (Tutorial 0 ships `config.*example.yaml` user-file samples)
+- Init template: [`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
 
 ### `mas_ctl` merge (exchange log and friends)
 
-For `mas_ctl.trace*` (and the rest of the `mas_ctl` map used by chat / run-mas):
+The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and run-mas, merge in this order (first wins):
 
 1. CLI flags
 2. Workspace `config.yaml`
 3. User `$XDG_CONFIG_HOME/mas/config.yaml`
-4. Built-ins (`trace` off unless set; when on, summary + timestamps, color off)
+4. Built-ins. `trace` is off unless set. When on, it shows a summary with timestamps and no color.
 
 ---
 
@@ -47,14 +51,14 @@ For `mas_ctl.trace*` (and the rest of the `mas_ctl` map used by chat / run-mas):
 |-----|------|---------|
 | `mas_ctl` | object | Defaults for `mas-ctl chat` / `run-mas` / validate |
 | `mas_lab` | object | Defaults for `mas-lab` benchmark / demo |
-| `infra_refs` | string or list | Infra bundles (left-to-right). Per-run override: CLI `--infra-ref` |
-| `runtime_refs` | string or list | `RuntimeEngine` refs. Omit for package defaults. Per-run override: `--runtime-ref` |
-| `infra_interceptors` | string or list | Optional interceptor bundle refs |
-| `manifest_libraries` | list of paths | Extra library checkouts (name = directory stem). Legacy name→path map still accepted. |
-| `aliases` | map | Runtime plugin alias → canonical URN |
+| `infra_refs` | string or list | Infra bundles, merged left to right. An *infra bundle* says where things are (LLM endpoint, tool servers). Env `MAS_INFRA_REFS` (comma- or space-separated) overrides without editing the file. CLI `--infra-ref` still wins. |
+| `runtime_refs` | string or list | `RuntimeEngine` refs. Omit for package defaults. Env `MAS_RUNTIME_REFS` (comma- or space-separated). Per-run override: `--runtime-ref`. |
+| `infra_interceptors` | string or list | Optional interceptor bundle refs. |
+| `manifest_libraries` | list of paths | Extra library search folders: a library root or a parent of sibling library folders, same scan as `lab.libraries` / `MAS_LIBRARY_PATHS` (name = directory stem). A legacy name→path map is flattened to its paths. |
+| `aliases` | map | Runtime plugin alias to canonical URN |
 | `defaults` | object | Overrides for runtime `defaults.yaml` (`model`, `design_pattern`, `context_manager`, `assembler`) |
 | `paths` | object | `labs_dir`, `cache_dir`, `runs_dir` (else XDG / `MAS_*`) |
-| `plugins` | list of URNs or URN→bool map | Workspace overlay plugins. **Off unless listed.** Not agent spec slots. Uncomment a catalog line in the init template to enable. Labs use `lab.enable_plugins`. |
+| `plugins` | list of URNs or URN-to-bool map | Workspace overlay plugins. **Off unless listed.** Not agent spec slots. Uncomment a catalog line in the init template to enable one. Labs use `lab.enable_plugins`. |
 
 ---
 
@@ -62,15 +66,15 @@ For `mas_ctl.trace*` (and the rest of the `mas_ctl` map used by chat / run-mas):
 
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
-| `flavour` | string | `local` | Flavour name (`library-standard` / workspace `flavours/`) |
+| `flavour` | string | `local` | Flavour name. A *flavour* is a deployment preset. Found in `library-standard` or the workspace `flavours/` folder. |
 | `env` | string | `.env` | Gitignored secrets **filename** relative to the workspace |
-| `deployment` | string | — | Deployment manifest path (relative to workspace) |
-| `runtime_id` | string | — | Kernel / runtime id override |
-| `runtime_profile` | string | — | Path to a runtime-profile manifest |
-| `trace` | `off` · `summary` · `full` or bool | `off` | Human exchange log on **stderr**. `true` = `summary`. `full` is the payload dump. Color is **not** implied |
-| `trace_timestamps` | bool | `true` when tracing | UTC + elapsed on each exchange |
-| `trace_color` | bool | `false` | ANSI color (opt-in; same as `--trace-color`) |
-| `trace_engine` | bool | `false` | Raw engine I/O JSON (same as `--trace-engine` / `-vv`) |
+| `deployment` | string | none | Deployment manifest path, relative to the workspace |
+| `runtime_id` | string | none | Kernel or runtime id override |
+| `runtime_profile` | string | none | Path to a runtime-profile manifest |
+| `trace` | `off` · `summary` · `full` or bool | `off` | Human exchange log on **stderr**. `true` means `summary`. `full` dumps payloads. Color is **not** implied. |
+| `trace_timestamps` | bool | `true` when tracing | UTC time and elapsed time on each exchange |
+| `trace_color` | bool | `false` | ANSI color. Opt-in. Same as `--trace-color`. |
+| `trace_engine` | bool | `false` | Raw engine I/O JSON. Same as `--trace-engine` or `-vv`. |
 
 ```yaml
 mas_ctl:
@@ -82,12 +86,9 @@ mas_ctl:
   # trace_engine: false
 ```
 
-`--trace` on the CLI is the one-shot form of `trace: summary`.
-`--trace full` is `trace: full`. `--no-trace` disables a config default.
+On the CLI, `--trace` is the one-shot form of `trace: summary`. `--trace full` is `trace: full`. `--no-trace` disables a config default.
 
-Machines use `events.jsonl` / `mas-lab telemetry`, not this log.
-See [mas-ctl.md](../cli/mas-ctl.md#exchange-log) and
-[observability.md](../cli/observability.md).
+The exchange log is for humans. Tools read `events.jsonl` and `mas-lab telemetry` instead. See [mas-ctl.md](../cli/mas-ctl.md#exchange-log) and [observability.md](../cli/observability.md).
 
 ---
 
@@ -96,10 +97,10 @@ See [mas-ctl.md](../cli/mas-ctl.md#exchange-log) and
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
 | `flavour` | string | `local` | Lab / demo flavour |
-| `benchmark_flavour` | string | — | Flavour for `mas-lab benchmark run` |
+| `benchmark_flavour` | string | none | Flavour for `mas-lab benchmark run` |
 | `benchmark.clean_stale_outputs` | bool | `false` | Drop output folders for scenarios no longer in `experiment.yaml` |
-| `benchmark.clean_stale_trace_cache` | bool | `true` | When cleaning stale outputs, drop unused trace-cache entries |
-| `labs_search_paths` | string or list | — | Extra dirs to scan for `*.lab` / experiment YAML (not `paths.labs_dir`) |
+| `benchmark.clean_stale_trace_cache` | bool | `true` | When cleaning stale outputs, also drop unused trace-cache entries. The trace cache stores completed run traces. |
+| `labs_search_paths` | string or list | none | Extra dirs to scan for `*.lab` / experiment YAML (not `paths.labs_dir`) |
 
 ---
 
@@ -107,12 +108,12 @@ See [mas-ctl.md](../cli/mas-ctl.md#exchange-log) and
 
 | Key | Purpose |
 |-----|---------|
-| `model` | Fill-in for remaining Agent/MAS/experiment `any` after `experiment.models` (not written into committed specs) |
+| `model` | Fill-in for any remaining Agent, MAS, or experiment `any` after `experiment.models`. Not written into committed specs. |
 | `design_pattern` | Default plugin id for `spec.design_pattern` |
 | `context_manager` | Default plugin id for `spec.context_manager` |
 | `assembler` | Default plugin id for `spec.assembler` |
 
-See [runtime/docs/agent-defaults.md](../../runtime/docs/agent-defaults.md).
+See [runtime/docs/agent-defaults.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/agent-defaults.md).
 
 ---
 
@@ -124,21 +125,15 @@ See [runtime/docs/agent-defaults.md](../../runtime/docs/agent-defaults.md).
 | `cache_dir` | Cache root (trace cache defaults to `<cache_dir>/traces` when set) |
 | `runs_dir` | Agent session run folders |
 
-Env overrides: [user-config.md](../user-config.md). Relative paths resolve from
-**the directory of the config file that declared them**.
+Env overrides: [user-config.md](../user-config.md). Relative paths resolve from **the directory of the config file that declared them**.
 
 ---
 
 ## `plugins` (workspace overlays)
 
-Agent YAML still chooses design_pattern, tools, models,
-`spec.observability`, `spec.governance`, and checkpoint cadence. This list
-turns on gdb, checkpoint stores, and the control wire from the workspace.
+Agent YAML still chooses `design_pattern`, tools, models, `spec.observability`, `spec.governance`, and checkpoint cadence. This list turns on gdb, checkpoint stores, and the control wire from the workspace. A *plugin* is a unit of behaviour selected by name.
 
-Omitted, `[]`, or a commented catalog means **nothing extra is on**. Uncomment
-`plugins:` and any line in
-[`lab/src/mas/lab/templates/init/config.yaml`](../../lab/src/mas/lab/templates/init/config.yaml)
-to enable it. Specs that already name the same plugin keep their own config.
+Omitted, `[]`, or a commented catalog means **nothing extra is on**. To enable a plugin, uncomment `plugins:` and any line in the [init template](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml). Specs that already name the same plugin keep their own config.
 
 Labs enable the same URNs under `lab.enable_plugins` in `lab-config.yaml`.
 
@@ -149,20 +144,19 @@ Labs enable the same URNs under `lab.enable_plugins` in `lab-config.yaml`.
 #   - mas.control_protocol.rpc             # JSON-lines control wire
 ```
 
-Put OTEL, governance, design patterns, and system tools in agent YAML, not here.
+Put OTel (OpenTelemetry) settings, governance, design patterns, and system tools in agent YAML, not here.
 
 ---
 
 ## User-file extras (`mas-lab init` / Tutorial 0)
 
-`$XDG_CONFIG_HOME/mas/config.yaml` is a hybrid: it may include workspace keys
-above **and** these fields used by user-config loading (not all are in the
-workspace schema):
+`$XDG_CONFIG_HOME/mas/config.yaml` is a hybrid. It may include the workspace keys above **and** these fields used by user-config loading. Not all are in the workspace schema.
 
 | Key | Purpose |
 |-----|---------|
-| `default_infra` | Infra used when no `--infra-ref` / workspace `infra_refs` |
-| `default_runtime` | Default `RuntimeEngine` when no `--runtime-ref` / `runtime_refs` |
+| `apiVersion` / `kind` | `mas.config/v1` / `UserConfig` header in the Tutorial 0 example |
+| `default_infra` | Infra used when no `--infra-ref` or workspace `infra_refs` is set |
+| `default_runtime` | Default `RuntimeEngine` when no `--runtime-ref` or `runtime_refs` is set |
 | `cache_dir` | Top-level alias for `paths.cache_dir` |
 | `runs_dir` / `labs_dir` | Top-level path aliases in the Tutorial 0 user example |
 
@@ -189,5 +183,14 @@ mas_lab:
 #   - mas.runtime.debug_script
 ```
 
-Offline CI pairs `standard:openai` with `tests/fixtures/llm-cache/ci-replay.yaml`
-via `--infra-ref` — still no secrets in YAML.
+Offline CI pairs `standard:openai` with `tests/fixtures/llm-cache/ci-replay.yaml` through `--infra-ref`. The YAML still holds no secrets.
+
+---
+
+## See also
+
+- [User configuration](../user-config.md): paths and XDG layout.
+- [`mas-ctl` reference](../cli/mas-ctl.md)
+- [Compiled defaults](defaults.md)
+- [Schema index](schemas.md)
+- [Tutorial 0: environment setup](../tutorials/00-environment-setup/README.md)

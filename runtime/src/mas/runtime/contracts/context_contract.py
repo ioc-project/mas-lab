@@ -10,11 +10,9 @@ It is a *composition* of typed sections contributed by many concerns:
     system identity / role
     design-pattern instructions (CoT chain, ReAct format)
     available external tools    (from ToolContract)
-    available sub-agents        (from WorkflowPromptInjector / ContextFacetProvider)
-    active skills summary       (from ContextFacetProvider with skill_facets)
-    ontology alignment hints    (from OntologyContextProvider)
+    available sub-agents        (from DelegationContract / engine_tool_provider)
+    active skills summary       (from skill context plugins)
     relevant memories           (from MemoryContract)
-    shared blackboard snapshot  (from SharedContextContract)
     conversation history        (maintained by the runtime)
     current task / user turn
 

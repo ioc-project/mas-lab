@@ -6,7 +6,7 @@ title: ObservabilityBinding
 description: >
   List of observability sink plugin ids (OSS: native, otel). Plugin implementations
   are resolved at runtime from the plugin registry — unknown ids fail at load time.
-  Extended sinks (observe_sdk, etc.) are internal-only; see mas-lab-internal.
+  Further sinks (for example observe_sdk) come from `mas-library-telemetry`.
 type: array
 items:
   oneOf:

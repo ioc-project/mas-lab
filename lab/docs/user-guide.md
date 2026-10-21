@@ -4,8 +4,15 @@
 -->
 # mas-lab user guide
 
-`mas-lab` runs **benchmark** **experiments**, validates **manifests**, and runs
-**pipeline steps** on **`events.jsonl`** logs.
+This page lists the main `mas-lab` commands. Read it for a first overview of the package.
+
+`mas-lab` runs benchmark **experiments**, validates **manifests**, and runs **pipeline steps** on **`events.jsonl`** logs.
+
+Smallest working command:
+
+```bash
+mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --progress
+```
 
 Workspace install: [docs/user-guide.md](../../docs/user-guide.md). Terms:
 [glossary.md](../../docs/glossary.md).
@@ -20,6 +27,8 @@ Workspace install: [docs/user-guide.md](../../docs/user-guide.md). Terms:
 | `mas-lab telemetry show …` | Print **`events.jsonl`** |
 
 ## Workflow
+
+Run an experiment, then open its plots:
 
 ```bash
 mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --progress

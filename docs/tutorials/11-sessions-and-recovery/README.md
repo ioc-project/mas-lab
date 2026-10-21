@@ -5,73 +5,76 @@
 # Tutorial 11 — Sessions and recovery
 
 > **Packages:** `mas-runtime`, `mas-ctl`
-> **Prerequisite:** [Tutorial 0](../00-environment-setup/) and an Agent manifest
-> that runs with the configured model.
+> **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) and
+> [Tutorial 1](../01-building-an-agent/README.md), with a model configured.
+> Run all commands from the repository root.
 
-This tutorial saves a complete conversation, forks the saved state, resumes the
-fork without its original manifest path, and returns to an earlier checkpoint
-with a steering note.
+## Goal
 
-## Capture a checkpoint
+A session is one running conversation with an agent. A checkpoint is a saved
+copy of that session.
 
-From the repository root, run an agent with explicit disk persistence:
+You save a conversation, fork it, resume the fork without its original
+manifest path, and return to an earlier checkpoint with a steering note.
+
+## Step 1 — Capture a checkpoint
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
   --checkpoint-dir .mas/checkpoints --save-checkpoint
 ```
 
-Complete at least one turn, then exit with `/quit`. Find the final artifact:
+Complete one turn (it calls your model), then exit with `/quit`. List and inspect the result:
 
 ```bash
 mas-ctl checkpoint list .mas/checkpoints
-mas-ctl checkpoint show <checkpoint-path-from-list>
+mas-ctl checkpoint show .mas/checkpoints/<file-name-from-list>
 ```
 
-Version 2 includes the kernel, committed conversation, manifest content and
-session lineage. The manifest hash is checked when resuming.
+`list` prints one file name per checkpoint, such as `turn-0001.checkpoint.json`.
+`show` prints the checkpoint JSON. A version 2 checkpoint holds
+the kernel state, the conversation, the manifest content and the session
+lineage. Resuming checks the manifest hash, so a changed manifest is
+detected.
 
-## Fork and resume
+## Step 2 — Fork and resume
 
-Fork the final checkpoint. The fork gets a distinct session identity and keeps
-the conversation that existed at the selected checkpoint:
+A fork is a new session with its own session id that starts from a
+checkpoint.
 
 ```bash
-mas-ctl checkpoint fork <checkpoint-path-from-list> \
+mas-ctl checkpoint fork .mas/checkpoints/<file-name-from-list> \
   --output-dir .mas/forks --session-id experiment-a
 mas-ctl chat --load-checkpoint <fork-checkpoint-path-printed-by-fork>
 ```
 
-Continue the conversation in the fork, then fork again from the same source.
-Each controller owns a separate working-memory registry; changes in one branch
-are not visible in its sibling.
+`fork` prints the new file path, under `.mas/forks/`. Chat loads it with the
+manifest stored inside, so you pass no `agent.yaml`.
 
-## What a checkpoint actually is
+`mas-ctl checkpoint resume <path>` equals the second command. Each fork has
+its own working-memory registry, so sibling forks do not see each other's
+changes.
 
-Two stores implement one `CheckpointStore` protocol
-(`ctl/src/mas/ctl/adapters/checkpoint.py`):
+## Step 3 — Know the checkpoint stores
 
-| Store | Backs | Survives process exit |
+All stores implement `CheckpointStore` (`plugins/checkpoint.py` in
+`mas-library-standard`).
+
+| Store | Backs | Survives exit |
 | --- | --- | --- |
-| `JsonCheckpointStore` | `--checkpoint-dir`, `--save-checkpoint`, `checkpoint fork` | Yes — one `*.checkpoint.json` file per checkpoint |
-| `InMemoryCheckpointStore` | `/backtrack`, pause/inspect snapshots | No — process-local, for walking recent turns without disk I/O |
+| `JsonCheckpointStore` | `--checkpoint-dir`, `--save-checkpoint`, `checkpoint fork` | Yes, one `*.checkpoint.json` per checkpoint |
+| `InMemoryCheckpointStore` | `/backtrack`, pause/inspect snapshots | No |
+| `HybridCheckpointStore` | `spec.checkpoint.storage: hybrid` | Yes, plus an in-process copy for backtrack |
 
-Either store accepts a raw kernel snapshot and wraps it as `version: 1`
-(`kernel`, `memory_seeds`, `turn`); a snapshot that already carries
-`version: 2` — kernel, committed conversation, manifest content, session
-lineage — is written through unchanged. That is what `--save-checkpoint`
-produces, and what [Tutorial 13](../13-control-and-debug/)'s control scripts
-read directly.
+`--save-checkpoint` writes version 2, which the control scripts of
+[Tutorial 13](../13-control-and-debug/README.md) read directly.
+`retain(session_id, mode, n)` prunes only that session's own files, so
+forking never ages out a sibling. Modes: `single`, `last_n`, `all`.
 
-`retain(session_id, mode, n)` prunes only that session's own files (matched
-by filename prefix), so forking never ages out a sibling's history:
-`single` keeps the latest checkpoint, `last_n` keeps the last `n`, `all`
-keeps everything — this is the `spec.checkpoint.retention` block below.
+## Step 4 — Recover manually
 
-## Recover manually
-
-For automatic capture at every model response, apply the packaged `openclaw`
-overlay or add this to the Agent manifest:
+Add this to the Agent manifest to checkpoint once per completed turn and
+keep the last five:
 
 ```yaml
 spec:
@@ -82,38 +85,37 @@ spec:
       n: 5
 ```
 
-In chat, return to the newest retained checkpoint and add a steering note:
+In chat, return to the newest retained checkpoint with a steering note:
 
 ```text
 /backtrack 1 Explain what failed; do not repeat the same tool call.
 ```
 
-Automatic repeated-error recovery is configured under `spec.governance`; see
-[Session checkpoints](../../manifests/checkpoint.md) for the full policy and
-cap behavior. Apply the packaged preset with:
+The agent continues from the earlier state and sees your note.
+
+The packaged `openclaw` overlay checkpoints after every model response and
+keeps all of them. Automatic recovery from repeated errors is configured
+under `spec.governance` (see [Session checkpoints](../../manifests/checkpoint.md)).
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
   -o pkg://mas.library.standard/overlays/openclaw.yaml
 ```
 
-The captured artifact can become one comparison cell in an experiment's
-starting-state axis; see the
+`/steer` injects operator text into the session. A paused session refuses
+the next user turn until you resume it. A checkpoint can also be a cell in an
+experiment's starting-state axis: see the
 [checkpoint-axis example](../../schemas/examples/checkpoint-axis.yaml).
 
-`/steer` injects operator text. A paused session refuses the next user turn
-until resume. In-memory snapshots are listed and walked through the same
-control contract as pause; persist is a separate step.
+## What you learned
 
-## Reference material
+1. `--save-checkpoint` writes the whole session. `checkpoint fork` and
+   `--load-checkpoint` continue it under a new session id.
+2. Stores differ in persistence: disk, memory or both.
+3. `/backtrack N <note>` returns to an earlier checkpoint with a note.
 
-- [Session checkpoints](../../manifests/checkpoint.md) — full policy,
-  retention, and cap reference.
-- [checkpoint-axis example](../../schemas/examples/checkpoint-axis.yaml) —
-  using a checkpoint as an experiment starting-state axis.
-- [Kernel operations](../../references/kernel-primitives.md) — where
-  checkpoint/persist/steer sit among the runtime's primitive operations.
-- Next: [Tutorial 13 — Control attach and debug](../13-control-and-debug/)
-  attaches to a *live* session from another process by session id (the same
-  id an A2A caller sees as `contextId`), and adds gdb-like governance
-  breakpoints on top of the checkpoint mechanics from this tutorial.
+## Next
+
+[Tutorial 12 — Spawned subagents](../12-subagents/README.md), then
+[Tutorial 13 — Control attach and debug](../13-control-and-debug/README.md).
+See also [Kernel operations](../../references/kernel-primitives.md).

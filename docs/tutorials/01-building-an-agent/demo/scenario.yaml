@@ -148,12 +148,14 @@ sections:
       - type: narrative
         title: "Skills — prompt decorators"
         content: |
-          **Skills** are prompt fragments injected by the runtime before every
-          LLM call.  They are not tools — they shape how the model reasons and
-          formats its reply.
+          **Skills** are directories with a `SKILL.md`. The model sees only a
+          short catalog entry (name and when-to-use description) and loads the
+          full instructions on demand with the `activate_skill` system tool.
+          They shape how the model reasons and formats its reply.
 
-          `overlays/skills.yaml` adds a formatting skill that instructs the
-          model to structure its answers with headings and bullet points.
+          `overlays/skills.yaml` adds the `answer-formatting` skill, which
+          tells the model to answer with a one-sentence summary, supporting
+          bullets and a confidence line.
 
       - type: command
         title: "Validate agent + tools + skills"
@@ -225,13 +227,13 @@ sections:
       - type: narrative
         title: "Seeding the memory store"
         content: |
-          The first run had to ask for clarification because the agent didn't
-          know the user's preference.
+          The first run answers about the stock until the user corrects it,
+          because the agent does not know the user's preference.
 
           `overlays/memory-seed.yaml` pre-loads the preference
-          *"The user prefers the fruit Apple, not the company"*
-          into the store.  On the next run the agent should answer without
-          asking for clarification.
+          *"User always refers to the fruit when asking about 'Apple', not the stock"*
+          into the store.  On the next run the agent should resolve the
+          ambiguity on the first turn.
 
       - type: command
         title: "Run agent with seeded memory — preference resolved"
@@ -257,7 +259,7 @@ sections:
         title: "agent-final.yaml — the merged view"
         content: |
           `agent-final.yaml` shows the result of applying all overlays: tools,
-          skills, memory, and context-manager, all merged into a single
+          skills and memory, all merged into a single
           readable manifest.
 
           Generate the live equivalent with `mas-ctl compile` (overlays
@@ -294,11 +296,11 @@ sections:
         title: "Plotting the trajectory"
         content: |
           Every `mas-ctl chat` call writes an `events.jsonl` log
-          (by default in the current directory).  Use `mas-lab plot` to turn
-          it into a visual timeline:
+          (by default `traces/events.jsonl` next to the manifest).  Use
+          `mas-lab plot` to turn it into a visual timeline:
 
           ```bash
-          mas-lab plot trajectory logs/events.jsonl --format mermaid
+          mas-lab plot trajectory traces/events.jsonl --format mermaid
           ```
 
           `--format mermaid` prints a Mermaid diagram you can paste into any
@@ -346,4 +348,4 @@ sections:
           **Benchmark & analyse**
 
           Run a multi-scenario experiment and explore the traces with
-          Tutorial 03 (Plugins & Observability).
+          Tutorial 03 (Experiments, Analysis & Evaluation).

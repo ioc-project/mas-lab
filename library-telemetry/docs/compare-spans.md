@@ -1,14 +1,10 @@
 # Span parity comparison
 
-Round-trip parity is how we prove the converter is faithful: replay `events.jsonl`
-to spans, and check the result matches a reference (a live plugin export, or a
-second replay). This mirrors `library-kg`'s `compare_kg` for the span domain.
+Span parity checks that two OTel span sets mean the same thing. Use it to confirm that replaying `events.jsonl` produces the same spans as a live plugin export, or as a second replay. It mirrors `compare_kg` in `library-kg`.
 
-`compare_otel_span_sets` compares **semantics**, not identifiers. Trace ids, span
-ids, and timestamps are ignored (they legitimately differ between replay and live
-export); span order is not significant.
+`compare_otel_span_sets` compares semantics, not identifiers. It ignores trace ids, span ids and timestamps, which differ between replay and live export, and it ignores span order.
 
-## Checks (6)
+## Checks
 
 | Check | Compares |
 |-------|----------|
@@ -22,7 +18,7 @@ export); span order is not significant.
 ## Usage
 
 ```python
-from mas.library.telemetry import compare_otel_span_sets, OtelSpanSet
+from mas.library.telemetry import OtelSpanSet
 
 ref = OtelSpanSet.from_file("otel_sdk_spans.jsonl")        # live plugin export
 cand = OtelSpanSet.from_events("events.jsonl", app_name="x")  # replay
@@ -31,7 +27,7 @@ report = cand.compare_to(ref, strict=True)
 print(report["passed"], report["summary"])   # {'passed': 6, 'failed': 0, 'total_checks': 6}
 ```
 
-Files / step / CLI:
+Step functions and CLI:
 
 ```python
 from mas.library.telemetry.steps import run_compare_spans, run_compare_spans_multi
@@ -40,7 +36,8 @@ run_compare_spans_multi("reference.jsonl", [("otel-plugin", "a.jsonl"), ("observ
 ```
 
 ```bash
-mas-lab telemetry compare reference.jsonl candidate.jsonl --output parity.json
+mas-lab telemetry compare reference.jsonl candidate.jsonl   # prints the summary; exit code 1 if a check fails
+mas-lab telemetry compare reference.jsonl candidate.jsonl --no-strict
 ```
 
 ## Typical workflow

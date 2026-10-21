@@ -35,8 +35,7 @@ def budget_from_manifest(manifest: dict | None) -> BudgetTracker:
     """Build a budget tracker from explicit manifest config only.
 
     Ceilings are not applied by default. When no ``spec.budget`` is set,
-    tool and LLM calls are unlimited until a control plugin (``BudgetContract``)
-    is wired via ``spec.control`` — see ROADMAP control/budget explicitness.
+    tool and LLM calls are unlimited.
     """
     spec = (manifest or {}).get("spec") or {}
     budget = spec.get("budget") or {}

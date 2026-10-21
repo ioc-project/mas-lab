@@ -1,7 +1,6 @@
 # Verifying OTel spans
 
-`library-telemetry` verifies spans in three complementary layers — the direct
-counterpart of `library-kg`'s combined KG validation.
+`library-telemetry` verifies OTel spans in three layers, the counterpart of the combined KG validation in `library-kg`. Use `verify_otel_file` to check a spans file before you push it.
 
 | Layer | Function | Checks |
 |-------|----------|--------|
@@ -25,9 +24,7 @@ print(report["spanspec"]["conformance_at_level"]) # 'full' | 'passing' | 'failin
 print(report["stats"])                           # spans, traces, agents, root_spans
 ```
 
-Structural errors and JSON-schema errors always set `report["ok"] = False`.
-SpanSpec errors only fail the run when `spanspec_fail_on_error=True` — spans are
-often intentionally partial (recommended attrs absent) without being wrong.
+Structural errors and JSON-schema errors always set `report["ok"] = False`. SpanSpec errors fail the run only when `spanspec_fail_on_error=True`, because spans are often partial (recommended attributes absent) without being wrong.
 
 ## Step + CLI
 
@@ -37,8 +34,8 @@ report = run_verify_spans("otel_sdk_spans.jsonl", spanspec_level="L3", fail_on_e
 ```
 
 ```bash
-mas-lab telemetry verify otel_sdk_spans.jsonl --level L3 --fail
-mas-lab telemetry verify otel_sdk_spans.jsonl --strictness recommended --json-output
+mas-lab telemetry verify otel_sdk_spans.jsonl --level L3 --fail   # prints the conformance summary
+mas-lab telemetry verify otel_sdk_spans.jsonl --level L3 --spanspec my.spanspec.yaml
 mas-lab telemetry inspect otel_sdk_spans.jsonl        # quick stats, no validation
 ```
 

@@ -1,249 +1,44 @@
+Status: Historical (implementation plan, superseded; the shipped design is in [agent-driven-hitl.md](agent-driven-hitl.md)).
+
 # Implementation Plan: Agent-Driven HITL Side Channel
 
-## Discovery Summary
+This note records the plan for agent-initiated HITL (human in the loop). It is kept as a historical record. The current behaviour is in [agent-driven-hitl.md](agent-driven-hitl.md) and the [system tools reference](../references/system-tools.md#request_human_input).
 
-### Current HITL Architecture (Working but Limited)
+## Problem it addressed
 
-1. **Governance-triggered HITL** (`hitl_on_tool`):
-   - Works via governance plugins
-   - Emits `EmitHitlRequest` in governance hooks
-   - `SessionController._drain_hitl()` resolves via local `HitlTerminal`
-   - ✅ **Works** because everything is in same process
-
-2. **Delegation Flow** (mas_session.py::send()):
-   ```python
-   result = controller.run_turn(prompt, turn_id=turn_id, parent_call_id=parent_call_id)
-   ...
-   return result.text  # ⚠️ LOSES result.awaiting_hitl
-   ```
-   - Sub-agent's `awaiting_hitl` state is DISCARDED
-   - Caller (moderator) never knows HITL is pending
-   - **Broken for distributed MAS**: no way to propagate HITL request up
-
-3. **The Side Channel Problem**:
-   - Current HITL blocks the LOCAL agent via `_drain_hitl` loop
-   - No mechanism for **asynchronous external resolution**
-   - In distributed MAS: HITL request would be invisible to entry point
-
-### Why This Breaks in Distributed MAS
+Only the session that hosted the agent resolved governance-triggered HITL. In a delegation, `mas_session.send()` returned the delegate's text and dropped its HITL state. A question raised by a delegate never reached the user-facing entry point:
 
 ```
-┌─────────────────┐
-│  Moderator      │  runs in Process A
-│  (entry agent)  │
-└────────┬────────┘
-         │ delegate("finance", "analyze discount")
-         ▼
-┌─────────────────┐
-│  Finance Agent  │  runs in Process B (different machine)
-│                 │  
-│  calls:         │
-│  request_human_input("Approve 20%?")
-│                 │
-│  result.awaiting_hitl = True  ◄── THIS STATE NEVER LEAVES PROCESS B
-│                 │
-│  return result.text  ← "delegated result text"
-└─────────────────┘
-         │
-         │ send() returns text only
-         ▼
-┌─────────────────┐
-│  Moderator      │  ⚠️ HAS NO IDEA finance is awaiting HITL
-│  continues...   │  ⚠️ User never sees the question
-└─────────────────┘
+Moderator (entry)  --delegate("finance", ...)-->  Finance agent
+                                                   asks the user a question
+                   <--------- text only ----------
+Moderator never learns that the question is pending.
 ```
 
-## Solution Architecture
+## Planned approach
 
-### Phase 1: Side-Channel HITL Resolver (✅ COMPLETE)
+1. A `request_human_input` system tool that raises a control-flow signal
+   (`RequestHitlSignal`) instead of returning.
+2. A wrapper around system tools that catches the signal and hands the
+   question to a side channel keyed by session, agent, and correlation id.
+3. A thread-safe `HitlResolverRegistry` that any host can poll or subscribe to,
+   and resolve.
+4. Delegation records which delegates have a pending question. The delegation return type stays the same.
+5. Host-side helpers (poll pending questions, resolve one) for user-facing
+   clients.
 
-**Created Files**:
-- [system_tools/request_human_input.py](../../runtime/src/mas/runtime/system_tools/request_human_input.py) — System tool contract
-- [system_tools/signal.py](../../runtime/src/mas/runtime/system_tools/signal.py) — `RequestHitlSignal` exception
-- [docs/design/agent-driven-hitl.md](agent-driven-hitl.md) — Architecture doc
+## How it landed
 
-**Implementation Approach**:
+| Planned | Shipped |
+| --- | --- |
+| Tool returns a `__hitl_request__` marker; the runtime pauses the turn and resumes on resolution | The wrapper (`_SystemToolHitlWrapper` in `mas.library.standard.plugins.tools.local`) **blocks** on an `HITLContract` and returns the answer as the tool result. No marker, no turn suspension. |
+| System tools auto-injected into every agent | Opt-in: list `{kind: system, name: request_human_input}` in `spec.tools`. |
+| Tool lives in the runtime | Tool lives in `library-standard` (`plugins/system_tools/request_human_input.py`); the runtime keeps only the signal (`mas.runtime.system_tools.signal`) and the registry (`mas.runtime.boundary.hitl.registry`). |
+| Single resolution path through the registry | Pluggable `HITLContract`: `RegistryHitlContract` (default), `AutoResolveHitlContract` (unattended), `InteractiveHitlContract` (`mas-ctl chat -i`). |
+| Delegation tracks pending delegates | `mas_session.send()` adds them to `state["pending_hitl_agents"]`. |
+| Host helper module | Hosts call `HitlResolverRegistry` directly (`subscribe`, `get_pending_for_session`, `resolve`). |
 
-Instead of modifying kernel internals, use **governance plugin pattern**:
+## See also
 
-1. Create `SystemToolsPlugin` (governance plugin)
-2. Plugin provides `request_human_input` tool
-3. Plugin's `on_execute_tool` catches `RequestHitlSignal`
-4. Converts signal to `EmitHitlRequest` via existing APIs
-5. Returns special marker that tells runtime to pause
-
-**Benefits**:
-- Uses existing governance infrastructure
-- No kernel modifications needed
-- Clean separation: tool → plugin → governance emission
-
-### Phase 2: Delegation Propagation (✅ COMPLETE)
-
-**Modified Files**:
-- `runtime/src/mas/runtime/boundary/hitl/registry.py` — NEW: Thread-safe HITL resolver registry
-- `runtime/src/mas/runtime/engine/manifest_tool_provider.py` — Inject system tools + wrapper
-- `runtime/src/mas/runtime/engine/tool_dispatch.py` — HITL marker detection
-- `runtime/src/mas/runtime/driver/mocks.py` — Add session_id/agent_id to ctx
-- `runtime/src/mas/runtime/driver/driver.py` — Propagate session_id/agent_id to ctx
-- `ctl/src/mas/ctl/executor/mas_session.py` — Track pending HITL in delegation state
-
-**Flow**:
-
-```python
-# Agent calls tool:
-request_human_input(question="Approve 20%?", question_type="CONFIRM", ...)
-
-# Tool raises signal:
-raise RequestHitlSignal(question=..., question_type=..., ...)
-
-# Wrapper catches signal:
-def on_execute_tool(...):
-    try:
-        return self._tool.execute(**arguments)
-    except RequestHitlSignal as signal:
-        # Register in global registry
-        registry.register(
-            session_id=ctx.session_id,
-            agent_id=ctx.agent_id,
-            correlation_id=ctx.correlation_id,
-            ...
-        )
-        # Return marker
-        return {"__hitl_request__": True, ...}
-
-# Runtime detects marker:
-if is_hitl_marker(result):
-    metadata = extract_hitl_metadata(result)
-    # External system polls pending HITL
-
-# Delegation propagates state:
-if result.awaiting_hitl:
-    registry.has_pending(session_id, agent_id)
-    state["pending_hitl_agents"].add(agent_id)
-```
-
-### Phase 3: External HITL Client Helpers (✅ COMPLETE)
-
-**Added Files**:
-- Integration-owned `hitl_helpers.py` module — HITL detection/resolution helpers
-
-**Helper Functions**:
-```python
-get_pending_hitl_for_session(session_id) -> dict[agent_id, list[requests]]
-resolve_agent_hitl(session_id, agent_id, correlation_id, choice, steering)
-has_pending_hitl(session_id, agent_id=None) -> bool
-clear_session_hitl(session_id)
-```
-
-**Integration Pattern**:
-
-```python
-# In an external chat client handler:
-result = session.ask(text)
-
-# Check for pending HITL
-pending = get_pending_hitl_for_session(result.session_id)
-for agent_id, requests in pending.items():
-    for req in requests:
-        # Post HITL card for this agent
-        self._publish_hitl_card(
-            room_id,
-            agent_id=agent_id,
-            question=req["question"],
-            choices=req["choices"],
-            context_data=req["context_data"],
-            correlation_id=req["correlation_id"],
-        )
-
-# When the user responds through the client UI:
-success = resolve_agent_hitl(
-    session_id,
-    agent_id,
-    correlation_id,
-    choice=inputs["hitl_choice"],
-    steering=inputs.get("hitl_steering", ""),
-)
-# Continue conversation with resolved result
-```
-
-## Implementation Status
-
-### ✅ Phase 1: Design + Tool Contract (Committed)
-
-- System tool `request_human_input` with Pydantic Input
-- `RequestHitlSignal` exception for control flow
-- Architecture documentation
-
-### ✅ Phase 2: Runtime Integration (IN PROGRESS - Ready to Commit)
-
-- `HitlResolverRegistry` — Thread-safe global registry
-- `_SystemToolHitlWrapper` — Signal catcher + marker emitter
-- `inject_system_tools()` — Auto-inject into ManifestToolProvider
-- `is_hitl_marker()` / `extract_hitl_metadata()` — Runtime detection helpers
-- `AutoCtxAssembler` — Add session_id/agent_id/correlation_id fields
-- `KernelDriver` — Propagate session/agent context to ctx
-- `mas_session.py` — Track pending HITL agents in delegation state
-
-### ✅ Phase 3: External HITL Client Helpers (Ready to Commit)
-
-- `hitl_helpers.py` — Detection and resolution functions
-- Integration pattern documented
-
-### 🔄 Phase 4: External Client UI (TODO - Next Session)
-
-**Files to Modify**:
-- The integration's client-specific UI adapter
-
-**Implementation**:
-```python
-def _handle_room_text(self, room_id, text):
-    result = self.session.ask(text)
-    
-    # Check for pending HITL after ask
-    pending = get_pending_hitl_for_session(result.session_id)
-    for agent_id, requests in pending.items():
-        for req in requests:
-            self._publish_agent_hitl_card(
-                room_id,
-                agent_id,
-                req["correlation_id"],
-                req["question"],
-                req["choices"],
-                req["context_data"],
-            )
-
-def _handle_attachment_action(self, attachment_action):
-    inputs = attachment_action.inputs
-    if inputs.get("action_type") == "hitl_resolve":
-        session_id = inputs["session_id"]
-        agent_id = inputs["agent_id"]
-        correlation_id = int(inputs["correlation_id"])
-        choice = inputs["hitl_choice"]
-        steering = inputs.get("hitl_steering", "")
-        
-        success = resolve_agent_hitl(
-            session_id, agent_id, correlation_id, choice, steering
-        )
-        if success:
-            # Resume conversation
-            self._post_message(
-                room_id,
-                f"✅ Choice recorded: {choice}. Continuing..."
-            )
-```
-
-## Testing Plan
-
-1. **Unit Test**: `RequestHumanInputTool.execute()` raises signal
-2. **Integration Test**: Wrapper catches signal and returns marker
-3. **Registry Test**: Register/resolve cycle works
-4. **Delegation Test**: finance-agent calls `request_human_input`, moderator detects pending
-5. **External UI Test**: Client posts HITL prompt, user responds, resolution propagates
-
-## Benefits of This Architecture
-
-✅ **Distributed-ready**: HITL state propagates via side channel (registry)  
-✅ **Non-blocking**: Other agents continue while one awaits user input  
-✅ **Clean contract**: System tool, not app-local plugin  
-✅ **Mealy-compatible**: No kernel modifications, uses existing egress flow  
-✅ **Delegation-safe**: Pending HITL tracked in state, doesn't break delegation contract
+- [Agent-driven HITL design](agent-driven-hitl.md)
+- [Implementation summary](IMPLEMENTATION-SUMMARY.md)

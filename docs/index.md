@@ -2,51 +2,53 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# MAS-Lab
+# MAS Lab
 
-**A specification-driven foundation** for multi-agent systems that are testable,
-reproducible, observable, and governable.
-
-Multi-agent demos are easy to build; production-grade systems are not. MAS-Lab
-helps teams close that gap with declarative specs, runtime enforcement, and
-repeatable experiments — without gluing everything together in prompts and scripts.
+MAS Lab builds, runs, and tests multi-agent systems from YAML specifications.
 
 <div class="mas-home" markdown="1">
 
 ## What it is
 
-MAS-Lab is an open toolkit for **engineering** multi-agent systems. You describe
-agents, teams, tools, workflows, and policies in YAML; the runtime executes and
-checks behavior at important boundaries; experiments and traces let you compare
-designs and audit what happened.
+A multi-agent system (MAS) is a team of LLM agents with tools and a workflow
+that says who talks to whom. MAS Lab is an open toolkit to engineer one.
 
-The same specification travels from local development through benchmarks to
-governed deployment — intent stays explicit instead of scattered across code and
-prompts.
+1. You describe agents, tools, workflows, and policies in YAML files (manifests).
+2. The runtime runs them and checks behaviour at boundaries such as tool calls and delegations.
+3. Experiments and traces let you compare designs and audit what happened.
 
-## Why it exists
+The same specification serves local development, benchmarks, and governed
+deployment.
 
-As systems grow, behavior becomes hard to reproduce, debug, and govern. Small
-changes to prompts, tools, or coordination can silently shift outcomes. MAS-Lab
-separates **what the system should do** from **what it actually did at runtime**,
-and connects them with specs, contracts, overlays, and observability.
+## Why use it
+
+Prototype demos are easy. Production systems are hard to reproduce, debug, and
+govern. A small change to a prompt, a tool, or the coordination can silently
+change outcomes.
+
+MAS Lab separates what the system should do (the spec) from what it did (the
+trace). Contracts, overlays, and observability connect the two.
 
 ## Who it is for
 
-**Developers** — build modular agent apps from specs instead of one-off glue.
-Declare agents, tools, and workflows once, then iterate safely across models and
-coordination patterns.
+- **Developers** build modular agent apps from specs. Declare agents, tools, and workflows once, then try other models and coordination patterns.
+- **Enterprises** add governance, traceability, and budgets as overlays. An overlay is a small YAML file merged onto a manifest, so core logic is untouched.
+- **Researchers** run controlled multi-run experiments. They vary designs and infrastructure, and replay recorded runs.
 
-**Enterprises** — roll out agentic workflows with governance, traceability, and
-operational control. Policies and budgets attach as overlays without rewriting
-core logic.
+More on the problem and the design: [overview](overview.md).
 
-**Researchers** — run controlled, multi-run campaigns; vary designs and
-infrastructure; replay trajectories with reproducibility built in.
+## Where to start
 
-More on each audience in the [overview](overview.md).
+- [Quickstart](tutorials/00-environment-setup/README.md): install and run a first command.
+- [Tutorials](tutorials/index.md): from one agent to a governed experiment.
+- [Labs](labs.md): reproduce the paper experiments.
+- [Architecture](architecture.md): the five stages and the packages.
 
-## Go deeper
+Browse manifests and runs in a browser with the [Web UI](ui/index.md). Watch runs
+live in the [live dashboard](ui/live.md). For what shipped in this release, read the
+[v0.2 release post](blog/posts/2026-09-30-v0-2-release/index.md).
+
+## Reference pages
 
 | Topic | Where |
 | --- | --- |
@@ -54,28 +56,17 @@ More on each audience in the [overview](overview.md).
 | Command line | [CLI](cli/index.md) · [mas-ctl options](cli/mas-ctl.md) |
 | Workspace `config.yaml` | [config.yaml reference](references/config.yaml.md) |
 | Labs vs libraries | [labs-and-libraries.md](labs-and-libraries.md) |
-| Hands-on path (agent → team → experiment) | [Tutorials](tutorials/index.md) |
-| Live telemetry dashboard | [Live dashboard](ui/live.md) |
+| Terms | [Glossary](glossary.md) |
 | YAML manifests, schemas, contracts | [References](references/index.md) |
 | Design-space exploration labs | [Paper](paper/index.md) |
 | Releases and updates | [Blog](blog/index.md) |
 
-## Where to start
-
-If you are new to MAS-Lab, begin with
-[Tutorial 0 — Environment setup](tutorials/00-environment-setup/README.md) to
-install the stack and run your first commands. The [Web UI](ui/index.md) lets you
-browse manifests and inspect runs in the browser. The [live dashboard](ui/live.md) is a
-separate surface over `/ws` and `/api/ingest`. For context on what shipped in
-this release, read the
-[v0.2 release post](blog/posts/2026-09-30-v0-2-release/). For the research motivation,
-formal model, and reproducible Section 5 labs, see the
-[MAS-Lab paper](paper/index.md).
-
 ## Citing this work
 
-If you use MAS-Lab in research or publications, please cite the
-[MAS-Lab article](paper/index.md) — not only this repository. BibTeX and
-reproduction details are on the [Paper](paper/index.md) page.
+If you use MAS Lab in research or publications, cite the
+[MAS Lab article](paper/index.md), not only this repository. BibTeX and
+reproduction details are on the Paper page.
+
+Next: [Tutorial 0 — Environment setup](tutorials/00-environment-setup/README.md).
 
 </div>

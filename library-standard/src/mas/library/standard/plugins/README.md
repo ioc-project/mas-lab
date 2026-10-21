@@ -4,7 +4,7 @@
 -->
 # Plugin id cards (MAS Library Standard)
 
-Each plugin has a canonical **`plugin_id@version`**. Short names resolve via the runtime alias manifest in [`runtime/src/mas/runtime/aliases.yaml`](../../../../../../runtime/src/mas/runtime/aliases.yaml).
+Each card below describes one plugin: its identity, what it implements and which manifest key selects it. Use it to find the id or alias to put in a manifest. Each plugin has a canonical `plugin_id@version`. Short names resolve via the runtime alias manifest in [`runtime/src/mas/runtime/aliases.yaml`](../../../../../../runtime/src/mas/runtime/aliases.yaml).
 
 ## Template
 
@@ -57,7 +57,7 @@ Same procedure as tools: a plugin speaks **one protocol**; the registry routes
 | `openai` | Wire protocol | OpenAI-compatible `/chat/completions` HTTP |
 | `cache` | Wrapper (not a protocol) | Disk cache around a routed protocol plugin |
 
-Infra `spec.protocol` / agent `spec.models[].kind` select the wire protocol (default `openai`). Ollama and LiteLLM proxies use the OpenAI plugin. A future Bedrock plugin would register as `type: llm_provider` with its own class. Offline CI replays a recorded live protocol through `llm_cache` (`raise_on_miss`).
+Infra `spec.protocol` / agent `spec.models[].kind` select the wire protocol (default `openai`). Ollama and LiteLLM proxies use the OpenAI plugin. Offline CI replays a recorded live protocol through `llm_cache` (`raise_on_miss`).
 
 ## Control protocol (`mas.library.standard.plugins.control`)
 
@@ -107,7 +107,3 @@ Example: [examples/governance/debug-script/](../../../../../examples/governance/
 - Example (not an app): [examples/context/summarizer-override/](../../../../../examples/context/summarizer-override/)
 - Overlay: `pkg://mas.library.standard/overlays/cheap-summarizer.yaml`
 - Docs: [summarization.md](../../../../../../docs/manifests/summarization.md)
-
-## Deferred (not in this OSS release)
-
-Docker/K8s placement, Petri-net workflow, Letta memory, and extended OTel plugins are planned for a later release.

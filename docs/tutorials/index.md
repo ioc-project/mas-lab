@@ -2,62 +2,83 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# MAS Framework — Hands-On Tutorials
+# MAS Lab — Hands-On Tutorials
 
-Progressive tutorials for the MAS Framework — from single-agent basics to full
-lab experiments. They are one of several ways to work with MAS Lab; you can also
-[reproduce paper labs](../paper/index.md) or use the [Web UI](../ui/index.md) to
-design and inspect agents and experiments.
+These tutorials take you from one agent to full experiments. Each builds on the
+previous ones. You can also [reproduce the paper labs](../paper/index.md) or use
+the [web UI](../ui/index.md).
 
-**Start with Tutorial 0** — Docker or developer install, LLM credentials, and
-verification. Same setup for CLI and web UI.
+**Start with Tutorial 0.** It covers the Docker or developer install, LLM
+credentials, and a check that everything works. The CLI and web UI share it.
+
+## Choose a route
+
+| If you want to... | Start here |
+| --- | --- |
+| See a multi-agent system run | [Tutorial 0](00-environment-setup/README.md), then [Tutorial 1](01-building-an-agent/README.md) |
+| Understand the model: agents, MAS, overlays | Tutorials [0](00-environment-setup/README.md), [1](01-building-an-agent/README.md), [2](02-creating-a-mas/README.md) |
+| Run a controlled experiment | [Tutorial 3](03-experiments-and-analysis/README.md), then the [paper labs](../labs.md) |
+| Add governance and human approval | [Tutorial 14](14-governance-hitl/README.md) |
+| Export traces to an observability stack or a knowledge graph | Tutorials [8](08-telemetry/README.md) and [9](09-kg-oxp/README.md) |
+| Click instead of type | The [web UI](../ui/index.md) |
 
 | # | Tutorial | What you learn |
 | --- | --- | --- |
-| 0 | [Environment Setup](00-environment-setup/) | Install, PATH, model endpoint, API key wiring |
-| 1 | [Build an agent](01-building-an-agent/) | Agent manifest, tools, skills, memory, CLI, traces |
-| 2 | [Orchestrate your MAS](02-creating-a-mas/) | MAS manifest, delegation, topology overlays |
-| 3 | [Run an experiment](03-experiments-and-analysis/) | Experiments, benchmarks, pipelines, MCEv1 evaluation |
-| 4 | [MCP tools](04-mcp-tools/) | Discover and dispatch local and remote tools through a stable contract |
-| 5 | [A2A agents](05-a2a-agents/) | Discover and dispatch local and remote agents through a stable contract |
-| 6 | [Agent skills](06-agent-skills/) | Teach an agent a reusable skill — procedure, reference material, checked script — without folding it into the agent's own instructions |
-| 8 | [Telemetry](08-telemetry/) | Native traces, live OTel, replay, collector / ClickHouse |
-| 9 | [KG & OXP](09-kg-oxp/) | Native→KG, OTel→KG (OXP `norm`), Neo4j serialization |
-| 10 | [Evaluation metrics](10-evaluation-metrics/) | Stock MCE, one-off prompts, reusable EvalMetrics, judge infra |
-| 11 | [Sessions and recovery](11-sessions-and-recovery/) | Checkpoint, fork, resume and recover a conversation |
-| 12 | [Spawned subagents](12-subagents/) | Run bounded, pre-authored subagent templates during a turn |
-| 13 | [Control attach and debug scripts](13-control-and-debug/) | Interrupt a bad session, persist, resume; investigate; steer-to-fix on the restarted chat; auto-checkpoint tree; gdb `script_file` / `--debug-script` |
-| 14 | [Governance and HITL](14-governance-hitl/) | Require human or automated-policy approval before a tool call runs |
+| 0 | [Environment Setup](00-environment-setup/README.md) | Install, PATH, model endpoint, API key wiring |
+| 1 | [Build an agent](01-building-an-agent/README.md) | Agent manifest, tools, skills, memory, CLI, traces |
+| 2 | [Orchestrate your MAS](02-creating-a-mas/README.md) | MAS manifest, delegation, topology overlays |
+| 3 | [Run an experiment](03-experiments-and-analysis/README.md) | Experiments, benchmarks, pipelines, and MCE evaluation (Metrics Computation Engine) |
+| 4 | [MCP tools](04-mcp-tools/README.md) | Call local and remote tools (Model Context Protocol) through one contract |
+| 5 | [A2A agents](05-a2a-agents/README.md) | Call local and remote agents (Agent2Agent) through one contract |
+| 6 | [Agent skills](06-agent-skills/README.md) | Give an agent a reusable skill (procedure, reference material, checked script) outside its own instructions |
+| 7 | *(reserved)* | |
+| 8 | [Telemetry](08-telemetry/README.md) | Native traces, live OTel, replay, collector / ClickHouse |
+| 9 | [KG & OXP](09-kg-oxp/README.md) | Build a knowledge graph (KG) from native traces or OpenTelemetry (OTel) spans, using the Observe and eXplain Platform (OXP) `norm` normalizer; write to Neo4j |
+| 10 | [Evaluation metrics](10-evaluation-metrics/README.md) | Stock MCE, one-off prompts, reusable EvalMetrics, judge infra |
+| 11 | [Sessions and recovery](11-sessions-and-recovery/README.md) | Checkpoint, fork, resume and recover a conversation |
+| 12 | [Spawned subagents](12-subagents/README.md) | Run bounded, pre-authored subagent templates during a turn |
+| 13 | [Control attach and debug scripts](13-control-and-debug/README.md) | Interrupt a bad session, persist, resume; investigate; steer-to-fix on the restarted chat; auto-checkpoint tree; gdb `script_file` / `--debug-script` |
+| 14 | [Governance and HITL](14-governance-hitl/README.md) | Require human or policy approval (human in the loop, HITL) before a tool call runs |
 
-After Tutorial 14, reproduce all paper results across 3 labs: [Paper](../paper/index.md).
+After Tutorial 14, reproduce the paper results in three labs: [Paper](../paper/index.md).
 
-Start from [Tutorial 0](00-environment-setup/README.md) for install and first commands —
-CLI and optional [web UI](../ui/index.md) use the same setup.
+Do Tutorials 0 to 3 in order: install, then one agent, then a MAS, then
+experiments. Tutorials 4 to 6 and 8 to 14 each cover one capability. Each page
+lists its prerequisites at the top, usually Tutorial 0 plus the agent or MAS it
+reuses.
 
-## Quick start
+Every tutorial except 10 ships a `demo/scenario.yaml` with steps, commands,
+expected exit codes, and sometimes expected output. CI runs the offline steps
+with `tests/tutorials/test_scenario_commands.py`, so the commands stay working.
 
-See **[Tutorial 0 — Environment setup](00-environment-setup/README.md)** for Docker and
-developer install paths, LLM credentials, and verification steps.
-
-Tutorials 0–3 ship `demo/scenario.yaml` files with structured steps, commands,
-and expected output used by `tests/tutorials/test_scenario_commands.py`.
-
-**Replay all offline commands with logs** (stdout/stderr per tutorial under `/tmp`):
+To replay the offline commands, run this from the repository root:
 
 ```bash
-python scripts/run_tutorial_scenarios.py
-# Live LLM steps too:
-TUTORIAL_ONLINE=1 python scripts/run_tutorial_scenarios.py
-# Logs: /tmp/tutorial-00.log … /tmp/tutorial-03.log
+pytest tests/tutorials/test_scenario_commands.py -v              # offline steps only
+pytest tests/tutorials/test_scenario_commands.py -v -k tuto-03   # one tutorial
+TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-01   # also live-LLM steps
 ```
 
-**Telemetry** is Tutorial 8 (`mas-library-telemetry`). **Knowledge-graph
-normalization** is Tutorial 9 (`mas-library-kg`): native→KG and OTel→KG
-(OXP `norm` wrap).
+Telemetry is Tutorial 8 (`mas-library-telemetry`). Knowledge-graph
+normalization is Tutorial 9 (`mas-library-kg`).
+
+## Sample applications
+
+The labs run on sample systems from `library-samples/apps`. They are also the
+fastest way to see the runtime work.
+
+| Application | What it is | Used by |
+| --- | --- | --- |
+| `trip-planner` | A four-agent moderator and specialists system | Topology and memory experiments |
+| `qa-mas` | A one-agent MAS wrapping a question-answering agent | Design-pattern experiments |
+
+Both come with datasets. The trip planner's is `trip-planner-benchmark`.
 
 ## What's next
 
 After Tutorial 14:
 
-- **Labs** — runnable experiment artifacts live in [`labs/`](../../labs/): `design-space.lab` (design patterns + topologies), `lifecycle-control.lab`, `extensions.lab` — see [paper index](../paper/index.md). Lab vs library: [labs-and-libraries.md](../labs-and-libraries.md)
-- **Protocol references** — see the [MCP ToolServerRegistry reference](../references/tool-server-registry.md) and [A2A developer reference](../a2a/developer.md)
+- **Labs:** runnable experiments live in [`labs/`](https://github.com/outshift-open/mas-lab/tree/main/labs): `design-space.lab` (design patterns and topologies), `lifecycle-control.lab`, and `extensions.lab`. See [Labs](../labs.md) and the [paper index](../paper/index.md). Lab vs library: [labs-and-libraries.md](../labs-and-libraries.md).
+- **Protocol references:** the [MCP ToolServerRegistry reference](../references/tool-server-registry.md) and the [A2A developer reference](../a2a/developer.md).
+
+Next: [Tutorial 0 — Environment setup](00-environment-setup/README.md).

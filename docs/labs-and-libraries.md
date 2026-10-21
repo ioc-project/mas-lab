@@ -1,54 +1,74 @@
-# Labs vs libraries
-
-> The `example-library` names in the examples below are synthetic documentation
-> fixtures. MAS-Lab does not ship an `example-library` or an `ioc` library.
 <!--
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
 # Labs, libraries, and local plugins
 
-A **lab** is an experiment pack. A **library** is reusable code and YAML.
-Do not turn a lab into a library, and do not create a library when you only
-need an experiment.
+> The `example-library` names in the examples below are synthetic documentation
+> fixtures. MAS Lab does not ship an `example-library`.
 
-**Datasets.** `library-samples` publishes the complete reusable pack for the
-reference app (`trip-planner-benchmark`). CI, unit tests, and functional
-tests pin that catalog (`locator: samples`) and cap rows with
-`dataset.limit`. They must not `path:` into `labs/` — paper labs are not
-shipped with the packages. Experiment-specific packs (QA reasoning, MAS
-necessity, lifecycle queries, extensions) live under that lab’s `datasets/`
-and are referenced only from the lab itself.
+This page explains the difference between a lab and a library, and when to
+create each. Read it before you add a folder with experiments or reusable code.
 
-Developer discovery contract: [library-discovery.md](library-discovery.md).
+- A **lab** is a folder of experiments (scenarios, overlays, datasets, pipelines).
+- A **library** is a folder of reusable code and YAML, with a `library.yaml`.
+
+Do not turn a lab into a library. Do not create a library when you only need an
+experiment.
+
+**Datasets.** A dataset is the set of input items an experiment runs over.
+`library-samples` publishes the full dataset pack for the reference app
+(`trip-planner-benchmark`). CI and tests pin that catalog (`locator: samples`)
+and cap rows with `dataset.limit`. They must not use `path:` into `labs/`,
+because paper labs are not shipped with the packages. Experiment-specific
+datasets (QA reasoning, MAS necessity, lifecycle queries, extensions) live in
+that lab's `datasets/` folder. Only that lab references them.
+
+Developer contract for finding libraries: [library-discovery.md](library-discovery.md).
 
 ---
 
 ## Lab
 
-A lab is a `*.lab/` folder with `lab-config.yaml`. It stays flat: scenarios,
-overlays, datasets, and pipelines. Refs use `name:path` (for example
-`samples:tools/calc.tool.yaml`).
+A lab is a `*.lab/` folder with `lab-config.yaml`. It stays flat and holds
+scenarios, overlays, datasets, and pipelines. It refers to other files with
+`name:path` references, for example `samples:tools/calc.tool.yaml`.
 
-Paper labs live under [`labs/`](../labs/README.md). Create a lab when you are
-composing a campaign, not when you are publishing reusable tools.
+Paper labs are under [`labs/`](https://github.com/outshift-open/mas-lab/blob/main/labs/README.md).
+Create a lab to compose an experiment. Do not create one to publish reusable tools.
 
 ## Library
 
-A library is a folder with `library.yaml`. Apps, tools, overlays, plugins,
-and Python live there. In a `name:path` ref, `name` is always a **library
-name** (`samples`, `standard`, `lab`, `skills`, `ioa`, or a lab-local name
-such as `lib`). It is never a filesystem path. Unknown names fail.
+A library is a folder with `library.yaml`. It holds apps, tools, overlays,
+plugins, and Python code.
 
-Shipped libraries in this repo include `library-samples/`,
-`library-standard/`, `library-lab/`, `library-skills/`, and `library-ioa/`.
-The name you write in YAML is a **library scheme** (`samples`, `example-library`),
-not necessarily the Python package name (`mas-library-samples`). Additional
-names can be listed as `aliases:` in `library.yaml`; the directory basename
-and `name:` field are also accepted. Labs then pin a MAS with
-`library:app` (for example `example-library:my-app@v2`). Versioning uses
-`name@version` (bare name is `@latest`). Slash is a path
-(`example-library:apps/my-app/v2`), not an id alias.
+In a `name:path` reference, `name` is always a **library name**: `samples`,
+`standard`, `lab`, `eval`, `skills`, `ioa`, `kg`, `telemetry`, or a lab-local
+name such as `lib`. It is never a filesystem path. An unknown name fails.
+
+The repository ships eight libraries. Each folder has a scheme (the name you
+write in YAML):
+
+| Folder | Scheme |
+| --- | --- |
+| `library-samples/` | `samples` |
+| `library-standard/` | `standard` |
+| `library-lab/` | `lab` |
+| `library-eval/` | `eval` |
+| `library-skills/` | `skills` |
+| `library-ioa/` | `ioa` |
+| `library-kg/` | `kg` |
+| `library-telemetry/` | `telemetry` |
+
+The scheme is not the Python package name (`mas-library-samples`). An installed
+library registers its scheme on the `mas.runtime.manifest_libraries` entry point.
+A library found on a search path uses its directory name. `library.yaml` may
+list extra names under `schemes:`, but use one name per library (see
+[library-discovery.md](library-discovery.md)).
+
+A lab pins a MAS with `library:app`, for example `example-library:my-app@v2`.
+`name@version` selects a version; a bare name means `@latest`. A slash is a
+path (`example-library:apps/my-app/v2`), not an alias for an id.
 
 How to write those refs: [writing-manifests.md](manifests/writing-manifests.md).
 
@@ -57,9 +77,9 @@ library — do not put `library.yaml` on the lab root.
 
 ## Local plugins
 
-A **plugin** is a runtime or pipeline extension **registered by a library**.
-Put plugin Python and YAML *in* a library (lab-local or shipped). Do not
-invent a third top-level “plugins folder” beside lab vs library.
+A **plugin** is a runtime or pipeline extension registered by a library. Put
+plugin Python and YAML inside a library, lab-local or shipped. There is no third
+"plugins folder" beside labs and libraries.
 
 | What you are adding | Where it lives |
 | --- | --- |
@@ -67,39 +87,38 @@ invent a third top-level “plugins folder” beside lab vs library.
 | Agent/runtime plugin (design pattern, memory, tool provider, …) | Declared in that library’s `library.yaml` so discovery finds it |
 | Experiment pack (scenarios, overlays, lab-owned datasets) | The lab, not a library |
 
-A pipeline step is still a plugin of type `step`. The lab is the experiment
-surface; the library is what registers the step.
+A pipeline step is a plugin of type `step`. The lab runs the experiment. The
+library registers the step.
 
-**Enable without editing agent YAML.** Workspace `config.yaml` `plugins:` and
-`lab.enable_plugins` turn on **runtime** plugins (gdb, checkpoint stores).
-Every catalog entry is commented in the init template — uncomment to enable.
+**Enable without editing agent YAML.** The `plugins:` key of `config.yaml` and
+`lab.enable_plugins` turn on **runtime** plugins (gdb, checkpoint stores). Every
+catalog entry is commented out in the init template. Uncomment one to enable it.
 `spec.observability` and `spec.governance` stay on the agent.
 
 ---
 
 ## When to use which
 
-1. **Lab is sufficient** when you only compose existing libraries: experiments,
-   overlays, datasets, refs like `samples:tools/calc.tool.yaml`. No new
-   reusable code.
-2. **Local library inside the lab** when this lab needs reusable manifests,
-   tools, plugins, or code that are not (yet) worth a shipped package. Put
-   them in a subdir with `library.yaml`, list it in `lab.libraries`, ref as
-   `name:path`.
-3. **Shipped / workspace library** when more than one lab (or ctl/runtime
-   generally) should reuse it: an installable package, or a path in workspace
-   `config.yaml` `manifest_libraries:`.
-4. **Local plugins** live *inside* a library (option 2 or 3), not instead of
-   one. If it is only a bench step for this experiment, keep it in the lab’s
-   local library. If it is an agent/runtime plugin, declare it in that
-   library’s `library.yaml`.
+1. **A lab alone** is enough when you only compose existing libraries:
+   experiments, overlays, datasets, and refs like `samples:tools/calc.tool.yaml`.
+   You write no reusable code.
+2. **A local library inside the lab** fits when this lab needs reusable
+   manifests, tools, plugins, or code that do not yet justify a package. Put
+   them in a subfolder with `library.yaml`, list it in `lab.libraries`, and
+   refer to it as `name:path`.
+3. **A shipped or workspace library** fits when more than one lab, or `mas-ctl`
+   and the runtime, should reuse the code. Make it an installable package or add
+   its path to `manifest_libraries:` in `config.yaml`.
+4. **A local plugin** lives inside a library (option 2 or 3). A bench step for
+   one experiment stays in the lab's local library. An agent or runtime plugin
+   is declared in that library's `library.yaml`.
 
 ---
 
 ## Lab-local library (in-repo pattern)
 
-`labs/lifecycle-control.lab` and `labs/extensions.lab` keep reusable pipeline
-code in a package named after the lab and list that directory:
+`labs/lifecycle-control.lab` and `labs/extensions.lab` keep pipeline code in a
+package named after the lab. The lab lists that directory:
 
 ```yaml
 # lab-config.yaml
@@ -119,17 +138,16 @@ description: Lab-local pipeline figure steps for this lab.
 version: "0.1.0"
 ```
 
-The library name in refs is the listed basename:
-`lifecycle_control_lab/` → `lifecycle_control_lab`. Immediate children of the
-lab root that contain `library.yaml` are picked up too.
+The library name in refs is the listed basename: `lifecycle_control_lab/`
+becomes `lifecycle_control_lab`. Direct children of the lab root that contain
+`library.yaml` are picked up too.
 
-The directory is also the Python package (`lifecycle_control_lab.steps.…`).
-Every library's parent directory shares one `sys.path`, so package names must
-be unique across the libraries a process loads: two labs that both ship a
-`lib/` package would shadow each other. The plugin registry fails with both
-paths when it detects such a clash.
+The directory is also the Python package (`lifecycle_control_lab.steps.…`). All
+libraries share one `sys.path`, so package names must be unique within a
+process. Two labs that both ship a `lib/` package would shadow each other. The
+plugin registry fails and prints both paths when it detects a clash.
 
-A listed directory **without** `library.yaml` is Python `sys.path` only. Do
+A listed directory without `library.yaml` only joins the Python `sys.path`. Do
 not leave an in-repo lab in that state.
 
 ## How to write `name:path`
@@ -150,11 +168,12 @@ manifest_libraries:
 ```
 
 Lab-local names win over the same name in workspace config or an installed
-library. First-seen name wins.
+library. The first name found wins.
 
-`lab.libraries`, workspace `manifest_libraries`, and `MAS_LIBRARY_PATHS` are
-the same scan. Install (entry point) is the other door. `library.yaml`
-fills the catalog. Do not declare aliases (`ioc` for `example-library`).
+`lab.libraries`, workspace `manifest_libraries`, and the `MAS_LIBRARY_PATHS`
+environment variable feed the same scan. Installing a package (entry point) is
+the other way in. `library.yaml` fills the catalog. Do not declare alias names
+for a library.
 
 ---
 
@@ -166,3 +185,6 @@ fills the catalog. Do not declare aliases (`ioc` for `example-library`).
 - [Tutorial 1](tutorials/01-building-an-agent/README.md) — overlay `name:path` refs
 - [Package map](libraries.md) — installable wheels
 - [Library discovery](library-discovery.md) — search order and `library.yaml` contract
+
+Next: [Library discovery](library-discovery.md) for the search order, or the
+[package map](libraries.md) for installable packages.

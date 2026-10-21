@@ -59,7 +59,7 @@ Existing `eval_mce` config (unchanged) plus **`model`**:
 
 ## Docs
 
-- [summarization.md § MCE judge](../../../docs/manifests/summarization.md#mce-judge-model)
-- [experiment.md](../../../docs/manifests/experiment.md)
-- [pipeline-steps.md](../../../lab/docs/pipeline-steps.md)
+- [summarization.md § MCE judge](../../../../docs/manifests/summarization.md#mce-judge-model)
+- [experiment.md](../../../../docs/manifests/experiment.md)
+- [pipeline-steps.md](../../../../lab/docs/pipeline-steps.md)
 - Category: [MCE examples](../README.md)

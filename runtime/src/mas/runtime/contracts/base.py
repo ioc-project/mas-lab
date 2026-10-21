@@ -1,98 +1,29 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# LAYER: L3 — Contract Layer  (OS analogue: POSIX ABI / Syscall Interface)
-# -------------------------------------------------------------------
-# Contracts are the stable interface between L2 (Hook Bus) and L4 (Plugins).
-# A governance plugin at L4 is written against a Contract, not a backend.
-# Liskov Substitution must hold: any Contract implementation is substitutable
-# without changing the governance properties that depend on it.
-# Reference: §16.1 (Layer 3) in formal_governance_and_ops.md
-# -------------------------------------------------------------------
 """Contract taxonomy base classes and registry.
 
-This module defines the two-level contract taxonomy used across the
-mas-runtime and establishes a lightweight auto-registration mechanism so
-that the runtime can inspect, validate, and compose contracts at load time.
+``ContractBase`` subclasses auto-register when they set a non-empty
+``contract_id``.  Query them with ``ContractRegistry.get("tool")``.
 
-Contract taxonomy
-─────────────────
+Shipped ``CapabilityContract`` subclasses (importable from this package or
+their modules) are ``ToolContract``, ``MemoryContract``, and
+``RecorderContract``.  ``ContextContract`` is a ``BasePlugin``, not a
+``CapabilityContract``.  ``OrchestrationContract`` and
+``GovernanceContract`` are bases only — they have no shipped subclasses.
 
-    ContractBase (abstract)
-    ├── CapabilityContract      — WHAT the agent can access
-    │   ├── ToolContract         (tool execution boundary)
-    │   ├── PromptContract       (prompt template fetching)
-    │   ├── MemoryContract       (memory read/write)
-    │   ├── SensorContract       (inbound signal boundary)
-    │   ├── SessionContract      (durable session state)
-    │   ├── TransportContract    (inter-agent messaging)
-    │   ├── MessageContract      (simple message send)
-    │   ├── RecorderContract     (telemetry emit)
-    │   ├── ControlContract      (pause/resume/abort/steer)
-    │   ├── SharedContextContract(shared state coordination)
-    │   ├── DelegationContract   (agent-as-tool)
-    │   ├── ModelAccessContract  (model selection/routing)
-    │   ├── ContextContract      (prompt assembly)
-    │   ├── LLMContract          (direct LLM call)
-    │   └── DesignPatternContract(reasoning pattern realizability)
-    │
-    ├── OrchestrationContract   — HOW control flows between agents
-    │   └── MainLoopContract     (execution topology: single-shot, supervisor loop…)
-    │
-    └── GovernanceContract      — POLICY over capabilities
-        ├── BudgetContract       (token / cost / call-rate ceilings)
-        └── RoutingContract      (topology / edge policy)        ← future
-        # SandboxContract, TBACContract — internal-only (mas-lab-internal)
-
-Key distinctions
-────────────────
-CapabilityContract:
-  - Defines a resource boundary (what can be called)
-  - Plugins IMPLEMENT it to provide a capability
-  - The agent CONSUMES it via the contract interface
-
-GovernanceContract:
-  - Defines a policy boundary (what is allowed)
-  - Applied by the runtime BEFORE and AFTER capability contracts fire
-  - Raises ``PolicyViolation`` to deny; never returns "allowed" explicitly
-  - ORTHOGONAL to capability contracts — can be added/removed without
-    changing the capability topology
-
-Petri net vs GovernanceContract
-────────────────────────────────
-Petri net token-place rate limits control FLOW (back-pressure, concurrency —
-how many firings per time window; tokens are restored after each firing).
-
-GovernanceContract controls RESOURCE ACCOUNTING (cumulative consumption over
-the lifetime of a run; counters are monotonically decreasing and never reset).
-
-Both are necessary and orthogonal:
-  • Petri net: prevents thundering-herd / deadlock (structural)
-  • GovernanceContract: prevents cost explosion / data exfiltration (economic)
-
-See §28 of formal_governance_and_ops.md for the full formal treatment.
+Nearby protocols live in other modules (``ControlContract``,
+``DelegationContract``, ``DesignPatternContract``, ``EngineContract``).
+They are not subclasses of the types in this file.
 
 Plugin dependency metadata
 ──────────────────────────
-Every plugin declares its contract relationships via class variables:
+Every plugin declares its contract relationships via class variables::
 
     class MyPlugin(BasePlugin):
         plugin_id    = "my_plugin@v1"
-        implements   = ["tool"]           # contracts this plugin fulfills
-        requires     = ["recorder"]       # contracts this plugin needs injected
-        governed_by  = ["budget"]  # governance contracts applied
-
-The runtime uses these to:
-  1. Validate that all required contracts are wired before execution
-  2. Auto-attach governance plugins to the correct hooks
-  3. Generate dependency graphs for ops dashboards
-
-Contract registry
-─────────────────
-Contracts auto-register via ``__init_subclass__``.  Query the registry:
-
-    ContractRegistry.get("tool")       → ToolContract class
-    ContractRegistry.all_capability()  → list of CapabilityContract subclasses
-    ContractRegistry.all_governance()  → list of GovernanceContract subclasses
+        implements   = ["tool"]
+        requires     = ["recorder"]
+        governed_by  = ["budget"]
 """
 
 from abc import ABC
@@ -164,49 +95,23 @@ def plugin(cls=None, *, plugin_id: Optional[str] = None,
     return _apply
 
 
-# ---------------------------------------------------------------------------
-# BasePlugin  (L3 — plugin attachment protocol)
-# ---------------------------------------------------------------------------
-# DESIGN INTENT
-# ───────────
-# BasePlugin lives at L3 so that CapabilityContracts and GovernanceContracts
-# can inherit from it without creating an upward dependency into L4 (Plugins).
-#
-# What belongs here (L3):
-#   • Plugin metadata ClassVars (plugin_id, implements, requires, governed_by)
-#   • attach_agent() — lightweight agent attachment (agent_id + config only)
-#
-# What does NOT belong here (L4 only):
-#   • PluginRegistry auto-registration — lives in L4 _RegistryMixin
-#     (core_plugins.py) so that L3 never imports from L4.
-#   • Hook execution methods — belong on TypeA–TypeE base classes in L4.
-# ---------------------------------------------------------------------------
-
 class BasePlugin:
-    """Base plugin attachment protocol — L3 Contract Layer.
-
-    Provides plugin metadata ClassVars and a lightweight ``attach_agent``
-    method.  Auto-registration into ``PluginRegistry`` (L4) is intentionally
-    absent here to preserve the L3 → L2 dependency direction.  Registration
-    is added by the L4 ``_RegistryMixin`` that all TypeA–TypeE plugin bases
-    inherit from.
+    """Plugin metadata and ``attach_agent``.
 
     Class variables (declare in subclasses):
 
     ``plugin_id`` : str
-        Unique identifier, e.g. ``"budget_plugin@v1"``.  When a subclass
-        inheriting from a TypeA–TypeE base (L4) declares this, the plugin
-        auto-registers into ``PluginRegistry``.
+        Unique identifier, e.g. ``"my_tool@v1"``.
 
     ``implements`` : List[str]
-        Contract IDs this plugin fulfills, e.g. ``["tool", "prompt"]``.
+        Contract IDs this plugin fulfills, e.g. ``["tool"]``.
 
     ``requires`` : List[str]
         Contract IDs this plugin needs injected, e.g. ``["recorder"]``.
 
     ``governed_by`` : List[str]
-        Governance contract IDs applied to this plugin's operations,
-        e.g. ``["budget", "sandbox"]``.
+        Governance IDs applied to this plugin's operations,
+        e.g. ``["budget"]``.
     """
 
     plugin_id:   ClassVar[Optional[str]]  = None
@@ -344,14 +249,12 @@ class ContractBase(ABC):
     ``contract_id`` is non-None and non-empty.
     """
 
-    contract_id: ClassVar[Optional[str]] = None  # e.g. "tool", "budget", "sensor"
+    contract_id: ClassVar[Optional[str]] = None  # e.g. "tool", "memory", "recorder"
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        # Use cls.__dict__ (not getattr) to avoid registering subclasses that
-        # merely INHERIT contract_id from a parent without overriding it.
-        # e.g. LocalTBACPlugin inherits contract_id="tbac" from TBACContract
-        # but should NOT re-register under "tbac" (that would overwrite it).
+        # Use cls.__dict__ (not getattr) so a plugin that inherits
+        # contract_id="tool" from ToolContract does not re-register as "tool".
         cid = cls.__dict__.get("contract_id")
         if cid and not str(cid).startswith("_"):
             ContractRegistry.register(cid, cls)
@@ -374,10 +277,8 @@ class CapabilityContract(ContractBase, BasePlugin):
     interface methods.
 
     Characteristic properties:
-    - Has input/output methods (call_tool, pull, send, emit, …)
-    - Raises domain exceptions on failure (ToolError, TransportError, …)
+    - Has input/output methods (``call_tool``, ``emit``, …)
     - Does NOT enforce policy — it delegates that to GovernanceContract layers
-    - Tested for correctness via validate_* helpers
 
     Lifecycle hook involvement:
     - Methods fire pre_* / post_* hooks at their execution boundary
@@ -402,14 +303,8 @@ class OrchestrationContract(ContractBase):
     - Controls invocation count, sequencing, and result stitching across agents
     - Does NOT expose resource methods (no call_tool / send / emit pattern)
     - Does NOT enforce policy (no ``check()`` method)
-    - Receives a fully wired ``MasRuntime`` and a resolved ``task`` dict
     - Multiple orchestration strategies are compositionally equivalent; any
       ``OrchestrationContract`` can be combined with any ``DesignPatternContract``
-
-    Formal distinction:
-      CapabilityContract  ↔  resource boundary  (POSIX syscall surface)
-      GovernanceContract  ↔  policy boundary     (kernel security check)
-      OrchestrationContract ↔  control topology  (scheduler / dispatch policy)
     """
 
     contract_id: ClassVar[Optional[str]] = None
@@ -432,21 +327,9 @@ class GovernanceContract(ContractBase):
     - Counters/state are MONOTONICALLY CONSUMED (budget, call counts)
     - Applied as cross-cutting concerns via hook composition
 
-    Formal distinction from Petri net rate limits
-    ─────────────────────────────────────────────
-    Petri net place-bounded transitions enforce FLOW RATE (tokens are restored
-    after each firing; the machine back-pressures or blocks temporarily).
-
-    GovernanceContract enforces LIFETIME CEILINGS (counters decrement and never
-    reset during a run; when exhausted the agent transitions permanently to
-    S_BUDGET_EXHAUSTED or S_POLICY_DENIED).
-
-      Petri net ↔ back-pressure / concurrency / throughput  (structural)
-      GovernanceContract ↔ cost accounting / isolation / RBAC  (economic / policy)
-
-    Adding / removing a governance contract is TOPOLOGY-NEUTRAL: the Mealy
-    machine structure is unchanged; only the guard conditions on transitions
-    are extended.
+    Adding or removing a governance contract is topology-neutral: the Mealy
+    machine structure is unchanged; only the guards on transitions are
+    extended.
 
     Subclasses MUST implement ``check()``.
     """

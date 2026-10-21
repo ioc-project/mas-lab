@@ -4,58 +4,12 @@
 -->
 # State and Context Contracts
 
-Session persistence, execution checkpoints, shared coordination, and prompt
-context assembly.
+These contracts cover prompt context assembly and conversation-history trimming.
+Session persistence uses kernel `Session` / `SessionState`, not a
+`SessionContract` class.
 
 See also: [taxonomy.md](taxonomy.md) · [model-and-tools.md](model-and-tools.md) ·
 [context-segmentation.md](../../context-segmentation.md)
-
----
-
-## SessionContract
-
-Durable per-contact conversational state (turn log, windowed history, metadata).
-
-| Method | Purpose |
-|--------|---------|
-| `load_session(session_id)` | Restore session blob |
-| `save_session(session_id, state)` | Persist after turn |
-| `list_sessions()` | Enumerate known sessions |
-
-**Runtime path:** `pre_session_access` / `post_session_access` hooks; kernel
-`SessionState` tracks in-flight execution. Full intra-turn tool traces are
-recorded in `events.jsonl`, not always in session blobs — see
-[trajectory-schema.md](../../trajectory-schema.md).
-
----
-
-## ExecutionSessionContract
-
-Checkpointing of in-flight execution (Mealy-layer state, DP phase, pending egress).
-
-| Method | Purpose |
-|--------|---------|
-| `checkpoint(execution_id, snapshot)` | Save resumable snapshot |
-| `load_execution(execution_id)` | Restore snapshot |
-| `latest_execution(session_id)` | Most recent checkpoint for session |
-
-**Runtime path:** `on_pre_checkpoint`, `on_post_checkpoint`, `on_pre_restore`,
-`on_post_restore` on the control plane.
-
----
-
-## SharedContextContract
-
-Multi-agent shared blackboard / coordination store.
-
-| Method | Purpose |
-|--------|---------|
-| `get(key)` / `set(key, value)` | Read/write shared fields |
-| `watch(key, callback)` | Change notifications |
-| `acquire_lock(key, timeout)` | Exclusive access |
-
-Used by MAS workflows where agents publish partial results to a shared store.
-`ContextContract` contributors may read a snapshot via `collect_context`.
 
 ---
 
@@ -87,41 +41,36 @@ plugin type.
 
 ## ContextManagerContract
 
-Supporting interface for conversation-history trimming and summarization — not a
-separate product factor in the Mealy model. **Python:**
-`mas.runtime.contracts.context_manager_contract.ContextManagerContract`.
-Implementations live in `library-standard` (this page is the interface
-contract those plugins must satisfy).
+Supporting interface for conversation-history trimming and summarization. It is not a separate product factor in
+the Mealy model. Python class: `mas.runtime.contracts.context_manager_contract.ContextManagerContract`.
+Implementations live in `library-standard`; this section is the interface they must satisfy.
 
-`ContextContract` contributes prompt parts. This contract decides how much of
-the **committed conversation** is resent on the next LLM call.
+`ContextContract` contributes prompt parts. This contract decides how much of the committed conversation is
+resent on the next LLM call.
 
 ### Two layers of an LLM call
 
-The provider is not “just a bag of tokens,” and it is not reading tool-result
-English either. There are two layers:
+A provider call has two layers:
 
 | Layer | What it is | What it inspects |
 |-------|------------|------------------|
 | **1. Protocol** | The HTTP body: a typed `messages[]` list (`role`, `tool_calls[].id`, `tool_call_id`, …) | Structure: roles, ids, counts. The body of a tool result (`"12°C"`) is opaque. |
 | **2. Tokens** | A chat template flattens those objects into one token stream, then the weights run | Ordinary next-token prediction in the tool-result *slot* of the template |
 
-Layer 1 runs **before** tokenization. A 400 for mismatched tool results is a
-failed protocol check, not the model misunderstanding the transcript. LiteLLM
-translating to Anthropic/Bedrock is still layer 1: it counts `toolUse` blocks
-against following `toolResult` blocks.
+Layer 1 runs before tokenization. A 400 for mismatched tool results is a failed protocol check, not the model
+misreading the transcript. LiteLLM translating to Anthropic or Bedrock is still layer 1: it counts `toolUse`
+blocks against following `toolResult` blocks.
 
-The HTTP API is **stateless**. Continuity is only the `messages[]` **we**
-resend. If call 1 returned “call tools A and B”, call 2 must include that
-assistant message and then the two matching results.
+The HTTP API is stateless: continuity is only the `messages[]` the caller resends. If call 1 returned "call
+tools A and B", call 2 must include that assistant message and then the two matching results.
 
-**Call 1 we send**
+Call 1, sent:
 
 ```text
 user: Weather in Paris and London?
 ```
 
-**Call 1 the model returns** (not stored by the vendor)
+Call 1, returned by the model (the vendor does not store it):
 
 ```text
 assistant: tool_calls = [
@@ -130,7 +79,7 @@ assistant: tool_calls = [
 ]
 ```
 
-**Call 2 we send** (previous transcript + ask + both results)
+Call 2, sent (previous transcript, the ask, both results):
 
 ```text
 user: Weather in Paris and London?
@@ -141,33 +90,23 @@ tool: tool_call_id=call_2  "8°C, rain"
 
 ### Rules `manage_history` must stick to
 
-`manage_history(past, budget_tokens)` sees **committed** history only. The
-current user turn and in-turn working memory are appended *after* this method.
-Return value is layer-1 objects, not a token string.
+`manage_history(past, budget_tokens)` sees committed history only. The runtime appends the current user turn and
+in-turn working memory after this method. The return value is layer-1 objects, not a token string.
 
-1. **User-turn atomicity.** Slice on `role=user`. Each turn is that user
-   message plus everything until the next user (assistant tool asks, `role=tool`
-   results, follow-up assistant text). Do not drop a tool ask and keep its
-   results, or the reverse.
-2. **Ask then results, then anyone else.** After an assistant message with N
-   `tool_calls`, the next N messages must be `role=tool` for those ids, same
-   count, nothing in between. Then the model may speak again.
-3. **Do not compact the live tool round.** That round is working memory, not
-   `past`. Summarize or drop only *older* user turns (`keep_turns` stay
-   verbatim). If you summarize, cache the summary; do not re-summarize on every
-   later call until the managed payload exceeds the budget including
-   `hysteresis_ratio`.
-4. **Ids over text.** Pair on `tool_calls[].id` / `tool_call_id`. Never parse
-   tool-result content to decide what to keep.
+1. User-turn atomicity. Slice on `role=user`. A turn is that user message plus everything until the next user
+   message (assistant tool asks, `role=tool` results, follow-up assistant text). Never drop a tool ask and keep
+   its results, or the reverse.
+2. Ask, then results, then anyone else. After an assistant message with N `tool_calls`, the next N messages
+   must be `role=tool` for those ids, with nothing in between.
+3. Do not compact the live tool round. It is working memory, not `past`. Summarize or drop only older user
+   turns (`keep_turns` stay verbatim). Cache a summary; do not re-summarize on later calls until the managed
+   payload exceeds the budget including `hysteresis_ratio`.
+4. Pair on ids. Match `tool_calls[].id` with `tool_call_id`. Never parse tool-result content to decide what to keep.
 
-The kernel does **not** repair pairing itself — it only asserts the invariant
-after the `spec.assembler` plugin returns, raising `ProviderPayloadError`
-(survives `python -O`) if it still doesn't hold. The bundled
-`ContextAssemblerPlugin` runs the actual last-pass repair
-(`sanitize_provider_messages`: fills missing results with empty strings,
-drops extras) before returning. A custom assembler plugin must either
-produce an already-paired payload or call `sanitize_provider_messages`
-itself — the kernel will not paper over a split group on its behalf.
+The kernel does not repair pairing. After the `spec.assembler` plugin returns, it asserts the invariant and raises
+`ProviderPayloadError` (survives `python -O`) if it fails. The bundled `ContextAssemblerPlugin` runs the last-pass
+repair (`sanitize_provider_messages`: fills missing results with empty strings, drops extras). A custom assembler
+plugin must return an already-paired payload or call `sanitize_provider_messages` itself.
 
 | Method | Parameters | Notes |
 |--------|------------|-------|

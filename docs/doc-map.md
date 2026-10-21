@@ -9,13 +9,13 @@
 ## One source tree
 
 All user documentation lives under **`docs/`**. GitHub Pages is **not** a separate
-site — it is `mkdocs build` of this folder, driven by [`mkdocs.yml`](../mkdocs.yml)
+site — it is `mkdocs build` of this folder, driven by [`mkdocs.yml`](https://github.com/outshift-open/mas-lab/blob/main/mkdocs.yml)
 at the repository root.
 
 | Where | What |
 | ------- | ------ |
-| [docs/index.md](index.md) | Site home (≈ align with root [README.md](../README.md)) |
-| [mkdocs.yml](../mkdocs.yml) `nav:` | Left sidebar and top tabs on GitHub Pages |
+| [docs/index.md](index.md) | Site home (≈ align with root [README.md](https://github.com/outshift-open/mas-lab/blob/main/README.md)) |
+| [mkdocs.yml](https://github.com/outshift-open/mas-lab/blob/main/mkdocs.yml) `nav:` | Left sidebar and top tabs on GitHub Pages |
 | [outshift-open.github.io/mas-lab](https://outshift-open.github.io/mas-lab/) | Published output |
 
 Local preview: `task docs-serve` → <http://127.0.0.1:8000>
@@ -83,9 +83,9 @@ When you add or rename a doc page, update **`mkdocs.yml` nav** and cross-links i
 
 | Path | Audience |
 | ------ | ---------- |
-| [`docker/README.md`](../docker/README.md) | Docker compose, mounts, env |
-| [`ui/README.md`](../ui/README.md) | UI package development (Yarn, Vite) |
-| [`runtime/docs/`](../runtime/docs/) | Runtime contributor docs |
+| [`docker/README.md`](https://github.com/outshift-open/mas-lab/blob/main/docker/README.md) | Docker compose, mounts, env |
+| [`ui/README.md`](https://github.com/outshift-open/mas-lab/blob/main/ui/README.md) | UI package development (Yarn, Vite) |
+| [`runtime/docs/`](https://github.com/outshift-open/mas-lab/tree/main/runtime/docs) | Runtime contributor docs |
 | Internal extensions (evolution, KG, rust) | Not published in OSS — separate internal repository |
 
 ---

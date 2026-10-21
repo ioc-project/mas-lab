@@ -4,25 +4,101 @@
 -->
 # mas-library-eval
 
-Evaluation library for MAS Lab — quality metrics and LLM-as-judge scoring using **MCE** (metrics-computation-engine).
+Scores MAS runs with quality metrics and LLM-as-judge prompts. It wraps the Metrics Computation Engine (MCE), an open-source set of LLM-as-judge metrics from the AGNTCY `telemetry-hub` project, for MAS traces.
 
-## Architecture
+Use it when you want a number for "did the system reach the goal" or "was the answer grounded" for one trace or a whole experiment.
 
-This library provides:
+## Quick start
 
-1. **Library code** (`mas.library.eval.*`): MCE integration, session entity construction, metric computation
-2. **Pipeline steps** (`mas.library.eval.steps`): Evaluation steps for benchmark pipelines
-3. **CLI component** (`mas.library.eval.cli`): Auto-registered `mas-lab eval` command
+```bash
+uv pip install -e library-eval          # from the repository root; needs Python 3.11+
+mas-lab eval --list-metrics
+mas-lab eval path/to/events.jsonl --metric goal_success_rate --metric groundedness
+```
 
-When installed, `mas-library-eval` automatically registers the `mas-lab eval` command via the `mas.lab.cli.components` entry point.
+Batch scoring over a benchmark output tree:
 
-## EvalMetrics on the MCE provider
+```bash
+mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
+```
 
-Libraries register session metrics onto the existing MCE eval provider
-through the `eval_metric` plugin type (`EvalProvider.register_metric`).
-`eval_mce` then runs any mix of stock MCE ids and registered ids into one
-`metrics.json`. Each metric knows what input it needs (`unit` / `evidence`
-on the metric). Stock MCE ids are MAS I/O, not the raw trajectory.
+`mas-lab eval SOURCE` flags:
+
+| Flag | Meaning |
+|------|---------|
+| `--metric` | Metric to compute; repeatable. |
+| `--model` | Judge model name (default `azure/gpt-4o`). |
+| `--api-base` | LLM proxy base URL (default `https://api.openai.com/v1`). |
+| `--api-key-env` | Environment variable holding the API key (default `OPENAI_API_KEY`). |
+| `--json` | Print results as JSON. |
+| `--list-metrics` | List available metrics and exit; `SOURCE` is then optional. |
+| `--recursive` | Score every trace under the `SOURCE` directory. |
+
+The package depends on `mas-lab-core`, `mas-lab-bench` and `mas-runtime` from this repository, plus the public MCE packages:
+
+- `metrics-computation-engine`: MCE core.
+- `mce-metrics-plugin`: quality metrics (GoalSuccessRate, Groundedness, ResponseCompleteness, ...).
+- `deepeval`: continuous-score implementations of `answer_relevancy` and `goal_success_rate`.
+
+## What the library provides
+
+1. Library code (`mas.library.eval.*`): MCE integration, session entity construction, metric computation, and the `eval_metric` plugin type.
+2. A CLI component (`mas.library.eval.cli`) that registers `mas-lab eval` through the `mas.lab.cli.components` entry point:
+
+```toml
+[project.entry-points."mas.lab.cli.components"]
+eval = "mas.library.eval.cli:EvalCliComponent"
+```
+
+The `eval_mce` pipeline step, which scores a run into `metrics.json`, ships in `mas-library-lab` (`mas.library.lab.steps.eval.mce`) and calls into this library. `mas.library.eval.steps` holds an older CamelCase-metric step class that is not registered.
+
+```
+src/mas/library/eval/
++-- evaluator.py     EvalProvider + get_provider("mce")
++-- providers/       mce.py: built-in MCE provider (stock + registered metrics);
+|                    trip_planner_gt.py, adversarial.py: sample ground-truth / adversarial providers
++-- mce/
+|   +-- catalog.py       one catalog: METRIC_MAP + METRIC_REGISTRY
+|   +-- runner.py        native-trace MCE/deepeval compute
+|   +-- registry_api.py  SessionEntity CamelCase API
++-- metrics/         EvalMetric, plugins, prompt_metrics, stock wrappers, toy example
++-- steps/           older CamelCase-metric step class (not registered)
++-- cli/             mas-lab eval
+```
+
+## Score runs in a benchmark
+
+Attach the `eval_mce` step to a run. Metric ids are snake_case and the judge model comes from the experiment (see [Tutorial 10](../docs/tutorials/10-evaluation-metrics/README.md)):
+
+```yaml
+# pipeline attached with `mas-lab benchmark run ... --pipeline run:post:eval.yaml`
+apiVersion: mas/v1
+kind: Pipeline
+spec:
+  steps:
+    - name: eval
+      type: eval_mce
+      per_run: true
+      in: trace
+      out: metrics
+      config:
+        metrics: [goal_success_rate, groundedness, response_completeness]
+```
+
+## Metric names
+
+The CLI, the `eval_mce` step `metrics:` and the `metrics.json` keys use snake_case ids. The class names used by the `SessionEntity` API (`compute_session_metrics`) are CamelCase.
+
+| Id (CLI and YAML) | Class name |
+|-------------------|------------|
+| `goal_success_rate` | `GoalSuccessRate` |
+| `answer_relevancy` | `AnswerRelevancy` |
+
+`mas-lab eval --list-metrics` lists the ids. The 11 stock session metrics are `answer_relevancy`, `component_conflict_rate`, `consistency`, `context_preservation`, `goal_success_rate`, `groundedness`, `information_retention`, `intent_recognition_accuracy`, `response_completeness`, `workflow_cohesion_index` and `workflow_efficiency`. The rule-based core metrics (`ToolError`, `ToolErrorRate`, `ToolUtilizationAccuracy`, `CyclesCount`, `AgentToAgentInteractions`, `AgentToToolInteractions`) are available through the CamelCase API only.
+
+## Register your own metric (`eval_metric` plugin)
+
+A library registers session metrics on the MCE eval provider through the `eval_metric` plugin type (`EvalProvider.register_metric`). `eval_mce` then runs any mix of stock MCE ids and registered ids into one `metrics.json`. Each metric declares the input it needs (`unit` / `evidence`). Stock MCE ids score MAS input and output, not the raw trajectory.
 
 ```yaml
 # library.yaml
@@ -43,134 +119,28 @@ plugins:
       provider: mce
 ```
 
+Rules:
+
 - Duplicate metric ids raise at registration.
-- Stock MCE session ids are `EvalMetric`s on `get_provider("mce")` (MAS I/O, one batch per run).
+- Stock MCE session ids are `EvalMetric`s on `get_provider("mce")` (one batch per run).
 - Plugins and inline `prompt_metrics` run through the same `compute_metrics` engine.
 - Unknown ids error with the list of available ids.
 - Metrics that share `batch_key` are computed once per run via `compute_batch`.
 - A failing metric writes `{value: null, error: "..."}` for that id only.
 - Optional `details` on each score is additive in `metrics.json` schema v1.
 
-List registered ids in an `eval_mce` step `metrics:` list, or split families
-across steps with distinct `metrics_filename` values (`metrics.json`,
-`metrics_judge2.json`). One-off LLM-as-judge questions can be added on the
-same step as `prompt_metrics: [{id, prompt, unit, evidence}]` without a
-plugin (ids must not collide with stock MCE or a registered metric).
-`collect_metrics` and `metrics_to_dataframe` accept a filename, a glob, or
-a list, and copy `details` into a JSON column.
+List registered ids in the `metrics:` list of an `eval_mce` step, or split families across steps with distinct `metrics_filename` values (`metrics.json`, `metrics_judge2.json`). For a one-off LLM-as-judge question, add `prompt_metrics: [{id, prompt, unit, evidence}]` to the same step without a plugin; ids must not collide with a stock or registered metric. `collect_metrics` and `metrics_to_dataframe` accept a filename, a glob or a list, and copy `details` into a JSON column.
 
-How the pieces fit (stock MCE, prompts, plugins, judge infra, trajectory
-wrappers): [Tutorial 10](../docs/tutorials/10-evaluation-metrics/).
-
-## Installation
-
-```bash
-# From workspace root
-cd library-eval && uv pip install -e .
-
-# Verify installation
-mas-lab eval --list-metrics
-```
-
-The `mas-lab eval` command is automatically available after installation — no manual CLI registration needed.
-
-## Dependencies
-
-- **metrics-computation-engine** — MCE core (public package from telemetry-hub)
-- **mce_metrics_plugin** — Quality metrics plugin (GoalSuccessRate, Groundedness, ResponseCompleteness, etc.)
-
-## Package Structure
-
-```
-src/mas/library/eval/
-├── __init__.py
-├── evaluator.py               # EvalProvider + get_provider("mce")
-├── providers/mce.py           # Built-in MCE provider (stock + registered metrics)
-├── mce/
-│   ├── catalog.py             # One catalog: METRIC_MAP + METRIC_REGISTRY
-│   ├── runner.py              # Native-trace MCE/deepeval compute
-│   └── registry_api.py        # SessionEntity CamelCase API
-├── metrics/                   # EvalMetric, plugins, prompt_metrics, stock wrappers
-├── steps/                     # Legacy CamelCase EvalMceStep
-└── cli/                       # mas-lab eval
-```
-
-## CLI Component Integration
-
-This library uses the `mas-lab` CLI extension system. When installed, it automatically registers the `eval` command:
-
-**Entry point** (`pyproject.toml`):
-
-```toml
-[project.entry-points."mas.lab.cli.components"]
-eval = "mas.library.eval.cli:EvalCliComponent"
-```
-
-**Component class** (`mas.library.eval.cli`):
+## Programmatic use
 
 ```python
-class EvalCliComponent:
-    def register(self, app: click.Group) -> str:
-        """Register 'eval' command on mas-lab CLI."""
-        app.add_command(eval_cmd, name="eval")
-        return "eval"
-```
+import os
 
-After installation, the command is immediately available:
+from mas.library.eval.mce import build_session_from_trace, compute_session_metrics
 
-```bash
-mas-lab eval --help
-```
+session_entity = build_session_from_trace("path/to/events.jsonl")
 
-## MCE vs MCE v2
-
-| Feature | MCE (this component) | MCE v2 (proprietary extension) |
-|---------|------------------------|------------------------------|
-| Package | `metrics-computation-engine` | (not shipped here) |
-| Input | OTEL spans (jsonl) | Custom trace format |
-| Metrics | Native + mce_metrics_plugin | mce.providers.native.metrics |
-| LLM setup | `LLMJudgeConfig` + `Jury` | `LLMService` (patched) |
-| API | `async compute(SessionEntity)` | `compute(resource_id, context)` |
-| Status | ✅ Public, stable | ⚠️  Private, complex |
-
-## Usage
-
-### Standalone CLI
-
-```bash
-# Score a single trace
-mas-lab eval path/to/events.jsonl --metric goal_success_rate --metric groundedness
-
-# Batch scoring over a benchmark output tree
-mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
-```
-
-### In Benchmarks
-
-```yaml
-# experiment.yaml
-pipeline:
-  - step: run-mas
-    # ... execution config
-  - step: eval-mce
-    metrics:
-      - goal_success_rate
-      - groundedness
-      - response_completeness
-    model: azure/gpt-4o
-    api_key_env: OPENAI_API_KEY
-```
-
-### Programmatic
-
-```python
-from mas.library.eval.mce import compute_session_metrics, build_session_entity_from_trace
-
-# Load trace
-session_entity = build_session_entity_from_trace("path/to/events.jsonl")
-
-# Compute metrics
-results = await compute_session_metrics(
+results = await compute_session_metrics(      # async
     session=session_entity,
     metrics=["GoalSuccessRate", "Groundedness"],
     llm_config={
@@ -181,39 +151,7 @@ results = await compute_session_metrics(
 )
 ```
 
-## Migration from MCE v2
-
-**Before (MCE v2, broken)**:
-
-```python
-from mas.library.eval.mce import install_openai_llm_service, compute_session_metrics
-install_openai_llm_service(model_override="azure/gpt-4o")
-results = compute_session_metrics(trace_path, ["goal_success_rate"])
-```
-
-**After (MCE, this component)**:
-
-```python
-from mas.library.eval.mce import compute_session_metrics, build_session_from_trace
-session = build_session_from_trace(trace_path)
-results = await compute_session_metrics(session, ["GoalSuccessRate"], llm_config)
-```
-
-## Metric Names
-
-CLI ``--metric``, YAML ``metrics:``, and ``metrics.json`` keys are **snake_case**.
-CamelCase is the plugin class name used by the SessionEntity API.
-
-| Id (CLI / YAML) | Class name |
-|-----------------|------------|
-| `goal_success_rate` | `GoalSuccessRate` |
-| `groundedness` | `Groundedness` |
-| `response_completeness` | `ResponseCompleteness` |
-| `answer_relevancy` | `AnswerRelevancy` |
-
-## Configuration
-
-LLM config is provided via `LLMJudgeConfig`:
+`llm_config` is a dict as above, or an `LLMJudgeConfig` with the same three fields:
 
 ```python
 from metrics_computation_engine.models.requests import LLMJudgeConfig
@@ -225,20 +163,11 @@ llm_config = LLMJudgeConfig(
 )
 ```
 
-Or as a dict:
+## See also
 
-```python
-llm_config = {
-    "LLM_MODEL_NAME": "azure/gpt-4o",
-    "LLM_BASE_MODEL_URL": "https://api.openai.com/v1",
-    "LLM_API_KEY": os.environ["OPENAI_API_KEY"],
-}
-```
-
-## See Also
-
+- [Tutorial 10, Evaluation metrics](../docs/tutorials/10-evaluation-metrics/README.md): how stock MCE, prompts, plugins, judge infra and trajectory wrappers fit together.
+- [Tutorial 3, Run an experiment](../docs/tutorials/03-experiments-and-analysis/README.md): first MCE scoring.
 - Feature example (not a sample app): [examples/mce/judge-override/](examples/mce/judge-override/)
-- [summarization.md § MCE judge](../docs/manifests/summarization.md#mce-judge-model)
+- [summarization.md, MCE judge](../docs/manifests/summarization.md#mce-judge-model)
 - [MCE documentation](https://github.com/agntcy/telemetry-hub/tree/main/metrics_computation_engine)
 - [mce_metrics_plugin](https://github.com/agntcy/telemetry-hub/tree/main/metrics_computation_engine/plugins/mce_metrics_plugin)
-- [Tutorial: Output Quality Evaluation](../../docs/tutorial-evaluation.md)

@@ -4,29 +4,25 @@
 -->
 # Lab 3 — Context Source Extensions: Results
 
-**Status (2026-06-02):** historical run notes below. To reproduce or refresh
-figures today, use `mas-lab benchmark run labs/extensions.lab/experiment.yaml`
-(pipeline steps only — no standalone plotting scripts).
+**Status (2026-06-02):** the notes below are historical. To reproduce or refresh figures, run `mas-lab benchmark run labs/extensions.lab/experiment.yaml`. Use pipeline steps only, no standalone plotting scripts.
 
-The 4-scenario reproducibility benchmark
-(baseline / vector-memory / letta-memory / vector-memory+guardrail) was
-re-executed end-to-end at `n_runs = 3` (120 runs, 100 % OK status). The
-LLM-judge analysis steps (`eval_mce` + `compute_ci` + `plotnine`) hung at
-the end of execution on a CLOSE_WAIT against the OpenAI-compatible
-endpoint and were killed; the per-run trace data persisted, so the
-attribution figure (§1.5) was built **directly from the
-events.jsonl traces** by a stand-alone script — no LLM judge involved.
+**Status note (2026-10-19):** the numbers below describe one earlier run. They were not regenerated for v0.2.0.
 
-Run output: `~/mas-data/extensions-lab/`. Pipeline:
-[`experiment.yaml`](experiment.yaml).
+The `~/mas-data/` paths and the stand-alone Sankey script belong to that run. They are not part of the repository. Current runs write to `$XDG_DATA_HOME/mas/labs/memory-extension-reproducibility/` (see [README](README.md)).
+
+The attribution and Sankey steps exist as lab-local steps in `extensions_lab/steps/`. `experiment.yaml` does not wire them in. So `mas-lab benchmark run` does not produce the Sankey figure.
+
+The earlier run executed the 4-scenario reproducibility benchmark end to end at `n_runs = 3`. The scenarios were baseline, vector-memory, letta-memory, and vector-memory+guardrail. It made 120 runs, all with status OK.
+
+The LLM-judge analysis steps (`eval_mce`, `compute_ci`, `plotnine`) hung at the end of execution. The connection to the OpenAI-compatible endpoint stuck in CLOSE_WAIT, and the steps were killed. The per-run trace data persisted. A stand-alone script built the attribution figure (§1.5) directly from the `events.jsonl` traces. No LLM judge was involved.
+
+Run output: `~/mas-data/extensions-lab/`. Pipeline: [`experiment.yaml`](experiment.yaml).
 
 ---
 
 ## Lab 3 §1.5 — Attribution Sankey
 
-The figure at `~/mas-data/extensions-lab/results/figure-attribution-sankey.png`
-encodes all 120 runs across four stages: **scenario → tool → governance →
-answer**. Stages are populated from the trace alone (no LLM judge):
+The figure at `~/mas-data/extensions-lab/results/figure-attribution-sankey.png` encodes all 120 runs across four stages: scenario, tool, governance, answer. The stages come from the trace alone, with no LLM judge:
 
 | Stage      | Categories                                                |
 |------------|-----------------------------------------------------------|
@@ -48,37 +44,13 @@ baseline / letta / vector     → used-tools  → allowed    → refused-ok    9
 
 **Reading.**
 
-1. **Governance triggers fire only where the overlay says they should.**
-   *Three* runs end in `governance:denied` and *all three are in the
-   `with-vector-memory-guardrail` scenario on item `g1`*
-   (the "Shadowmere" forbidden-destination query). No false positives
-   across the other 117 runs. The trace-level signal therefore localises
-   the governance contribution exactly — without any LLM judge needed.
+1. **Governance triggers fire only where the overlay says they should.** Three runs end in `governance:denied`. All three are in the `with-vector-memory-guardrail` scenario on item `g1` (the "Shadowmere" forbidden-destination query). The other 117 runs show no false positive. The trace signal localises the governance contribution exactly, with no LLM judge.
 
-2. **The baseline correctly refuses g1 too** (3/3 on g1 → `refused-ok`),
-   but via *the LLM* declining, not via a policy event. The Sankey shows
-   this as `allowed → refused-ok` instead of `denied → refused-ok`. This
-   is exactly the distinction §5.3 makes: the answer can look identical
-   end-to-end while the *provenance* of the refusal differs.
-   Failure-localisation is intrinsic to the trace, not derived from
-   output text.
+2. **The baseline also refuses g1** (3/3 on g1, `refused-ok`). The LLM declines; no policy event fires. The Sankey shows `allowed → refused-ok` instead of `denied → refused-ok`. This is the distinction §5.3 makes. The answer can look identical end to end while the provenance of the refusal differs. The trace localises the failure. The output text does not.
 
-3. **Tool usage is the dominant predictor of "answered" vs. "no-answer"**:
-   among the 55 runs where the agent *did* call a tool, 52 produced an
-   `answered` output and 3 produced a correct refusal; among the 65
-   no-tool runs, 56 produced an answered output (because for `recall`
-   queries the LLM has enough context to give a generic answer) and 9
-   produced incorrect refusals. The trace alone localises the failures.
+3. **Tool usage is the dominant predictor of "answered" vs. "no-answer".** In the 55 runs where the agent called a tool, 52 produced an `answered` output and 3 produced a correct refusal. In the 65 no-tool runs, 56 produced an answered output and 9 produced incorrect refusals. For `recall` queries the LLM has enough context to give a generic answer. The trace alone localises the failures.
 
-4. **The memory overlays produced zero observable `memory_*` events**
-   across all 60 vector/letta runs. This is a *negative finding worth
-   reporting*: the overlay wires the plugin and registers the
-   `memory-search` tool, but on this prompt set the agent never *chose*
-   to call it. The reproducibility claim of the paper holds (the runs
-   are repeatable; tools are invoked uniformly), but the *memory
-   extensibility* claim is only demonstrable when an item explicitly
-   names a profile attribute the agent must retrieve. This is now
-   §1.6 follow-up below.
+4. **The memory overlays produced zero `memory_*` events** across all 60 vector and letta runs. This is a negative finding. The overlay wires the plugin and registers the `memory-search` tool. On this prompt set the agent never chose to call it. The runs are repeatable and tools are invoked uniformly, so the reproducibility claim of the paper holds. The memory-extensibility claim holds only when an item names a profile attribute the agent must retrieve. Backlog item 1.6 below tracks this.
 
 Per-scenario answer distribution (n=30 each):
 
@@ -99,18 +71,14 @@ Outputs:
 
 ## Lab 3 §base — Memory extension reproducibility
 
-The mas-lab `eval_mce` step hung on the LLM-judge HTTP calls (CLOSE_WAIT
-on the proxy) and was killed after producing the 120-run trace corpus
-but before writing the CI summary CSV. The numerical reproducibility
-claim of §5.3 is therefore **not refreshed in this session**; the
-previously published Table 5 (last run 2026-05 in the archive snapshot
-at `$XDG_DATA_HOME/mas/labs/memory-provenance/`) remains the canonical source
-for GSR/AR numbers. What this session adds is:
+The `eval_mce` step hung on the LLM-judge HTTP calls (CLOSE_WAIT on the proxy). It was killed after the 120-run trace corpus existed and before it wrote the CI summary CSV.
 
-- **120 fresh runs across all 4 scenarios** with the `n_runs=3`
-  configuration, persisted under `~/mas-data/extensions-lab/`
-- **An eval-judge-free attribution figure** that the paper can use
-  alongside Table 5 to demonstrate the failure-localisation claim
+This session did not refresh the numerical reproducibility claim of §5.3. The previously published Table 5 remains the canonical source for GSR and AR numbers. Its last run was in 2026-05, in the archive snapshot at `$XDG_DATA_HOME/mas/labs/memory-provenance/`.
+
+This session added:
+
+- 120 fresh runs across all 4 scenarios at `n_runs=3`, stored under `~/mas-data/extensions-lab/`.
+- A judge-free attribution figure. The paper can use it next to Table 5 to show failure localisation.
 
 ---
 
@@ -137,6 +105,6 @@ for GSR/AR numbers. What this session adds is:
 # 1. Runs (already cached, content-addressed; will be no-ops):
 mas-lab benchmark run labs/extensions.lab/experiment.yaml --force
 
-# 2. Attribution Sankey (script, ~5 s, no LLM):
-python3 /tmp/lab3_attribution2.py
 ```
+
+A stand-alone script built the §1.5 Sankey from the `events.jsonl` traces of that run. The repository does not include the script. The lab-local `attribution_flow` and `sankey_flow` steps in `extensions_lab/steps/` implement the same idea as pipeline steps.

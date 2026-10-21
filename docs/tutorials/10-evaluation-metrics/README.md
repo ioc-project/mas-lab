@@ -4,92 +4,78 @@
 -->
 # Tutorial 10 — Evaluation metrics
 
-> **Packages:** `mas-lab`, `mas-library-eval`
-> **Prerequisite:** [Tutorial 3](../03-experiments-and-analysis/) — you have
-> already run an experiment, inspected `events.jsonl`, and scored a run with
-> stock MCE.
+> **Packages:** `mas-lab`, `mas-library-eval` (metrics and the `eval_metric`
+> plugin type), `mas-library-lab` (the `eval_mce` pipeline step)
+> **Prerequisite:** [Tutorial 3](../03-experiments-and-analysis/README.md). You
+> have scored a run with stock MCE, the Metrics Computation Engine: an
+> open-source set of LLM-as-judge metrics.
+> **Needs:** an LLM endpoint for the judge (see
+> [Tutorial 0](../00-environment-setup/README.md)). Only `toy_echo` runs
+> without one.
 
-Tutorial 3 answers one kind of question: *does this session look like a good
-answer?* Groundedness, goal success, relevancy — those prompts belong to MCE,
-and mas-lab only chooses the **judge model**.
+## Goal
 
-This tutorial is about the next problem you hit in a real lab: **that is not
-the question you needed**. You wanted to know whether a tool fired, whether
-two specialists contradicted each other, whether a protocol activated. Those
-are still session scores in `metrics.json`. They are not stock MCE.
+Tutorial 3 asked one question: does this session look like a good answer?
+Real labs ask more: did a tool fire, did two specialists contradict each
+other, did a protocol activate? You score those too. Each answer is a session
+score in `metrics.json`.
 
-You will:
+## What you need
 
-1. recall what a session metric is, and where it is written;
-2. score a run with stock MCE (the Tutorial 3 path);
-3. define an inline metric (prompt plus what evidence it needs);
-4. promote a reusable metric by registering it on the MCE eval provider;
-5. attach a mixed pipeline to a finished run.
+- A finished run folder with `traces/events.jsonl` (from Tutorial 3).
+- The judge LLM, the model that scores the run.
 
-Attach pipelines explicitly. A file named `pipeline.yaml` next to the
-experiment is not enough.
+## Big picture
 
-```bash
-mas-lab benchmark … --pipeline run:post:path/to/eval-pipeline.yaml
-```
+A metric is one named question about a run. It returns a number and a reason.
+Evaluation is a post step: it reads the trace and writes `metrics.json` next
+to `run_info.json`.
 
----
+| Step | Source of the metric | Where it lives |
+| --- | --- | --- |
+| 1 | Stock MCE | Built into MCE. You list ids |
+| 2 | Inline definition | `prompt_metrics` in the pipeline YAML |
+| 3 | Registered plugin | `eval_metric` in a library |
+| 4 | All three together | `eval-pipeline.yaml` |
 
-## The problem
-
-A finished run is a folder with `traces/events.jsonl`. Evaluation is a
-**post** step: it reads that trace and writes `metrics.json` beside
-`run_info.json`. Each id in `session` is one question:
+Start with the cheapest source. Promote a metric only when several pipelines
+use the same wording. Each id under `session` in `metrics.json` is one
+question:
 
 ```json
-{
-  "schema_version": "1",
-  "session": {
-    "groundedness": {
-      "value": 0.8,
-      "reasoning": "…",
-      "error": null
-    }
-  }
-}
+{"schema_version": "1",
+ "session": {"groundedness": {"value": 0.8, "reasoning": "…", "error": null}}}
 ```
 
-`value` is a number or `null`. Optional `details` holds structured extras
-(gates, token buckets, the judge payload). **Polarity is per id** — document
-it next to the name. `1.0` is not always “good”.
+`value` is a number or `null`; optional `details` holds structured extras.
+Polarity is per id, so document it: `1.0` is not always good.
 
-The **metric** knows what input it needs. The step only names ids and
-writes `metrics.json`. Stock MCE metrics look at MAS input/output (the
-user query and the final answer). They do not see the event list. A
-metric that asks “did a tool fire?” must say it needs the trajectory —
-that belongs in the metric definition, not as a switch on `eval_mce`.
-
-On a metric, two fields make that contract readable:
+Each metric declares what input it needs, with two fields stored in
+`details`:
 
 | Field | Values | Meaning |
 |---|---|---|
-| **unit** | `mas`, `agent`, `call` | Which I/O pair: the whole MAS run, one agent, or one LLM/tool call |
-| **evidence** | `io`, `trajectory` | Only that pair's input and output, or the event history |
+| `unit` | `mas`, `agent`, `call` | Whole MAS run, one agent, or one LLM or tool call (`call` is not implemented: one score per run) |
+| `evidence` | `io`, `trajectory` | Only the input and output, or the ordered event history |
 
-They are stored on `details.unit` / `details.evidence`. `unit: call` is
-not implemented in this release (`metrics.json` is one score per run).
+Stock MCE metrics see only the user query and the final answer, never the
+trajectory. Attach pipelines explicitly; a `pipeline.yaml` next to the
+experiment is not picked up:
 
-Three ways to ship a metric, all listed on the same `eval_mce` step:
+```bash
+mas-lab benchmark run EXPERIMENT.yaml --pipeline run:post:path/to/eval-pipeline.yaml
+```
 
-| You need… | Do this | The metric's input |
-|---|---|---|
-| Generic quality wording MCE already ships | List the stock id | MAS I/O (built into MCE) |
-| A question that exists only for this experiment | Inline definition under `prompt_metrics` | `unit` + `evidence` on that definition |
-| A reusable definition with tests | `eval_metric` plugin on the MCE provider | `unit` + `evidence` on the class (default: MAS trajectory) |
-
-Start with the cheapest layer that answers the question. Promote only when
-the same wording is going to live in more than one pipeline.
+`run:post:` means "after each run"; the other levels are `item`, `scenario`
+and `experiment` (see the [CLI reference](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/cli-reference.md)).
+A relative path resolves from the directory of `experiment.yaml`.
 
 ---
 
-## Part A — Stock MCE (Tutorial 3, revisited)
+## Step 1 — Score with stock MCE
 
-List ids. Omit `metrics` and you get every session metric in `METRIC_MAP`.
+List the ids you want. If you omit `metrics`, you get every session metric in
+`METRIC_MAP`.
 
 ```yaml
 - name: eval
@@ -104,27 +90,27 @@ List ids. Omit `metrics` and you get every session metric in `METRIC_MAP`.
       - context_preservation
 ```
 
-| Id | Asks |
-|---|---|
-| `answer_relevancy` | Is the response relevant to the query? |
-| `goal_success_rate` | Did the agent accomplish the user's goal? |
-| `groundedness` | Is the response grounded in retrieved context? |
-| `response_completeness` | Does the response address the query? |
-| `workflow_cohesion_index` | How cohesive was multi-agent coordination? |
-| `workflow_efficiency` | Was the workflow efficient? |
-| `consistency` | Were responses consistent across turns? |
-| `context_preservation` | Was conversational context preserved? |
-| `information_retention` | Was key information retained? |
-| `intent_recognition_accuracy` | Was user intent identified? |
-| `component_conflict_rate` | How often did component outputs conflict? |
+Stock ids: `answer_relevancy`, `goal_success_rate`, `groundedness`,
+`response_completeness`, `workflow_cohesion_index`, `workflow_efficiency`,
+`consistency`, `context_preservation`, `information_retention`,
+`intent_recognition_accuracy`, `component_conflict_rate`. MCE owns the
+prompts. `mas-lab eval --list-metrics` lists these ids.
 
-MCE owns those prompts. The runner extracts **MAS input** (`input_query`
-from the root `execution_start`) and **MAS output** (`final_response`
-from the response agent). That is I/O of the run, not the trajectory.
-If two systems both say “groundedness”, they are not the same
-definition — prefix or document colliding names.
+Try one outside a pipeline. `mas-lab eval --list-metrics` is offline. Scoring
+needs the judge key:
 
-The judge **model** is a lab field. Resolution order (first hit wins):
+```bash
+mas-lab eval --list-metrics
+export OPENAI_API_KEY=...
+mas-lab eval docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl \
+  --metric goal_success_rate --model gpt-4o
+```
+
+It prints one row per metric with a 0 to 1 score and the judge's reason. Add
+`--recursive` to score every trace under a directory.
+
+The runner reads `input_query` from the root `execution_start` and
+`final_response` from the response agent. The judge model is the first hit in:
 
 1. `eval_mce` `config.model` / `config.judge_model`
 2. `experiment.evaluation.model`
@@ -132,17 +118,16 @@ The judge **model** is a lab field. Resolution order (first hit wins):
 4. `experiment.model` / `models.main`
 5. application `spec.models[]`
 
-Runnable pin: [library-eval/examples/mce/judge-override/](../../../library-eval/examples/mce/judge-override/).
-Full table: [summarization.md — MCE judge model](../../manifests/summarization.md#mce-judge-model).
+A runnable pin is in
+[library-eval/examples/mce/judge-override/](https://github.com/outshift-open/mas-lab/tree/main/library-eval/examples/mce/judge-override).
+See also [summarization.md — MCE judge model](../../manifests/summarization.md#mce-judge-model).
 
 ---
 
-## Part B — An inline metric
+## Step 2 — Define an inline metric
 
-Suppose Tutorial 3's groundedness score is fine, but you also need: *did
-the agent invoke a tool?* That question is not in MCE. You do not need a
-plugin yet. The YAML **is** the metric — id, what it needs, and the
-prompt it owns.
+MCE has no "did the agent invoke a tool" metric. You do not need a plugin: the
+YAML is the metric, with an id, the evidence it needs and its prompt.
 
 ```yaml
 config:
@@ -164,26 +149,20 @@ config:
         Return JSON {"value": 1.0 or 0.0, "reasoning": "…"}.
 ```
 
-Required: snake_case `id`, `prompt`, `unit`, `evidence`. Optional:
-`description`, `system`, `agent` (when `unit: agent`). `question` is an
-alias for `prompt`. The helper that runs inline metrics appends the
-requested slice after `---` (`## INPUT` / `## OUTPUT` for `io`,
-`## TRACE` for `trajectory`). There is no default system prompt.
-
-The step parses a JSON object with numeric `value`, or `answer: YES|NO`
-(YES → 1.0). Put that contract in **your** prompt. Results land in
-`session.used_a_tool` in the same `metrics.json`.
-
-Ids must not collide with stock MCE or a registered `eval_metric`. When the
-same wording is used in more than one lab, promote it (Part C).
+Required keys: snake_case `id`, `prompt`, `unit`, `evidence`. Optional:
+`description`, `system`, and `agent` (when `unit: agent`). The step appends
+the evidence after `---` (`## INPUT` and `## OUTPUT`, or `## TRACE`) and
+parses a JSON object with a numeric `value`, or `answer: YES|NO`. Put that
+contract in your prompt. You should see `session.used_a_tool` in
+`metrics.json`. Ids must not collide with stock MCE ids or a registered
+`eval_metric`.
 
 ---
 
-## Part C — A reusable metric on the MCE provider
+## Step 3 — Register a reusable metric
 
-A content library ships metrics that experiments pin by id. They register
-on the **existing MCE eval provider** — the same `EvalProvider` that
-`register_provider` / `get_provider("mce")` already use. There is no
+When several labs share the same wording, register it in a content library.
+It lands on the existing MCE eval provider (`get_provider("mce")`), with no
 second registry.
 
 ```yaml
@@ -197,16 +176,10 @@ plugins:
     class: ToyEchoMetric
     attributes:
       provider: mce
-  - type: eval_metric
-    name: my_family
-    factory: mas.library.example.metrics:build_metrics
-    attributes:
-      provider: mce
 ```
 
 ```python
 from mas.library.eval.metrics import EvalMetric, MetricContext, RunInputs
-from mas.library.eval.metrics.llm_json import complete_json
 
 class ToyEchoMetric(EvalMetric):
     metric_id = "toy_echo"
@@ -216,88 +189,85 @@ class ToyEchoMetric(EvalMetric):
 
     async def compute(self, inputs: RunInputs, ctx: MetricContext):
         path = inputs.require("native_trace")
-        return {
-            "value": 1.0,
-            "reasoning": f"{path.name} is present",
-            "error": None,
-            "details": {"bytes": path.stat().st_size},
-        }
+        return {"value": 1.0, "reasoning": f"{path.name} is present",
+                "error": None, "details": {"bytes": path.stat().st_size}}
 ```
 
-An LLM judge uses the **same** OpenAI-compatible client `eval_mce` already
-installed (`install_openai_llm_service`). Call `complete_json(messages)` —
-do not build a second HTTP client. Your messages are the whole prompt.
+A family of metrics can use `factory: mas.library.example.metrics:build_metrics`
+instead of `module`/`class`. For an LLM judge, call
+`mas.library.eval.metrics.llm_json.complete_json(messages)`. It uses the
+OpenAI-compatible client `eval_mce` already installed
+(`install_openai_llm_service`), shared with stock MCE and
+`llm_service_config()` (for an external scorer): same credentials, retries
+and proxy. Do not build a second HTTP client.
 
 Rules:
 
-- Duplicate ids raise at registration. Stock MCE session ids, plugins, and
-  `prompt_metrics` all run on `get_provider("mce")`. Stock ids are MAS
-  I/O. Set `unit` and `evidence` on a plugin class so the slice is
-  explicit (defaults: `mas` + `trajectory`).
-- `batch_key` groups a family so one parse / one `evaluate_file` serves
-  many ids (`compute_batch`).
+- Duplicate ids raise an error at registration.
+- Set `unit` and `evidence` on the class; the defaults are `mas` and
+  `trajectory`.
+- `batch_key` groups a family so one parse serves many ids (`compute_batch`).
 - A failing metric writes `{value: null, error: "…"}` for that id only.
-- Split families across steps with distinct `metrics_filename` values if
-  you want a second judge file (`metrics_judge2.json`).
+- For a second judge file such as `metrics_judge2.json`, split families across
+  steps with distinct `metrics_filename` values.
+- Prefix ids of a wrapped external scorer (for example
+  `stateful_groundedness`) so they never collide with MCE ids.
 
-List those ids in `eval_mce.config.metrics` together with stock MCE and
-`prompt_metrics`.
-
----
-
-## How the judge client is shared
-
-`eval_mce` calls `install_openai_llm_service` before any judge runs. Stock
-MCE, `complete_json`, and `llm_service_config()` (for an external scorer)
-all use that client. They share credentials, retries, and the proxy URL.
-
-They are **not** kernel `LLM_CALL` events, so runtime `llm_cache`
-middleware does not automatically replay them. If the proxy itself records
-OpenAI-compatible traffic, judge calls can still hit that gateway cache.
-
-`complete_json` retries malformed JSON (appends a “JSON only” turn) on the
-same client.
-
-To wrap a trajectory scorer (history of tool results, open requirements,
-hand-offs): prefer a pre-written `otel_sdk_spans.jsonl`, or convert with
-the stock `events_to_otel` path; pass `llm_service_config()` into the
-scorer; prefix ids (`stateful_groundedness`) so they never collide with
-MCE `groundedness`; use `batch_key` so many codes share one call.
-
-Deterministic counters (`extract_trace_stats`) are not `metrics.json`.
-Cross-run reports (`metrics_to_dataframe`, impact steps) **read** scores;
-they do not call the judge again.
+List registered ids in `eval_mce.config.metrics` with stock ids and
+`prompt_metrics`. Judge calls are not kernel `LLM_CALL` events, so the
+runtime `llm_cache` does not replay them; only a caching gateway can.
+`complete_json` retries malformed JSON once with a "JSON only" turn.
 
 ---
 
-## Try the mixed pipeline
+## Step 4 — Run the mixed pipeline
 
 [eval-pipeline.yaml](eval-pipeline.yaml) mixes the three sources: stock
-`groundedness`, registered `toy_echo` (ships with `mas-library-eval`, no
-LLM), and step-local `used_a_tool`.
-
-From the repository root, after a Tutorial 3 (or any) run that produced
-`traces/events.jsonl`:
+`groundedness`, registered `toy_echo` (ships with `mas-library-eval`, no LLM
+needed) and inline `used_a_tool`. First validate it, with no LLM:
 
 ```bash
-mas-lab benchmark pipeline run \
-  docs/tutorials/10-evaluation-metrics/eval-pipeline.yaml \
-  -o <that-run-folder>
+mas-lab benchmark pipeline validate docs/tutorials/10-evaluation-metrics/eval-pipeline.yaml
 ```
 
-Or attach it on the next benchmark:
+Then attach it to the Tutorial 3 experiment. The pipeline path resolves from
+the experiment's directory, so use an absolute path or copy the file next to it.
 
 ```bash
-mas-lab benchmark run path/to/experiment.yaml \
-  --pipeline run:post:docs/tutorials/10-evaluation-metrics/eval-pipeline.yaml
+mas-lab benchmark run docs/tutorials/03-experiments-and-analysis/experiment.yaml \
+  --pipeline "run:post:$PWD/docs/tutorials/10-evaluation-metrics/eval-pipeline.yaml"
 ```
+
+This calls the judge model, so it needs your key and costs tokens.
+
+Each run folder now has a `metrics.json` with `groundedness`, `toy_echo` and
+`used_a_tool` under `session`. An existing `metrics.json` is reused when the
+trace, metric ids, definitions and judge model are unchanged. Add
+`--set eval_mce.overwrite=true` to force re-scoring.
+
+The step must run per run, inside a benchmark, because it finds
+`traces/events.jsonl` through the run. To score one trace outside a benchmark,
+use `mas-lab eval TRACE --metric goal_success_rate` (stock ids only).
 
 ---
+
+## What you learned
+
+1. A metric is a named question that writes one score under `session` in
+   `metrics.json`. Its `unit` and `evidence` say what it reads.
+2. Use stock ids first, an inline `prompt_metrics` entry for one experiment,
+   and an `eval_metric` plugin for reuse.
+3. Attach evaluation with `--pipeline run:post:...`. It runs per run, inside a
+   benchmark.
 
 ## See also
 
-- [Tutorial 3](../03-experiments-and-analysis/) — first experiment and MCE
-- [summarization.md — MCE judge model](../../manifests/summarization.md#mce-judge-model)
+- [Tutorial 3](../03-experiments-and-analysis/README.md): first experiment and MCE
 - [LLM cache](../../manifests/llm-cache.md)
-- [pipeline-steps.md](../../../lab/docs/pipeline-steps.md) — `eval_mce`
-- [library-eval README](../../../library-eval/README.md)
+- [pipeline-steps.md](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md): `eval_mce`
+- [library-eval README](https://github.com/outshift-open/mas-lab/blob/main/library-eval/README.md)
+
+## Next
+
+[Tutorial 11](../11-sessions-and-recovery/README.md): checkpoint, fork and
+resume a conversation.

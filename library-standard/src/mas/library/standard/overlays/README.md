@@ -25,8 +25,8 @@ governance plugins already on the agent, then merges reliability knobs
 under `spec.control`. Stack more overlays the same way — a future
 OpenClaw-like flavour would compose `with-hardened` + observability +
 checkpoint/backtrack overlays rather than inlining each plugin
-([reliability.md](../../../../../../../docs/references/reliability.md),
-[governance.md](../../../../../../../docs/manifests/governance.md)).
+([reliability.md](../../../../../../docs/references/reliability.md),
+[governance.md](../../../../../../docs/manifests/governance.md)).
 
 ```bash
 mas-ctl chat agent.yaml \
@@ -35,11 +35,11 @@ mas-ctl chat agent.yaml \
 ```
 
 CLI shortcut `--events` is equivalent to `observability-native` for one run.
-See [docs/cli/observability.md](../../../../../../../docs/cli/observability.md).
+See [docs/cli/observability.md](../../../../../../docs/cli/observability.md).
 
 The `openclaw` control preset enables full LLM-call checkpointing, self-contained
 resume, and repeated-error backtracking. See
-[Session checkpoints](../../../../../../../docs/manifests/checkpoint.md).
+[Session checkpoints](../../../../../../docs/manifests/checkpoint.md).
 
 `gov_no_undeclared_tool` example (not a sample app):
 [examples/governance/undeclared-tool/](../../../../../examples/governance/undeclared-tool/).

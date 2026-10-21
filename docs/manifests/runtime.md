@@ -4,33 +4,46 @@
 -->
 # Runtime manifests (`mas-runtime`)
 
-Execution manifests consumed by **mas-runtime** and **mas-ctl**. Authoritative JSON
-Schemas: [`docs/schemas/runtime/`](../schemas/runtime/).
+This page indexes the manifests that **mas-runtime** and **mas-ctl** consume.
+It also documents the two bundle kinds that have no page of their own: `ToolBundle` and `PromptBundle`.
+Use it to find the reference page and schema for a manifest kind.
+The authoritative JSON Schemas are in [`docs/schemas/runtime/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas/runtime).
 
-Validated by `mas-ctl validate` (agents, MAS, overlays) and `mas-lab validate`
-(experiments, pipelines, lab configs).
+`mas-ctl validate` checks agents, MAS, overlays, workflows, flavours, tools, bundles, and infra.
+`mas-lab validate` checks experiments, pipelines, and lab configs.
 
----
+This minimal PromptBundle shows the shape of a runtime manifest:
+
+```yaml
+apiVersion: mas/v1
+kind: PromptBundle
+metadata:
+  name: support-prompts
+spec:
+  entries:
+    greeter:
+      type: system
+      text: You are a concise support agent.
+```
 
 ## Manifest index
 
 | Manifest | Schema file | Reference page |
 | ---------- | ------------- | ---------------- |
-| Agent | `agent.schema.yaml` | [agent.md](agent.md) · [plugin-bindings.md](plugin-bindings.md) · [context-assembly.md](context-assembly.md) |
+| Agent | `agent.schema.yaml` | [agent.md](agent.md), [plugin-bindings.md](plugin-bindings.md), [context-assembly.md](context-assembly.md) |
 | MAS | `mas.schema.yaml` | [mas.md](mas.md) |
 | Overlay | `overlay.schema.yaml` | [overlay.md](overlay.md) |
-| Workflow topology | `workflow.schema.yaml` | [mas.md — Standalone workflow manifest](mas.md#standalone-workflow-manifest-kind-workflow) |
+| Workflow topology | `workflow.schema.yaml` | [mas.md: Standalone workflow manifest](mas.md#standalone-workflow-manifest-kind-workflow) |
 | Flavour | `flavour.schema.yaml` | [flavour.md](flavour.md) |
 | Infrastructure | `infra.schema.yaml` | [infra.md](infra.md) |
-| RuntimeEngine | `runtime-engine.schema.yaml` | [runtime-engine.md](runtime-engine.md) |
+| RuntimeEngine | `fragments/runtime-engine.schema.yaml` | [runtime-engine.md](runtime-engine.md) |
 | Tool | `tool.schema.yaml` | [tool.md](tool.md) |
-| ToolBundle | `tool_bundle.schema.yaml` | [tool.md](tool.md) |
-| PromptBundle | `prompt_bundle.schema.yaml` | [PromptBundle](#prompt-bundle) |
-| Workspace | `workspace.py` + docs | [user-config.md](../user-config.md) |
+| ToolBundle | `tool_bundle.schema.yaml` | [ToolBundle](#toolbundle) |
+| PromptBundle | `prompt_bundle.schema.yaml` | [PromptBundle](#promptbundle) |
+| Workspace (`config.yaml`) | `config.schema.yaml` (in `docs/schemas/`) | [user-config.md](../user-config.md) |
 
-API id (controller): `agent`, `mas`, `overlay`, `workflow`, `flavour`, `tool`, `tool-bundle`, `prompt-bundle`.
-
----
+The controller serves schemas at `GET /api/schemas/<id>`.
+The ids are `agent`, `mas`, `overlay`, `infra`, `workflow`, `flavour`, `tool`, `tool-bundle`, and `prompt-bundle`.
 
 ## Tool family
 
@@ -38,43 +51,66 @@ API id (controller): `agent`, `mas`, `overlay`, `workflow`, `flavour`, `tool`, `
 | ------ | --------- |
 | `Tool` | Single tool definition (parameters, implementation ref) |
 | `ToolBundle` | Bundle of tool entries |
-| `PromptBundle` | Named prompts for `context.*` `{ref: ...}` / `@lib#key` |
+| `PromptBundle` | Named prompt entries (system prompts, few-shot examples, intents) |
 
-Agents reference tools by **semantic name** or `tools[].ref` to a `kind: Tool`
-manifest ([tool.md](tool.md)). Infra `ToolServerRegistry` maps remote endpoints
-([infra.md](infra.md#toolserverregistry)). Invocation is
-[`ToolContract.call_tool`](../references/tool-contract.md).
+Agents reference tools by **semantic name** or by `tools[].ref` to a `kind: Tool` manifest ([tool.md](tool.md)).
+Infra `ToolServerRegistry` maps remote endpoints ([infra.md](infra.md#toolserverregistry)).
+Invocation goes through [`ToolContract.call_tool`](../references/tool-contract.md).
 
 ## PromptBundle
 
 `kind: PromptBundle` uses [`prompt_bundle.schema.yaml`](../schemas/runtime/prompt_bundle.schema.yaml).
-It requires `metadata.name` and `spec.entries`; each entry requires `type`
-(`system`, `few-shot`, or `intent`) and may contain `text`, `items`, or `tags`.
-The schema does not conditionally require `text` or `items` based on `type`.
+It requires `metadata.name` and `spec.entries`, a map from entry key to entry.
+Each entry requires `type` (`system`, `few-shot`, or `intent`) and may contain `text`, `items`, or `tags`.
+The schema does not require `text` or `items` conditionally on `type`.
+The example at the top of this page is a complete PromptBundle.
+
+### Not used yet
+
+`mas-ctl validate` checks PromptBundle documents, but the runtime does not read them when it builds an agent.
+`spec.context.<key>` takes inline text or a `{ref: path}` to a file, not a bundle entry.
 
 ## ToolBundle
 
 `kind: ToolBundle` uses [`tool_bundle.schema.yaml`](../schemas/runtime/tool_bundle.schema.yaml).
-It requires `metadata.name` and `spec.tools`. Each entry requires `description`;
-optional fields include `module_path`, `class_name`, `input_schema`,
-`output_schema`, `idempotent`, and `timeout_seconds`.
+It requires `metadata.name` and `spec.tools`, a map from tool id to entry.
+Each entry requires `description`.
+Optional entry fields are `module_path`, `class_name`, `input_schema`, `output_schema`, `tags`, `idempotent`, and `timeout_seconds`.
+Entries also accept the advertise hints of a Tool manifest: `title`, `read_only`, `destructive`, `open_world`, `icons`, `task_support`, and `meta`.
 
----
+```yaml
+apiVersion: mas/v1
+kind: ToolBundle
+metadata:
+  name: calc-tools
+spec:
+  tools:
+    calc:
+      description: Evaluate an arithmetic expression.
+      module_path: ./calc_tool.py
+      class_name: CalcTool
+```
+
+### Not used yet
+
+`mas-ctl validate` checks ToolBundle documents, but the local tool provider does not resolve `bundle://<bundle>/<tool>` refs in this release.
+Reference `kind: Tool` files from `spec.tools[].ref` instead ([tool.md](tool.md)).
 
 ## Separation rules (config hygiene)
 
-Enforced by `mas-lab check-config` and flavour separation validators:
+`mas-ctl validate` (separation checks run with schema validation) and `mas-lab check-config` enforce these rules.
 
-These rules define **semantic ownership**, not a required file layout. Where a
-field's schema allows it, the same resource can be declared inline, referenced
-by a filesystem/library path, or selected by a catalog id; these forms resolve
-to the same kind-specific data without moving the concern to another owner.
-For example, `MAS.spec.agency.agents[]` accepts inline Agent documents or
-`ref`s, `Agent.spec.tools[]` accepts semantic names, Tool/ToolBundle refs, or
-inline implementations, and `experiment.application` accepts a manifest path
-or a registered app id. They are equivalent in ownership and resolved intent,
-not interchangeable in syntax; see [writing-manifests.md](writing-manifests.md)
-for the forms accepted by each field.
+The rules define **semantic ownership**, not a required file layout.
+Where a field's schema allows it, you can declare the same resource inline, reference it by a filesystem or library path, or select it by a catalog id.
+These forms resolve to the same data and keep the same owner.
+Examples:
+
+- `MAS.spec.agency.agents[]` accepts inline Agent documents or `ref`s.
+- `Agent.spec.tools[]` accepts semantic names, Tool or ToolBundle refs, or inline implementations.
+- `experiment.application` accepts a manifest path or a registered app id.
+
+The forms are equivalent in ownership and resolved intent, but not interchangeable in syntax.
+See [writing-manifests.md](writing-manifests.md) for the forms each field accepts.
 
 | Concern | Belongs in |
 | --------- | ------------ |
@@ -86,27 +122,21 @@ for the forms accepted by each field.
 | Protocol / OTel defaults | `Flavour` |
 | Scenario-specific behaviour | `Overlay` |
 
----
-
 ## Contracts and plugins
 
-Formal **contracts** (tool invocation, delegation, governance) are implemented
-in `mas-runtime`. In manifests, agent and MAS behavior is declared via:
+Formal **contracts** (tool invocation, delegation, governance) live in `mas-runtime`.
+Manifests declare agent and MAS behaviour through these fields:
 
-- `spec.design_pattern` — intra-agent Mealy step selection (`DesignPatternPlugin` via registry); peer
-  delegation (`delegate_to_*` tool calls) runs through this same contract — there is no separate
-  delegation-transport plugin binding on the agent
-- `spec.governance[]`, `spec.observability[]`, `spec.control` and `spec.context_sources` — schema-declared governance, observation, control, and context-source bindings ([governance.md](governance.md), [reliability.md](../references/reliability.md))
-- `MAS.spec.workflow` — topology (`entry`, `nodes`, `delegates_to`, `dispatch`); standalone `kind: Workflow` has a separate `workflow/v1` schema with `edges`
+- `spec.design_pattern`: how the agent picks its next step each turn. A `DesignPatternPlugin` from the plugin registry implements it, and the kernel runs it as a Mealy machine (a state machine whose output depends on state and input). Peer delegation (`delegate_to_*` tool calls) runs through this same contract. The agent has no separate delegation-transport plugin binding.
+- `spec.governance[]`, `spec.observability[]`, `spec.control`, and `spec.context_sources`: schema-declared governance, observation, control, and context-source bindings. See [governance.md](governance.md), [reliability.md](../references/reliability.md), and [plugin-bindings.md](plugin-bindings.md).
+- `MAS.spec.workflow`: topology (`entry`, `nodes`, `delegates_to`, `dispatch`). A standalone `kind: Workflow` has a separate `workflow/v1` schema with `edges`.
 
-There is no `spec.plugins[]`, `spec.workflow.type`, or `spec.workflow.plugin` field
-in the current Agent/MAS schemas. See the topology, workflow, and routing section in [mas.md](mas.md#topology-workflow-and-routing).
+The current Agent and MAS schemas have no `spec.plugins[]`, `spec.workflow.type`, or `spec.workflow.plugin` field.
+See the topology, workflow, and routing section in [mas.md](mas.md#topology-workflow-and-routing).
 
-Authoring detail: [agent.md](agent.md#delegation) · [mas.md](mas.md).
+Authoring detail: [agent.md](agent.md#delegation), [mas.md](mas.md), and the [contracts reference](../references/contracts.md).
 
----
-
-## Further reading
+## See also
 
 - [agent.md](agent.md)
 - [governance.md](governance.md)

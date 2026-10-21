@@ -40,7 +40,7 @@ Dependencies: [`mas-runtime`](../runtime/) and [`mas-ctl`](../ctl/).
 | ------- | --------- | ------ |
 | [`check`](components/core/README.md#check) | core | Validate a MAS specification |
 | [`benchmark`](components/bench/README.md#benchmark-run) | bench | Run experiments + level hooks |
-| [`plot`](components/bench/README.md#plot--trace-visualisations) | bench | Trajectory / communication plots |
+| [`plot`](components/bench/README.md) | bench | Trajectory / communication plots |
 | [`telemetry`](components/core/README.md#telemetry) | core | Inspect or push traces |
 
 Full tables: [components/bench/README.md](components/bench/README.md).

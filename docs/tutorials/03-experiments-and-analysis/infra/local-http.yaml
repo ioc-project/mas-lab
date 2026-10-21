@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: ServiceBundle
+metadata:
+  name: local-http
+  description: Local HTTP server standing in for a collector or database
+spec:
+  services:
+    local-http:
+      backend: process
+      command: [python3, -m, http.server, "8765", --bind, 127.0.0.1]
+      env:
+        T3_SERVICE_URL: http://127.0.0.1:8765
+      health_check:
+        url: http://127.0.0.1:8765/
+        timeout: 15

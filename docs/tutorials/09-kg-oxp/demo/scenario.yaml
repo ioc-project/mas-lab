@@ -9,7 +9,7 @@ version: "1.0"
 authors: ["MAS Framework Team"]
 tags: ["kg", "oxp", "norm", "tutorial"]
 prerequisites:
-  - "Tutorial 7"
+  - "Tutorial 8"
   - "mas-lab on PATH with mas-library-kg"
   - "Offline: pytest tests/tutorials/test_scenario_commands.py -k tuto-09"
 estimated_duration_min: 20

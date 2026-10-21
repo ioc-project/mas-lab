@@ -19,7 +19,7 @@ mas-lab [-v] COMMAND [ARGS]...
 Core CLI for MAS Lab. Library packages add groups via
 `mas.lab.cli.components` (`telemetry`, `kg`, `eval`, `control`, `worker`).
 
-Site index (pointers only): [docs/cli/mas-lab.md](../../docs/cli/mas-lab.md).
+Site index (pointers only): [docs/cli/mas-lab.md](../../../docs/cli/mas-lab.md).
 
 ## COMMANDS
 
@@ -34,9 +34,9 @@ Site index (pointers only): [docs/cli/mas-lab.md](../../docs/cli/mas-lab.md).
 | `run` | Processors / pipeline steps | [run](run.md) |
 | `pipe` | GStreamer-style processor pipeline | [pipe](pipe.md) |
 | `benchmark` | Experiments | [benchmark](benchmark.md) |
-| `telemetry` | OTel + native traces | [library-telemetry CLI](../../library-telemetry/docs/cli/index.md) |
-| `kg` | Knowledge graphs | [library-kg CLI](../../library-kg/docs/cli/index.md) |
-| `eval` | Score traces (library-eval, same runner as `eval_mce`) | [library-eval CLI](../../library-eval/docs/cli/index.md) |
+| `telemetry` | OTel + native traces | [library-telemetry CLI](../../../library-telemetry/docs/cli/index.md) |
+| `kg` | Knowledge graphs | [library-kg CLI](../../../library-kg/docs/cli/index.md) |
+| `eval` | Score traces (library-eval, same runner as `eval_mce`) | [library-eval CLI](../../../library-eval/docs/cli/index.md) |
 | `control` / `worker` | Controller daemon | [control](control.md) |
 | `demo-ui` / `replay` | Live-dashboard export / replay | [demo-ui](demo-ui.md) · [replay](replay.md) |
 
@@ -50,4 +50,4 @@ Pipeline shortcuts: [cli-pipelines.md](../cli-pipelines.md).
 
 ## SEE ALSO
 
-[docs/cli/index.md](../../docs/cli/index.md), [mas-ctl](../../docs/cli/mas-ctl.md)
+[docs/cli/index.md](../../../docs/cli/index.md), [mas-ctl](../../../docs/cli/mas-ctl.md)

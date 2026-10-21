@@ -1,0 +1,32 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+experiment:
+  name: t3-services
+  description: 'Tutorial 03: one scenario with a service bundle started before and stopped after the runs.'
+  default_flavour: local
+  models:
+    main: gpt-4o-mini
+  application:
+    manifest: ./agent.yaml
+    configs_dir: ./overlays
+  default_infra: local-http
+  pre:
+  - name: start-http
+    type: service_start
+    config: {service: local-http, infra: local-http}
+  post:
+  - name: stop-http
+    type: service_stop
+    config: {service: local-http, infra: local-http}
+  scenarios:
+  - id: cot
+    description: Chain-of-Thought reasoning
+    overlays:
+      logic:
+      - cot
+      control: []
+      infra: []
+  dataset:
+    path: ./dataset.yaml
+  run:
+    n_runs: 1

@@ -4,15 +4,13 @@
 -->
 # References
 
-Complete reference material for MAS Lab: YAML manifests, JSON/YAML schemas,
-runtime contracts, and lab benchmarking. New to the vocabulary? Start with the
-[glossary](../glossary.md).
+This hub lists the reference pages for MAS Lab: YAML manifests, schemas, runtime contracts, and lab benchmarking. Unsure about a term? Check the [glossary](../glossary.md).
 
 ---
 
 ## Specifications
 
-Declarative YAML kinds and how they compose.
+The YAML kinds and how they compose.
 
 | Topic | Reference |
 |-------|-----------|
@@ -21,7 +19,9 @@ Declarative YAML kinds and how they compose.
 | MAS & workflow | [mas.md](../manifests/mas.md) |
 | Overlay | [overlay.md](../manifests/overlay.md) |
 | Flavour & environment | [flavour.md](../manifests/flavour.md), [infra.md](../manifests/infra.md) |
-| Workspace file | [user-config.md](../user-config.md), [config.schema.yaml](../schemas/config.schema.yaml) |
+| Workspace file | [config.yaml reference](config.yaml.md), [user-config.md](../user-config.md), [config.schema.yaml](../schemas/config.schema.yaml) |
+| Compiled defaults | [What a minimal agent expands to](defaults.md) |
+| Tools | [ToolContract](tool-contract.md) · [ToolServerRegistry](tool-server-registry.md) · [System tools](system-tools.md) |
 | Schemas (all) | [Schema index](schemas.md) |
 | Contracts | [Contracts](contracts.md) |
 
@@ -29,18 +29,19 @@ Declarative YAML kinds and how they compose.
 
 ## Runtime
 
-Execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
+The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 
 | Topic | Reference |
 |-------|-----------|
 | Runtime manifests (Agent, MAS, overlay) | [Manifest fields](../manifests/runtime.md) |
 | Context window, summarization, pinned prompt parts, cache and token usage | [Context management](context-management.md) |
 | Reliability (retries, circuit, `error_policy`, logging) | [reliability.md](reliability.md) |
+| LLM response cache (`llm_cache` infra middleware) | [llm-cache.md](llm-cache.md) |
 | Contracts & Mealy envelope | [Contracts](contracts.md) · [runtime package docs](runtime.md) |
 | Thin waist (plugin vs catalog) | [thin-waist.md](thin-waist.md) |
 | Snapshots vs checkpoints | [snapshots.md](snapshots.md) |
 | Kernel operations | [kernel-primitives.md](kernel-primitives.md) |
-| CLI (`mas-ctl`, `mas-runtime`) | [ctl user guide](https://github.com/outshift-open/mas-lab/blob/main/ctl/docs/user-guide.md) |
+| CLI (`mas-ctl`, `mas-runtime`) | [mas-ctl reference](../cli/mas-ctl.md) · [ctl user guide](https://github.com/outshift-open/mas-lab/blob/main/ctl/docs/user-guide.md) |
 | **Web UI** | [ui/index.md](../ui/index.md) |
 | Run logs | [Observability](../cli/observability.md) |
 
@@ -61,9 +62,16 @@ Experiments, datasets, pipelines, and analysis (`mas-lab`).
 
 ---
 
+## Design decisions
+
+- [ADR 0001 — lab terminology](adr-0001-lab-terminology.md)
+- [ADR 0002 — observability event model](adr-0002-observability-event-model.md)
+
+---
+
 ## See also
 
-- [User guide](../user-guide.md) — install and day-to-day workflows
-- [Tutorials](../tutorials/index.md) — hands-on tutorials (agents → teams → experiments)
-- [Paper labs](../paper/index.md) — reproduce Section 5 of the article
-- [Web UI](../ui/index.md) — design and inspect in the browser
+- [User guide](../user-guide.md): install and day-to-day workflows.
+- [Tutorials](../tutorials/index.md): hands-on, from agents to teams to experiments.
+- [Paper labs](../paper/index.md): reproduce Section 5 of the article.
+- [Web UI](../ui/index.md): design and inspect in the browser.

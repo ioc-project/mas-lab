@@ -7,9 +7,9 @@ categories:
   - Releases
 ---
 
-# MAS-Lab v0.2: Skills, Tools, and Agents That Can Work Together
+# MAS Lab v0.2: Skills, Tools, and Agents That Can Work Together
 
-MAS-Lab is an open-source foundation for building multi-agent systems the way
+MAS Lab is an open-source foundation for building multi-agent systems the way
 you'd build any other production software: from a declarative specification,
 with a runtime that enforces it, and with experiments and traces that show
 what actually happened. v0.1 gave us a way to specify, run, and test agent
@@ -21,7 +21,7 @@ it.
 
 ## One system, from experiment to operation
 
-MAS-Lab is not another agent framework or test harness. It is a continuity
+MAS Lab is not another agent framework or test harness. It is a continuity
 architecture: one versioned specification gives the system an identity across
 design, experiments, execution, and operations. The spec declares roles, tools,
 delegation, and policies; the runtime applies those boundaries; isolated plugins
@@ -46,12 +46,13 @@ around the agentskills.io format: discover `SKILL.md` by name, disclose the
 instructions on demand, load accompanying resources, and run embedded scripts.
 Skills can add expertise or executable capabilities through an overlay without
 changing the base agent specification. The same skill directory remains portable
-to other harnesses that support agentskills.io; it is not tied to MAS-Lab's
+to other harnesses that support agentskills.io; it is not tied to MAS Lab's
 runtime or to a copy of the agent prompt.
 
 ## Tools and peers across protocols
 
-With MCP, the agent still asks for the same logical tool. As
+MCP (Model Context Protocol) serves tools from separate processes. The agent
+still asks for the same logical tool. As
 [Tutorial 4](../../../tutorials/04-mcp-tools/README.md) shows, moving from a
 local experiment to an MCP provider is an infrastructure switch: set
 `protocol: mcp` in a `ToolServerRegistry`, then specify any non-default
@@ -68,11 +69,11 @@ combines a local calculator and remote web search in one turn.
   <figcaption><em>Fig. 1. The agent keeps its tool contract; infrastructure switches the execution path to MCP.</em></figcaption>
 </figure>
 
-A2A applies the same idea to delegation: select `protocol: a2a` for an agent
-endpoint and supply its URL and any other non-default settings. An existing
-agent can be exposed with `mas-ctl serve --protocol a2a`, or the MAS can connect
-to a remote peer by declaring its endpoint. The agent ids, workflow, and
-delegation contract remain unchanged. [Tutorial 5](../../../tutorials/05-a2a-agents/README.md)
+A2A (Agent2Agent) applies the same idea to delegation: select `protocol: a2a` for an agent
+endpoint and supply its URL and any other non-default settings. You can expose
+an existing agent with `mas-ctl serve` and an infra `Application` endpoint that
+uses `protocol: a2a`. Or the MAS can connect to a remote peer by declaring its
+endpoint. The agent ids, workflow, and delegation contract stay unchanged. [Tutorial 5](../../../tutorials/05-a2a-agents/README.md)
 demonstrates a mixed local/remote team; a single application can also use MCP
 tools and A2A peers together.
 
@@ -93,13 +94,13 @@ specification. These results do not amount to blanket protocol certification.
 ## Built with real workloads
 
 Beyond protocol integration, v0.2 grew from our research and prototypes within
-Outshift and contributions from teams using MAS-Lab. It also brings
+Outshift and contributions from teams using MAS Lab. It also brings
 [new features, improvements, and bug fixes](https://github.com/outshift-open/mas-lab/blob/v0.2.0/CHANGELOG.md).
 
-An example of MAS-Lab in use is the published
+An example of MAS Lab in use is the published
 [study of silent cognitive failures](https://outshift.cisco.com/blog/ai-ml/cognitive-challenges-in-multi-agent-systems):
 agents can skip verification or agree on the wrong answer while ordinary
-operational signals stay green. MAS-Lab helped turn that observation into
+operational signals stay green. MAS Lab helped turn that observation into
 repeatable research. We defined an SRE triage use case under two coordination
 patterns, varied specific failure conditions through overlays, and automated
 repeated runs and trace processing to compare outcomes and diagnostic metrics.
@@ -109,7 +110,7 @@ and further artifacts from that work are on the way.
 This also supports our ongoing research on the
 [Internet of Cognition (IoC)](https://outshift.cisco.com/internet-of-cognition):
 how agents share intent and context, reason together, and detect cognitive
-failures before a team commits to the wrong result. MAS-Lab gives us a way to
+failures before a team commits to the wrong result. MAS Lab gives us a way to
 reproduce and measure those failures. Cognitive observability means looking at
 what agents represented, checked, and committed to across their interactions,
 not only whether requests succeeded or latency stayed low.
@@ -131,7 +132,7 @@ the more expensive runtime checks for what cannot be prevented earlier,
 including silent failures in production that require cognitive observability.
 This is both an accuracy goal and a way to reduce the cost of verification.
 
-We presented MAS-Lab and its protocol extensions across the agentic stack at
+We presented MAS Lab and its protocol extensions at
 [AGNTCon Europe](https://agntconmcpconeu26.sched.com/event/2RB9i/mas-lab-an-open-framework-for-spec-driven-interoperable-multi-agent-systems-jordan-auge-cisco-systems)
 (slides linked from the session page; recording available online). Read the
 [v0.2 release](https://github.com/outshift-open/mas-lab/releases/tag/v0.2.0)

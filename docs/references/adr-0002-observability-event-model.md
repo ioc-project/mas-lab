@@ -2,116 +2,87 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# ADR 0002 — Observability event model: an announced stream, not a query interface
+# ADR 0002: Observability event model, an announced stream and not a query interface
 
-**Status:** Accepted
+**Status:** Accepted · Implemented (see [Implementation](#implementation))
 **Date:** 2026-07-10
+
+An ADR (architecture decision record) states one decision, its context, and its consequences. *Observability* here means recording what a run did so that you can inspect it later.
 
 ## Context
 
-Every call the runtime makes on an agent's behalf — a tool invocation, a model
-call, a memory read or write — passes through the same shape of crossing: a
-governance check before the call, the call itself, and a governance check
-after. Each of these is a moment worth recording, and not only the fact that
-it happened. What made governance decide what it decided, what a human
-answered when asked, what the runtime did when a call failed and had to be
-retried or abandoned — all of that is information some downstream consumer
-will eventually need.
+Every call the runtime makes for an agent crosses a boundary in the same shape: a governance check before the call, the call itself, and a governance check after. *Governance* is the policy layer that approves or blocks a call. The call can be a tool invocation, a model call, or a memory read or write.
 
-There are two general shapes for making that information available. One is a
-store that answers questions when asked: something else, later, requests
-"what did governance decide for this call" and receives an answer. The other
-is a stream that announces what happened as it happens: each crossing writes
-a self-describing record the moment it occurs, and whatever wants to know
-subscribes to or later reads that stream rather than asking a question of a
-live system.
+Each crossing is worth recording, with more than the fact that it happened. A downstream consumer will eventually need to know:
+
+- what made governance decide as it did,
+- what a human answered when asked,
+- what the runtime did when a call failed and was retried or abandoned.
+
+Two designs can make that information available:
+
+- A **query store** answers questions on request. A later reader asks "what did governance decide for this call" and gets an answer.
+- An **announced stream** writes a self-describing record the moment a crossing occurs. Interested readers subscribe to the stream or read it later.
 
 ## Decision
 
-The runtime records every boundary crossing as a self-contained record,
-written once, at the moment the crossing happens, and never asked for again.
-Every record carries a single linking value — a correlation id — shared by
-every other record produced by the same call. A reader who wants the whole
-story of one call (its governance check going in, the call itself, its
-governance check coming out) reassembles that story by collecting every
-record with the same correlation id, in the order they were written.
-Nothing needs to be asked for in advance, and nothing needs a live system to
-answer it.
+The runtime records every boundary crossing as a self-contained record. It writes the record once, when the crossing happens. Nobody asks for it again.
 
-## Why an announced stream, and not a query interface
+Every record carries one linking value, a *correlation id*. All records produced by the same call share it. To get the whole story of one call (governance going in, the call, governance coming out), a reader collects every record with that id, in write order.
 
-**A run outlives the process that produced it.** A benchmark result gets
-inspected during a code review weeks later; an incident gets reconstructed
-months after the fact; a lab result gets compared against a previous one that
-no longer has a running process behind it. A written record survives all of
-these unchanged. A live store that answers questions only survives them if it
-is itself turned into a written record at some point — at which point it was
-a stream all along, just a later one.
+Nothing needs to be requested in advance. Nothing needs a live system to answer.
 
-**More than one thing wants to know what happened, and they don't
-coordinate with each other.** A single call's outcome may be read by a file
-written for later inspection, by an external monitoring system, by a plot
-built from the run's history — none of which run at the same time as the
-call itself, none of which know about each other, and none of which should
-have to. An announced stream lets each of these subscribe or read
-independently, at its own pace, without agreeing on a shared protocol for
-asking questions of a live run. A query interface would require all of them
-to exist and coordinate while the call is still in progress.
+## Why a stream and not a query interface
 
-**Self-contained does not mean disconnected.** Each record is deliberately
-kept small — it describes one crossing, not the whole call — but it is never
-isolated, because the correlation id ties it back to everything else the same
-call produced. This is already the shape used elsewhere in the runtime: the
-context handed to a model call is recorded as its own small record, linked to
-the call it feeds, rather than folded into one large combined record. The
-same principle now applies to governance: a decision at the boundary is
-recorded as its own record — what was decided, and why — linked by
-correlation id to the call it gates, rather than bundled into the call
-record itself or withheld until asked for.
+**A run outlives its process.** People inspect a benchmark result in a code review weeks later. They reconstruct an incident months later. They compare a lab result with a previous one that has no running process. A written record survives all of these. A live store survives only if someone turns it into a written record. At that point it was a stream all along.
 
-## What each record carries, and what is left to be asked for
+**Several readers want to know what happened, and they do not coordinate.** A file for later inspection, an external monitor, and a plot built from run history may all read one call's outcome. They run at different times and do not know each other. A stream lets each read independently, at its own pace. A query interface would force all of them to exist and coordinate while the call is still running.
 
-A record carries the minimum that lets it stand on its own: what kind of
-crossing this was, when it happened, which call it belongs to. Beyond that
-minimum, the runtime does not try to anticipate every question a future
-governance rule, a future audit, or a future visualization might have.
-Records that describe a governance outcome carry the decision and a short,
-human-readable reason for it — not because every consumer needs the reason,
-but because withholding it would mean the explanation is lost forever the
-moment the call moves on, and there is no way to go back and ask for it
-later. Anything that can instead be computed by a reader from the stream
-itself — a chain of retries, a call that a human approved — is left to be
-computed by the reader, rather than pre-packaged into the record.
+**Self-contained does not mean disconnected.** Each record is small and describes one crossing, not the whole call. The correlation id ties it to everything else the call produced.
 
-This is the same reasoning applied consistently at both ends: record
-everything that would otherwise be lost the instant the moment passes, and
-leave everything else to whoever reads the stream afterward. A prior version
-of the runtime's boundary recording dropped several kinds of crossings
-outright — a human's actual answer to an approval request, a call that
-failed past its retry budget, the semantic outcome of a governance check as
-distinct from its timing — because nothing downstream had been built yet to
-read them. Those crossings still happened; they were simply never written
-down, and so were unrecoverable afterward. Every kind of crossing the runtime
-performs is now written to the stream, whether or not every current consumer
-uses every kind yet.
+The runtime already works this way elsewhere. The context handed to a model call is its own small record, linked to the call it feeds. Governance now follows the same rule. A decision at the boundary is its own record (what was decided and why), linked by correlation id to the call it gates. It is not bundled into the call record, and it is not withheld until asked for.
 
-## Forward compatibility with graph-shaped consumption
+## What each record carries
 
-A stream of small, correlation-linked records is already shaped like a graph
-without committing to being one: each record is a node's worth of
-information, and correlation ids (together with the parent/child structure
-already carried by nested calls) are its edges. A future consumer that wants
-to read the same run's history as a graph — for exploration, for a richer
-visualization, for cross-run comparison — does not require the runtime to
-record anything differently. It requires only a different way of reading
-what is already written: a translation step that turns the flat stream into
-nodes and relationships, sitting in front of whatever already consumes the
-stream today. The recording side of this design does not need to change
-for that translation step to exist later.
+A record carries the minimum it needs to stand alone: the kind of crossing, when it happened, and which call it belongs to.
 
-## Related
+The runtime does not try to anticipate every future question. It follows one rule: record what would be lost the instant the moment passes, and leave the rest to the reader.
 
-- [Contracts](contracts.md) — where this stream fits among the runtime's
-  other boundaries
-- [ADR 0001](adr-0001-lab-terminology.md) — repository terminology (unrelated
-  decision, same record format)
+- A governance outcome carries the decision and a short human-readable reason. Without the reason, the explanation is lost when the call moves on.
+- Anything a reader can compute from the stream stays out of the record. Examples: a chain of retries, or a call that a human approved.
+
+An earlier version of boundary recording dropped several kinds of crossings, because no downstream reader existed yet:
+
+- a human's actual answer to an approval request,
+- a call that failed past its retry budget,
+- the semantic outcome of a governance check, as distinct from its timing.
+
+Those crossings happened but were never written down. They were unrecoverable. The runtime now writes them:
+
+- `hitl.resolve` carries the resolution and the answer. HITL means human in the loop.
+- `governance.decision` carries the decision and reason, plus any failure class and retry count.
+- `boundary.error` records a call abandoned at the boundary.
+
+## Consequences: reading the stream as a graph
+
+A stream of small, correlation-linked records already has the shape of a graph. Each record is a node. Correlation ids, with the parent and child structure of nested calls, are the edges.
+
+A consumer that wants a graph view needs no change on the recording side. It needs a translation step that turns the flat stream into nodes and relationships, placed in front of whatever reads the stream today.
+
+## Implementation
+
+As of v0.2.0 the model is implemented as follows.
+
+- **Record type.** `ObservabilityEvent` (`mas.runtime.schema.observability`) is a frozen record with `seq`, `kind`, `phase`, `machine_id`, `correlation_id`, `policy_name`, `actor_id`, `attribution_code`, and a free-form `payload`. `ObsEventKind` enumerates the crossings: `boundary.egress`, `boundary.ingress`, `governance.decision`, `hitl.request`, `hitl.resolve`, `engine.io`, `engine.io.return`, `client.response`, `boundary.error`, `context.steer`, `context.mutation`, `context.assembled`, `cache.lookup`, `envelope.activity`, and `control`.
+- **Recorder.** `ObservabilityOperator` (`mas.runtime.boundary.obs.operator`) writes one record per crossing as the kernel driver processes it. The model-call context is its own `context.assembled` record, linked by correlation id to the call it feeds.
+- **Projection.** `boundary_event_to_transition()` (`mas.runtime.boundary.obs.transition`) projects each record to a `TransitionEvent`. It adds `agent_id`, `session_id`, `task_id`, `call_id`, `parent_call_id`, and `upstream_correlation_id`. These are the parent and child edges described above.
+- **Live stream.** `EventStream` (`mas.runtime.boundary.obs.event_stream`) is an in-process publish/subscribe bus. The native observability plugin (`library-standard`, `plugins/observability/native_plugin.py`) publishes projected records onto it. Nothing subscribes unless a host or pipeline step does.
+- **Written stream.** JSONL emitters write the same records to a file or stdout for later reading: `JsonlFileEmitter`, `StdoutJsonlEmitter`, `FanOutEmitter`, and `NullEmitter` in `mas.library.standard.lib.observability.emit`.
+- **Cross-process tail.** `ExchangeHub` (`mas.runtime.boundary.obs.exchange_hub`) fans out driver exchange records to control-protocol subscribers. The host injects it. It is not a process-wide singleton.
+
+## See also
+
+- [Contracts](contracts.md): where this stream fits among the runtime's other boundaries.
+- [ADR 0001](adr-0001-lab-terminology.md): repository terminology, a separate decision in the same format.
+- [Observability](../cli/observability.md)
+- [Tutorial 8: telemetry](../tutorials/08-telemetry/README.md)

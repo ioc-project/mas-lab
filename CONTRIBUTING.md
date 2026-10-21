@@ -1,58 +1,34 @@
 # How to Contribute
 
-Thanks for your interest in contributing to `mas-lab`! Here are a few
-general guidelines on contributing and reporting bugs that we ask you to review.
-Following these guidelines helps to communicate that you respect the time of the
-contributors managing and developing this open source project. In return, they
-should reciprocate that respect in addressing your issue, assessing changes, and
-helping you finalize your pull requests. In that spirit of mutual respect, we
-endeavor to review incoming issues and pull requests within 10 days, and will
-close any lingering issues or pull requests after 60 days of inactivity.
+This page tells you how to report a bug or send a pull request to `mas-lab`. Read it before you open either.
 
-Please note that all of your interactions in the project are subject to our
-[Code of Conduct](/CODE_OF_CONDUCT.md). This includes creation of issues or pull
-requests, commenting on issues or pull requests, and extends to all interactions
-in any real-time space e.g., Slack, Discord, etc.
+Development setup: [DEVELOPMENT.md](DEVELOPMENT.md).
+
+We review incoming issues and pull requests within 10 days. We close them after 60 days of inactivity.
+
+Our [Code of Conduct](/CODE_OF_CONDUCT.md) covers all your interactions in the project. That includes creating or commenting on issues and pull requests. It also covers any real-time space, such as Slack or Discord.
 
 ## Reporting Issues
 
-Before reporting a new issue, please ensure that the issue was not already
-reported or fixed by searching through our [issues
-list](https://github.com/outshift-open/mas-lab/issues).
+Search the [issues list](https://github.com/outshift-open/mas-lab/issues) first. Check that nobody reported or fixed the issue already.
 
-When creating a new issue, please be sure to include a **title and clear
-description**, as much relevant information as possible, and, if possible, a
-test case.
+A new issue needs a title and a clear description. Add all relevant information and, if possible, a test case.
 
-**If you discover a security bug, please do not report it through GitHub.
-Instead, please see security procedures in [SECURITY.md](/SECURITY.md).**
+**Do not report a security bug through GitHub.** Follow the procedure in [SECURITY.md](/SECURITY.md).
 
 ## Sending Pull Requests
 
-Before sending a new pull request, take a look at existing pull requests and
-issues to see if the proposed change or fix has been discussed in the past, or
-if the change was already implemented but not yet released.
+Before you send a pull request, check existing pull requests and issues. Someone may have discussed the change already. Someone may have implemented it without a release yet.
 
-We expect new pull requests to include tests for any affected behavior, and, as
-we follow semantic versioning, we may reserve breaking changes until the next
-major version release.
+Include tests for any affected behavior. We follow semantic versioning. We may hold breaking changes until the next major release.
 
 ## Other Ways to Contribute
 
-We welcome anyone that wants to contribute to `mas-lab` to triage and
-reply to open issues to help troubleshoot and fix existing bugs. Here is what
-you can do:
+You can help without writing code. Triage and answer open issues to help troubleshoot and fix bugs. You can:
 
-- Help ensure that existing issues follows the recommendations from the
-  _[Reporting Issues](#reporting-issues)_ section, providing feedback to the
-  issue's author on what might be missing.
-- Review and update the existing content of our
-  [Wiki](https://github.com/outshift-open/mas-lab/wiki) with up-to-date
-  instructions and code samples.
-- Review existing pull requests, and testing patches against real existing
-  applications that use `mas-lab`.
-- Write a test, or add a missing test case to an existing test.
+- Check that existing issues follow the _[Reporting Issues](#reporting-issues)_ section. Tell the author what is missing.
+- Update the [Wiki](https://github.com/outshift-open/mas-lab/wiki) with current instructions and code samples.
+- Review pull requests. Test patches against real applications that use `mas-lab`.
+- Write a test, or add a missing case to an existing test.
 
-Thanks again for your interest on contributing to `mas-lab`!
-
-:heart:
+Thanks for your interest in contributing to `mas-lab`.

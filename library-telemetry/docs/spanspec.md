@@ -1,8 +1,11 @@
 # SpanSpec — the OTel span contract (L1–L4)
 
-`mas.spanspec.yaml` is to OTel spans what SHACL is to an RDF graph: a declarative
-set of shape constraints, evaluated by
-`mas.library.telemetry.verification.SpanValidator`.
+`mas.spanspec.yaml` declares which attributes each OTel span must carry. `mas.library.telemetry.verification.SpanValidator` evaluates it. It plays the role for spans that SHACL (Shapes Constraint Language) plays for an RDF graph: a set of declarative shape constraints. Read this page to interpret a conformance report.
+
+```python
+from mas.library.telemetry import SpanValidator
+print(SpanValidator().validate_file("otel_sdk_spans.jsonl").conformance("L3"))
+```
 
 ## Conformance model
 
@@ -30,7 +33,7 @@ set of shape constraints, evaluated by
 
 ## Shapes
 
-The spec has four sections:
+The spec has five sections:
 
 - `global_attributes` — attributes required/recommended on **every** span
   (e.g. `application_id`, `session.id` at L2; `mas.call.id` recommended at L3).

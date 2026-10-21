@@ -1,17 +1,14 @@
 # Native events → OTel spans (conversion)
 
-This is the core transform of `library-telemetry`, and the inverse of what
-`library-kg` does:
+Conversion turns `events.jsonl`, the structured trace of native MAS execution events, into OpenTelemetry (OTel) spans. It is the core transform of `library-telemetry` and the inverse of `library-kg`, which reads OTel spans and produces a knowledge graph. Read this page to run a replay or to add support for a new event kind.
 
-```
-library-kg:        OTel spans ──▶ events.jsonl ──▶ kg.json
-library-telemetry: events.jsonl ──▶ OTel spans ──▶ (verify / OTLP collector)
+```python
+from mas.library.telemetry.conversion import replay_events_file
+
+n = replay_events_file("events.jsonl", "otel_sdk_spans.jsonl", app_name="my-app")
 ```
 
-The authoritative input is **`events.jsonl`** — a structured trace of native MAS
-execution events (the same file `library-kg` normalises *from*). Each `*_start`/
-`*_end` pair becomes one interval span; singleton events become point (zero-width)
-spans.
+Each `*_start` / `*_end` pair becomes one interval span. A singleton event becomes a point (zero-width) span.
 
 ```
 events.jsonl
@@ -33,19 +30,18 @@ from mas.library.telemetry.conversion import replay_events_file
 n = replay_events_file(
     "runs/item0/traces/events.jsonl",
     "runs/item0/traces/otel_sdk_spans.jsonl",
-    service_name="mas-runtime",
+    service_name="my-app",
     app_name="my-app",
 )
 ```
 
-**Live** (during agent execution) — a plugin builds a minimal event dict per hook
-and calls `converter.process_event(event)`. The same handler code runs in both
-modes, so replayed traces are span-for-span identical to live ones (enforced by
-the parity tests).
+**Live** (during agent execution): a plugin builds a minimal event dict per hook and calls `converter.process_event(event)`. The same handlers run in both modes, so replayed traces are span-for-span identical to live ones (the parity tests enforce this).
 
 ```python
 from mas.library.telemetry.conversion import MasOtelConverter, ExportLayers
 
+# `tracer` is an OpenTelemetry SDK tracer whose provider uses an exporter such
+# as JSONLineFileSpanExporter (see conversion/replay.py for the wiring).
 converter = MasOtelConverter(tracer, app_name="my-app",
                              export_layers=ExportLayers(governance=True))
 for event in events:
@@ -53,11 +49,9 @@ for event in events:
 converter.flush_open_spans()
 ```
 
-## Design: thin core + category handlers (extensible mapping)
+## Design: thin core and category handlers
 
-Following the same principle as `library-kg`'s OTel→KG mappings, the per-`kind`
-logic is **not** a single flat dispatch table. It is split into category modules
-that mirror the ontology *blocks*, and assembled through a decorator registry.
+As in `library-kg`, the per-`kind` logic is not one flat dispatch table. Category modules that mirror the ontology blocks hold the handlers, and a decorator registry assembles them.
 
 ```
 conversion/
@@ -77,8 +71,7 @@ conversion/
     └── trajectory.py   routing / user I/O / parallel_group / obs_wrap_gov
 ```
 
-A **handler** is a plain function `handler(conv, event) -> None`. It never touches
-converter internals — it emits spans through the `SpanEmitter` primitive API:
+A handler is a plain function `handler(conv, event) -> None`. It does not touch converter internals; it emits spans through the `SpanEmitter` primitive API:
 
 | Primitive | Purpose |
 |-----------|---------|
@@ -91,8 +84,7 @@ converter internals — it emits spans through the `SpanEmitter` primitive API:
 
 ### Extending the mapping
 
-Adding support for a new event `kind` is two steps — nothing in `converter.py`
-changes:
+Adding a new event `kind` takes two steps, and `converter.py` does not change:
 
 1. Add a row to `envelope.KIND_ENVELOPE` (`kind → (block, summand, mealy_symbol)`)
    so the event is categorised and layer-gated correctly.
@@ -116,19 +108,17 @@ def h_embedding_call_end(conv: SpanEmitter, ev):
     conv.close_span(ev.get("call_id"), status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
 ```
 
-Third-party code can register handlers too — just import and call `register`
-before constructing a converter. One handler can serve several kinds:
-`@register("policy_allow", "policy_denial")`.
+Third-party code can register handlers by calling `register` before it constructs a converter. One handler can serve several kinds: `@register("policy_allow", "policy_denial")`.
 
 Verify what is registered:
 
 ```bash
-mas-lab telemetry kinds            # 53 built-in handlers, grouped by block
+mas-lab telemetry kinds            # JSON list of the registered event kinds
 ```
 
 ```python
 from mas.library.telemetry.conversion import registered_kinds
-print(len(registered_kinds()))
+print(len(registered_kinds()))   # 76 built-in kinds at the time of writing
 ```
 
 ## Export layers
@@ -144,8 +134,7 @@ block (via `envelope.export_layer_for_kind`):
 | `provenance` | trajectory | on |
 | `governance` | governance | off |
 
-The OXP-required defaults are structure, execution, and trajectory
-(``provenance``). Semantic stays on with that set. Governance is opt-in:
+OXP (Observe and eXplain Platform) requires the structure, execution and trajectory (`provenance`) layers; `semantic` stays on too. Governance is opt-in:
 
 ```python
 replay_events_file(..., export_layers={"governance": True})
@@ -154,11 +143,10 @@ replay_events_file(..., export_layers={"governance": True})
 ## Determinism
 
 `replay_events_file` seeds a stable session uuid from `(file, service_name)`, so
-repeated replays of the same events produce identical span/trace ids — which is
-what makes the [span parity](compare-spans.md) checks meaningful.
+repeated replays of the same events produce identical span and trace ids, which makes the [span parity](compare-spans.md) checks meaningful.
 
 ## References
 
-- Categorization: `papers/mas-ontology-kg` appendices R.2–R.3 (block / summand /
-  Mealy symbol), reproduced in `conversion/envelope.py`.
+- Categorization (block / summand / Mealy symbol): the `KIND_ENVELOPE` table in
+  `conversion/envelope.py`.
 - Inverse transform: `library-kg` `docs/kg-spec.md`.

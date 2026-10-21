@@ -2,60 +2,47 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Contract Taxonomy
+# Contract taxonomy
 
-This document explains how contracts are classified and how to choose the
-correct boundary for a new runtime feature.
+A contract is a Python protocol for one runtime boundary. This page is for contributors who must choose
+the right contract for a new runtime feature. It classifies contracts into three families and gives a selection guide.
 
-## The three contract families
+```python
+from mas.runtime.contracts import ToolContract, MemoryContract, RecorderContract
+```
 
-`mas-runtime` distinguishes three top-level contract families in
-`mas.runtime.contracts.base`:
+## The three families
+
+`mas.runtime.contracts.base` distinguishes three top-level families:
 
 | Family | Meaning | Typical question | Examples |
 | --- | --- | --- | --- |
-| Capability | What the runtime can access or expose | What operation is available? | `ToolContract`, `ModelAccessContract`, `SessionContract` |
-| Orchestration | How control flows across agents | How are agents invoked and stitched together? | `WorkflowContract` |
-| Governance | What is allowed | Is this operation permitted right now? | `BudgetContract`, `RoutingContract` |
+| Capability | What the runtime can access or expose | What operation is available? | `ToolContract`, `MemoryContract`, `RecorderContract` |
+| Orchestration | How control flows across agents | How are agents invoked and stitched together? | `DelegationContract` |
+| Governance | What is allowed | Is this operation permitted right now? | `BudgetTracker`, governance plugins |
 
-The split matters because it keeps runtime surfaces composable:
+The split keeps capabilities reusable, orchestration focused on topology, and governance cross-cutting.
 
-- capabilities stay reusable
-- orchestration stays topology-focused
-- governance stays cross-cutting
+## Chokepoints and contracts
 
-## Chokepoints vs contracts
+A chokepoint is a runtime execution site. A contract is a developer-facing protocol.
+Several contracts can share one chokepoint, so the runtime has more contracts than chokepoints:
 
-One source of confusion is that the runtime can have **more contracts than
-chokepoints** without being over-designed.
+- The tool chokepoint can host `ToolContract` and human-in-the-loop (HITL) plugins.
+- The model chokepoint can host the LLM provider and `RecorderContract`.
+- The state chokepoint can host `MemoryContract` and session state.
 
-- chokepoints are runtime execution sites
-- contracts are developer-facing protocols
+See [mealy-hooks-and-closure.md](mealy-hooks-and-closure.md) for the closure model.
 
-Several contracts can legitimately share one chokepoint.
-
-Examples:
-
-- the tool chokepoint can host `ToolContract`, `BudgetContract`, and HITL plugins
-- the model chokepoint can host `ModelAccessContract`, `BudgetContract`, and
-  `RecorderContract`
-- the state chokepoint can host `MemoryContract`, `SessionContract`, and
-  `ExecutionSessionContract`
-
-See [mealy-hooks-and-closure.md](mealy-hooks-and-closure.md) for the target
-closure model.
-
-## Contract vs plugin vs implementation
+## Contract, plugin, implementation type
 
 | Term | Meaning | Example |
 | --- | --- | --- |
 | Contract | Abstract runtime boundary | `ToolContract` |
-| Plugin | Concrete runtime component implementing a contract | tool-server-backed tool provider |
-| Implementation type | Data structure or helper used by a plugin | `SessionState`, `ExecutionSession`, `SandboxPolicy` |
+| Plugin | Concrete component implementing a contract | tool-server-backed tool provider |
+| Implementation type | Data structure or helper used by a plugin | `SessionState`, `BudgetTracker` |
 
 ## Selection guide
-
-Use this table when introducing a new feature.
 
 | If the feature is about... | Prefer... | Avoid... |
 | --- | --- | --- |
@@ -63,37 +50,27 @@ Use this table when introducing a new feature.
 | Denying or constraining access | A governance contract | Embedding denials inside every tool or provider |
 | Running agents in a different topology | An orchestration contract | Coupling loop behavior to a capability plugin |
 | Prompt contribution | `ContextContract` | Ad hoc mutation of `messages[]` in many plugins |
-| Conversation history trimming | `ContextManagerContract` | Overloading `SessionContract` |
-| Durable run checkpoints | `ExecutionSessionContract` | Flattening run state into `SessionContract` |
-| Cross-agent shared state | `SharedContextContract` | Abusing `MemoryContract` for coordination locks |
+| Conversation history trimming | `ContextManagerContract` | Mutating session history from many plugins |
+| Durable run checkpoints | Session snapshot APIs | Flattening run state into conversation history |
+| Cross-agent shared state | Coordination / blackboard plugins | Abusing `MemoryContract` for coordination locks |
 
-## Important separations
-
-### Session vs execution vs memory vs shared context
+## Boundaries that are easy to confuse
 
 | Boundary | Stores | Scope |
 | --- | --- | --- |
-| `SessionContract` | Durable conversation history and metadata | Contact or channel session |
-| `ExecutionSessionContract` | In-flight run state and checkpoint data | Single run |
-| `MemoryContract` | Semantic, episodic, or procedural memory | Agent memory layer |
-| `SharedContextContract` | Multi-agent coordination state and locks | Group or MAS-level coordination |
+| Session | Durable conversation history and metadata | Contact or channel session |
+| Run snapshot | In-flight run state and checkpoint data | Single run |
+| `MemoryContract` | Semantic, episodic or procedural memory | Agent memory layer |
+| Shared context plugins | Multi-agent coordination state | Group or MAS-level coordination |
 
-### Context vs context manager
-
-| Boundary | Role |
-| --- | --- |
-| `ContextContract` | Contributes typed context parts to prompt assembly |
-| `ContextManagerContract` | Trims or compresses past turns before the next LLM call |
-
-`ContextContract` says what should be present. `ContextManagerContract` says
-how much historical conversation survives into the next turn. The list it
-returns is still a **protocol** `messages[]` (roles and tool ids), not a token
-string — see [ContextManagerContract](state-and-context.md#contextmanagercontract)
-for the two layers and the pairing rules plugins must keep.
+`ContextContract` contributes typed context parts to prompt assembly: it says what is present.
+`ContextManagerContract` trims or compresses past turns before the next LLM call: it says how much history survives.
+Its result is still a protocol `messages[]` (roles and tool ids), not a token string. See
+[ContextManagerContract](state-and-context.md#contextmanagercontract) for the pairing rules plugins must keep.
 
 ## Hook-driven execution
 
-Many contracts are called through hooks rather than direct runtime imports.
+The registry calls many contracts through hooks instead of direct imports:
 
 ```text
 Runtime event
@@ -102,30 +79,5 @@ Runtime event
   -> registry executes post_* hooks
 ```
 
-Examples:
-
-- `ToolContract.call_tool()` is typically surrounded by `pre_tool_call` and
-  `post_tool_call`
-- `ModelAccessContract.complete()` is typically surrounded by `pre_llm_call`
-  and `post_llm_call`
-- `SessionContract.load_session()` and `save_session()` are surrounded by
-  session access hooks
-
-## Example: wiring a minimal runtime surface
-
-```python
-from mas.runtime.contracts import (
-    InMemorySessionStore,
-    InMemoryExecutionStore,
-    DummyMemoryStore,
-    LocalSharedContext,
-)
-
-session_store = InMemorySessionStore()
-execution_store = InMemoryExecutionStore()
-memory_store = DummyMemoryStore()
-shared_context = LocalSharedContext()
-```
-
-This wiring gives you four distinct boundaries with different semantics. None
-of them should be collapsed into a single generic "state" object.
+`ToolContract.call_tool()` is surrounded by `pre_tool_call` and `post_tool_call`.
+LLM completions are surrounded by `pre_llm_call` and `post_llm_call`.

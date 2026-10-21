@@ -20,6 +20,7 @@ from mas.runtime.contracts.context_contract import (
     ContextResolver,
 )
 from mas.runtime.contracts.context_manager_contract import ContextManagerContract
+from mas.runtime.contracts.memory_contract import MemoryContract
 from mas.runtime.contracts.protocols import (
     CtxAssembler,
     CtxAssemblerContract,
@@ -60,6 +61,7 @@ __all__ = [
     "GovernanceContract",
     "HitlResponder",
     "MealyPlugin",
+    "MemoryContract",
     "ObservabilitySink",
     "OrchestrationContract",
     "PolicyViolation",

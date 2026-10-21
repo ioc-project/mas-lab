@@ -1,157 +1,54 @@
-#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
-#  SPDX-License-Identifier: Apache-2.0
+<!--
+  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+  SPDX-License-Identifier: Apache-2.0
+-->
 
 # Flavour / infra / overlay / execution boundary
 
-Status: proposal (FT3, `BRANCHES.md` §5b). Blocks FT4 (flavour schema rework)
-and FT7 (CLI observability flags as a flavour overlay). Written against the
-code as of this branch; file:line references are current as of writing and
-will drift — treat them as pointers, not guarantees.
+Status: implemented. This note records why the boundary sits where it does. For the supported fields, use the [Flavour manifest reference](../manifests/flavour.md).
 
-> This is a historical design proposal, not the current Flavour contract.
-> For supported fields and schema behavior, use the [Flavour manifest reference](../manifests/flavour.md).
+## The problem
 
-## The tension
+Four concerns look alike in code, because each ends up patching an in-memory spec dict. They are different:
 
-`BRANCHES.md` flags four things that look alike in the code today (they all
-end up patching an in-memory spec dict) but are conceptually different:
+- A **flavour** is a deployment preset. It sets protocol, observability and control plugin selection, and tool exposure.
+- **Infra** holds endpoints, API-key variable names, the tool name-to-implementation mapping, and model wire names.
+- An **overlay** is a small YAML file merged on top of a manifest. The **agent spec** holds LLM inference parameters, tools, skills, and memory.
+- **Execution** holds the engine queue, LLM cache policy, streaming, and parallel tool calls.
 
-- a **flavour** — deployment posture (protocol, observability/control plugin
-  selection)
-- **infra** — endpoints, tool name→impl mapping, model wire-names
-- **overlay / agent-spec** — llm params, tools, skills, memory
-- **execution** — caching (pipeline elements sitting between the
-  agent and the LLM/tool call)
+Cache is the awkward case. It is shaped like infrastructure: it is an `InfraMiddleware` in the engine's infra pipeline (`runtime/src/mas/runtime/engine/infra_pipeline.py`). But whether it is on is a per-run choice, not a fixed property of the environment.
 
-Cache is called out specifically because it doesn't obviously
-belong to either "flavour" or "infra": a cache is infrastructure-shaped (it
-sits in the `InfraMiddleware` chain, `runtime/src/mas/runtime/engine/
-infra_pipeline.py:26` — `LlmCacheMiddleware`), but *whether it's on* is a
-per-run execution choice, not a fixed piece of environment topology.
+Example: one run records with the cache on, another replays. Both use the same flavour and infra. Only the execution settings differ.
 
-## What the code already gets right
+## Decision
 
-This is not a green-field decision — the overlay schema already drew most of
-this boundary correctly, independently of the Flavour schema, and the two
-disagree. Concretely:
+1. **Execution is not a flavour concern.** Queue depth, LLM disk-cache policy, streaming, and parallel tool dispatch live in `kind: RuntimeEngine` (`infra/v1`). The runtime resolves it from workspace `runtime_refs` or `--runtime-ref`. Agent, MAS, and Overlay manifests may not carry these settings. Offline LLM turns use the `llm_cache` middleware recorded against a live provider, not a flavour field.
+2. **Endpoints are infra.** The `infra.schema.yaml` kinds (`InfraBundle`, `LLMProxy`, `ToolProvider`, `ToolRegistry`, ...) own endpoints, API-key variable names, wire names, and tool mapping. A flavour may not carry `infra_refs` or `infra_ref`.
+3. **A flavour carries posture only.** `FlavourSeparationValidator` (`ctl/src/mas/ctl/validate/separation.py`) rejects `spec.llm`, `spec.skills`, `spec.prefer_local`, `spec.infra_refs`, and `spec.infra_ref`. Inference parameters and skills are Agent concerns. `prefer_local` duplicated workspace infra tuning and was removed.
+4. **Overlay is the one patch mechanism.** Flavours and agents use the same JSON merge-patch semantics. `merge_overlay` (`ctl/src/mas/ctl/overlay/merge.py`) dispatches on the overlay's `spec.target.kind`:
+    - `Agent` to `merge_agent_overlay`.
+    - `MAS` to `merge_mas_overlay`.
+    - `Flavour` to `merge_flavour_overlay`.
+    - `Infra` to a plain merge-patch.
 
-- `kind: RuntimeEngine` (`infra/v1`) — shared engine queue, LLM disk cache policy,
-  stream, parallel tool dispatch. Resolved via workspace `runtime_refs` / CLI;
-  **not** on Agent, MAS, or overlays. Agent `spec.execution` and
-  `execution-binding.schema.yaml` overlay patches are removed.
-- `docs/schemas/runtime/infra.schema.yaml` — infra manifests (`InfraBundle`,
-  `LLMProxy`, `ToolProvider`, `ToolRegistry`, …) own endpoints, api keys,
-  model wire-names, and tool name→impl mapping. Flavours are explicitly
-  forbidden from carrying `infra_refs` (`FlavourSeparationValidator`,
-  referenced in `flavour.schema.yaml:24`).
-- `docs/schemas/runtime/fragments/observability-binding.schema.yaml` — a
-  closed plugin-list shape (`native`, `otel`, each with a couple of
-  whitelisted config keys) already matches "flavour selects
-  observability/control plugins" from the guiding principle in
-  `BRANCHES.md` §5b.
+    `merge_flavour_overlay` is deliberately narrow. It rejects any patch key that is not a property of the Flavour schema. An overlay therefore cannot reintroduce model or skill state through a flavour.
+5. **`observability` and `control` use one shape everywhere.** Each is a closed plugin list, such as `[native]` or `[native, {otel: {output_path: traces/otel}}]`. See `fragments/observability-binding.schema.yaml` and `fragments/control-binding.schema.yaml`. An overlay can choose which known plugins run and set their few sanctioned options. It cannot invent a plugin id or pass arbitrary plugin configuration. The `--events*` CLI flags apply as a Flavour overlay patch on `observability` (`ctl/src/mas/ctl/cli/obs_flags.py`).
 
-**Resolution: execution (cache, parallel, live, timeout) is already
-correctly modeled as an `execution` binding / `RuntimeEngine`, not flavour.**
-Offline LLM turns use the `llm_cache` infra middleware recorded against a
-live provider. What's broken is that the *Flavour* schema also carries a
-redundant, competing `spec.prefer_local` that duplicates workspace infra
-tuning. FT4 already lists removing it — this doc confirms that's correct,
-not just cleanup.
+## Consequences
 
-## Where flavour and overlay actually converge — and why
-
-Both `merge_agent_overlay` (`ctl/src/mas/ctl/overlay/merge.py:37`) and a
-would-be flavour-application step patch a `spec` dict using the same
-mental model (RFC 7396 merge-patch semantics, `apply_merge_patch` at
-`merge.py:22`). The overlay schema even already declares `target.kind:
-Flavour` as a legal selector (`overlay.schema.yaml:70-76`). But today that's
-dead schema surface: `merge_overlay`'s dispatch
-(`merge.py:325-349`) only special-cases `target.kind ∈ {mas, app, workflow}`;
-anything else — including an explicit `Flavour` target — silently falls
-through to `merge_agent_overlay`, which assumes an *agent* spec shape
-(`tools`, `skills`, `memory`, `llm`, `plugins`, …). There is no
-`merge_flavour_overlay`, and no call site anywhere invokes `merge_overlay`
-against a loaded Flavour manifest — flavours are validated
-(`ctl/src/mas/ctl/session/flavour.py:51`, `validate_flavour`, "applies
-nothing") and then discarded.
-
-**Resolution:** flavour and overlay are not actually converging on the same
-concept — they converge on the same *mechanism* (JSON merge-patch over a
-manifest's `spec`). That mechanism should be shared, not duplicated per
-manifest kind. Concretely:
-
-1. Overlay stays the **one** patch mechanism. `merge_overlay` gets a real
-   `target_kind` dispatch table (`agent` → `merge_agent_overlay`, `mas/app/
-   workflow` → `merge_mas_overlay`, `flavour` → a new
-   `merge_flavour_overlay`) instead of an `if/else` that only recognizes two
-   cases and silently defaults the rest to "agent."
-2. `merge_flavour_overlay` is deliberately narrow: it only accepts the keys
-   FT4 leaves in the slimmed Flavour schema (protocol/`agent_comm`,
-   `observability` plugin list, `control` plugin list — deployment posture
-   only). It reuses the generic list/dict merge logic already written for
-   `observability` in `merge_agent_overlay` (`merge.py:156-175`) — that logic
-   doesn't actually know or care whether the base spec is an agent or a
-   flavour, so it should be extracted into a shared helper
-   (`merge_plugin_list_field(base_spec, overlay_spec, key)`) called from both
-   `merge_agent_overlay` and `merge_flavour_overlay`, rather than duplicated.
-3. Flavours remain schema-validated-only for every field FT4 removes (llm
-   inference params, skills, `prefer_local`) — those are agent-spec /
-   workspace-infra concerns and a flavour overlay must not be able to
-   reintroduce them through the back door. `merge_flavour_overlay` should
-   reject unknown patch keys the same way `parse_execution` rejects unknown
-   execution keys, rather than silently ignoring or (worse) applying them.
-
-This also resolves the "can overlay express arbitrary plugin wiring?"
-question from FT7: no, by design. The plugin-list fragments
-(`observability-binding.schema.yaml`, `control-binding.schema.yaml`) are
-closed enums with a couple of whitelisted config keys each
-(`additionalProperties: false`), not a free-form plugin-config bag. An
-overlay can select which known plugins run and set their few sanctioned
-options (`path`/`events_file`, `output_path`/`otel_file`) — it cannot invent
-a new plugin id or hand it arbitrary config. That's a feature, not a gap:
-it's what "observability is a flavour concern, not agent logic" is supposed
-to mean — you configure *which* plugins are wired, not *how* a plugin
-works internally.
-
-## The concrete evidence this frontier is currently confused
-
-Observability today exists in three incompatible shapes, which is the
-`BRANCHES.md` FT7 complaint made precise:
-
-| Location | Shape | Consumed by runtime today? |
-|---|---|---|
-| `Flavour.spec.observability` (`flavour.schema.yaml:192-213`) | OTel span-export config (`backend: otel_sdk\|otel_extended\|none`, `output_path`, `otlp_endpoint_env`, `trace_content`) | No — `validate_flavour` never applies it |
-| `library-standard/flavours/local-benchmark.yaml` (`observability: {backend: native, service_name: ...}`) | Neither of the other two shapes (`native` isn't in the documented enum; `service_name` is read nowhere) | No |
-| `Overlay.spec.patch.observability` / Agent `spec.observability` (`observability-binding.schema.yaml`) | Plugin list (`[native, {otel: {...}}]`) | **Yes** — this is what `manifest_config.py:150` (`parse_observability`) actually reads |
-
-Only the third shape is live. FT4's job is to delete the first two and make
-the third the Flavour schema's shape too (`local` → `[native]`), so there is
-one `observability` shape everywhere it appears, and it's overlay-patchable
-by construction rather than needing a bespoke merge path.
-
-## Summary table (the actual boundary)
+Each concern has one owner and one mechanism.
 
 | Concern | Owner | Mechanism |
 |---|---|---|
-| Endpoints, api keys, model wire-names, tool name→impl mapping | **Infra** (`infra/v1`: `InfraBundle`, `LLMProxy`, `ToolProvider`, …) | `--infra-ref` / workspace `infra_refs` only — never Agent, MAS, or overlay YAML |
-| Protocol, observability/control plugin *selection* | **Flavour** | `--flavour NAME` (+ future flavour overlay, this doc §3) |
-| LLM inference params, tools, skills, memory | **Agent spec / overlay** | `merge_agent_overlay`, `build_cli_overlay` |
-| LLM endpoints | **Infra** (`LLMProxy`, bundles) | workspace `infra_refs`, `--infra-ref` |
-| Engine queue, LLM disk cache policy, stream, parallel tool calls | **RuntimeEngine** (`infra/v1`) | workspace `runtime_refs`, `--runtime-ref` (not Agent/MAS/overlays) |
-| Lab trace replay / batch concurrency | **Experiment** `execution:` (mas-lab only) | [experiment.md](../manifests/experiment.md#execution-batch-orchestration) |
+| Endpoints, API keys, model wire names, tool name-to-implementation mapping | **Infra** (`infra/v1`: `InfraBundle`, `LLMProxy`, `ToolProvider`, ...) | `--infra-ref` or workspace `infra_refs` only. Never Agent, MAS, or overlay YAML. |
+| Protocol, observability and control plugin *selection* | **Flavour** | `--flavour NAME`, optionally patched by an overlay with `target.kind: Flavour`. |
+| LLM inference parameters, tools, skills, memory | **Agent spec / overlay** | `merge_agent_overlay`, CLI overlay builders. |
+| Engine queue, LLM disk-cache policy, streaming, parallel tool calls | **RuntimeEngine** (`infra/v1`) | Workspace `runtime_refs`, `--runtime-ref`. |
+| Trace replay and batch concurrency | **Experiment** `design`, `schedule`, `bench_emulation` (mas-lab only) | [experiment.md](../manifests/experiment.md#design-vs-schedule) |
 
-## What this unblocks
+## See also
 
-- **FT4**: strip `Flavour.spec.{llm-inference-params, skills,
-  prefer_local}`; rework `observability`/`control` into the plugin-list
-  shape; make flavour resolution *apply* (not just validate) the surviving
-  fields.
-- **FT7**: once FT4 lands, `--events*` becomes a `merge_flavour_overlay`
-  patch (`spec.patch.observability`) built by `build_cli_overlay`-style code,
-  applied to the resolved flavour spec, instead of overriding
-  `agent_data.spec.observability` via `observability_config_from_manifest`.
-  `--events-stdout` still needs an explicit decision: add `stdout` to
-  `observability-binding.schema.yaml`, or keep it a pure ctl runtime toggle
-  applied after binding resolution (it's arguably execution-time behavior,
-  not deployment posture) — this doc doesn't resolve that one; it's a small
-  follow-up call for whoever implements FT7.
+- [Flavour manifest](../manifests/flavour.md)
+- [Overlay manifest](../manifests/overlay.md)
+- [Infra manifest](../manifests/infra.md)
+- [LLM cache reference](../references/llm-cache.md)

@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Tutorial 1, Step 6: expose qa-agent over A2A.
+# The endpoint key must equal the agent's metadata.name.
+apiVersion: infra/v1
+kind: Application
+
+metadata:
+  name: a2a-qa
+  description: Serve qa-agent through the A2A protocol on port 9005.
+
+spec:
+  endpoints:
+    qa-agent:
+      protocol: a2a
+      usage: deploy
+      url: http://127.0.0.1:9005

@@ -4,11 +4,11 @@
 -->
 # MAS Lab packages
 
-MAS Lab ships as a small set of installable Python packages. Most users interact
-with the **CLIs**; extension authors add plugins, pipeline steps, or libraries on
-top of the same contracts.
+This page lists the installable Python packages of MAS Lab and what each does.
+Most users only call the two CLIs. Extension authors add plugins, pipeline steps,
+or libraries on top of the same contracts.
 
-Install everything from a repository checkout with:
+Install every package from a repository checkout:
 
 ```bash
 uv sync --all-packages
@@ -27,18 +27,20 @@ Requires **Python 3.11+**.
 | **Lab** | `mas-lab` | Benchmark experiments, pipelines, reports, and the web UI controller |
 | **Standard library** | `mas-library-standard` | Flavours, overlays, infra bundles, and built-in runtime plugins |
 | **Samples** | `mas-library-samples` | Reference apps (e.g. trip planner), datasets, and tutorial fixtures |
+| **Optional libraries** | `mas-library-skills`, `mas-library-ioa`, `mas-library-kg`, `mas-library-telemetry` | Agent skills, MCP bridge, trace-to-knowledge-graph pipelines, OpenTelemetry conversion and export |
 
-A **lab** is an experiment pack (`*.lab/` + `lab-config.yaml`). A **library**
-is a folder with `library.yaml`. When to create each, including a local
-library inside a lab: [labs-and-libraries.md](labs-and-libraries.md).
+A **lab** is a folder of experiments (`*.lab/` plus `lab-config.yaml`). A
+**library** is a folder with `library.yaml`. See
+[labs-and-libraries.md](labs-and-libraries.md) for when to create each.
 
 **Typical path:** [Tutorial 0](tutorials/00-environment-setup/README.md) →
 `mas-ctl` for agents and teams → `mas-lab benchmark run` for experiments.
 
-Supporting packages (`mas-library-lab`, `mas-library-eval`, and the `mas-lab`
-component libraries) provide shared types, evaluation metrics, and UI/backend
-code. They are installed automatically when you depend on `mas-lab`; you rarely
-import them directly unless you are extending the toolkit.
+Supporting packages are `mas-library-eval` and the three `mas-lab` components
+(`mas-lab-core`, `mas-lab-bench`, `mas-lab-controller`). They provide shared
+types, evaluation metrics, and web UI backend code. `mas-lab` installs them. You
+rarely import them unless you extend the toolkit. `mas-library-lab` (lab
+extension plugins and standard plots) is separate. Add it when you need it.
 
 ---
 
@@ -51,11 +53,18 @@ import them directly unless you are extending the toolkit.
 | `mas-lab` | `lab/` | `mas-lab` | Benchmarks, pipelines, controller API |
 | `mas-library-standard` | `library-standard/` | — | Standard plugins, flavours, observability sinks |
 | `mas-library-samples` | `library-samples/` | — | Sample MAS apps and benchmark datasets |
-| `mas-library-lab` | `library-lab/` | — | Lab extension plugins (eval providers, helpers) |
+| `mas-library-lab` | `library-lab/` | — | Pipeline-step and artifact-codec plugins, eval provider, standard plots |
 | `mas-library-eval` | `library-eval/` | — | Session-level evaluation metrics for benchmarks |
+| `mas-library-skills` | `library-skills/` | — | Agent skills (progressive disclosure) |
+| `mas-library-ioa` | `library-ioa/` | — | MCP client/server bridge |
+| `mas-library-kg` | `library-kg/` | — | Trace-to-KG normalization and KG pipelines |
+| `mas-library-telemetry` | `library-telemetry/` | — | Native events to OpenTelemetry conversion and OTLP export |
 
-Published from PyPI (when available): `uv pip install mas-lab` pulls the runtime,
-control plane, and lab stack transitively.
+The PyPI upload is still pending (see the
+[README](https://github.com/outshift-open/mas-lab#get-started)). Until then,
+install from a checkout. After the upload, `uv pip install mas-lab` pulls the
+runtime, control plane, and lab stack. The generated list with dependencies and
+extras is in [packages-reference.md](packages-reference.md).
 
 ---
 
@@ -69,8 +78,8 @@ control plane, and lab stack transitively.
 | YAML manifests | [References](references/index.md) |
 | Paper reproduction | [Paper labs](paper/index.md) |
 | Library discovery | [library-discovery.md](library-discovery.md) |
-| Runtime development | [`runtime/docs/`](../runtime/docs/index.md) in the repository |
-| Control plane | [`ctl/docs/`](../ctl/docs/user-guide.md) in the repository |
+| Runtime development | [`runtime/docs/`](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/index.md) in the repository |
+| Control plane | [`ctl/docs/`](https://github.com/outshift-open/mas-lab/blob/main/ctl/docs/user-guide.md) in the repository |
 
 Site: [outshift-open.github.io/mas-lab](https://outshift-open.github.io/mas-lab/)
 
@@ -81,8 +90,8 @@ Site: [outshift-open.github.io/mas-lab](https://outshift-open.github.io/mas-lab/
 Workspace configuration: [config.schema.yaml](schemas/config.schema.yaml).
 
 Experiment and benchmark manifests are validated by `mas-lab validate` against
-schemas under `lab/components/bench/src/mas/lab/manifests/schema/`. Manifest
-field reference: [References](references/index.md).
+the schemas under [`docs/schemas/lab/`](schemas/lab/experiment.schema.yaml).
+Manifest field reference: [References](references/index.md).
 
 ---
 
@@ -90,16 +99,16 @@ field reference: [References](references/index.md).
 
 | Area | Extend | Entry points |
 |------|--------|--------------|
-| **Agent runtime** | Design patterns, tools, overlays, observability | Runtime plugin registry — see [`runtime/docs/`](../runtime/docs/index.md) |
+| **Agent runtime** | Design patterns, tools, overlays, observability | Runtime plugin registry — see [`runtime/docs/`](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/index.md) |
 | **Benchmark pipelines** | Custom step types (metrics, plots, reports) | Pipeline `type:` in `experiment.yaml` — see [lab manifests](manifests/pipeline.md) |
 | **Evaluation** | Session-level judges and metrics | `mas-library-eval` / MCE integration — see [Tutorial 3](tutorials/03-experiments-and-analysis/README.md) |
 | **Deployment** | Controller backends for the lab UI | `mas.lab.controller.plugins` entry-point group |
 
-For local development, use editable installs only when you are patching packages
-in this repository:
+Use editable installs only when you patch packages in this repository:
 
 ```bash
-uv pip install -e runtime -e ctl -e lab -e library-standard -e library-lab -e library-eval
+uv pip install -e runtime -e ctl -e library-standard -e library-lab -e library-eval \
+  -e lab/components/core -e lab/components/bench -e lab/components/controller -e lab
 ```
 
 ---
@@ -109,3 +118,5 @@ uv pip install -e runtime -e ctl -e lab -e library-standard -e library-lab -e li
 - [User guide](user-guide.md)
 - [User configuration](user-config.md)
 - [Glossary](glossary.md)
+
+Next: [Labs, libraries, and local plugins](labs-and-libraries.md).

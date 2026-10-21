@@ -1,8 +1,12 @@
 # Serializing spans to an OTLP collector
 
-This is the telemetry analogue of `library-kg`'s Neo4j serialization: where
-`library-kg` pushes a KG document to Neo4j, `library-telemetry` pushes an OTel
-span set to an OTLP collector (and reads it back from ClickHouse).
+This page shows how to send an OpenTelemetry (OTel) span set to an OTLP (OpenTelemetry Protocol) collector and read it back from ClickHouse. Use it to feed spans to a collector or to OXP.
+
+```bash
+mas-lab telemetry push otel_sdk_spans.jsonl --endpoint http://localhost:4318
+```
+
+It parallels the Neo4j serialization in `library-kg`:
 
 | library-kg (KG → Neo4j) | library-telemetry (spans → collector) |
 |-------------------------|---------------------------------------|
@@ -12,10 +16,7 @@ span set to an OTLP collector (and reads it back from ClickHouse).
 
 ## Push
 
-The push uses only the standard library (`urllib`) — no OTel SDK needed to send
-pre-built spans. It targets any OTLP **HTTP/JSON** endpoint (`POST /v1/traces`,
-`Content-Type: application/json`), e.g. an OpenTelemetry Collector on
-`http://localhost:4318`.
+The push uses only the standard library (`urllib`); sending pre-built spans does not need the OTel SDK. It targets any OTLP HTTP/JSON endpoint (`POST /v1/traces`, `Content-Type: application/json`), for example an OpenTelemetry Collector on `http://localhost:4318`.
 
 ```python
 from mas.library.telemetry.collector import push_file
@@ -24,7 +25,7 @@ from mas.library.telemetry.collector import push_file
 result = push_file(
     "otel_sdk_spans.jsonl",
     endpoint="http://localhost:4318",
-    service_name="mas-runtime",
+    service_name="my-app",
     app_name="my-app",       # → application_id on every span (OXP grouping)
 )
 print(result)   # {"spans": N, "batches": M, "status": "ok", "detail": "..."}
@@ -45,6 +46,11 @@ Dry run (build batches, print the plan, send nothing):
 ```bash
 mas-lab telemetry push otel_sdk_spans.jsonl --endpoint http://localhost:4318 --dry-run
 ```
+
+Without `--endpoint`, the collector comes from `--infra` (an infra manifest with
+an `OtelCollector` target, for example `infra/local-otel.yaml`) or
+`$OTEL_EXPORTER_OTLP_ENDPOINT`. `--dry-run` falls back to
+`http://localhost:4318` when none is set.
 
 Write OTLP/SDK JSONL without sending:
 
@@ -74,8 +80,10 @@ mas-lab telemetry dump <SESSION_ID> -o /tmp/session.otel.jsonl
 mas-lab telemetry dump <TRACE_HEX_ID> --by trace -o /tmp/trace.otel.jsonl
 ```
 
-Connection defaults come from `$CLICKHOUSE_HOST` / `_PORT` / `_USER` /
-`_DATABASE` and the `CLICKHOUSE_PASSWORD` env var.
+Connection defaults come from `$CLICKHOUSE_HOST` (default `localhost`),
+`$CLICKHOUSE_PORT` (`8123`), `$CLICKHOUSE_USER` (`admin`) and
+`$CLICKHOUSE_DATABASE` (`default`); the password is read from
+`$CLICKHOUSE_PASSWORD`. Local stack: [`../docker/README.md`](../docker/README.md).
 
 ## OtlpSpan
 

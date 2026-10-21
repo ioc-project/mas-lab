@@ -1,66 +1,43 @@
-# KG Annotation — Reference and Examples
+# KG annotation
 
-`mas-library-kg` ships a generic mechanism for attaching computed data to
-knowledge-graph nodes without touching the original document.  This guide
-covers the concept, the full API, idempotency guarantees, worked examples,
-and the integration pattern for pushing annotations to Neo4j.
+`annotate_kg_nodes` in `mas.library.kg` attaches computed data (an embedding, a score, a label) to nodes of a knowledge graph (KG) without changing the original document. Use it to enrich a KG from `mas-lab kg normalize` before querying it or pushing it to Neo4j.
 
----
+```python
+import json
+from mas.library.kg import annotate_kg_nodes
 
-## Contents
+doc = json.load(open("kg.jsonld"))
+enriched = annotate_kg_nodes(
+    doc,
+    node_type="LLMCall",
+    edge_name="hasScore",
+    value_fn=lambda node: {"score": 1.0} if node.get("completion") else None,
+)
+```
 
-1. [Concept](#concept)
-2. [API Reference](#api-reference)
-3. [Stable IDs and Idempotency](#stable-ids-and-idempotency)
-4. [Examples](#examples)
-   - [Example 1 — Embed State nodes via OpenAI](#example-1--embed-state-nodes-via-openai)
-   - [Example 2 — Score LLMCall nodes](#example-2--score-llmcall-nodes)
-   - [Example 3 — Classify ToolCall nodes, skipping empties](#example-3--classify-toolcall-nodes-skipping-empties)
-   - [Example 4 — Pure computed annotation without a model](#example-4--pure-computed-annotation-without-a-model)
-5. [Pushing Annotations to Neo4j](#pushing-annotations-to-neo4j)
-6. [Custom annotation_node_type and id_prefix](#custom-annotation_node_type-and-id_prefix)
-7. [Deprecation: embed_state_nodes](#deprecation-embed_state_nodes)
-
----
+**Contents:** [Concept](#concept) · [API reference](#api-reference) · [Stable IDs](#stable-ids-and-idempotency) · [Examples](#examples) · [Neo4j](#pushing-annotations-to-neo4j) · [Custom types and prefixes](#custom-annotation_node_type-and-id_prefix) · [Built-in State embeddings](#built-in-state-embeddings)
 
 ## Concept
 
-A KG document (`kg.jsonld`) is a plain dict with two top-level lists:
+A KG document (`kg.jsonld`, loaded as a dict) has two top-level lists:
 
 ```python
 {
-    "nodes": [...],   # graph nodes, each with "id" and "node_type"
-    "edges": [...],   # directed edges, each with "from_id", "to_id", "edge_type"
-    # ... other metadata fields preserved as-is
+    "nodes": [...],   # each with "id" and "node_type"
+    "edges": [...],   # each with "from_id", "to_id", "edge_type"
+    # other top-level keys ("@context", "metadata") are preserved as-is
 }
 ```
 
-**Annotation** means attaching a computed value — an embedding vector, a
-quality score, a label, a classification — to one or more existing nodes
-**without mutating the original document**.  The result is a new document
-that contains the original nodes and edges plus additional annotation nodes
-and the edges that link them to their sources.
+Annotation attaches a computed value to existing nodes. The result is a new document with the original nodes and edges plus annotation nodes and the edges linking them to their sources.
 
-Key properties of the annotation model:
+- **Immutability.** The input `doc` is never modified. When at least one annotation is added, `annotate_kg_nodes` returns a new top-level dict. The `nodes` and `edges` lists are new, but node dicts are shared with the input, so do not mutate them. You can pass the original to several annotation calls.
+- **Idempotency.** Annotation node IDs derive only from the source node's `id` and the `edge_name` (SHA-256). Re-running an annotation on the same original document gives identical IDs, so a Neo4j `MERGE` creates no duplicates. The function does not check for existing IDs: annotating a document that already holds the annotations adds a second copy. Annotate the original, not an enriched document.
+- **Separation of concerns.** `annotate_kg_nodes` owns graph structure (nodes, edges, IDs). You own the computation (an embedding API, a scorer, a regex). The boundary is the `value_fn` callable.
 
-- **Immutability.** The input `doc` is never modified.  `annotate_kg_nodes`
-  always returns a new dict.  The original can be passed to multiple
-  annotation calls safely.
+Typical uses:
 
-- **Idempotency.** Annotation node IDs are deterministic: they are derived
-  from the source node's `id` and the `edge_name` only, using a SHA-256
-  hash.  Re-running the same annotation over the same document produces
-  identical IDs, so merging the result into Neo4j with `MERGE` is safe —
-  no duplicates accumulate.
-
-- **Separation of concerns.** `annotate_kg_nodes` owns graph structure
-  (node creation, edge wiring, ID generation).  The caller owns the
-  computation (calling an embedding API, running a scorer, applying a
-  regex).  The boundary is the `value_fn` callable.
-
-### Typical use cases
-
-| Use case | node_type | edge_name | annotation fields |
+| Use case | `node_type` | `edge_name` | Annotation fields |
 |---|---|---|---|
 | Semantic embeddings | `State` | `hasEmbedding` | `vector`, `model`, `dimensions` |
 | Response quality score | `LLMCall` | `hasScore` | `score`, `scorer`, `rationale` |
@@ -69,15 +46,11 @@ Key properties of the annotation model:
 | Length bucketing | `LLMCall` | `hasLengthBucket` | `bucket`, `char_count` |
 | Custom metrics | any | any valid identifier | arbitrary fields |
 
----
-
-## API Reference
+## API reference
 
 ### `annotate_kg_nodes`
 
 ```python
-from mas.library.kg import annotate_kg_nodes
-# or
 from mas.library.kg import annotate_kg_nodes
 # or
 from mas.library.kg.core.annotate import annotate_kg_nodes
@@ -95,82 +68,67 @@ annotate_kg_nodes(
 ) -> dict
 ```
 
-**Parameters**
-
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `doc` | `dict` | yes | KG document: `{"nodes": [...], "edges": [...], ...}` |
-| `node_type` | `str` | yes | Only process nodes where `node["node_type"] == node_type` |
-| `edge_name` | `str` | yes | `edge_type` on the new edges (e.g. `"hasEmbedding"`) |
-| `value_fn` | `Callable[[dict], dict \| None]` | yes | Called once per matching node.  Return a dict of fields to store on the annotation node, or `None` to skip this node. |
-| `annotation_node_type` | `str` | no | `node_type` written on each new annotation node.  Default: `"Annotation"` |
-| `id_prefix` | `str` | no | URI prefix for generated annotation IDs.  Default: `"urn:mas:annotation:"` |
+| `node_type` | `str` | yes | Process only nodes where `node["node_type"] == node_type` (keyword-only) |
+| `edge_name` | `str` | yes | `edge_type` of the new edges, for example `"hasEmbedding"` (keyword-only) |
+| `value_fn` | `Callable[[dict], dict \| None]` | yes | Called once per matching node. Returns a dict of fields for the annotation node, or `None` to skip the node. Returned keys are merged last and override `id`, `node_type` and `source_node_id` if they reuse those names; avoid that. |
+| `annotation_node_type` | `str` | no | `node_type` of each new node. Default `"Annotation"` |
+| `id_prefix` | `str` | no | Prefix of generated annotation IDs. Default `"urn:mas:annotation:"` |
 
-**Return value**
+**Returns** a new `dict` shaped like `doc`, with the annotation nodes and edges appended to `"nodes"` and `"edges"`. Other top-level keys (`"@context"`, `"metadata"`) are preserved. If `value_fn` returns `None` for every node, or no node matches, the original `doc` object is returned unchanged (not a copy).
 
-A new `dict` with the same structure as `doc` plus the annotation nodes and
-edges appended to `"nodes"` and `"edges"`.  All other top-level keys from
-`doc` (e.g. `"metadata"`, `"run_id"`) are preserved unchanged.
+**Raises** `TypeError` if `value_fn` returns anything other than `dict` or `None`.
 
-If `value_fn` returns `None` for every matching node, or if there are no
-matching nodes, the **original `doc` object is returned unchanged** (not a
-copy).
-
-**Raises**
-
-- `TypeError` — if `value_fn` returns something other than `dict` or `None`.
-
-**Annotation node structure**
-
-Each new node has the following guaranteed fields, plus whatever `value_fn`
-returned:
+Each annotation node has these fields, plus everything `value_fn` returned:
 
 ```python
 {
-    "id":             "<id_prefix><16-hex-chars>",   # stable, deterministic
+    "id":             "<id_prefix><16-hex-chars>",
     "node_type":      annotation_node_type,
     "source_node_id": "<id of the source node>",
-    # ... all fields from value_fn return value
 }
 ```
 
-**Edge structure**
+Each edge:
 
 ```python
 {
-    "from_id":  "<source node id>",
-    "to_id":    "<annotation node id>",
+    "from_id":   "<source node id>",
+    "to_id":     "<annotation node id>",
+    "source":    "<source node id>",       # duplicate of from_id
+    "target":    "<annotation node id>",   # duplicate of to_id
     "edge_type": edge_name,
 }
 ```
 
+`source` and `target` duplicate `from_id` and `to_id` for readers that use the older edge key names (see the [edge format note](kg-query.md#edge-format-note)).
+
 ### `run_annotate` (step wrapper)
+
+`run_annotate` loads a `*.jsonld` file (or takes a `KGArtifact`), calls `annotate_kg_nodes`, and optionally writes the result. See also [steps.md](steps.md#run_annotate).
 
 ```python
 from mas.library.kg.steps.annotate import run_annotate
-```
 
-A convenience wrapper that reads a `kg.jsonld` file, calls `annotate_kg_nodes`,
-and writes the result back to disk.
-
-```python
-result = run_annotate(
-    kg_path,
+enriched = run_annotate(
+    "kg.jsonld",        # KGArtifact, str or Path
     value_fn,
     node_type="State",
     edge_name="hasEmbedding",
     annotation_node_type="Annotation",
-    output_path=None,   # defaults to overwriting kg_path
-    dry_run=False,
+    output_path=None,   # None + path input: overwrite the input file
+    dry_run=False,      # True: compute only, write nothing
 )
-# result = {"kg_path": "/path/to/output.json", "annotated_count": 12}
+# enriched is a KGArtifact; enriched.node_count includes the annotation nodes
 ```
 
----
+It returns the enriched `KGArtifact`, not a dict. It has no `id_prefix` parameter (the default prefix is used). Paths must end in `.jsonld`. A `KGArtifact` input with no `output_path` writes nothing.
 
-## Stable IDs and Idempotency
+## Stable IDs and idempotency
 
-Annotation node IDs are computed as follows:
+`mas.library.kg.core.annotate` computes annotation IDs like this:
 
 ```python
 import hashlib, json
@@ -182,36 +140,18 @@ content_hash = hashlib.sha256(
 annotation_id = f"{id_prefix}{content_hash}"
 ```
 
-The inputs are **the source node's `id`** and **the `edge_name`**.  The
-`value_fn` output does not affect the ID.
+The inputs are the source node's `id` and the `edge_name`. The `value_fn` output does not affect the ID. Consequences:
 
-Consequences:
-
-1. Running the same annotation twice on the same document produces the same
-   annotation node IDs.  Pushing to Neo4j with `MERGE` is safe — the
-   second push updates properties rather than creating a duplicate.
-
-2. Different `edge_name` values produce different IDs for the same source
-   node, so a node can have independent `hasEmbedding`, `hasScore`, and
-   `hasLabel` annotations with no collision.
-
-3. The `id_prefix` is part of the ID string but is not hashed.  Changing the
-   prefix changes the ID, which breaks idempotency across prefix changes.
-   Pick a prefix and keep it stable for the lifetime of the dataset.
-
-4. If a source node has no `"id"` field, `annotate_kg_nodes` falls back to
-   `uuid.uuid4()`, which is non-deterministic.  Nodes without IDs will not
-   be idempotent; ensure source nodes always carry an `"id"`.
-
----
+1. Running the same annotation twice on one document gives the same IDs. A second push with `MERGE` updates properties instead of creating duplicates.
+2. Different `edge_name` values give different IDs for one source node, so `hasEmbedding`, `hasScore` and `hasLabel` annotations do not collide.
+3. `id_prefix` is part of the ID string but is not hashed. Changing it changes the ID and breaks idempotency. Keep it stable for the lifetime of the dataset.
+4. A source node without an `"id"` gets `uuid.uuid4()`, which is not deterministic. Make sure source nodes carry an `"id"`.
 
 ## Examples
 
-### Example 1 — Embed State nodes via OpenAI
+### Example 1: embed State nodes
 
-This is the canonical embedding use case.  Each `State` node represents a
-snapshot of agent working memory.  Embedding the `content` field enables
-semantic search and trajectory clustering.
+Each `State` node is a snapshot of the agent's context at one point in the run. Embedding its `content` enables semantic search and trajectory clustering. The example needs the `openai` package (not a dependency of `mas.library.kg`); the OpenAI client reads its credentials from its default configuration.
 
 ```python
 import json
@@ -220,7 +160,7 @@ from pathlib import Path
 import openai
 from mas.library.kg import annotate_kg_nodes
 
-client = openai.OpenAI()  # reads OPENAI_API_KEY from env
+client = openai.OpenAI()
 
 
 def embed_fn(node: dict) -> dict | None:
@@ -228,16 +168,9 @@ def embed_fn(node: dict) -> dict | None:
     content = (node.get("content") or "").strip()
     if not content:
         return None
-    resp = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=[content],
-    )
+    resp = client.embeddings.create(model="text-embedding-3-small", input=[content])
     vector = resp.data[0].embedding
-    return {
-        "vector": vector,
-        "model": "text-embedding-3-small",
-        "dimensions": len(vector),
-    }
+    return {"vector": vector, "model": "text-embedding-3-small", "dimensions": len(vector)}
 
 
 kg_path = Path("output/session-abc/kg.jsonld")
@@ -251,46 +184,35 @@ enriched = annotate_kg_nodes(
     annotation_node_type="StateEmbedding",
     id_prefix="urn:mas:emb:",
 )
-
-kg_path.write_text(json.dumps(enriched, indent=2))
-
-# Count what was added
-original_count = len(doc["nodes"])
-added = len(enriched["nodes"]) - original_count
-print(f"Added {added} StateEmbedding nodes")
+kg_path.with_name("kg.annotated.jsonld").write_text(json.dumps(enriched, indent=2))
+print(f"Added {len(enriched['nodes']) - len(doc['nodes'])} StateEmbedding nodes")
 ```
 
-**Result shape** — each new node looks like:
+Each new node looks like:
 
 ```json
 {
   "id": "urn:mas:emb:3f8a1c9e72b04d51",
   "node_type": "StateEmbedding",
-  "source_node_id": "state-001",
+  "source_node_id": "state-agent-agent-u1-exec-initial",
   "vector": [0.023, -0.114, ...],
   "model": "text-embedding-3-small",
   "dimensions": 1536
 }
 ```
 
-**Tip:** For large sessions, batch the embedding calls rather than calling
-the API once per node.  Collect all content strings first, call the API once
-in `value_fn` via a pre-built lookup table:
+For large sessions, batch the API calls: embed all contents first, then look vectors up in `value_fn`.
 
 ```python
-# Pre-build a {node_id: vector} map before calling annotate_kg_nodes
 state_nodes = [n for n in doc["nodes"] if n.get("node_type") == "State"]
-contents = [(n["id"], (n.get("content") or "").strip()) for n in state_nodes]
-non_empty = [(nid, c) for nid, c in contents if c]
+non_empty = [(n["id"], (n.get("content") or "").strip()) for n in state_nodes]
+non_empty = [(nid, c) for nid, c in non_empty if c]
 
+vector_map = {}
 if non_empty:
-    resp = client.embeddings.create(
-        model="text-embedding-3-small",
-        input=[c for _, c in non_empty],
-    )
+    resp = client.embeddings.create(model="text-embedding-3-small",
+                                    input=[c for _, c in non_empty])
     vector_map = {nid: resp.data[i].embedding for i, (nid, _) in enumerate(non_empty)}
-else:
-    vector_map = {}
 
 
 def embed_fn(node: dict) -> dict | None:
@@ -298,19 +220,11 @@ def embed_fn(node: dict) -> dict | None:
     if vec is None:
         return None
     return {"vector": vec, "model": "text-embedding-3-small", "dimensions": len(vec)}
-
-
-enriched = annotate_kg_nodes(doc, node_type="State", edge_name="hasEmbedding",
-                              value_fn=embed_fn, annotation_node_type="StateEmbedding")
 ```
 
----
+### Example 2: score LLMCall nodes
 
-### Example 2 — Score LLMCall nodes
-
-Attach a quality score to each LLM call.  Here `value_fn` uses a mocked
-scorer; replace the body with any scoring logic (a rubric LLM call, a
-heuristic, a regex-based check, etc.).
+Generated `LLMCall` nodes store the model output in `completion` and the input in `prompt`. Returning `None` skips a node: no annotation node and no edge are created, and the totals grow only by the number of non-`None` returns. Replace the scoring block with your own logic.
 
 ```python
 import re
@@ -318,29 +232,18 @@ from mas.library.kg import annotate_kg_nodes
 
 
 def score_llm_call(node: dict) -> dict | None:
-    """
-    Score an LLMCall node based on its output.
-
-    Returns None to skip nodes with no output (e.g. errored calls).
-    """
-    output = (node.get("output") or node.get("response") or "").strip()
+    output = (node.get("completion") or "").strip()
     if not output:
-        return None  # skip — no response to score
+        return None  # no response to score (for example an errored call)
 
-    # --- replace this block with your actual scorer ---
     word_count = len(output.split())
     has_reasoning = bool(re.search(r"\bbecause\b|\btherefore\b|\bthus\b", output, re.I))
     score = min(1.0, word_count / 200.0)
     if has_reasoning:
         score = min(1.0, score + 0.15)
-    # --------------------------------------------------
 
-    return {
-        "score": round(score, 4),
-        "scorer": "heuristic-v1",
-        "word_count": word_count,
-        "has_reasoning": has_reasoning,
-    }
+    return {"score": round(score, 4), "scorer": "heuristic-v1",
+            "word_count": word_count, "has_reasoning": has_reasoning}
 
 
 enriched = annotate_kg_nodes(
@@ -353,7 +256,7 @@ enriched = annotate_kg_nodes(
 )
 ```
 
-**Result shape:**
+Result:
 
 ```json
 {
@@ -367,111 +270,19 @@ enriched = annotate_kg_nodes(
 }
 ```
 
----
+### Example 3: annotate without a model
 
-### Example 3 — Classify ToolCall nodes, skipping empties
-
-Return `None` from `value_fn` to skip any node that does not warrant an
-annotation.  Here, ToolCall nodes that produced no output (e.g. a failed
-tool invocation) are skipped entirely — no annotation node is created for
-them.
+`value_fn` can be plain Python. This one buckets each `LLMCall` by response length and skips `ToolCall` nodes with no output in the same way (return `None`).
 
 ```python
-from mas.library.kg import annotate_kg_nodes
-
-# A simple rule-based classifier for tool output categories
-TOOL_CATEGORIES = {
-    "search":    ["results", "found", "items"],
-    "compute":   ["result", "value", "calculated"],
-    "retrieval": ["document", "file", "content"],
-    "error":     ["error", "failed", "exception", "traceback"],
-}
-
-
-def classify_tool_call(node: dict) -> dict | None:
-    """
-    Classify a ToolCall by its output.  Skip calls with no output.
-    """
-    output = (node.get("output") or "").strip()
-    if not output:
-        return None  # no output — skip, do not annotate
-
-    output_lower = output.lower()
-    matched_label = "unknown"
-    best_score = 0
-
-    for label, keywords in TOOL_CATEGORIES.items():
-        hits = sum(1 for kw in keywords if kw in output_lower)
-        if hits > best_score:
-            best_score = hits
-            matched_label = label
-
-    return {
-        "label": matched_label,
-        "confidence": min(1.0, best_score / 3.0),
-        "classifier": "keyword-v1",
-    }
-
-
-enriched = annotate_kg_nodes(
-    doc,
-    node_type="ToolCall",
-    edge_name="hasLabel",
-    value_fn=classify_tool_call,
-    annotation_node_type="ToolCallLabel",
-    id_prefix="urn:mas:label:",
-)
-
-# How many ToolCall nodes were annotated vs skipped?
-tool_calls = [n for n in doc["nodes"] if n.get("node_type") == "ToolCall"]
-labels_added = len(enriched["nodes"]) - len(doc["nodes"])
-print(f"{labels_added} of {len(tool_calls)} ToolCall nodes classified")
-```
-
-**When `value_fn` returns `None`:**
-
-- No annotation node is created.
-- No edge is created.
-- The source node is left untouched in the output document.
-- The total node and edge counts increase only by the number of non-None
-  returns.
-
----
-
-### Example 4 — Pure computed annotation without a model
-
-Not every annotation requires a model.  This example adds a
-`response_length_bucket` annotation to each `LLMCall` node based solely on
-the character count of its response.  No external API is involved — the
-`value_fn` is pure Python.
-
-```python
-from mas.library.kg import annotate_kg_nodes
-
-
 def length_bucket(node: dict) -> dict | None:
-    """Bucket LLMCall responses by output length."""
-    output = (node.get("output") or node.get("response") or "").strip()
-    char_count = len(output)
-
+    char_count = len((node.get("completion") or "").strip())
     if char_count == 0:
-        return None  # no response; skip
-
-    if char_count < 100:
-        bucket = "xs"
-    elif char_count < 500:
-        bucket = "sm"
-    elif char_count < 2000:
-        bucket = "md"
-    elif char_count < 8000:
-        bucket = "lg"
-    else:
-        bucket = "xl"
-
-    return {
-        "bucket": bucket,
-        "char_count": char_count,
-    }
+        return None
+    for limit, bucket in ((100, "xs"), (500, "sm"), (2000, "md"), (8000, "lg")):
+        if char_count < limit:
+            return {"bucket": bucket, "char_count": char_count}
+    return {"bucket": "xl", "char_count": char_count}
 
 
 enriched = annotate_kg_nodes(
@@ -484,46 +295,16 @@ enriched = annotate_kg_nodes(
 )
 ```
 
-**Result shape:**
+Computed annotations are cheap to regenerate and work as pre-filters before expensive model calls, for example skipping the `xs` bucket before embedding. For a classifier, read `toolOutput` on `ToolCall` nodes the same way and return `{"label": ..., "confidence": ...}`.
 
-```json
-{
-  "id": "urn:mas:len:c92d4f1a8e3b0765",
-  "node_type": "LengthBucket",
-  "source_node_id": "llmcall-012",
-  "bucket": "md",
-  "char_count": 743
-}
-```
+## Pushing annotations to Neo4j
 
-Pure computed annotations are cheap to re-generate and useful as pre-filters
-before expensive model calls — for example, skip embedding nodes in the `xs`
-bucket because they carry too little signal.
+`push_kg_to_neo4j` assumes a self-contained session graph. Before writing, it runs a denormalize step that stamps every node and edge with `sessionId`, `appName` and `source` (nodes also get `block`); see [steps.md](steps.md#run_neo4j_push).
 
----
+Annotation edges can point at nodes already in Neo4j that are absent from the annotation document, so stamping a session onto them would mislead. `push_annotations_to_neo4j` calls `push_kg_to_neo4j` with `skip_denormalize=True` and uses `MERGE`:
 
-## Pushing Annotations to Neo4j
-
-### Why `push_annotations_to_neo4j` instead of `push_kg_to_neo4j`
-
-`push_kg_to_neo4j` assumes the document is a self-contained session graph.
-Before writing, it runs a *denormalize* step that stamps every node and edge
-with session-scoped attributes (`sessionId`, `appId`, `source`, `block`).
-
-Annotation documents are different: their edges reference **existing nodes**
-that are already in Neo4j (the original session graph nodes), but those
-source nodes are NOT present in the annotation document.  Denormalizing them
-would fail or produce misleading results.
-
-`push_annotations_to_neo4j` calls `push_kg_to_neo4j` with
-`skip_denormalize=True` and uses `MERGE` semantics, so:
-
-- Annotation nodes are upserted safely (idempotent re-runs).
-- Edge `MATCH` statements find the referenced source nodes in Neo4j.
-- If a source node does not exist yet, that edge is silently skipped
-  (Neo4j `MATCH` finds nothing; no error is raised).
-
-### Full pattern
+- Annotation nodes are upserted, so re-runs are idempotent.
+- Edges `MERGE` both endpoints. A referenced source node that is not yet in Neo4j is created as a minimal stub (`id` and label only) and filled in if you push it later. Push the session graph first to avoid stubs.
 
 ```python
 import json
@@ -532,12 +313,9 @@ from pathlib import Path
 from mas.library.kg import annotate_kg_nodes
 from mas.library.kg.neo4j.push import push_annotations_to_neo4j
 
-
-# 1. Load the session KG document
 doc = json.loads(Path("output/session-abc/kg.jsonld").read_text())
 
 
-# 2. Build a value_fn (inline or imported)
 def embed_fn(node: dict) -> dict | None:
     content = (node.get("content") or "").strip()
     if not content:
@@ -546,157 +324,66 @@ def embed_fn(node: dict) -> dict | None:
     return {"vector": [0.0] * 1536, "model": "text-embedding-3-small", "dimensions": 1536}
 
 
-# 3. Annotate — returns a new doc; original is unchanged
 annotations_doc = annotate_kg_nodes(
-    doc,
-    node_type="State",
-    edge_name="hasEmbedding",
-    value_fn=embed_fn,
-    annotation_node_type="StateEmbedding",
-    id_prefix="urn:mas:emb:",
+    doc, node_type="State", edge_name="hasEmbedding",
+    value_fn=embed_fn, annotation_node_type="StateEmbedding", id_prefix="urn:mas:emb:",
 )
 
-# 4. Extract only the new nodes and edges (optional — push_annotations_to_neo4j
-#    accepts the full enriched doc and ignores the original session nodes because
-#    skip_denormalize=True, but they do no harm if present)
+# The full enriched doc is accepted: original session nodes are MERGEd too
+# (unchanged, since denormalization is skipped).
 result = push_annotations_to_neo4j(
     annotations_doc,
     uri="bolt://localhost:7687",
     username="neo4j",
-    password="password",
+    password="<your-neo4j-password>",
     database="neo4j",
 )
-
 print(result)
-# {"nodes_pushed": 42, "edges_pushed": 42, "dry_run": False, "rows": 84}
+# {"nodes_pushed": ..., "edges_pushed": ..., "dry_run": False, "rows": ...}
+# The counts cover every node and edge in the pushed document, not only annotations.
 ```
 
-### Dry-run mode
+Pass `dry_run=True` to write nothing and make no Neo4j connection. `push_annotations_to_neo4j` returns only `{nodes_pushed, edges_pushed, dry_run, rows}` and logs the Cypher statements (`logger.info`) instead of returning them. To get them as strings, call `push_kg_to_neo4j(..., skip_denormalize=True, dry_run=True)` and read `result["statements"]`.
 
-Pass `dry_run=True` to inspect the Cypher without writing:
-
-```python
-result = push_annotations_to_neo4j(
-    annotations_doc,
-    uri="bolt://localhost:7687",
-    username="neo4j",
-    password="neo4j",
-    database="neo4j",
-    dry_run=True,
-)
-# result["statements"] contains the Cypher strings
-for stmt in result.get("statements", []):
-    print(stmt)
-```
-
-### Re-running annotations (idempotency in practice)
-
-Because annotation IDs are deterministic, calling `push_annotations_to_neo4j`
-a second time with the same inputs is safe.  Neo4j `MERGE` finds each
-annotation node by its `id` property and updates its properties in place
-rather than creating a duplicate.  This makes it straightforward to re-run
-annotation pipelines after changing the model or scorer: the node ID stays
-the same, and the properties are overwritten.
-
----
+Because IDs are deterministic, pushing twice with the same inputs is safe: `MERGE` finds each annotation node by `id` and overwrites its properties. You can re-run an annotation pipeline after changing the model or scorer.
 
 ## Custom `annotation_node_type` and `id_prefix`
 
-### `annotation_node_type`
+**`annotation_node_type`** sets the `node_type` of each new node and becomes the Neo4j label on push.
 
-The `annotation_node_type` parameter controls the `node_type` field written on
-every new annotation node.  It also becomes a Neo4j label when pushed via
-`push_annotations_to_neo4j`.
+- Use `PascalCase`, like the other KG node types.
+- Be specific: `StateEmbedding` is better than `Annotation` when all annotations embed State nodes. Use the default `"Annotation"` only for ad-hoc or mixed documents you will not query by annotation type.
+- Do not reuse one type for different annotations (for example `"LLMAnnotation"` for both a score and a label).
+- Examples: `StateEmbedding`, `QualityScore`, `ToolCallLabel`, `SafetyAnnotation`, `LengthBucket`.
 
-Recommendations:
+**`id_prefix`** is prepended to the 16-character hash.
 
-- Use `PascalCase` to match the rest of the KG ontology node types.
-- Be specific: `StateEmbedding` is preferable to `Annotation` when all
-  annotations in a document are embeddings of State nodes.
-- Use the default `"Annotation"` only for ad-hoc or mixed-purpose documents
-  where you do not need to query by annotation type.
-- Avoid reusing the same `annotation_node_type` across semantically different
-  annotations (e.g. do not use `"LLMAnnotation"` for both a score and a label).
+- Use URN-style prefixes to avoid collisions: `"urn:mas:emb:"`, `"urn:mas:score:"`, `"urn:mas:label:"`.
+- Add a version token if you may change the hash inputs: `"urn:mas:emb:v2:"`.
+- Keep it stable. Changing it changes all IDs, so Neo4j `MERGE` creates new nodes instead of updating existing ones.
+- The prefix is stored in `id`, so it works as a namespace when debugging: `MATCH (n) WHERE n.id STARTS WITH 'urn:mas:emb:' RETURN n`.
 
-Common patterns:
+## Built-in State embeddings
 
-```python
-# Semantic embeddings
-annotation_node_type="StateEmbedding"
-
-# Scalar scores
-annotation_node_type="QualityScore"
-
-# Categorical labels
-annotation_node_type="ToolCallLabel"
-
-# Toxicity / safety signals
-annotation_node_type="SafetyAnnotation"
-
-# Pure computed metrics
-annotation_node_type="LengthBucket"
-```
-
-### `id_prefix`
-
-The `id_prefix` is prepended to the 16-character hex hash to form the full
-annotation node ID.
-
-Recommendations:
-
-- Use URN-style prefixes to avoid collisions: `"urn:mas:emb:"`,
-  `"urn:mas:score:"`, `"urn:mas:label:"`.
-- Include a version token if you anticipate changing the hash inputs:
-  `"urn:mas:emb:v2:"`.
-- Keep the prefix stable for the lifetime of a dataset.  Changing it
-  changes all IDs, which causes Neo4j `MERGE` to create new nodes instead
-  of updating existing ones.
-- The prefix is stored as part of the `id` field in Neo4j, so it doubles
-  as a human-readable namespace for debugging (`MATCH (n) WHERE n.id STARTS
-  WITH 'urn:mas:emb:' RETURN n`).
-
----
-
-## Deprecation: `embed_state_nodes`
-
-`embed_state_nodes` from `mas.library.kg.embeddings` is a deprecated shim.
-It accepts a batch embed function (one that takes a list of strings and
-returns a list of vectors) and wires it into `annotate_kg_nodes` internally.
+For `State` nodes, `mas.library.kg.embeddings.state_embeddings` ships helpers that do not use `annotate_kg_nodes`:
 
 ```python
-# Deprecated — raises DeprecationWarning
-from mas.library.kg.embeddings import embed_state_nodes
-enriched = embed_state_nodes(doc, embed_fn=lambda texts: [...])
-```
-
-It is exactly equivalent to:
-
-```python
-from mas.library.kg import annotate_kg_nodes
-
-def value_fn(node):
-    content = (node.get("content") or "").strip()
-    if not content:
-        return None
-    vec = vector_map.get(node.get("id") or "")
-    if vec is None:
-        return None
-    return {"vector": vec, "model": model, "dimensions": len(vec)}
-
-enriched = annotate_kg_nodes(
-    doc,
-    node_type="State",
-    edge_name="hasEmbedding",
-    value_fn=value_fn,
-    annotation_node_type="StateEmbedding",
+from mas.library.kg.embeddings.state_embeddings import (
+    attach_embeddings_to_kg,
+    default_openai_embed_fn,
 )
+
+# embed_fn: Sequence[str] -> list[list[float] | None], one vector per text
+embed_fn = default_openai_embed_fn(model="text-embedding-3-small", api_key="<your-api-key>")
+enriched = attach_embeddings_to_kg(doc, embed_fn=embed_fn, model="text-embedding-3-small")
 ```
 
-The shim will be removed in a future release.  Migrate to `annotate_kg_nodes`
-directly.  The main advantages of migrating:
+Differences from `annotate_kg_nodes`:
 
-- Full control over what fields are stored on the annotation node.
-- Support for any node type, not just `State`.
-- Support for any edge name, not just `hasEmbedding`.
-- No need to batch-produce a vector map manually; `value_fn` can call any
-  API per-node or consume a pre-built lookup.
+- Only `State` nodes with non-empty `content` are embedded (text capped at 4096 characters), in batches of `batch_size` (default 64).
+- New nodes have `node_type="VectorEmbedding"` and ids `emb-<16 hex>` derived from the state id and model. They carry `stateNodeId`, `model`, `dim`, `vector`, `computedAt`, `contentHash`, `runId`. The edge is `hasEmbedding` (State to VectorEmbedding).
+- `skip_existing=True` (default) skips states that already have a `hasEmbedding` edge.
+- `metadata["embeddings"]` records `{model, state_count, attached}`.
+- A batch whose API call fails yields no vectors for its states; the failure is logged, not raised.
+
+Use `annotate_kg_nodes` for another node type, edge name or field layout. `default_openai_embed_fn` needs the `openai` package.

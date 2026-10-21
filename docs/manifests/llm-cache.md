@@ -4,54 +4,75 @@
 -->
 # LLM cache
 
-Record and replay LLM responses via the **`llm_cache` infra middleware** —
-attach a `kind: InfraMiddleware` manifest with `--infra-ref` or
-workspace `infra_refs` / `--infra-ref`, write responses to a JSON file, then play them back without
-calling the provider.
+The **`llm_cache` infra middleware** records LLM responses to a JSON file and replays them later without calling the provider.
+Use it to make tests and tutorials reproducible, to run offline, or to avoid paying for repeated calls.
+A **trace cache** is this kind of store: a run with identical inputs reuses the stored response instead of calling the model again.
+**Infra middleware** is a step in the infra pipeline that wraps the LLM provider.
 
-**Reference (parameters, pipeline rules, implementation):**
-[llm-cache.md](../references/llm-cache.md)
+Attach a `kind: InfraMiddleware` manifest with `--infra-ref` or with workspace `infra_refs`.
+This manifest replays a recorded file and fails on any miss:
 
-**Prerequisites:** Tutorial 0 (`task install`, `.venv` on `PATH`). Commands
-below assume the **repository root** as the working directory.
+```yaml
+apiVersion: infra/v1
+kind: InfraMiddleware
+metadata:
+  name: llm-cache-replay
+spec:
+  middleware: llm_cache
+  applies_to: [LLM_CALL]
+  params:
+    allow_read: true
+    allow_write: false
+    raise_on_miss: true
+    cache_path: cache/demo.llm-cache.json
+```
 
----
+Reference (parameters, pipeline rules, implementation): [llm-cache.md](../references/llm-cache.md).
+Prerequisite: Tutorial 0 (`task install`, `.venv` on `PATH`).
+The commands below assume the repository root as the working directory.
+
+## Contents
+
+- [Overview](#overview)
+- [Sample manifests](#sample-manifests)
+- [Write manifest (record)](#write-manifest-record)
+- [Replay manifest (playback)](#replay-manifest-playback)
+- [Pipeline order](#pipeline-order)
+- [Mini walkthrough](#mini-walkthrough-tutorial-1-agent-library-samples-infra)
+- [Live provider (OpenAI)](#live-provider-openai)
+- [Tool-using runs](#tool-using-runs)
+- [Experiments and CI fixtures](#experiments-and-ci-fixtures)
 
 ## Overview
 
-The **`llm_cache` middleware caches every `LLM_CALL`** the runtime makes to the
-provider — initial answers, **tool-call turns** (`next_step: TOOL_CALL` /
-`PARALLEL_TOOL_CALLS`), and **post-tool completions**. Each call is one cache
-entry keyed by the assembled conversation preview at that point in the run.
+The `llm_cache` middleware caches every `LLM_CALL` that the runtime makes to the provider.
+This covers initial answers, **tool-call turns** (`next_step: TOOL_CALL` or `PARALLEL_TOOL_CALLS`), and **post-tool completions**.
+Each call is one cache entry.
+The key is the assembled conversation preview at that point in the run.
 
-Caching is configured in a **separate infra manifest**, not on the agent:
+You configure caching in a **separate infra manifest**, not on the agent.
+Three parts work together:
 
-1. **Provider** (`standard:openai`, `standard:openai`, …) — where the model runs.
-2. **Cache middleware** (`middleware: llm_cache`) — read/write/replay policy and `cache_path`.
-3. **Pipeline** — middleware wraps the provider; see [Pipeline order](#pipeline-order).
+1. **Provider** (`standard:openai`, `standard:ollama`, and others): where the model runs.
+2. **Cache middleware** (`middleware: llm_cache`): the read, write, and replay policy plus `cache_path`.
+3. **Pipeline**: the middleware wraps the provider. See [Pipeline order](#pipeline-order).
 
-MAS also has a **built-in engine disk cache** (policy from merged
-`RuntimeEngine` manifests — `runtime_refs` / `--runtime-ref`, or CLI
-`--cache-read` / `--cache-write` on `mas-ctl chat`). When an infra pipeline
-includes `llm_cache`, the built-in cache is off for that session.
+MAS also has a **built-in engine disk cache**.
+Merged `RuntimeEngine` manifests (`runtime_refs` or `--runtime-ref`) set its policy, and so do the `--cache-read` and `--cache-write` flags on `mas-ctl chat`.
+When the infra pipeline has any middleware step (`llm_cache`, `fault_inject`, and others), the built-in cache is off for that session.
 See [references/llm-cache.md](../references/llm-cache.md#two-cache-mechanisms).
 
-### End-to-end workflow (record → fixture → replay)
+### End-to-end workflow (record, fixture, replay)
 
-1. **Pick or copy infra manifests** from `library-samples/infra/` or bundled
-   `standard:llm-cache-*` refs (write + replay pair, shared `cache_path`).
-2. **Attach provider + write manifest** on a chat or experiment run (`--infra-ref`).
-3. **Run the scenario** (single-turn or multi-step with tools). Every `LLM_CALL`
-   appends to the JSON file at `cache_path`.
-4. **Check in the cache file** (e.g. `library-samples/infra/cache/demo.llm-cache.json`).
-5. **Replay** with the replay manifest — no provider network calls; with
-   `raise_on_miss: true`, any drift from the recorded trajectory fails fast.
+1. Pick or copy infra manifests from `library-samples/infra/`, or use the bundled `standard:llm-cache-*` refs. They come as a write and replay pair that shares `cache_path`.
+2. Attach the provider and the write manifest on a chat or experiment run (`--infra-ref`).
+3. Run the scenario, single-turn or multi-step with tools. Every `LLM_CALL` appends to the JSON file at `cache_path`.
+4. Check in the cache file, for example `library-samples/infra/cache/demo.llm-cache.json`.
+5. Replay with the replay manifest. No provider network calls happen. With `raise_on_miss: true`, any drift from the recorded trajectory fails fast.
 
-Optional: set `include_preview: true` on the **write** manifest so each entry
-stores the conversation preview (including the user query) for manual inspection
-and pruning — see [Known limitations](../references/llm-cache.md#known-limitations).
-
----
+Optionally set `include_preview: true` on the **write** manifest.
+Each entry then stores the conversation preview, including the user query, for manual inspection and pruning.
+See [Known limitations](../references/llm-cache.md#known-limitations).
 
 ## Sample manifests
 
@@ -59,18 +80,15 @@ and pruning — see [Known limitations](../references/llm-cache.md#known-limitat
 | --- | --- | --- |
 | Write | `library-samples/infra/llm-cache-write.yaml` | `cache/demo.llm-cache.json` (resolved under that infra dir) |
 | Replay | `library-samples/infra/llm-cache-replay.yaml` | Strict replay; same `cache_path` |
-| Read+write | `standard:llm-cache` | XDG default; both read and write |
+| Read+write | `standard:llm-cache` | `cache_path: null` → `$XDG_CACHE_HOME/mas/llm_cache.json`; both read and write |
 | Provider + cache | `standard:llm-proxy-cached` | `InfraBundle` (cache + OpenAI) |
 
-Write/replay YAML lives in [library-samples/infra/](../../library-samples/README.md).
-Bundled `standard:llm-cache` and `standard:llm-proxy-cached` live under
-`library-standard/src/mas/library/standard/libs/standard/`.
-
----
+The write and replay YAML lives in [library-samples/infra/](https://github.com/outshift-open/mas-lab/blob/main/library-samples/README.md).
+The bundled `standard:llm-cache` and `standard:llm-proxy-cached` live under `library-standard/src/mas/library/standard/libs/standard/`.
 
 ## Write manifest (record)
 
-`library-samples/infra/llm-cache-write.yaml`:
+This is `library-samples/infra/llm-cache-write.yaml`:
 
 ```yaml
 apiVersion: infra/v1
@@ -90,14 +108,12 @@ spec:
     cache_path: cache/demo.llm-cache.json
 ```
 
-`allow_read: false` — always call the provider on a miss; still write responses.
+`allow_read: false` means every call goes to the provider, and the middleware still writes the responses.
 Use the **same** `cache_path` in the replay manifest.
-
----
 
 ## Replay manifest (playback)
 
-`library-samples/infra/llm-cache-replay.yaml`:
+This is `library-samples/infra/llm-cache-replay.yaml`:
 
 ```yaml
 apiVersion: infra/v1
@@ -117,25 +133,37 @@ spec:
     cache_path: cache/demo.llm-cache.json
 ```
 
-On a hit the provider is not called. On a miss, `raise_on_miss: true` errors
-instead of falling through to a live call.
-
+On a hit, the middleware does not call the provider.
+On a miss, `raise_on_miss: true` raises an error instead of falling through to a live call.
 Parameter reference: [references/llm-cache.md](../references/llm-cache.md#parameters-specparams).
 
----
+### Other parameters
+
+The middleware also accepts these parameters, besides `allow_read`, `allow_write`, `raise_on_miss`, `include_preview`, and `cache_path`:
+
+| Param | Default | Meaning |
+|-------|---------|---------|
+| `path` | none | Alias for `cache_path` |
+| `enabled` | none | Legacy switch: `false` sets both `allow_read` and `allow_write` to `false` unless you give them |
+| `write_mode` | `append` | `append` keeps existing keys and adds misses. `replace` empties `cache_path` once at process start, so a new recording is not mixed with an old one |
+| `replay_delay_min_s` / `replay_delay_max_s` | `0` / `0` | On a hit, sleep a random time in this range (seconds) to mimic provider latency in demos |
+| `miss_log_path` | none | On a `raise_on_miss` miss, append `{key, preview}` as one JSON line to this file, to diff what changed since recording |
+
+Relative `cache_path`, `path`, and `miss_log_path` values resolve against the directory of the infra YAML file, not the working directory.
 
 ## Pipeline order
 
-Only **`InfraMiddleware`** refs add pipeline steps. **Provider refs do not** —
-they only supply `api_base` / `model_access`.
+Only `InfraMiddleware` refs add pipeline steps.
+Provider refs do not.
+They supply only `api_base` and `model_access`.
 
-Refs merge: workspace `infra_refs` → user default → CLI `--infra-ref` (not from agent/MAS YAML)
-(left to right). Pipeline steps append in that order; **first step = outermost**
-(cache runs before the provider).
+Refs merge left to right: workspace `infra_refs`, then the user default, then CLI `--infra-ref`.
+Agent and MAS YAML cannot add refs.
+Pipeline steps append in that order, and the **first step is the outermost**: the cache runs before the provider.
 
-### One cache + one provider
+### One cache and one provider
 
-Either CLI order works — only the middleware ref adds a pipeline step:
+Either CLI order works, because only the middleware ref adds a pipeline step:
 
 ```bash
 --infra-ref standard:openai --infra-ref library-samples/infra/llm-cache-write.yaml
@@ -143,28 +171,23 @@ Either CLI order works — only the middleware ref adds a pipeline step:
 --infra-ref library-samples/infra/llm-cache-write.yaml --infra-ref standard:openai
 ```
 
-### Provider plus cache middleware
-
-`--infra-ref standard:openai --infra-ref library-samples/infra/llm-cache-write.yaml`
-merges to pipeline `[llm_cache]` wrapping the OpenAI provider.
+Both merge to the pipeline `[llm_cache]` wrapping the OpenAI provider.
 
 ### Multiple middleware
 
-Order matters — first ref is outermost:
+Order matters.
+The first ref is outermost:
 
 ```bash
 --infra-ref standard:llm-cache --infra-ref standard:chaos-lite
 ```
 
-Formal rules: [references/llm-cache.md — Pipeline model](../references/llm-cache.md#pipeline-model).
-
----
+Formal rules: [references/llm-cache.md: Pipeline model](../references/llm-cache.md#pipeline-model).
 
 ## Mini walkthrough (Tutorial 1 agent + library-samples infra)
 
-This reuses the [Tutorial 1](../tutorials/01-building-an-agent/README.md) agent
-and overlays — no extra files under the tutorial tree. Cache manifests come from
-`library-samples/infra/`.
+This walkthrough reuses the [Tutorial 1](../tutorials/01-building-an-agent/README.md) agent and overlays, with no extra files under the tutorial tree.
+The cache manifests come from `library-samples/infra/`.
 
 ```bash
 export PATH="$(git rev-parse --show-toplevel)/.venv/bin:$PATH"
@@ -183,7 +206,7 @@ mas-ctl chat "$AGENT" \
   --single-turn
 ```
 
-**Replay** (same query; swap middleware ref)
+**Replay** (same query; swap the middleware ref)
 
 ```bash
 mas-ctl chat "$AGENT" \
@@ -193,7 +216,7 @@ mas-ctl chat "$AGENT" \
   --single-turn
 ```
 
-**Prove `raise_on_miss`** (different query → error)
+**Prove `raise_on_miss`** (a different query raises an error)
 
 ```bash
 mas-ctl chat "$AGENT" \
@@ -203,51 +226,47 @@ mas-ctl chat "$AGENT" \
   --single-turn
 ```
 
----
-
 ## Live provider (OpenAI)
 
-Requires `OPENAI_API_KEY`. Bundled refs share `$XDG_CACHE_HOME/mas/llm_cache.json`.
+This needs `OPENAI_API_KEY`.
+The bundled refs `standard:llm-cache` and `standard:llm-proxy-cached` leave `cache_path` unset.
+The runtime fills it with the user cache file `$XDG_CACHE_HOME/mas/llm_cache.json` (default `~/.cache/mas/llm_cache.json`).
+These refs read and write.
+The first run calls the provider, a repeat of the same conversation comes from the cache, and a miss falls through to the provider.
 
 ```bash
 mas-ctl chat "$AGENT" \
   -q "Say hello in one sentence." \
   --infra-ref standard:openai \
-  --infra-ref library-samples/infra/llm-cache-write.yaml \
+  --infra-ref standard:llm-cache \
   --single-turn
 
+# Equivalent: one InfraBundle with cache + OpenAI
 mas-ctl chat "$AGENT" \
   -q "Say hello in one sentence." \
-  --infra-ref standard:openai \
-  --infra-ref library-samples/infra/llm-cache-replay.yaml \
+  --infra-ref standard:llm-proxy-cached \
   --single-turn
 ```
 
-Or `--infra-ref standard:llm-proxy-cached` for read-through caching.
-
----
-
 ## Tool-using runs
 
-Every **`LLM_CALL` is cached**, including responses that schedule tools:
+The middleware caches every `LLM_CALL`, including responses that schedule tools:
 
 | Turn | Typical `next_step` | Cached? |
 | --- | --- | --- |
 | Model requests a tool | `TOOL_CALL` or `PARALLEL_TOOL_CALLS` | Yes |
 | Model answers after tool results | `STOP` | Yes |
 
-Each turn is a **separate cache entry** (the preview includes prior tool
-results). On replay, the runtime walks the same LLM-call sequence; with
-**deterministic tools** (same tool output for the same inputs), the trajectory
-matches the recording and you get **cache hits on every `LLM_CALL` until the
-run completes** — no live provider calls.
+Each turn is a **separate cache entry**, because the preview includes prior tool results.
+On replay, the runtime walks the same LLM-call sequence.
+With **deterministic tools** (same tool output for the same inputs), the trajectory matches the recording.
+Every `LLM_CALL` then hits the cache until the run completes, with no live provider calls.
 
-**Non-deterministic tool-call IDs** change the preview
-text between runs, so strict replay (`raise_on_miss: true`) may miss on
-post-tool turns. Prefer a **live recording** for fixture-grade replay, and
-deterministic tools for CI.
+**Non-deterministic tool-call IDs** change the preview text between runs.
+Strict replay (`raise_on_miss: true`) may then miss on post-tool turns.
+Prefer a **live recording** for fixture-grade replay, and deterministic tools for CI.
 
-Uses Tutorial 1's `overlays/tools.yaml` (same agent as above):
+This example uses Tutorial 1's `overlays/tools.yaml` with the same agent:
 
 ```bash
 TOOLS=docs/tutorials/01-building-an-agent/overlays/tools.yaml
@@ -269,39 +288,45 @@ mas-ctl chat "$AGENT" \
   --single-turn
 ```
 
----
-
 ## Experiments and CI fixtures
 
-Treat the cache file as a **run fixture**: record once, commit `cache_path`, replay
-in CI with `raise_on_miss: true` so tests never hit a live LLM.
+Treat the cache file as a **run fixture**.
+Record once, commit the file at `cache_path`, and replay it in CI with `raise_on_miss: true`, so tests never hit a live LLM.
+
+`mas-lab benchmark run` has no `--infra-ref` flag.
+Benchmark runs merge infra like `mas-ctl`: workspace `infra_refs`, `MAS_INFRA_REFS`, and user `default_infra`.
+`--infra NAME` adds the experiment-local file `<experiment_dir>/infra/NAME.yaml`.
+Copy the sample manifests there, and their relative `cache_path` resolves to `<experiment_dir>/infra/cache/`.
+The provider (for example `standard:openai`) comes from the workspace `infra_refs` or your user `default_infra`.
+
+```bash
+cp library-samples/infra/llm-cache-write.yaml  path/to/experiment/infra/
+cp library-samples/infra/llm-cache-replay.yaml path/to/experiment/infra/
+```
 
 **Record:**
 
 ```bash
-mas-lab benchmark run experiment.yaml \
-  --infra-ref standard:openai \
-  --infra-ref library-samples/infra/llm-cache-write.yaml
+mas-lab benchmark run path/to/experiment/experiment.yaml --infra llm-cache-write
 ```
 
 **Replay:**
 
 ```bash
-mas-lab benchmark run experiment.yaml \
-  --infra-ref library-samples/infra/llm-cache-replay.yaml
+mas-lab benchmark run path/to/experiment/experiment.yaml --infra llm-cache-replay
 ```
 
-There is currently **no API to stop writing mid-experiment** or to prune entries
-in-process — see [Known limitations](../references/llm-cache.md#known-limitations).
+### Not used yet
+
+No API stops writing mid-experiment or prunes entries in-process.
+See [Known limitations](../references/llm-cache.md#known-limitations).
 
 See [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
 
----
-
 ## See also
 
-- [references/llm-cache.md](../references/llm-cache.md) — exhaustive reference
-- [infra.md](infra.md) — infra kinds and bundles
-- [runtime-engine.md](runtime-engine.md) — built-in cache policy (`spec.cache` on RuntimeEngine)
-- [Tutorial 1](../tutorials/01-building-an-agent/README.md) — agent and overlays used above
-- [library-samples/README.md](../../library-samples/README.md) — sample infra manifests
+- [references/llm-cache.md](../references/llm-cache.md): exhaustive reference
+- [infra.md](infra.md): infra kinds and bundles
+- [runtime-engine.md](runtime-engine.md): built-in cache policy (`spec.cache` on RuntimeEngine)
+- [Tutorial 1](../tutorials/01-building-an-agent/README.md): agent and overlays used above
+- [library-samples/README.md](https://github.com/outshift-open/mas-lab/blob/main/library-samples/README.md): sample infra manifests

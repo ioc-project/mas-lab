@@ -4,11 +4,21 @@
 -->
 # mas-library-skills User Guide
 
-`mas-library-skills` implements the [Agent Skills specification](https://agentskills.io)
-for MAS Lab.  It gives agents access to specialized, on-demand instructions
-without loading everything into the context window upfront.
+`mas-library-skills` implements the [Agent Skills specification](https://agentskills.io) for MAS Lab. Agents load specialised instructions on demand instead of carrying them all in the context window. This guide is for authors who write skills and attach them to agents.
 
-## Core concept — progressive disclosure
+Smallest example: list a skill in the agent manifest and chat.
+
+```yaml
+spec:
+  skills:
+    - answer-formatting      # ./skills/answer-formatting/SKILL.md
+```
+
+```bash
+mas-ctl chat agent.yaml -q "What is the speed of light?"
+```
+
+## Progressive disclosure
 
 | Tier | What the model sees | When | Token cost |
 | ------ | --------------------- | ------ | ------------ |
@@ -16,12 +26,7 @@ without loading everything into the context window upfront.
 | 2 — Instructions | Full `SKILL.md` body | When model calls `activate_skill(name)` | <5000 (recommended) |
 | 3 — Resources | Scripts, references, assets | When model calls `read_skill_file(skill, path)` | Varies |
 
-The model sees the catalog from the start: each skill's name and when-to-use
-text from frontmatter. That description should tell the model when the skill
-applies and to call `activate_skill(name)` to load the body. The body is how
-to apply the skill and is not in the catalog.
-
----
+The catalog holds each skill's name and when-to-use text from the frontmatter. The description tells the model when the skill applies and to call `activate_skill(name)`. The body says how to apply the skill and is not in the catalog.
 
 ## Step 1 — Write a SKILL.md
 
@@ -57,13 +62,8 @@ tags: [formatting, qa]
 
 Required front matter fields:
 
-- `name` — must match the directory name (warning if not, still loaded)
-- `description` — when to use the skill, plus a cue to `activate_skill(name)`
-  and follow the loaded body. The catalog lists this text so the model can
-  decide to load the skill. The body is *how* to apply it, shown only after
-  `activate_skill`.
-
----
+- `name`: must match the directory name (a mismatch logs a warning; the skill still loads).
+- `description`: when to use the skill, plus a cue to call `activate_skill(name)` and follow the loaded body.
 
 ## Step 2 — Reference the skill in the agent manifest
 
@@ -82,19 +82,13 @@ The runtime searches for `SKILL.md` in:
 Every non-namespaced skill listed in `spec.skills` must resolve to an existing
 `SKILL.md` through these search paths. A missing skill fails bootstrap with an
 error naming the missing reference; it is never silently omitted from the
-system prompt. A present file with invalid front matter is still handled by
-the discovery parser and reported using its existing validation warnings.
-
----
+system prompt. A present file with invalid front matter is reported through the discovery parser's validation warnings.
 
 ## Step 3 — Skill tools (implicit, or explicit in the manifest)
 
-Nothing from the skills system is shown to the LLM by default.
+The model sees nothing from the skills system by default.
 
-Listing at least one skill **implicitly** adds `activate_skill` (plus
-`list_skill_files` / `read_skill_file`) as a **system tool**, enables the
-LLM tool loop so those tools are actually advertised, and injects
-the catalog (name + frontmatter description) into the system prompt.
+Listing at least one skill adds `activate_skill`, `list_skill_files` and `read_skill_file` as system tools, enables the LLM tool loop so the tools are advertised, and injects the catalog (name + frontmatter description) into the system prompt.
 
 ```yaml
 spec:
@@ -105,7 +99,7 @@ spec:
 If a listed skill has a `scripts/` directory with at least one file,
 `run_skill_script` is added the same way.
 
-**Explicit** opt-in (same tools, written in the manifest):
+To declare the same tools explicitly:
 
 ```yaml
 spec:
@@ -116,18 +110,13 @@ spec:
       name: run_skill_script   # even if no skill ships scripts yet
 ```
 
-YAML refs (`skills:tools/skill-access.tool.yaml`) still work as the older
-explicit form.
-
-Or use the convenience overlay:
+The older explicit form, a YAML ref (`skills:tools/skill-access.tool.yaml`), still works. You can also use the overlay:
 
 ```bash
 mas-ctl chat agent.yaml \
   -o skills:overlays/skills.yaml \
   -q "What is the speed of light?"
 ```
-
----
 
 ## What the model receives
 
@@ -161,23 +150,18 @@ Skill directory: /path/to/skills/answer-formatting
 </skill_content>
 ```
 
----
-
 ## Available tools
 
 ### `activate_skill(name)`
 
-Load the full `SKILL.md` body for a skill. Returns the Markdown body (front
-matter stripped) wrapped in `<skill_content>` tags, plus a listing of bundled
-resource files.
+Loads the full `SKILL.md` body. Returns the Markdown body (front matter stripped) wrapped in `<skill_content>` tags, plus a listing of bundled resource files.
 
 ```json
 {"name": "answer-formatting"}
 → {"content": "<skill_content name=\"answer-formatting\">...", "skill": "...", "base_dir": "..."}
 ```
 
-The `unload` parameter is **off by default** and is not advertised. It is not
-in the Agent Skills spec. Opt in on the skill engine:
+The `unload` parameter is off by default, is not advertised and is not part of the Agent Skills spec. Opt in on the skill engine:
 
 ```yaml
 spec:
@@ -206,15 +190,12 @@ List all files in a skill's directory (except `SKILL.md` itself).
 
 ### `read_skill_file(skill, path)`
 
-Read a specific file from the skill's directory.  Path is relative to the skill
-directory.  Access is sandboxed — paths that escape the directory are rejected.
+Reads one file from the skill's directory. The path is relative to that directory; paths that escape it are rejected.
 
 ```json
 {"skill": "answer-formatting", "path": "references/examples.md"}
 → {"content": "# Examples\n...", "skill": "...", "path": "..."}
 ```
-
----
 
 ## Shell tool (optional — trusted environments only)
 
@@ -238,8 +219,7 @@ mas-ctl chat agent.yaml \
   -q "Analyse this data"
 ```
 
-⚠️ Only enable in trusted environments where skill scripts have been reviewed.
-The subprocess runs with the agent process's OS-level permissions.
+Warning: enable this only in trusted environments where skill scripts have been reviewed. The subprocess runs with the agent process's operating-system permissions.
 
 To grant it to every skill-declaring agent in a deployment without hand-listing
 the tool ref on each one, opt in per-deployment instead:
@@ -251,8 +231,6 @@ spec:
         auto_inject: true
 ```
 
----
-
 ## Overlays reference
 
 | Overlay | What it adds |
@@ -260,9 +238,6 @@ spec:
 | `skills:overlays/skills.yaml` | Explicit `{kind: system, name: activate_skill}` (same tools are implicit if `spec.skills` is listed) |
 | `skills:overlays/skills-shell.yaml` | Explicit `activate_skill` + `run_skill_script` |
 
----
-
 ## Quickstart example
 
-See `examples/quickstart/` for a self-contained runnable example that demonstrates
-the before/after effect of adding a skill overlay.
+`examples/quickstart/` is a runnable example that shows the before and after effect of adding a skill overlay.

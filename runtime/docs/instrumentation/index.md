@@ -6,28 +6,18 @@
 
 This folder documents instrumentation utilities used to observe MAS traffic.
 
-## OSS
+## What ships
 
-Shipped observability in v2 uses native event recording (`events.jsonl`) and optional
-OpenTelemetry export via manifest `observability` config — see
-[architecture-instrumentation.md](../architecture-instrumentation.md).
+Observability in this release uses native event recording (`events.jsonl`) and optional
+OpenTelemetry export via manifest `observability` config; see
+[architecture-instrumentation.md](../architecture-instrumentation.md) and
+[trajectory-schema.md](../trajectory-schema.md).
 
-The following MITM-style proxy docs are **reference only**; running them is **not**
-part of the open-source release (see org-level `outshift-open/ROADMAP.md` non-goals).
+## Not included
 
-## Not in OSS (do not expect these paths in the repo)
-
-| Topic | Status |
-| --- | --- |
-| agent-remote MITM | Internal / removed from OSS tree |
-| tool-server MITM | Internal / removed from OSS tree |
-| agent-remote protocol | Not shipped in OSS |
-| tool-server protocol | Not shipped in OSS |
-| observe-sdk plugin aliases | Internal only |
-
-For cognitive fault injection (MITM plugin), see internal `mas-lab-internal` — not in this repository.
+Proxy-style (man-in-the-middle) instrumentation of agent and tool-server traffic, and
+cognitive fault-injection plugins, are not part of this release.
 
 ## Related
 
-- [Plugins and agent composition](../plugins/agent_plugins.md) (if present)
-- [mealy-envelope.md](../mealy-envelope.md) — native span emission on envelope symbols
+- [mealy-envelope.md](../mealy-envelope.md): native span emission on envelope symbols

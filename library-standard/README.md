@@ -4,7 +4,14 @@
 -->
 # mas-library-standard
 
-Reusable MAS artifacts: plugins, tools, skills, prompts, flavours, and overlays.
+Reusable multi-agent system (MAS) artifacts: plugins, tools, skills, prompts, flavours and overlays.
+
+Use it when you want ready-made governance, context, observability or design-pattern plugins for an agent without writing them yourself.
+
+```bash
+uv pip install -e library-standard
+mas-ctl chat agent.yaml -o pkg://mas.library.standard/overlays/observability-native.yaml
+```
 
 ## Documentation
 

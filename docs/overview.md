@@ -4,62 +4,111 @@
 -->
 # Overview
 
-MAS-Lab is for **developers**, **enterprises**, and **researchers** who need
-multi-agent systems that remain understandable as they grow. This page expands on
-[the home introduction](index.md) for each audience.
+This page explains the problem MAS Lab addresses, how it is built and who it is for.
+For a short introduction, see the [home page](index.md).
 
-[Back to home](index.md)
+## The problem
 
----
+Agent logic, orchestration, monitoring, and control are usually mixed together in
+prompts and ad hoc code. The system is then hard to test, to reproduce, and to
+predict outside the demo path. What a team learns from experiments says little
+about production, where budgets are tighter and policies are stricter.
 
-## For developers
+??? example "A trip planner: what goes wrong between demo and production"
 
-Build modular multi-agent applications using explicit specifications instead of
-hidden prompt and code glue.
+    A coordinator receives a request and splits it into subtasks. It delegates
+    them to agents that fetch schedules, compute routes, and estimate cost. On a
+    few queries the demo works.
 
-Declare agents, tools, workflows, and contracts once, then iterate safely across
-models, tools, and coordination patterns. The runtime enforces contracts at
-important boundaries — tool calls, delegations, model requests — so changes do
-not propagate unpredictably through the whole stack.
+    To prepare for production, the team adds memory for user preferences, a
+    tighter reasoning pattern, and a budget cap. Each change is small. Together
+    they break things: the same query returns different results, handoffs become
+    inconsistent, and latency and cost drift. Undoing a change does not restore the
+    old behaviour.
 
-Use the [design-space labs](paper/index.md) to compare coordination patterns and
-topologies before production. Start with [Tutorial 0](tutorials/00-environment-setup/README.md).
+    There is nowhere to start debugging, because the system has no single
+    definition to inspect.
 
----
+Multi-agent workflows need **explicit intent, controlled execution, and evidence
+that carries from development to production**.
 
-## For enterprises
+## Three building blocks
 
-Deploy agentic systems with governance, traceability, and operational control
-built in.
+MAS Lab is not another agent framework. It is a layer around your agents.
 
-MAS-Lab separates business intent, runtime execution, observability, and policy
-enforcement. Governance policies — budgets, approvals, delegation rules, tool
-access — are expressed as overlays rather than buried in application code.
+| Block | What it is | The question it answers |
+| --- | --- | --- |
+| **Specification** | A versioned definition of agents, roles, tools, delegation, and policies | *What is this workflow, and which version are we testing?* |
+| **Runtime** | Execution that enforces the definition and records what happens | *How is the definition enforced while the system runs, including failures?* |
+| **Labs** | Repeatable experiments that change one factor at a time | *What changes when we vary one design choice or policy?* |
 
-See the [user guide](user-guide.md) for install, configuration, and day-to-day
-workflows.
+Keeping the three apart stops a small change from spreading in unpredictable ways.
+See the [architecture](architecture.md) and the [labs](labs.md).
 
----
+### Why the specification comes first
 
-## For researchers
+- It gives the workflow an **identity** you can version, compare, and cite.
+- It makes monitoring meaningful: traces refer to named roles, tools, and
+  delegation paths, not to an anonymous prompt.
+- It makes analysis possible: an experiment needs a declared baseline.
 
-Run controlled, reproducible experiments on multi-agent systems.
+In practice the specification is a set of YAML files, called **manifests**. An
+[agent manifest](manifests/agent.md) describes one agent. A
+[MAS manifest](manifests/mas.md) describes a team. An
+[overlay](manifests/overlay.md) is a small file that changes either one without
+copying it. You can infer a specification from an existing system to get started.
+The goal is still an explicit one, written first.
 
-Experiments tie to an explicit specification, so observed differences are more
-likely to reflect the variable you changed — not hidden stack drift. Multi-run
-campaigns, overlays, and integrated observability support rigorous comparison of
-agent designs, coordination patterns, and governance mechanisms.
+## Silent failures
 
-Reproduce the article's Section 5 evaluations via [paper labs](paper/index.md).
+Some failures raise no error: a delegation to the wrong agent that still returns an
+answer, stale memory that sounds plausible, coordination that drifts only under
+load. You cannot rule them out when you write the specification, and the runtime
+does not flag them.
 
----
+To diagnose one, compare the *intended* behaviour (the specification) with the
+*actual* behaviour (the trace). MAS Lab keeps both under one identity. A failure
+then points to the exact workflow version, policy, and interaction that caused it.
+The fix goes back into the specification, the policies, or the experiments.
 
-## The problem in brief
+## One specification across the lifecycle
 
-Prototype multi-agent demos are easy; production-grade trust is not. When logic,
-orchestration, and control are interwoven, teams struggle to reproduce behavior,
-attribute failures, or evolve systems safely.
+Teams often rebuild the workflow between development, test, and production. A test
+on a toy setup then says little about the real deployment.
 
-MAS-Lab's response is a **specification-driven foundation**: intent, execution,
-observability, experimentation, and governance share one model — from the first
-lab run through deployment. See [the home page](index.md) for a short introduction.
+MAS Lab uses one specification throughout. Developers edit it. Labs benchmark
+variants of it. Operations deploy and monitor it. A failed lab run or a drifted
+trace points back to the definition reviewers saw.
+
+## Who it is for
+
+- **Developers** build modular agent apps from specs. Declare agents, tools, and
+  workflows once, then try other models and coordination patterns. You can diff,
+  branch, and benchmark a specification. First step:
+  [Tutorial 0](tutorials/00-environment-setup/README.md).
+- **Enterprises** add governance, traceability, and budgets as overlays. The
+  specification states which agents exist, what they can access, and which policies
+  apply. The runtime enforces it and writes an audit trail. First step:
+  [Tutorial 14](tutorials/14-governance-hitl/README.md) and the
+  [user guide](user-guide.md).
+- **Researchers** run controlled multi-run experiments. The specification names the
+  variable you change, and a lab holds everything else fixed. Reproduce the article
+  with the [paper labs](paper/index.md).
+
+## How it fits the ecosystem
+
+Teams already use agent frameworks, protocols such as MCP and A2A, and monitoring
+or evaluation platforms. These tools help, but they are usually assembled around
+workflows that have **no shared definition**.
+
+MAS Lab does not replace them. It gives them one versioned specification to attach
+to, whatever the agents or framework. Monitoring platforms provide traces.
+Governance layers enforce policy. Evaluation tools produce comparisons.
+
+Remote tools (MCP) and remote agents (A2A) are deployment details, not part of the
+agent's logic. You swap in an adapter and the agent stays the same. See
+[Tutorial 4](tutorials/04-mcp-tools/README.md) and
+[Tutorial 5](tutorials/05-a2a-agents/README.md). You do not need a clean slate:
+you can import or infer an existing system.
+
+Next: [Architecture](architecture.md) or [Tutorials](tutorials/index.md).

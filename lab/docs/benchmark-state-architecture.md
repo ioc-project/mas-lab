@@ -4,10 +4,11 @@
 -->
 # Benchmark run state and locking
 
-How `mas-lab benchmark run` tracks progress, avoids duplicate work, and stays safe
-under concurrent invocations.
+This page explains how `mas-lab benchmark run` tracks progress, skips finished work, and stays safe under concurrent invocations. Read it when a re-run does not behave as you expect.
 
-**Prerequisite:** [benchmark.md](benchmark.md) (execution vs pipeline phases).
+Prerequisite: [benchmark.md](benchmark.md) (execution and pipeline phases).
+
+Smallest working command: re-run `mas-lab benchmark run experiment.yaml --progress`. Finished work is skipped.
 
 ## Phases
 
@@ -26,29 +27,40 @@ Re-run the same command to resume or refresh outputs:
 mas-lab benchmark run experiment.yaml --progress
 ```
 
-Force re-execution: `--force` (runs) or `benchmark pipeline run ... --force STEP`.
+Force re-execution with one of these:
+
+- `--force` re-executes runs.
+- `benchmark pipeline run ... --force STEP` re-executes one step.
+- `benchmark step restart BENCHMARK_ID STEP_ID` restarts a step of a finished benchmark.
 
 ## Trace cache
 
-Completed runs store traces under the configured cache root (default
-`$XDG_CACHE_HOME/mas/traces/` when `$XDG_CONFIG_HOME/mas/config.yaml` is present). Run directories
-may contain `.run_ref` symlinks into the cache instead of duplicating JSONL.
+The **trace cache** stores the `events.jsonl` traces of completed runs. A later run with the same fingerprint reuses them.
+
+The cache root resolves in this order:
+
+1. `--trace-cache`
+2. The experiment YAML
+3. `MAS_TRACE_CACHE`
+4. `$XDG_CACHE_HOME/mas/traces/`
+
+`mas-lab config` prints the effective path. Run directories can hold `.run_ref` files that point into the cache instead of copying the JSONL.
 
 Configure: [docs/user-config.md](../../docs/user-config.md).
 
 ## Advisory lock
 
-Each experiment output directory uses a PID-based lock (`.benchmark.lock`) so two
-`benchmark run` processes do not corrupt the same tree. Stale locks (dead PID) can
-be broken with `--force`.
+Each experiment output directory holds a PID-based lock (`.benchmark.lock`). The lock stops two `benchmark run` processes from corrupting the same tree.
+
+Break a stale lock (dead PID) with `--force-lock`. Do not use `--force`: it re-executes the runs.
 
 Implementation: [`lab/components/bench/src/mas/lab/benchmark/lock.py`](../components/bench/src/mas/lab/benchmark/lock.py).
 
 ## Inspect state
 
 ```bash
-mas-lab benchmark show last
-mas-lab benchmark show last tree
+mas-lab benchmark show last                     # details of the latest benchmark
+mas-lab benchmark show labs/my.lab -r -d run    # tree of a lab or experiment, per-run status
 mas-lab benchmark list --limit 10
 ```
 

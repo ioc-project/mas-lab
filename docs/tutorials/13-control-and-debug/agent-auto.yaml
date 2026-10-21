@@ -10,7 +10,7 @@ metadata:
 spec:
   models:
     - model: gpt-4o-mini
-  description: "Same tools as tutorial 8, with automatic checkpoints and error backtrack."
+  description: "Flaky calc tool, with automatic checkpoints and error backtrack."
   context:
     role: |
       You are a research assistant. Use calc for arithmetic.

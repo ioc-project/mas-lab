@@ -38,6 +38,7 @@ properties:
       - SecretsProvider
       - Infrastructure
       - RuntimeEngine
+      - ServiceBundle
 
   metadata:
     type: object
@@ -343,6 +344,46 @@ properties:
                     items:
                       type: string
                       enum: [read, write, query]
+
+      # ── ServiceBundle ───────────────────────────────────────────────────
+      services:
+        type: object
+        description: >
+          Named processes or compose stacks started by mas-lab
+          ``service_start`` / ``service_stop`` (not LLM ``--infra-ref``).
+        additionalProperties:
+          type: object
+          additionalProperties: true
+          properties:
+            description:
+              type: string
+            backend:
+              type: string
+              enum: [process, docker-compose, catalogue]
+            command:
+              oneOf:
+                - type: array
+                  items:
+                    type: string
+                - type: string
+            compose_file:
+              type: string
+            auto_start:
+              type: boolean
+            env:
+              type: object
+              additionalProperties: true
+            health_check:
+              type: object
+              additionalProperties: true
+              properties:
+                url:
+                  type: string
+                timeout:
+                  type: integer
+            triggers:
+              type: object
+              additionalProperties: true
 
       # ── SecretsProvider ─────────────────────────────────────────────────
       provider:

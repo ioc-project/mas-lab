@@ -1,948 +1,535 @@
-# MAS Knowledge Graph Ontology Reference
+# MAS knowledge graph ontology
 
-**Document:** `mas-lab-internal/library-kg/docs/ontology.md`
-**Scope:** Canonical definition of every node type, edge type, attribute, constraint, and ID-construction rule in the MAS Knowledge Graph ontology.
+The ontology defines the node classes, edge types, attributes and constraints of the knowledge graph (KG) that `mas.library.kg` builds from a multi-agent system (MAS) run. It comes from the `oxp-ontology` package plus a MAS Lab extension file. Read it when you write queries, validate a KG, or add event kinds. Pipeline mechanics are in [normalization.md](normalization.md).
 
-See also: [normalization.md](normalization.md) · [steps.md](steps.md) · [neo4j.md](neo4j.md)
+Smallest example: build a KG, then check it against the ontology.
 
----
+```bash
+mas-lab kg normalize library-kg/examples/qa-agent/events.jsonl --run-id demo -o kg.jsonld
+mas-lab kg validate kg.jsonld
+```
 
-## Table of Contents
+See also: [normalization.md](normalization.md), [steps.md](steps.md), [neo4j.md](neo4j.md), [kg-spec.md](kg-spec.md).
+
+## Table of contents
 
 1. [Overview](#1-overview)
-2. [Layer Overview](#2-layer-overview)
-3. [Common Attributes](#3-common-attributes)
-4. [Node ID Construction](#4-node-id-construction)
-5. [Core Layer (L0)](#5-core-layer-l0)
-   - 5.1 [Structural Catalog Nodes](#51-structural-catalog-nodes)
-   - 5.2 [Execution Node Attribute Tables](#52-execution-node-attribute-tables)
-   - 5.3 [Core Edges](#53-core-edges)
-   - 5.4 [Core Constraints](#54-core-constraints)
-   - 5.5 [Core Layer Examples](#55-core-layer-examples)
-6. [Trajectory Layer (L2)](#6-trajectory-layer-l2)
-   - 6.1 [Mealy Machine Semantics](#61-mealy-machine-semantics)
-   - 6.2 [Trajectory Node Attribute Tables](#62-trajectory-node-attribute-tables)
-   - 6.3 [Trajectory Edges](#63-trajectory-edges)
-   - 6.4 [Trajectory Constraints](#64-trajectory-constraints)
-   - 6.5 [Trajectory Examples](#65-trajectory-examples)
-7. [Provenance Layer (L4)](#7-provenance-layer-l4)
-   - 7.1 [ContextContribution Semantics](#71-contextcontribution-semantics)
-   - 7.2 [Provenance Node Attributes](#72-provenance-node-attributes)
-   - 7.3 [The σ DAG (derivedFrom Edges)](#73-the-σ-dag-derivedfrom-edges)
-   - 7.4 [Provenance Constraints](#74-provenance-constraints)
-   - 7.5 [Provenance Examples](#75-provenance-examples)
-8. [Infrastructure Layer (L1)](#8-infrastructure-layer-l1)
-   - 8.1 [Worker Node Attributes](#81-worker-node-attributes)
-   - 8.2 [Infrastructure Edges and Constraints](#82-infrastructure-edges-and-constraints)
-9. [Governance Layer (L5)](#9-governance-layer-l5)
-   - 9.1 [Annotation-as-Governance Pattern](#91-annotation-as-governance-pattern)
-   - 9.2 [CallAnnotation Attributes](#92-callannotation-attributes)
-   - 9.3 [annotation_kind Values](#93-annotation_kind-values)
-   - 9.4 [Governance Edges and Constraints](#94-governance-edges-and-constraints)
-   - 9.5 [Governance Examples](#95-governance-examples)
-10. [Global Constraints (G1–G8)](#10-global-constraints-g1g8)
-11. [URN Scope Conventions](#11-urn-scope-conventions)
+2. [Layer overview](#2-layer-overview)
+3. [Common attributes](#3-common-attributes)
+4. [Node ID construction](#4-node-id-construction)
+5. [Core layer](#5-core-layer) (5.1 catalog nodes, 5.2 attribute tables, 5.3 edges, 5.4 constraints, 5.5 example)
+6. [Trajectory layer](#6-trajectory-layer) (6.1 semantics, 6.2 attributes, 6.3 edges, 6.4 constraints, 6.5 example)
+7. [Provenance layer](#7-provenance-layer) (7.1 semantics, 7.2 attributes, 7.3 `derivedFrom`, 7.4 constraints)
+8. [Infrastructure layer](#8-infrastructure-layer)
+9. [Governance layer](#9-governance-layer) (9.1 classes, 9.2 attributes, 9.3 kinds, 9.4 edges and constraints)
+10. [Global constraints](#10-global-constraints)
+11. [URN scope conventions](#11-urn-scope-conventions)
 12. [Verification](#12-verification)
-
----
 
 ## 1. Overview
 
 ### What the ontology is
 
-The MAS Knowledge Graph ontology defines the typed vocabulary used to represent
-multi-agent system (MAS) execution traces as a property graph.  Every run of a
-MAS produces a stream of raw events; the normalization pipeline (see
-[normalization.md](normalization.md)) maps those events onto the node and edge
-types defined here.  The resulting `kg.jsonld` document, or its Neo4j projection
-(see [neo4j.md](neo4j.md)), is the authoritative record of what a system did,
-why, and in what order.
+The KG represents a MAS run as a property graph: typed nodes (what ran, what it said, what state it was in) and typed directed edges (who contained whom, in what order). An ontology is the schema of those node and edge types. Normalization ([normalization.md](normalization.md)) turns a run's `events.jsonl` into this graph, stored as a `kg.jsonld` document or projected into Neo4j ([neo4j.md](neo4j.md)).
 
 ### Where it lives
 
-The ontology is implemented in `mas.library.kg.core.ontology`.  The SHACL shapes
-that enforce it programmatically live alongside the normalization step.
-`run_validate_kg` (see [steps.md](steps.md)) evaluates a materialized `kg.jsonld`
-against a subset of these constraints at runtime; the remaining constraints (those
-that require cross-document or cross-session context) must be verified externally.
+There is no ontology module in `mas.library.kg`. The vocabulary comes from two places, both in the `https://outshift-open.github.io/oxp-ontology/mas#` namespace:
+
+| Source | Contents |
+|---|---|
+| `oxp-ontology` (PyPI, a required dependency; part of the open-source Observe and eXplain Platform, OXP) | `mas-ontology.ttl` (core classes and properties), `mas-shapes.ttl` and `mas-shapes-custom.ttl` (SHACL shapes, the W3C constraint language for RDF graphs), and the generated Python models `oxp_ontology.models.*`. |
+| `library-kg/ontology/extensions/mas-kg-native-extensions.ttl` | Classes and properties the native `events.jsonl` path emits that `oxp-ontology` does not declare yet: `RAGQuery`, `MemoryCall`, `SkillCall`, `Skill`, `ThinkingCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`, `ParallelGroup`, `Branch`, `Worker`, `Run`, `Application`, and the properties `annotates`, `contributesTo`, `callsAgent`, `hasMemoryCall`, `hasSkillCall`. It is not a second ontology; entries are removed once they land in `oxp-ontology`. |
+
+`mas.library.kg.ontology` resolves the TTL paths. The validation step ([section 12](#12-verification)) loads both sources into one RDF graph.
+
+### Class hierarchy
+
+```
+Element
+|-- StructuralElement   (types: what the MAS is made of)
+|     MAS, Agent, Capability -> LLM, Tool, Processing, Skill
+|     Application, Run, Worker (extension)
+|-- ExecutionElement    (instances: what actually ran; one *Call per trace unit)
+|     Session, MASCall, AgentCall, CapabilityCall
+|       CapabilityCall -> LLMCall, ToolCall, ProcessingCall -> SkillCall, ThinkingCall
+|       CapabilityCall -> RAGQuery, MemoryCall (extension)
+|-- TrajectoryElement   (content flow between steps)
+|     State, Transition, ParallelGroup, Branch (extension)
+|-- CallAnnotation, GovernanceEvent, ContextContribution (extension; direct subclasses of Element)
+```
+
+`TaskCall` is emitted by the native builder (an `execution_*` event with `boundary == "TaskCall"`) but is not declared in either TTL.
 
 ### How it is used
 
-The ontology serves three purposes:
-
 | Purpose | How it helps |
-|---------|-------------|
-| **Normalization target** | The normalizer translates raw events into ontology-typed nodes and edges, ensuring a uniform schema across all MAS frameworks and runtimes. |
-| **Query contract** | Downstream analysis tools (KG compare, RAG, annotation pipelines) rely on stable attribute names and edge types defined here. |
-| **Compliance surface** | Governance tooling inspects `CallAnnotation` nodes, budget events, and policy edges whose structure is specified in L5. |
+|---|---|
+| Normalization target | One schema for traces from any framework or runtime. |
+| Query contract | KG compare, query and annotation steps use the attribute and edge names defined here. |
+| Validation | SHACL shapes and structural checks run against the vocabulary (section 12). |
 
 ### Design goals
 
-- **Layered**: each layer can be enabled or disabled independently.  A minimal
-  deployment carries only L0 and L2; L1, L4, and L5 add overhead that is only
-  worthwhile for specific observability or compliance use cases.
-- **Stable IDs**: every node ID is deterministically derived from its content so
-  that re-ingesting the same trace never creates duplicates (see §4).
-- **Closed-world for catalog nodes, open-world for execution nodes**: catalog
-  nodes (§5.1) must be declared before they can be referenced; execution nodes
-  can reference catalog entries that arrive later in the stream, subject to G7.
+- **Layered**: you switch optional layers on or off per run (section 2).
+- **Stable ids**: ids are deterministic functions of the trace (section 4), so re-normalizing creates no duplicates.
+- **Execution versus structure**: structural (catalog) nodes describe types (`Tool`, `LLM`, ...); execution nodes describe instances and point at their catalog node through `executes*` edges.
 
----
+## 2. Layer overview
 
-## 2. Layer Overview
+A layer is a group of event kinds that is included or excluded as a unit (flags `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`; see [normalization.md](normalization.md#8-layer-defaults-and-control)). The tags `L0` to `L5` are labels, not an ordering, and no layer uses L3.
 
-| Layer | Tag | Default | Event kinds |
-|-------|-----|---------|-------------|
-| Core | L0 | always on | `tool_call`, `llm_call`, `execution` (→ AgentCall), `mas_call`, `rag_query`, `memory_call`, `processing_call`, `skill_execution`, `network_call`, `workflow_transition` |
-| Infrastructure | L1 | **off** | `infrastructure_info` (→ Worker) |
-| Trajectory | L2 | **on** | `parallel_group`, `branch`, `routing`, `routing_result` |
-| Provenance | L4 | **off** | `context_part_contributed` (→ ContextContribution) |
-| Governance | L5 | **off** | `audit`, `policy_denial`, `policy_allow`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_gate`, `governance_denied`, `governance_checked` |
+| Layer | Tag | Default | Events | Node classes |
+|---|---|---|---|---|
+| Core | L0 | always on | `tool_call`, `network_call`, `llm_call`, `execution`, `mas_call`, `rag_query`, `memory_*`, `processing_call`, `workflow_transition`, `skill_execution` pairs; annotation kinds such as `context_assembled`, `state_update_*`, `checkpoint_*`, `user_input` | `Session`, `MASCall`, `AgentCall`, `TaskCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `SkillCall`, `MemoryCall`, `RAGQuery`, `ThinkingCall`, `CallAnnotation`, catalog nodes, `Run`, `Agent` |
+| Infrastructure | L1 | **off** | `infrastructure_info` | `Worker` |
+| Trajectory | L2 | **on** for `ParallelGroup`/`Branch`/routing; `State` and `Transition` are always built | `parallel_group_*`, `branch_*`, `routing`, `routing_result` | `ParallelGroup`, `Branch`, routing `CallAnnotation`s |
+| Provenance | L4 | **off** | `context_part_contributed` | `ContextContribution` |
+| Governance | L5 | **off** | `audit`, `policy_*`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_*`, `governance_*`, `obs_wrap_gov_*` | `GovernanceEvent` |
 
-**Why L2 is on by default:** State and Transition nodes encode the agent's
-Mealy-machine execution path.  They are the primary unit of analysis for latency
-attribution, loop detection, and trajectory comparison (§6.1).  Their storage
-overhead is low relative to the analytical value they provide.
+`State` and `Transition` nodes are not tied to any flag: they are derived from every call that has content, whatever the layers. The `include_trajectory` flag controls only `ParallelGroup`, `Branch` and routing annotations.
 
-**Why L1, L4, L5 are off by default:** Worker nodes (L1) require process-level
-instrumentation that not all runtimes expose.  ContextContribution nodes (L4) add
-one node per LLM context slot, which can be thousands of nodes per session.
-Governance nodes (L5) are only meaningful when a policy engine is wired into the
-MAS.  All three layers can be enabled per-run by setting the corresponding feature
-flag in the normalizer configuration.
+**Defaults.** Provenance adds about one node per context part (often hundreds per session). Governance has content only when a policy engine is connected. Infrastructure currently produces no nodes ([section 8](#8-infrastructure-layer)).
 
----
+## 3. Common attributes
 
-## 3. Common Attributes
+Attribute names are camelCase in the graph. The ontology declares these datatype properties:
 
-Every execution node (Session, MASCall, AgentCall, LLMCall, ToolCall, MemoryCall,
-RAGQuery, ProcessingCall, SkillCall) carries the following attributes.  Catalog
-nodes (Agent, Tool, LLM, etc.) do **not** carry these fields — they have their own
-identity attributes described in §5.1.
+| Applies to | Attribute | Type | Notes |
+|---|---|---|---|
+| every `Element` | `id` | string | required (SHACL violation if missing) |
+| every `Element` | `name` | string | required (warning) |
+| `StructuralElement` | `declared` | boolean | `false` for catalog nodes inferred from a trace |
+| `ExecutionElement` | `startTime`, `endTime` | number | epoch seconds in native output; required |
+| `ExecutionElement` | `duration` | number | milliseconds; required |
+| `ExecutionElement` | `spanId`, `parentSpanId`, `success` | string, string, boolean | optional (OTel linkage) |
+| `ExecutionElement`, `TrajectoryElement` | `sessionId` | string | required on trajectory elements |
+| `LLM` | `provider` | string | required (warning) |
+| `LLMCall` | `promptTokenCount`, `completionTokenCount`, `totalTokenCount`, `cacheReadTokenCount`, `finishReason`, `responseId`, `temperature` | | required (warnings) |
+| `State` | `content` | string | required |
 
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `call_id` | `str` | yes | Unique identifier for this execution event. Forms the basis of most node IDs (see §4). |
-| `parent_call_id` | `str \| null` | conditional | `call_id` of the immediately enclosing execution node. Null only on the root MASCall or a top-level AgentCall. Required when the node is nested (G3). |
-| `agent_id` | `str` | yes | Logical identifier of the agent that produced this event. Must match an `Agent` catalog node's `agent_id` field. |
-| `run_id` | `str` | yes | Identifier of the pipeline run. All nodes in a single run share the same `run_id`. |
-| `session_id` | `str` | yes | Identifier of the user session. One session may contain multiple runs. Maps to the `Session` node's `session_id`. |
-| `start_time` | `str (ISO 8601)` | yes | Wall-clock time when this execution began. |
-| `end_time` | `str (ISO 8601)` | yes | Wall-clock time when this execution completed. |
-| `duration` | `float` | yes | Elapsed milliseconds: `(end_time − start_time) × 1000`. Must be ≥ 0 (enforced by G2). |
+The native builder adds identity and linkage attributes to execution nodes: `callId`, `executionId` (`exec-{Class}-{callId}`), `agentId`, `parentCallId` (empty for roots), `runId`, `kindBase`, `masUri`, `spanLevel`, `status` and `sourceRecordIds`. The full per-class list is in [normalization.md](normalization.md#6-node-attributes-reference).
 
-### Derived fields added by `denormalize`
+### Fields added at Neo4j push
 
-When a KG document is pushed to Neo4j, `denormalize` propagates three
-session-scoped fields to every node and edge that do not already carry them:
+`denormalize` copies three session-scoped fields onto every node and edge, and fills in `block` when missing:
 
 | Field | Source |
-|-------|--------|
-| `sessionId` | Resolved from the `Session` node or any node's `run_id` |
-| `appId` | Supplied as `app_name` parameter to `push_kg_to_neo4j` |
-| `source` | Defaults to `"mas-lab"`; overridable per push call |
+|---|---|
+| `sessionId` | the `Session` node (falls back to a `run_id`) |
+| `appName` | the `app_name` argument, else inferred from the session id |
+| `source` | defaults to `mas-lab`; overridable per push |
 
-These fields are not part of the ontology proper but are required by the Neo4j
-index strategy.  See [neo4j.md](neo4j.md) for details.
+These are not part of the ontology but support the Neo4j index strategy ([neo4j.md](neo4j.md)).
 
----
+## 4. Node ID construction
 
-## 4. Node ID Construction
+Node ids must be stable across re-normalization so that `MERGE` in Neo4j never duplicates nodes. Patterns (full table and examples in [normalization.md](normalization.md#9-node-id-stability)):
 
-Node IDs must be stable across re-ingestion (G8).  Use the following patterns
-exactly.  Any deviation will cause `MERGE` deduplication in Neo4j to fail and
-duplicate nodes to accumulate.
+| Node type | ID pattern |
+|---|---|
+| Call nodes (`MASCall`, `AgentCall`, `LLMCall`, `ToolCall`, ...) | `{type lowercased}:{run slug}:{agent slug}:{callId}` |
+| `CallAnnotation`, `GovernanceEvent` | `ann-{16 hex}` derived from run id, agent id, event kind and timestamp |
+| `ContextContribution` | `cpr-{part_id}` |
+| `State` | `state-{agent\|llm\|tool\|proc}-{callId}-{suffix}` |
+| `Transition` | `trans-{agent\|llm\|tool\|proc}-{callId}` |
+| `Session` | `session-{run_id}` (or the session UUID or hierarchical run id; see normalization.md) |
+| `Run` | the run id |
+| `Agent` | the agent id |
+| `Tool`, `Skill`, `Processing`, `LLM` catalog | `catalog:tool:{name}`, `catalog:skill:{name}`, `catalog:processing:{name}`, `catalog:model:{name}` |
+| `MAS` | `catalog:mas:{appName or mas}` |
 
-| Node type | ID pattern | Example |
-|-----------|-----------|---------|
-| Session | `session:{session_id}` | `session:sess-abc-123` |
-| AgentCall | `call:{call_id}` | `call:agt-7f3a` |
-| LLMCall | `call:{call_id}` | `call:llm-9b12` |
-| ToolCall | `call:{call_id}` | `call:tool-2c4d` |
-| MASCall | `call:{call_id}` | `call:mas-0001` |
-| MemoryCall | `call:{call_id}` | `call:mem-a9f2` |
-| RAGQuery | `call:{call_id}` | `call:rag-6e1b` |
-| ProcessingCall | `call:{call_id}` | `call:proc-3d7c` |
-| SkillCall | `call:{call_id}` | `call:skill-5f8e` |
-| State | `state:{agent_id}:{call_id}:{mealy_symbol}` | `state:planner:agt-7f3a:THINKING` |
-| Transition | `transition:{from_state_id}:{to_state_id}` | `transition:state:planner:agt-7f3a:THINKING:state:planner:agt-7f3a:TOOL_USE` |
-| ContextContribution | `contribution:{source_call_id}:{content_hash}` | `contribution:call:llm-9b12:a3f7c2d1` |
-| CallAnnotation | `annotation:{annotation_id}` | `annotation:gov-0045` |
-| Worker | `worker:{worker_id}` | `worker:pid-18342` |
+### Spec nodes (separate from catalog nodes)
 
-### Catalog node IDs
+`merge_spec_into_kg` ([kg-spec.md](kg-spec.md)) adds *declared* design-time nodes with ids `spec:{kind}:{key}` (`spec:agent:planner`, `spec:tool:search_kb`, `spec:skill:...`), of types `IntentSpec`, `AgentSpec`, `ToolSpec`, `SkillSpec`, and conformance edges (`instanceOf`, `invokes`, `declaresSkill`, `mayInvoke`). These are not in the ontology TTLs and are distinct from the `catalog:` nodes derived from a trace.
 
-Catalog nodes use a `spec:` prefix to distinguish them from execution nodes and
-to match the interning scheme described in [kg-spec.md](kg-spec.md):
+## 5. Core layer
 
-| Catalog node type | ID pattern | Example |
-|-------------------|-----------|---------|
-| Agent | `spec:agent:{agent_id}` | `spec:agent:planner` |
-| MAS | `spec:mas:{mas_id}` | `spec:mas:support-pipeline` |
-| Task | `spec:task:{task_id}` | `spec:task:ticket-classify` |
-| LLM | `spec:llm:{model}` | `spec:llm:claude-3-5-sonnet` |
-| Tool | `spec:tool:{tool_name}` | `spec:tool:search_kb` |
-| Processing | `spec:processing:{processing_name}` | `spec:processing:chunk-and-embed` |
-| Skill | `spec:skill:{skill_id}` | `spec:skill:summarise` |
-| Memory | `spec:memory:{memory_id}` | `spec:memory:episodic-store` |
-| Workflow | `spec:workflow:{workflow_id}` | `spec:workflow:triage-resolve` |
-| DesignPattern | `spec:dp:{dp_id}` | `spec:dp:orchestrator-subagent` |
+The core layer is always on. It defines what the system is made of (catalog nodes) and what actually executed (execution nodes).
 
-### Why all execution nodes share the `call:` prefix
+### 5.1 Structural catalog nodes
 
-A `call_id` is already unique across node types within a run.  Sharing the
-`call:` prefix keeps ID construction simple and makes it possible to look up any
-execution node by its `call_id` without knowing its type.
+Catalog nodes are `StructuralElement` instances. They are created from the trace (not declared by the user), so `declared = false`.
 
----
+| Node type | Identity | Description |
+|---|---|---|
+| `MAS` | `name` (app name) | The multi-agent system. One per trace; target of `Session` and `MASCall` `executes*` edges. |
+| `Agent` | `agentId` | An agent role. One per agent id, not per invocation. |
+| `Capability` | | Abstract parent of `LLM`, `Tool`, `Processing`. |
+| `LLM` | `name` (model), `provider` | A language model used by `LLMCall`s. |
+| `Tool` | `name` | A tool invoked by `ToolCall`s. |
+| `Processing` | `name` | A named internal processing step. |
+| `Skill` (extension) | `name` | A skill invoked by `SkillCall`s. |
+| `Application` (extension) | `appName` | Optional; groups `Session`s via `hasSession`. |
+| `Run` (extension) | `runId` | One per run id. Present as a node, with no edges. |
 
-## 5. Core Layer (L0)
+`Tool`, `LLM`, `Skill` and `Processing` nodes also carry `callCount`, the number of calls referencing them.
 
-L0 is always active.  It defines the minimum viable knowledge graph: what the
-system is made of (catalog nodes) and what actually executed (execution nodes).
+### 5.2 Execution node attribute tables
 
----
+Every execution node carries the common attributes of [section 3](#3-common-attributes). Class-specific attributes (emitted by the native path):
 
-### 5.1 Structural Catalog Nodes
+| Class | Attributes |
+|---|---|
+| `Session` | `sessionId`, `runId`, `appName`, `inputQuery`, `finalResponse` |
+| `MASCall` | `masName`, `masType` |
+| `AgentCall` | `agentName`, `agentType`, `agentSequence`, `inputContent`, `outputRaw`, `outputParts`, `outputContent` |
+| `TaskCall` | `taskName`, `taskType` |
+| `LLMCall` | `llmName`, `modelName`, `provider`, `prompt`, `completion`, `toolCalls`, token counts, `finishReason`, `responseId`, `temperature` |
+| `ToolCall` | `toolName`, `toolCallId`, `toolArguments` (JSON string), `toolOutput`, optional `barrierId` |
+| `ProcessingCall` | `processingName`, `processingType`, `inputContent`, `processingOutput` |
+| `SkillCall` | `skillName`, `skillInput`, `skillOutput`, optional `skillVersion` |
+| `MemoryCall`, `RAGQuery` | common attributes only |
+| `ThinkingCall` | `thinkingContent` |
 
-Catalog nodes record design-time declarations.  They are not execution events and
-do not carry the common attributes from §3.  The same catalog node is shared
-across all runs of the same MAS version (interned once; see
-[kg-spec.md](kg-spec.md)).
+Source events and fallbacks are in [normalization.md](normalization.md#6-node-attributes-reference). Failure categories, memory operations, retrieval result counts and similar details are not modelled; they stay on the source events.
 
-| Node type | Identity attribute | Description |
-|-----------|--------------------|-------------|
-| `Agent` | `agent_id` | A logical agent in the MAS.  One `Agent` node per role, not per invocation. |
-| `MAS` | `mas_id` | The multi-agent system as a whole.  Typically one per deployment configuration. |
-| `Task` | `task_id` | A declared task that the MAS is designed to accomplish. |
-| `LLM` | `model` | A language model available for use.  E.g., `claude-3-5-sonnet`, `gpt-4o`. |
-| `Tool` | `tool_name` | A callable tool registered in the system.  Referenced by every ToolCall via G7. |
-| `Processing` | `processing_name` | A named data-processing step (chunking, embedding, tokenization, etc.). |
-| `Skill` | `skill_id` | A reusable multi-step procedure that an agent may execute. |
-| `Memory` | `memory_id` | A memory backend (vector store, episodic store, working memory, etc.). |
-| `Workflow` | `workflow_id` | A declared workflow or pipeline that the MAS implements. |
-| `DesignPattern` | `dp_id` | A recognized MAS design pattern (orchestrator-subagent, reflection, etc.). |
+### 5.3 Core edges
 
-**Relationship to spec nodes:** When `merge_spec_into_kg` is called (see
-[kg-spec.md](kg-spec.md)), it creates `AgentSpec`, `ToolSpec`, and `SkillSpec`
-nodes with IDs matching the `spec:` patterns above.  These serve as the canonical
-catalog nodes for conformance-edge wiring.
+Edge names are the ontology's. Domain and range are from `mas-ontology.ttl` unless marked (extension).
 
----
+| Edge | From -> To | Meaning |
+|---|---|---|
+| `hasMASCall` | `Session` -> `MASCall` | session's top-level call |
+| `hasAgentCall` | `MASCall` -> `AgentCall` | MAS call spawns agent calls (the native builder also emits it `AgentCall` -> `AgentCall` for time-enclosed delegations) |
+| `belongsToMASCall` | `AgentCall` -> `MASCall` | inverse of `hasAgentCall` |
+| `hasLLMCall`, `hasToolCall` | `AgentCall` -> `LLMCall` / `ToolCall` | containment |
+| `hasProcessingCall` | `AgentCall` or `MASCall` -> `ProcessingCall` | containment (shortcut) |
+| `hasMemoryCall`, `hasSkillCall` (extension) | call -> `MemoryCall` / `SkillCall` | containment |
+| `hasRAGQuery` | call -> `RAGQuery` | containment; not declared in either TTL |
+| `executes` | `ExecutionElement` -> `StructuralElement` | generic typing link |
+| `executesSession` | `Session` -> `MAS` | |
+| `executesMAS`, `executesAgent`, `executesLLM`, `executesTool`, `executesProcessing` | `MASCall` / `AgentCall` / `LLMCall` / `ToolCall` / `ProcessingCall` -> `MAS` / `Agent` / `LLM` / `Tool` / `Processing` | typing link; `executesLLM`, `executesTool`, `executesProcessing` also check the target class |
+| `belongsToMAS` | `Agent` -> `MAS` | agent membership |
+| `usesCapability`, `usesLLM`, `usesTool`, `usesProcessing` | `Agent` -> capability | declared in the ontology; not emitted by the native builder |
+| `callsAgent` (extension) | call -> `Agent` | delegation (`delegate_to_*` tool) |
+| `annotates` (extension) | `CallAnnotation` / `GovernanceEvent` -> call | |
 
-### 5.2 Execution Node Attribute Tables
+Containment is derived from the `parentCallId` links and from time enclosure; a call may be contained by any enclosing call, so edges such as `ParallelGroup -> ToolCall` occur ([normalization.md](normalization.md#5-synthesised-nodes-and-edges)).
 
-#### Session
+### 5.4 Core constraints
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `session_id` | `str` | Stable session identifier.  Scopes all runs within a user conversation or task. |
+From the SHACL property shapes in `mas-ontology.ttl` (violation unless noted):
 
-#### MASCall
+| Constraint | Applies to |
+|---|---|
+| `id` present (violation); `name` present (warning) | every `Element` |
+| `startTime`, `endTime`, `duration` present | every `ExecutionElement` |
+| at least one `executes` edge | every `ExecutionElement` |
+| `hasMASCall` present | every `Session` |
+| `executesSession` present | every `Session` |
+| `executesMAS` / `executesAgent` present | `MASCall` / `AgentCall` |
+| `executesLLM` / `executesTool` / `executesProcessing`, range `LLM` / `Tool` / `Processing` | `LLMCall` / `ToolCall` / `ProcessingCall` |
+| `belongsToMASCall` present | every `AgentCall` |
+| `belongsToMAS` present | every `Agent` |
+| `hasLLMCall`, `hasToolCall` on `AgentCall`; `hasAgentCall` on `MASCall` (all warnings) | `AgentCall`, `MASCall` |
+| `provider` (warning) | `LLM` |
+| token counts, `finishReason`, `responseId`, `temperature` (warning) | `LLMCall` |
+| `ExecutionElement` must not be instantiated directly (use a concrete subclass) | all |
 
-Carries all [common attributes](#3-common-attributes).  No additional attributes.
-Represents the top-level invocation of the MAS for one user turn.
+The alignment step in `mas.library.kg` adds the `executes*`, `belongsTo*` and topology edges, and fills `name`, `duration`, `declared`, `provider` and the `LLMCall` defaults, so that these shapes can be satisfied; see `core/ontology_align.py`.
 
-#### AgentCall
+### 5.5 Core layer example
 
-Carries all [common attributes](#3-common-attributes), plus:
+A trimmed excerpt of `mas-lab kg normalize library-kg/examples/trip-planner/events.jsonl --run-id demo` (selected attributes only):
 
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `input` | `str \| dict` | yes | The input passed to this agent invocation. |
-| `output` | `str \| dict` | yes | The output returned by this agent invocation. |
-| `dp_id` | `str \| null` | no | Design pattern identifier. If set, must reference a `DesignPattern` catalog node. |
-| `failure_reason` | `str \| null` | no | Human-readable description of why the invocation failed. Null on success. |
-| `failure_category` | `str \| null` | no | Structured failure category.  Allowed values: `timeout`, `tool_error`, `llm_error`, `budget_exceeded`, `policy_denial`, `unknown`. |
-
-#### LLMCall
-
-Carries all [common attributes](#3-common-attributes), plus:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `model` | `str` | yes | Model identifier, e.g. `claude-3-5-sonnet`.  Must match an `LLM` catalog node. |
-| `prompt` | `str` | yes | Full prompt sent to the model, including system prompt and message history. |
-| `completion` | `str` | yes | The model's response text. |
-| `thinking` | `str \| null` | no | Extended thinking / chain-of-thought content returned by the model, when available. |
-| `prompt_token_count` | `int` | yes | Tokens in the prompt. |
-| `completion_token_count` | `int` | yes | Tokens in the completion. |
-| `total_token_count` | `int` | yes | Sum of prompt and completion token counts. |
-| `temperature` | `float \| null` | no | Sampling temperature used for this call. |
-| `finish_reason` | `str` | yes | Reason the model stopped generating.  Typical values: `stop`, `length`, `tool_use`, `content_filter`. |
-
-#### ToolCall
-
-Carries all [common attributes](#3-common-attributes), plus:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `tool_name` | `str` | yes | Name of the tool invoked.  Must match a `Tool` catalog node (G7). |
-| `tool_arguments` | `dict` | yes | Arguments passed to the tool, as a JSON-serializable dict. |
-| `tool_output` | `str \| dict` | yes | Return value from the tool. |
-| `tool_category` | `str \| null` | no | Semantic category.  Suggested values: `retrieval`, `action`, `computation`, `communication`, `filesystem`, `external_api`. |
-| `barrier_id` | `str \| null` | no | When set, this tool call is the synchronization point for a parallel group. References a `ParallelGroup.group_id`. |
-
-#### MemoryCall
-
-Carries all [common attributes](#3-common-attributes), plus:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `memory_type` | `str` | yes | Type of memory backend: `episodic`, `semantic`, `working`, `procedural`. |
-| `memory_operation` | `str` | yes | Operation performed: `read`, `write`, `update`, `delete`, `search`. |
-| `memory_key` | `str \| null` | no | Key used for read/write/update/delete operations on key-value stores. |
-| `memory_query` | `str \| null` | no | Query string used for search operations. |
-| `memory_output` | `str \| dict \| null` | no | Result of the memory operation. |
-| `memory_result_count` | `int \| null` | no | Number of results returned by a search operation. |
-
-#### RAGQuery
-
-Carries all [common attributes](#3-common-attributes), plus:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `rag_query` | `str` | yes | The retrieval query issued. |
-| `rag_result_count` | `int` | yes | Number of chunks or documents retrieved. |
-
-#### ProcessingCall
-
-Carries all [common attributes](#3-common-attributes), plus:
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `processing_name` | `str` | yes | Name of the processing step.  Must match a `Processing` catalog node. |
-| `processing_type` | `str` | yes | Category of processing: `chunking`, `embedding`, `tokenization`, `formatting`, `extraction`, `transformation`. |
-| `processing_segments` | `int \| null` | no | Number of segments or chunks produced by the processing step. |
-| `processing_tokens` | `int \| null` | no | Token count consumed or produced by the processing step. |
-
-#### SkillCall
-
-Carries all [common attributes](#3-common-attributes).  No additional ontology
-attributes.  Skill-specific metadata is carried on the linked `Skill` catalog node
-and on the child `AgentCall`, `LLMCall`, or `ToolCall` nodes produced during skill
-execution.
-
----
-
-### 5.3 Core Edges
-
-| Source node type | Edge type | Target node type | Description |
-|-----------------|-----------|-----------------|-------------|
-| `Session` | `hasRun` | `MASCall` or `AgentCall` | Links a session to its top-level execution nodes. |
-| `MASCall` | `hasCall` | `AgentCall` | A MAS-level invocation spawns one or more agent invocations. |
-| `AgentCall` | `hasCall` | `LLMCall` | An agent invocation produces one or more LLM calls. |
-| `AgentCall` | `hasCall` | `ToolCall` | An agent invocation produces one or more tool calls (direct, not via LLM). |
-| `AgentCall` | `hasCall` | `MemoryCall` | An agent invocation reads or writes memory. |
-| `AgentCall` | `hasCall` | `ProcessingCall` | An agent invocation triggers a processing step. |
-| `AgentCall` | `hasCall` | `SkillCall` | An agent invocation executes a skill. |
-| `LLMCall` | `hasCall` | `ToolCall` | A tool call originating from an LLM tool-use response. |
-| `AgentCall` | `annotatedBy` | `CallAnnotation` | Links a governance or evaluation annotation to an agent call (L5). |
-| `AgentCall` | `hasState` | `State` | Links an agent call to its Mealy-machine states (L2). |
-
-**Cardinality guidance:**
-
-- `Session → hasRun → MASCall`: one-to-many (one session, multiple turns).
-- `AgentCall → hasCall → LLMCall`: typically one-to-many (a ReAct loop produces multiple LLM calls per agent call).
-- `LLMCall → hasCall → ToolCall`: one-to-many (a single LLM response may request multiple tool calls in parallel).
-- `AgentCall → hasState → State`: one-to-many (one state per Mealy symbol visited).
-
----
-
-### 5.4 Core Constraints
-
-| ID | Constraint | Rationale |
-|----|-----------|-----------|
-| C0-1 | Every execution node must carry `call_id`, `agent_id`, `session_id` (G1). | These three fields are the minimum required to reconstruct the call tree and scope queries by session. |
-| C0-2 | `tool_name` on every `ToolCall` must correspond to an existing `Tool` catalog node (G7). | Prevents orphaned tool references that cannot be traced to a declared capability. |
-| C0-3 | Every `LLMCall` within an `AgentCall` must satisfy `LLMCall.parent_call_id = AgentCall.call_id` (G5). | Ensures LLM calls are always correctly nested under their containing agent call. |
-| C0-4 | `start_time ≤ end_time` on all execution nodes (G2). | Negative durations indicate instrumentation bugs. |
-
----
-
-### 5.5 Core Layer Examples
-
-**Minimal single-agent run (Python dict representation):**
-
-```python
+```json
 {
   "nodes": [
-    {"id": "session:sess-001",      "node_type": "Session",   "session_id": "sess-001"},
-    {"id": "call:agt-001",          "node_type": "AgentCall", "call_id": "agt-001",
-     "agent_id": "resolver", "session_id": "sess-001", "run_id": "run-001",
-     "start_time": "2025-01-15T10:00:00Z", "end_time": "2025-01-15T10:00:03Z",
-     "duration": 3000.0,
-     "input": "What is the refund policy?", "output": "Refunds are accepted within 30 days."},
-    {"id": "call:llm-001",          "node_type": "LLMCall",   "call_id": "llm-001",
-     "parent_call_id": "agt-001",   "agent_id": "resolver",   "session_id": "sess-001",
-     "run_id": "run-001",
-     "start_time": "2025-01-15T10:00:00.1Z", "end_time": "2025-01-15T10:00:02.9Z",
-     "duration": 2800.0,
-     "model": "claude-3-5-sonnet",
-     "prompt": "You are a support agent...\nUser: What is the refund policy?",
-     "completion": "Refunds are accepted within 30 days.",
-     "prompt_token_count": 320, "completion_token_count": 18, "total_token_count": 338,
-     "temperature": 0.2, "finish_reason": "stop"},
+    {"node_type": "Session", "id": "session-demo", "startTime": 1716200000.0, "endTime": 1716200010.0},
+    {"node_type": "MASCall", "id": "mascall:demo:mas:tp-mas-001", "agentId": "mas", "status": "success"},
+    {"node_type": "AgentCall", "id": "agentcall:demo:planner:tp-exec-001",
+     "agentId": "planner", "parentCallId": "tp-mas-001"},
+    {"node_type": "LLMCall", "id": "llmcall:demo:planner:tp-llm-001",
+     "agentId": "planner", "parentCallId": "tp-exec-001", "modelName": "gemini-2.5-flash"},
+    {"node_type": "Agent", "id": "planner", "agentId": "planner"},
+    {"node_type": "LLM", "id": "catalog:model:gemini-2.5-flash", "name": "gemini-2.5-flash"},
+    {"node_type": "MAS", "id": "catalog:mas:mas"}
   ],
   "edges": [
-    {"from_id": "session:sess-001", "to_id": "call:agt-001", "edge_type": "hasRun"},
-    {"from_id": "call:agt-001",     "to_id": "call:llm-001", "edge_type": "hasCall"},
+    {"edge_type": "hasMASCall", "from_id": "session-demo", "to_id": "mascall:demo:mas:tp-mas-001"},
+    {"edge_type": "hasAgentCall", "from_id": "mascall:demo:mas:tp-mas-001", "to_id": "agentcall:demo:planner:tp-exec-001"},
+    {"edge_type": "hasLLMCall", "from_id": "agentcall:demo:planner:tp-exec-001", "to_id": "llmcall:demo:planner:tp-llm-001"},
+    {"edge_type": "executesAgent", "from_id": "agentcall:demo:planner:tp-exec-001", "to_id": "planner"},
+    {"edge_type": "executesLLM", "from_id": "llmcall:demo:planner:tp-llm-001", "to_id": "catalog:model:gemini-2.5-flash"},
+    {"edge_type": "belongsToMAS", "from_id": "planner", "to_id": "catalog:mas:mas"}
   ]
 }
 ```
 
-**ToolCall nested under LLMCall:**
+## 6. Trajectory layer
 
-```python
-# LLMCall with finish_reason=tool_use spawns a ToolCall child
-{"id": "call:llm-002", "node_type": "LLMCall", "call_id": "llm-002",
- "parent_call_id": "agt-001", "finish_reason": "tool_use", ...},
-{"id": "call:tool-001", "node_type": "ToolCall", "call_id": "tool-001",
- "parent_call_id": "llm-002",
- "tool_name": "search_kb",
- "tool_arguments": {"query": "refund policy", "top_k": 5},
- "tool_output": ["Policy doc §4.2: 30-day returns...", "FAQ: refunds..."],
- "tool_category": "retrieval"},
+### 6.1 State and Transition semantics
 
-# Edge: LLMCall → hasCall → ToolCall
-{"from_id": "call:llm-002", "to_id": "call:tool-001", "edge_type": "hasCall"}
-```
+The trajectory records content flow through the run. `State` and `Transition` are built by `core/state_transition.py` for every `AgentCall`, `LLMCall`, `ToolCall` and `ProcessingCall` that has input or output content:
 
----
+- A **State** is a snapshot of content at one point: a call's input (prompt, tool arguments, agent input) or output (completion, tool result, agent output).
+- A **Transition** is one step that consumes an input State and produces an output State, and *represents* the call that performed it (`representsExecution`).
+- The result is a Mealy-style view of a run: a Mealy machine is a finite automaton whose outputs are attached to the transitions between states, not to the states. Here each Transition carries `actionType` (`agent_delegation`, `llm_call`, `tool_call`, a context-management name) and `appliedOperator`, and a call's input is its preceding sibling's output, so siblings under one parent form a chain `State -> Transition -> State -> Transition -> ...`.
+- Parallel tool calls with a shared `barrierId` produce Transitions with `edgeType = "parallel"` and `appliedOperator = "parallel_merge"`.
 
-## 6. Trajectory Layer (L2)
+Per-run states are session-scoped, but `State.contentHash` (SHA-256 of the content) is identical for identical content across sessions, so content can be compared or embedded once.
 
-L2 is enabled by default.  It records the agent's internal execution trajectory
-as a Mealy finite-state machine, enabling step-level latency attribution, loop
-detection, and structural comparison across runs.
+`ParallelGroup` and `Branch` are `TrajectoryElement` subclasses for explicit fan-out; they come from `parallel_group_*` / `branch_*` events.
 
----
+### 6.2 Trajectory node attribute tables
 
-### 6.1 Mealy Machine Semantics
+| Node | Attributes |
+|---|---|
+| `State` | `stateNodeId`, `contentHash`, `content` (truncated to 8000 characters), `semanticType` (`initial` or `final`), `sessionId`, `layer = "normalized"`; tool and processing states add `deltaType`; processing states add `contextWindowSize` |
+| `Transition` | `transitionId`, `fromState`, `toState`, `realizesCallId`, `edgeType` (`sequential` or `parallel`), `actionType`, `appliedOperator` (`sequential_compose`, `parallel_merge`, `context_transform`), `transitionTimestamp`, `transitionDuration` (seconds), `sessionId`, `layer`; processing transitions add `transitionDeltaType`, `contextTokensIn`, `contextTokensOut`, `contextTokensDelta`, `compressionRatio`, `contextStrategy` |
+| `ParallelGroup`, `Branch` | common call attributes (no `sessionId`), `layer = "normalized"`. `group_id`, `branch_count` and branch indexes stay on the source event; they are not copied to the node. |
 
-A Mealy machine is a finite automaton where outputs (here: `mealy_symbol` labels)
-are associated with transitions rather than states.  In the MAS KG:
+### 6.3 Trajectory edges
 
-- Each **State node** represents a snapshot of the agent at a specific phase of
-  its `AgentCall`.  The `mealy_symbol` on a State node is the label of the
-  transition that *led into* that state.
-- Each **Transition node** records the arc between two consecutive states.  Its
-  `mealy_symbol` is the observable event that caused the state change (e.g.,
-  `TOOL_RESULT_RECEIVED`).
-- The sequence of states within an `AgentCall` forms a path through the agent's
-  decision graph, which is directly comparable across runs using structural
-  similarity metrics.
+| Edge | From -> To | Meaning |
+|---|---|---|
+| `hasInitialState`, `hasFinalState` | `ExecutionElement` -> `State` | a call's input and output state; also from `Session` and `MASCall` to the first and last top-level state |
+| `hasState` | `ExecutionElement` -> `State` | every state of the call |
+| `inputTo` | `State` -> `Transition` | state consumed by a step (also emitted for the output state, as the declared inverse of `leadsTo`) |
+| `leadsTo` | `Transition` -> `State` | state produced by a step |
+| `representsExecution` | `Transition` -> `ExecutionElement` | which call the step is |
+| `correspondsToTransition` | `ExecutionElement` -> `Transition` | inverse of `representsExecution`; also from `Session` and `MASCall` to the first top-level transition |
 
-**Standard mealy_symbol values (L2 vocabulary):**
+`inputTo` and `leadsTo` require exactly the endpoint class shown; `hasInitialState`, `hasFinalState`, `hasState`, `correspondsToTransition`, `representsExecution` are required by SHACL.
 
-| Symbol | Meaning |
-|--------|---------|
-| `INIT` | Initial state at the start of the AgentCall |
-| `THINKING` | LLM is generating a response |
-| `TOOL_USE` | LLM has emitted a tool-use request |
-| `TOOL_RESULT_RECEIVED` | Tool output has been returned and appended to context |
-| `REFLECTION` | Agent is evaluating whether to continue or stop |
-| `ROUTING` | Agent is selecting a subagent or routing to a branch |
-| `WAITING_PARALLEL` | Agent is waiting on parallel branches to complete |
-| `PARALLEL_JOINED` | All parallel branches have completed |
-| `DONE` | AgentCall has produced its final output |
-| `ERROR` | AgentCall terminated due to an error |
-
-Custom symbols are allowed.  Any string value is valid; define custom symbols in
-the MAS configuration so that downstream tooling can interpret them.
-
----
-
-### 6.2 Trajectory Node Attribute Tables
-
-#### State
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `state_id` | `str` | yes | Stable ID for this state instance.  Derived from `agent_id`, `call_id`, and `mealy_symbol` (see §4). |
-| `agent_id` | `str` | yes | Agent that this state belongs to. |
-| `mealy_symbol` | `str` | yes | The transition label that produced this state. `INIT` for the first state in an AgentCall. |
-| Common attributes | — | yes | All fields from §3. |
-
-#### Transition
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `transition_id` | `str` | yes | Derived from `from_state_id` and `to_state_id` (see §4). |
-| `from_state_id` | `str` | yes | ID of the state this transition departs from. |
-| `to_state_id` | `str` | yes | ID of the state this transition leads to. |
-| `mealy_symbol` | `str` | yes | The observable event label for this arc. |
-| `timestamp` | `str (ISO 8601)` | yes | Wall-clock time at which this transition fired. |
-| `call_id` | `str` | yes | `call_id` of the execution event (LLMCall, ToolCall, etc.) that triggered this transition. |
-
-#### ParallelGroup
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `group_id` | `str` | yes | Unique identifier for this parallel execution group. |
-| `branch_count` | `int` | yes | Total number of branches in the group.  All branches must complete before the group can join. |
-
-#### Branch
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `branch_id` | `str` | yes | Unique identifier for this branch instance. |
-| `group_id` | `str` | yes | `group_id` of the `ParallelGroup` this branch belongs to. |
-| `branch_index` | `int` | yes | Zero-based index of this branch within the group.  Must be unique within the group and in `[0, branch_count − 1]`. |
-
----
-
-### 6.3 Trajectory Edges
-
-| Source | Edge type | Target | Description |
-|--------|-----------|--------|-------------|
-| `AgentCall` | `hasState` | `State` | An agent call owns all states visited during its execution. |
-| `State` | `hasTransition` | `Transition` | A state can fire one or more transitions (usually one at a time). |
-| `Transition` | `leadsTo` | `State` | The destination state of a transition. |
-| `AgentCall` | `parallels` | `ParallelGroup` | An agent call spawns a parallel group. |
-| `ParallelGroup` | `hasBranch` | `Branch` | A parallel group contains its branches. |
-
-**Traversal pattern for the full trajectory of an AgentCall:**
+Cypher for one call's trajectory:
 
 ```cypher
-MATCH path = (ac:AgentCall {id: $call_id})
-  -[:hasState]->  (s0:State  {mealy_symbol: "INIT"})
-  -[:hasTransition*]->(:Transition)
-  -[:leadsTo*]->(sN:State)
-RETURN path
+MATCH (c:AgentCall {callId: $call_id})-[:hasInitialState]->(s0:State)
+MATCH (c)-[:correspondsToTransition]->(t:Transition)-[:leadsTo]->(s1:State)
+RETURN s0.content AS input, t.actionType, s1.content AS output
 ```
 
----
+### 6.4 Trajectory constraints
 
-### 6.4 Trajectory Constraints
+From the SHACL shapes:
 
-| ID | Constraint |
-|----|-----------|
-| C2-1 | State nodes must be reachable from their AgentCall via `hasState`. |
-| C2-2 | `Transition.from_state_id` and `to_state_id` must reference existing State nodes. |
-| C2-3 | `Branch.branch_index` values within a group must be unique and in `[0, branch_count − 1]`. |
-| C2-4 | Every AgentCall must have at least one State node (the `INIT` state) (G4). |
-| C2-5 | The path `INIT → ... → DONE|ERROR` must be acyclic within a single AgentCall. Cycles indicate loops in the agent's reasoning, which must be detected and flagged rather than silently represented. |
+| Constraint |
+|---|
+| every `State` has `content`; every `TrajectoryElement` has `sessionId` |
+| every `ExecutionElement` has `hasInitialState`, `hasFinalState`, `hasState` and `correspondsToTransition` |
+| every `Transition` has `representsExecution`; every `State` has `inputTo`; every `Transition` has `leadsTo` |
+| a `Session`'s initial and final `State` must also be the initial / final state of at least one other `ExecutionElement` (custom shapes) |
+| only `TrajectoryElement` nodes may carry `layer`, and the value must be `normalized` (structural check `layer_vocabulary`) |
 
----
+Calls without any input or output content get no State/Transition and therefore violate the first two rows when validated with SHACL.
 
-### 6.5 Trajectory Examples
+### 6.5 Trajectory example
 
-**Two-step ReAct trajectory (INIT → THINKING → TOOL_USE → TOOL_RESULT_RECEIVED → THINKING → DONE):**
+From the same trip-planner run, one LLM call's trajectory:
 
-```python
-# State nodes
-{"id": "state:planner:agt-001:INIT",                  "node_type": "State",
- "mealy_symbol": "INIT",         "agent_id": "planner", "call_id": "agt-001", ...},
-{"id": "state:planner:agt-001:THINKING",              "node_type": "State",
- "mealy_symbol": "THINKING",     "agent_id": "planner", "call_id": "agt-001", ...},
-{"id": "state:planner:agt-001:TOOL_USE",              "node_type": "State",
- "mealy_symbol": "TOOL_USE",     "agent_id": "planner", "call_id": "agt-001", ...},
-{"id": "state:planner:agt-001:TOOL_RESULT_RECEIVED",  "node_type": "State",
- "mealy_symbol": "TOOL_RESULT_RECEIVED", "agent_id": "planner", "call_id": "agt-001", ...},
-{"id": "state:planner:agt-001:DONE",                  "node_type": "State",
- "mealy_symbol": "DONE",         "agent_id": "planner", "call_id": "agt-001", ...},
+```json
+{"node_type": "State", "id": "state-llm-tp-llm-001-prompt", "semanticType": "initial"},
+{"node_type": "State", "id": "state-llm-tp-llm-001-completion", "semanticType": "final"},
+{"node_type": "Transition", "id": "trans-llm-tp-llm-001", "actionType": "llm_call",
+ "fromState": "state-llm-tp-llm-001-prompt", "toState": "state-llm-tp-llm-001-completion",
+ "realizesCallId": "tp-llm-001"}
 
-# Transition nodes
-{"id": "transition:state:planner:agt-001:INIT:state:planner:agt-001:THINKING",
- "node_type": "Transition", "from_state_id": "state:planner:agt-001:INIT",
- "to_state_id": "state:planner:agt-001:THINKING",
- "mealy_symbol": "THINKING", "call_id": "llm-001", "timestamp": "2025-01-15T10:00:00.1Z"},
-# ... remaining transitions follow the same pattern
+{"edge_type": "hasInitialState", "from_id": "llmcall:demo:planner:tp-llm-001", "to_id": "state-llm-tp-llm-001-prompt"},
+{"edge_type": "hasFinalState", "from_id": "llmcall:demo:planner:tp-llm-001", "to_id": "state-llm-tp-llm-001-completion"},
+{"edge_type": "inputTo", "from_id": "state-llm-tp-llm-001-prompt", "to_id": "trans-llm-tp-llm-001"},
+{"edge_type": "leadsTo", "from_id": "trans-llm-tp-llm-001", "to_id": "state-llm-tp-llm-001-completion"},
+{"edge_type": "representsExecution", "from_id": "trans-llm-tp-llm-001", "to_id": "llmcall:demo:planner:tp-llm-001"}
 ```
 
-**ParallelGroup with two branches:**
+A parallel group with its calls (`ParallelGroup` -> `ToolCall` and `RAGQuery` via `hasToolCall` / `hasRAGQuery`):
 
-```python
-{"id": "pg-001",    "node_type": "ParallelGroup", "group_id": "pg-001", "branch_count": 2},
-{"id": "br-001",    "node_type": "Branch", "branch_id": "br-001", "group_id": "pg-001", "branch_index": 0},
-{"id": "br-002",    "node_type": "Branch", "branch_id": "br-002", "group_id": "pg-001", "branch_index": 1},
-
-{"from_id": "call:agt-001", "to_id": "pg-001",  "edge_type": "parallels"},
-{"from_id": "pg-001",       "to_id": "br-001",  "edge_type": "hasBranch"},
-{"from_id": "pg-001",       "to_id": "br-002",  "edge_type": "hasBranch"},
+```json
+{"node_type": "ParallelGroup", "id": "parallelgroup:demo:itinerary-agent:tp-pg-001"},
+{"edge_type": "hasToolCall", "from_id": "parallelgroup:demo:itinerary-agent:tp-pg-001", "to_id": "toolcall:demo:itinerary-agent:tp-tc-001"}
 ```
 
----
+## 7. Provenance layer
 
-## 7. Provenance Layer (L4)
+The provenance layer is **off** by default (`--include-provenance`). Enable it to see which pieces of content went into each LLM prompt, for example for retrieval audits or context-budget tuning.
 
-L4 is **off by default** and should be enabled only when per-token context
-attribution is required (e.g., for RAG provenance audits or context budget
-optimization).
+### 7.1 ContextContribution semantics
 
----
+A `ContextContribution` node records one part of the context assembled for an LLM call, from a `context_part_contributed` event. It is linked to the `LLMCall` it contributed to (`contributesTo`), by `llm_call_id` when the event names one, else to the call of the same agent whose time window contains the event. The `parents` list names the parts it was derived from.
 
-### 7.1 ContextContribution Semantics
+### 7.2 Provenance node attributes
 
-A `ContextContribution` node records one distinct piece of content that was
-present in an LLM call's prompt context.  Each contribution is linked to:
+| Attribute | Source (`event` field) | Default |
+|---|---|---|
+| `partId` | `part_id` | derived hash |
+| `parents` | `parents` or `provenance.parents` | `[]` |
+| `source` | `source` | `""` |
+| `sectionId` | `section_id` | `""` |
+| `sourceType` | `source_type` | `unknown` |
+| `accessMechanism`, `mechanism` | `access_mechanism` | `inject` |
+| `cause` | `cause` | `context_manager` |
+| `causeType` | `cause_type` | `deterministic` |
+| `tokenEstimate` | `token_estimate` | `0` |
+| `retained` | `retained` | `true` |
+| `evictionReason` | `eviction_reason` (only when `retained` is false) | `budget_exceeded` |
+| `sensitivity` | `sensitivity` | absent |
+| `content`, `contentPreview` | `content` or `content_preview`; preview is the first 200 characters | absent |
+| `agentId`, `timestamp`, `runId` | | |
 
-- The `LLMCall` whose prompt contained it (via `hasContextPart`).
-- The originating execution node that produced the content (via `source_call_id`).
+The values of `sourceType`, `accessMechanism`, `cause` and `causeType` are free strings; the defaults above are the only ones the normalizer assigns.
 
-This makes it possible to answer: "which prior tool results, memory reads, and
-agent outputs contributed to the context that produced this LLM response?"
+### 7.3 The derivedFrom graph
 
-**Semantic types of context contributions:**
+`derivedFrom` links a `ContextContribution` to each parent listed in its `parents` that is present in the trace, forming a directed graph of how context parts were derived (summarised, extracted, transformed) from earlier ones.
 
-| `semantic_type` | Meaning |
-|----------------|---------|
-| `system_prompt` | Static system-level instructions |
-| `user_message` | Direct user input |
-| `tool_result` | Output from a prior ToolCall |
-| `memory_retrieval` | Content retrieved from a MemoryCall |
-| `rag_chunk` | A document chunk from a RAGQuery |
-| `agent_output` | Output from a prior AgentCall (e.g., in orchestrator patterns) |
-| `assistant_message` | Prior model completion included in the context window |
+| Edge | From -> To |
+|---|---|
+| `contributesTo` | `ContextContribution` -> `LLMCall` |
+| `derivedFrom` | `ContextContribution` -> `ContextContribution` (child to parent) |
 
----
+### 7.4 Provenance constraints
 
-### 7.2 Provenance Node Attributes
+| Constraint | Checked by |
+|---|---|
+| `ContextContribution` and `contributesTo` are declared in the extension TTL | `unknown_node_types`, `unknown_edge_types` |
+| `derivedFrom` is **not** declared in any TTL | `unknown_edge_types` reports it when present |
+| the `derivedFrom` graph should be acyclic | no automated check; see [section 12](#12-verification) |
 
-#### ContextContribution
+Example (event field names; graph attributes are camelCase):
 
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `source_call_id` | `str` | yes | `call_id` of the execution node that produced this content. Must reference an existing LLMCall (G6). |
-| `semantic_type` | `str` | yes | Category of the contribution (see table above). |
-| `content_hash` | `str` | yes | Stable SHA-256 (or similar) hash of the content.  Used to construct the node ID and to detect identical contributions across calls. |
-| `tokens` | `int` | yes | Number of tokens this contribution occupies in the prompt context. |
-
----
-
-### 7.3 The σ DAG (derivedFrom Edges)
-
-Beyond the flat `hasContextPart` edges, L4 supports a `derivedFrom` edge that
-connects one `ContextContribution` to another when the content of one is derived
-from (summarized from, extracted from, or transformed from) another.  The
-resulting directed acyclic graph (the σ DAG, σ for "sources") enables multi-hop
-provenance queries:
-
-```
-LLMCall:llm-010
-  └─hasContextPart─► contribution:llm-010:a3f7  (semantic_type=rag_chunk)
-                          └─derivedFrom─► contribution:llm-005:9c2a  (semantic_type=tool_result)
-                                              └─derivedFrom─► contribution:llm-001:4b8e  (semantic_type=user_message)
+```json
+{"kind": "context_part_contributed", "part_id": "part-hotel-rag-001", "source": "rag_result",
+ "access_mechanism": "vector_search", "token_estimate": 142, "retained": true,
+ "llm_call_id": "tp-llm-002", "parents": []}
 ```
 
-**σ DAG edges:**
+becomes a node `cpr-part-hotel-rag-001` with `accessMechanism = "vector_search"` and an edge `contributesTo` to `tp-llm-002`'s `LLMCall`.
 
-| Source | Edge type | Target | Description |
-|--------|-----------|--------|-------------|
-| `LLMCall` | `hasContextPart` | `ContextContribution` | Primary edge; links a prompt to one of its context slots. |
-| `ContextContribution` | `derivedFrom` | `ContextContribution` | Provenance lineage; the source contribution is an ancestor of the target. |
+## 8. Infrastructure layer
 
----
+`infrastructure_info` events map to the `Worker` class (`StructuralElement`) when `include_infrastructure` is on. The current native handlers produce no `Worker` node: there is no dispatch handler for `Worker`, and the generic call handler skips events without a `call_id`. Enabling the layer therefore has no effect on the graph today. No `Worker` edge type is defined in either TTL.
 
-### 7.4 Provenance Constraints
+## 9. Governance layer
 
-| ID | Constraint |
-|----|-----------|
-| C4-1 | `ContextContribution.source_call_id` must reference an existing LLMCall node in the same trace (G6). |
-| C4-2 | `content_hash` must be stable: the same content must always produce the same hash, regardless of when the node is ingested. |
-| C4-3 | The σ DAG (the subgraph formed by `derivedFrom` edges) must be acyclic. |
-| C4-4 | `tokens` must be ≥ 1. A zero-token contribution is nonsensical and indicates a normalization error. |
+The governance layer is **off** by default (`--include-governance`). Enable it to record policy decisions, audit events, budget events and human-in-the-loop gates.
 
----
+### 9.1 GovernanceEvent and CallAnnotation
 
-### 7.5 Provenance Examples
+Both are point-in-time nodes with no `call_id`, attached to the enclosing call by `annotates` (annotation -> call), so governance data never changes the execution node it describes.
 
-**RAG chunk contributing to an LLM call:**
+- `GovernanceEvent` is the class for every governance kind in `KIND_TO_CLASS`.
+- `CallAnnotation` is the class for the always-on annotation kinds (routing, context assembly, state updates, checkpoints, user input and output, `observability_*_execute_*`, ...). Checkpoint kinds are tagged like governance events (`annotationKind`, `block = "governance"`) but are `CallAnnotation` nodes.
 
-```python
-# ContextContribution for a retrieved chunk
-{"id": "contribution:call:llm-009:a3f7c2d1",
- "node_type": "ContextContribution",
- "source_call_id": "call:llm-009",   # the LLMCall that contains this in its prompt
- "semantic_type": "rag_chunk",
- "content_hash": "a3f7c2d1",
- "tokens": 142},
+Both are declared in the extension TTL as direct subclasses of `Element`.
 
-# Edge: LLMCall → hasContextPart → ContextContribution
-{"from_id": "call:llm-009", "to_id": "contribution:call:llm-009:a3f7c2d1",
- "edge_type": "hasContextPart"}
-```
+### 9.2 Attributes
 
-**Query: which tool results contributed to LLM call `llm-020`?**
+Common to both: `annotationId` (= `id`), `agentId` (falls back to `source_agent_id`), `kind` (the original event kind), `timestamp`, `runId`. Payload fields are copied only when the event carries them:
 
-```cypher
-MATCH (llm:LLMCall {id: "call:llm-020"})
-  -[:hasContextPart]-> (cc:ContextContribution {semantic_type: "tool_result"})
-RETURN cc.source_call_id, cc.tokens
-ORDER BY cc.tokens DESC
-```
+`sourceAgentId`, `targetAgentId`, `task`, `correlationId`, `status`, `segments`, `totalTokens`, `operation`, `target`, `from`, `to`, `messageType`, `policyId`, `decision`, `reason`, `deniedCallId`, `budgetScope`, `amount`, `interventionType`.
 
----
+For governance kinds the handler also sets `annotationKind` (= `kind`) and `block = "governance"` (see 9.3).
 
-## 8. Infrastructure Layer (L1)
+### 9.3 Governance event kinds
 
-L1 is **off by default**.  Enable it when process-level worker attribution is
-required for debugging crashes, tracking resource usage per worker process, or
-auditing durable-backend persistence.
+| Kind | Meaning |
+|---|---|
+| `audit` | a call was examined by a policy or monitoring component |
+| `policy_denial`, `policy_allow` | a policy rule blocked or explicitly allowed a call |
+| `budget_event` | a token or cost budget threshold was reached (`budgetScope`, `amount`) |
+| `transformation_event` | content was transformed (redacted, rewritten) by governance |
+| `control_intervention` | a control component intervened (`interventionType`) |
+| `hitl_gate`, `hitl_request` | a human-in-the-loop gate or request |
+| `governance_denied`, `governance_checked` | a governance check denied or permitted a call (`policyId`, `decision`, `reason`, `deniedCallId`) |
+| `governance_decision`, `governance_event`, `governance_policy` | decision, generic and policy records |
+| `governance_authorize_*`, `governance_validate_*`, `obs_wrap_gov_authorize_*`, `obs_wrap_gov_validate_*` | start/end records of the authorize and validate steps, and the runtime wrapper events around them |
 
----
+`annotationKind` and `block = "governance"` are set for every kind above except `hitl_request` and the `obs_wrap_gov_*` wrapper kinds, which become `GovernanceEvent` nodes without those two attributes.
 
-### 8.1 Worker Node Attributes
+### 9.4 Governance edges and constraints
 
-#### Worker
+| Edge | From -> To |
+|---|---|
+| `annotates` | `GovernanceEvent` / `CallAnnotation` -> call |
 
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `worker_id` | `str` | yes | Stable identifier for this worker.  Typically derived from hostname and PID: `{hostname}-{pid}`. |
-| `worker_pid` | `int` | yes | Operating system process ID of the worker at the time the AgentCall was executed. |
-| `durable_backend` | `str \| null` | no | Name or URI of the durable storage backend this worker is attached to (e.g., a Redis URI for checkpointing). |
+Notes on validation:
 
----
+- `block = "governance"` is accepted by the `block_vocabulary` check only on `CallAnnotation` nodes whose `annotationKind` starts with `governance`; on `GovernanceEvent` nodes the check currently reports it as invalid (expected `execution`). Run governance traces through `mas-lab kg validate` with that in mind.
+- Zero or more governance nodes may annotate one call; absence is never an error.
 
-### 8.2 Infrastructure Edges and Constraints
+## 10. Global constraints
 
-| Source | Edge type | Target | Description |
-|--------|-----------|--------|-------------|
-| `Worker` | `hosts` | `AgentCall` | Records which worker process executed a given AgentCall. |
+There is no separate constraint numbering in the code. Constraints are enforced in two ways:
 
-| ID | Constraint |
-|----|-----------|
-| C1-1 | Infrastructure is optional.  Absence of a `Worker` node does not invalidate a KG document. |
-| C1-2 | Each `AgentCall` may be linked to **at most one** `Worker` node.  Multiple worker links on a single call indicate a normalization error. |
+**Structural checks** (`core/verifier.py`, always available):
 
-**Example:**
+| Check | Rule |
+|---|---|
+| `unknown_node_types` | every `node_type` is a class declared in the ontology graph (`oxp-ontology` plus the extension TTL) |
+| `unknown_edge_types` | every `edge_type` is an object property declared there |
+| `block_vocabulary` | `block`, when present, is one of `structural`, `execution`, `trajectory`, `governance` and matches the node's class (`structural` for `StructuralElement` subclasses, `trajectory` for `TrajectoryElement` subclasses, `execution` otherwise) |
+| `layer_vocabulary` | `layer` appears only on `TrajectoryElement` nodes, with value `normalized` |
+| `orphaned_edges` | every edge endpoint id exists in the node list |
+| `experiment_extension` (optional) | experiment, scenario, test item and run label attributes on `Session`, when `--enable-extension-layer experiment` is set |
 
-```python
-{"id": "worker:worker-node42-18342", "node_type": "Worker",
- "worker_id": "worker-node42-18342", "worker_pid": 18342,
- "durable_backend": "redis://redis-host:6379/0"},
+**SHACL** (`shacl` check): `mas-ontology.ttl` property shapes plus `mas-shapes.ttl` and `mas-shapes-custom.ttl` from `oxp-ontology`, evaluated with `pyshacl` against the graph serialised as RDF. The constraints are listed in sections 5.4 and 6.4. Severity is violation (error), warning or info per shape; `strict` promotes warnings to errors.
 
-{"from_id": "worker:worker-node42-18342", "to_id": "call:agt-001", "edge_type": "hosts"}
-```
+**Stable ids.** Id stability is by construction (deterministic id functions; [normalization.md](normalization.md#9-node-id-stability)), not checked at validation time. Two things break it: duplicate point events in the input (each produces a node with the same id) and any pre-processing that changes timestamps, since annotation ids hash the event timestamp.
 
----
+## 11. URN scope conventions
 
-## 9. Governance Layer (L5)
+Every node and edge carries a `canonicalId` URN, assigned in `core/graph_builder.py`. The scope is part of the identity:
 
-L5 is **off by default**.  Enable it when policy enforcement, budget tracking, or
-human-in-the-loop (HITL) gate records must be captured in the KG.
+| Scope | Pattern | Used for |
+|---|---|---|
+| session | `urn:mas:session:{sessionId}:call:{callId}`, `...:state:{stateNodeId}`, `...:transition:{transitionId}`, `...:annotation:{annotationId}`, `...:edge:{edgeType}:{sha1[:16]}` | call, state, transition, annotation nodes and all edges: ephemeral, one per trajectory |
+| session | `urn:mas:session:{sessionId}` | the `Session` node |
+| run | `urn:mas:run:{runId}` | the `Run` node |
+| global | `urn:mas:global:{type}:{slug}` | catalog nodes (`Agent`, `MAS`, `LLM`, `Tool`, `Processing`, `Skill`): stable across sessions |
+| node | `urn:mas:node:{type}:{slug}` | fallback for nodes with no other identity (for example `ContextContribution`) |
 
----
-
-### 9.1 Annotation-as-Governance Pattern
-
-Rather than adding governance attributes directly to execution nodes (which would
-couple the core schema to policy logic), L5 uses a separate `CallAnnotation` node
-attached via an `annotatedBy` edge.  This pattern has three benefits:
-
-1. **Separation of concerns**: governance records can be written by a sidecar
-   policy engine without mutating the primary execution record.
-2. **Auditability**: the annotation node is independently queryable and can be
-   indexed separately from the execution trace.
-3. **Extensibility**: new `annotation_kind` values can be added without schema
-   migration.
-
----
-
-### 9.2 CallAnnotation Attributes
-
-| Attribute | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `annotation_id` | `str` | yes | Unique identifier.  Forms the node ID as `annotation:{annotation_id}`. |
-| `annotation_kind` | `str` | yes | Semantic type of this annotation (see §9.3). |
-| `source_agent_id` | `str \| null` | no | `agent_id` of the agent or component that created this annotation (e.g., the policy engine). |
-| `target_agent_id` | `str \| null` | no | `agent_id` of the agent that this annotation is about (typically the same as the `AgentCall.agent_id`). |
-
----
-
-### 9.3 annotation_kind Values
-
-The following `annotation_kind` values correspond to L5 event kinds:
-
-| `annotation_kind` | Source event kind | Description |
-|-------------------|------------------|-------------|
-| `audit` | `audit` | A general audit record noting that a call was examined by a policy or monitoring component. |
-| `policy_denial` | `policy_denial` | The call was blocked by a policy rule before execution could complete. |
-| `policy_allow` | `policy_allow` | The call was explicitly allowed by a policy rule (as distinct from default pass-through). |
-| `budget_event` | `budget_event` | A token or cost budget threshold was hit during this call. |
-| `transformation_event` | `transformation_event` | Input or output content was transformed (redacted, anonymized, rewritten) by a governance component. |
-| `control_intervention` | `control_intervention` | A control plane component (circuit breaker, rate limiter, etc.) intervened in this call. |
-| `hitl_gate` | `hitl_gate` | A human-in-the-loop gate was triggered.  Execution may have been paused pending human review. |
-| `governance_denied` | `governance_denied` | A higher-level governance check denied the call, distinct from a policy_denial at the rule level. |
-| `governance_checked` | `governance_checked` | A governance check was performed and the call was permitted to proceed. |
-
----
-
-### 9.4 Governance Edges and Constraints
-
-| Source | Edge type | Target | Description |
-|--------|-----------|--------|-------------|
-| `AgentCall` | `annotatedBy` | `CallAnnotation` | Links an agent call to its governance annotation record. One AgentCall may have multiple CallAnnotation nodes (e.g., both an `audit` and a `policy_allow`). |
-
-| ID | Constraint |
-|----|-----------|
-| C5-1 | An `AgentCall` may have zero or more `CallAnnotation` nodes.  The absence of annotations is not an error. |
-| C5-2 | When `annotation_kind = policy_denial`, the associated `AgentCall.failure_category` should be set to `policy_denial` for consistency. |
-| C5-3 | `annotation_id` must be unique across the trace. |
-
----
-
-### 9.5 Governance Examples
-
-**Policy denial annotation:**
-
-```python
-{"id": "annotation:gov-0045", "node_type": "CallAnnotation",
- "annotation_id": "gov-0045",
- "annotation_kind": "policy_denial",
- "source_agent_id": "policy-engine",
- "target_agent_id": "resolver"},
-
-{"from_id": "call:agt-007", "to_id": "annotation:gov-0045", "edge_type": "annotatedBy"}
-```
-
-**HITL gate with policy_allow on resume:**
-
-```python
-# Gate fires — execution paused
-{"id": "annotation:hitl-001", "node_type": "CallAnnotation",
- "annotation_id": "hitl-001", "annotation_kind": "hitl_gate",
- "source_agent_id": "hitl-controller", "target_agent_id": "executor"},
-
-# Human approves — execution resumes with allow annotation
-{"id": "annotation:gov-002", "node_type": "CallAnnotation",
- "annotation_id": "gov-002", "annotation_kind": "policy_allow",
- "source_agent_id": "human-reviewer-jsmith", "target_agent_id": "executor"},
-
-# Both annotations are linked to the same AgentCall
-{"from_id": "call:agt-012", "to_id": "annotation:hitl-001", "edge_type": "annotatedBy"},
-{"from_id": "call:agt-012", "to_id": "annotation:gov-002",  "edge_type": "annotatedBy"},
-```
-
-**Query: all calls that were denied by policy in a session:**
-
-```cypher
-MATCH (ac:AgentCall:KGNode {sessionId: $session_id})
-  -[:annotatedBy]-> (ann:CallAnnotation {annotation_kind: "policy_denial"})
-RETURN ac.id, ac.agent_id, ann.source_agent_id
-```
-
----
-
-## 10. Global Constraints (G1–G8)
-
-These constraints apply across all layers.  `run_validate_kg` checks G1–G7
-structurally.  G8 (ID stability) must be verified by comparing re-ingested traces
-against the database.
-
-| ID | Constraint | Checked by | Why it matters |
-|----|-----------|-----------|---------------|
-| G1 | Every execution node must carry `call_id`, `agent_id`, and `session_id`. | `run_validate_kg` | These three fields are the minimum required to reconstruct the call tree, scope queries by session, and link execution records back to their originating agent. A node missing any of them cannot be reliably indexed or queried. |
-| G2 | `start_time ≤ end_time` (equivalently, `duration ≥ 0`) on all execution nodes. | `run_validate_kg` | Negative durations indicate clock skew or instrumentation errors.  They corrupt latency metrics and can cause infinite loops in timeline reconstruction. |
-| G3 | If `parent_call_id` is set, the referenced `call_id` must exist in the same trace. | `run_validate_kg` | Dangling parent references leave subtrees disconnected from the call root.  They prevent traversal of the full call hierarchy and can silently produce incomplete analysis results. |
-| G4 | Every `AgentCall` must have at least one `State` node (the `INIT` state) when L2 is enabled. | `run_validate_kg` | An AgentCall without a trajectory record cannot be used for step-level analysis, loop detection, or structural comparison.  It also indicates that the normalizer's L2 event was dropped. |
-| G5 | `LLMCall.parent_call_id` must equal its containing `AgentCall.call_id`. | `run_validate_kg` | LLM calls are always the direct children of an AgentCall, never children of other LLMCalls or ToolCalls.  Violations indicate mis-parented spans from the instrumentation layer. |
-| G6 | `ContextContribution.source_call_id` must reference an existing LLMCall node in the same trace. | `run_validate_kg` | A ContextContribution without a resolvable source cannot be used for provenance attribution and may indicate a dropped or out-of-order event. |
-| G7 | Every `ToolCall.tool_name` must appear as a `Tool` catalog node. | `run_validate_kg` | Undeclared tool usage cannot be linked to its spec, preventing capability coverage analysis, I/O schema validation, and conformance checking. |
-| G8 | Node IDs must be stable across re-ingestion of the same trace. | External comparison | Non-stable IDs cause `MERGE` in Neo4j to create duplicate nodes on re-ingestion.  They also break cross-run comparisons that rely on ID equality to identify the same logical node. |
-
-### G8 implementation guidance
-
-G8 is satisfied automatically when ID construction follows §4 exactly.  The most
-common causes of G8 violations:
-
-- Using a random UUID as the `call_id` when the underlying event already carries a
-  stable trace ID (e.g., an OTel span ID).  Always prefer the trace-originating ID.
-- Including a wall-clock timestamp in a node ID.  Timestamps are not stable if the
-  normalizer re-processes a trace with a slightly different `end_time` due to
-  rounding.
-- Using Python's `id()` or memory address of an object.  These are process-local
-  and not reproducible.
-
----
-
-## 11. URN Scope Conventions
-
-When the KG is serialized as RDF (e.g., for SPARQL queries or interoperability
-with external knowledge graphs), node IDs are expanded into URNs using the
-following scope hierarchy:
-
-| Scope | URN prefix | Example |
-|-------|-----------|---------|
-| Global | `urn:maskg:` | Reserved for cross-organization interoperability. Not used in standard deployments. |
-| Organization | `urn:maskg:{org_id}:` | `urn:maskg:cisco:` — scopes the graph to a single organization. |
-| MAS | `urn:maskg:{org_id}:{mas_id}:` | `urn:maskg:cisco:support-pipeline:` — scopes to a specific MAS deployment. |
-| Session | `urn:maskg:{org_id}:{mas_id}:{session_id}:` | `urn:maskg:cisco:support-pipeline:sess-001:` — scopes to a single session. |
-
-**Expansion rules:**
-
-- Catalog node IDs (prefixed `spec:`) expand under the MAS scope, since they are
-  shared across sessions: `spec:agent:planner` → `urn:maskg:cisco:support-pipeline:spec:agent:planner`.
-- Execution node IDs (prefixed `call:`, `state:`, etc.) expand under the session
-  scope: `call:agt-001` → `urn:maskg:cisco:support-pipeline:sess-001:call:agt-001`.
-- Worker node IDs expand under the organization scope, since a worker process may
-  host calls from multiple sessions: `worker:pid-18342` → `urn:maskg:cisco:worker:pid-18342`.
-
-**In practice:** for Neo4j-only deployments (the standard case), URN expansion is
-not required.  The short-form IDs from §4 are used directly as node `id`
-properties.  URN expansion is only needed when the graph is exported for RDF
-federation or linked-data publication.
-
-**Namespace declaration for Turtle serialization:**
-
-```turtle
-@prefix maskg:    <urn:maskg:> .
-@prefix mas-org:  <urn:maskg:cisco:> .
-@prefix mas-sys:  <urn:maskg:cisco:support-pipeline:> .
-@prefix mas-sess: <urn:maskg:cisco:support-pipeline:sess-001:> .
-```
-
----
+Two sessions with identical state content get different session-scoped URNs but the same `contentHash`. For Neo4j-only use, the short `id` values from [section 4](#4-node-id-construction) are the node keys; URNs matter for RDF export and SHACL validation, which serialise the graph under the `mas:` namespace `https://outshift-open.github.io/oxp-ontology/mas#`.
 
 ## 12. Verification
 
-### What `run_validate_kg` checks automatically
+### What `run_validate_kg` checks
 
-`run_validate_kg` (see [steps.md](steps.md)) performs structural validation of a
-materialized KG document.  It checks:
+`run_validate_kg(artifact, ...)` (see [steps.md](steps.md); CLI `mas-lab kg validate KG_PATH`) runs the structural checks and the SHACL check from [section 10](#10-global-constraints):
 
-| Check | Global constraint enforced |
-|-------|---------------------------|
-| Every execution node carries `call_id`, `agent_id`, `session_id` | G1 |
-| `start_time ≤ end_time` on all execution nodes | G2 |
-| `parent_call_id` references resolve within the same trace | G3 |
-| Every `AgentCall` has at least one `State` node (when L2 is present) | G4 |
-| `LLMCall.parent_call_id = AgentCall.call_id` for all LLM calls | G5 |
-| `ContextContribution.source_call_id` resolves to a `LLMCall` in the trace | G6 |
-| `ToolCall.tool_name` matches a `Tool` catalog node | G7 |
-| Schema-level attribute type checks (e.g., `duration` is float ≥ 0) | — |
-| Required attributes are present on each node type | — |
-| No duplicate node IDs within a document | — |
+| Check | Default |
+|---|---|
+| `unknown_node_types`, `unknown_edge_types`, `block_vocabulary`, `layer_vocabulary`, `orphaned_edges` | on |
+| `shacl` | on; reported as **skipped** (not passed) unless `pyshacl` and `rdflib` are installed (`mas-library-kg[validation]`) |
+| `experiment_extension` | off; enabled with `--enable-extension-layer experiment` |
 
-`run_validate_kg` returns a report dict with keys `valid` (bool), `errors` (list
-of constraint violations), and `warnings` (list of non-fatal schema deviations).
+It returns a report dict:
 
-### What must be checked externally
+```python
+{"error_count": 0, "warning_count": 0, "skipped_count": 1,
+ "results": [{"check": "unknown_node_types", "status": "pass", "detail": ""}, ...]}
+```
 
-The following checks require cross-document or cross-session context that
-`run_validate_kg` cannot access:
+`status` is one of `pass`, `warning`, `error`, `skipped`. When `error_count` is nonzero the function raises `KGValidationError`, whose `report` attribute carries the full report (there is no option to suppress this). Use `--list-checks`, `--check NAME` and `--skip-check NAME` on the CLI to choose checks.
 
-| Check | Reason it is external | Recommended approach |
-|-------|-----------------------|---------------------|
-| G8: Node ID stability across re-ingestion | Requires comparing a new trace against previously stored nodes in Neo4j. | Run `run_compare_kg` (see [steps.md](steps.md)) between the re-ingested KG and the stored KG for the same `session_id`. Any node present in only one version with a matching logical key is a G8 violation. |
-| Catalog node completeness | A `Tool` catalog node may not be present if it was declared in a different KG document than the one being validated. | Call `merge_spec_into_kg` with the current `mas_spec` before validation so that catalog nodes are always present in the same document. |
-| Cross-run trajectory consistency | Whether the same agent follows a consistent state machine across runs is a semantic question, not a structural one. | Use `run_compare_kg` across multiple KG documents for the same MAS configuration to detect trajectory drift. |
-| σ DAG acyclicity (C4-3) | Cycle detection over the `derivedFrom` subgraph requires full graph traversal, which `run_validate_kg` only partially performs. | Run a dedicated Cypher query after pushing to Neo4j: `MATCH path = (c:ContextContribution)-[:derivedFrom*]->(c) RETURN path LIMIT 1` — any result indicates a cycle. |
+### Known results on the shipped examples
+
+- `library-kg/examples/qa-agent` with default layers validates with zero errors (SHACL skipped when the extra is not installed).
+- Enabling governance produces `block_vocabulary` errors for `GovernanceEvent` nodes (see [section 9.4](#94-governance-edges-and-constraints)).
+- Traces that contain a `RAGQuery` (the trip-planner example, default layers) produce an `unknown_edge_types` error for `hasRAGQuery`; `hasThinking`, `derivedFrom` and `hasSession` behave the same, and `TaskCall` is reported by `unknown_node_types`. These names are produced by the native builder but are not declared in the TTLs yet.
+
+### What must be checked outside `run_validate_kg`
+
+| Check | Approach |
+|---|---|
+| Re-ingestion stability | normalize the same input twice and compare with `run_compare_kg` ([steps.md](steps.md)); ids should match |
+| `derivedFrom` acyclicity | after a Neo4j push, run `MATCH path = (c:ContextContribution)-[:derivedFrom*]->(c) RETURN path LIMIT 1`; any result is a cycle |
+| Spec conformance (declared tools and agents versus what ran) | `merge_spec_into_kg` then compare ([kg-spec.md](kg-spec.md)) |
+| Events-side schema (before normalization) | `mas-lab kg verify EVENTS_PATH` / `run_verify_events` ([steps.md](steps.md)) |
 
 ### Running validation
 
 ```python
 from mas.library.kg.steps import run_validate_kg
+from mas.library.kg.steps.validate_kg import KGValidationError
 
-report = run_validate_kg("runs/001/kg.jsonld")
-
-if not report["valid"]:
-    for error in report["errors"]:
-        print(f"[ERROR] {error['constraint']} — {error['message']}")
-        print(f"        node: {error.get('node_id')}")
+try:
+    report = run_validate_kg("runs/001/kg.jsonld")
+except KGValidationError as exc:
+    for row in exc.report["results"]:
+        if row["status"] == "error":
+            print(f"[ERROR] {row['check']}: {row['detail']}")
+    raise
 ```
 
-For continuous validation in a pipeline, wire `run_validate_kg` as a step
-immediately after `run_normalize` and fail the pipeline on any `valid=False`
-report before proceeding to annotation or Neo4j push steps.
+In a pipeline, run validation immediately after `run_normalize` and stop on `KGValidationError` before annotation or the Neo4j push.

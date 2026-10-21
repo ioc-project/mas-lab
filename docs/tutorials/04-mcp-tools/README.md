@@ -1,51 +1,28 @@
-# Tutorial 4: MCP tools
+<!--
+  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+  SPDX-License-Identifier: Apache-2.0
+-->
+# Tutorial 4 — MCP tools
 
-This tutorial moves a tool from in-process execution to MCP without changing
-the agent's reasoning logic or the tool call seen by the model. It then extends
-the example so one agent uses a local calculator and a remote web-search tool in
-the same turn.
+You move a tool from in-process execution to the Model Context Protocol (MCP) without changing the agent.
+Then one agent uses a local calculator and a remote web-search tool in the same turn.
 
-Protocol integrations are often treated as a small bolt-on, but in real systems
-MCP adds a stack of work: provider discovery, routing, authentication,
-transport compatibility, pagination, and protocol compliance. The value is only
-real when that complexity is isolated away from the agent's business logic.
+MCP is an open protocol that lets an agent call tools hosted by a separate server. The agent asks for a logical tool.
+Infra decides whether a local function or an MCP server answers.
 
-The objective of this tutorial is to show that separation clearly: the agent
-still asks for the same logical tool, while infra decides whether that request is
-resolved locally or through an MCP server. That gives teams a clean path to
-benefit from protocol compliance, best practices, and protocol upgrades without
-rewriting their agent code.
+## What you need
 
-You will learn how to:
+- **Packages:** `mas-ctl` and `mas-library-ioa` (the `mas-mcp` server and client CLI, in the standard install).
+- **Prerequisites:** [Tutorial 0](../00-environment-setup/README.md) (install, LLM access) and
+  [Tutorial 1](../01-building-an-agent/README.md) (this tutorial reuses its agent and `tools` overlay).
+- Run all commands from the repository root. Only the `mas-ctl chat` steps call a live LLM.
 
-- separate a tool's logical contract from its deployment configuration;
-- switch a tool between local and MCP access without rewriting agent code;
-- discover MCP tools and build a unique route for every tool name;
-- dispatch local and remote calls through the same `ToolContract`.
+## Step 1 — Read the MCP infra manifest
 
-## The big win: one infra manifest, no agent rewrite
-
-This is the most important idea in the tutorial: the same agent continues to
-call `ToolContract.call_tool(name, arguments)`, and the runtime swaps the
-transport by changing **infra**, not the agent's logic.
-
-In other words, you do not rewrite the agent, the tool manifest, or the prompt
-when moving from local execution to MCP. You only attach a different
-`ToolServerRegistry` and let the runtime discover the provider and route the
-call.
-
-That is the key separation of concerns:
-
-- agent logic: what the tool is and when it should be called
-- tool contract: stable logical contract (`name`, `arguments`, `response`)
-- infra: provider protocol, URL, auth, transport, and discovery policy
-
-## MCP manifest mapping and defaults
-
-The complete reference is [ToolServerRegistry](../../references/tool-server-registry.md) and [infra.md](../../manifests/infra.md#toolserverregistry).
-
-The remote-tool config is a `ToolServerRegistry` entry under
-`spec.tool_servers[]`:
+The agent keeps calling `ToolContract.call_tool(name, arguments)`. Only infra changes. A remote tool is a
+`ToolServerRegistry` entry under `spec.tool_servers[]`
+(fields: [ToolServerRegistry reference](../../references/tool-server-registry.md),
+[infra.md](../../manifests/infra.md#toolserverregistry)):
 
 ```yaml
 apiVersion: infra/v1
@@ -63,49 +40,29 @@ spec:
       tools: "*"
 ```
 
-The key fields and their defaults are:
+| Field | Meaning |
+| --- | --- |
+| `protocol` | `mcp` selects the MCP adapter. |
+| `usage` | `use` consumes a remote endpoint; `deploy` starts the local provider; `use-and-deploy` does both. |
+| `transport` | `stdio`, `sse`, `streamable-http`, and others. |
+| `tools` | `"*"` discovers the names the server advertises. |
+| `headers` | Optional auth. Use `env:VAR`, never hardcoded secrets. |
 
-| Field | Default / common value | Meaning |
-| --- | --- | --- |
-| `id` | required | Stable key used to identify the server in the active infra bundle. |
-| `protocol` | required | For MCP, this is `mcp`. The protocol is the switch that chooses the transport adapter. |
-| `usage` | `use` | `use` consumes the remote endpoint; `deploy` starts the local provider; `use-and-deploy` does both. |
-| `transport` | `streamable-http` | Wire transport for the MCP server (`stdio`, `sse`, `streamable-http`, etc.). |
-| `url` | required for HTTP transports | Endpoint where the remote MCP server is served. |
-| `timeout` | `30` | Per-call timeout for the server request. |
-| `tools` | `"*"` | Default discovery mode; the runtime fetches the names advertised by the server. |
-| `headers` | `{}` | Optional auth or metadata; prefer `env:VAR` instead of hardcoded secrets. |
-| `follow_pagination` | `true` | Keep following MCP pagination while listing tools. |
+Each layer owns one thing:
 
-The runtime uses these values to discover, register, and route the remote tool
-without changing the logical `ToolContract` the model sees.
-
-## One contract, two execution locations
-
-Three documents have different owners:
-
-| Layer | Owns | Does not own |
-| --- | --- | --- |
-| Agent manifest | Which logical tools the agent may call | URLs and transports |
-| `kind: Tool` manifest | Tool name, description, arguments, result semantics | Where the code runs |
-| `ToolServerRegistry` infra | Provider protocol, endpoint, transport, credentials, tool claims | Agent reasoning |
-
-The runtime invokes every tool through `ToolContract.call_tool(name,
-arguments)`. A local provider and an MCP provider implement that boundary in
-different ways, but neither changes the agent-facing name or argument schema.
+| Layer | Owns |
+| --- | --- |
+| Agent manifest | Which logical tools the agent may call |
+| `kind: Tool` manifest | Tool name, description, arguments, result |
+| `ToolServerRegistry` infra | Protocol, endpoint, transport, credentials |
 
 ![Local and MCP tool access share ToolContract](tutorial-04.1-logic-infra-contract.svg)
 
-**Figure 1:** The agent and tool contracts stay fixed. Selecting MCP replaces
-the execution adapter and supplies connection data through infra; it does not
-move protocol details into the agent manifest.
+**Figure 1:** Selecting MCP replaces the execution adapter. The agent and tool contracts stay fixed.
 
-"Seamless" therefore means **no change to agent or tool logic**, not no
-configuration. Deployment still has to select a reachable provider.
+## Step 2 — Start the MCP provider
 
-## Start the MCP provider
-
-From the repository root, expose only `web-search` through MCP:
+Expose only `web-search` through MCP:
 
 ```bash
 mas-mcp serve \
@@ -115,7 +72,7 @@ mas-mcp serve \
   --host 127.0.0.1 --port 9001
 ```
 
-In another terminal, inspect what the server advertises and call it directly:
+The server keeps running, so leave it in this terminal. In another terminal, list and call the tool (no API key needed):
 
 ```bash
 mas-mcp tools list --url http://127.0.0.1:9001/mcp
@@ -124,13 +81,11 @@ mas-mcp tools call --url http://127.0.0.1:9001/mcp \
   --arguments '{"query":"MAS-Lab"}'
 ```
 
-The server adapter translates the existing MAS tool manifest into MCP
-`tools/list` and `tools/call`. The Python implementation remains behind the
-server and does not leak into the consumer agent.
+You should see `web-search` listed with its input schema, then search results (the live search needs network access). Stop the server with Ctrl-C when you finish Step 3.
 
-## Mix local and MCP tools
+## Step 3 — Mix local and MCP tools
 
-Tutorial 1's `tools` overlay already gives the agent two logical tools:
+Tutorial 1's `tools` overlay gives the agent two logical tools, `web-search` and `calc`:
 
 ```yaml
 tools:
@@ -140,7 +95,7 @@ tools:
       - ref: samples:tools/calc.tool.yaml
 ```
 
-The canonical [`mixed-tools.infra.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mixed-tools.infra.yaml)
+[`mixed-tools.infra.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mixed-tools.infra.yaml)
 activates two providers:
 
 ```yaml
@@ -156,12 +111,7 @@ tool_servers:
     tools: "*"
 ```
 
-Both `tools: "*"` entries mean "claim the names this provider can supply";
-they do not send all calls to both providers. MCP discovery reports only
-`web-search`. The external provider claims that name first, and the local
-provider keeps the remaining declared name, `calc`.
-
-Run the unchanged agent plus its existing tools overlay:
+Keep the Step 2 server running, then run the unchanged agent with it (needs `OPENAI_API_KEY` or a Tutorial 0 cache replay):
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
@@ -171,40 +121,26 @@ mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
   --trace
 ```
 
-The resulting route table is:
+In the exchange log, `web-search` goes over MCP and `calc` runs locally:
 
-| Tool name | Discovered owner | Dispatch |
+| Tool | Owner | Dispatch |
 | --- | --- | --- |
 | `web-search` | `mcp-web-search` advertises it through `tools/list` | MCP `tools/call` |
-| `calc` | Not advertised by MCP; available from the local manifests | Local Python call |
+| `calc` | Not advertised by MCP; local manifests supply it | Local Python call |
 
 ![Tool discovery and dispatch](tutorial-04.2-discovery-dispatch.svg)
 
-**Figure 2:** Discovery builds a name-to-provider registry once. During the
-turn, dispatch looks up the requested name and invokes exactly one provider
-through `ToolContract`.
+**Figure 2:** Discovery builds a name-to-provider registry once. Dispatch calls exactly one provider per tool call.
 
-## What happens during discovery and dispatch
+How the registry assigns owners:
 
-1. MAS-Lab loads the agent and resolves the two `kind: Tool` manifests.
-2. Infra activates the local and MCP provider plugins.
-3. The MCP plugin calls `tools/list`; the local plugin lists the resolved local
-   manifests.
-4. The registry arbitrates ownership by tool name. An explicit claim beats a
-   discovered claim; an external discovered claim beats the local catch-all.
-5. When the model calls a tool, the dispatcher resolves its owner and invokes
-   the common `ToolContract`.
+1. Each provider lists its tools: MCP through `tools/list`, local from the resolved manifests.
+2. An explicit claim beats a discovered claim. An external discovered claim beats the local catch-all.
+3. Duplicate claims of equal priority are errors. Once an external provider is active, every tool needs an owner.
 
-Duplicate claims with equal priority are errors rather than silent routing
-choices. Likewise, once an external provider is active, every application tool
-must have an owner; the explicit local provider in this example preserves the
-local fallback intentionally.
+## Step 4 — Switch back to local access
 
-## Switch back to local access
-
-Remove `--infra-ref` and run the same agent and overlay. With no external
-provider active, both names resolve to the implicit local provider. No tool
-manifest, prompt, or implementation changes:
+Remove `--infra-ref`, so both names resolve to the implicit local provider. The Step 2 server is no longer needed:
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
@@ -212,18 +148,16 @@ mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
   -q "Calculate 28 + 22." --trace
 ```
 
-## What changed
+## What you learned
 
-Only infra changed. MCP owns discovery, transport, endpoint policy, and wire
-messages; MAS-Lab keeps the agent behavior, tool names, schemas, and
-`ToolContract` stable.
+- A tool's contract is separate from where it runs. Only infra changed.
+- MCP owns discovery, transport, and wire messages. Agent behavior, tool names, and schemas stay stable.
+- The registry routes each tool name to exactly one provider.
 
-## Reference material
+Reference: [ToolServerRegistry reference](../../references/tool-server-registry.md),
+[infra.md § ToolServerRegistry](../../manifests/infra.md#toolserverregistry),
+[MCP compliance workflow](https://github.com/outshift-open/mas-lab/tree/main/library-ioa/compliance/mcp).
 
-- [ToolServerRegistry reference](../../references/tool-server-registry.md)
-  and [infra.md § ToolServerRegistry](../../manifests/infra.md#toolserverregistry)
-  — full field reference.
-- [MCP compliance workflow](https://github.com/outshift-open/mas-lab/tree/main/library-ioa/compliance/mcp)
-  — official runner and reproducible reports.
-- Next: [Tutorial 5 — A2A agents](../05-a2a-agents/) applies the same
-  logic/infra split to agent-to-agent delegation.
+## Next
+
+[Tutorial 5 — A2A agents](../05-a2a-agents/README.md) applies the same split to agent-to-agent delegation.

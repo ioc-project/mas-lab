@@ -4,54 +4,133 @@
 -->
 # `mas-ctl` command-line reference
 
-Complete flags for **`mas-ctl`**. `mas-ctl COMMAND --help` is always authoritative
-if this page and the code diverge.
+`mas-ctl` runs, serves, and inspects a single agent or a multi-agent system (MAS) from YAML manifests. This page lists every flag. If this page and the code differ, `mas-ctl COMMAND --help` is correct.
 
-Related: [CLI overview](index.md) · [config.yaml](../references/config.yaml.md) ·
-[observability (`events.jsonl`)](observability.md) · [TUI](../ctl/tui.md).
+Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. A *flavour* is a deployment preset. An *infra bundle* is a YAML file that says where services live. A *session* is one conversation with an agent. A *checkpoint* is a saved session state. See the [glossary](../glossary.md).
 
-General override reference: [CLI overrides](overrides.md).
+## The three commands most people run
 
----
+```bash
+mas-ctl chat agent.yaml -q "What is 2+2?"      # one agent answers one query; the reply goes to stdout
+mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace   # a MAS answers; --trace prints the AGENT/LLM/TOOL exchange to stderr
+mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml   # exposes the agent over A2A and keeps running
+```
+
+Related: [CLI overview](index.md), [config.yaml](../references/config.yaml.md), [observability (`events.jsonl`)](observability.md), [TUI](../ctl/tui.md), [CLI overrides](overrides.md).
+
+## Task guide
+
+### Run an agent
+
+```bash
+mas-ctl chat agent.yaml -q "What is 2+2?"
+mas-ctl chat agent.yaml -i
+```
+
+`-q` runs scripted turns. `-i` opens a multi-turn prompt. The reply goes to stdout.
+
+### Run a MAS
+
+```bash
+mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia"
+```
+
+### Pass an overlay
+
+An overlay changes the manifest for one run, without editing the file.
+
+```bash
+mas-ctl chat agent.yaml -o overlays/tools.yaml
+mas-ctl chat agent.yaml --tool calculator
+```
+
+### Patch one field
+
+```bash
+mas-ctl chat agent.yaml --override 'agent:spec.context.role="security expert"'
+mas-ctl run-mas mas.yaml --override 'mas:spec.workflow.entry=moderator'
+```
+
+See [CLI overrides](overrides.md) for the selector syntax.
+
+### Watch the exchange between agent, model, and tools
+
+```bash
+mas-ctl chat agent.yaml -i --trace
+```
+
+The exchange log goes to stderr. Add `--trace full` to include payloads.
+
+### Turn on the event log
+
+```bash
+mas-ctl chat agent.yaml -q "hello" --events --events-file logs/events.jsonl
+```
+
+`events.jsonl` is the machine-readable run log. See [observability](observability.md).
+
+### Save and resume a session
+
+```bash
+mas-ctl chat agent.yaml -i --checkpoint-dir ckpt --save-checkpoint
+mas-ctl checkpoint list ckpt
+mas-ctl checkpoint resume ckpt/<file>.json
+```
+
+`--save-checkpoint` writes one checkpoint after each turn.
+
+### Serve an agent over A2A
+
+```bash
+mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
+```
+
+The infra bundle must declare an Application endpoint for the agent with `usage: deploy`.
+
+### Control a running session
+
+```bash
+mas-ctl control attach SESSION
+mas-ctl control steer SESSION --text "be brief" --after
+```
+
+`SESSION` is the id printed when the session starts. See [`mas-ctl control`](#mas-ctl-control).
 
 ## Global flags
 
-Apply before the subcommand:
+These flags go before the subcommand:
 
 ```bash
 mas-ctl [-v] [--env FILE] COMMAND …
 ```
 
-| Flag | Default | Effect |
-|------|---------|--------|
-| `-v` / `--verbose` | off | Repeatable. `-v` session hints / extra logs; `-vv` also enables `--trace-engine` when tracing |
-| `--env FILE` | workspace `mas_ctl.env` (default `.env`) | Load that dotenv file |
-
----
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-v` / `--verbose` | off | Repeatable. `-v` adds session hints and extra logs. `-vv` also enables `--trace-engine` when tracing (`chat`, `run-mas`). |
+| `--env FILE` | `.env` in the current directory and next to the manifest | Load this dotenv file. The file must exist. |
 
 ## Outputs
 
 | Destination | What | Enable |
-| ------------- | ------ | -------- |
-| **stdout** | Conversation (`You:` / `Agent:`) | Always for `chat` / `run-mas` |
-| **stderr** | Human exchange log (AGENT↔LLM↔TOOL↔GOV) | `--trace` or `mas_ctl.trace` |
-| **`events.jsonl`** | Machine run log | `--events` / overlay / manifest — [observability.md](observability.md) |
+| --- | --- | --- |
+| stdout | The conversation (`You:` and `Agent:`) | Always, for `chat` and `run-mas`. |
+| stderr | The exchange log: human-readable AGENT, LLM, TOOL, and GOV hops | `--trace` or `mas_ctl.trace`. |
+| `events.jsonl` | The machine run log | `--events`, an overlay, or the manifest. See [observability.md](observability.md). |
 
-Stdout stays the conversation. Color is never the default (`--trace-color`).
+Stdout always stays the conversation. Color is off unless you pass `--trace-color`.
 
-### Precedence (exchange log)
+### Exchange-log precedence
 
-1. CLI (`--trace`, `--no-trace`, `--trace-color`, …)
-2. Workspace `config.yaml` `mas_ctl:`
-3. User `$XDG_CONFIG_HOME/mas/config.yaml` `mas_ctl:`
-4. Built-in: off until `--trace` or config enables it; then **summary + timestamps**, color off
+The first match wins:
 
----
+1. CLI flags (`--trace`, `--no-trace`, `--trace-color`, and so on).
+2. Workspace `config.yaml`, key `mas_ctl:`.
+3. User `$XDG_CONFIG_HOME/mas/config.yaml`, key `mas_ctl:`.
+4. Built-in default: off until `--trace` or config enables it. Then it prints a summary with timestamps and no color.
 
 ## `mas-ctl chat [MANIFEST]`
 
-Interactive or scripted single-agent session. Manifest defaults to `agent.yaml`
-when omitted (cwd / workspace walk).
+`chat` runs an interactive or scripted single-agent session. `MANIFEST` defaults to `agent.yaml`, found in the current directory or the workspace.
 
 ```bash
 mas-ctl chat agent.yaml -q "What is 2+2?"
@@ -60,93 +139,83 @@ mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace
 
 ### Session
 
-| Flag | Default | Effect |
-| ------ | --------- | -------- |
-| `-p` / `--prompt TEXT` | — | First user turn |
-| `-q` / `--query TEXT` | — | Extra turn(s); repeatable |
-| `-i` / `--interactive` · `-I` / `--no-interactive` | TTY and no scripted turns | Multi-turn REPL |
-| `--single-turn` | off | Exit after the first agent reply |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-p` / `--prompt TEXT` | none | First user turn. |
+| `-q` / `--query TEXT` | none | Extra turn. Repeatable. |
+| `-i` / `--interactive`, `-I` / `--no-interactive` | on in a terminal with no scripted turns | Open a multi-turn prompt. |
+| `--single-turn` | off | Exit after the first agent reply. |
 
-### Manifest / overlays
+### Manifest and overlays
 
-| Flag | Default | Effect |
-| ------ | --------- | -------- |
-| `-o` / `--overlay PATH` | — | Overlay YAML; repeatable |
-| `--tool NAME` | — | Inline overlay: add a tool by name |
-| `--skill NAME` | — | Inline overlay: add a skill by name |
-| `--memory ID` | — | Inline overlay: memory backend id |
-| `--set KEY=VALUE` | — | Inline overlay: `spec.context` |
-| `--override ROOT:PATH=VALUE` | — | Schema-backed overlay patch; applied last |
-| `--bind NAME=URI` | — | Shortcut for infra Application / ToolServerRegistry `usage: use` (expands to `--override infra:…`) |
-| `--pattern ID` | manifest | Design-pattern plugin id |
-| `--flavour NAME` | `local` | Flavour from library-standard |
-| `--infra-ref REF` | workspace / user | Infra bundle; repeatable; wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
-| `--runtime-ref REF` | workspace / user | `RuntimeEngine` ref; repeatable |
-| `--model ID` | spec.models / `MAS_CTL_MODEL` / `MAS_LLM_MODEL` | Force the engine model for this run |
-| `--max-tokens N` | none sent | Alias of `--override 'agent:spec.models[*].max_tokens=N'`; bounded by infra `generation.max_output_tokens` — [Output-token limits](../manifests/agent.md#output-token-limits) |
-| `--no-validate` | off | Skip schema checks for seeds/checkpoints |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
+| `--tool NAME` | none | Inline overlay: add a tool by name. |
+| `--skill NAME` | none | Inline overlay: add a skill by name. |
+| `--memory ID` | none | Inline overlay: set the memory backend id. |
+| `--set KEY=VALUE` | none | Inline overlay: set a `spec.context` value. |
+| `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
+| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--pattern ID` | manifest | Design-pattern plugin id. |
+| `--flavour NAME` | `local` | Flavour from library-standard. |
+| `--infra-ref REF` | workspace or user | Infra bundle. Repeatable. Wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
+| `--runtime-ref REF` | workspace or user | `RuntimeEngine` ref. Repeatable. |
+| `--model ID` | `spec.models`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model for this run. |
+| `--max-tokens N` | none sent | Alias of `--override 'agent:spec.models[*].max_tokens=N'`. Infra `generation.max_output_tokens` bounds it. See [Output-token limits](../manifests/agent.md#output-token-limits). |
+| `--no-validate` | off | Skip schema checks for seeds and checkpoints. |
 
-`--override` uses the same canonical Overlay merge engine as `-o`. Paths are
-root-qualified so the target document is explicit:
+How the patching flags work:
 
-```bash
-mas-ctl chat agent.yaml --override 'agent:spec.context.role="security expert"'
-mas-ctl run-mas mas.yaml \
-  --override 'mas:spec.agency.agents[id=reviewer].spec.memory=long'
-```
-
-Selectors support numeric indexes, identity selectors such as `[id=reviewer]`,
-and `[*]` wildcards. CLI patches have higher priority than file overlays.
-Existing `--tool`, `--skill`, `--memory`, and `--set` flags remain supported.
-`--bind NAME=URI` is a shortcut for the same Application / ToolServerRegistry
-fields as `--infra-ref` YAML: it expands into `--override infra:…` and uses
-that merge path (see [CLI override reference — Bind](overrides.md#bind)).
-An overlay file may group the same assignments under `spec.overrides`; those
-assignments run after that file's regular `spec.patch` in list order. See
-[CLI override reference](overrides.md) and [Overlay manifest](../manifests/overlay.md).
+- `--override` uses the same overlay merge engine as `-o`. Paths start with a root (`agent:`, `mas:`, `infra:`) so the target document is explicit.
+- Selectors accept numeric indexes, identity selectors such as `[id=reviewer]`, and `[*]` wildcards. Identity selectors work only on agency entries that carry an inline `spec`. A `{id, ref}` entry has nothing to select into. See [Agents in a MAS](overrides.md#agents-in-a-mas).
+- CLI patches outrank file overlays.
+- `--tool`, `--skill`, `--memory`, and `--set` remain supported.
+- `--bind NAME=URI` writes the same Application and ToolServerRegistry fields as `--infra-ref` YAML. See [Bind](overrides.md#bind).
+- An overlay file can group assignments under `spec.overrides`. They run after that file's `spec.patch`, in list order. See the [overlay manifest](../manifests/overlay.md).
 
 ### Cache, stream, envelope
 
-| Flag | Default | Effect |
-| ------ | --------- | -------- |
-| `--cache-read` / `--no-cache-read` | RuntimeEngine / true | Lookup before the LLM call |
-| `--cache-write` / `--no-cache-write` | RuntimeEngine / true | Persist after the LLM call |
-| `--stream` / `--no-stream` | RuntimeEngine / false | SSE streaming |
-| `--without-obs` | off | Disable observability summand (`M_obs`) and event recording |
-| `--without-gov` | off | Disable governance summand (`M_gov`) and HITL chokepoints |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--cache-read` / `--no-cache-read` | RuntimeEngine, true | Look up the cache before the LLM call. |
+| `--cache-write` / `--no-cache-write` | RuntimeEngine, true | Persist the result after the LLM call. |
+| `--stream` / `--no-stream` | RuntimeEngine, false | Stream responses over SSE. |
+| `--without-obs` | off | Disable the observability summand (`M_obs`) and event recording. |
+| `--without-gov` | off | Disable the governance summand (`M_gov`) and HITL chokepoints. |
 
-### Checkpoints / memory seed
+### Checkpoints and memory seed
 
-| Flag | Default | Effect |
-| ------ | --------- | -------- |
-| `--memory-seed PATH` | — | Seed working / persistent memory |
-| `--checkpoint-dir PATH` | — | Checkpoint directory |
-| `--load-checkpoint PATH` | — | Restore a checkpoint |
-| `--save-checkpoint` / `--no-save-checkpoint` | off | Save after each turn |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--memory-seed PATH` | none | Seed working and persistent memory. |
+| `--checkpoint-dir PATH` | none | Directory for checkpoints. |
+| `--load-checkpoint PATH` | none | Restore a checkpoint. |
+| `--save-checkpoint` / `--no-save-checkpoint` | off | Save a checkpoint after each turn. |
 
 ### Control attach
 
-| Flag | Default | Effect |
-|------|---------|--------|
-| `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else temp | Advertise control so `mas-ctl control attach` can use the session id |
-| `--no-control` | off | Do not advertise a control endpoint |
-| `--debug-script` | — | gdb-like script: `@file` or inline (runtime plugin `spec.debug`) |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the session id. |
+| `--no-control` | off | Do not advertise a control endpoint. |
+| `--debug-script` | none | gdb-like script: `@file` or inline (runtime plugin `spec.debug`). |
 
 ### Exchange log
 
-Shared with `run-mas`. **Not** on `tui` (curses has its own pane).
+`chat` and `run-mas` share these flags. `tui` does not have them, because its curses UI has its own pane.
 
-| Flag | Default when tracing | Effect |
-| ------ | ---------------------- | -------- |
-| `--trace` / `--trace summary` | — | Enable human summary: headers + timestamps; untruncated AGENT→USER |
-| `--trace full` / `--trace-full` | — | Verbose payload dump (legacy `--trace` behaviour) |
-| `--trace-summary` | — | Alias for `--trace` / `--trace summary` |
-| `--no-trace` | — | Off even if `config.yaml` sets `mas_ctl.trace` |
-| `--trace-timestamps` / `--no-trace-timestamps` | timestamps **on** | UTC + elapsed per exchange |
-| `--trace-color` / `--no-trace-color` | **off** | ANSI color; never implied by `--trace` |
-| `--trace-engine` | off (also `-vv`) | Raw `InvokeEngineIo` / `EngineIoReturn` JSON |
+| Flag | Default when tracing | Description |
+| --- | --- | --- |
+| `--trace` / `--trace summary` | none | Print headers and timestamps. AGENT to USER text is untruncated. |
+| `--trace full` / `--trace-full` | none | Dump full payloads (the legacy `--trace` behaviour). |
+| `--trace-summary` | none | Alias for `--trace` and `--trace summary`. |
+| `--no-trace` | none | Force it off, even if `config.yaml` sets `mas_ctl.trace`. |
+| `--trace-timestamps` / `--no-trace-timestamps` | on | Show UTC time and elapsed time per exchange. |
+| `--trace-color` / `--no-trace-color` | off | Use ANSI color. `--trace` never turns it on. |
+| `--trace-engine` | off (on with `-vv`) | Print raw `InvokeEngineIo` and `EngineIoReturn` JSON. |
 
-Workspace / user `config.yaml`:
+Set defaults in the workspace or user `config.yaml`:
 
 ```yaml
 mas_ctl:
@@ -158,128 +227,135 @@ mas_ctl:
 
 Field reference: [config.yaml](../references/config.yaml.md#mas_ctl).
 
-### `events.jsonl` (`--events*`)
+### `events.jsonl` flags
 
-Shared with `run-mas` and `tui`. Full semantics: [observability.md](observability.md).
+`chat`, `run-mas`, and `tui` share these flags. Details: [observability.md](observability.md).
 
-| Flag | Effect |
-| ------ | -------- |
-| `--events` / `--no-events` | Force native observability on or off |
-| `--events-file PATH` | JSONL path (default `traces/events.jsonl`) |
-| `--events-stderr` / `--events-stdout` | Also stream JSONL on **stderr** (`--events-stdout` is a legacy alias) |
-| `--events-format` | `native` · `boundary` · `both` · `otel` |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--events` / `--no-events` | manifest | Force native observability on or off. |
+| `--events-file PATH` | `traces/events.jsonl` | JSONL output path. |
+| `--events-stderr` / `--events-stdout` | off | Also stream JSONL on stderr. `--events-stdout` is a legacy alias. |
+| `--events-format` | manifest | One of `native`, `boundary`, `both`, `otel`. |
 
----
+### Interactive commands
+
+Type these at the `You:` prompt. They are also listed in `mas-ctl chat --help`.
+
+| Input | Description |
+| --- | --- |
+| `/quit`, `/exit`, `/q` | End the session. |
+| `/reset` | Clear working memory and turn history. |
+| `/steer TEXT` | Inject operator steering. |
+| `/skills`, `/skill NAME` | List skills, or activate one. |
+| `/backtrack [N] [TEXT]` | Restore the checkpoint N steps back (default 1), with an optional steering note. Needs `--checkpoint-dir`. |
+
+With `spec.governance.hitl_on_tool` set, interactive mode prompts SCHEDULE, BLOCK, or SKIP on stderr. Batch `-q` runs auto-approve unless the overlay sets `hitl_mode: auto-deny`.
 
 ## `mas-ctl run-mas [MANIFEST]`
 
-Compose → materialize → session on the MAS entry agent. Manifest defaults to
-`mas.yaml`. Deployed A2A Application endpoints on in-process agents
-(`usage: deploy` on the entry agent, or on specialists that are not also
-`use`) bind for interrogation while the conversation stays on stdin.
+`run-mas` composes the MAS, materializes it, and opens a session on the entry agent. `MANIFEST` defaults to `mas.yaml`. A2A Application endpoints on in-process agents bind for interrogation: `usage: deploy` on the entry agent, or on specialists that are not also `use`. The conversation stays on stdin.
 
 ```bash
 mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 ```
 
-| Flag | Default | Effect |
-| ------ | --------- | -------- |
-| `-p` / `--prompt TEXT` | — | First user turn |
-| `-q` / `--query TEXT` | — | Extra turn(s); repeatable |
-| `-o` / `--overlay PATH` | — | Overlay YAML; repeatable |
-| `--override ROOT:PATH=VALUE` | — | Schema-backed MAS / infra / flavour patch; applied last |
-| `--bind NAME=URI` | — | Shortcut for infra Application / ToolServerRegistry `usage: use` (expands to `--override infra:…`) |
-| `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest |
-| `--flavour NAME` | `local` | Flavour |
-| `--infra-ref REF` | — | Infra bundle; repeatable |
-| `--kernel ID` | package default | Runtime / kernel id |
-| `-i` / `--interactive` | off | Interactive session |
-| `--auto-hitl` / `--no-auto-hitl` | auto-hitl **on** | Batch auto-resolve HITL; `--no-auto-hitl` uses OperatorConsole |
-| `--single-turn` | off | Exit after first reply |
-| `--no-validate` | off | Skip manifest validation |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-p` / `--prompt TEXT` | none | First user turn. |
+| `-q` / `--query TEXT` | none | Extra turn. Repeatable. |
+| `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
+| `--override ROOT:PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
+| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest. |
+| `--flavour NAME` | `local` | Flavour. |
+| `--infra-ref REF` | none | Infra bundle. Repeatable. |
+| `--kernel ID` | `mas-runtime-py` | Runtime id. It is the only value today. |
+| `-i` / `--interactive` | off | Open an interactive session. |
+| `--auto-hitl` / `--no-auto-hitl` | auto-hitl on | Auto-resolve human-in-the-loop (HITL) gates in batch mode. `--no-auto-hitl` uses the OperatorConsole. |
+| `--single-turn` | off | Exit after the first reply. |
+| `--no-validate` | off | Skip manifest validation. |
 
-Plus the shared **`--trace*`** and **`--events*`** tables above.
-
----
+`run-mas` also takes the `--trace*` and `--events*` flags above.
 
 ## `mas-ctl serve AGENT`
 
-Dedicated blocking A2A (or other `agent_expose`) process. Requires an
-Application endpoint named after the agent `metadata.name` with
-`usage: deploy` or `use-and-deploy` in workspace `infra_refs` or `--infra-ref`.
-Same helper as `chat` / `tui` / `run-mas` (`mas.ctl.session.exposure`); this
-command does not return until the listener stops.
+`serve` runs a dedicated, blocking A2A process (or another `agent_expose` target). It does not return until the listener stops.
+
+It needs an Application endpoint named after the agent's `metadata.name`, with `usage: deploy` or `use-and-deploy`. Declare it in workspace `infra_refs` or pass `--infra-ref`. It uses the same helper as `chat`, `tui`, and `run-mas` (`mas.ctl.session.exposure`).
 
 ```bash
 mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
 ```
 
-| Flag | Default | Effect |
-|------|---------|--------|
-| `-o` / `--overlay PATH` | — | Overlay YAML; repeatable |
-| `--override ROOT:PATH=VALUE` | — | Schema-backed overlay patch; applied last |
-| `--bind NAME=URI` | — | Shortcut for infra Application / ToolServerRegistry `usage: use` (expands to `--override infra:…`) |
-| `--infra-ref REF` | workspace / user | Must include the agent's deployed Application endpoint |
-| `--flavour NAME` | `local` | Flavour |
-| `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else temp | Advertise control so `mas-ctl control attach` can use the A2A `contextId` |
-| `--no-control` | off | Do not advertise a control endpoint |
-
----
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
+| `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
+| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
+| `--flavour NAME` | `local` | Flavour. |
+| `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the A2A `contextId`. |
+| `--no-control` | off | Do not advertise a control endpoint. |
 
 ## `mas-ctl tui [MANIFEST]`
 
-Curses UI with the same bootstrap as `chat` (overlays, infra, HITL, `--events*`).
-Deployed A2A endpoints for the in-process agent bind for interrogation, same
-helper as `chat`. No `--trace` (the TUI renders exchanges itself).
+`tui` opens a curses UI. It uses the same bootstrap as `chat`: overlays, infra, HITL, and `--events*`. Deployed A2A endpoints for the in-process agent bind for interrogation. It has no `--trace`, because the TUI renders exchanges itself. Guide: [ctl/tui.md](../ctl/tui.md).
 
-| Flag | Default | Effect |
-| ------ | --------- | -------- |
-| `-o` / `--overlay PATH` | — | Overlay YAML; repeatable |
-| `--override ROOT:PATH=VALUE` | — | Schema-backed overlay patch; applied last |
-| `--bind NAME=URI` | — | Shortcut for infra Application / ToolServerRegistry `usage: use` (expands to `--override infra:…`) |
-| `--pattern ID` | manifest | Design-pattern plugin id |
-| `--flavour NAME` | `local` | Flavour |
-| `--single-turn` | off | Exit after first reply |
-| `--memory-seed PATH` | — | Memory seed |
-| `--infra-ref` / `--infra REF` | — | Infra bundle; repeatable |
-| `--runtime-ref REF` | — | RuntimeEngine ref; repeatable |
-| `--no-validate` | off | Skip schema checks |
-| `--model ID` | spec.models / `MAS_CTL_MODEL` / `MAS_LLM_MODEL` | Force the engine model |
-| `--max-tokens N` | none sent | Alias of `--override 'agent:spec.models[*].max_tokens=N'` |
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
+| `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
+| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--pattern ID` | manifest | Design-pattern plugin id. |
+| `--flavour NAME` | `local` | Flavour. |
+| `--single-turn` | off | Exit after the first reply. |
+| `--memory-seed PATH` | none | Memory seed. |
+| `--infra-ref` / `--infra REF` | none | Infra bundle. Repeatable. |
+| `--runtime-ref REF` | none | `RuntimeEngine` ref. Repeatable. |
+| `--no-validate` | off | Skip schema checks. |
+| `--model ID` | `spec.models`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model. |
+| `--max-tokens N` | none sent | Alias of `--override 'agent:spec.models[*].max_tokens=N'`. |
 
-Plus **`--events*`**. Guide: [ctl/tui.md](../ctl/tui.md).
-
----
+`tui` also takes the `--events*` flags.
 
 ## Other commands
 
 | Command | Purpose | Typical flags |
-| --------- | --------- | --------------- |
-| `mas-ctl validate PATH …` | Schema-check manifests | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay` |
-| `mas-ctl schemas` | List bundled JSON/YAML schemas | — |
-| `mas-ctl compose MANIFEST` | Effective bind + placement plan | `-d/--deployment`, `-o/--overlay`, `--override`, `--bind`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
-| `mas-ctl plan MANIFEST` | Placement plan only | `-d/--deployment`, `--kernel`, `--no-validate` |
-| `mas-ctl flavour list` | Flavours from installed libraries | — |
-| `mas-ctl infra list` | Infra bundles | `-v` |
-| `mas-ctl list-bundles` | All library bundles | — |
-| `mas-ctl registry …` | Plugin registry introspection | `mas-ctl registry --help` |
-| `mas-ctl checkpoint list DIR` | List checkpoint files | — |
-| `mas-ctl checkpoint show PATH` | Print one checkpoint JSON | — |
-| `mas-ctl control attach SESSION` | Attach by session id (A2A `contextId`) | `-d/--directory` (default runtime dir). Verbs: `pause`, `resume` (unpause live), `snapshot`/`persist` (require stopped session or `--auto-stop`), `steer`, `checkpoints`, `inspect`. Chain: `mas-ctl control SESSION pause persist --auto-stop`. Scripts: `--data @file`, `-e`, `-f` (equivalent). |
+| --- | --- | --- |
+| `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay` |
+| `mas-ctl schemas` | List registered schema kinds. | none |
+| `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
+| `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--bind`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
+| `mas-ctl plan MANIFEST` | Print the placement plan only. | `-d/--deployment`, `--kernel`, `--no-validate` |
+| `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: prefer `deployment/v1`. | none |
+| `mas-ctl infra list` | List infra bundles. Alias: `mas-ctl list-bundles`. | `-v` |
+| `mas-ctl list-bundles` | List infra bundles from installed libraries. | `-v` |
+| `mas-ctl registry list`, `registry query PREFIX` | List registered runtime machines, ctl registries, and schema kinds. | `query`: `-l/--layer`, `--json` |
+| `mas-ctl plugin list`, `doctor [MANIFEST …]`, `enable URN` | Show plugin availability from `library.yaml` `plugins:`. `enable` installs the missing extra. | `list`: `--type`, `--json`. `doctor`: `--json`. `enable`: `--dry-run`. |
+| `mas-ctl checkpoint list DIR` | List checkpoint files. | none |
+| `mas-ctl checkpoint show PATH` | Print one checkpoint as JSON. | none |
+| `mas-ctl checkpoint fork PATH` | Create a new v2 checkpoint branch. The source file stays untouched. | `--output-dir`, `--session-id` |
+| `mas-ctl checkpoint resume PATH` | Resume from a checkpoint, using its embedded manifest or the CLI chat setup. | none |
 
----
+### `mas-ctl control`
 
-## Interactive `chat` commands
+`control` attaches to a running `chat` or `serve` session by its session id. The session id is the A2A `contextId`, printed when the session starts.
 
-At the `You:` prompt (see `mas-ctl chat --help` epilog):
+```bash
+mas-ctl control attach SESSION                 # print inspect() view
+mas-ctl control pause SESSION
+mas-ctl control steer SESSION --text "be brief" --after
+mas-ctl control SESSION pause persist --auto-stop   # chained verbs (script form)
+```
 
-| Input | Effect |
-| ------- | -------- |
-| `/quit` `/exit` `/q` | End the session |
-| `/reset` | Clear working memory and turn history |
-| `/steer TEXT` | Inject operator steering |
-| `/skills` · `/skill NAME` | List / activate skills |
-
-HITL (when `spec.governance.hitl_on_tool` is set): interactive mode prompts
-SCHEDULE / BLOCK / SKIP on stderr. Batch `-q` auto-approves unless the overlay
-sets `hitl_mode: auto-deny`.
+| Part | Description |
+| --- | --- |
+| `-d` / `--directory DIR` | Goes before the verb. Default: `$MAS_CONTROL_DIR`, else `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir. |
+| `attach`, `inspect` | Print the session view. |
+| `pause [--reason]`, `resume` | Pause or unpause a live session. |
+| `snapshot [--label] [--auto-stop]` | Snapshot the session. It needs a stopped session, or pass `--auto-stop` to pause first. |
+| `persist [--snapshot-id] [--label] [--auto-stop]` | Same stop rule as `snapshot`. Writes a checkpoint file for `mas-ctl chat --load-checkpoint`. |
+| `steer --text TEXT [--replace \| --after] [--at tail\|head\|N]` | By default, preempt the current generation. `--replace` discards streamed tokens. `--after` (alias `--enqueue`) waits for the current generation. |
+| `checkpoints` | List the session's checkpoints. |
+| `script SESSION [VERBS…]` | Run the same verbs as a chain, with `-e TEXT` (repeatable), `-f FILE`, or `--data @file`. All are equivalent. `mas-ctl control SESSION VERBS…` is shorthand for `script`. |

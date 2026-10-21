@@ -4,8 +4,11 @@
 -->
 # Library-Standard Infrastructure Bundles
 
-This directory contains infrastructure manifest bundles referenced via the
-`standard:` prefix in agent and flavour manifests.
+This directory holds the infrastructure manifest bundles that agent and flavour manifests reference with the `standard:` prefix. Use a bundle to point an agent at a model endpoint without writing an infra manifest.
+
+```bash
+mas-runtime run-agent agent.yaml --infra-ref standard:ollama
+```
 
 ## Available Bundles
 
@@ -38,14 +41,14 @@ This directory contains infrastructure manifest bundles referenced via the
 Write-only and strict-replay manifests with an explicit `cache_path`:
 `library-samples/infra/llm-cache-{write,replay}.yaml`.
 
-See [docs/manifests/llm-cache.md](../../../../docs/manifests/llm-cache.md) (guide) and
-[docs/references/llm-cache.md](../../../../docs/references/llm-cache.md) (reference).
+See [docs/manifests/llm-cache.md](../../../../../../docs/manifests/llm-cache.md) (guide) and
+[docs/references/llm-cache.md](../../../../../../docs/references/llm-cache.md) (reference).
 
 ## Usage
 
 ### In User Config
 
-Set a default infrastructure bundle in `$XDG_CONFIG_HOME/mas/config.yaml` (see [User config](../../../../docs/user-config.md)):
+Set a default infrastructure bundle in `$XDG_CONFIG_HOME/mas/config.yaml` (see [User config](../../../../../../docs/user-config.md)):
 
 ```yaml
 apiVersion: mas.config/v1
@@ -118,6 +121,4 @@ mas-runtime list-bundles
 
 ## Creating Custom Bundles
 
-See [CONTRIBUTING.md](../../../../../../../CONTRIBUTING.md) and
-[docs/developer-guide.md](../../../../../../../docs/developer-guide.md) for
-registering custom manifest libraries via entry points.
+See [CONTRIBUTING.md](../../../../../../CONTRIBUTING.md) for registering custom manifest libraries via entry points.

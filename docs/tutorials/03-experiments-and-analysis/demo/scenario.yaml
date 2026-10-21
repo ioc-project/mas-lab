@@ -1,7 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 name: tutorial-03-observability
-title: "Tutorial 03 — Plugins & Observability"
+title: "Tutorial 03 — Experiments, Analysis & Evaluation"
 description: >
   ReAct · CoT · Reflection — from raw trace to trajectory plots and
   reproducible analysis pipelines on events.jsonl.
@@ -13,7 +13,7 @@ prerequisites:
   - "Tutorial 0: labs_dir / cache_dir in $XDG_CONFIG_HOME/mas/config.yaml"
   - "mas-lab on PATH (telemetry, plot, benchmark — OSS only)"
   - "Offline: pytest tests/tutorials/test_scenario_commands.py -k tuto-03"
-working_dir: docs/tutorials/03-experiments-and-analysis # relative to repo root when running mas-tutorial from outshift-open/mas-lab
+working_dir: docs/tutorials/03-experiments-and-analysis # relative to repo root
 cache_dir: ".demo-cache"
 
 sections:
@@ -24,7 +24,7 @@ sections:
       - type: slide
         title: "Three design patterns, one trace format"
         content: |
-          ## Tutorial 03 — Plugins & Observability
+          ## Tutorial 03 — Experiments, Analysis & Evaluation
 
           Every agent run produces a single artifact: **`events.jsonl`**.
 
@@ -53,8 +53,8 @@ sections:
           - `llm_call_start` / `llm_call_end` — every LLM round-trip
           - `tool_call_start` / `tool_call_end` — every tool invocation
 
-          The fixture below was captured from a **ReAct** agent running two tools:
-          `calculator`.
+          The fixture below is a hand-written ReAct-style trace in which the
+          agent calls the `calculator` tool twice.
 
       - type: command
         title: "telemetry show — event summary"
@@ -117,7 +117,7 @@ sections:
         content: |
           Part A showed telemetry and plot commands on `events.jsonl`.
           **Part B** captures post-benchmark analysis in `pipelines/analysis.yaml`
-          (telemetry, plots, and eval steps on `events.jsonl` directly).
+          (trace statistics and plots, run on a completed benchmark's output).
 
           Run once, re-run consistently for every new benchmark.
 
@@ -138,7 +138,8 @@ sections:
           You have completed the full Part A + B pipeline for the QA agent.
 
           **Part C** runs the same analysis across three topologies
-          (single-agent · linear · moderator) on 15 trip-planner questions.
+          (single-agent · linear · moderator) on a one-item trip-planner smoke
+          dataset (the full sweep lives in `labs/design-space.lab/`).
           Press → to continue.
 
   - id: wrapup
@@ -161,6 +162,6 @@ sections:
 
           ## Next steps
 
-          - `mas-lab benchmark run experiment.yaml --progress` — full benchmark run
+          - `mas-lab benchmark run experiment.yaml` — full benchmark run (needs a live LLM)
           - `mas-lab benchmark run experiment-topology.yaml --dry-run` — plan topology comparison
-          - [Paper labs](paper/index.md) — design-space, lifecycle, and extension experiments
+          - Paper labs (`docs/paper/index.md`) — design-space, lifecycle, and extension experiments

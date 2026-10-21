@@ -20,10 +20,8 @@ Hook Usage:
 - pre_tool_call: Validate, authorize, log BEFORE tool execution
 - post_tool_call: Process results, filter, audit AFTER tool execution
 
-Implementations:
-- ToolServerPlugin: tool-server protocol tool serving
-- LlamaIndexToolsPlugin: LlamaIndex tool integration
-- ToolServerBundleServer: ToolBundle manifest → full tool server
+Implementations live in library packages (``ToolContract`` subclasses such as
+``SkillToolsPlugin`` and the sample tools under ``library-samples/tools/``).
 
 Pydantic Input pattern (recommended for new tools)
 --------------------------------------------------

@@ -4,54 +4,32 @@
 -->
 # Ontology extensions
 
-Semantic annotations for traces, governance events, and manifest overlays.
-
----
-
-## Purpose
-
-MAS Lab traces are consumed by bench pipelines (MCE, lifecycle figures, Mealy
-stats). Ontology fields make events **machine-interpretable** without scraping
-free text.
+Ontology fields are classification keys on `events.jsonl` records. A trace is the ordered event log of one run. This page is for pipeline authors who read those keys: bench pipelines (evaluation metrics, trace statistics, lifecycle figures) filter on them instead of scraping free text.
 
 ---
 
 ## Event payload extensions
 
-Common extension keys in `events.jsonl`:
+Common classification keys in `events.jsonl` (see [trajectory-schema.md](trajectory-schema.md)):
 
 | Key | Used by |
 |-----|---------|
-| `symbol` | Envelope activity (`EnvelopeSymbol` value) |
-| `segment_id` | Context provenance linkage |
-| `policy_name` | Governance decision attribution |
-| `dp_phase` | Design-pattern phase (plan/act/synth) |
-| `scheduled_op` | `LLM_CALL`, `TOOL_CALL`, … |
+| `mealy_symbol` | Which symbol of the Mealy product the event belongs to (`LLM_CALL`, `TOOL_CALL`, `CONTEXT_ASSEMBLE`, `RUN_START`, ...) |
+| `summand` | Which machine produced it (`model`, `tool`, `context`, `orchestrator`, ...) |
+| `block`, `layer` | Coarse grouping (`execution`, `context`, `structural`; `execution`, `semantic`, `structure`) |
+| `policy_name` | Governance decision attribution (on `governance_decision` events) |
+| `call_id`, `parent_call_id`, `correlation_id` | Interval nesting and envelope correlation |
+| `part_id`, `source`, `section_id` | Context provenance (on `context_part_contributed` events) |
 
-Pipeline steps `extract_trace_stats` and `extract_mealy_stats` read these fields.
-
----
-
-## Manifest overlays
-
-Overlays may attach semantic tags:
-
-```yaml
-metadata:
-  labels:
-    mas.lab/scenario: baseline
-    mas.lab/paper-figure: fig-3
-```
-
-Labels are copied into run metadata for experiment grouping.
+Pipeline steps such as `extract_trace_stats` read these fields.
 
 ---
 
 ## Lab-specific vocabularies
 
-Paper labs may define local enums under `lib/` (e.g. lifecycle-control moodbar
-states). Keep lab vocabularies **inside the lab**; do not extend global event
-kinds without a schema bump in `trajectory-schema.md`.
+Paper labs may define local enums inside the lab (for example lifecycle states used by a figure step).
+Keep lab vocabularies **inside the lab**; do not extend the global event kinds without updating
+`trajectory-schema.md` and the `Kind` constants in `lab/src/mas/lab/evaluation/events.py`.
 
 ---
 

@@ -1,114 +1,67 @@
-# KG Spec Injection Module Reference
+# KG spec injection
 
-**Module:** `mas.library.kg.core.spec`
-**Public API:** `from mas.library.kg import build_spec_nodes, merge_spec_into_kg`
+`mas.library.kg.core.spec` adds the design-time specification of a multi-agent system (MAS), meaning its declared agents, tools and skills, to a knowledge graph (KG) built from a run. It links each runtime call node to the spec node that declared it. Use it to check what ran against what was intended.
 
----
+Public API: `from mas.library.kg import build_spec_nodes, merge_spec_into_kg`.
 
-## Table of Contents
+```python
+from mas.library.kg import merge_spec_into_kg
 
-1. [Conceptual Overview](#conceptual-overview)
-2. [The `mas_spec` Dictionary Shape](#the-mas_spec-dictionary-shape)
-3. [`build_spec_nodes`](#build_spec_nodes)
-4. [`merge_spec_into_kg`](#merge_spec_into_kg)
-5. [ASCII Diagram: Runtime Nodes Linked to Spec Sub-Graph](#ascii-diagram)
-6. [Stable IDs](#stable-ids)
-7. [Extending the Spec](#extending-the-spec)
+mas_spec = {"agents": [{"id": "triage"}], "tools": [{"id": "search_kb"}]}
+merge_spec_into_kg(kg_doc, mas_spec)   # kg_doc: a KG document dict, modified in place
+```
 
----
+**Contents:** [Concepts](#conceptual-overview) · [`mas_spec` shape](#the-mas_spec-dictionary-shape) · [`build_spec_nodes`](#build_spec_nodes) · [`merge_spec_into_kg`](#merge_spec_into_kg) · [Diagram](#ascii-diagram) · [Stable IDs](#stable-ids) · [Extending](#extending-the-spec)
 
-## Conceptual Overview
+## Conceptual overview
 
-### Design-time vs Runtime
+A KG document from a run holds two kinds of information.
 
-A knowledge graph (KG) document produced by a MAS run carries two distinct layers
-of information:
+| Layer | Produced | Contains |
+|-------|----------|----------|
+| Runtime | During execution | `AgentCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, ... nodes that record what happened |
+| Spec (design time) | At system setup | `IntentSpec`, `AgentSpec`, `ToolSpec`, `SkillSpec` nodes that record what was intended |
 
-| Layer | Produced when | Contains |
-|-------|--------------|----------|
-| **Runtime** | During agent execution | `LLMCall`, `AgentCall`, `ToolCall`, `Observation`, `Message`, … nodes that record what actually happened |
-| **Spec (design-time)** | Before / during system setup | `IntentSpec`, `AgentSpec`, `ToolSpec`, `SkillSpec` nodes that record what was *intended* |
+This module creates the spec nodes and links runtime nodes to them with *conformance edges* (`instanceOf`, `invokes`).
 
-The spec injection module bridges these layers by materialising the design-time
-declarations as first-class KG nodes and then linking them to the matching
-runtime nodes via *conformance edges*.
+The spec sub-graph works as the system's blueprint, shared by every run of one configuration. The same `mas_spec` always yields the same node IDs ([Stable IDs](#stable-ids)), so the sub-graph can be *interned*: a node is added only if no node with the same `id` exists. `merge_spec_into_kg` interns per document. Storing the spec sub-graph once across many run KGs is up to the caller.
 
-### Spec Sub-Graph as Shared Procedural Memory
+Interning has two benefits:
 
-The spec sub-graph acts as the system's procedural memory: it encodes the
-blueprint that every run of a given MAS configuration is expected to follow.
-Because the same `mas_spec` dict produces the same node IDs (see
-[Stable IDs](#stable-ids)), the sub-graph is **interned once** per unique
-specification version and reused across all runs that share that version.
+- A vector index (embedding lookup) built over the `_text` of `AgentSpec` and `ToolSpec` nodes survives KG regeneration. It does not grow with the number of runs.
+- Cross-run comparison uses ID lookups instead of fuzzy text matching.
 
-This means:
-- A vector index built over `AgentSpec` / `ToolSpec` nodes survives KG
-  regeneration and does not need to be rebuilt when only runtime data changes.
-- Cross-run comparisons can be done with simple ID lookups rather than
-  fuzzy text matching.
-- A single spec sub-graph can be stored in a shared collection and referenced
-  by many per-run KG documents simultaneously.
+Conformance edges enable:
 
-### Why Intern Once Across Runs
+- **Compliance checking**: walk from a runtime call to its spec and compare inputs and outputs with `in_schema` / `out_schema`.
+- **Root-cause analysis**: when a `ToolCall` fails, follow `invokes` to the `ToolSpec` to read the expected I/O contract.
+- **Capability coverage**: count which `AgentSpec` nodes (and their declared `capabilities`) runs exercised.
+- **Semantic search**: embed `AgentSpec._text` to answer "which agents can handle X?".
 
-If spec nodes were duplicated per run, the embedding index would grow linearly
-with the number of runs even when the system design never changed.  Interning
-means the spec sub-graph is inserted only on the first run (or when the spec
-version changes), and subsequent runs attach runtime nodes to the already-
-existing spec nodes.
+## The `mas_spec` dictionary shape
 
-### What Conformance Edges Enable
+All top-level keys are optional; the module skips absent sections. Agent `skills` and `tools` entries must be the bare `id` of a `skills` / `tools` entry. The edge target is built as `spec:skill:<value>` / `spec:tool:<value>`, so `"tool:search_kb"` would point at the nonexistent `spec:tool:tool:search_kb`.
 
-The `instanceOf` and `invokes` edges added by `merge_spec_into_kg` enable:
-
-- **Compliance checking** – walk from a runtime call to its spec and verify
-  that the inputs and outputs match the declared schemas.
-- **Root-cause analysis** – when a ToolCall fails, traverse `invokes` to the
-  `ToolSpec` to retrieve the expected I/O contract without re-parsing source
-  code.
-- **Capability coverage** – count which `AgentSpec.capabilities` were actually
-  exercised across a set of runs.
-- **Semantic search** – query "which agents can handle X?" by embedding
-  `AgentSpec._text` fields instead of mining raw call logs.
-
----
-
-## The `mas_spec` Dictionary Shape
-
-All top-level keys are optional.  The module gracefully skips any section whose
-key is absent.
+| Key | Type | Meaning |
+|-----|------|---------|
+| `version` | str | Version tag, for example `"v1.2.0"` or a git SHA. Default: `sha256(repr(mas_spec))[:12]`. |
+| `intent` / `goal` | str | Purpose of the system. `intent` wins when both are present. |
+| `agents` | list[dict] | Per entry: `id` (required), `role`, `intent`, `capabilities` (list[str]), `skills` (skill ids), `tools` (tool ids). |
+| `tools` | list[dict] | Per entry: `id` (required), `description`, `in_schema`, `out_schema` (JSON Schema fragments). |
+| `skills` | list[dict] | Per entry: `id` (required), `description`, `requires` (list[str] preconditions), `concludes` (str postcondition). |
 
 ```python
 mas_spec = {
-    # -----------------------------------------------------------------------
-    # version (str, optional)
-    #   An explicit version tag, e.g. "v1.2.0" or a git SHA.
-    #   When omitted, the module computes sha256(repr(mas_spec))[:12].
-    # -----------------------------------------------------------------------
     "version": "v1.0.0",
-
-    # -----------------------------------------------------------------------
-    # intent / goal (str, optional)
-    #   Human-readable statement of the overall system purpose.
-    #   Both keys are accepted; "intent" takes precedence over "goal".
-    # -----------------------------------------------------------------------
     "intent": "Resolve customer support tickets using a two-agent pipeline.",
-
-    # -----------------------------------------------------------------------
-    # agents (list[dict], optional)
-    #   Each entry describes one logical agent in the MAS.
-    # -----------------------------------------------------------------------
     "agents": [
         {
-            "id": "triage",               # str, required within entry
-            "role": "Triage Agent",       # str, human label
+            "id": "triage",
+            "role": "Triage Agent",
             "intent": "Classify incoming tickets and route to the right specialist.",
-            "capabilities": [             # list[str]
-                "intent_classification",
-                "priority_scoring",
-            ],
-            "skills": ["skill:summarise"],  # list of skill IDs (matched to SkillSpec)
-            "tools": ["tool:search_kb"],    # list of tool IDs (matched to ToolSpec)
+            "capabilities": ["intent_classification", "priority_scoring"],
+            "skills": ["summarise"],
+            "tools": ["search_kb"],
         },
         {
             "id": "resolver",
@@ -116,496 +69,285 @@ mas_spec = {
             "intent": "Generate a resolution for classified tickets.",
             "capabilities": ["answer_generation", "policy_lookup"],
             "skills": [],
-            "tools": ["tool:search_kb", "tool:submit_resolution"],
+            "tools": ["search_kb", "submit_resolution"],
         },
     ],
-
-    # -----------------------------------------------------------------------
-    # tools (list[dict], optional)
-    #   Each entry describes one callable tool available in the system.
-    # -----------------------------------------------------------------------
     "tools": [
         {
-            "id": "search_kb",            # str, required within entry
-            "in_schema": {                # dict, JSON-Schema fragment
+            "id": "search_kb",
+            "description": "Search the knowledge base.",
+            "in_schema": {
                 "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "top_k": {"type": "integer", "default": 5},
-                },
+                "properties": {"query": {"type": "string"},
+                               "top_k": {"type": "integer", "default": 5}},
                 "required": ["query"],
             },
-            "out_schema": {               # dict, JSON-Schema fragment
-                "type": "array",
-                "items": {"type": "string"},
-            },
+            "out_schema": {"type": "array", "items": {"type": "string"}},
         },
         {
             "id": "submit_resolution",
             "in_schema": {
                 "type": "object",
-                "properties": {
-                    "ticket_id": {"type": "string"},
-                    "resolution": {"type": "string"},
-                },
+                "properties": {"ticket_id": {"type": "string"},
+                               "resolution": {"type": "string"}},
                 "required": ["ticket_id", "resolution"],
             },
             "out_schema": {"type": "object", "properties": {"status": {"type": "string"}}},
         },
     ],
-
-    # -----------------------------------------------------------------------
-    # skills (list[dict], optional)
-    #   Reusable multi-step procedures an agent may execute.
-    # -----------------------------------------------------------------------
     "skills": [
         {
-            "id": "summarise",            # str, required within entry
-            "requires": ["text_input"],   # list[str], preconditions
-            "concludes": "summary_output", # str, postcondition
+            "id": "summarise",
+            "description": "Summarise a text.",
+            "requires": ["text_input"],
+            "concludes": "summary_output",
         },
     ],
 }
 ```
 
----
-
 ## `build_spec_nodes`
-
-### Signature
 
 ```python
 def build_spec_nodes(mas_spec: dict) -> tuple[list[dict], list[dict]]:
-    ...
 ```
 
-### Parameters
+`mas_spec` is the design-time specification above. The function returns `(nodes, edges)`.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `mas_spec` | `dict` | Design-time specification (see shape above). All keys optional. |
-
-### Return Value
-
-Returns a 2-tuple `(nodes, edges)`.
-
-**`nodes`** – a flat list of node dicts.  Each node carries at minimum:
+**`nodes`** is a flat list of dicts. Fields by node type:
 
 | Field | Type | Present on |
 |-------|------|-----------|
-| `id` | `str` | All nodes |
-| `node_type` | `str` | All nodes |
-| `version` | `str` | All nodes |
-| `content` | `str` | All nodes |
-| `_text` | `str` | All nodes (same as `content`, used for embedding) |
-| `intent` | `str` | `IntentSpec`, `AgentSpec` |
-| `role` | `str` | `AgentSpec` |
-| `capabilities` | `list[str]` | `AgentSpec` |
-| `skills` | `list[str]` | `AgentSpec` |
-| `in_schema` | `dict` | `ToolSpec` |
-| `out_schema` | `dict` | `ToolSpec` |
-| `requires` | `list[str]` | `SkillSpec` |
-| `concludes` | `str` | `SkillSpec` |
+| `id`, `node_type`, `version`, `content` | str | all nodes |
+| `_text` | str | all nodes (same as `content`; used for embedding) |
+| `intent`, `role` | str | `AgentSpec` |
+| `capabilities`, `skills` | list[str] | `AgentSpec` (`skills` are the ids as given in the spec) |
+| `in_schema`, `out_schema` | dict | `ToolSpec` |
+| `requires` | list[str] | `SkillSpec` |
+| `concludes` | str | `SkillSpec` |
 
-**`edges`** – a flat list of edge dicts, each with:
+`content` / `_text` is the entry's text:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `src` | `str` | Source node ID |
-| `dst` | `str` | Destination node ID |
-| `rel` | `str` | Relationship label |
+- `IntentSpec`: the intent string.
+- `AgentSpec`: its `intent`, else `role`, else `description`, else `id`.
+- `ToolSpec` and `SkillSpec`: the `description`, else the `id`.
 
-Edge relationship labels produced by this function:
+The `AgentSpec` node does not carry its `tools` list; the `mayInvoke` edges do.
 
-| `rel` | Direction | Meaning |
+**`edges`** is a flat list of dicts with `from_id`, `to_id` and `edge_type`:
+
+| `edge_type` | Direction | Meaning |
 |-------|-----------|---------|
-| `declaresSkill` | `AgentSpec` → `SkillSpec` | Agent declares it can execute the skill |
-| `mayInvoke` | `AgentSpec` → `ToolSpec` | Agent declares it may call the tool |
+| `declaresSkill` | `AgentSpec` to `SkillSpec` | Agent declares it can execute the skill |
+| `mayInvoke` | `AgentSpec` to `ToolSpec` | Agent declares it may call the tool |
 
-### Example Output JSON
+### Example output
 
-Given the `mas_spec` shown in the shape section (abbreviated), the call:
-
-```python
-nodes, edges = build_spec_nodes(mas_spec)
-```
-
-produces nodes like:
+For the `mas_spec` above, `nodes, edges = build_spec_nodes(mas_spec)` returns six nodes (abridged here to the first three) and four edges.
 
 ```json
 [
-  {
-    "id": "spec:intent:mas",
-    "node_type": "IntentSpec",
-    "version": "v1.0.0",
-    "content": "Resolve customer support tickets using a two-agent pipeline.",
-    "_text": "Resolve customer support tickets using a two-agent pipeline."
-  },
-  {
-    "id": "spec:agent:triage",
-    "node_type": "AgentSpec",
-    "version": "v1.0.0",
-    "role": "Triage Agent",
-    "intent": "Classify incoming tickets and route to the right specialist.",
-    "capabilities": ["intent_classification", "priority_scoring"],
-    "skills": ["skill:summarise"],
-    "content": "AgentSpec triage | role=Triage Agent | intent=Classify incoming tickets and route to the right specialist. | capabilities=['intent_classification', 'priority_scoring']",
-    "_text": "AgentSpec triage | role=Triage Agent | intent=Classify incoming tickets and route to the right specialist. | capabilities=['intent_classification', 'priority_scoring']"
-  },
-  {
-    "id": "spec:agent:resolver",
-    "node_type": "AgentSpec",
-    "version": "v1.0.0",
-    "role": "Resolver Agent",
-    "intent": "Generate a resolution for classified tickets.",
-    "capabilities": ["answer_generation", "policy_lookup"],
-    "skills": [],
-    "content": "AgentSpec resolver | role=Resolver Agent | intent=Generate a resolution for classified tickets. | capabilities=['answer_generation', 'policy_lookup']",
-    "_text": "AgentSpec resolver | role=Resolver Agent | intent=Generate a resolution for classified tickets. | capabilities=['answer_generation', 'policy_lookup']"
-  },
-  {
-    "id": "spec:tool:search_kb",
-    "node_type": "ToolSpec",
-    "version": "v1.0.0",
-    "in_schema": {
-      "type": "object",
-      "properties": {
-        "query": {"type": "string"},
-        "top_k": {"type": "integer", "default": 5}
-      },
-      "required": ["query"]
-    },
-    "out_schema": {
-      "type": "array",
-      "items": {"type": "string"}
-    },
-    "content": "ToolSpec search_kb | in=object | out=array",
-    "_text": "ToolSpec search_kb | in=object | out=array"
-  },
-  {
-    "id": "spec:tool:submit_resolution",
-    "node_type": "ToolSpec",
-    "version": "v1.0.0",
-    "in_schema": {
-      "type": "object",
-      "properties": {
-        "ticket_id": {"type": "string"},
-        "resolution": {"type": "string"}
-      },
-      "required": ["ticket_id", "resolution"]
-    },
-    "out_schema": {"type": "object", "properties": {"status": {"type": "string"}}},
-    "content": "ToolSpec submit_resolution | in=object | out=object",
-    "_text": "ToolSpec submit_resolution | in=object | out=object"
-  },
-  {
-    "id": "spec:skill:summarise",
-    "node_type": "SkillSpec",
-    "version": "v1.0.0",
-    "requires": ["text_input"],
-    "concludes": "summary_output",
-    "content": "SkillSpec summarise | requires=['text_input'] | concludes=summary_output",
-    "_text": "SkillSpec summarise | requires=['text_input'] | concludes=summary_output"
-  }
+  {"id": "spec:intent:mas", "node_type": "IntentSpec", "version": "v1.0.0",
+   "content": "Resolve customer support tickets using a two-agent pipeline.",
+   "_text": "Resolve customer support tickets using a two-agent pipeline."},
+  {"id": "spec:agent:triage", "node_type": "AgentSpec", "version": "v1.0.0",
+   "role": "Triage Agent",
+   "intent": "Classify incoming tickets and route to the right specialist.",
+   "capabilities": ["intent_classification", "priority_scoring"],
+   "skills": ["summarise"],
+   "content": "Classify incoming tickets and route to the right specialist.",
+   "_text": "Classify incoming tickets and route to the right specialist."},
+  {"id": "spec:tool:submit_resolution", "node_type": "ToolSpec", "version": "v1.0.0",
+   "in_schema": {"type": "object", "properties": {"ticket_id": {"type": "string"},
+                 "resolution": {"type": "string"}}, "required": ["ticket_id", "resolution"]},
+   "out_schema": {"type": "object", "properties": {"status": {"type": "string"}}},
+   "content": "submit_resolution", "_text": "submit_resolution"}
 ]
 ```
 
-and edges like:
+The other nodes are `spec:agent:resolver`, `spec:tool:search_kb` and `spec:skill:summarise`. The edges:
 
 ```json
 [
-  {
-    "src": "spec:agent:triage",
-    "dst": "spec:skill:summarise",
-    "rel": "declaresSkill"
-  },
-  {
-    "src": "spec:agent:triage",
-    "dst": "spec:tool:search_kb",
-    "rel": "mayInvoke"
-  },
-  {
-    "src": "spec:agent:resolver",
-    "dst": "spec:tool:search_kb",
-    "rel": "mayInvoke"
-  },
-  {
-    "src": "spec:agent:resolver",
-    "dst": "spec:tool:submit_resolution",
-    "rel": "mayInvoke"
-  }
+  {"from_id": "spec:agent:triage",   "to_id": "spec:skill:summarise",        "edge_type": "declaresSkill"},
+  {"from_id": "spec:agent:triage",   "to_id": "spec:tool:search_kb",         "edge_type": "mayInvoke"},
+  {"from_id": "spec:agent:resolver", "to_id": "spec:tool:search_kb",         "edge_type": "mayInvoke"},
+  {"from_id": "spec:agent:resolver", "to_id": "spec:tool:submit_resolution", "edge_type": "mayInvoke"}
 ]
 ```
 
-### Example 1 — Minimal spec (intent only)
+### Example: intent only
 
 ```python
-from mas.library.kg import build_spec_nodes
+nodes, edges = build_spec_nodes({"intent": "Summarise a document and return key points."})
 
-spec = {"intent": "Summarise a document and return key points."}
-nodes, edges = build_spec_nodes(spec)
-
-# nodes contains exactly one entry: the IntentSpec node.
-# edges is an empty list.
-assert len(nodes) == 1
+assert len(nodes) == 1 and edges == []
 assert nodes[0]["node_type"] == "IntentSpec"
 assert nodes[0]["id"] == "spec:intent:mas"
-# version is auto-generated from sha256(repr(spec))[:12]
-assert len(nodes[0]["version"]) == 12
-assert edges == []
+assert len(nodes[0]["version"]) == 12      # auto-generated fingerprint
 ```
 
-### Example 2 — Two agents sharing a tool; no explicit version
+### Example: two agents sharing a tool
 
 ```python
-from mas.library.kg import build_spec_nodes
-
 spec = {
     "agents": [
-        {
-            "id": "planner",
-            "role": "Planning Agent",
-            "intent": "Decompose the user task into sub-tasks.",
-            "capabilities": ["task_decomposition"],
-            "skills": [],
-            "tools": ["tool:web_search"],
-        },
-        {
-            "id": "executor",
-            "role": "Execution Agent",
-            "intent": "Execute sub-tasks produced by the planner.",
-            "capabilities": ["code_execution"],
-            "skills": [],
-            "tools": ["tool:web_search", "tool:code_runner"],
-        },
+        {"id": "planner", "role": "Planning Agent",
+         "intent": "Decompose the user task into sub-tasks.",
+         "capabilities": ["task_decomposition"], "skills": [], "tools": ["web_search"]},
+        {"id": "executor", "role": "Execution Agent",
+         "intent": "Execute sub-tasks produced by the planner.",
+         "capabilities": ["code_execution"], "skills": [], "tools": ["web_search", "code_runner"]},
     ],
     "tools": [
         {"id": "web_search",  "in_schema": {"type": "object"}, "out_schema": {"type": "string"}},
         {"id": "code_runner", "in_schema": {"type": "object"}, "out_schema": {"type": "object"}},
     ],
 }
-
 nodes, edges = build_spec_nodes(spec)
 
-# 2 AgentSpec + 2 ToolSpec = 4 nodes (no IntentSpec since intent key absent)
-assert len(nodes) == 4
-
-# Both agents declare mayInvoke for web_search; executor also declares code_runner
-rels = [(e["src"], e["rel"], e["dst"]) for e in edges]
+assert len(nodes) == 4          # 2 AgentSpec + 2 ToolSpec; no IntentSpec (no intent key)
+rels = [(e["from_id"], e["edge_type"], e["to_id"]) for e in edges]
 assert ("spec:agent:planner",  "mayInvoke", "spec:tool:web_search")  in rels
 assert ("spec:agent:executor", "mayInvoke", "spec:tool:web_search")  in rels
 assert ("spec:agent:executor", "mayInvoke", "spec:tool:code_runner") in rels
 assert len(edges) == 3
 ```
 
----
-
 ## `merge_spec_into_kg`
-
-### Signature
 
 ```python
 def merge_spec_into_kg(kg_doc: dict, mas_spec: dict) -> dict:
-    ...
 ```
-
-### Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `kg_doc` | `dict` | An existing KG document (modified **in place**). Must have `"nodes"`, `"edges"`, and `"meta"` keys at the top level. |
-| `mas_spec` | `dict` | Design-time specification (same shape as for `build_spec_nodes`). |
+| `kg_doc` | `dict` | Existing KG document, modified in place. Missing `"nodes"`, `"edges"` and `"metadata"` keys are created. |
+| `mas_spec` | `dict` | Specification, same shape as for `build_spec_nodes`. |
 
-### Return Value
+It returns the same `kg_doc` dict. Steps:
 
-Returns the same `kg_doc` dict (modified in place).  The caller may ignore the
-return value when mutating in-place is sufficient.
+1. Call `build_spec_nodes(mas_spec)`.
+2. Intern the spec nodes: append each to `kg_doc["nodes"]` only if no node with the same `id` exists. Existing runtime nodes are never overwritten.
+3. Add conformance edges (below).
+4. Set `kg_doc["metadata"]["spec_injected"] = True`.
+5. Set `kg_doc["metadata"]["spec_node_count"]` to the number of nodes `build_spec_nodes` returned, not the number added.
 
-### Side Effects
+The spec-internal edges from `build_spec_nodes` (`declaresSkill`, `mayInvoke`) are not added to `kg_doc["edges"]`; only conformance edges are. Append the `build_spec_nodes` edges yourself if you want them in the document.
 
-1. Calls `build_spec_nodes(mas_spec)` internally.
-2. **Interns** spec nodes: each spec node is appended to `kg_doc["nodes"]` only
-   if no node with the same `id` already exists.  Existing runtime nodes are
-   never overwritten.
-3. **Interns** spec edges similarly.
-4. Adds **conformance edges** (see below).
-5. Sets `kg_doc["meta"]["spec_injected"] = True`.
-6. Sets `kg_doc["meta"]["spec_node_count"]` to the number of unique spec nodes
-   now present in `kg_doc["nodes"]`.
+### Conformance edge rules
 
-### Conformance Edge Rules
-
-After interning spec nodes, the function scans every node in `kg_doc["nodes"]`
-(including pre-existing runtime nodes) and creates conformance edges:
+The function scans every node in `kg_doc["nodes"]`, including pre-existing runtime nodes:
 
 | Runtime node type | Matched field(s) | Edge added | To |
 |-------------------|-----------------|-----------|-----|
 | `AgentCall`, `LLMCall` | `agentId` or `agent_id` | `instanceOf` | `spec:agent:{id}` |
 | `ToolCall` | `toolId`, `tool_id`, `toolName`, or `tool_name` | `invokes` | `spec:tool:{id}` |
 
-Conformance edges are also interned: a given `(src, rel, dst)` triple is never
-duplicated even if `merge_spec_into_kg` is called multiple times on the same
-document.
+- Conformance edges are not deduplicated. Calling `merge_spec_into_kg` twice on one document appends them twice; spec nodes stay interned. Guard with `kg_doc.get("metadata", {}).get("spec_injected")` if a document may be merged more than once.
+- `agentId` is matched against the last `:`-separated segment of the spec node id, so spec agent ids that contain `:` do not match.
+- A runtime node with no matching spec node gets no edge and raises no error.
 
-If no matching spec node exists for a given runtime node, **no edge is added
-and no error is raised** — the runtime node simply has no conformance link.
-
-### Example 1 — Basic merge with a single AgentCall and ToolCall
+### Example: merge one agent call and one tool call
 
 ```python
 from mas.library.kg import merge_spec_into_kg
 
 kg_doc = {
-    "meta": {},
+    "metadata": {},
     "nodes": [
-        {
-            "id": "call:agent:run-001",
-            "node_type": "AgentCall",
-            "agentId": "triage",
-            "input": "Ticket #42: login fails",
-        },
-        {
-            "id": "call:tool:run-001-1",
-            "node_type": "ToolCall",
-            "toolId": "search_kb",
-            "input": {"query": "login failure SSO"},
-        },
+        {"id": "call:agent:run-001", "node_type": "AgentCall", "agentId": "triage",
+         "input": "Ticket #42: login fails"},
+        {"id": "call:tool:run-001-1", "node_type": "ToolCall", "toolId": "search_kb",
+         "input": {"query": "login failure SSO"}},
     ],
     "edges": [
-        {"src": "call:agent:run-001", "dst": "call:tool:run-001-1", "rel": "invoked"}
+        {"from_id": "call:agent:run-001", "to_id": "call:tool:run-001-1", "edge_type": "hasToolCall"}
     ],
 }
-
 mas_spec = {
     "version": "v1.0.0",
-    "agents": [
-        {
-            "id": "triage",
-            "role": "Triage Agent",
-            "intent": "Classify tickets.",
-            "capabilities": ["intent_classification"],
-            "skills": [],
-            "tools": ["tool:search_kb"],
-        }
-    ],
-    "tools": [
-        {
-            "id": "search_kb",
-            "in_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
-            "out_schema": {"type": "array", "items": {"type": "string"}},
-        }
-    ],
+    "agents": [{"id": "triage", "role": "Triage Agent", "intent": "Classify tickets.",
+                "capabilities": ["intent_classification"], "skills": [], "tools": ["search_kb"]}],
+    "tools": [{"id": "search_kb",
+               "in_schema": {"type": "object", "properties": {"query": {"type": "string"}},
+                             "required": ["query"]},
+               "out_schema": {"type": "array", "items": {"type": "string"}}}],
 }
 
 result = merge_spec_into_kg(kg_doc, mas_spec)
 
-# Spec nodes are interned
 spec_ids = {n["id"] for n in result["nodes"]}
-assert "spec:agent:triage" in spec_ids
-assert "spec:tool:search_kb" in spec_ids
+assert "spec:agent:triage" in spec_ids and "spec:tool:search_kb" in spec_ids
 
-# Conformance edges are present
-edge_rels = {(e["src"], e["rel"], e["dst"]) for e in result["edges"]}
-assert ("call:agent:run-001",   "instanceOf", "spec:agent:triage")    in edge_rels
-assert ("call:tool:run-001-1",  "invokes",    "spec:tool:search_kb")  in edge_rels
+edge_rels = {(e["from_id"], e["edge_type"], e["to_id"]) for e in result["edges"]}
+assert ("call:agent:run-001",  "instanceOf", "spec:agent:triage")   in edge_rels
+assert ("call:tool:run-001-1", "invokes",    "spec:tool:search_kb") in edge_rels
 
-# Meta is updated
-assert result["meta"]["spec_injected"] is True
-assert result["meta"]["spec_node_count"] == 2
+assert result["metadata"]["spec_injected"] is True
+assert result["metadata"]["spec_node_count"] == 2
 ```
 
-### Example 2 — Idempotent re-injection and alternative field names
+### Example: snake_case fields and re-injection
 
 ```python
-from mas.library.kg import merge_spec_into_kg
-
 kg_doc = {
-    "meta": {},
+    "metadata": {},
     "nodes": [
-        # Uses snake_case field variants
-        {"id": "c1", "node_type": "ToolCall",  "tool_name": "search_kb"},
-        {"id": "c2", "node_type": "LLMCall",   "agent_id":  "resolver"},
+        {"id": "c1", "node_type": "ToolCall", "tool_name": "search_kb"},
+        {"id": "c2", "node_type": "LLMCall",  "agent_id":  "resolver"},
     ],
     "edges": [],
 }
-
 spec = {
     "version": "v2.0.0",
-    "agents": [{"id": "resolver", "role": "Resolver", "intent": "Resolve.", "capabilities": [], "skills": [], "tools": []}],
+    "agents": [{"id": "resolver", "role": "Resolver", "intent": "Resolve.",
+                "capabilities": [], "skills": [], "tools": []}],
     "tools":  [{"id": "search_kb", "in_schema": {}, "out_schema": {}}],
 }
 
-# First injection
 merge_spec_into_kg(kg_doc, spec)
-node_count_after_first = len(kg_doc["nodes"])
-edge_count_after_first = len(kg_doc["edges"])
+nodes_1, edges_1 = len(kg_doc["nodes"]), len(kg_doc["edges"])
 
-# Second injection must be idempotent — no duplicates
 merge_spec_into_kg(kg_doc, spec)
-assert len(kg_doc["nodes"]) == node_count_after_first
-assert len(kg_doc["edges"]) == edge_count_after_first
+assert len(kg_doc["nodes"]) == nodes_1          # spec nodes are interned
+assert len(kg_doc["edges"]) == 2 * edges_1      # conformance edges are appended again
 
-# Conformance via alternative field names works
-edge_rels = {(e["src"], e["rel"], e["dst"]) for e in kg_doc["edges"]}
+edge_rels = {(e["from_id"], e["edge_type"], e["to_id"]) for e in kg_doc["edges"]}
 assert ("c1", "invokes",    "spec:tool:search_kb") in edge_rels
 assert ("c2", "instanceOf", "spec:agent:resolver") in edge_rels
 ```
 
----
+<a id="ascii-diagram"></a>
 
-## ASCII Diagram
+## Diagram
 
-The diagram below shows a single-run KG document after `merge_spec_into_kg`.
-Spec nodes (left column) are shared across all runs of the same spec version.
-Runtime nodes (right column) record what happened in one specific execution.
+A single-run KG document after `merge_spec_into_kg`. Spec nodes (left) are shared across runs of the same spec version. Runtime nodes (right) record one execution.
 
 ```
-SPEC SUB-GRAPH (shared / interned)          RUNTIME SUB-GRAPH (per-run)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                                                                         
- ┌──────────────────────┐                   ┌──────────────────────┐    
- │ IntentSpec           │                   │ Message (user input) │    
- │ id=spec:intent:mas   │                   │ id=msg:run-042:0     │    
- └──────────────────────┘                   └──────────┬───────────┘    
-                                                       │ triggers       
- ┌──────────────────────┐  ◄────instanceOf──  ┌────────▼───────────┐    
- │ AgentSpec            │                   │ AgentCall            │    
- │ id=spec:agent:triage │                   │ id=call:agent:r42:1  │    
- └──────────┬───────────┘                   └────────┬─────────────┘    
-            │ mayInvoke                              │ invoked           
-            ▼                                        ▼                   
- ┌──────────────────────┐  ◄────invokes──────  ┌────────────────────┐   
- │ ToolSpec             │                      │ ToolCall           │   
- │ id=spec:tool:srch_kb │                      │ id=call:tool:r42:2 │   
- └──────────────────────┘                      └────────────────────┘   
-                                                                         
- ┌──────────────────────┐  ◄────instanceOf──  ┌────────────────────┐    
- │ AgentSpec            │                      │ LLMCall            │    
- │ id=spec:agent:resolv │                      │ id=llm:r42:3       │    
- └──────────┬───────────┘                      └────────────────────┘    
-            │ mayInvoke                                                   
-            ▼                                                             
- ┌──────────────────────┐  ◄────invokes──────  ┌────────────────────┐   
- │ ToolSpec             │                      │ ToolCall           │   
- │ id=spec:tool:submit  │                      │ id=call:tool:r42:4 │   
- └──────────────────────┘                      └────────────────────┘   
-                                                                         
- ┌──────────────────────┐                                                
- │ SkillSpec            │  (no runtime match in this run)               
- │ id=spec:skill:summar │                                                
- └──────────────────────┘                                                
+SPEC SUB-GRAPH (shared / interned)          RUNTIME SUB-GRAPH (per run)
+
+ IntentSpec  spec:intent:mas                (no conformance edge)
+
+ AgentSpec   spec:agent:triage   <--instanceOf--   AgentCall  call:agent:r42:1
+    | mayInvoke                                        | hasToolCall
+    v                                                  v
+ ToolSpec    spec:tool:search_kb <--invokes------   ToolCall   call:tool:r42:2
+
+ AgentSpec   spec:agent:resolver <--instanceOf--   LLMCall    llm:r42:3
+    | mayInvoke
+    v
+ ToolSpec    spec:tool:submit_resolution <--invokes-- ToolCall call:tool:r42:4
+
+ SkillSpec   spec:skill:summarise           (no runtime match in this run)
 ```
 
-Key:
-- `────instanceOf──►` conformance edge: runtime AgentCall / LLMCall → AgentSpec
-- `────invokes──────►` conformance edge: runtime ToolCall → ToolSpec
-- `────mayInvoke────►` design-time declaration edge (inside spec sub-graph)
-
----
+- `instanceOf`: conformance edge from a runtime `AgentCall` / `LLMCall` to an `AgentSpec`.
+- `invokes`: conformance edge from a runtime `ToolCall` to a `ToolSpec`.
+- `mayInvoke`: declaration edge inside the spec sub-graph. `build_spec_nodes` returns it; `merge_spec_into_kg` does not add it.
+- `hasToolCall`: ordinary runtime containment edge already in the KG.
 
 ## Stable IDs
-
-All spec node IDs follow a deterministic naming scheme:
 
 | Node type | ID pattern |
 |-----------|-----------|
@@ -614,79 +356,38 @@ All spec node IDs follow a deterministic naming scheme:
 | `ToolSpec` | `spec:tool:{tool["id"]}` |
 | `SkillSpec` | `spec:skill:{skill["id"]}` |
 
-Stability is guaranteed as long as the `"id"` values within the spec entries
-remain constant.  The `version` field changes when content changes, but the
-node `id` does not — allowing embeddings and cross-document references to
-survive version bumps.
+IDs stay stable while the `"id"` values in the spec entries stay constant. The `version` field changes with content; the node `id` does not. Embeddings and cross-document references therefore survive version bumps.
 
-### What Stable IDs Enable
+Stable IDs give you:
 
-**Deduplication**
-: `merge_spec_into_kg` uses a simple `id`-set membership check to intern nodes.
-  No hashing of full node content is required at merge time.
+- **Deduplication**: `merge_spec_into_kg` interns with an `id`-set membership check, with no hashing of node content.
+- **Embedding reuse**: a vector store keyed by node `id` needs re-embedding only for spec nodes whose `version` changed.
+- **Cross-run lookup**: for any `AgentCall.agentId = "triage"`, the spec node is at `spec:agent:triage`, with no join table.
+- **Traversal entry points**: tools can start at `spec:intent:mas` or `spec:agent:<id>` and follow `mayInvoke` edges (once you have appended the `build_spec_nodes` edges).
 
-**Embedding reuse**
-: A vector store keyed by node `id` does not need to be re-indexed when new
-  runtime data arrives.  Only spec nodes whose `version` changed require a
-  re-embed.
+## Extending the spec
 
-**Cross-run lookup**
-: Given any `AgentCall.agentId = "triage"` across any run, the spec node is
-  always retrievable at the key `spec:agent:triage` — no join table required.
+### Custom fields
 
-**Graph traversal shortcuts**
-: Tools that navigate the KG can hard-code spec entry points (e.g., start at
-  `spec:intent:mas` and follow `mayInvoke` edges) without scanning the full
-  node list.
-
----
-
-## Extending the Spec
-
-### Optional Fields and Custom Fields
-
-The spec dict accepts arbitrary additional keys at any level.  Fields not
-recognised by the module are ignored during node construction but can be stored
-as custom metadata by the caller:
+The spec dict accepts extra keys at any level. `build_spec_nodes` ignores them; they stay in your spec dict.
 
 ```python
 spec = {
     "version": "v1.1.0",
-    "agents": [
-        {
-            "id": "researcher",
-            "role": "Research Agent",
-            "intent": "Gather evidence from external sources.",
-            "capabilities": ["web_search", "pdf_parse"],
-            "skills": [],
-            "tools": ["tool:browser"],
-            # Custom fields — ignored by build_spec_nodes but preserved in spec dict
-            "owner": "platform-team",
-            "sla_ms": 3000,
-            "tags": ["external", "io-heavy"],
-        }
-    ],
-    "tools": [
-        {
-            "id": "browser",
-            "in_schema": {"type": "object", "properties": {"url": {"type": "string"}}},
-            "out_schema": {"type": "string"},
-            # Custom field
-            "rate_limit_rps": 2,
-        }
-    ],
+    "agents": [{
+        "id": "researcher", "role": "Research Agent",
+        "intent": "Gather evidence from external sources.",
+        "capabilities": ["web_search", "pdf_parse"], "skills": [], "tools": ["browser"],
+        "owner": "platform-team", "sla_ms": 3000,       # custom: not copied to KG nodes
+    }],
+    "tools": [{"id": "browser", "in_schema": {"type": "object"}, "out_schema": {"type": "string"}}],
 }
-
-nodes, edges = build_spec_nodes(spec)
-# nodes[0] is AgentSpec with standard fields only; custom fields are not in KG node
-# but remain accessible via the original spec dict
 ```
 
 To store custom fields in KG nodes, post-process the returned list:
 
 ```python
 nodes, edges = build_spec_nodes(spec)
-# Annotate AgentSpec nodes with custom metadata
 id_to_extra = {
     f"spec:agent:{a['id']}": {k: a[k] for k in a if k not in
         ("id", "role", "intent", "capabilities", "skills", "tools")}
@@ -697,48 +398,34 @@ for node in nodes:
         node.update(id_to_extra[node["id"]])
 ```
 
-### What Happens When No Match Is Found
+### Runtime nodes with no spec match
 
-When `merge_spec_into_kg` encounters a runtime node whose identifier does not
-match any spec entry, it silently skips conformance edge creation for that node.
-No warning is raised.  The runtime node remains in the graph without any
-`instanceOf` or `invokes` edge.
-
-This is intentional: runtime graphs may contain ad-hoc tool calls or agent
-invocations introduced during debugging or experimentation that were never
-declared in the spec.  Absence of a conformance edge is itself a signal worth
-querying:
+`merge_spec_into_kg` skips conformance edges for runtime nodes that match no spec entry, without a warning. Runtime graphs can contain ad-hoc calls from debugging or experiments. The missing edge is itself a signal:
 
 ```python
-# Find ToolCall nodes that have no invokes edge (undeclared tool usage)
-spec_tool_ids = {n["id"] for n in kg_doc["nodes"] if n["node_type"] == "ToolSpec"}
-nodes_with_invokes = {e["src"] for e in kg_doc["edges"] if e["rel"] == "invokes"}
+with_invokes = {e["from_id"] for e in kg_doc["edges"] if e["edge_type"] == "invokes"}
 undeclared_calls = [
     n for n in kg_doc["nodes"]
-    if n["node_type"] == "ToolCall" and n["id"] not in nodes_with_invokes
+    if n["node_type"] == "ToolCall" and n["id"] not in with_invokes
 ]
 ```
 
-### Using `"goal"` Instead of `"intent"`
+### `goal` instead of `intent`
 
-If your spec uses `"goal"` as the key for the system purpose, the module treats
-it identically to `"intent"`:
+`"goal"` behaves like `"intent"`; when both are present, `"intent"` wins.
 
 ```python
-spec = {"goal": "Classify and route support tickets."}
-nodes, _ = build_spec_nodes(spec)
+nodes, _ = build_spec_nodes({"goal": "Classify and route support tickets."})
 assert nodes[0]["node_type"] == "IntentSpec"
 assert nodes[0]["content"] == "Classify and route support tickets."
 ```
 
-When both `"intent"` and `"goal"` are present, `"intent"` takes precedence.
+### Auto-generated version fingerprint
 
-### Auto-generated Version Fingerprint
-
-When `"version"` is omitted, the module produces a 12-character hex fingerprint:
+Without `"version"`, the module uses a 12-character hex fingerprint of `repr(spec)`:
 
 ```python
-import hashlib, json
+import hashlib
 
 spec = {"intent": "Do something useful."}
 fingerprint = hashlib.sha256(repr(spec).encode()).hexdigest()[:12]
@@ -746,7 +433,4 @@ nodes, _ = build_spec_nodes(spec)
 assert nodes[0]["version"] == fingerprint
 ```
 
-The fingerprint changes when any part of the spec changes, making it a reliable
-cache-busting key.  If you need version stability across Python versions or
-platforms (where `repr` output may differ for floats or complex objects), supply
-an explicit `"version"` string instead.
+The fingerprint changes when any part of the spec changes. `repr` output can differ across Python versions or platforms for floats and complex objects, so supply an explicit `"version"` if you need stability across them.

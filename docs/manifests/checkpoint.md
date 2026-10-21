@@ -4,17 +4,39 @@
 -->
 # Session checkpoints
 
-Session checkpoints preserve the runtime kernel and conversation history as a
-single resumable artifact. Version 2 also contains session lineage and the
-agent manifest, so a process can rebuild a session without the original
-manifest file. Keep credentials in environment/secret-store references; a
-checkpoint must not contain inline secrets.
+A **session checkpoint** saves the runtime kernel state and the conversation history as one resumable file.
+Enable checkpoints with `spec.checkpoint` on an Agent manifest when a session must survive a crash, be forked, or be rewound.
+Version 2 files also hold the session lineage and the agent manifest, so a new process can rebuild the session without the original manifest file.
+A checkpoint must not contain inline secrets.
+Keep credentials in environment or secret-store references.
+
+```yaml
+spec:
+  checkpoint:
+    mode: every_turn
+```
+
+Schemas:
+
+- Policy: `spec.checkpoint` in [`agent.schema.yaml`](../schemas/runtime/agent.schema.yaml).
+- File format: [`checkpoint.schema.yaml`](../schemas/checkpoint.schema.yaml). Version 1 holds a kernel snapshot. Version 2 adds `lineage`, `working_memory`, and the embedded `manifest`.
+
+## Contents
+
+- [Policy](#policy)
+- [Resume and fork](#resume-and-fork)
+- [Backtracking](#backtracking)
+- [See also](#see-also)
 
 ## Policy
 
-`spec.checkpoint` defaults to no automatic checkpointing. Configure cadence
-(`mode`) and location (`storage`) on an Agent manifest, or apply the standard
-`openclaw` overlay:
+`spec.checkpoint` defaults to no automatic checkpointing.
+Set the cadence (`mode`) and the location (`storage`) on an Agent manifest.
+Alternatively, apply the bundled `openclaw` overlay (`pkg://mas.library.standard/overlays/openclaw.yaml`).
+That overlay turns on `on_event` checkpoints after every LLM call and `auto_resume_latest`.
+It also adds the `backtrack_on_error` recovery binding shown under [Backtracking](#backtracking).
+
+A full policy looks like this:
 
 ```yaml
 spec:
@@ -39,60 +61,83 @@ spec:
 | `every_n_turns` | Positive integer; used with the `every_n_turns` trigger | unset |
 | `retention.mode` | `all`, `single`, `last_n` | `all` |
 | `retention.n` | Positive integer for `last_n` | `5` |
-| `portability` | `self_contained`, `reference` | `self_contained` |
+| `portability` | `self_contained`, `reference` | `self_contained` (see below) |
 | `auto_resume_latest` | Boolean | `false` |
 
-`mode` is **when** to capture. `storage` is **where** payloads live, resolved
-as a library **`checkpoint_store` plugin** (`memory`, `disk`, `hybrid`) that
-implements kernel `persist`. It is not a new envelope slot:
+`mode` says **when** to capture:
 
-- `memory` — process-local. `/backtrack` works; a new process cannot load.
-- `disk` — JSON files. `checkpoint list` / `fork` / `--load-checkpoint`.
-- `hybrid` — memory plus files. Fast in-process copy; disk is the resume witness.
+- `none` captures nothing automatically. Manual checkpoints still work (`--save-checkpoint`, control `persist`).
+- `on_event` captures on the listed `triggers`.
+- `every_turn` captures after each completed user turn.
+- `in_memory` keeps checkpoints in the process.
 
-When `storage` is omitted, `mode: in_memory` means memory; `on_event` and
-`every_turn` mean disk. `auto_resume_latest` requires disk or hybrid.
-A workspace or lab may enable a store via `config.yaml` `plugins:` /
-`lab.enable_plugins` (`mas.checkpoint_store.hybrid`, …) when the spec omits
-`storage`. Spec `storage` still wins. CLI `--checkpoint-dir` overrides
-`storage.path`. When disk persistence is
-enabled without either, the CLI uses `.mas/checkpoints` beside the active
-manifest (or current working directory). Retention prunes only files belonging
-to the same session.
+`portability` is validated, but the current writer ignores it.
+Every version 2 checkpoint embeds the agent manifest.
 
-A walkthrough (crash, resume, fork, backtrack):
-[Tutorial 11](../tutorials/11-sessions-and-recovery/).
+`auto_resume_latest: true` loads the newest version 2 checkpoint in the checkpoint directory whose embedded manifest hash matches the current manifest.
+It requires `disk` or `hybrid` storage.
+
+`storage` says **where** payloads live.
+The runtime resolves it as a library `checkpoint_store` plugin that implements kernel `persist`.
+It is not a new envelope slot.
+
+- `memory`: process-local. `/backtrack` works, but a new process cannot load the checkpoint.
+- `disk`: JSON files. Use `checkpoint list`, `checkpoint fork`, and `--load-checkpoint`.
+- `hybrid`: memory plus files. The in-process copy is fast, and the disk copy is what a resume loads.
+
+When `storage` is omitted, `mode: in_memory` means memory, and `on_event` and `every_turn` mean disk.
+A workspace or lab can enable a store through `config.yaml` `plugins:` or `lab.enable_plugins` (for example `mas.checkpoint_store.hybrid`) when the spec omits `storage`.
+Spec `storage` still wins.
+
+The checkpoint directory resolves in this order:
+
+1. CLI `--checkpoint-dir` overrides `storage.path`.
+2. Otherwise `storage.path` applies.
+3. When disk persistence is on and neither is set, the CLI uses `.mas/checkpoints` beside the active manifest, or in the current working directory.
+
+Retention prunes only files that belong to the same session.
+
+[Tutorial 11](../tutorials/11-sessions-and-recovery/README.md) walks through crash, resume, fork, and backtrack.
 
 ## Resume and fork
 
-Create an explicit checkpoint with `mas-ctl chat agent.yaml --checkpoint-dir
-.mas/checkpoints --save-checkpoint`, or enable automatic checkpoints through
-the policy. List artifacts and fork one into a new session identity:
+Create an explicit checkpoint with `--save-checkpoint`, or enable automatic checkpoints through the policy:
 
 ```bash
-mas-ctl checkpoint list .mas/checkpoints
-mas-ctl checkpoint fork <checkpoint-path-from-list> \
-  --output-dir .mas/forks
-mas-ctl chat --load-checkpoint <fork-checkpoint-path-printed-by-fork>
+mas-ctl chat agent.yaml --checkpoint-dir .mas/checkpoints --save-checkpoint
 ```
 
-The fork command prints its output path. For version 2, `--load-checkpoint` can
-use the embedded manifest when no manifest argument is supplied. Resume
-preserves the session ID and history.
-Fork creates a new session ID, records its parent and source checkpoint, and
-copies history up to that point; later turns do not share mutable memory.
-Version 1 checkpoints remain loadable as kernel-only snapshots when used with
-an explicit manifest.
+List the artifacts and fork one into a new session identity:
 
-In a live process, an in-memory **snapshot tree** is cheaper than a checkpoint.
-`take_snapshot` does not write disk. Walking the tree moves a debug cursor;
-it does not change the live run until a branch is promoted. See
-[Snapshots vs checkpoints](../references/snapshots.md). Pause
-(`ControlContract.pause`) blocks the next user turn until resume.
+```bash
+mas-ctl checkpoint list .mas/checkpoints            # prints file names
+mas-ctl checkpoint show .mas/checkpoints/<file>     # pretty-prints the JSON
+mas-ctl checkpoint fork .mas/checkpoints/<file> \
+  --output-dir .mas/forks                           # optional: --session-id ID
+mas-ctl chat --load-checkpoint <fork-checkpoint-path-printed-by-fork>
+# or: mas-ctl checkpoint resume <checkpoint-path>
+```
+
+- `list` prints file names only. Prefix them with the directory.
+- `fork` requires a version 2 checkpoint and checks the embedded manifest hash. It prints its output path, by default next to the source file.
+- `resume` is `chat --load-checkpoint` with no manifest argument. For version 2, `--load-checkpoint` uses the embedded manifest when you pass no manifest argument.
+
+Resume preserves the session ID and the history.
+Fork creates a new session ID, records its parent and source checkpoint, and copies the history up to that point.
+Later turns do not share mutable memory.
+Version 1 checkpoints stay loadable as kernel-only snapshots when you pass an explicit manifest.
+
+A **snapshot** is a copy of kernel state taken inside a live process.
+An in-memory snapshot tree is cheaper than a checkpoint.
+`take_snapshot` does not write disk.
+Walking the tree moves a debug cursor and does not change the live run until you promote a branch.
+See [Snapshots vs checkpoints](../references/snapshots.md).
+Pause (`ControlContract.pause`) blocks the next user turn until resume.
 
 ## Backtracking
 
-Manual backtracking is available in a managed chat with checkpoints enabled:
+Backtracking rewinds a session to an earlier checkpoint and steers the model away from a failure.
+In a managed chat with checkpoints enabled, rewind manually:
 
 ```text
 /backtrack 1 Avoid the failed tool approach and ask for missing details first.
@@ -114,8 +159,17 @@ spec:
           on_cap_reached: hitl
 ```
 
-The recovery plugin retries the same engine error first. Once its signature
-repeats, the kernel emits a backtrack boundary signal; the session layer restores
-the retained checkpoint and injects a steering message. Design-pattern plugins
-do not own this policy. `on_cap_reached` accepts `hitl`, `terminate`, or
-`stop_backtracking`.
+The recovery plugin first retries the same engine error.
+Once its signature repeats, the kernel emits a backtrack boundary signal.
+The session layer then restores the retained checkpoint and injects a steering message.
+Design-pattern plugins do not own this policy.
+
+`on_cap_reached` accepts `hitl`, `terminate`, or `stop_backtracking`.
+`hitl` (human in the loop) hands the decision to a person.
+
+## See also
+
+- [Tutorial 11: sessions and recovery](../tutorials/11-sessions-and-recovery/README.md)
+- [Agent manifest](agent.md): `spec.checkpoint`
+- [Governance](governance.md): the `error_recovery_plugin` binding
+- [Snapshots vs checkpoints](../references/snapshots.md)

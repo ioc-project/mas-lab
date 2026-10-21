@@ -4,25 +4,43 @@
 -->
 # Dataset envelope migration
 
-A dataset item is `inputs` + `expectations`. Prefer that envelope now
-(`inputs.user` string, `expectations.details` for app-specific ground truth,
-catalog `dataset.name`). Loaders **still accept** the deprecated shapes below
-and warn once per file. Those shapes will be **removed in a future breaking
-release**. Rewrite with:
+This page maps deprecated dataset item shapes to the current envelope.
+The **envelope** is the `kind: Dataset` wrapper plus the `inputs` / `expectations` split of each item.
+Read this page when `mas-lab` warns about a dataset file, or when you convert an old dataset by hand.
+
+A dataset item is `inputs` (what the run receives) plus `expectations` (what you score against). Target shape:
+
+```yaml
+spec:
+  items:
+    - id: "001"
+      inputs:
+        user: Plan a three-day trip to Paris.
+      expectations:
+        ground_truth: A three-day Paris itinerary.
+        details:
+          max_budget_eur: 900   # app-specific ground truth
+```
+
+Loaders still accept the deprecated shapes below. They warn once per file.
+A future breaking release will remove them.
+
+## Migrate with the script
+
+The migrator rewrites files **in place**, so commit or back up first:
 
 ```bash
-python scripts/migrate_dataset_envelope.py                  # this repo's datasets
+python scripts/migrate_dataset_envelope.py                  # this repo's datasets (run from the repo root)
 python scripts/migrate_dataset_envelope.py path/to/datasets  # any kind: Dataset file or directory
 ```
 
-The migrator also collapses a one-key `tool_fixtures` pointer
-(`{scene: file.yaml}`) to the path and drops `spec.item_schema`
-(use `spec.schemas`). Ambiguous inputs (several `tool_fixtures` keys, a key
-already in `details`) fail with the item id.
+The migrator also collapses a one-key `tool_fixtures` pointer (`{scene: file.yaml}`) to the path.
+It drops `spec.item_schema` (use `spec.schemas`).
+Ambiguous inputs fail with the item id. Examples: several `tool_fixtures` keys, or a key already in `details`.
 
-## Still accepted — removed later
+## Still accepted, removed later
 
-Codes match `mas.lab.deprecations.NOTICES`. Each warning points here.
+Each load-time warning names one of these codes.
 
 | Code | Still loads | Use instead |
 |---|---|---|
@@ -31,11 +49,9 @@ Codes match `mas.lab.deprecations.NOTICES`. Each warning points here.
 | `dataset.legacy_expectations` | App-specific keys on `expectations` (`correct_action`, `governance`, …) | `expectations.details.<key>` |
 | `dataset.bare_list` | Bare YAML list of items (no `kind: Dataset`) | `apiVersion: lab/v1` / `kind: Dataset` / `spec.items` |
 
-A clash (`correct_action` both at the top of `expectations` and under
-`details`) is an error, not a warning.
+A clash is an error, not a warning. Example: `correct_action` both at the top of `expectations` and under `details`.
 
-Former **lab / experiment wiring** that is not a dataset item, also kept for
-this release:
+Legacy lab and experiment wiring that is not a dataset item also still loads:
 
 | Still loads | Use instead / notes |
 |---|---|
@@ -61,13 +77,15 @@ this release:
 | tools reading fixture files or environment variables | `mas.runtime.contracts.tool_fixture(ctx, tool_name)`; overlay params in `ctx.runtime_params` | — |
 | bare YAML list of items (no Dataset kind) | `apiVersion: lab/v1` / `kind: Dataset` / `spec.items` | warn `dataset.bare_list` |
 
-A string on `user` is the prompt text. A string on `tool_fixtures` /
-`memory_seeds` is a path (shorthand for `{ref: that-string}`). Do not mix
-the two. `{ref: relative/path}` is the only file-pointer syntax on `user`.
+A string on `user` is the prompt text.
+A string on `tool_fixtures` or `memory_seeds` is a path, shorthand for `{ref: that-string}`.
+Do not mix the two.
+`{ref: relative/path}` is the only file-pointer syntax on `user`.
+
 
 ## Couplings
 
-`execution.design.mode: coupled` binds `scenario` to dataset item **`id`**:
+`experiment.design.mode: coupled` binds each `scenario` to a dataset item **`id`** (see [experiment.md](experiment.md#design)):
 
 ```yaml
 design:
@@ -77,19 +95,21 @@ design:
       items: [order-42-refund]
 ```
 
-Do **not** rename item ids when migrating. Cartesian / one-factor experiments
-that filter by `id` / `group` / `category` keep using those metadata keys.
+Do not rename item ids when you migrate.
+Cartesian and one-factor experiments that filter by `id`, `group`, or `category` keep using those metadata keys.
 
 ## Labs already on the envelope
 
-- library-samples trip-planner — `inputs.user` + `expectations.ground_truth`
+- library-samples trip-planner: `inputs.user` + `expectations.ground_truth`.
 
-Evaluators that read app-specific ground truth read it from
-`expectations.details` on the Dataset item, never from tool-fixture YAML.
-Overlay-only files are not a ground-truth home; if a run needs scoring, it is
-a Dataset item.
+Evaluators read app-specific ground truth from `expectations.details` on the Dataset item, never from tool-fixture YAML.
+Overlay-only files are not a ground-truth home. If a run needs scoring, make it a Dataset item.
 
 ## Generate-dataset pipeline step
 
-`GenerateDatasetStep` now writes `kind: Dataset` items with `inputs.user`,
-not `prompt:`.
+The `generate_dataset` pipeline step (`GenerateDatasetStep`, `library-lab`) writes `kind: Dataset` items with `inputs.user`, not `prompt:`.
+
+## See also
+
+- [dataset.md](dataset.md): the current manifest format
+- [experiment.md](experiment.md): `dataset` and `design.couplings`

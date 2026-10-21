@@ -4,14 +4,15 @@
 -->
 # Designing experiments
 
-Structure an **experiment manifest** (`experiment.yaml`) for ablations, smoke
-validation, and publishable results.
+This page shows how to structure an **experiment manifest** (`experiment.yaml`). Read it before you design an ablation, a smoke check, or a publishable study.
+
+Smallest working command: `mas-lab benchmark run experiment.yaml --dry-run`.
 
 Terms: [glossary.md](../../docs/glossary.md).
 
 ## One canonical experiment file
 
-Use CLI flags for smoke — do not fork `experiment-smoke.yaml` unless documented:
+Use CLI flags for smoke runs. Do not fork an `experiment-smoke.yaml` unless you document it.
 
 ```bash
 mas-lab benchmark run experiment.yaml --dry-run
@@ -20,7 +21,7 @@ mas-lab benchmark run experiment.yaml --limit-scenarios 1 --max-runs 1 --progres
 
 ## Scenario matrix
 
-Each **scenario** is one column: a setup `id` and layered **overlays**:
+Each **scenario** is one column of the matrix. It has a setup `id` and layered **overlays** (YAML patches applied on top of the base MAS):
 
 ```yaml
 experiment:
@@ -34,7 +35,7 @@ experiment:
         infra: []
 ```
 
-Hold **dataset** and `n_runs` constant across scenarios.
+Keep the **dataset** and `n_runs` constant across scenarios.
 
 Details: [multi-scenario-format.md](multi-scenario-format.md).
 
@@ -47,15 +48,13 @@ Details: [multi-scenario-format.md](multi-scenario-format.md).
 
 Use `n_runs > 1` when **pipeline steps** report confidence intervals.
 
-A failed scenario×item×run is **reattempted** by default
-(`execution.max_attempts: 3`, independent of `n_runs`). That covers LLM HTTP
-failures after in-call retries are spent. Auth and TLS failures are
-not retried. Set `max_attempts: 1` to fail the slot on the first error.
+The scheduler reattempts a failed scenario×item×run by default. The default is `schedule.max_attempts: 3`, independent of `n_runs`. The older `execution:` block is deprecated.
+
+Reattempts cover LLM HTTP failures after in-call retries run out. Auth and TLS failures are not retried. Set `max_attempts: 1` to fail the slot on the first error.
 
 ## Level hooks for figures
 
-Declare figures on experiment-level `post:` (CLI `--depth exp`), not a
-`pipeline:` key:
+Declare figures in the experiment-level `post:` list (CLI `--depth exp`). There is no `pipeline:` key:
 
 ```yaml
   post:
@@ -75,4 +74,4 @@ Declare figures on experiment-level `post:` (CLI `--depth exp`), not a
 | Lifecycle / governance | [lifecycle-control.lab](../../labs/lifecycle-control.lab/) |
 | Memory **overlays** | [extensions.lab](../../labs/extensions.lab/) |
 
-Record `experiment.metadata` for publication: see [Experiments and analysis](../../docs/tutorials/03-experiments-and-analysis/README.md).
+To record `experiment.metadata` for publication, see [Experiments and analysis](../../docs/tutorials/03-experiments-and-analysis/README.md).

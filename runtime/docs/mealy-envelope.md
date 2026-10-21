@@ -2,7 +2,16 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Mealy envelope — Python kernel status
+# Mealy envelope: Python kernel status
+
+This page lists what the envelope wraps and which parts are implemented in the Python kernel.
+Kernel developers and reviewers use it as the status checklist. For the formal model, read [automaton-product-model.md](automaton-product-model.md).
+
+Run the envelope tests:
+
+```bash
+pytest runtime/tests/test_mealy_envelope.py -q
+```
 
 **Implementation:** `runtime/src/mas/runtime/` (`kernel/envelope.py`, `schema/envelope.py`, boundary coordination).
 
@@ -23,7 +32,7 @@ The envelope is the **authorize → execute → validate** walk around each **sc
 | Ctl observability transforms | No (terminating adapters) |
 | Design-pattern internal evaluate | No until an egress is scheduled |
 
-Profile flags (`mas-ctl chat --without-gov`, `--without-obs`) collapse σ summands the same way as documented in the v2 `EnvelopeProduct` spec.
+Profile flags (`mas-ctl chat --without-gov`, `--without-obs`) collapse σ summands as the v2 `EnvelopeProduct` spec describes.
 
 ---
 
@@ -69,4 +78,5 @@ Maps to `KernelConfig.enable_governance` / `enable_envelope_observability`.
 
 ## 5. Further reading
 
-- [`automaton-product-model.md`](automaton-product-model.md)
+- [automaton-product-model.md](automaton-product-model.md)
+- [mealy-machines-guide.md](mealy-machines-guide.md)

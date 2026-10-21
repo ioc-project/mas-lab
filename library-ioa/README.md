@@ -1,12 +1,8 @@
 # IOA Library
 
-MCP (Model Context Protocol) client and server bridge for MAS Lab.
+Client and server bridge between MAS Lab tools and the Model Context Protocol (MCP), plus Agent2Agent (A2A) exposure of agents. Use it to call tools served by an MCP server, or to publish a MAS tool manifest as an MCP server. The Quickstart below shows both.
 
-Agents keep the same tool names and arguments. MCP endpoints are discovered
-from infra `ToolServerRegistry` entries; the agent manifest does not declare
-providers. MCP `usage: use` dependencies replace the implicit local provider;
-add an explicit `protocol: local` infra claim to retain in-process tools beside
-MCP.
+Agents keep the same tool names and arguments. MCP endpoints come from infra `ToolServerRegistry` entries; the agent manifest does not declare providers. An MCP `usage: use` dependency replaces the implicit local provider. To keep in-process tools beside MCP, add an explicit `protocol: local` infra claim.
 
 ## Layout
 
@@ -16,8 +12,7 @@ MCP.
 - `src/library_ioa/plugins/mcp/provider.py` — `kind: mcp` tool-provider plugin
 - `src/library_ioa/plugins/mcp/server` — wrap a MAS tool manifest as an MCP server (`mas-mcp`)
 - `src/library_ioa/utils` — result/error helpers
-- `docs/` — tutorial
-- `plugins/mcp/docs/` — MCP quickstart and contract-gap reference
+- `docs/` — tutorial and protocol-compliance notes (`docs/mcp/`, `docs/a2a/`)
 
 Reusable MCP YAML lives in `library-samples/infra/mcp-localhost.yaml`.
 
@@ -47,7 +42,7 @@ mas-mcp serve \
 ```
 
 ```bash
-# terminal 2 — official SDK CLI + mas-mcp client
+# terminal 2: official SDK CLI + mas-mcp client
 mcp version
 mas-mcp tools list --url http://127.0.0.1:9001/mcp
 mas-mcp tools call --url http://127.0.0.1:9001/mcp \
@@ -62,13 +57,13 @@ mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
   --trace
 ```
 
-The serve terminal must log `MCP tool call name=web-search` for both `mas-mcp tools call` and the agent.
+The serve terminal logs `MCP tool call name=web-search` for both `mas-mcp tools call` and the agent.
 
 ## Runtime wiring
 
-- `MCPClient` opens/closes streamable-HTTP in the same asyncio task (`run_sync` from the provider)
-- `LocalToolProvider` — in-process Python tools (`local` flavour / implicit `standard:local-tools` infra)
-- `MCPToolProvider` — `kind: mcp` (`library_ioa.plugins.mcp.provider`)
+- `MCPClient` opens and closes the streamable-HTTP session in the same asyncio task (`run_sync` from the provider)
+- `LocalToolProvider`: in-process Python tools (`local` flavour or implicit `standard:local-tools` infra)
+- `MCPToolProvider`: `kind: mcp` (`library_ioa.plugins.mcp.provider`)
 
 ## A2A exposure
 
@@ -87,16 +82,15 @@ a2a card get http://127.0.0.1:9005
 a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 ```
 
-For a MAS, declare remote dependencies as named endpoints in an `infra/v1`
-Application manifest and keep `workflow.nodes[].delegates_to` as the topology.
-See the A2A feature page at [docs/a2a/README.md](docs/a2a/README.md).
+For a MAS, declare remote dependencies as named endpoints in an `infra/v1` Application manifest, and keep `workflow.nodes[].delegates_to` as the topology.
+See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-compliance.md).
 
 ## Development notes
 
 - The bridge lives in the `library_ioa.plugins.mcp` package.
 - The runtime provider plugin registers `kind: mcp` manifests through `MCPProviderPlugin`.
 - The SDK-backed client connects using `mcp.client.stdio.stdio_client` and `ClientSession`.
-- A separate MCP server process can therefore expose the same business tool contract without changing the agent manifest contract.
+- A separate MCP server process can expose the same tool contract without changing the agent manifest.
 
 ## Related docs
 

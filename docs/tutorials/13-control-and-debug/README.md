@@ -5,54 +5,47 @@
 # Tutorial 13 — Control attach and debug scripts
 
 > **Packages:** `mas-runtime`, `mas-ctl`, `mas-library-standard`
-> **Prerequisite:** [Tutorial 0](../00-environment-setup/), [Tutorial 11](../11-sessions-and-recovery/),
-> and a configured model. Offline: `mas-ctl validate` on this directory's
-> manifests. Live turns need the usual LLM credentials.
+> **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md),
+> [Tutorial 11](../11-sessions-and-recovery/README.md) (checkpoint, fork,
+> `--load-checkpoint`) and a configured model. Offline, you can only run
+> `mas-ctl validate`. Run all commands from the repository root, in three
+> terminals.
 
-## The problem we will solve
+## Goal
 
 A long-running agent says something wrong because a tool gave it bad data,
-and you only notice after the fact — by which point the live process has
-moved on. You cannot `ssh` into a conversation. What you *can* do is pause
-it from another terminal, take the exact state it was in, and load that
-state into a fresh process to investigate and fix it — without guessing, and
-without disturbing whatever the original session is doing now.
+and the live process has moved on. You pause it from another terminal,
+persist its exact state, and load that state into a fresh process to fix it.
 
-That is the concrete bug this tutorial walks through: a **bad tool result**
-(`web_search` claims Lyon is the capital of France). The fix is not steering
-the live process — it is **stopping** that session, **persisting** it, and
-**resuming a new chat from the file**. That restarted session still believes
-Lyon; investigating it means inspecting context from outside, the same way
-you would attach a debugger to a running program. Steering **on the
-restarted session** (or a fresh fork of the same file) fixes it to Paris —
-and because the fix happened on a loaded checkpoint file, not the live
-process, the same recipe works whether the bad session is still running or
-crashed five minutes ago.
+The bug: `web_search` claims Lyon is the capital of France. You persist the
+session, resume a new chat from the file (it still says Lyon), inspect it
+from outside, then steer it to Paris. `mas-ctl control resume` only unpauses
+the live process. It is not checkpoint resume.
 
-`mas-ctl control resume` only unpauses the live process. It is not checkpoint
-resume.
+| Step | Terminal | What you do |
+| --- | --- | --- |
+| 1 | A | Run a session that receives a bad tool result |
+| 2 | B | Pause, persist, resume a new chat from the file (says Lyon) |
+| 3 | B, C | Inspect and steer the restarted session (says Paris) |
+| 4 | A | Auto checkpoints and a checkpoint tree |
 
-## What talks to what
+## Concepts
 
-Talking to an agent is **A2A**. Two connections with no `contextId` are two
-sessions. The first response returns the session id as A2A `contextId`; send
-that id again to attach.
-
-The **control protocol** attaches to `ControlContract` with that same id.
-`mas-ctl chat` advertises it in a platform runtime directory
-(`MAS_CONTROL_DIR`, else `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`,
-else temp). Omit `-d` unless you overrode `--control-dir`.
-
-Snapshot and persist require a **stopped** (paused) session. Pass
-`--auto-stop` to pause first. A chained CLI line, `-e`, `-f`, and
-`--data @file` are the **same command language** (curl-style `@file` or
-inline). Agents call `run_control_script` with that same text.
-
-Gdb **breakpoints** load from `spec.governance`'s `debug_script` entry, or
-from `--debug-script` on the command line. They are not the control CLI:
+- Each A2A (agent-to-agent protocol) connection without a `contextId` is a
+  new session. The first response returns the session id as `contextId`. Two
+  clients with the same id share one queue.
+- `mas-ctl control` attaches to `ControlContract` with that id. `mas-ctl chat`
+  advertises it in a runtime directory (`MAS_CONTROL_DIR`,
+  `$XDG_RUNTIME_DIR/mas-ctl`, `/var/run/mas-ctl`, then temp). Pass
+  `mas-ctl control -d DIR` only if you started chat with `--control-dir DIR`.
+- Snapshot and persist need a paused session. `--auto-stop` pauses first.
+  A chained CLI line, `-e`, `-f` and `--data @file` use the same command
+  language. Agents call `run_control_script` with the same text.
+- gdb-style breakpoints are separate. They load from `debug_script` in
+  `spec.governance` (the policy layer that can allow, block or change a tool
+  call) or from `--debug-script`:
 
 ```bash
-# equivalent ways to load the breakpoint script
 mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml
 mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
   --debug-script @docs/tutorials/13-control-and-debug/debug.gdb
@@ -60,43 +53,38 @@ mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
   --debug-script $'break tool_call calc\ncommands\n  checkpoint\n  continue\nend'
 ```
 
-YAML may use `script_file: ./debug.gdb` or `script: @./debug.gdb` or an
-inline `script: |` block.
-
-Validate:
+In YAML, use `script_file: ./debug.gdb`, `script: @./debug.gdb`, or an inline
+`script: |` block. Validate the manifests:
 
 ```bash
 mas-ctl validate docs/tutorials/13-control-and-debug/agent.yaml
 mas-ctl validate docs/tutorials/13-control-and-debug/agent-auto.yaml
 ```
 
----
+## Step 1 — Run a session that goes bad
 
-## Step 1 — Run a session (it will go bad)
+In terminal A:
 
 ```bash
 mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
   --checkpoint-dir .mas/t13-checkpoints
 ```
 
-Copy `session_id`. Keep this terminal open.
+Copy the `session_id: <id>` it prints and keep the terminal open. Type:
 
 ```text
 You: Remember we will talk about France later. What is 2+2?
 You: Look up the capital of France.
 ```
 
-`calc` and the first `web_search` **result** hit `debug.gdb`: in-memory
-checkpoint, print the checkpoint list, session id, working memory, continue.
-The search stub is **wrong on purpose** (`Lyon is the capital of France.`).
-The live session now has a France breadcrumb **and** a false capital.
+The `calc` call and the first `web_search` result hit breakpoints in
+`debug.gdb`. Each takes an in-memory checkpoint, prints the checkpoint list,
+session id and working memory, then continues. The search stub is wrong on
+purpose: `Lyon is the capital of France.`
 
----
+## Step 2 — Interrupt, persist and resume
 
-## Step 2 — Witness: interrupt, checkpoint, resume
-
-In a second terminal, **stop** the bad session and write a disk checkpoint.
-These four forms are equivalent:
+In terminal B (these forms are equivalent):
 
 ```bash
 SESSION=<id-from-step-1>
@@ -110,15 +98,15 @@ mas-ctl control "$SESSION" --data @docs/tutorials/13-control-and-debug/recover.c
 # curl-style inline + eval
 mas-ctl control "$SESSION" -e 'pause --reason bad-session' -e 'persist --label bad --auto-stop'
 
-# one verb at a time (same contract)
+# one verb at a time
 mas-ctl control pause "$SESSION" --reason bad-session
 mas-ctl control persist "$SESSION" --label bad --auto-stop
 mas-ctl control inspect "$SESSION"
 mas-ctl control checkpoints "$SESSION"
 ```
 
-Copy `path` from persist. Fork so the new session does not collide with the
-still-advertised live id, then **start a new chat from that file**:
+Copy `path` from the `persist` output. Fork it, because the live id is still
+advertised, then start a new chat from the fork:
 
 ```bash
 BEFORE=.mas/t13-checkpoints/<file-from-persist>
@@ -131,28 +119,15 @@ mas-ctl chat --load-checkpoint "$FORK" --checkpoint-dir .mas/t13-checkpoints
 You: Which country were we going to discuss, and what is its capital?
 ```
 
-| Check | Proves |
-|-------|--------|
-| Country is **France** | Working memory survived the restart |
-| Capital is **Lyon** (the bad tool) | You resumed the **bad** checkpoint, not a clean agent |
+The wording varies; check two facts. You should see **France** (working memory survived) and **Lyon** (you
+resumed the bad checkpoint). Paris means you did not load the file. No France
+means persist missed working memory. `mas-ctl checkpoint list
+.mas/t13-checkpoints` and `mas-ctl checkpoint show "$BEFORE"` dump the files.
 
-That pair is the witness. If this chat says Paris, you did not load the
-persisted file. If it forgot France, persist missed working memory.
+## Step 3 — Investigate, then steer the restarted session
 
-`mas-ctl checkpoint list .mas/t13-checkpoints` and
-`mas-ctl checkpoint show "$BEFORE"` dump the artifact.
-
----
-
-## Step 3 — Investigate, then steer to fix (on the restarted session)
-
-Still in the **new** chat from step 2, look at context without fixing yet:
-
-```text
-You: What did the search tool tell you about the capital?
-```
-
-From a third terminal, attach the **new** session id printed at chat start:
+In the new chat, ask `What did the search tool tell you about the capital?`.
+In terminal C, attach with the new session id printed at chat start:
 
 ```bash
 RESUMED=<id-from-step-2-chat>
@@ -160,8 +135,7 @@ mas-ctl control inspect "$RESUMED"
 mas-ctl control checkpoints "$RESUMED"
 ```
 
-Then steer **this restarted session** (or fork `$BEFORE` again and steer
-there — same file, new process):
+Steer it. You can also fork `$BEFORE` again and steer there.
 
 ```bash
 mas-ctl control "$RESUMED" --data @docs/tutorials/13-control-and-debug/steer-fix.ctl
@@ -170,19 +144,16 @@ mas-ctl control steer "$RESUMED" \
   --text "Ignore the tool result. The capital of France is Paris, not Lyon. Keep using earlier conversation."
 ```
 
-```text
-You: Which country were we going to discuss, and what is its capital?
-```
+Ask the question again in the restarted chat: `Which country were we going to
+discuss, and what is its capital?` Model wording varies, so check the country
+and capital, not the sentence.
 
-| Session | Country | Capital | Why |
-|---------|---------|---------|-----|
-| Step 2 chat, after steer | **France** | **Paris** | Restarted from the bad file, then steered |
-| A fresh fork of `$BEFORE` with no steer | **France** | **Lyon** | The checkpoint never contained the fix |
+| Session | Country | Capital |
+| --- | --- | --- |
+| Step 2 chat, after steer | France | Paris |
+| Fresh fork of `$BEFORE`, no steer | France | Lyon |
 
-Steering the original live process without restarting does **not** prove
-the checkpoint. The proof is: load the file → still wrong → steer → right.
-
----
+The proof: load the file, still wrong, steer, right.
 
 ## Step 4 — Auto checkpoints and a tool-error tree
 
@@ -197,28 +168,24 @@ You: What is 3+3?
 ```
 
 `calc` fails twice (`fail_first: 2`), then works. `spec.checkpoint.mode:
-every_turn` writes a file per completed turn.
-`backtrack_on_error` restores an earlier checkpoint after the repeated
-error and records an `after-backtrack` node, so the in-memory tree has
-**siblings** (failed path and retry), not only a line.
+every_turn` writes a file per completed turn. `backtrack_on_error` restores
+an earlier checkpoint after the repeated error and records an
+`after-backtrack` node. In-memory checkpoints form a tree (failed path and
+retry), not a line.
 
 ```bash
 mas-ctl checkpoint list .mas/t13-auto
-# in another terminal, with the auto session id:
-mas-ctl control checkpoints "$AUTO_SESSION"
+AUTO_SESSION=<session_id-printed-by-the-step-4-chat>
+mas-ctl control checkpoints "$AUTO_SESSION"   # another terminal
 ```
 
-Disk list = files alongside the run. `control checkpoints` JSON includes
-`parent_snapshot_id` — that is the tree.
-
----
+`checkpoint list` shows the files on disk. `control checkpoints` shows the
+live in-memory tree. The JSON includes `parent_snapshot_id`, which encodes the tree.
 
 ## Observability
 
-Every control verb (attach/inspect, pause, persist, steer, script, queue
-peek, …) is appended to `ControlEvent` **and** emitted on the native
-telemetry stream as `kind: control` with `category: control.<method>`.
-The contract always receives them. Export may filter:
+Every control verb is logged as `ControlEvent` and emitted on the native
+stream as `kind: control`, `category: control.<method>`. Export may filter:
 
 ```yaml
 spec:
@@ -229,24 +196,15 @@ spec:
           exclude: [control.inspect]
 ```
 
-Omit `categories` to write everything. This tutorial's agents use unfiltered
-`native`, so pause/persist/steer show up in `traces/events.jsonl`.
+Without `categories`, everything is written, so pause, persist and steer
+appear in `traces/events.jsonl`.
 
----
+## The gdb script
 
-## gdb script (breakpoints)
+`debug.gdb` has two breakpoints, `break tool_result web_search if first` and
+`break tool_call calc`. Both run:
 
 ```text
-break tool_result web_search if first
-commands
-  checkpoint
-  info checkpoints
-  info session
-  info working_memory
-  continue
-end
-
-break tool_call calc
 commands
   checkpoint
   info checkpoints
@@ -256,27 +214,30 @@ commands
 end
 ```
 
-`checkpoint` here uses `--auto-stop` (pause, snapshot, then `continue`
-unpauses). In-memory nodes stay in the live process; `persist` is what
-another chat resumes.
+`checkpoint` pauses, snapshots and `continue` unpauses. In-memory nodes stay
+in the live process. `persist` is what another chat resumes.
+`mas-ctl serve` does not take `--checkpoint-dir`.
 
-`mas-ctl serve … --checkpoint-dir` is not this persist/resume path. Two A2A
-clients with no `contextId` are two sessions; two with the same id share
-one queue. Disk fork details: [Tutorial 11](../11-sessions-and-recovery/).
+## What you learned
 
----
+1. `mas-ctl control <session-id>` pauses, inspects, persists and steers a
+   live session from another terminal.
+2. A persisted file resumed in a new chat shows the bad state again.
+   Steering fixes it reproducibly.
+3. `debug.gdb` breakpoints checkpoint automatically, and every control verb
+   is logged as a `control` event.
 
 ## Reference material
 
-- [Snapshots vs checkpoints](../../references/snapshots.md) — the in-memory
-  vs. on-disk distinction this whole tutorial is built on.
-- [Contracts](../../references/contracts.md) — `ControlContract` and the
-  other stable runtime boundaries plugins implement.
-- [Kernel operations](../../references/kernel-primitives.md) — pause,
-  steer, snapshot, persist, and the concurrent-queue rules as primitive ops.
-- [Session checkpoints](../../manifests/checkpoint.md) — `spec.checkpoint`
-  field reference (mode, retention).
-- [Debug-script governance card](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/debug-script.md) —
-  full `break` / `commands` grammar for the gdb-style breakpoints above.
-- Back to [Tutorial 11 — Sessions and recovery](../11-sessions-and-recovery/)
-  for checkpoint capture and fork without live control attach.
+- [Snapshots vs checkpoints](../../references/snapshots.md)
+- [Contracts](../../references/contracts.md): `ControlContract`.
+- [Kernel operations](../../references/kernel-primitives.md)
+- [Session checkpoints](../../manifests/checkpoint.md)
+- [Debug-script governance card](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/debug-script.md):
+  full `break` / `commands` grammar.
+
+## Next
+
+[Tutorial 14 — Governance and HITL](../14-governance-hitl/README.md) puts a
+human (human in the loop, HITL) or an automated policy in front of a tool
+call.

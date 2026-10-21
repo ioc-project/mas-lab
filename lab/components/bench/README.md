@@ -4,66 +4,23 @@
 -->
 # mas-lab-bench
 
-> Reproducible **benchmark** experiments, **pipelines**, and trajectory plots.
+Runs reproducible benchmark experiments: scenarios x dataset items x runs, then pipeline steps on the resulting `events.jsonl` logs. Runs resume from the trace cache when inputs match.
 
-`mas-lab-bench` orchestrates **experiments**: **scenarios** × **dataset** items ×
-**runs**, then **pipeline steps** on the resulting **`events.jsonl`** logs. Runs
-resume from the **trace cache** when inputs match.
-
-**Terms:** [glossary.md](../../../docs/glossary.md) · User guide:
-[lab/docs/benchmark.md](../../docs/benchmark.md).
-
-## Pipeline step library
-
-Step *implementations* are library plugins registered into the runtime
-registry via [`library-lab/library.yaml`](../../../library-lab/library.yaml)'s
-`types:`/`plugins:` block — see [pipeline-steps.md](../../../lab/docs/pipeline-steps.md)
-for the full catalog and how to query it live.
-
-| Category | Examples |
-|----------|----------|
-| `extract/` | `extract_trace_stats`, `extract_mealy_stats`, `extract_trajectories` |
-| `eval/` | `eval_mce`, `collect_metrics`, `compute_ci` |
-| `viz/` | `plot_trajectory`, `ci_plot`, `plot_multilevel_trajectory` |
-| `data/` | `to_dataframe`, `serialize`, `processor` |
-| `services/` | `service_start`, `export_otel` |
-
-Shared helpers: `pipeline/lib/` (`data_source`, `plot_lib`, `plot_specs/`).
-
-Internal-only steps (`embed_states`, `list_clickhouse_sessions`) ship in
-`mas-lab-internal/lab-components/bench-steps` and register via entry points when installed.
-
----
-
-## Installation
-
-```bash
-uv pip install -e "mas-lab[all]"    # with all extras
-uv pip install -e mas-lab/components/bench  # standalone
-```
-
----
+Use it when you compare multi-agent system (MAS) variants, for example an ablation, and need statistics and plots. Terms are in the [glossary](../../../docs/glossary.md). The user guide is [lab/docs/benchmark.md](../../docs/benchmark.md).
 
 ## Quick start
 
 ```bash
-# 1. Write an experiment YAML  (see Experiment YAML format below)
-# 2. Dry-run to validate config
-mas-lab benchmark run my-experiment.yaml --dry-run
+uv pip install -e "mas-lab[all]"            # all extras
+uv pip install -e mas-lab/components/bench  # or this component alone
 
-# 3. Execute (resumes if a prior run exists)
-mas-lab benchmark run my-experiment.yaml --progress
-
-# 4. Watch progress in another terminal
-mas-lab benchmark follow my-experiment.yaml
-
-# 5. Inspect results
-mas-lab benchmark show last
+mas-lab benchmark run my-experiment.yaml --dry-run    # validate config, show plan
+mas-lab benchmark run my-experiment.yaml --progress   # execute (resumes a prior run)
+mas-lab benchmark follow my-experiment.yaml           # watch progress from a second terminal
+mas-lab benchmark show last                           # inspect results
 ```
 
----
-
-## Experiment YAML format
+## Experiment YAML
 
 ```yaml
 experiment:
@@ -101,15 +58,11 @@ experiment:
     strategy: coverage
 ```
 
----
-
 ## Commands
 
 ### `benchmark run`
 
-Executes an experiment. Idempotent by default — a run with `run.n_runs: 5` resumes
-from wherever it stopped. Results land under the lab output root derived from
-`experiment.name` (override with `-o`).
+Executes an experiment. A run with `run.n_runs: 5` resumes from where it stopped. Results go under the lab output root derived from `experiment.name` (override with `-o`).
 
 ```bash
 mas-lab benchmark run experiment.yaml
@@ -126,12 +79,12 @@ mas-lab benchmark run experiment.yaml -o /tmp/results
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--force` | off | Always create a new run |
-| `--benchmark-id` | — | Resume a specific benchmark by ID |
+| `--benchmark-id` | - | Resume a specific benchmark by ID |
 | `--progress / --no-progress` | progress | Real-time progress bar |
 | `--dry-run` | off | Validate config + show plan, no execution |
 | `--max-runs` | from YAML `run.n_runs` | Override `n_runs` |
-| `--limit-scenarios` | — | Limit to first N scenarios |
-| `--sample-scenarios` | — | Randomly sample N scenarios |
+| `--limit-scenarios` | - | Limit to first N scenarios |
+| `--sample-scenarios` | - | Randomly sample N scenarios |
 | `--single-run` | off | Run exactly 1 scenario |
 | `-o / --output-dir` | derived from `experiment.name` | Output directory |
 | `--trace-cache` | `$XDG_CACHE_HOME/mas/traces` | Override trace-cache directory |
@@ -139,89 +92,42 @@ mas-lab benchmark run experiment.yaml -o /tmp/results
 | `--flavour` | `local` | Runtime flavour YAML name |
 | `--strategy` | `coverage` | `coverage` (breadth-first) or `depth` (depth-first) |
 
-### `benchmark list`
+### Other `benchmark` commands
 
 ```bash
-mas-lab benchmark list
-mas-lab benchmark list --status completed
-mas-lab benchmark list --limit 10 --format markdown
-```
+# list: --status running|completed|failed|partial, --limit (20), --format simple|markdown|csv|json|jsonl
+mas-lab benchmark list --status completed --limit 10 --format markdown
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--status` | — | Filter: `running` / `completed` / `failed` / `partial` |
-| `--limit` | `20` | Max rows to show |
-| `--format` | `simple` | `simple` / `markdown` / `csv` / `json` / `jsonl` |
-
-### `benchmark show`
-
-```bash
+# show: one run, or a section of it
 mas-lab benchmark show <id>
-mas-lab benchmark show last
-mas-lab benchmark show last plots
-mas-lab benchmark show last events-trace
-mas-lab benchmark show last otel-traces
+mas-lab benchmark show last plots          # also: events-trace, otel-traces
 mas-lab benchmark show last --format json
-```
 
-### `benchmark follow`
-
-Polls `run_info.json` files and streams a running tally until all runs finish.
-Use in a second terminal while `benchmark run` is executing.
-
-```bash
-mas-lab benchmark follow experiment.yaml
+# follow: poll run_info.json files and stream a tally until all runs finish
 mas-lab benchmark follow experiment.yaml --interval 10
 mas-lab benchmark follow experiment.yaml --once        # single snapshot
-```
 
-### `benchmark analyze`
-
-Regenerates plots and statistics from existing run output (no re-execution).
-
-```bash
-mas-lab benchmark analyze <id>
+# analyze: regenerate plots and statistics from existing output (no re-execution)
 mas-lab benchmark analyze <id> --experiment-yaml path/to/experiment.yaml
-```
 
-### `benchmark update`
+# update: edit metadata of a run
+mas-lab benchmark update <id> --name "Final ablation v2" --add-tag ablation --remove-tag wip
 
-Edit metadata of an existing run.
-
-```bash
-mas-lab benchmark update <id> --name "Final ablation v2"
-mas-lab benchmark update <id> --add-tag ablation --add-tag final
-mas-lab benchmark update <id> --remove-tag wip
-```
-
-### `benchmark step`
-
-Inspect and restart individual pipeline steps within a run.
-
-```bash
+# step: inspect and restart individual pipeline steps of a run
 mas-lab benchmark step list <id>
 mas-lab benchmark step show <id> <step_id>
 mas-lab benchmark step restart <id> <step_id>
-```
 
-### `benchmark pipeline`
-
-Executes a standalone post-processing pipeline YAML (normalize, graph export,
-embed, evaluate, plot, …) against existing benchmark output.
-
-```bash
+# pipeline: run a standalone post-processing pipeline YAML on existing output
 mas-lab benchmark pipeline validate pipeline.yaml   # schema check
-mas-lab benchmark pipeline show pipeline.yaml       # show step graph
+mas-lab benchmark pipeline show pipeline.yaml       # step graph
 mas-lab benchmark pipeline plan pipeline.yaml       # execution plan
 mas-lab benchmark pipeline run pipeline.yaml
 ```
 
----
-
 ## Post-processing pipeline
 
-Pipelines are YAML files that declare steps and their dependencies. Steps run
-in topological order; independent steps run in parallel.
+A pipeline YAML declares steps and their dependencies. Steps run in topological order; independent steps run in parallel.
 
 ```yaml
 name: post-process
@@ -247,40 +153,28 @@ steps:
       spec: shapley_bars
 ```
 
-### Built-in step types
+Step implementations are library plugins registered in the runtime registry through the `types:` / `plugins:` block of [`library-lab/library.yaml`](../../../library-lab/library.yaml). `mas-lab benchmark pipeline validate` lists the registered step types. The full catalog is in [pipeline-steps.md](../../docs/pipeline-steps.md). Steps such as `embed_states` and `list_clickhouse_sessions` can live in your own package and register through entry points.
 
-Registered step types are listed by `mas-lab benchmark pipeline validate` and in
-[lab/docs/pipeline-steps.md](../../docs/pipeline-steps.md). Common OSS steps:
+| Category | Step types |
+|----------|------------|
+| `extract/` | `extract_trace_stats`, `extract_mealy_stats`, `extract_trajectories` (builds `trajectories.jsonl` from `events.jsonl`) |
+| `eval/` | `eval_mce` (MCE LLM-as-judge scoring on `events.jsonl`), `collect_metrics`, `compute_ci` |
+| `viz/` | `plot` (declarative figure from a `plot_library/` spec: `shapley_bars`, `ablation_heatmap`, `trajectory_gantt`), `plot_trajectory` (per-run SVG), `plot_multilevel_trajectory` (swimlane HTML/SVG), `ci_plot` |
+| `data/` | `to_dataframe`, `serialize`, `processor` (run a registered trajectory processor by name) |
+| `services/` | `service_start`, `export_otel` |
+| other | `experiment` (run a MAS scenario via `mas-ctl`), `dataset` (load / filter a scenario dataset), `annotate_metrics` (attach scores to run metadata), `embed_trajectories` (embed trajectory strings for manifold analysis) |
 
-| Step type | Description |
-|-----------|-------------|
-| `experiment` | Run a MAS scenario via `mas-ctl` |
-| `dataset` | Load / filter a scenario dataset |
-| `extract_trajectories` | Build `trajectories.jsonl` from `events.jsonl` traces |
-| `extract_trace_stats` | Aggregate per-run trace statistics |
-| `eval_mce` | MCE LLM-as-judge scoring on `events.jsonl` |
-| `annotate_metrics` | Attach metric scores to run metadata |
-| `embed_trajectories` | Embed trajectory strings for manifold analysis |
-| `plot` | Declarative figure from `plot_library/` spec (`shapley_bars`, `ablation_heatmap`, `trajectory_gantt`) |
-| `plot_multilevel_trajectory` | Multilevel swimlane HTML/SVG from `events.jsonl` |
-| `plot_trajectory` | Per-run trajectory SVG |
-| `processor` | Run a registered trajectory processor by name |
+Shared helpers are in `pipeline/lib/` (`data_source`, `plot_lib`, `plot_specs/`).
 
----
+## Related commands
 
-## `eval` — MCE metrics on traces
+Score one trace with MCE metrics (for batches, use the `eval_mce` step; see [library-eval](../../../library-eval/README.md)):
 
 ```bash
 mas-lab eval path/to/traces/events.jsonl --metric groundedness --json
 ```
 
-For batch scoring in benchmarks, use the `eval_mce` pipeline step on `events.jsonl`.
-
----
-
-## `plot` — trace visualisations
-
-Generate visualisations directly from a trace file:
+Draw visualisations directly from a trace file:
 
 ```bash
 mas-lab plot trajectory events.jsonl -o trajectory.png
@@ -289,11 +183,9 @@ mas-lab plot communication-flow events.jsonl -o flow.png
 mas-lab plot list output/benchmark/runs/
 ```
 
----
-
 ## Python API
 
-Prefer `mas-lab benchmark run experiment.yaml`. For in-process runs:
+Prefer `mas-lab benchmark run experiment.yaml`. For an in-process run:
 
 ```python
 from pathlib import Path
@@ -306,43 +198,35 @@ ok = run_benchmark_sync(
 )
 ```
 
----
-
 ## Package layout
 
 ```
 components/bench/src/mas/lab/benchmark/
-├── dataset.py              Dataset loading, filtering, sampling
-├── experiment.py           ExperimentRunner + ExperimentConfig
-├── metadata.py             BenchmarkMetadata (run_info.json)
-├── lock.py                 Advisory file lock (concurrent-run safety)
-├── deduplication.py        Trace-cache dedup (skip already-seen prompts)
-├── analysis.py             Statistical analysis helpers
-├── migrate.py              Run directory migration utilities
-└── pipeline/
-    ├── pipeline.py         Pipeline loader + validator
-    ├── executor.py         Topological executor (parallel)
-    ├── registry.py         Step-type registry
-    ├── cache.py            Step output cache
-    └── steps/
-        ├── experiment.py
-        ├── extract_trajectories.py
-        ├── eval_mce.py
-        ├── plot_multilevel_trajectory.py
-        └── …
++-- dataset.py              dataset loading, filtering, sampling
++-- experiment.py           ExperimentRunner + ExperimentConfig
++-- metadata.py             BenchmarkMetadata (run_info.json)
++-- lock.py                 advisory file lock (concurrent-run safety)
++-- deduplication.py        trace-cache dedup (skip already-seen prompts)
++-- analysis.py             statistical analysis helpers
++-- migrate.py              run directory migration utilities
++-- pipeline/
+    +-- pipeline.py         pipeline loader + validator
+    +-- executor.py         topological executor (parallel)
+    +-- registry.py         step-type registry
+    +-- cache.py            step output cache
+    +-- steps/              experiment.py, extract_trajectories.py, eval_mce.py,
+                            plot_multilevel_trajectory.py, ...
 ```
-
----
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [../../docs/benchmark.md](../../docs/benchmark.md) | Benchmark guide: quickstart, concepts, lifecycle |
-| [../../docs/pipeline.md](../../docs/pipeline.md) | Pipeline architecture and YAML schema |
-| [../../docs/pipeline-steps.md](../../docs/pipeline-steps.md) | Step type reference |
-| [../../docs/pipeline-processors.md](../../docs/pipeline-processors.md) | Processor registry and plot library |
-| [../../../library-eval/README.md](../../../library-eval/README.md) | MCE metrics and `mas-lab eval` |
-| [../../docs/designing-experiments.md](../../docs/designing-experiments.md) | Designing ablations and Shapley experiments |
-| [../../docs/benchmark-state-architecture.md](../../docs/benchmark-state-architecture.md) | Run state machine and locking |
-| [../../docs/multi-scenario-format.md](../../docs/multi-scenario-format.md) | Multi-scenario dataset format |
+| [benchmark.md](../../docs/benchmark.md) | Benchmark guide: quickstart, concepts, lifecycle |
+| [pipeline.md](../../docs/pipeline.md) | Pipeline architecture and YAML schema |
+| [pipeline-steps.md](../../docs/pipeline-steps.md) | Step type reference |
+| [pipeline-processors.md](../../docs/pipeline-processors.md) | Processor registry and plot library |
+| [library-eval/README.md](../../../library-eval/README.md) | MCE metrics and `mas-lab eval` |
+| [designing-experiments.md](../../docs/designing-experiments.md) | Designing ablations and Shapley experiments |
+| [benchmark-state-architecture.md](../../docs/benchmark-state-architecture.md) | Run state machine and locking |
+| [multi-scenario-format.md](../../docs/multi-scenario-format.md) | Multi-scenario dataset format |

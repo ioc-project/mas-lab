@@ -3,9 +3,10 @@
 from __future__ import annotations
 """service_start — pipeline step that provisions an infrastructure service.
 
-Starts a named service from an *infra bundle* (a ``services.yaml``-format file
-in the experiment's ``infra/`` directory) and exports the service's env vars
-into the current process so subsequent steps can consume them.
+Starts a named service from an ``infra/v1`` ``ServiceBundle`` (or a legacy
+top-level ``services:`` map) in the experiment's ``infra/`` directory and
+exports the service's env vars into the current process so subsequent steps
+can consume them.
 
 Typical use-case: start a fake OTel collector before per-run ``export_otel``
 steps, then stop it with :class:`service_stop.ServiceStopStep` in the post

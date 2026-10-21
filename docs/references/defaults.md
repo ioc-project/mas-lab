@@ -4,27 +4,22 @@
 -->
 # Compiled agent defaults
 
-Every field a bare-minimum `Agent` manifest **doesn't** declare is filled in
-by `mas-ctl compile` before the runtime ever sees it — the plugin for every
-singleton slot (`design_pattern`, `context_manager`, `assembler`), the
-sub-plugin composed by one of those (`context_manager.params.summarizer`),
-and every attribute each one takes. Omitting a field, writing the plugin
-name, and writing the fully-expanded object are the **same runtime
-behaviour** ([plugin-bindings.md](../manifests/plugin-bindings.md)) — this
-page exists so you don't have to hold that expansion in your head, or worse,
-guess at it.
+This page shows what a minimal `Agent` manifest expands to. Read it to see which defaults the runtime applies to the fields you leave out.
 
-**This page is a worked example, not a schema.** Field-by-field docs (with
-the *why*) live on the pages linked from each block below; if a number here
-ever looks stale, trust the command over this page and re-run it — see
-[Regenerating this page](#regenerating-this-page).
+## The problem
+
+A minimal manifest omits most fields. `mas-ctl compile` fills each omitted field before the runtime sees the manifest. It sets the plugin for every singleton slot (`design_pattern`, `context_manager`, `assembler`). It sets the sub-plugin that one slot composes (`context_manager.params.summarizer`). It sets every attribute each plugin takes.
+
+A *plugin* is a unit of behaviour that a manifest selects by name. Three forms give the **same runtime behaviour**: omit the field, write the plugin name, or write the fully expanded object. See [plugin-bindings.md](../manifests/plugin-bindings.md).
+
+This page is a worked example, not a schema. Field-by-field docs are on the pages linked from each block. If a number here looks stale, re-run the command in [Regenerating this page](#regenerating-this-page) and trust its output.
 
 ---
 
 ## The input: Tutorial 1's minimal manifest
 
 [`docs/tutorials/01-building-an-agent/agent.yaml`](../tutorials/01-building-an-agent/agent.yaml)
-declares a model, a description, and a system-prompt fragment. Nothing else:
+declares a model, a description, and a system-prompt fragment. It declares nothing else:
 
 ```yaml
 apiVersion: mas/v1
@@ -86,41 +81,38 @@ spec:
 
 | Block | Plugin (default) | Attributes | Docs |
 |-------|-------------------|------------|------|
-| `models[0].context_window` | — | Auto-resolved from the effective model; an unknown model warns and uses `128000` | [agent.md](../manifests/agent.md#spec-field-reference) · [context-management](context-management.md) |
+| `models[0].context_window` | none | Auto-resolved from the effective model; an unknown model warns and uses `128000` | [agent.md](../manifests/agent.md#spec-fields) · [context-management](context-management.md) |
 | `design_pattern` | `react@v1` (registry alias `react`) | `max_steps` (dispatch-loop cap), `max_cot_pass`, `parallel` | [plugin-bindings.md § design_pattern](../manifests/plugin-bindings.md#design_pattern-default-react) |
-| `assembler` | `assembler` (`ContextAssemblerPlugin`) | `emit_segments`, `always_reassemble` — builds `messages[]`; **not** where history policy lives | [plugin-bindings.md § assembler](../manifests/plugin-bindings.md#assembler-default-assembler) · [context-assembly.md](../manifests/context-assembly.md#assembler-required-default) |
+| `assembler` | `assembler` (`ContextAssemblerPlugin`) | `emit_segments`, `always_reassemble`. Builds `messages[]`. History policy does **not** live here. | [plugin-bindings.md § assembler](../manifests/plugin-bindings.md#assembler-default-assembler) · [context-assembly.md](../manifests/context-assembly.md#assembler-required-default) |
 | `context_manager` | `summarising` | `keep_turns`, `hysteresis_ratio`, `summary_threshold`, `working_memory_messages`, `trimmer.{max_tokens,reserve_tokens,safety_margin_ratio}` | [plugin-bindings.md § context_manager](../manifests/plugin-bindings.md#context_manager-default-summarising) · [context-management](context-management.md) |
-| `context_manager.params.summarizer` | `llm` (sub-plugin of `summarising`) | `params.model` omitted → summarizer slot (Agent/MAS/`experiment.models.summarizer`) else agent's primary model. Compile does **not** invent a cheaper summarizer. | [plugin-bindings.md § summarizer](../manifests/plugin-bindings.md#summarizer-sub-plugin-of-summarising) · [summarization.md](../manifests/summarization.md) |
+| `context_manager.params.summarizer` | `llm` (sub-plugin of `summarising`) | If `params.model` is omitted, the summarizer slot applies (Agent, MAS, or `experiment.models.summarizer`). Otherwise the agent's primary model applies. Compile does **not** invent a cheaper summarizer. | [plugin-bindings.md § summarizer](../manifests/plugin-bindings.md#summarizer-sub-plugin-of-summarising) · [summarization.md](../manifests/summarization.md) |
 
-Every one of these is a real registered plugin — resolving `type: react@v1`,
-`type: summarising`, `type: assembler`, `type: llm` through the same plugin
-registry a manifest author's own explicit choice would go through. There is
-no hidden "if omitted, do X in code" branch: the default *is* a binding
-(`library-standard/library.yaml`'s `defaults:` map), and it is overridable
-per-workspace (`config.yaml` `defaults:`) without touching a single agent
-manifest. See [config.yaml § defaults](config.yaml.md).
+Every block is a real registered plugin. The runtime resolves `type: react@v1`, `type: summarising`, `type: assembler`, and `type: llm` through the same registry as an explicit choice. No hidden "if omitted, do X in code" branch exists. The default *is* a binding.
+
+Defaults come from two places:
+
+- The singleton slots (`model`, `design_pattern`, `context_manager`, `assembler`) come from the built-in `runtime/src/mas/runtime/defaults.yaml` of `mas-runtime`.
+- Other slots and sub-plugins (`summarizer`, `tool_provider`, `llm_provider`, `agent_comm`, `hitl_contract`, `user_io_contract`) come from the `defaults:` map in `library-standard/library.yaml`.
+
+You can override the four singleton keys per workspace in `config.yaml` `defaults:`. No agent manifest changes. See [config.yaml, defaults](config.yaml.md#defaults).
 
 ## Regenerating this page
 
-The numbers above will drift as defaults change. Reproduce them yourself
-from any manifest — an omitted field and its fully-expanded form are
-identical at runtime, so this works on your own agents too, not just the
-tutorial:
+The numbers above drift as defaults change. Reproduce them from any manifest. The expansion works on your own agents, not only the tutorial:
 
 ```bash
 cd docs/tutorials/01-building-an-agent
 mas-ctl compile agent.yaml --no-header
 ```
 
-Add `-o overlays/<file>.yaml` (repeatable) to see overlays folded in first —
-[compile command reference](../cli/compile.md). To see only what a specific
-manifest sets versus package defaults, add `--no-defaults` and diff.
+Add `-o overlays/<file>.yaml` (repeatable) to fold overlays in first. An *overlay* is a small YAML file merged on top of a manifest. See the [compile command reference](../cli/compile.md). To see what a manifest sets versus package defaults, add `--no-defaults` and diff.
 
-## Related
+## See also
 
-- [plugin-bindings.md](../manifests/plugin-bindings.md) — the binding shape these defaults fill (string ≡ object, list slots)
-- [agent.md](../manifests/agent.md) — every `spec` field, not just the plugin slots shown here
-- [context-assembly.md](../manifests/context-assembly.md) — how `assembler` + `context_manager` + `summarizer` cooperate at assemble time
-- [summarization.md](../manifests/summarization.md) — thresholds, summarizer/judge model, logs
-- [working-memory-compaction.md](../design/working-memory-compaction.md) — why `context_manager` is the single history-policy surface
-- [Tutorial 1: building an agent](../tutorials/01-building-an-agent/README.md) — the manifest this page compiles
+- [plugin-bindings.md](../manifests/plugin-bindings.md): the binding shape these defaults fill (string equals object, list slots).
+- [agent.md](../manifests/agent.md): every `spec` field, not only the plugin slots shown here.
+- [context-assembly.md](../manifests/context-assembly.md): how `assembler`, `context_manager`, and `summarizer` cooperate at assemble time.
+- [summarization.md](../manifests/summarization.md): thresholds, summarizer and judge model, logs.
+- [working-memory-compaction.md](../design/working-memory-compaction.md): why `context_manager` is the single history-policy surface.
+- [config.yaml reference](config.yaml.md): the `defaults:` override.
+- [Tutorial 1: building an agent](../tutorials/01-building-an-agent/README.md): the manifest this page compiles.

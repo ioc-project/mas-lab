@@ -1,29 +1,44 @@
-# Tutorial: From Trace to Knowledge Graph
+# Tutorial: from trace to knowledge graph
 
-MAS-Lab [Tutorial 9](../../docs/tutorials/09-kg-oxp/README.md) is the
-hands-on KG & OXP path (native→KG, OTel→KG, Neo4j, equivalence). This page is
-the library-kg deep dive: Neo4j push/dump and KG compare.
+This tutorial follows one trace through the `library-kg` workflow: raw event log, knowledge
+graph (KG), Neo4j, round-trip dump, diff. It is for readers who finished
+[Tutorial 9](../../docs/tutorials/09-kg-oxp/README.md) (native to KG, OTel to KG,
+serialization, equivalence, validation) and want Neo4j push and dump, round-trip
+comparison, annotation and querying. Each `mas-lab kg` command appears next to the library
+function it calls, so you can switch to Python when the CLI is not enough.
 
-A worked example that follows a concrete multi-agent trace end-to-end: raw event
-logs → knowledge graph → Neo4j → round-trip dump → diff.  Every `mas-lab graph`
-command is shown alongside the library function it calls, so you can drop down to
-Python whenever the CLI shortcuts aren't enough.
+Smallest example (steps 2 and 3 below):
 
-**What you need**
+```bash
+mas-lab kg normalize library-kg/examples/qa-agent/events.jsonl --run-id tutorial-native -o /tmp/tutorial-kg.jsonld
+mas-lab kg validate /tmp/tutorial-kg.jsonld
+```
 
-- `mas-lab` installed
-- Docker (for the Neo4j instance) — `library-kg/docker/compose.yaml`
-- The sample files in `library-kg/examples/trip-planner/` (MAS) and
-  `library-kg/examples/qa-agent/` (Tutorial 1 qa-agent, used by Tutorial 9)
+**What is first-party and what is OXP.** OXP is the open-source Observe and eXplain
+Platform
+([outshift-open/observe-and-explain-platform](https://github.com/outshift-open/observe-and-explain-platform)).
+This tutorial uses two OXP pieces: `oxp-ontology` (the ontology, the SHACL shapes and the
+generated models; a hard dependency of `mas-library-kg`) and, for the OpenTelemetry (OTel)
+path only, `norm` (the OXP OTel normalizer; optional extra `[norm]`, installed from git
+until it is published). The native-to-KG normalizer, validation, Neo4j push and dump, the
+`mas-lab kg` commands and the pipeline steps belong to `mas-library-kg`.
 
-**Reference docs used in this tutorial**
+**Requirements**
 
-| Topic | Doc |
-|---|---|
+- A MAS Lab checkout with the packages installed from source:
+  `uv pip install -e "library-kg[verify,validation,neo4j]"` (add `[norm]` for step 4).
+  `library-kg` registers `mas-lab kg ...` when it is installed next to the `mas-lab` CLI.
+- Docker, only for the Neo4j steps (6 to 8): `library-kg/docker/compose.yaml`.
+- The sample traces in `library-kg/examples/qa-agent/`.
+
+Run commands from the repository root.
+
+| Reference | Doc |
+|-----------|-----|
 | Step functions | [steps.md](steps.md) |
-| Neo4j push / dump / denormalize | [neo4j.md](neo4j.md) |
+| Neo4j push, dump, denormalize | [neo4j.md](neo4j.md) |
 | KG structural comparison | [kg-compare.md](kg-compare.md) |
-| KGIndex / FacetQuery | [kg-query.md](kg-query.md) |
+| `KGIndex`, `FacetQuery` | [kg-query.md](kg-query.md) |
 | Spec injection | [kg-spec.md](kg-spec.md) |
 | Node annotation | [annotation.md](annotation.md) |
 
@@ -31,151 +46,106 @@ Python whenever the CLI shortcuts aren't enough.
 
 ## The scenario
 
-`trip-planner` is a two-agent MAS: `planner` receives the user request and routes
-it; `itinerary_agent` fans out two parallel sub-tasks (flight search + hotel RAG
-query) and synthesises the answer.
-
-One run of this system produces a trace file — `events.jsonl`.  Our goal is to
-turn that trace into a structured knowledge graph, store it in Neo4j, and verify
-that nothing was lost in transit.
-
----
-
-## Sample files
+`qa-agent` is the single-agent question-answering example from the first MAS Lab tutorial.
+One run answers "What is 15 * 23?" with one agent call and one LLM call. The run was
+captured in two formats:
 
 ```
-library-kg/examples/
-├── trip-planner/
-│   ├── events.jsonl       # native MAS event trace  (20 events)
-│   └── otel_spans.jsonl   # same trace as OTel SDK spans (6 spans)
-├── infra/
-│   └── neo4j-local.yaml   # Datastore infra manifest
-└── pipeline/
-    └── trip-planner.yaml  # equivalent declarative pipeline
+library-kg/examples/qa-agent/
+├── events.jsonl        # native event trace
+├── otel_spans.jsonl    # the same run as OTel SDK spans (replayed from events.jsonl)
+├── kg-native.jsonld    # KG produced by run_normalize on events.jsonl
+├── kg-otel.jsonld      # KG produced by run_normalize_otel on otel_spans.jsonl
+└── README.md
 ```
 
-### `events.jsonl` (abbreviated)
+The goal: turn the trace into a KG, store it in Neo4j, and check that nothing is lost.
+
+`events.jsonl` holds one JSON object per line. Every event has a `kind`, an `agent_id`
+and a `timestamp`. Events that form the call tree also have a `call_id` and an optional
+`parent_call_id`:
 
 ```jsonl
-{"kind":"user_input","agent_id":"mas","call_id":"tp-mas-001","session_id":"trip-planner/demo/baseline/item1/r1","content":"Plan a 3-day trip to Paris…","timestamp":1716199999.5}
-{"kind":"mas_call_start","agent_id":"mas","call_id":"tp-mas-001","session_id":"trip-planner/demo/baseline/item1/r1","timestamp":1716200000.0}
-{"kind":"execution_start","agent_id":"planner","call_id":"tp-exec-001","parent_call_id":"tp-mas-001","session_id":"trip-planner/demo/baseline/item1/r1","boundary":"AgentCall","timestamp":1716200001.0,"input":"Plan a 3-day trip to Paris…"}
-{"kind":"governance_checked","hook":"pre_agent_communication","plugin":"RoutingPlugin","contract_id":"routing","reason":"planner → itinerary_agent: found in declared edges","timestamp":1716200003.8}
-{"kind":"parallel_group_start","agent_id":"itinerary_agent","call_id":"tp-pg-001","parent_call_id":"tp-exec-002","branch_count":2,"branches":["flights","hotels"],"timestamp":1716200005.0}
-{"kind":"tool_call_end","agent_id":"itinerary_agent","call_id":"tp-tc-001","tool_name":"search_flights","status":"success","result":{"flights":[{"id":"AF101","price_usd":680}]},"timestamp":1716200006.5}
-{"kind":"rag_query_end","agent_id":"itinerary_agent","call_id":"tp-rag-001","status":"success","retrieved_doc_count":4,"timestamp":1716200006.8}
-{"kind":"mas_call_end","agent_id":"mas","call_id":"tp-mas-001","session_id":"trip-planner/demo/baseline/item1/r1","status":"success","timestamp":1716200010.0}
+{"kind": "mas_call_start", "agent_id": "mas", "call_id": "5bcde400-...", "block": "structural", "layer": "structure", "timestamp": 1791132003.876734, ...}
+{"kind": "execution_start", "agent_id": "agent", "call_id": "agent-u1-exec", "parent_call_id": "5bcde400-...", "input": "What is 15 * 23?", "block": "execution", "layer": "execution", ...}
 ```
 
-The full 20-event file is at `examples/trip-planner/events.jsonl`.  Each event has
-a `kind`, `agent_id`, `call_id`, optional `parent_call_id`, and a `session_id`
-that encodes the lab hierarchy: `{lab}/{experiment}/{scenario}/{item}/{run}`.
-
-### `otel_spans.jsonl` (alternative input)
-
-If your system emits OpenTelemetry traces instead, the same trace is available as
-OTel SDK spans in `examples/trip-planner/otel_spans.jsonl`.  Each span carries
-`mas.boundary` and `mas.agent.id` attributes; the normaliser handles the
-span→node mapping automatically.  See [§ OTel path](#3-otel-path) below.
+[native-telemetry.md](native-telemetry.md) lists all kinds and fields.
 
 ---
 
-## 1. Infrastructure setup
+## 1. Set up Neo4j
 
-### 1a. Write an infra manifest
+Start Neo4j 5 (Bolt on port 7687, browser on 7474, authentication disabled; a laptop lab,
+see [`docker/README.md`](../docker/README.md)):
 
-`mas-lab graph push` and `mas-lab graph dump` accept a `--to` / `--from` flag
-that names a *store ID* defined in your workspace infra manifest.  This keeps
-connection details out of your shell history and makes it easy to switch between
-local, staging, and production targets.
+```bash
+docker compose -f library-kg/docker/compose.yaml up -d
+docker compose -f library-kg/docker/compose.yaml ps   # wait until healthy
+```
 
-Create `examples/infra/neo4j-local.yaml`:
+The Neo4j Browser is at <http://localhost:7474>.
+
+Connection settings resolve as: explicit flag, then infra manifest, then environment. The
+simplest option is the environment:
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+```
+
+`NEO4J_URI` is a shortcut for the shipped manifest
+[`infra/local-neo4j.yaml`](../infra/local-neo4j.yaml), which you can also pass with
+`--infra`. The manifest holds the name of the password variable, never the password. With
+the authentication-free compose file, leave that variable unset.
 
 ```yaml
-apiVersion: infra/v1
-kind: Datastore
-
+apiVersion: mas/v1
+kind: Infra
 metadata:
-  name: neo4j-local
-  description: Local Neo4j 5 instance (Docker) for development.
-
+  name: local-neo4j
 spec:
-  stores:
-    neo4j-local:
-      type: neo4j
+  targets:
+    - kind: Neo4j
       uri: bolt://localhost:7687
-      user: neo4j
-      password_env: NEO4J_PASSWORD   # env var name — never the value itself
       database: neo4j
+      username: neo4j
+      password_env: NEO4J_PASSWORD   # name of the env var, never the value
 ```
 
-Place this file anywhere on the path that `mas-lab` searches for infra manifests
-(typically `infra/` in your workspace root, or the directory you pass via
-`--infra`).  The full manifest is at `examples/infra/neo4j-local.yaml`.
-
-> **Reference** — DatastoreSpec fields, store resolution, InfraBundle merging:
-> [neo4j.md → Infra manifest](neo4j.md#infra-manifest)
-
-### 1b. Start Neo4j
-
-```bash
-export NEO4J_PASSWORD=a-strong-password   # min 8 chars for Neo4j 5
-
-# Option A — via mas-lab-services (recommended)
-mas-lab services start neo4j
-
-# Option B — direct Docker Compose
-docker compose \
-  -f mas-lab-services/src/mas/lab/services/catalogue/neo4j/docker-compose.yml \
-  up -d
-```
-
-Neo4j Browser is at <http://localhost:7474> (login: `neo4j` / `$NEO4J_PASSWORD`).
-The Bolt endpoint is at `bolt://localhost:7687`.
-
-Wait for the health-check to pass before pushing:
-
-```bash
-docker compose \
-  -f mas-lab-services/src/mas/lab/services/catalogue/neo4j/docker-compose.yml \
-  ps
-# neo4j   running (healthy)
-```
+Reference: [neo4j.md, Infra manifest](neo4j.md#infra-manifest).
 
 ---
 
-## 2. Validate native events
+## 2. Verify the native events
 
-Before normalization it's worth checking that `events.jsonl` is well-formed:
-all required fields present, event kinds recognized, parent/child call IDs
-consistent.  This is the **`verify_events`** step.
+Check that `events.jsonl` is well formed (required fields present, event kinds
+recognised) before you normalise it. This is the `verify_events` step.
 
 ```bash
-# No CLI command — use Python directly (or include as a pipeline step)
-python - <<'EOF'
+mas-lab kg verify library-kg/examples/qa-agent/events.jsonl --strictness recommended
+```
+
+The command prints a JSON report (`error_count`, `warning_count`, `event_count`,
+`violations`) and exits with status 1 when there are errors. The report has the shape of
+the return value of [`run_verify_events`](steps.md#run_verify_events):
+
+```python
 from mas.library.kg.steps import run_verify_events
 
-result = run_verify_events(
-    "examples/trip-planner/events.jsonl",
-    strictness="recommended",   # "required" | "recommended" | "complete"
-)
-print(f"{result['event_count']} events — "
-      f"{result['error_count']} errors, {result['warning_count']} warnings")
-for v in result["violations"]:
-    print(f"  [{v['severity'].upper()}] {v['message']}")
-EOF
+report = run_verify_events("library-kg/examples/qa-agent/events.jsonl",
+                           strictness="recommended")   # "required" | "recommended" | "complete"
+print(report["event_count"], "events,", report["error_count"], "errors,",
+      report["warning_count"], "warnings")
+for v in report["violations"][:3]:
+    print(f"  [{v['severity']}] line {v['line']}: {v['message']}")
 ```
 
-Expected output for the sample file:
+The shipped `events.jsonl` was captured with an empty `run_id`, so the verifier reports
+`missing required field 'run_id'` for most lines. Normalisation still works because step 3
+passes the run id explicitly. For traces you capture yourself, set `run_id` at the source
+and expect zero errors.
 
-```
-20 events — 0 errors, 0 warnings
-```
-
-> **Reference** — `run_verify_events` parameters, violation structure, strictness
-> levels: [steps.md → run_verify_events](steps.md#run_verify_events)
-
-**As a pipeline step:**
+As a pipeline step:
 
 ```yaml
 - name: verify
@@ -187,684 +157,466 @@ Expected output for the sample file:
 
 ---
 
-## 3. Normalize events → KG
+## 3. Normalise events to a KG
 
-Normalization reads `events.jsonl`, maps each event to ontology-typed nodes and
-edges, resolves call containment, and writes a `kg.jsonld` artifact.
+Normalisation reads `events.jsonl`, maps each event to ontology-typed nodes and edges,
+resolves call containment and writes a `kg.jsonld` artifact.
 
 ```bash
-mas-lab graph normalize \
-  examples/trip-planner/events.jsonl \
-  --output examples/trip-planner/kg.jsonld \
-  --session-id trip-planner/demo/baseline/item1/r1
+mas-lab kg normalize library-kg/examples/qa-agent/events.jsonl \
+  --run-id tutorial-native \
+  -o /tmp/tutorial-kg.jsonld
 ```
 
-`--session-id` encodes the lab hierarchy `{lab}/{experiment}/{scenario}/{item}/{run}`.
-When the trace sits under a `lab-config.yaml` the value is derived automatically;
-pass it explicitly when working outside a lab directory.
-
-The command prints a summary:
-
-```
-normalized 20 events → 18 nodes, 22 edges
-  session_id : trip-planner/demo/baseline/item1/r1
-  run_id     : r1
-  written    : examples/trip-planner/kg.jsonld
-```
-
-The output `kg.jsonld` is a **[`KGArtifact`](steps.md#kgartifact)** serialised as JSON:
+It prints a summary (counts depend on the library version):
 
 ```json
 {
-  "run_id": "r1",
-  "metadata": {
-    "event_count": 20,
-    "session_id": "trip-planner/demo/baseline/item1/r1",
-    "source": "native"
-  },
-  "nodes": [
-    { "id": "tp-mas-001", "node_type": "MASCall", "agentId": "mas", ... },
-    { "id": "tp-exec-001", "node_type": "AgentCall", "agentId": "planner", ... },
-    ...
-  ],
-  "edges": [
-    { "edge_type": "contains", "from_id": "tp-mas-001", "to_id": "tp-exec-001" },
-    ...
-  ]
+  "output": "/tmp/tutorial-kg.jsonld",
+  "node_count": 56,
+  "edge_count": 89,
+  "session_id": "session-tutorial-native",
+  "run_id": null
 }
 ```
 
-**What this command actually does** — it is a thin wrapper around
-[`run_normalize`](steps.md#run_normalize):
+Without `-o` / `--output-dir`, the command prints the KG to stdout. The session id is
+`session-<run_id>`. The flags `--include-governance`, `--include-provenance` and
+`--include-infrastructure` add event categories; see
+[normalization.md](normalization.md#8-layer-defaults-and-control).
+
+The output is a [`KGArtifact`](steps.md#kgartifact) serialised as JSON-LD:
+
+```json
+{
+  "@context": "...",
+  "nodes": [
+    {"node_type": "Session", "id": "session-tutorial-native", "sessionId": "session-tutorial-native", ...},
+    {"node_type": "MASCall", "id": "mascall:tutorial-native:mas:5bcde400-...", ...},
+    ...
+  ],
+  "edges": [
+    {"edge_type": "hasMASCall", "from_id": "session-tutorial-native", "to_id": "mascall:..."},
+    ...
+  ],
+  "metadata": {"events": 44, "nodes": 56, "edges": 89, "layers": {...}, ...}
+}
+```
+
+The command wraps [`run_normalize`](steps.md#run_normalize):
 
 ```python
 from mas.library.kg.steps import run_normalize
 
 artifact = run_normalize(
-    "examples/trip-planner/events.jsonl",
-    run_id="r1",
-    output_dir="examples/trip-planner/",
-    session_id="trip-planner/demo/baseline/item1/r1",
+    "library-kg/examples/qa-agent/events.jsonl",
+    run_id="tutorial-native",
+    output_dir="/tmp/tutorial-kg",      # writes /tmp/tutorial-kg/kg.jsonld
 )
-# artifact is a KGArtifact — artifact.nodes, artifact.edges, artifact.metadata
-artifact.save("examples/trip-planner/kg.jsonld")
+print(artifact)   # KGArtifact(nodes=56, edges=89, run_id=...)
 ```
 
-`run_normalize` in turn calls
-`mas.library.kg.core.graph_builder.normalize_events` to do the
-ontology-driven mapping.
+`run_normalize` calls `mas.library.kg.pipeline.build_kg_from_events_path`, which runs the
+two phases in [normalization.md](normalization.md#1-overview): annotate each event, then
+extract the graph.
 
 ---
 
-## 3. OTel path
+## 4. Normalise OTel spans
 
-If your system emits OpenTelemetry spans instead of native events, pass `--otel`:
-
-```bash
-mas-lab graph normalize \
-  examples/trip-planner/otel_spans.jsonl \
-  --otel \
-  --output examples/trip-planner/kg-from-otel.json \
-  --session-id trip-planner/demo/baseline/item1/r1
-```
-
-The OTel normaliser maps `mas.boundary` span attribute → node type, resolves
-parent/child span relationships into containment edges, and produces a `kg.jsonld`
-structurally identical to the native output.
-
-You can also convert native events to OTel format first, then normalize:
+If your system emits OTel spans instead of native events, normalise those. This path calls
+the OXP function `norm.normalize()` and needs the `[norm]` extra:
 
 ```bash
-# Step A: convert events → OTel spans
-mas-lab graph events-to-otel \
-  examples/trip-planner/events.jsonl \
-  --output examples/trip-planner/converted_spans.jsonl \
-  --service-name trip-planner
+uv pip install -e "library-kg[norm]"
 
-# Step B: normalize the spans
-mas-lab graph normalize \
-  examples/trip-planner/converted_spans.jsonl \
-  --otel \
-  --output examples/trip-planner/kg-from-converted.json
+mas-lab kg normalize --otel library-kg/examples/qa-agent/otel_spans.jsonl \
+  --run-id tutorial-otel \
+  -o /tmp/tutorial-kg-otel.jsonld
 ```
 
-**Python equivalent:**
+Without `norm`, the command logs a warning and writes an empty KG (0 nodes, 0 edges)
+instead of failing.
+
+To convert native events into OTel spans, use the telemetry package:
+
+```bash
+mas-lab telemetry convert library-kg/examples/qa-agent/events.jsonl \
+  -o /tmp/converted_spans.jsonl --app-name qa-agent
+```
+
+Python equivalent of the normalisation:
 
 ```python
 from mas.library.kg.steps import run_normalize_otel
 
 artifact = run_normalize_otel(
-    "examples/trip-planner/otel_spans.jsonl",
-    run_id="r1",
-    output_dir="examples/trip-planner/",
-    session_id="trip-planner/demo/baseline/item1/r1",
+    "library-kg/examples/qa-agent/otel_spans.jsonl",
+    run_id="tutorial-otel",
+    output_dir="/tmp/tutorial-kg-otel",
 )
+print(artifact.metadata["otel_format"], artifact.metadata["otel_spans"])
 ```
 
-> **Reference** — OTel span format, attribute mapping, span→node type table:
-> [steps.md → run_normalize_otel](steps.md#run_normalize_otel)
+A graph built from the spans ships as
+[`examples/qa-agent/kg-otel.jsonld`](../examples/qa-agent/kg-otel.jsonld). Two different
+normalisers build the native and OTel graphs, so compare them structurally (step 8 and
+Tutorial 9, section 4), not byte for byte.
+
+Reference: [otel-telemetry.md](otel-telemetry.md),
+[steps.md, run_normalize_otel](steps.md#run_normalize_otel).
 
 ---
 
-## 4. Verify the KG
+## 5. Validate the KG
 
-With `kg.jsonld` in hand, run structural validation.  This checks ontology
-vocabulary, containment chain integrity, temporal enclosure, session
-connectivity, and optionally SHACL constraints.
-
-```bash
-mas-lab graph validate examples/trip-planner/kg.jsonld
-```
-
-Output:
-
-```
-✓ containment_chain     pass
-✓ state_nesting         pass
-✓ processing_call_gate  pass
-✓ temporal_enclosure    pass
-✓ session_connectivity  pass
-✓ unknown_node_types    pass
-✓ unknown_edge_types    pass
-
-18 nodes, 22 edges — 0 errors, 0 warnings
-```
-
-Run with `--strict` to also check recommended-attribute gaps, and `--fail` to
-exit non-zero on any error (useful in CI):
+The default checks are `unknown_node_types`, `unknown_edge_types`, `block_vocabulary`,
+`layer_vocabulary`, `orphaned_edges` and `shacl`.
 
 ```bash
-mas-lab graph validate examples/trip-planner/kg.jsonld --strict --fail
+mas-lab kg validate /tmp/tutorial-kg.jsonld
 ```
 
-**Python equivalent:**
+The command prints a JSON report and exits with status 1 if `error_count` is not zero:
+
+```json
+{
+  "error_count": 0,
+  "warning_count": 0,
+  "skipped_count": 1,
+  "results": [
+    {"check": "unknown_node_types", "status": "pass", "detail": ""},
+    {"check": "unknown_edge_types", "status": "pass", "detail": ""},
+    {"check": "block_vocabulary", "status": "pass", "detail": ""},
+    {"check": "layer_vocabulary", "status": "pass", "detail": ""},
+    {"check": "orphaned_edges", "status": "pass", "detail": ""},
+    {"check": "shacl", "status": "skipped", "detail": "shacl check requires pyshacl and rdflib (pip install 'mas-library-kg[validation]')"}
+  ]
+}
+```
+
+This output is what you get without the `[validation]` extra (`rdflib`, `pyshacl`): the
+`shacl` row is `"skipped"` and `skipped_count` is 1. A skipped check is never a pass. With
+the extra installed, the command also checks the SHACL shapes from `oxp-ontology`. On
+short captures this can add warnings (for example optional LLM token fields) and some
+cardinality findings; see
+[Tutorial 9, section 5](../../docs/tutorials/09-kg-oxp/README.md).
+
+Useful flags: `--strict` (recommended-attribute gaps become errors), `--list-checks`,
+`--check NAME` (run only this check, repeatable), `--skip-check NAME`,
+`--warning-verbosity full|summary|none`.
+
+`run_validate_kg` raises `KGValidationError` when there are errors; the report is on the
+exception:
 
 ```python
 from mas.library.kg.steps import run_validate_kg
+from mas.library.kg.steps.validate_kg import KGValidationError
 
-report = run_validate_kg(
-    "examples/trip-planner/kg.jsonld",
-    strict=False,
-    fail_on_error=True,
-    checks=["containment_chain", "session_connectivity", "unknown_node_types"],
-)
+try:
+    report = run_validate_kg("/tmp/tutorial-kg.jsonld")
+except KGValidationError as exc:
+    report = exc.report
 print(report["error_count"], "errors")
 ```
 
-> **Reference** — all available check names, violation format, SHACL integration:
-> [steps.md → run_validate_kg](steps.md#run_validate_kg)
+Reference: [steps.md, run_validate_kg](steps.md#run_validate_kg).
 
 ---
 
-## 5. Push to Neo4j
+## 6. Push to Neo4j
 
-Push `kg.jsonld` to the local Neo4j instance.  The `--to` flag names the store ID
-from your infra manifest (`neo4j-local` from `examples/infra/neo4j-local.yaml`):
-
-```bash
-mas-lab graph push \
-  examples/trip-planner/kg.jsonld \
-  --to neo4j-local
-```
-
-The push is **idempotent** — it uses Cypher `MERGE` semantics, so running it twice
-leaves the graph unchanged.  Output:
-
-```
-pushed trip-planner/demo/baseline/item1/r1
-  nodes merged : 18
-  edges merged : 22
-  elapsed      : 0.4 s
-```
-
-Without a manifest you can pass connection flags directly:
+Preview first. `--dry-run` prints the Cypher without connecting and needs neither a
+running Neo4j nor the `neo4j` extra:
 
 ```bash
-mas-lab graph push \
-  examples/trip-planner/kg.jsonld \
-  --uri bolt://localhost:7687 \
-  --user neo4j
-  # prompts for NEO4J_PASSWORD if not set in env
+mas-lab kg push /tmp/tutorial-kg.jsonld --dry-run
 ```
 
-Use `--dry-run` to preview the generated Cypher without connecting:
+The output is a JSON object with `rows: 0`, the node and edge counts and a `statements`
+list of Cypher strings. Then push for real (needs `uv pip install -e
+"library-kg[neo4j]"` and the container from step 1):
 
 ```bash
-mas-lab graph push examples/trip-planner/kg.jsonld --to neo4j-local --dry-run
+mas-lab kg push /tmp/tutorial-kg.jsonld --infra library-kg/infra/local-neo4j.yaml
+# or, with NEO4J_URI exported:
+mas-lab kg push /tmp/tutorial-kg.jsonld
 ```
 
-**What this command does** — after loading the `KGArtifact` it calls
-[`push_kg_to_neo4j`](neo4j.md#push_kg_to_neo4j) from `mas.library.kg.neo4j`:
+The push is idempotent: it uses Cypher `MERGE`, so a second run leaves the graph
+unchanged. Add `--clear-session` to replace the session instead. `mas-lab kg neo4j-push`
+is an alias of `push`. The output is the push summary:
+
+```json
+{
+  "rows": 145,
+  "nodes": 56,
+  "edges": 89,
+  "uri": "bolt://localhost:7687",
+  "dry_run": false,
+  "node_count": 56,
+  "edge_count": 89,
+  "kg_path": "/tmp/tutorial-kg.jsonld"
+}
+```
+
+The command resolves the connection, loads the KG and calls
+[`run_neo4j_push`](steps.md#run_neo4j_push), which calls
+[`push_kg_to_neo4j`](neo4j.md#push_kg_to_neo4j). The Python form:
 
 ```python
 from mas.library.kg.artifact import KGArtifact
 
-artifact = KGArtifact.from_file("examples/trip-planner/kg.jsonld")
+artifact = KGArtifact.from_file("/tmp/tutorial-kg.jsonld")
 result = artifact.push_to_neo4j(
     uri="bolt://localhost:7687",
     username="neo4j",
-    password="...",
+    password="",                 # the compose file runs with authentication disabled
     database="neo4j",
 )
-print(result["node_count"], "nodes,", result["edge_count"], "edges")
+print(result["nodes"], "nodes,", result["edges"], "edges")
 ```
 
-Under the hood `push_to_neo4j` calls
-[`build_merge_statements`](neo4j.md#build_merge_statements) to generate
-parameterised `UNWIND $rows AS row MERGE …` Cypher, then executes it in batches
-of 200.  Every node gets a `KGNode` secondary label in addition to its semantic
-type, enabling cross-label lookups.
-
-> **Reference** — UNWIND batching, KGNode secondary label, `_JSON_PREFIX` prop
-> encoding, index creation: [neo4j.md → push_kg_to_neo4j](neo4j.md#push_kg_to_neo4j)
+Before writing, `denormalize` copies `sessionId`, `appName`, `source` and `block` onto every
+node and edge. Each node gets its `node_type` as label, and writes are `UNWIND`-batched
+(200 rows by default).
 
 ---
 
-## 6. Browse in Neo4j Browser
+## 7. Browse in Neo4j Browser
 
-Open <http://localhost:7474> and run:
+Open <http://localhost:7474> and run these queries. The session id is `session-` plus the
+run id from step 3.
 
 ```cypher
 // All nodes for our session
-MATCH (n:KGNode {sessionId: "trip-planner/demo/baseline/item1/r1"})
-RETURN n LIMIT 50
+MATCH (n {sessionId: "session-tutorial-native"}) RETURN n LIMIT 50
 
-// The agent communication arc
-MATCH path = (p:AgentCall {agentId: "planner"})-[:communicatesWith|contains*]->(i:AgentCall {agentId: "itinerary_agent"})
-RETURN path
+// Node counts by type
+MATCH (n {sessionId: "session-tutorial-native"})
+RETURN labels(n)[0] AS type, count(*) AS n ORDER BY n DESC
 
-// Tool calls made by itinerary_agent
-MATCH (a:AgentCall {agentId: "itinerary_agent"})-[:contains]->(t:ToolCall)
-RETURN t.toolName, t.status, t.startTime
-ORDER BY t.startTime
+// The LLM call made by the agent call
+MATCH (a:AgentCall {sessionId: "session-tutorial-native"})-[:hasLLMCall]->(l:LLMCall)
+RETURN a.id, l.id, l.startTime
 ```
-
-The parallel group (`tp-pg-001`) will appear as a node with two contained
-`ToolCall` and `RAGQuery` children — the fan-out structure is fully preserved.
 
 ---
 
-## 7. Dump from Neo4j
+## 8. Dump from Neo4j and check the round trip
 
-Fetch the session back as a `KGArtifact` JSON file:
-
-```bash
-mas-lab graph dump \
-  trip-planner/demo/baseline/item1/r1 \
-  --from neo4j-local \
-  --output examples/trip-planner/dumped.json
-```
-
-The `--from` flag mirrors `--to` from the push step.  Output:
-
-```
-fetched trip-planner/demo/baseline/item1/r1
-  nodes : 18
-  edges : 22
-  written : examples/trip-planner/dumped.json
-```
-
-You can also print a human-readable table or restrict to a structural subgraph:
+Fetch the session back into a file. Pass exactly one of `--session-id` and `--run-id`.
 
 ```bash
-# tabular view of execution nodes
-mas-lab graph dump trip-planner/demo/baseline/item1/r1 \
-  --from neo4j-local \
-  --block execution \
-  --format table
-
-# dump only the trajectory (state/transition) nodes
-mas-lab graph dump trip-planner/demo/baseline/item1/r1 \
-  --from neo4j-local \
-  --block trajectory \
-  --format trajectory
+mas-lab kg dump --session-id session-tutorial-native \
+  --infra library-kg/infra/local-neo4j.yaml \
+  -o /tmp/tutorial-dumped.jsonld
 ```
 
-**Python equivalent:**
+The command prints a summary with `output`, `node_count`, `edge_count`, `session_id` and
+`run_id`. Python equivalent:
 
 ```python
 from mas.library.kg.steps import run_neo4j_dump
 
 artifact = run_neo4j_dump(
-    session_id="trip-planner/demo/baseline/item1/r1",
-    output_path="examples/trip-planner/dumped.json",
+    session_id="session-tutorial-native",
+    output_path="/tmp/tutorial-dumped.jsonld",
     uri="bolt://localhost:7687",
-    username="neo4j",
-    password="...",
-    database="neo4j",
 )
 print(artifact.node_count, "nodes retrieved")
 ```
 
-Or via `KGArtifact.fetch_from_neo4j`:
-
-```python
-from mas.library.kg.artifact import KGArtifact
-
-artifact = KGArtifact.fetch_from_neo4j(
-    session_id="trip-planner/demo/baseline/item1/r1",
-    run_id="r1",
-    uri="bolt://localhost:7687",
-    username="neo4j",
-    password="...",
-    database="neo4j",
-)
-```
-
-> **Reference** — `fetch_kg_from_neo4j`, `--block` filter options, Cypher preview
-> mode: [neo4j.md → fetch_kg_from_neo4j](neo4j.md#fetch_kg_from_neo4j)
-
----
-
-## 8. Verify round-trip fidelity
-
-Compare the original `kg.jsonld` to the dumped copy to ensure nothing was lost or
-mutated during Neo4j push/fetch:
-
-```bash
-mas-lab graph compare \
-  examples/trip-planner/dumped.json \
-  --against examples/trip-planner/kg.jsonld
-```
-
-Output for a clean round-trip:
-
-```
-✓ node_count       18 == 18
-✓ edge_count       22 == 22
-✓ node_types       match
-✓ edge_types       match
-✓ session_ids      match
-
-All checks passed — KGs are structurally equivalent.
-```
-
-**Python equivalent** using [`run_compare_kg`](steps.md#run_compare_kg):
+Compare the dump with the original. There is no `mas-lab kg compare` command. Use
+[`run_compare_kg`](steps.md#run_compare_kg) or the `compare_kg` pipeline step:
 
 ```python
 from mas.library.kg.steps import run_compare_kg
 
 report = run_compare_kg(
-    candidate="examples/trip-planner/dumped.json",
-    reference="examples/trip-planner/kg.jsonld",
+    candidate="/tmp/tutorial-dumped.jsonld",
+    reference="/tmp/tutorial-kg.jsonld",
 )
-print("match:", report["match"])
+print("passed:", report["passed"], report["summary"])
 for check in report["checks"]:
-    status = "✓" if check["passed"] else "✗"
-    print(f"  {status} {check['name']}: {check['detail']}")
+    print(f"  {'PASS' if check['passed'] else 'FAIL'} {check['name']}")
 ```
 
-For deeper diffs — individual missing/added nodes, property drift — use
-[`compare_kg`](kg-compare.md#compare_kg) directly:
+The seven checks are `agent_coverage`, `node_distribution`, `edge_distribution`,
+`call_depth`, `tool_coverage`, `delegation_topology` and `element_level_diff`. The last
+counts toward `passed` only with `strict=True`. Each check dict has `name`, `passed` and
+check-specific fields; see [kg-compare.md](kg-compare.md). To compare documents directly:
 
 ```python
-from mas.library.kg.core.compare import compare_kg
+from mas.library.kg import compare_kg
 from mas.library.kg.artifact import KGArtifact
 
-candidate = KGArtifact.from_file("examples/trip-planner/dumped.json")
-reference = KGArtifact.from_file("examples/trip-planner/kg.jsonld")
-
-result = compare_kg(candidate.to_doc(), reference.to_doc())
-print(result.summary())
-# {match: True, node_delta: 0, edge_delta: 0, ...}
+candidate = KGArtifact.from_file("/tmp/tutorial-dumped.jsonld")
+reference = KGArtifact.from_file("/tmp/tutorial-kg.jsonld")
+print(compare_kg(candidate.to_doc(), reference.to_doc()).summary)
+# {"total_checks": 7, "passed": ..., "failed": ...}
 ```
 
-> **Reference** — all comparison checks, `KGCompareResult`, per-node diff:
-> [kg-compare.md](kg-compare.md)
+Reference: [kg-compare.md](kg-compare.md),
+[neo4j.md, fetch_kg_from_neo4j](neo4j.md#fetch_kg_from_neo4j).
 
 ---
 
-## 9. The `ingest` shortcut
+## 9. Annotate the KG
 
-`mas-lab graph ingest` combines normalize → validate → push in a single
-idempotent command.  It reads the session ID from the lab manifest hierarchy,
-checks whether the session is already in Neo4j, and skips if present:
-
-```bash
-cd path/to/my-lab/
-mas-lab graph ingest examples/trip-planner/events.jsonl \
-  --uri bolt://localhost:7687 \
-  --yes   # skip confirmation prompt
-```
-
-On the first run:
-
-```
-session trip-planner/demo/baseline/item1/r1 not found in Neo4j
-normalizing…   20 events → 18 nodes, 22 edges
-pushing…       18 nodes, 22 edges merged
-done
-```
-
-On subsequent runs:
-
-```
-session trip-planner/demo/baseline/item1/r1 already in Neo4j (18 nodes, 22 edges) — skipping
-```
-
-Use `mas-lab graph update` to replace an existing session (drop + re-push):
-
-```bash
-mas-lab graph update \
-  examples/trip-planner/events.jsonl \
-  --session-id trip-planner/demo/baseline/item1/r1 \
-  --yes
-```
-
----
-
-## 10. Annotate the KG
-
-After normalization you can enrich KG nodes with computed values — embeddings,
-scores, labels — without re-running the normaliser.  The annotation step adds new
-typed nodes and edges to the graph:
+Annotation adds computed values (embeddings, scores, labels) as new typed nodes and edges,
+without re-running the normaliser:
 
 ```python
 from mas.library.kg.steps import run_annotate
 
 def score_call(node):
-    """Return a quality score for every AgentCall node."""
-    if node.get("status") == "error":
+    """Return a score for every AgentCall node."""
+    if node.get("success") is False:
         return {"score": 0.0, "reason": "execution_error"}
-    if node.get("agentId") == "itinerary_agent":
-        return {"score": 0.95, "reason": "parallel_execution_success"}
     return {"score": 0.75, "reason": "default"}
 
 artifact = run_annotate(
-    "examples/trip-planner/kg.jsonld",
+    "/tmp/tutorial-kg.jsonld",
     value_fn=score_call,
     node_type="AgentCall",
     edge_name="hasQualityScore",
     annotation_node_type="QualityAnnotation",
-    output_path="examples/trip-planner/kg-annotated.json",
+    output_path="/tmp/tutorial-kg-annotated.jsonld",
 )
-print(f"added {artifact.node_count - 18} annotation nodes")
+print("annotated KG:", artifact)
 ```
 
-> **Reference** — `annotate_kg_nodes`, the `value_fn` contract, batching large
-> graphs: [annotation.md](annotation.md)
+Without `output_path`, a path input is overwritten in place. Reference:
+[annotation.md](annotation.md).
 
 ---
 
-## 11. Query the KG
+## 10. Query the KG
 
-[`KGIndex`](kg-query.md#kgindex) builds an in-memory index for fast faceted
-lookups without a database:
+[`KGIndex`](kg-query.md#kgindex) builds an in-memory index for typed lookups without a
+database:
 
 ```python
 from mas.library.kg import KGIndex
 from mas.library.kg.artifact import KGArtifact
 
-artifact = KGArtifact.from_file("examples/trip-planner/kg.jsonld")
-idx = KGIndex.from_artifact(artifact)
+idx = KGIndex.from_doc(KGArtifact.from_file("/tmp/tutorial-kg.jsonld").to_doc())
 
-# All tool calls made in this session
-tool_calls = idx.nodes(node_type="ToolCall")
-print([n["toolName"] for n in tool_calls])
-# ['search_flights', 'rag_query']
+print(idx.session["id"])                 # the Session node
+print(len(idx.agent_calls), "agent calls,", len(idx.llm_calls), "LLM calls")
+print([n["node_type"] for n in idx.calls_by_time])   # calls in time order
 
-# Nodes reachable from the planner's AgentCall via containment edges
-planner_subtree = idx.subgraph(root_id="tp-exec-001", edge_types=["contains"])
-print(planner_subtree.node_count)
+root = idx.find_root_agent_call()
+print(root["id"], "->", [n["node_type"] for n in idx.out_neighbors(root["id"])])
 ```
 
-> **Reference** — `KGIndex`, `FacetQuery`, `KGView`, streaming multiple files:
-> [kg-query.md](kg-query.md)
+Reference: [kg-query.md](kg-query.md) (`KGIndex`, `FacetQuery`, `KGSource`, `KGView`).
 
 ---
 
-## 12. Bulk ingest a benchmark run
+## 11. Run the steps as a pipeline
 
-After running a full benchmark (many traces), push all sessions at once:
-
-```bash
-mas-lab graph push-benchmark \
-  --output-dir benchmark-output/ \
-  --to neo4j-local \
-  --workers 4
-```
-
-Check which sessions have been exported:
+A `kind: Pipeline` manifest declares the same steps for the benchmark pipeline runner. The
+library ships manifests in [`pipelines/`](../pipelines/README.md): `native-to-kg.yaml`
+(verify, normalise, validate), `native-to-neo4j.yaml` (the same plus a push) and
+`neo4j-dump.yaml`. Attach one to a benchmark run:
 
 ```bash
-mas-lab graph sessions-exported \
-  --output-dir benchmark-output/ \
-  --to neo4j-local \
-  --missing-only
+mas-lab benchmark run my/experiment.yaml --pipeline run:kg:native-to-neo4j
 ```
 
----
-
-## 13. The pipeline approach
-
-Everything above can be expressed as a declarative pipeline YAML.  The pipeline
-is executed by the `mas-lab-graph` pipeline runner, which instantiates the
-corresponding `PipelineStep` subclass for each step type.
+or reference it from the experiment manifest:
 
 ```yaml
-# examples/pipeline/trip-planner.yaml
-name: trip-planner-ingest
-
-steps:
-  - name: normalize
-    type: normalize_events
-    config:
-      log_path: "examples/trip-planner/events.jsonl"
-      session_id: trip-planner/demo/baseline/item1/r1
-
-  - name: validate
-    type: validate_kg
-    depends_on: [normalize]
-    config:
-      fail_on_error: true
-
-  - name: push
-    type: neo4j_push
-    depends_on: [validate]
-    config:
-      database: neo4j
-
-  - name: dump
-    type: neo4j_dump
-    depends_on: [push]
-    config:
-      session_id: trip-planner/demo/baseline/item1/r1
-      output_path: examples/trip-planner/dumped.json
-
-  - name: compare
-    type: compare_kg
-    depends_on: [dump]
-    config:
-      candidate_step: dump
-      reference_step: normalize
+run:
+  post:
+    - ref: kg:native-to-neo4j
 ```
 
-Run it:
-
-```bash
-mas-lab pipeline run examples/pipeline/trip-planner.yaml \
-  --output-dir ./output/trip-planner/
-```
-
-The full annotated pipeline file is at `examples/pipeline/trip-planner.yaml`.
-
-**CLI → pipeline step mapping**
-
-| `mas-lab graph` command | pipeline `type` | library function |
-|---|---|---|
+| `mas-lab kg` command | Pipeline `type` | Library function |
+|----------------------|-----------------|------------------|
+| `verify` | `verify_events` | [`run_verify_events`](steps.md#run_verify_events) |
 | `normalize` | `normalize_events` | [`run_normalize`](steps.md#run_normalize) |
 | `normalize --otel` | `normalize_otel` | [`run_normalize_otel`](steps.md#run_normalize_otel) |
 | `validate` | `validate_kg` | [`run_validate_kg`](steps.md#run_validate_kg) |
 | `push` | `neo4j_push` | [`run_neo4j_push`](steps.md#run_neo4j_push) |
 | `dump` | `neo4j_dump` | [`run_neo4j_dump`](steps.md#run_neo4j_dump) |
-| `compare` | `compare_kg` | [`run_compare_kg`](steps.md#run_compare_kg) |
-| *(Python only)* | `verify_events` | [`run_verify_events`](steps.md#run_verify_events) |
-| *(Python only)* | `annotate` | [`run_annotate`](steps.md#run_annotate) |
+| no command | `compare_kg` | [`run_compare_kg`](steps.md#run_compare_kg) |
+| Python only | none | [`run_annotate`](steps.md#run_annotate) |
 
-The CLI commands are thin wrappers: they parse flags, resolve the infra manifest,
-call the library function, and format the output.  When you need programmatic
-control — branching logic, conditional steps, custom error handling — import the
-functions directly rather than shelling out.
+The step config keys are in [steps.md, Pipeline YAML](steps.md#pipeline-yaml). The CLI
+commands parse flags, resolve the infra manifest, call the library function and print the
+result. For branching logic or custom error handling, import the functions directly.
 
 ---
 
-## 14. Python walkthrough (all-in-one)
-
-The full workflow in a single script:
+## 12. The whole flow in Python
 
 ```python
 #!/usr/bin/env python3
-"""
-library-kg tutorial — full pipeline in Python.
-Equivalent to running the mas-lab graph CLI commands in sequence.
-"""
-import os
+"""library-kg tutorial: the whole flow in Python."""
 from mas.library.kg.steps import (
-    run_verify_events,
-    run_normalize,
-    run_validate_kg,
-    run_neo4j_push,
-    run_neo4j_dump,
-    run_compare_kg,
-)
-from mas.library.kg.core.compare import compare_kg
-
-EVENTS  = "examples/trip-planner/events.jsonl"
-SESSION = "trip-planner/demo/baseline/item1/r1"
-NEO4J   = dict(
-    uri      = "bolt://localhost:7687",
-    username = "neo4j",
-    password = os.environ["NEO4J_PASSWORD"],
-    database = "neo4j",
+    run_verify_events, run_normalize, run_validate_kg,
+    run_neo4j_push, run_neo4j_dump, run_compare_kg,
 )
 
-# ── 1. Validate events ────────────────────────────────────────────────────
-result = run_verify_events(EVENTS, strictness="recommended")
-assert result["error_count"] == 0, result["violations"]
-print(f"✓ {result['event_count']} events valid")
+EVENTS = "library-kg/examples/qa-agent/events.jsonl"
+RUN_ID = "tutorial-native"
+SESSION = f"session-{RUN_ID}"
+NEO4J = dict(uri="bolt://localhost:7687", username="neo4j", password="")
 
-# ── 2. Normalize → KGArtifact ─────────────────────────────────────────────
-artifact = run_normalize(EVENTS, run_id="r1", session_id=SESSION)
-print(f"✓ normalized → {artifact.node_count} nodes, {artifact.edge_count} edges")
+# 1. Verify events (the shipped sample has an empty run_id, so errors are expected)
+report = run_verify_events(EVENTS, strictness="recommended")
+print(f"{report['event_count']} events, {report['error_count']} errors")
 
-# ── 3. Validate KG ────────────────────────────────────────────────────────
-report = run_validate_kg(artifact, fail_on_error=True)
-print(f"✓ KG valid ({report['error_count']} errors, {report['warning_count']} warnings)")
+# 2. Normalise to a KGArtifact (in memory)
+artifact = run_normalize(EVENTS, run_id=RUN_ID)
+print(f"normalized: {artifact.node_count} nodes, {artifact.edge_count} edges")
 
-# ── 4. Push to Neo4j ──────────────────────────────────────────────────────
-push_result = run_neo4j_push(artifact, **NEO4J)
-print(f"✓ pushed {push_result['node_count']} nodes, {push_result['edge_count']} edges")
+# 3. Validate (raises KGValidationError if there are errors)
+report = run_validate_kg(artifact)
+print(f"valid: {report['error_count']} errors, {report['skipped_count']} skipped")
 
-# ── 5. Dump from Neo4j ────────────────────────────────────────────────────
+# 4. Push to Neo4j
+push = run_neo4j_push(artifact, **NEO4J)
+print(f"pushed {push['nodes']} nodes, {push['edges']} edges")
+
+# 5. Dump from Neo4j
 dumped = run_neo4j_dump(session_id=SESSION, **NEO4J)
-print(f"✓ dumped {dumped.node_count} nodes, {dumped.edge_count} edges")
+print(f"dumped {dumped.node_count} nodes, {dumped.edge_count} edges")
 
-# ── 6. Round-trip comparison ──────────────────────────────────────────────
-diff = compare_kg(dumped.to_doc(), artifact.to_doc())
-assert diff.match, diff.summary()
-print("✓ round-trip match")
+# 6. Round-trip comparison
+diff = run_compare_kg(dumped, artifact)
+print("round trip passed:", diff["passed"], diff["summary"])
 ```
 
 ---
 
-## 15. Teardown
+## 13. Tear down
 
 ```bash
-# Remove the session from Neo4j
-mas-lab graph drop trip-planner/demo/baseline/item1/r1 \
-  --uri bolt://localhost:7687 --yes
+# Stop the Neo4j container (the data volume persists)
+docker compose -f library-kg/docker/compose.yaml down
 
-# Stop the Neo4j container (data volume persists)
-docker compose \
-  -f mas-lab-services/src/mas/lab/services/catalogue/neo4j/docker-compose.yml \
-  down
+# Stop and remove the data volume
+docker compose -f library-kg/docker/compose.yaml down -v
+```
 
-# Stop and remove the data volume entirely
-docker compose \
-  -f mas-lab-services/src/mas/lab/services/catalogue/neo4j/docker-compose.yml \
-  down -v
+To remove one session from a running database, re-push with `--clear-session`, or run in
+Neo4j Browser:
+
+```cypher
+MATCH (n {sessionId: "session-tutorial-native"}) DETACH DELETE n
 ```
 
 ---
 
-## What's next
+## Next steps
 
-- **Spec injection** — merge ontology-derived spec nodes into the KG to add
-  contract-level context:
-  [kg-spec.md](kg-spec.md)
-
-- **Annotation** — attach embeddings, quality scores, or any computed value to
-  KG nodes using a custom `value_fn`:
-  [annotation.md](annotation.md)
-
-- **Faceted queries** — use `KGIndex` and `FacetQuery` to slice and filter the
-  graph in memory without Cypher:
-  [kg-query.md](kg-query.md)
-
-- **Streaming multiple artifacts** — process a full benchmark run lazily with
-  `stream_artifacts(paths)`:
-  [steps.md → Streaming](steps.md#streaming-multiple-artifacts)
-
-- **Dataset creation** — group benchmark sessions into a named `Dataset` node
-  for longitudinal analysis:
-  `mas-lab graph dataset-create --help`
+- Merge app-spec nodes into the KG: [kg-spec.md](kg-spec.md).
+- Attach embeddings, scores or any computed value with a custom `value_fn`:
+  [annotation.md](annotation.md).
+- Slice and filter the graph in memory without Cypher: [kg-query.md](kg-query.md).
+- Process a full benchmark run lazily with `stream_artifacts(paths)`:
+  [steps.md, Streaming](steps.md#streaming-multiple-artifacts).

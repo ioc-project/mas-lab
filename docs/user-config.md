@@ -4,66 +4,68 @@
 -->
 # User-Level Configuration
 
-Canonical path variables and their defaults live on this page. In other docs,
-prefer **`$XDG_*` / `MAS_*` names** (not hardcoded home paths). MkDocs tutorials
-can include values via
-[`includes/mas-paths.md`](includes/mas-paths.md) snippets (`task docs-gen`).
+This page lists where MAS Lab reads configuration and writes data, and how to
+change those locations. Read it when you set up a machine or a project.
+
+The first steps are in [Quick Start](#quick-start). Other docs use `$XDG_*` and
+`MAS_*` names instead of hard-coded home paths. The XDG variables come from the
+XDG Base Directory Specification.
 
 Field-by-field `config.yaml` keys (including `mas_ctl.trace`) are in the
-[config.yaml reference](references/config.yaml.md). CLI flags:
+[config.yaml reference](references/config.yaml.md). CLI flags are in
 [mas-ctl.md](cli/mas-ctl.md).
 
 ## Path variable reference
 
 | Symbol | Default layout | Role |
 |--------|----------------|------|
-| `--8<-- "includes/mas-paths.md:workspace-config-filename"` | project root | Workspace config (`paths:`, `infra_refs:`, …) |
+| `config.yaml` | project root | Workspace config (`paths:`, `infra_refs:`, …) |
 | `$XDG_CONFIG_HOME` | `~/.config` | Base for user config (see row below) |
-| `--8<-- "includes/mas-paths.md:xdg-user-config"` | under `$XDG_CONFIG_HOME` | Global config fallback |
+| `$XDG_CONFIG_HOME/mas/config.yaml` | under `$XDG_CONFIG_HOME` | Global config fallback |
 | `$XDG_DATA_HOME` | `~/.local/share` | Base for persistent lab data |
-| `--8<-- "includes/mas-paths.md:xdg-labs-dir"` | under `$XDG_DATA_HOME` | Benchmark / lab output root |
-| `--8<-- "includes/mas-paths.md:xdg-runs-dir"` | under `$XDG_DATA_HOME` | Agent session run folders |
-| `--8<-- "includes/mas-paths.md:mas-home"` | under `$XDG_DATA_HOME` | Controller `MAS_HOME` default |
-| `--8<-- "includes/mas-paths.md:controller-socket"` | under `$XDG_DATA_HOME` | Controller Unix socket |
-| `--8<-- "includes/mas-paths.md:xdg-agent-memory"` | under `$XDG_DATA_HOME` | Semantic memory SQLite (overlays) |
+| `$XDG_DATA_HOME/mas/labs` | under `$XDG_DATA_HOME` | Benchmark / lab output root |
+| `$XDG_DATA_HOME/mas/runs` | under `$XDG_DATA_HOME` | Agent session run folders |
+| `$XDG_DATA_HOME/mas` | under `$XDG_DATA_HOME` | Controller `MAS_HOME` default |
+| `$XDG_DATA_HOME/mas/controller.sock` | under `$XDG_DATA_HOME` | Controller Unix socket |
+| `$XDG_DATA_HOME/mas/memory/{agent_id}.sqlite` | under `$XDG_DATA_HOME` | Semantic memory SQLite (overlays) |
 | `$XDG_CACHE_HOME` | `~/.cache` | Base for caches |
-| `--8<-- "includes/mas-paths.md:xdg-trace-cache"` | under `$XDG_CACHE_HOME` | Content-addressed trace cache |
-| `--8<-- "includes/mas-paths.md:xdg-artifacts-cache"` | under `$XDG_CACHE_HOME` | Pipeline step cache |
-| `--8<-- "includes/mas-paths.md:xdg-llm-cache"` | under `$XDG_CACHE_HOME` | LLM cache — built-in: [execution.md](manifests/execution.md#cache--the-llm-response-cache); infra: [llm-cache.md](manifests/llm-cache.md) · [ref](references/llm-cache.md) |
+| `$XDG_CACHE_HOME/mas/traces` | under `$XDG_CACHE_HOME` | Content-addressed trace cache |
+| `$XDG_CACHE_HOME/mas/artifacts` | under `$XDG_CACHE_HOME` | Pipeline step cache |
+| `$XDG_CACHE_HOME/mas/llm_cache.json` | under `$XDG_CACHE_HOME` | LLM cache — built-in: [llm-cache.md](manifests/llm-cache.md) · [ref](references/llm-cache.md) |
 | `$XDG_STATE_HOME` | `~/.local/state` | Base for state files |
-| `--8<-- "includes/mas-paths.md:xdg-last-run"` | under `$XDG_STATE_HOME` | Last benchmark run pointer |
+| `$XDG_STATE_HOME/mas/last-run.json` | under `$XDG_STATE_HOME` | Last benchmark run pointer |
 | `MAS_LABS_ROOT` | — | Env override for labs root |
 | `MAS_RUNS_ROOT` | — | Env override for runs root |
 | `MAS_DATA_ROOT` / `MAS_LAB_DATA` | — | Env override for data root |
 | `MAS_TRACE_CACHE` | — | Env override for trace cache |
 | `MAS_DATA_CACHE` | — | Env override for pipeline cache |
 | `MAS_LLM_CACHE` | — | Env override for the LLM response cache file path |
-| `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | — | Built-in engine cache — [execution.md](manifests/execution.md#cache--the-llm-response-cache). Infra middleware: [references/llm-cache.md](references/llm-cache.md) |
+| `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | — | Built-in engine cache — [llm-cache.md](manifests/llm-cache.md). Infra middleware: [references/llm-cache.md](references/llm-cache.md) |
 | `MAS_LLM_MAX_TOKENS` / `MAS_LLM_MAX_COMPLETION_TOKENS` | — (no limit sent) | Output-token budget for model rows that set none; below `spec.models[]` overrides and above infra `generation` — [Output-token limits](manifests/agent.md#output-token-limits) |
 | `MAS_LLM_ON_TRUNCATION` | — | `ignore` \| `warn` \| `error` \| `escalate`; default action below `spec.models[].on_truncation` |
-| `MAS_HOME` | `--8<-- "includes/mas-paths.md:mas-home"` | Env override for controller data root |
-| `MAS_CONTROLLER_SOCKET` | `--8<-- "includes/mas-paths.md:controller-socket"` | Env override for controller socket |
+| `MAS_HOME` | `$XDG_DATA_HOME/mas` | Env override for controller data root |
+| `MAS_CONTROLLER_SOCKET` | `$XDG_DATA_HOME/mas/controller.sock` | Env override for controller socket |
 
-MAS-Lab and `mas-ctl` resolve storage paths from the active config file
-(see [Tutorial 0](tutorials/00-environment-setup/README.md)). Infra manifests
-resolve from workspace refs, `$XDG_CONFIG_HOME/mas/infra/`, or explicit
-`--infra-ref` paths.
+MAS Lab and `mas-ctl` read storage paths from the active config file (see
+[Tutorial 0](tutorials/00-environment-setup/README.md)). Infra manifests (which
+say where the LLM endpoint and tool servers are) come from workspace refs,
+`$XDG_CONFIG_HOME/mas/infra/`, or explicit `--infra-ref` paths.
 
-`config.yaml` may also define top-level `aliases:` overrides for runtime plugin
-resolution. See [runtime/docs/plugin-aliases.md](../runtime/docs/plugin-aliases.md)
-for the discovery order and canonical name mapping.
+`config.yaml` may define top-level `aliases:` that override runtime plugin
+resolution. See [runtime/docs/plugin-aliases.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/plugin-aliases.md)
+for the discovery order and name mapping.
 
-`plugins:` is a separate overlay list of **runtime** plugins (gdb, checkpoint
-stores). Off unless uncommented. Observability and governance stay in the
-agent spec. See the
+`plugins:` lists **runtime** plugins to add (gdb, checkpoint stores). It is off
+unless you uncomment it. Observability and governance stay in the agent spec.
+See the
 [config.yaml reference](references/config.yaml.md#plugins-workspace-overlays).
 
 **Config file names**
 
 | Location | File | Role |
 |----------|------|------|
-| Project root | `--8<-- "includes/mas-paths.md:workspace-config-filename"` | Workspace config (`paths:`, `infra_refs:`, …) |
-| User home | `--8<-- "includes/mas-paths.md:xdg-user-config"` | Global fallback when no project file is found |
+| Project root | `config.yaml` | Workspace config (`paths:`, `infra_refs:`, …) |
+| User home | `$XDG_CONFIG_HOME/mas/config.yaml` | Global fallback when no project file is found |
 
 Default data paths follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
 
@@ -102,14 +104,14 @@ cp config/infra/openai.example.yaml "${XDG_CONFIG_HOME:-$HOME/.config}/mas/infra
 ```
 
 Workspace checkouts use the sample at
-[`library-samples/sample-workspace/config.yaml`](../library-samples/sample-workspace/config.yaml)
+[`library-samples/sample-workspace/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
 (copy it to your project root; commands find it by walking up from the
 current directory).
 
 For first-time setup via `mas-lab init`, generated files come from templates
 bundled in the `mas-lab` package:
-[`lab/src/mas/lab/templates/init/config.yaml`](../lab/src/mas/lab/templates/init/config.yaml)
-and [`lab/src/mas/lab/templates/infra/llmprovider.yaml`](../lab/src/mas/lab/templates/infra/llmprovider.yaml).
+[`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
+and [`lab/src/mas/lab/templates/infra/llmprovider.yaml`](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/infra/llmprovider.yaml).
 
 ### 3. Set API key
 
@@ -126,9 +128,10 @@ mas-ctl chat agent.yaml -q "What is 2+2?"
 
 ### Human exchange log (`mas_ctl.trace`)
 
-Stdout is the conversation. The AGENT↔LLM↔TOOL transcript is a **human** log on
-stderr. Persist `mas_ctl.trace: summary` in `config.yaml` so you do not need
-`--trace`. Color stays opt-in (`--trace-color` / `trace_color: true`).
+Stdout carries the conversation. The agent, LLM, and tool transcript goes to
+stderr as a human-readable log. Set `mas_ctl.trace: summary` in `config.yaml` to
+get it without `--trace`. Colour stays opt-in (`--trace-color` or
+`trace_color: true`).
 
 Complete tables: [config.yaml](references/config.yaml.md#mas_ctl) ·
 [mas-ctl flags](cli/mas-ctl.md#exchange-log).
@@ -165,13 +168,14 @@ When `paths.cache_dir` is set in `config.yaml`, trace cache defaults to
 
 ### Environment overrides (last resort)
 
-Manifests, `config.yaml`, and CLI flags are the supported configuration
-surface: they are versioned with the project and give the same result on
-every machine. The variables below exist only as last-resort overrides for
-test harnesses and one-off debugging. Do not put them in `.env` files or
-shell profiles: they apply silently to every run in that environment,
-including the long-lived controller daemon, which keeps the environment it
-started with. Model and infra/runtime ref overrides log a warning when applied.
+Configure MAS Lab with manifests, `config.yaml`, and CLI flags. They are
+versioned with the project and give the same result on every machine.
+
+The variables below are last-resort overrides for test harnesses and one-off
+debugging. Do not put them in `.env` files or shell profiles. They apply
+silently to every run in that environment, including the long-lived controller
+daemon, which keeps the environment it started with. Model and infra or runtime
+ref overrides log a warning when applied.
 
 | Variable | Overrides |
 |----------|-----------|
@@ -181,7 +185,7 @@ started with. Model and infra/runtime ref overrides log a warning when applied.
 | `MAS_LABS_ROOT`, `MAS_RUNS_ROOT` | `paths.labs_dir`, `paths.runs_dir` |
 | `MAS_DATA_ROOT` / `MAS_LAB_DATA` | Data root (derived from `paths.labs_dir`) |
 | `MAS_TRACE_CACHE`, `MAS_DATA_CACHE` | Trace / pipeline step cache (use `--trace-cache` / `--data-cache`) |
-| `MAS_LLM_CACHE`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | Built-in engine cache — [execution.md](manifests/execution.md#cache--the-llm-response-cache) |
+| `MAS_LLM_CACHE`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | Built-in engine cache — [llm-cache.md](manifests/llm-cache.md) |
 | `MAS_LLM_HTTP_RETRIES` | Extra LLM HTTP retries (`attempts = retries + 1`). Prefer `spec.control.retry.llm` — [reliability.md](references/reliability.md) |
 | `MAS_LLM_HTTP_RETRY_BACKOFF` | LLM HTTP base backoff seconds (also disables jitter) |
 | `MAS_HOME`, `MAS_CONTROLLER_SOCKET` | Controller data root / socket |
@@ -189,38 +193,29 @@ started with. Model and infra/runtime ref overrides log a warning when applied.
 Secrets (`OPENAI_API_KEY`, proxy credentials) are the exception: they belong
 in the environment, never in YAML.
 
-Relative paths in any config file (`--8<-- "includes/mas-paths.md:workspace-config-filename"` or `--8<-- "includes/mas-paths.md:xdg-user-config"`)
+Relative paths in any config file (`config.yaml` or `$XDG_CONFIG_HOME/mas/config.yaml`)
 resolve from **that file's directory** — e.g. with user config at
 `~/.config/mas/config.yaml`, `labs_dir: custom/labs` → `~/.config/mas/custom/labs`.
 
-## Doc authors
+## Resolving `name:path` and infra refs
 
-Recurring path strings live in `mas.runtime.constants` / `mas.runtime.xdg` and are
-generated into [`includes/mas-paths.md`](includes/mas-paths.md) for MkDocs snippets.
-After changing defaults, run `task docs-gen` and commit the updated include file.
-Include a value in markdown with pymdownx snippets, for example
-`--8<-- "includes/mas-paths.md:xdg-trace-cache"`.
+In a library ref `name:path` (tools, overlays, infra bundles, …), the prefix is
+always a **library name**. MAS Lab searches lab-local libraries first, then
+workspace `manifest_libraries:`, then installed libraries.
 
-### Resolution Rules
+- List local library directories in `lab-config.yaml` under `lab.libraries`. Each needs a `library.yaml`.
+- List extra checkouts in `config.yaml` under `manifest_libraries:`. It is a list of paths. The name is the directory stem.
 
-When resolving a library `name:path` ref (tools, overlays, infra bundles, …),
-the prefix is always a **library name**. Lab-local libraries are searched
-first, then workspace `manifest_libraries:`, then installed libraries.
-
-List local library dirs in `lab-config.yaml` `lab.libraries` (and put
-`library.yaml` in that dir). List extra checkouts in workspace
-`config.yaml` `manifest_libraries:` (a list of paths; the name is the
-directory stem).
-
-User guide: [labs-and-libraries.md](labs-and-libraries.md). Search order and
+Guide: [labs-and-libraries.md](labs-and-libraries.md). Search order and
 `LookupError`: [library-discovery.md](library-discovery.md).
 
-Infra files that are not `name:path` still fall through to `$XDG_CONFIG_HOME/mas/infra/{ref}` or a path relative to the manifest directory.
+An infra ref that is not `name:path` resolves to `$XDG_CONFIG_HOME/mas/infra/{ref}`
+or to a path relative to the manifest directory.
 
 ### Examples
 
 ```bash
-# Workspace bundle ref
+# Library bundle ref
 mas-ctl chat agent.yaml --infra-ref standard:openai -q "Hello"
 
 # User config file
@@ -232,8 +227,8 @@ mas-ctl chat agent.yaml --infra-ref config/infra/openai.example.yaml -q "Hello"
 
 ## Migrating older agent / MAS manifests
 
-`mas-ctl validate` rejects infrastructure and runtime wiring on Agent, MAS, and
-overlay patches, and rejects `spec.execution` on agents. Use this workspace file
+`mas-ctl validate` rejects infra and runtime wiring on Agent, MAS, and overlay
+manifests. It also rejects `spec.execution` on agents. Use the workspace file
 instead:
 
 | Removed from manifests | Use instead |
@@ -242,8 +237,10 @@ instead:
 | `spec.execution` (cache, stream, queue depth, parallel tools, …) | `kind: RuntimeEngine` refs (see [runtime-engine.md](manifests/runtime-engine.md)) |
 | Offline LLM turns (no live provider) | [llm_cache replay](manifests/llm-cache.md) (`raise_on_miss`) recorded against a live provider |
 
-`experiment.execution` in **mas-lab benchmark** YAML is unrelated — batch
-orchestration and trace emulation ([experiment.md](manifests/experiment.md#execution-batch-orchestration)).
+The `design:`, `schedule:`, and `bench_emulation:` blocks of an experiment
+(formerly `experiment.execution`) are a different thing. They control the grid
+of runs, batch orchestration, and trace emulation
+([experiment.md](manifests/experiment.md#design-vs-schedule)).
 
 ## Example Configurations
 
@@ -257,5 +254,10 @@ See `library-standard/src/mas/library/standard/libs/standard/openai.yaml` and
 Record with a live provider, then replay from disk (`raise_on_miss: true`).
 See [llm-cache.md](manifests/llm-cache.md).
 
-Library names, lab-local `lab.libraries`, and workspace `manifest_libraries:`:
-[labs-and-libraries.md](labs-and-libraries.md).
+## Doc authors
+
+Path strings live in `mas.runtime.constants` and `mas.runtime.xdg`. They are
+generated into `docs/includes/mas-paths.md` for MkDocs snippets. After you
+change a default, run `task docs-gen` and commit the updated include file.
+
+Next: [Tutorial 0 — Environment setup](tutorials/00-environment-setup/README.md).

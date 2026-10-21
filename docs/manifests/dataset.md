@@ -6,37 +6,55 @@
 
 **Package:** `mas-lab-bench` · **Schema:** `dataset.schema.yaml` · **apiVersion:** `lab/v1`
 
-A **dataset** manifest lists benchmark inputs: a user prompt (string),
-optional HITL replies, memory seeds, and tool fixtures. Each **experiment**
-pairs a dataset with **scenarios** and `run.n_runs`.
+A **dataset** manifest lists the inputs of a benchmark.
+Each **item** is one case. It holds a user prompt and, optionally, human-in-the-loop (HITL) replies, memory seeds, tool fixtures, and expected results.
+Write a dataset when an **experiment** needs a fixed set of inputs to run every **scenario** against.
+The experiment pairs the dataset with its scenarios and `run.n_runs`.
 
-**Terms:** [glossary.md](../glossary.md) · **Experiment wiring:** [experiment.md](experiment.md) · **Migrating from older shapes:** [dataset-migration.md](dataset-migration.md)
+Every item uses the **dataset envelope**: an `inputs` block (what the run receives) and an `expectations` block (what you score against).
+An older flat item (`prompt:`, top-level `ground_truth`) still loads with a warning. [dataset-migration.md](dataset-migration.md) shows how to convert it.
+
+Smallest dataset:
+
+```yaml
+apiVersion: lab/v1
+kind: Dataset
+metadata:
+  name: my-dataset
+spec:
+  items:
+    - id: "001"
+      inputs:
+        user: Plan a three-day trip to Paris.
+```
+
+Terms: [glossary.md](../glossary.md). Experiment wiring: [experiment.md](experiment.md).
+
+A **run** is identified by this tuple:
 
 ```text
 run = (application, flavour, memory_state, user_query)
 ```
 
 The dataset declares `memory_state` and `user_query` per item.
-`application` and `default_flavour` come from the experiment YAML. There is no
-chat-log `turns:` field on the item.
+The experiment YAML supplies `application` and `default_flavour`.
+An item has no chat-log `turns:` field.
 
-## Table of contents
+## Contents
 
-1. [Manifest format](#1-manifest-format)
-2. [Item fields reference](#2-item-fields-reference)
-3. [Memory seeds — the memory state slot](#3-memory-seeds--the-memory-state-slot)
-4. [HITL](#4-hitl-optional)
-5. [Session continuity](#5-session-continuity)
-6. [Experiment-level seeds](#6-experiment-level-seeds)
-7. [Seed merge order](#7-seed-merge-order)
-8. [Path references](#8-path-references)
-10. [`spec.source` — meta-datasets](#10-specsource--meta-datasets-mmlu-pro)
+- [Fields you always set](#fields-you-always-set): [1. Manifest format](#1-manifest-format), [2. Item fields](#2-item-fields-reference), [3. Path references](#3-path-references)
+- [Fields you sometimes set](#fields-you-sometimes-set): [4. Memory seeds](#4-memory-seeds-the-memory-state-slot), [5. HITL](#5-hitl-optional), [6. Session continuity](#6-session-continuity), [7. Experiment-level seeds](#7-experiment-level-seeds-and-merge-order), [8. Tool fixtures](#8-tool-fixtures), [9. Schemas for free-form parts](#9-schemas-for-the-free-form-parts)
+- [Full example](#full-example)
+- [Advanced fields](#advanced-fields): [10. App-specific datasets](#10-app-specific-and-general-purpose-datasets), [11. `spec.source`](#11-specsource-meta-datasets-mmlu-pro)
+- [Common mistakes](#common-mistakes)
 
 ---
 
-## 1. Manifest format
+## Fields you always set
 
-A dataset file is a YAML document.  Two formats are accepted:
+### 1. Manifest format
+
+A dataset file is a YAML document. Two formats load.
 
 **Declarative manifest** (preferred):
 
@@ -55,7 +73,7 @@ spec:
         user: Plan a three-day trip to Paris.
 ```
 
-**Flat dict** (shorthand, no kind/apiVersion required):
+**Flat dict** (shorthand, no `kind` or `apiVersion`):
 
 ```yaml
 name: my-dataset
@@ -65,57 +83,68 @@ items:
       user: Plan a three-day trip to Paris.
 ```
 
-The `name` field defaults to the file stem when omitted.
+The loader accepts the flat form and takes `name` from the file stem when it is omitted.
+The flat form is not schema-valid: `mas-lab validate` and `mas-ctl validate` recognise only the declarative form.
+Use the declarative form for anything you check in.
 
-### App-specific vs general-purpose
+Check a Dataset file with `mas-lab validate datasets/my-dataset.yaml` (it detects the kind from `kind: Dataset`) or with `mas-ctl validate`.
 
-App-specific datasets live **under the app version they evaluate**. Catalog
-id and `spec.app` use that same version tag:
+#### Document fields
 
-```yaml
-metadata:
-  name: my-app-scenarios
-  version: v1
-spec:
-  app: my-app@^v1    # or my-app@v1
-  items: [...]
-```
-
-| Kind | On disk | Catalog id |
-|------|---------|------------|
-| **App-specific** | `apps/<app>/v<N>/datasets/<dataset-name>/dataset.yaml` | `<dataset-name>@vN` |
-| **Unversioned app** | `apps/<app>/datasets/<dataset-name>/dataset.yaml` | `<dataset-name>` or `@v1` in `library.yaml` |
-| **General-purpose** | `datasets/<name>.yaml` or `datasets/<domain>/...` | file/metadata name |
-
-A dataset version is a **folder** (`dataset.yaml` plus optional sibling
-files) next to that app version’s agents and tools.
-
-```text
-apps/<app>/v1/datasets/<name>/
-  dataset.yaml                 # items: inputs + expectations
-  tool_fixtures/*.yaml         # payloads listed from items
-```
-
-Each item is the run setup. `inputs.user` is the **prompt string**. Files are
-`{ref: relative/path}` (on `tool_fixtures` / `memory_seeds` a bare path is
-the same shorthand). Ground truth stays on the **same item** under
-`expectations`.
-
-| Slot | Role | Agent sees it |
+| Field | Required | Meaning |
 |---|---|---|
-| `inputs.user` | Prompt (string, or `{ref: file}`) | yes |
-| `inputs.hitl` | Optional operator reply strings | as HITL |
-| `inputs.memory_seeds` | Pre-loaded memory (prefer a sibling file) | via memory |
-| `inputs.tool_fixtures` | Mapping + payloads for mock tools | via tools |
-| `inputs.checkpoint.load` | Optional checkpoint path/ref used to resume this item's run; an experiment-level `checkpoints` axis overrides it when declared. | via restored session |
-| `inputs.checkpoint.save` | Save checkpoint artifacts for this item when enabled (`false` by default). | no |
-| `expectations` | Ground truth (`ground_truth`, `metrics`, free-form `details`) | no |
+| `apiVersion` | yes | `lab/v1`. |
+| `kind` | yes | `Dataset`. |
+| `metadata.name` | yes | Dataset name (the catalog id when catalogued). |
+| `metadata.version` | no | Version tag (`"1.0"`, `v1`). |
+| `metadata.display_name`, `description`, `tags` | no | Labels for reports and UIs. |
+| `spec.items` | one of `items` / `path` / `source` | Inline items (see [section 2](#2-item-fields-reference)). |
+| `spec.path` | | Sidecar file of already-shaped items (YAML, JSONL, or CSV) next to this file. `spec.format` (`yaml`, `jsonl`, or `csv`; default `yaml`) is a format hint. |
+| `spec.source` | | External corpus plus column map; see [section 11](#11-specsource-meta-datasets-mmlu-pro). |
+| `spec.app` | no | Compatible app range: `[library:]name[@tag-or-range]` (`my-app@v1`, `my-app@^v1`, `my-app@>=v1,<v3`) or `{name, library, version}`. Omit for general-purpose datasets. |
+| `spec.schemas` | no | JSON Schemas for the free-form item parts; see [section 9](#9-schemas-for-the-free-form-parts). |
+| `spec.groups` | no | Declared item groups `[{id, description, count}]`. Documentation only: the loader does not read it. Items select a group with their own `group` key. |
+
+### 2. Item fields reference
+
+Each item follows `run-input.schema.yaml`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Unique identifier within the dataset. Used by coupled experiments, output paths, and the run hash. |
+| `inputs.user` | string, string list, or `{ref:}` | yes | The user prompt. A string is the text, never a path. A list of strings is sequential user messages. `{ref: file}` loads a sibling file. |
+| `inputs.hitl` | string, string list, or `{ref:}` | no | Operator replies after the prompt, in order. |
+| `inputs.memory_seeds` | list, `{ref:}`, or bare path | no | Initial memory state. See [section 4](#4-memory-seeds-the-memory-state-slot). |
+| `inputs.tool_fixtures` | `{ref:}`, bare path, or mapping | no | Mock-tool payloads. See [section 8](#8-tool-fixtures). |
+| `inputs.session_id` | string | no | Fixed conversation identifier. See [section 6](#6-session-continuity). |
+| `inputs.checkpoint.load` | path, `{ref: path}`, or `null` | no | Checkpoint to resume this item's run from. An experiment-level `checkpoints` axis overrides it when declared. See [checkpoint.md](checkpoint.md). |
+| `inputs.checkpoint.save` | boolean or string | no (`false`) | `true` (or a string) saves checkpoints under the run's `checkpoints/` folder after each turn. |
+| `expectations.ground_truth` | any | no | Reference answer for generic metrics. |
+| `expectations.metrics` | string list | no | Metrics this item is scored on. |
+| `expectations.details` | object | no | Free-form app- or tool-specific ground truth. The schema rejects any other top-level `expectations` key. |
+| `category` / `group` / `type` / `tags` | string / list | no | Filtering metadata (`experiment.dataset.filter`). Coupled mode uses `id` only. |
+| `metadata` | object | no | Free-form item metadata, carried into results. |
+
+`expectations` may also be `{ref: file}`, which loads the whole block from a file.
+
+Which slots the agent sees:
+
+| Slot | Agent sees it |
+|---|---|
+| `inputs.user` | Yes, as the prompt. |
+| `inputs.hitl` | As HITL replies. |
+| `inputs.memory_seeds` | Through memory. |
+| `inputs.tool_fixtures` | Through tools. |
+| `inputs.checkpoint.load` | Through the restored session. |
+| `inputs.checkpoint.save`, `expectations` | No. |
+
+Smallest item with ground truth:
 
 ```yaml
 - id: order-42-refund
   inputs:
     user: >
-      Customer asks for a refund on order 42…
+      Customer asks for a refund on order 42...
     tool_fixtures: {ref: tool_fixtures/order-42.yaml}
   expectations:
     ground_truth: refund approved
@@ -124,7 +153,7 @@ the same shorthand). Ground truth stays on the **same item** under
       action: refund
 ```
 
-Long prompt in a file uses the **same** ref syntax:
+A long prompt can live in a file. It uses the same `ref` syntax:
 
 ```yaml
 inputs:
@@ -132,178 +161,102 @@ inputs:
   tool_fixtures: {ref: tool_fixtures/order-42.yaml}
 ```
 
-Both `inputs.tool_fixtures` and `expectations` have a generic layer that
-mas-lab reads and a free-form layer owned by the app. Do not mix them:
+On `tool_fixtures` and `memory_seeds`, a bare path means the same as `{ref: path}`.
+Ground truth stays on the same item, under `expectations`.
 
-```yaml
-# tool_fixtures — generic mapping: which tool gets which payload.
-tool_fixtures: tool_fixtures/order-42.yaml      # every tool (same as {ref: …})
-tool_fixtures:
-  by_tool:
-    "*": tool_fixtures/order-42.yaml            # every tool without its own entry
-    query_db: tool_fixtures/db-rows.yaml
-    get_weather: {city: Paris, temp_c: 18}     # inline payload
-tool_fixtures:
-  - tool: get_metrics
-    ref: tool_fixtures/metrics.yaml
-# The payload (file body or inline value) is free-form: mas-lab does not
-# schema-check it, the tool does.
+### 3. Path references
 
-# expectations — generic keys + free-form details.
-expectations:
-  ground_truth: …        # compared by generic metrics
-  metrics: [exact_match] # metrics this item is scored on
-  details: {…}           # app- or tool-specific ground truth
+The loader resolves every relative path in a dataset file from the dataset file itself.
+It does not use the experiment YAML or the working directory.
+Dataset files stay portable: you can move an experiment directory without breaking seed paths.
+
+```text
+labs/my-experiment/
+  experiment.yaml
+  datasets/
+    trip_queries.yaml          <- relative paths resolve from here
+    seeds/
+      user_alice.yaml
+      user_bob.yaml
 ```
 
-An inline payload directly under `tool_fixtures` (without `by_tool`) is
-rejected. Keep ground truth out of tool-fixture payloads.
-
-Tools receive their payload through the call context, not through files or
-environment variables:
-
-```python
-from mas.runtime.contracts import ToolContract, tool_fixture
-
-class GetMetrics(ToolContract):
-    def on_execute_tool(self, tool_name, arguments, *, ctx=None, **_):
-        payload = tool_fixture(ctx, tool_name)  # by_tool[name], else by_tool["*"]
-        ...
-```
-
-Overlay `spec.patch.params` reach tools the same way, as `ctx.runtime_params`.
-
-### Optional schemas for the free-form parts
-
-mas-lab does not interpret payloads or `details`, but a Dataset can declare
-JSON Schemas for them in `spec.schemas`. Keys are dotted envelope paths, the
-same vocabulary as [`spec.source.map`](#102-map). Only free-form roots are
-allowed; the generic layer is already checked by the run-input schema.
+In `trip_queries.yaml`:
 
 ```yaml
 spec:
-  schemas:
-    expectations.details: {ref: schemas/booking-truth.schema.yaml}
-    inputs.tool_fixtures.by_tool.get_fares: {ref: my-library:tools/get_fares.fixture.schema.yaml}
-    inputs.tool_fixtures.by_tool.*.routes:            # inline schema
-      type: array
-  items: [...]
+  items:
+    - id: "alice"
+      inputs:
+        user: Plan my trip.
+        memory_seeds: {ref: seeds/user_alice.yaml}
 ```
 
-- A tool key checks the payload that tool receives: `by_tool[tool]`, else
-  `by_tool["*"]` (the same rule as `tool_fixture()`).
-- Items that do not provide a part are skipped. Parts without a schema are
-  not checked.
-- Violations, unknown keys, and missing schema files fail `Dataset.from_yaml`
-  and `mas-lab validate`. `spec.source` rows are checked when materialized.
-- A tool can ship its fixture schema next to its code; datasets reference it
-  by catalog path.
-
-### External datasets (meta-dataset)
-
-See [§10](#10-specsource--meta-datasets-mmlu-pro). A Dataset YAML can
-**describe how to use** a third-party corpus (`spec.source` + `map`) instead
-of repeating it. `Dataset.from_yaml` materializes that into envelope items.
-
-Bare `spec.app: <app>` means any version of that app. Omit `spec.app`
-for generic datasets. `library-samples` ships one complete trip-planner
-Dataset (`trip-planner-benchmark`). Cap rows in the experiment with
-`dataset.limit` instead of a reduced sidecar file.
+Paths in `experiment.yaml` itself (`dataset.path`, checkpoint paths) resolve from the experiment YAML.
 
 ---
 
-## 2. Item fields reference
+## Fields you sometimes set
 
-Preferred shape is the [run-input envelope](#1-manifest-format) (`inputs` +
-`expectations`). The table below is the older flat item form; migrate with
-[dataset-migration.md](dataset-migration.md).
+### 4. Memory seeds: the memory state slot
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `id` | string | yes | Unique identifier within the dataset. Used by coupled experiments, output paths, and the run hash. |
-| `inputs.user` | string, string list, or `{ref:}` | yes | The user prompt. A string is the text (never a path). A list of strings is sequential user messages. `{ref: file}` loads a sibling file. |
-| `inputs.hitl` | string, string list, or `{ref:}` | no | Operator replies after the prompt, in order. |
-| `inputs.memory_seeds` | list, `{ref:}`, or bare path | no | Initial memory state. See §3. |
-| `inputs.tool_fixtures` | `{ref:}`, bare path, or mapping | no | Mock-tool payloads. See §1. |
-| `inputs.session_id` | string | no | Fixed conversation identifier. See §5. |
-| `expectations.ground_truth` | any | no | Reference answer for generic metrics. |
-| `expectations.metrics` | string list | no | Metrics this item is scored on. |
-| `expectations.details` | object | no | Free-form app- or tool-specific ground truth. Any other top-level `expectations` key is rejected. |
-| `category` / `group` / `tags` | string / list | no | Filtering metadata. Coupled mode uses **`id` only**. |
+A **seed** is a piece of text made available to the agents before the first prompt.
+It models the prior state of the world from the agents' perspective: what they already know before the conversation starts.
+It is the second slot of the run input: `run_input = (user_query, memory_state)`.
 
----
+Without seeds, every run starts with no prior knowledge. That is the default for reproducible benchmarks.
+Seeds let you test agents against specific prior knowledge as a versioned, reproducible input.
+Examples: a user's history, a shared catalogue, a background fact.
 
-## 3. Memory seeds — the memory state slot
+The seed list is part of the run input, so it is part of the run hash.
+Two runs that differ only in their seeds use separate trace-cache entries.
 
-### What is a seed?
+**How the native runner delivers seeds.**
+`mas-lab benchmark run` with the default `native` runner adds each seed to the run's assembled context as a line `[memory:<source>] <content>`.
+It does not index dataset seeds into a memory backend.
+Every seed reaches the run as shared context.
+To pre-index documents into an agent's semantic memory, use `spec.memory_seed` on the [Agent manifest](agent.md), or an overlay that appends to it.
 
-A seed is a document pre-loaded into one or more agent memory backends
-**before the first token is generated**.  It models the *prior state of the
-world from the agents' perspective*: things they would already know before
-the conversation starts.
+!!! note "Not used yet"
+    The native runner does not act on `target_agent` or `metadata` on a seed.
 
-This is conceptually the second slot of the input tuple:
+#### Seed fields
 
-```
-run_input = (user_query, memory_state)
-```
-
-Without seeds the memory backend starts empty on every run (the default for
-reproducible benchmarks).  Seeds let you test agents against specific
-pre-existing knowledge — a user's history, a shared catalogue, a background
-fact — as a first-class, versioned, reproducible input.
-
-### Seed fields
-
-Each seed is a dict with:
+Each seed is a mapping (schema `fragments/memory-seed-entry.schema.yaml`):
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `source` | string | yes | A logical label for the document's origin (e.g. `"user_history"`, `"product_catalog"`, `"policy"`).  Used for logging, deduplication, and content-addressing the run hash.  See note on shadowing below. |
-| `content` | string | yes | The text indexed into the memory backend.  The backend embeds this text and makes it retrievable by semantic search. |
-| `target_agent` | string | no | ID of the agent whose memory backend receives this seed.  When absent the seed is delivered to **all** agents. |
-| `metadata` | dict | no | Arbitrary key-value pairs stored alongside the document.  Passed verbatim to `backend.index_document()`.  Useful for post-retrieval filtering (e.g. `{category: "preference", user: "alice"}`). |
+| `content` | string | yes | The seed text. |
+| `source` | string | no | Provenance label for the text (for example `"user_history"`, `"policy"`). Shown as the `[memory:<source>]` prefix. `key` is accepted as an alias (MemorySeed documents use `key`). |
+| `target_agent` | string | no | Agent the seed is meant for. Kept in the run input. The native runner does not route on it. |
+| `metadata` | mapping | no | Free-form key/value pairs kept with the seed. The native runner does not use them. |
 
-### What does `source` mean?
-
-`source` is not a file path.  It is a **human-readable provenance label** that
-identifies where a piece of knowledge comes from.  Examples:
+`source` is a human-readable provenance label, not a file path.
+The label prints next to the content, so traces show which seed a piece of context came from.
 
 ```yaml
-source: "user_history"       # knowledge retrieved from a user activity log
+source: "user_history"       # knowledge from a user activity log
 source: "product_catalog"    # knowledge from the product database
 source: "travel_policy"      # company travel rules
 source: "operator_briefing"  # pre-run context injected by an operator
 ```
 
-The `source` label is stored in the memory document's metadata and surfaced
-in traces, so you can reason about *why* an agent retrieved a specific piece
-of knowledge.
-
-### Targeting: per-agent vs. global
+A seed may name one agent, or serve every agent:
 
 ```yaml
 memory_seeds:
-  # Per-agent: only the concierge's memory receives this
+  # Intended for one agent (kept in the run input; see the note above)
   - source: "user_preferences"
     content: "Alice prefers window seats and vegetarian meals."
     target_agent: "concierge_agent"
 
-  # Global: ALL agents receive this (shared knowledge)
+  # Shared knowledge for every agent
   - source: "shared_policy"
     content: "Company travel policy: economy class for flights under 3h."
 ```
 
-Use `target_agent` when the knowledge is private to one agent (its own
-episodic memory, its own user profile, etc.).  Omit it for facts every agent
-should know — a shared catalogue, a company policy, a world-state snapshot.
+#### Inline list or path reference
 
-### Inline list vs. path reference
-
-Seeds can be declared inline or loaded from a separate YAML file:
-
-Seeds can be declared inline, as `{ref: seeds/user_alice.yaml}`, or as a
-bare path (shorthand on this slot only):
+Declare seeds inline, as `{ref: seeds/user_alice.yaml}`, or as a bare path (shorthand on this slot only):
 
 ```yaml
 # Inline
@@ -321,40 +274,41 @@ inputs:
   memory_seeds: seeds/user_alice.yaml
 ```
 
-The seed file may be a bare list or a dict with a `seeds`, `items`, or
-`memory_seeds` key:
+The seed file may be one of three shapes:
+
+- a bare list;
+- a mapping with a `seeds`, `items`, `memory_seeds`, or `entries` list;
+- a `kind: MemorySeed` document (`entries:` with `key` / `content`; schema `memory-seed.schema.yaml`).
 
 ```yaml
-# seeds/user_alice.yaml — bare list
+# seeds/user_alice.yaml (bare list)
 - source: "user_history"
   content: "Alice visited Paris in March."
 - source: "user_preferences"
   content: "Alice prefers boutique hotels."
 ```
 
-Path references are useful when:
+Use a path reference when:
 
-- Multiple dataset items share a large seed file (keep it DRY).
-- Seeds are generated by a pipeline step and written to a file.
-- The seed corpus is large enough to deserve its own version history.
+- several dataset items share a large seed file;
+- a pipeline step generates the seeds and writes them to a file;
+- the seed corpus is large enough to deserve its own version history.
 
----
+### 5. HITL (optional)
 
-## 4. HITL (optional)
-
-Most items are a single `inputs.user` string. If the run should inject
-operator replies after that prompt, list them as strings:
+Most items are a single `inputs.user` string.
+To inject operator replies after that prompt, list them as strings under `inputs.hitl`:
 
 ```yaml
 - id: approval
   inputs:
     user: Book a flight to Tokyo.
     hitl:
-      - Operator: budget approved up to €3,000.
+      - "Operator: budget approved up to €3,000."   # quote it: a bare `Operator: ...` is a YAML mapping
 ```
 
-There is no `turns` list and no `{role, content}` objects in the public
-YAML. Sequential user messages (rare) are a list of strings on `user`:
+The public YAML has no `turns` list and no `{role, content}` objects.
+For sequential user messages (rare), give `user` a list of strings:
 
 ```yaml
 - id: memory-conversation
@@ -364,26 +318,18 @@ YAML. Sequential user messages (rare) are a list of strings on `user`:
       - What is my name and where do I work?
 ```
 
-The runner still tags messages internally for traces; that is not an
-authoring format.
+The runner tags messages internally for traces. That tag is not an authoring format.
 
-### Memory + HITL
+**Memory plus HITL.**
+The runner applies memory seeds before the initial `inputs.user` prompt.
+It then sends the user messages and HITL replies in order.
+Memory writes made during the conversation accumulate on top of the seeds, which is the behaviour you want when testing stateful agents.
 
-Memory seeds are injected **before** the initial `inputs.user` prompt.
-The agents' memory backends are populated, then the conversation starts.
-Any memory writes that happen during the conversation accumulate on top of
-the seeds — this is the expected behaviour for testing stateful agents.
+### 6. Session continuity
 
----
-
-## 5. Session continuity
-
-By default the runner generates a fresh UUID `session_id` for every run.  Set
-`session_id` explicitly to:
-
-- **Replay** a known conversation in exactly the same session slot.
-- **Test session-aware memory** (e.g. `FileSessionStore`, `MemoryContextPlugin`
-  keyed on `conversation_id`) with deterministic inputs.
+`inputs.session_id` pins the conversation identifier for an item.
+Use it to replay a known conversation in the same session slot, or to test session-keyed memory with deterministic inputs.
+The loader passes it to the lab runner as the run's `session_id`.
 
 ```yaml
 - id: "session-replay-001"
@@ -392,101 +338,105 @@ By default the runner generates a fresh UUID `session_id` for every run.  Set
     session_id: "abc-1234-deterministic"
 ```
 
-Note: a fixed `session_id` does not affect the content-addressed run hash —
-the hash covers the inputs *to* the MAS, not internal session bookkeeping.
+`session_id` is part of the run input. Changing it changes the run hash, so it creates a new trace-cache entry.
 
----
+!!! note "Not used yet"
+    The default `native` runner creates a fresh UUID session for every run and ignores `inputs.session_id`.
+    To start a run from a saved session, use `inputs.checkpoint.load` or the experiment `checkpoints` axis.
 
-## 6. Experiment-level seeds
+### 7. Experiment-level seeds and merge order
 
-Seeds declared in the experiment YAML under `memory_seeds` are applied to
-**every run** in the benchmark, regardless of the dataset item.  They model
-background knowledge shared across all test cases — a product catalogue, a
-company policy, a world model.
+`experiment.yaml` has no `memory_seeds` key. The experiment schema rejects it.
+For knowledge every run should see, use one of two options:
 
-```yaml
-# experiment.yaml
-name: trip_planner_eval
-memory_seeds:
-  - source: "product_catalog"
-    content: "Arborian Network schedule: Paris–London 08:00, 14:00, 20:00."
-    target_agent: "transport_agent"
-  - source: "company_policy"
-    content: "All bookings require manager approval above €2,000."
-    # no target_agent → all agents
+- a shared seed file referenced from each item (`memory_seeds: {ref: seeds/shared.yaml}`);
+- `spec.memory_seed` on the [Agent manifest](agent.md), or an [overlay](overlay.md) that appends to it for one scenario.
 
-dataset:
-  path: "./datasets/trip_queries.yaml"
-```
+The agent loads its seeds when it starts. Overlay entries are appended to the agent's existing list.
 
-The same inline-or-path syntax is supported:
+Each item carries one seed list (`inputs.memory_seeds`), so there is nothing to merge at the experiment level.
+Agent-level `spec.memory_seed` is configured on the agent and is independent of the dataset's seeds.
+The loader does not deduplicate by `source`: if two seeds share a label, the run applies both.
+
+### 8. Tool fixtures
+
+`inputs.tool_fixtures` gives mock tools their payloads.
+Both `inputs.tool_fixtures` and `expectations` have two layers.
+mas-lab reads the generic layer. The app owns the free-form layer. Do not mix them.
 
 ```yaml
-memory_seeds: "./seeds/baseline_context.yaml"
+# tool_fixtures: generic mapping of which tool gets which payload.
+tool_fixtures: tool_fixtures/order-42.yaml      # every tool (same as {ref: ...})
+tool_fixtures:
+  by_tool:
+    "*": tool_fixtures/order-42.yaml            # every tool without its own entry
+    query_db: tool_fixtures/db-rows.yaml
+    get_weather: {city: Paris, temp_c: 18}     # inline payload
+tool_fixtures:
+  - tool: get_metrics
+    ref: tool_fixtures/metrics.yaml
+# The payload (file body or inline value) is free-form: mas-lab does not
+# schema-check it, the tool does.
+
+# expectations: generic keys + free-form details.
+expectations:
+  ground_truth: ...      # compared by generic metrics
+  metrics: [exact_match] # metrics this item is scored on
+  details: {...}         # app- or tool-specific ground truth
 ```
 
----
+The loader rejects an inline payload placed directly under `tool_fixtures` without `by_tool`.
+Keep ground truth out of tool-fixture payloads.
 
-## 7. Seed merge order
+Tools receive their payload through the call context, not through files or environment variables:
 
-When both experiment-level and item-level seeds are present they are merged
-into a single list before injection:
+```python
+from mas.runtime.contracts import ToolContract, tool_fixture
 
-```
-effective_seeds = experiment_seeds + item_seeds
-```
-
-**Experiment seeds come first.**  This means item seeds are indexed into the
-memory backend *after* experiment seeds.  If a semantic search is run
-immediately after seeding, item-specific seeds appear later in the indexing
-order and will surface at higher relevance when their content is more specific
-(standard embedding distance behaviour).
-
-**Why not deduplicate by `source`?**  Deduplication by source would require
-choosing one entry to keep, which implies a precedence rule that is opaque in
-the YAML.  Instead the merge is intentionally additive: both documents are
-indexed.  If you need to *replace* an experiment-level seed for a specific
-item, use a different source name in the item seed (e.g. `"policy_override"`
-instead of `"policy"`).
-
-The merged seed list is included in the content-addressed run hash.  Two runs
-that differ only in their seeds produce different hashes and are cached
-independently.
-
----
-
-## 8. Path references
-
-All relative paths in a dataset file are resolved relative to **the dataset
-file itself**, not the experiment YAML or the working directory.  This makes
-dataset files portable: you can move an experiment directory without breaking
-relative seed paths.
-
-```
-labs/my-experiment/
-  experiment.yaml
-  datasets/
-    trip_queries.yaml          ← relative paths resolved from here
-    seeds/
-      user_alice.yaml
-      user_bob.yaml
+class GetMetrics(ToolContract):
+    def on_execute_tool(self, tool_name, arguments, *, ctx=None, **_):
+        payload = tool_fixture(ctx, tool_name)  # by_tool[name], else by_tool["*"]
+        ...
 ```
 
-In `trip_queries.yaml`:
+Overlay `spec.patch.params` reach tools the same way, as `ctx.runtime_params`.
+
+A dataset version is a folder next to the agents and tools of the app version it evaluates:
+
+```text
+apps/<app>/v1/datasets/<name>/
+  dataset.yaml                 # items: inputs + expectations
+  tool_fixtures/*.yaml         # payloads listed from items
+```
+
+### 9. Schemas for the free-form parts
+
+mas-lab does not interpret payloads or `details`.
+A Dataset can still declare JSON Schemas for them in `spec.schemas`.
+Keys are dotted envelope paths, the same vocabulary as [`spec.source.map`](#112-map).
+Only free-form roots are allowed, because the run-input schema already checks the generic layer.
 
 ```yaml
-- id: "alice"
-  inputs:
-    user: Plan my trip.
-    memory_seeds: {ref: seeds/user_alice.yaml}
+spec:
+  schemas:
+    expectations.details: {ref: schemas/booking-truth.schema.yaml}
+    inputs.tool_fixtures.by_tool.get_fares: {ref: my-library:tools/get_fares.fixture.schema.yaml}
+    inputs.tool_fixtures.by_tool.*.routes:            # inline schema
+      type: array
+  items: [...]
 ```
 
-Experiment-level seeds in `experiment.yaml` are resolved relative to the
-**experiment YAML file** (i.e. `labs/my-experiment/`).
+Rules:
+
+- A tool key checks the payload that tool receives: `by_tool[tool]`, else `by_tool["*"]`. This is the same rule as `tool_fixture()`.
+- Items that do not provide a part are skipped. Parts without a schema are not checked.
+- Violations, unknown keys, and missing schema files fail `Dataset.from_yaml` and `mas-lab validate`.
+- The loader checks `spec.source` rows when it materializes them.
+- A tool can ship its fixture schema next to its code. Datasets reference it by catalog path.
 
 ---
 
-## 9. Full example
+## Full example
 
 ```yaml
 # labs/trip-planner-eval/datasets/trip_queries.yaml
@@ -495,7 +445,7 @@ kind: Dataset
 metadata:
   name: trip-planner-queries
   version: "1.0"
-  description: Trip planner items — prompt strings, optional files, GT.
+  description: Trip planner items with prompt strings, optional files, and ground truth.
 spec:
   items:
 
@@ -536,7 +486,7 @@ spec:
       inputs:
         user: Book a flight to Singapore for the team offsite.
         hitl:
-          - Operator: budget exception approved — up to €800 per person.
+          - "Operator: budget exception approved — up to €800 per person."
         memory_seeds: {ref: seeds/team-offsite.yaml}
         session_id: "offsite-2026-q3"
 
@@ -551,91 +501,110 @@ Companion experiment YAML:
 
 ```yaml
 # labs/trip-planner-eval/experiment.yaml
-name: trip-planner-eval
-mas:
-  manifest: app: trip-planner  # resolves mas.yaml via mas.apps
-
-# Seeds shared by every run — background world knowledge
-memory_seeds:
-  - source: "arborian_schedule"
-    content: "Paris–London: 08:00, 14:00, 20:00. Paris–Tokyo: 11:30, 23:00."
-    target_agent: "transport_agent"
-  - source: "pricing_baseline"
-    content: "Economy fares: Paris–London €89, Paris–Tokyo €640."
-
-dataset:
-  path: "./datasets/trip_queries.yaml"
-
-scenarios:
-  - id: baseline
-    overlay: overlays/baseline.yaml
-  - id: with-memory
-    overlay: overlays/with-memory.yaml
+experiment:
+  name: trip-planner-eval
+  application:
+    app: trip-planner                # resolves mas.yaml via the app catalog
+    configs_dir: ./overlays
+  dataset:
+    path: ./datasets/trip_queries.yaml
+  scenarios:
+    - id: baseline
+      overlays: {logic: [baseline], control: [], infra: []}
+    - id: with-memory
+      overlays: {logic: [with-memory], control: [], infra: []}
+  run:
+    n_runs: 3
 ```
 
-`spec.path` (without `items` or `source`) is a sidecar of already-shaped
-items: YAML, JSONL, or CSV next to the Dataset YAML. Prefer `spec.source`
-when the file is a third-party table that still needs a `map`. JSON Dataset
-files are not supported — inline `spec.items` in the YAML (the 250-item
-trip-planner benchmark lives in `benchmark.yaml`).
+Put shared background knowledge (schedules, fares) in a seed file that each item references, or in agent `spec.memory_seed`. See [section 7](#7-experiment-level-seeds-and-merge-order).
+
+`spec.path` (without `items` or `source`) is a sidecar of already-shaped items: YAML, JSONL, or CSV next to the Dataset YAML.
+Prefer `spec.source` when the file is a third-party table that still needs a `map`.
+JSON Dataset files are not supported. Inline the items in `spec.items` instead.
+The 250-item trip-planner benchmark lives in `benchmark.yaml`.
 
 ---
 
-## 10. `spec.source` — meta-datasets (MMLU-Pro)
+## Advanced fields
 
-A **meta-dataset** is a Dataset document whose `spec.source` tells mas-lab
-where a third-party corpus lives and how each row becomes one envelope item.
-The YAML is the mapping. The corpus stays where it is (HuggingFace hub, a
-jsonl export, a pickle from another bench).
+### 10. App-specific and general-purpose datasets
 
-After load, every item is the same shape as a hand-written customer-support / trip-planner
-item: `id`, `inputs.user`, `expectations.*`. Experiments point at the Dataset
-catalog id. Apps do not know the rows came from MMLU-Pro.
+An app-specific dataset lives under the app version it evaluates.
+The catalog id and `spec.app` use that same version tag:
+
+```yaml
+metadata:
+  name: my-app-scenarios
+  version: v1
+spec:
+  app: my-app@^v1    # or my-app@v1
+  items: [...]
+```
+
+| Kind | On disk | Catalog id |
+|------|---------|------------|
+| **App-specific** | `apps/<app>/v<N>/datasets/<dataset-name>/dataset.yaml` | `<dataset-name>@vN` |
+| **Unversioned app** | `apps/<app>/datasets/<dataset-name>/dataset.yaml` | `<dataset-name>` or `@v1` in `library.yaml` |
+| **General-purpose** | `datasets/<name>.yaml` or `datasets/<domain>/...` | file or metadata name |
+
+A bare `spec.app: <app>` means any version of that app.
+Omit `spec.app` for generic datasets.
+
+`library-samples` ships one complete trip-planner Dataset (`trip-planner-benchmark`).
+Cap rows in the experiment with `dataset.limit`, not with a reduced sidecar file.
+
+### 11. `spec.source`: meta-datasets (MMLU-Pro)
+
+A **meta-dataset** is a Dataset document whose `spec.source` tells mas-lab where a third-party corpus lives.
+It also says how each row becomes one envelope item.
+The YAML is the mapping.
+The corpus stays where it is: the HuggingFace hub, a jsonl export, or a pickle from another bench.
+`Dataset.from_yaml` materializes the rows into envelope items.
+
+After load, every item has the same shape as a hand-written one: `id`, `inputs.user`, `expectations.*`.
+Experiments point at the Dataset catalog id. Apps do not know the rows came from MMLU-Pro.
 
 Worked copies:
 
-- HuggingFace MMLU-Pro (no rows in git):
-  [`docs/schemas/examples/datasets/mmlu-pro.yaml`](../schemas/examples/datasets/mmlu-pro.yaml)
-- Offline jsonl slice (same `map`, tiny fixture):
-  [`docs/schemas/examples/datasets/mmlu-pro-jsonl.yaml`](../schemas/examples/datasets/mmlu-pro-jsonl.yaml)
+- HuggingFace MMLU-Pro (no rows in git): [`docs/schemas/examples/datasets/mmlu-pro.yaml`](../schemas/examples/datasets/mmlu-pro.yaml)
+- Offline jsonl slice (same `map`, tiny fixture): [`docs/schemas/examples/datasets/mmlu-pro-jsonl.yaml`](../schemas/examples/datasets/mmlu-pro-jsonl.yaml)
 
-### 10.1 Fields
+#### 11.1 Fields
 
 | Field | Required | Meaning |
 |---|---|---|
-| `kind` | yes | `huggingface` \| `jsonl` \| `csv` \| `glob` \| `pickle` |
-| `id` | huggingface | Hub id, e.g. `TIGER-Lab/MMLU-Pro` |
-| `split` | no | HuggingFace split (default `validation`). Slice syntax is passed through (`validation[:8]`). |
-| `config` / `name` | no | HuggingFace subset name |
-| `path` | jsonl/csv/pickle/glob | File or glob, relative to the Dataset folder |
-| `map` | no | Column → envelope path. If omitted, defaults to `question`/`prompt`/`text`/`user` → `inputs.user` and `answer_index`/`answer`/`ground_truth`/`label` → `expectations.ground_truth` |
-| `limit` | no | Keep only the first N rows (CI / smoke) |
+| `kind` | yes | `huggingface`, `jsonl`, `csv`, `glob`, or `pickle`. |
+| `id` | huggingface | Hub id, for example `TIGER-Lab/MMLU-Pro`. |
+| `split` | no | HuggingFace split (default `validation`). Slice syntax passes through (`validation[:8]`). |
+| `config` / `name` | no | HuggingFace subset name. |
+| `path` | jsonl, csv, pickle, glob | File or glob, relative to the Dataset folder. |
+| `map` | no | Column to envelope path. If omitted, `question`/`prompt`/`text`/`user` map to `inputs.user`, and `answer_index`/`answer`/`ground_truth`/`label` map to `expectations.ground_truth`. |
+| `limit` | no | Keep only the first N rows (CI, smoke tests). |
 
-`spec.items` may be omitted when `source` is set. If both are present,
-sourced rows load first and inline items are appended (local extras).
+You may omit `spec.items` when `source` is set.
+If both are present, sourced rows load first and inline items are appended as local extras.
 
-Declare `source` on the **Dataset** manifest (preferred: a catalog id wraps
-the map). `experiment.dataset.source` is the same shape and is merged on top
-of the Dataset's `spec.source` at load time (override split / `limit` / `map`
-for one experiment without forking the Dataset file).
+Declare `source` on the Dataset manifest. A catalog id then wraps the map.
+`experiment.dataset.source` has the same shape. The loader merges it over the Dataset's `spec.source`.
+Use it to override `split`, `limit`, or `map` for one experiment without forking the Dataset file.
 
-### 10.2 `map`
+#### 11.2 `map`
 
-Each key is a dotted envelope path. Each value is:
+Each key is a dotted envelope path. Each value is one of:
 
-- a **column name** (`question_id`, `answer_index`), or
-- a **template string** with `{column}` placeholders, or
-- `{template: "…"}` / `{column: name}` (same thing, object form).
+- a **column name** (`question_id`, `answer_index`);
+- a **template string** with `{column}` placeholders;
+- `{template: "..."}` or `{column: name}` (the object form of the same two).
 
-Synthesized fields (not in the raw row):
+The loader synthesizes one field that is not in the raw row:
 
 | Name | From |
 |---|---|
-| `options_text` | `options` list formatted as `A. …`, `B. …` |
+| `options_text` | The `options` list formatted as `A. ...`, `B. ...`. |
 
-MMLU-Pro columns used here: `question_id`, `question`, `options` (list of
-strings), `answer_index` (int). Hub schema may also expose `answer` (letter)
-and `category`; map those if you need them as `group` / `category` metadata.
+MMLU-Pro columns used here: `question_id`, `question`, `options` (list of strings), and `answer_index` (int).
+The hub schema may also expose `answer` (letter) and `category`. Map those if you need them as `group` or `category` metadata.
 
 ```yaml
 map:
@@ -645,9 +614,9 @@ map:
   category: category
 ```
 
-### 10.3 Examples
+#### 11.3 Examples
 
-**MMLU-Pro from HuggingFace** (requires the `datasets` package at load time):
+**MMLU-Pro from HuggingFace** (needs the `datasets` package at load time):
 
 ```yaml
 apiVersion: lab/v1
@@ -655,7 +624,7 @@ kind: Dataset
 metadata:
   name: mmlu-pro
   version: v1
-  description: Meta-dataset — maps TIGER-Lab/MMLU-Pro; does not vendor the rows.
+  description: Meta-dataset that maps TIGER-Lab/MMLU-Pro; it does not vendor the rows.
 spec:
   source:
     kind: huggingface
@@ -673,7 +642,7 @@ Experiment:
 ```yaml
 dataset:
   name: mmlu-pro@v1
-# cartesian: one MAS overlay × N questions. Do not couple 12k ids.
+# cartesian: one MAS overlay x N questions. Do not couple 12k ids.
 ```
 
 **Same map, local jsonl** (no hub, no `datasets` extra):
@@ -702,7 +671,7 @@ spec:
       expectations.ground_truth: answer
 ```
 
-**Glob of YAML/JSONL files:**
+**Glob of YAML or JSONL files:**
 
 ```yaml
 spec:
@@ -715,7 +684,8 @@ spec:
       expectations.ground_truth: answer_index
 ```
 
-**Pickle** (list of dicts or objects with `__dict__`, e.g. oxp-ces `QuestionModel`):
+**Pickle** (a list of dicts, or of objects with `__dict__`).
+Loading a pickle runs Python code from the file. Use only pickles you produced or trust:
 
 ```yaml
 spec:
@@ -728,19 +698,32 @@ spec:
       expectations.ground_truth: gt_answer_index
 ```
 
-### 10.4 What this is not
+#### 11.4 What this is not
 
-- Not a copy of MMLU-Pro into `spec.items`.
-- Not SILO-BENCH. SILO's private per-agent shards (one shard per agent, plus
-  the exact ground-truth answer) are a different dataset — you cannot derive
-  them from MMLU-Pro's rows, which have no private-information split.
-- HuggingFace load is **not** cached as YAML in the repo. Offline CI should
-  use `kind: jsonl` plus a tiny checked-in slice.
+- It is not a copy of MMLU-Pro into `spec.items`.
+- It is not a way to split information across agents. A benchmark that gives each agent a private shard of the facts needs its own dataset. MMLU-Pro rows have no per-agent split to map from.
+- The repo does not cache the HuggingFace load as YAML. Offline CI should use `kind: jsonl` plus a tiny checked-in slice.
 
 ---
 
-## Related documentation
+## Common mistakes
 
-- [dataset-migration.md](dataset-migration.md) — prompt → `inputs.user` string
-- [overlay.md](overlay.md) — scenario-level memory seeds and params
-- [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md) — hands-on benchmarks
+- **A path in `inputs.user`.** A string on `user` is the prompt text. Use `{ref: path}` to load a file.
+- **A `{role, content}` list or a `turns` list.** Use a string or a list of strings.
+- **App-specific keys directly under `expectations`.** Put them under `expectations.details`.
+- **An inline payload directly under `tool_fixtures`.** Wrap it in `by_tool` (use `"*"` for every tool).
+- **Ground truth inside a fixture file.** Keep it on the item, in `expectations`.
+- **Paths relative to the experiment.** Paths in a dataset resolve from the dataset file.
+- **A reduced copy of a dataset for smoke runs.** Use `dataset.limit`.
+- **Coupling thousands of item ids.** Use a cartesian design for large corpora.
+- **An unquoted HITL reply that starts with `Operator:`.** YAML reads it as a mapping. Quote it.
+- **`memory_seeds` in `experiment.yaml`.** The experiment schema rejects it. Seed from items or from the agent.
+- **Expecting `inputs.session_id` to pin the session.** The native runner ignores it today.
+
+---
+
+## See also
+
+- [dataset-migration.md](dataset-migration.md): prompt to `inputs.user` string
+- [overlay.md](overlay.md): scenario-level memory seeds and params
+- [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md): hands-on benchmarks

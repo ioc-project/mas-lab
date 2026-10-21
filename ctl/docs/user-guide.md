@@ -4,19 +4,17 @@
 -->
 # mas-ctl User Guide
 
-`mas-ctl` orchestrates multi-agent systems from declarative manifests.
-
-## Who this guide is for
-
-- Teams deploying MAS topologies
-- Developers running scenarios against the same MAS definition
-- Operators applying environment flavours and policy controls
+`mas-ctl` runs agents and multi-agent systems (MAS) from YAML manifests. This guide is for teams that run a MAS, switch environments with flavours, and apply overlays.
 
 ## Install
 
+From a checkout of the repository (the PyPI upload is still pending):
+
 ```bash
-uv pip install -e ctl
+uv sync --package mas-ctl     # or: uv sync --all-packages
 ```
+
+`mas-ctl` is then available through `uv run mas-ctl ...` (or activate the virtual environment).
 
 ## Quickstart
 
@@ -26,55 +24,64 @@ Run from a MAS manifest:
 mas-ctl run-mas mas.yaml --flavour local
 ```
 
-Run with explicit prompt and scenario:
+Run with an explicit prompt and an overlay (a partial manifest merged on top of the base):
 
 ```bash
-mas-ctl run-mas mas.yaml --scenario baseline --prompt "Plan a 3-day trip to Paris" --flavour local
+mas-ctl run-mas mas.yaml --overlay overlays/baseline.yaml --prompt "Plan a 3-day trip to Paris" --flavour local
 ```
+
+Add `--override ROOT:PATH=VALUE` (repeatable) for one-off, schema-validated changes applied last.
 
 ## Core concepts
 
 - MAS manifest: declares agents, topology/workflow, metadata
 - Deployment: placement strategy and runtime binding (`local-inproc` is the only OSS-supported strategy)
-- Scenario: named overlay for test or environment-specific variants
-- Policy: system-level guardrails and runtime limits
+- Overlay: a partial manifest merged over the base (`--overlay`, `--override`). In `mas-lab`, a *scenario* is the experiment-level construct that selects overlays per run (hierarchy: Experiment, Scenario, Item, Run).
+- Flavour: a named environment profile shipped by a library (list them with `mas-ctl flavour list`). Only `local` is available today.
+- Policy: guardrails and runtime limits declared in the manifest
 
 ### Placement (OSS)
 
 Only `local-inproc` placement is supported in mas-lab OSS. Strategies
-`local-multiprocess`, `docker`, and `kubernetes` are planned for a later release
-(2026.3). Compose and plan fail at compose time with a clear error if an
-unsupported strategy is used.
+`local-multiprocess`, `docker`, and `kubernetes` are planned for a later release.
+`compose` and `plan` fail with a clear error if an unsupported strategy is used.
 
 ## Common tasks
 
 ### Validate effective topology
 
-- Inspect resolved contracts and topology before production runs.
+- Dry-run composition and placement: `mas-ctl plan mas.yaml`.
+- Print the composed manifest: `mas-ctl compose mas.yaml` (write it with `--output`).
+- Check manifests against their schemas: `mas-ctl validate mas.yaml`.
 
 ### Switch environments
 
-- Keep same MAS manifest; switch only flavour.
+- Keep the same MAS manifest; switch only `--flavour` (or `--infra-ref` for an infra bundle).
 
 ### Audit secret usage
 
-- Verify all `*_env` references are present and provided at runtime.
+- Secrets are never stored in manifests. Verify that every `*_env` reference names an environment variable that is set at runtime.
 
 ## CLI map
 
-- `chat`, `tui` — interactive conversation
-- `run-mas` — execute MAS workflow
-- `compose`, `plan` — manifest composition and placement dry-run
-- `validate`, `schemas` — YAML validation
-- `flavour list`, `flavour show`
-- `infra list`, `infra show`
-- `registry` — plugin registry introspection
-- `checkpoint` — session checkpoints
+Run `mas-ctl --help` and `mas-ctl <command> --help` for all options.
+
+- `chat`, `tui` — interactive conversation with an agent or MAS manifest
+- `run-mas` — execute a MAS workflow (`--prompt`/`--query`, `--interactive`)
+- `compile`, `compose`, `plan` — manifest compilation, composition and placement dry-run
+- `validate`, `schemas` — YAML validation and schema listing
+- `flavour list` — flavours shipped by installed libraries
+- `infra list` (alias `list-bundles`) — infra bundles
+- `registry list`, `registry query` — plugin registry introspection
+- `plugin list`, `plugin enable`, `plugin doctor` — plugin inspection and checks
+- `serve` — expose an agent through the endpoint plugin its infra selects
+- `checkpoint` (`list`, `show`, `fork`, `resume`) — session checkpoints
+- `control` (`attach`, `inspect`, `pause`, `resume`, `steer`, `snapshot`, ...) — drive a running session
 
 Benchmarking: **`mas-lab benchmark run`** (see [Tutorial 3](../../docs/tutorials/03-experiments-and-analysis/README.md)).
 
 ## Troubleshooting
 
-- Scenario not applied: check scenario name and overlay paths.
+- Overlay not applied: check the `--overlay` path and the `--override` ROOT:PATH syntax.
 - Agent startup failure: validate referenced agent manifests.
 - Policy mismatch: inspect effective config output before run.

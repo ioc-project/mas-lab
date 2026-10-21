@@ -2,14 +2,22 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Trajectory & Metric File Schemas
+# Trajectory and metric file schemas
 
-Reference for the file families produced by every MAS run:
+This page describes the files a MAS run writes: the event stream (`events.jsonl`), the benchmark run entries, and the OpenTelemetry (OTel) span export.
+It is for people who read traces, write evaluation plugins, or convert traces between formats.
 
-1. **Run files** — written by `mas-runtime` under
-   `$XDG_DATA_HOME/mas/runs/<mas-id>/<timestamp>-<scenario>-<run-id>/`
-2. **Metric files** — written by the benchmark pipeline into
-   the pipeline output directory.
+Print the kind and agent of each event of a run:
+
+```bash
+jq -c '{kind, agent_id}' traces/events.jsonl
+```
+
+The file families are:
+
+1. **Event stream**: `traces/events.jsonl`, written by the runtime for every run (`mas-ctl chat`, `run-mas`, benchmarks). See also [docs/cli/observability.md](../../docs/cli/observability.md).
+2. **Benchmark run entries**: for `mas-lab benchmark run`, each run is stored in the content-addressed trace cache with the metadata files below.
+3. **Metric files**: written by the benchmark pipeline into the pipeline output directory. The metric types are `MetricValue` and `MetricSpec` in `lab/src/mas/lab/evaluation/eval_contract.py`.
 
 The schemas are identical across use cases.
 
@@ -17,321 +25,137 @@ The schemas are identical across use cases.
 
 ## Run directory layout
 
-```
-$XDG_DATA_HOME/mas/runs/<mas-id>/<YYYYMMDD-HHMMSS>-<scenario>-<run-id>/
-├── run.json          # Run metadata (single object)
+A single `mas-ctl` run writes `traces/events.jsonl` relative to the working directory. Override the path with `--events-file`; disable the file with `--no-events`. A benchmark run entry looks like:
+
+```text
+<trace-cache>/<run-hash>/
+├── run.json          # Immutable input fingerprint (what produced this hash)
+├── inputs.json       # Full run inputs
+├── result.json       # status, elapsed_ms, error, executed_at
 └── traces/
-    └── events.jsonl  # Ordered stream of ObsEvents (one JSON object per line)
+    └── events.jsonl  # Ordered stream of events (one JSON object per line)
 ```
 
-`<mas-id>` is the `id` field in `mas.yaml`.
-`<run-id>` is an 8-hex-char UUID prefix generated at runtime.
+`mas-lab config` shows the trace-cache location. Benchmark run directories reference their entry (`.run_ref`, or an inline `traces/`).
 
----
+### `run.json`
 
-## `run.json`
-
-Single JSON object.  Written once at the end of the run.
+One JSON object, written once per cache entry and never overwritten:
 
 ```jsonc
 {
-  // Unique 8-hex-char identifier for this run.
-  "run_id": "f52df92b",
-
-  // MAS identifier from mas.yaml (.id field).
-  "mas_id": "trip-planner",
-
-  // Scenario name (overlay applied, e.g. "baseline", "full").
-  "scenario": "baseline",
-
-  // ISO-8601 UTC timestamp when the run started.
-  "created_at": "2026-02-23T23:24:48.694866+00:00",
-
-  // Absolute path to this run folder.
-  "folder": "/home/user/.mas/runs/trip-planner/20260223-232448-baseline-f52df92b",
-
-  // Runtime environment snapshot.
-  "env": {
-    "python": "3.14.3 ...",
-    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
-    "packages": {
-      "mas-runtime": "0.1.16"
-    },
-    "git_commit": "d2909f0",
-    "git_dirty": true
-  },
-
-  // The user prompt fed to the entry-point agent.
-  "prompt": "what trains go from Celestia to Verdantia?",
-
-  // Overlay YAML path (relative to workspace root), if any.
-  "overlay_path": "labs/lifecycle-control.lab/overlays/baseline.yaml",
-
-  // Flavour name used for the run.
-  "flavour": "local",
-
-  // mas.yaml path (relative to workspace root).
-  "mas_yaml": "library-samples/apps/trip-planner/mas.yaml",
-
-  // CLI verbosity level.
-  "verbosity": 0,
-
-  // "success" | "error" | "timeout"
-  "status": "success",
-
-  // Wall-clock duration in seconds.
-  "duration_secs": 24.87
+  "run_hash": "…",               // content hash of the run inputs
+  "created_at": "2026-02-23T23:24:48.694866Z",
+  "item_id": "1",                // dataset item
+  "run_idx": 0,                  // repetition index
+  "model": "gpt-4o-mini",
+  "api_base": "",
+  "prompt": "what trains go from Celestia to Verdantia?"
 }
 ```
+
+Outcome metadata is in `result.json`: `status` (`"ok"` or `"error"`), `elapsed_ms`, `error`, `executed_at`.
 
 ---
 
 ## `events.jsonl`
 
-Newline-delimited JSON.  Each line is one **ObsEvent** dict.  Events are
-emitted in chronological order; `timestamp` is a Unix epoch float (seconds).
+The file is newline-delimited JSON: each line is one event, in chronological order. `timestamp` is a Unix epoch float in seconds.
 
-Every event carries these three mandatory fields:
+Every event carries these fields:
 
 | Field | Type | Description |
-|---|---|---|
-| `kind` | `string` | Event type — one of the `Kind.*` constants (see below) |
-| `agent_id` | `string` | Emitting agent identifier (matches `agents[].id` in `mas.yaml`) |
+|-------|------|-------------|
+| `kind` | `string` | Event type, one of the `Kind.*` constants in `mas.lab.evaluation.events` |
+| `agent_id` | `string` | Emitting agent identifier (matches the agent id in the MAS manifest) |
 | `timestamp` | `float` | Unix epoch seconds |
-| `run_id` | `string` | Same `run_id` as in `run.json` |
 
-### `execution_start`
+The observability layer adds correlation and classification fields to most events:
 
-Emitted when an agent begins processing a task (entry-point or recursive
-delegation).
+| Field | Description |
+|-------|-------------|
+| `call_id`, `parent_call_id` | Interval identity and its parent interval; `*_start` / `*_end` pairs share a `call_id` |
+| `correlation_id` | Ties the envelope events of one egress operation together |
+| `turn_id` | User turn (`u1`, `u2`, ...) |
+| `session_id`, `task_id` | Session and task identifiers |
+| `app_name`, `mas_id` | Application and MAS names |
+| `block`, `layer`, `summand`, `mealy_symbol` | Position of the event in the Mealy product (for example `summand: model`, `mealy_symbol: LLM_CALL`) |
+| `run_id` | Run identifier; empty for single `mas-ctl` runs |
 
-```jsonc
-{
-  "kind": "execution_start",
-  "agent_id": "moderator",
-  "timestamp": 1771889088.7677,
-  "run_id": "f52df92b",
+The examples below omit these fields and show the payload fields specific to each kind. Further keys may be present.
+Streams also contain governance and envelope events (`governance_decision`, `boundary_ingress`, `governance_authorize_start` / `_end`, `hitl_gate`, ...), `state_update_start` / `_end`, `mas_call_start` / `_end`, `processing_call_start` / `_end`, `context_part_contributed`, `context_steer`, and `client_response`. The authoritative list is `Kind` in `lab/src/mas/lab/evaluation/events.py`.
 
-  // The input prompt / delegated task text.
-  "input": "what trains go from Celestia to Verdantia?",
+### Event kinds
 
-  // Ambient context passed from the caller.
-  "context": {
-    "agent_id": "moderator",
-    "run_id": "local"
-  }
-}
-```
+| Kind | Emitted when | Payload fields |
+|------|--------------|----------------|
+| `execution_start` | An agent begins a task (entry point or delegation) | `input`: the prompt or delegated task text |
+| `execution_end` | An agent finishes | `status`: `"ok"`, or the failure class |
+| `llm_call_start` | Just before an LLM request is dispatched | `messages`: the array sent to the model, when available (also on the preceding `context_assembled` event) |
+| `llm_call_end` | After the LLM response arrives | `output`: model text; `next_step`: what the design pattern schedules next (`"TOOL_CALL"`, `"FINALIZE"`, ...). When set: `tokens_used` (provider usage), `finish_reason`, `model`, `max_tokens`, `truncation_retries`, `tools`, `cache_status`, `cache_layer`, `cache_events` |
+| `tool_call_start` | The runtime dispatches a tool call, including delegation tools such as `delegate_to_<agent>` | `tool_name`; `arguments`: what the model supplied |
+| `tool_call_end` | The tool returns | `tool_name`; `output`: tool or sub-agent result text |
+| `user_response` | The entry-point agent emits its final answer | `content`: the rendered answer; `message_type`: `"info"`, `"warning"`, or `"error"` |
+| `context_assembled` | The context assembler finishes, before each LLM call | `segments`, `total_tokens`, `message_count`, `messages` (see below) |
+| `audit` | Any plugin calls `recorder.audit(payload)` | `payload`: arbitrary plugin-specific object |
 
-### `execution_end`
-
-Emitted when an agent finishes.
-
-```jsonc
-{
-  "kind": "execution_end",
-  "agent_id": "schedule_agent",
-  "timestamp": 1771889098.2508,
-  "run_id": "f52df92b",
-
-  // "success" | "error" | "timeout"
-  "status": "success",
-
-  // The agent's final natural-language or JSON output.
-  "output": "Here is the schedule information ..."
-}
-```
-
-### `llm_call_start`
-
-Emitted just before an LLM request is dispatched.
+Examples:
 
 ```jsonc
-{
-  "kind": "llm_call_start",
-  "agent_id": "moderator",
-  "timestamp": 1771889088.7681,
-  "run_id": "f52df92b",
+{ "kind": "execution_start", "agent_id": "moderator", "timestamp": 1771889088.7677,
+  "input": "what trains go from Celestia to Verdantia?" }
 
-  // LiteLLM model name (e.g. "vertex_ai/gemini-3-pro-preview").
-  "model": "vertex_ai/gemini-3-pro-preview",
+{ "kind": "llm_call_end", "agent_id": "moderator", "timestamp": 1771889092.6869,
+  "output": "Based on your request ...", "next_step": "TOOL_CALL" }
 
-  // Full messages array sent to the LLM.
-  "messages": [
-    { "role": "system",  "content": "You are the Trip Planner Moderator ..." },
-    { "role": "user",    "content": "what trains go from Celestia to Verdantia?" }
-  ],
-
-  // Sampling parameters (null if not set).
-  "temperature": null,
-  "max_tokens": null
-}
-```
-
-### `llm_call_end`
-
-Emitted after the LLM response is received.
-
-```jsonc
-{
-  "kind": "llm_call_end",
-  "agent_id": "moderator",
-  "timestamp": 1771889092.6869,
-  "run_id": "f52df92b",
-
-  // Round-trip latency in milliseconds.
-  "latency_ms": 3918.59,
-
-  // Raw LLM response.
-  "response": {
-    // Raw model output text (may embed JSON, tool intents, reasoning chains).
-    "content": "Based on your request ...\n```json\n{\"tool_name\": \"delegate_to_schedule_agent\", ...}\n```",
-
-    // Token counts from the provider.
-    "usage": {
-      "prompt_tokens": 1149,
-      "completion_tokens": 157,
-      "total_tokens": 1306
-    }
-  },
-
-  // Provider stop reason (null when not surfaced by LiteLLM).
-  "finish_reason": null,
-
-  // Aggregate token counter (may be null; usage is canonical).
-  "tokens_used": null
-}
-```
-
-### `tool_call_start`
-
-Emitted when the runtime dispatches a tool call (including delegation tools
-such as `delegate_to_<agent>`).
-
-```jsonc
-{
-  "kind": "tool_call_start",
-  "agent_id": "moderator",
-  "timestamp": 1771889092.6896,
-  "run_id": "f52df92b",
-
-  // Tool or delegation function name.
+{ "kind": "tool_call_start", "agent_id": "moderator", "timestamp": 1771889092.6896,
   "tool_name": "delegate_to_schedule_agent",
+  "arguments": {"task": "Plan a trip from A to B"} }
 
-  // Parsed arguments dict (null when the DP has not yet extracted them).
-  "arguments": null
-}
-```
-
-### `tool_call_end`
-
-Emitted when the tool returns.
-
-```jsonc
-{
-  "kind": "tool_call_end",
-  "agent_id": "moderator",
-  "timestamp": 1771889098.2510,
-  "run_id": "f52df92b",
-
-  "latency_ms": 5561.17,
-  "tool_name": "delegate_to_schedule_agent",
-
-  // Nested result envelope from the tool / sub-agent.
-  "result": {
-    "result": {
-      "status": "ok",
-      "result": "Here is the schedule ..."
-    }
-  }
-}
-```
-
-### `user_response`
-
-Emitted when the entry-point agent emits its final answer to the user.
-
-```jsonc
-{
-  "kind": "user_response",
-  "agent_id": "moderator",
-  "timestamp": 1771889113.6235,
-  "run_id": "f52df92b",
-
-  // The rendered answer.
+{ "kind": "user_response", "agent_id": "moderator", "timestamp": 1771889113.6235,
   "content": "Here is the schedule for trains from Celestia to Verdantia ...",
-
-  // "info" | "warning" | "error"
-  "message_type": "info"
-}
+  "message_type": "info" }
 ```
 
 ### `context_assembled`
 
-Emitted by `ContextAssemblerPlugin` (when `emit_segments=True`, the default)
-just before each LLM call.  Provides the typed segment map that corresponds to
-the `messages` array in `llm_call_start`.  See `context-segmentation.md`.
+The context assembler emits this event just before each LLM call. It carries the segment map and the `messages` array sent to the model. See [context-segmentation.md](context-segmentation.md).
 
 ```jsonc
 {
   "kind": "context_assembled",
   "agent_id": "moderator",
-  "timestamp": 1771889088.7681,   // same as llm_call_start that follows
-  "run_id": "f52df92b",
-
-  // Ordered list of ContextPart descriptors.
-  "segments": [
-    {
-      "source": "SystemPromptPlugin",
-      "placement": "system",
-      "role": "agent_identity",
-      "content": "You are the Trip Planner Moderator ..."
-    },
-    {
-      "source": "ToolRegistryPlugin",
-      "placement": "system",
-      "role": "system_agents",
-      "content": "Available tools: delegate_to_schedule_agent, ..."
-    },
-    {
-      "source": "HistoryPlugin",
-      "placement": "user",
-      "role": "user_task",
-      "content": "what trains go from Celestia to Verdantia?"
-    }
+  "timestamp": 1771889088.7681,
+  "segments": 2,          // number of context parts
+  "total_tokens": 253,    // estimated
+  "message_count": 2,
+  "messages": [
+    { "role": "system", "content": "You are the Trip Planner Moderator ..." },
+    { "role": "user",   "content": "what trains go from Celestia to Verdantia?" }
   ]
 }
 ```
 
 ### `audit`
 
-Ad-hoc structured payload emitted by any plugin via `recorder.audit(payload)`.
-Used for structured logging of non-standard events (e.g. budget gate
-decisions, checkpoint saves).
+Plugins use `audit` for structured logging of non-standard events, for example budget gate decisions and checkpoint saves:
 
 ```jsonc
 {
   "kind": "audit",
   "agent_id": "moderator",
   "timestamp": 1771889113.62,
-  "run_id": "f52df92b",
-
-  // Arbitrary plugin-specific payload.
-  "payload": {
-    "event": "budget_gate_triggered",
-    "total_cost_usd": 1450.0,
-    "budget_limit": 1200.0
-  }
+  "payload": { "event": "budget_gate_triggered", "total_cost_usd": 1450.0, "budget_limit": 1200.0 }
 }
 ```
 
 ---
 
-## Multi-level trajectory view
+## Nested interval view
 
-The events above form a **nested interval tree** (see `context-segmentation.md §The Multi-Level Trajectory`):
+Events form a nested interval tree, linked by `call_id` and `parent_call_id`:
 
-```
+```text
 MAS call:
   Agent:    execution_start(coordinator)  ───────────────────────────────── execution_end(coordinator)
               context_assembled_1 + llm_call_start_1  ── llm_call_end_1
@@ -343,54 +167,42 @@ MAS call:
               user_response
 ```
 
-Each `tool_call_end` at level N provides the facts available to level N-1's
-next `context_assembled` event.
+Each `tool_call_end` at level N provides the facts available to the next `context_assembled` event at level N-1.
 
 ---
 
-## OTel export alternative
+## OTel export
 
-When `instrumentation: otel_file` is set in the flavour, spans are written as
-OTLP protobuf-JSON (`resourceSpans` envelope).  Eval plugins in the OSS tree
-consume raw JSONL events directly; OTel span conversion is handled by
-proprietary graph extensions when installed.  OTLP exports use:
+Pass `--events-format otel` (or `format: otel` in the manifest `observability` block) to write spans as OTLP JSON (`resourceSpans` envelope). Evaluation plugins in the OSS tree read the raw JSONL events directly. `mas-lab otel` and `mas-lab telemetry` convert between native events and OTLP spans.
 
 ```jsonc
 {
-  "resourceSpans": [
-    {
-      "scopeSpans": [
-        {
-          "spans": [
-            {
-              "name": "ToolCall",
-              "startTimeUnixNano": "1771889092000000000",
-              "endTimeUnixNano":   "1771889098000000000",
-              "attributes": [
-                { "key": "mas.agent.id",       "value": { "stringValue": "moderator" } },
-                { "key": "mas.tool.name",      "value": { "stringValue": "delegate_to_schedule_agent" } },
-                { "key": "mas.tool.arguments", "value": { "stringValue": "{}" } },
-                { "key": "mas.tool.result",    "value": { "stringValue": "..." } }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  ]
+  "resourceSpans": [{
+    "scopeSpans": [{
+      "spans": [{
+        "name": "ToolCall",
+        "startTimeUnixNano": "1771889092000000000",
+        "endTimeUnixNano":   "1771889098000000000",
+        "attributes": [
+          { "key": "mas.agent.id",       "value": { "stringValue": "moderator" } },
+          { "key": "mas.tool.name",      "value": { "stringValue": "delegate_to_schedule_agent" } },
+          { "key": "mas.tool.arguments", "value": { "stringValue": "{}" } },
+          { "key": "mas.tool.result",    "value": { "stringValue": "..." } }
+        ]
+      }]
+    }]
+  }]
 }
 ```
 
-Recognized `name` values: `ToolCall`, `LLMCall`, `AgentCall`, `TaskCall`,
-`MASCall`, `RAGQuery`, `MemoryCall`, `ProcessingCall`.
+Recognised `name` values: `ToolCall`, `LLMCall`, `AgentCall`, `TaskCall`, `MASCall`, `RAGQuery`, `MemoryCall`, `ProcessingCall`.
 
-OTel spans carry **both** start and end in a single record and are expanded to
-an `(e_start, e_end)` event pair when converted by a proprietary graph extension.
+An OTel span holds both start and end in one record. Conversion back to native events expands each span into an `(e_start, e_end)` event pair.
 
 ---
 
 ## See also
 
-- `context-segmentation.md` — theory behind segment roles and `context_assembled`
-- `mas-lab/src/mas/lab/evaluation/events.py` — `Kind`, `obs_event()`
-- `mas-lab/src/mas/lab/evaluation/eval_contract.py` — `MetricValue`, `MetricSpec`, `EvalContract`
+- [context-segmentation.md](context-segmentation.md): how context is assembled and attributed
+- `lab/src/mas/lab/evaluation/events.py`: `Kind`, `obs_event()`
+- `lab/src/mas/lab/evaluation/eval_contract.py`: `MetricValue`, `MetricSpec`, `EvalContract`

@@ -20,10 +20,8 @@ Hook Usage:
 - pre_memory_store: Intercept BEFORE writing memory
 - post_memory_store: Audit AFTER memory written
 
-Implementations:
-- ToolServerPlugin: tool-server protocol memory serving
-- RedisMemoryProvider: Redis-backed memory (future)
-- PGVectorMemoryProvider: PostgreSQL pgvector (future)
+Implementations live in library packages (``MemoryProviderPlugin``,
+``SemanticMemoryPlugin``).
 
 Memory Types:
 - episodic: Conversation history, events, traces

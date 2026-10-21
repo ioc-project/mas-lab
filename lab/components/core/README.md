@@ -4,18 +4,22 @@
 -->
 # mas-lab-core
 
-> Core validation, contract verification, export, and telemetry for MAS systems.
+`mas-lab-core` is the foundation component of mas-lab. It validates multi-agent system (MAS) specifications, checks manifests for configuration hygiene, verifies contracts against traces, exports agent manifests, and pushes traces to an OpenTelemetry (OTel) collector.
 
-`mas-lab-core` is the foundation component of **mas-lab**. It provides:
+Use it when you author a `mas.yaml` and want to check it, or when you extend the benchmark pipeline with custom steps.
 
-- **Structural validation** of MAS specifications (`mas.yaml`)
-- **Declarative-config hygiene** enforcement across all manifests
-- **Formal contract verification** (Hook Interception, Protocol Validation, Governance Enforcement)
-- **Agent manifest export** to OASF / AgentCard / AgentSpec
-- **OTel telemetry** push from trace files to an OTel collector
-- A **Processor API** used by the pipeline system to register custom post-processing steps
+```bash
+mas-lab check library-samples/apps/trip-planner/mas.yaml
+```
 
----
+What it provides:
+
+- Structural validation of MAS specifications (`mas.yaml`).
+- Configuration hygiene checks across all manifests.
+- Contract verification (Hook Interception, Protocol Validation, Governance Enforcement).
+- Agent manifest export to OASF, AgentCard and AgentSpec.
+- OTLP push from trace files to an OTel collector.
+- A Processor API for registering custom post-processing steps in the pipeline system.
 
 ## Installation
 
@@ -29,17 +33,12 @@ uv pip install -e mas-lab/components/core
 
 ---
 
-## Quick start
+## More examples
 
 ```bash
-# Validate a MAS specification
-mas-lab check library-samples/apps/trip-planner/mas.yaml
-
 # Check configuration hygiene (no model names in the wrong files)
 mas-lab check-config library-samples/apps/trip-planner
 ```
-
----
 
 ## Commands
 
@@ -84,8 +83,7 @@ mas-lab check-config path/to/project
 
 ### `export`
 
-Converts a MAS manifest to an external agent schema. Useful for publishing
-agent capabilities to registries or agent-remote discovery endpoints.
+Converts a MAS manifest to an external agent schema, for publishing agent capabilities to registries or discovery endpoints.
 
 ```bash
 # List available schemas
@@ -115,8 +113,7 @@ mas-lab export path/to/mas.yaml --schema oasf --format yaml \
 
 ### `telemetry`
 
-Converts a MAS trace file (`events.jsonl`) to OTLP format and pushes spans to
-an OpenTelemetry collector endpoint.
+Converts a MAS trace file (`events.jsonl`) to the OpenTelemetry Protocol (OTLP) format and pushes the spans to a collector endpoint. For the full conversion and verification toolchain, see [library-telemetry](../../../library-telemetry/README.md).
 
 ```bash
 mas-lab telemetry push events.jsonl --endpoint http://localhost:4318
@@ -139,8 +136,7 @@ mas-lab config --json
 
 ## Contract verification framework
 
-`mas-lab-core` includes a formal contract verification engine derived from the
-MaskAT paper. Three contract types are supported:
+`mas-lab-core` includes a contract verification engine derived from the MaskAT paper. It supports three contract types:
 
 | Contract | What it checks |
 |----------|----------------|
@@ -166,8 +162,7 @@ for result in report.results:
 
 ## Processor API
 
-The Processor API lets you register custom post-processing steps that are
-usable inside `mas-lab benchmark pipeline` YAML files.
+The Processor API registers custom post-processing steps for use in `mas-lab benchmark pipeline` YAML files.
 
 ```python
 from mas.lab.processor import Processor, ProcessorResult

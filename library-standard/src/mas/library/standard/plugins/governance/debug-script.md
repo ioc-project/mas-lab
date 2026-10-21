@@ -13,7 +13,7 @@
 | **Implementation** | `DebugScriptPlugin` in `mas.library.standard.plugins.governance.debug_script` |
 | **Enable** | `config.yaml` `plugins:` / `lab.enable_plugins` |
 | **Script** | `spec.debug` (`script` or `script_file`) or `--debug-script` |
-| **Example** | [examples/governance/debug-script/](../../../../../examples/governance/debug-script/) |
+| **Example** | [examples/governance/debug-script/](../../../../../../examples/governance/debug-script/) |
 
 gdb-like breakpoints observe tool-call / tool-result so the process can act
 as a debugger. They do not BLOCK. Observability and governance stay on the

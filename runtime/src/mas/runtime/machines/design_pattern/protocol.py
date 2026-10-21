@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Design-pattern plugins — implement M_dp Mealy protocol (DPContract).
+"""Design-pattern plugins — implement M_dp Mealy protocol (DesignPatternPlugin).
 
 Patterns (ReAct, CoT, SinglePass, …) register with the kernel; the kernel never
 imports pattern-specific logic. See runtime/docs/design-patterns.md.
