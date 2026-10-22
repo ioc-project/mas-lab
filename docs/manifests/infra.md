@@ -53,6 +53,7 @@ Remote tools: [ToolServerRegistry](../references/tool-server-registry.md).
 - [A2A agent endpoints](#a2a-agent-endpoints)
 - [Separation from Flavour](#separation-from-flavour)
 - [LLM cache middleware](#llm-cache-middleware)
+- [LLM scheduler middleware](#llm-scheduler-middleware)
 - [Fault-injection middleware](#fault-injection-middleware)
 - [CLI overrides](#cli-overrides)
 - [LLM output-token policy](#llm-output-token-policy)
@@ -305,6 +306,14 @@ With several middleware refs, the **first merged ref is outermost**.
 Refs listed under workspace `infra_interceptors` append after the `infra_refs` steps.
 See [llm-cache.md: Pipeline order](llm-cache.md#pipeline-order).
 
+## LLM scheduler middleware
+
+Pace live `LLM_CALL` after cache and routing with `middleware: llm_scheduler`.
+Stack it **inside** `llm_cache` so replay never waits on a slot.
+`spec.params` is that plugin's constructor kwargs (`max_in_flight`, `state_path`),
+not a shared Infra field — same shape as `llm_cache` and `fault_inject`.
+The guide is [llm-scheduler.md](llm-scheduler.md).
+
 ## Fault-injection middleware
 
 `middleware: fault_inject` fails a fraction of `LLM_CALL`s with a synthetic HTTP error, for reliability experiments.
@@ -482,6 +491,7 @@ The runtime discovers the names that MCP advertises unless `tools` is set.
 ## See also
 
 - [LLM cache](llm-cache.md): `llm_cache` middleware guide
+- [LLM scheduler](llm-scheduler.md): live-call in-flight and RPM caps
 - [LLM cache reference](../references/llm-cache.md): parameters, pipeline model, implementation
 - [ToolServerRegistry reference](../references/tool-server-registry.md)
 - [Flavour manifest](flavour.md)

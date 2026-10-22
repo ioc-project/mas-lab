@@ -70,6 +70,27 @@ def _filesystem_path_param_keys(schema: dict[str, Any], base: Path) -> frozenset
     return frozenset(keys)
 
 
+def _infra_plugin_param_schemas() -> list[Path]:
+    """Closed per-plugin middleware param fragments (not the open default)."""
+    skip = {
+        "infra-middleware-params.schema.yaml",
+        "infra-middleware-params-by-id.schema.yaml",
+        "infra-middleware-inline.schema.yaml",
+    }
+    return sorted(
+        path
+        for path in _FRAGMENTS.glob("infra-*-params.schema.yaml")
+        if path.name not in skip
+    )
+
+
+def _infra_middleware_path_param_keys() -> frozenset[str]:
+    keys: set[str] = set()
+    for path in _infra_plugin_param_schemas():
+        keys.update(_filesystem_path_param_keys(_load(path), _FRAGMENTS))
+    return frozenset(keys)
+
+
 def _property_defaults(schema: dict[str, Any], base: Path) -> dict[str, Any]:
     defaults: dict[str, Any] = {}
     for key, prop in _merged_properties(schema, base).items():
@@ -119,7 +140,6 @@ def _render_bindings(agent: dict[str, Any]) -> str:
     control = _load(_FRAGMENTS / "control-binding.schema.yaml")
     assembly = _load(_FRAGMENTS / "context-manager-assembly-params.schema.yaml")
     strategy = _load(_FRAGMENTS / "context-manager-strategy-params.schema.yaml")
-    infra_mw = _load(_FRAGMENTS / "infra-middleware-params.schema.yaml")
 
     lines = [
         "#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates",
@@ -147,7 +167,7 @@ def _render_bindings(agent: dict[str, Any]) -> str:
         ),
         (
             "INFRA_MIDDLEWARE_PATH_PARAM_KEYS",
-            _filesystem_path_param_keys(infra_mw, _FRAGMENTS),
+            _infra_middleware_path_param_keys(),
         ),
     ]
     for name, keys in chunks:

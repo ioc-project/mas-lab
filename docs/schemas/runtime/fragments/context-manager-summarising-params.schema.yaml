@@ -1,0 +1,21 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#context-manager-summarising-params"
+title: SummarisingContextManagerParams
+description: >
+  spec.context_manager.params when type is summarising. Assembly knobs plus
+  this plugin's constructor kwargs. Unknown top-level keys are rejected.
+allOf:
+  - $ref: "./context-manager-assembly-params.schema.yaml"
+  - $ref: "./context-manager-summarising-strategy.schema.yaml"
+additionalProperties: false
+properties:
+  working_memory_messages: {}
+  max_in_turn_messages: {}
+  trimmer: {}
+  working_memory_ref: {}
+  keep_turns: {}
+  hysteresis_ratio: {}
+  summary_threshold: {}
+  summarizer: {}

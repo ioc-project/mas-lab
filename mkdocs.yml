@@ -163,6 +163,7 @@ nav:
           - Tool contract: references/tool-contract.md
           - RuntimeEngine: manifests/runtime-engine.md
           - "LLM cache (guide)": manifests/llm-cache.md
+          - "LLM scheduler": manifests/llm-scheduler.md
           - "LLM reasoning / thinking": manifests/llm-reasoning.md
           - "LLM model catalog": manifests/llm-model-catalog.md
           - "config.yaml": references/config.yaml.md

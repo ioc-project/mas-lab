@@ -3,57 +3,10 @@
 $schema: "https://json-schema.org/draft-07/schema#"
 $id: "infra/v1#middleware-params"
 title: InfraMiddlewareParams
-description: InfraMiddleware spec.params — cache and fault-inject knobs.
+description: >
+  Default ``params`` object for an infra middleware step. Unknown plugin ids
+  keep extra keys (third-party middleware). Shipped plugins replace this with
+  their own closed schema via ``infra-middleware-params-by-id.schema.yaml``
+  on the sibling ``middleware`` field.
 type: object
-additionalProperties: false
-properties:
-  enabled:
-    type: boolean
-  allow_read:
-    type: boolean
-  allow_write:
-    type: boolean
-  raise_on_miss:
-    type: boolean
-  include_preview:
-    type: boolean
-  replay_delay_min_s:
-    type: number
-    minimum: 0
-  replay_delay_max_s:
-    type: number
-    minimum: 0
-  miss_log_path:
-    type: [string, "null"]
-    x-filesystem-path: true
-  write_mode:
-    type: string
-    enum: [append, replace]
-    description: >
-      append (default) keeps existing cache keys and records misses.
-      replace truncates cache_path once at process start (startup recording)
-      so a gold replay file is not mixed with a previous failed run.
-  cache_path:
-    type: [string, "null"]
-    x-filesystem-path: true
-  path:
-    type: string
-    x-filesystem-path: true
-  rate:
-    type: number
-    minimum: 0
-    maximum: 1
-  failure_rate:
-    type: number
-    minimum: 0
-    maximum: 1
-  status_codes:
-    type: array
-    items:
-      type: integer
-  errors:
-    type: array
-    items:
-      type: integer
-  message:
-    type: string
+additionalProperties: true

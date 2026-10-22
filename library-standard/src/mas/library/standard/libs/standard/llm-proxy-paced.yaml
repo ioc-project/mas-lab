@@ -1,0 +1,24 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: InfraBundle
+
+metadata:
+  name: llm-proxy-paced
+  description: >
+    OpenAI-compatible proxy with llm_cache outermost, then llm_scheduler, then
+    the provider. Cache hits never wait on the limiter.
+
+spec:
+  entries:
+    - id: cache
+      type: infra_middleware
+      ref: standard:llm-cache
+      applies_to: [llm]
+    - id: scheduler
+      type: infra_middleware
+      ref: standard:llm-scheduler
+      applies_to: [llm]
+    - id: llm
+      type: llm_provider
+      ref: standard:openai

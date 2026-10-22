@@ -4,90 +4,10 @@ $schema: "https://json-schema.org/draft-07/schema#"
 $id: "mas/v1#context-manager-strategy-params"
 title: ContextManagerStrategyParams
 description: >
-  Constructor kwargs for concrete ContextManagerContract plugins (sliding-window,
-  summarising, stack, etc.). Not passed to assembly-only knobs — see
-  context-manager-assembly-params.schema.yaml.
-type: object
-properties:
-  max_turns:
-    type: integer
-    minimum: 1
-    description: Sliding-window — max prior user turns (alias of keep_turns).
-  window_size:
-    type: integer
-    minimum: 1
-    description: Alias for keep_turns (sliding-window).
-  max_messages:
-    type: integer
-    minimum: 1
-    description: Stack CM — cap total past messages.
-  summary_threshold:
-    type: integer
-    minimum: 0
-    description: >
-      Summarising CM — token estimate that triggers compression of older
-      turns when no assembly budget is supplied. 0 means use the derived
-      model context window minus completion reserve. Never compresses the
-      last keep_turns turns.
-  keep_turns:
-    type: integer
-    minimum: 1
-    default: 10
-    description: >
-      Recent user turns kept verbatim (never summarized). Configurable per
-      agent; 10 is the usual conversation-buffer default (enough recency
-      for a tool-using agent, not the whole session). The live tool round
-      is in working memory, not this window.
-  hysteresis_ratio:
-    type: number
-    minimum: 0
-    maximum: 1
-    default: 0.1
-    description: >
-      Summarising CM — extra headroom after a compaction before summarizing
-      again. After compressing to keep_turns, new turns accumulate verbatim
-      until the managed payload exceeds the budget times (1 + hysteresis_ratio).
-      The automatic trigger is lowered so this ceiling remains inside the hard
-      context budget. Stops a summary LLM call on every subsequent iteration.
-  summarizer:
-    description: >
-      Sub-plugin of the summarising context manager. Compresses older turns.
-      `llm` (default): spec.models[id=summarizer] if concrete, else
-      experiment.models.summarizer, else this agent's resolved turn model.
-      `drop`: discard older turns, keep keep_turns verbatim. String
-      shorthand (`summarizer: llm`) ≡ `{type: llm}`. Override with
-      `params.model` (a spec.models[].id or a LiteLLM string). See
-      docs/manifests/summarization.md.
-    oneOf:
-      - type: string
-        enum: [llm, drop]
-      - type: object
-        additionalProperties: false
-        properties:
-          type:
-            type: string
-            enum: [llm, drop]
-          model:
-            type: string
-            description: >
-              Shorthand for params.model — spec.models[].id or a LiteLLM
-              model string. Default: summarizer slot, else this agent's
-              resolved turn model.
-          params:
-            type: object
-            additionalProperties: false
-            properties:
-              model:
-                type: string
-                description: >
-                  Model for the summary call. A spec.models[].id (e.g.
-                  summarizer) or a LiteLLM model string. Default: the
-                  summarizer slot (Agent → MAS → experiment.models.summarizer),
-                  else the agent's resolved turn model.
-              instructions:
-                type: string
-                description: >
-                  System prompt for the summary call. Default is the package
-                  constant (preserve facts, decisions, identifiers; plain
-                  prose). Does not change when summarization fires — that
-                  is the history token budget. See docs/manifests/summarization.md.
+  Union of shipped ContextManagerContract plugin kwargs. Used to generate
+  CONTEXT_MANAGER_STRATEGY_PARAM_KEYS. Per-plugin validation is the
+  type-dispatched params schema on the context_manager binding.
+allOf:
+  - $ref: "./context-manager-summarising-strategy.schema.yaml"
+  - $ref: "./context-manager-sliding-window-strategy.schema.yaml"
+  - $ref: "./context-manager-stack-strategy.schema.yaml"

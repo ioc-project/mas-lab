@@ -61,6 +61,8 @@ properties:
       ``api_key_env``, ``password_env``) are secretKeyRef names and must
       be literal env var names, not ``env:`` lookups.
     additionalProperties: true
+    allOf:
+      - $ref: "./fragments/infra-middleware-params-by-id.schema.yaml"
     properties:
       # ── InfraBundle ─────────────────────────────────────────────────────
       entries:
@@ -84,15 +86,7 @@ properties:
         items:
           oneOf:
             - type: string
-            - type: object
-              additionalProperties: false
-              properties:
-                ref:
-                  type: string
-                middleware:
-                  type: string
-                params:
-                  $ref: "./fragments/infra-middleware-params.schema.yaml"
+            - $ref: "./fragments/infra-middleware-inline.schema.yaml"
 
       middleware:
         type: string

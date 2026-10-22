@@ -133,10 +133,11 @@ practical examples.
 
 ### Infra_Middleware
 
-| Class                   | Full module path                                  | Package                |
-| ----------------------- | ------------------------------------------------- | ---------------------- |
-| `FaultInjectMiddleware` | `mas.library.standard.plugins.infra.fault_inject` | `mas-library-standard` |
-| `LlmCacheMiddleware`    | `mas.library.standard.plugins.infra.llm_cache`    | `mas-library-standard` |
+| Class                    | Full module path                                   | Package                |
+| ------------------------ | -------------------------------------------------- | ---------------------- |
+| `FaultInjectMiddleware`  | `mas.library.standard.plugins.infra.fault_inject`  | `mas-library-standard` |
+| `LlmCacheMiddleware`     | `mas.library.standard.plugins.infra.llm_cache`     | `mas-library-standard` |
+| `LlmSchedulerMiddleware` | `mas.library.standard.plugins.infra.llm_scheduler` | `mas-library-standard` |
 
 ### Llm_Provider
 
@@ -285,6 +286,7 @@ practical examples.
 | `ListClickhouseSessionsStep`     | step                 | `mas-library-telemetry` |
 | `LlmCacheMiddleware`             | infra_middleware     | `mas-library-standard`  |
 | `LlmDelegator`                   | engine_tool_provider | `mas-library-standard`  |
+| `LlmSchedulerMiddleware`         | infra_middleware     | `mas-library-standard`  |
 | `LlmSummarizer`                  | summarizer           | `mas-library-standard`  |
 | `LocalAgentComm`                 | agent_comm           | `mas-library-standard`  |
 | `LocalToolProvider`              | tool_provider        | `mas-library-standard`  |

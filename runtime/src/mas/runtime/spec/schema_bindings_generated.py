@@ -121,6 +121,7 @@ INFRA_MIDDLEWARE_PATH_PARAM_KEYS = frozenset(
     'cache_path',
     'miss_log_path',
     'path',
+    'state_path',
     }
 )
 

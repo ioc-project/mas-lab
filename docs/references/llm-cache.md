@@ -4,7 +4,7 @@
 -->
 # LLM cache reference
 
-**Packages:** `mas-runtime` (pipeline, cache file format), `mas-ctl` (ref merge, engine wiring), `mas-library-standard` (`LlmCacheMiddleware` plugin, `type: infra_middleware`) · **Schema:** [`infra-middleware-params.schema.yaml`](../schemas/runtime/fragments/infra-middleware-params.schema.yaml) · **Middleware id:** `llm_cache`
+**Packages:** `mas-runtime` (pipeline, cache file format), `mas-ctl` (ref merge, engine wiring), `mas-library-standard` (`LlmCacheMiddleware` plugin, `type: infra_middleware`) · **Schema:** [`infra-llm-cache-params.schema.yaml`](../schemas/runtime/fragments/infra-llm-cache-params.schema.yaml) · **Middleware id:** `llm_cache`
 
 This page is the full reference for the `llm_cache` infra middleware. It stores model responses on disk, so a repeated request skips the LLM call. Read it to record a run, replay it offline, or share a cache across a deployment. For a walkthrough, see the [hands-on guide](../manifests/llm-cache.md).
 
@@ -172,7 +172,7 @@ spec:
 
 `_load_file` loads the manifest when `kind in {InfraMiddleware, InfraInterceptor}`. `spec.middleware` becomes the pipeline entry `middleware` id. `spec.params` becomes the `params` dict.
 
-Schema: `docs/schemas/runtime/fragments/infra-middleware-params.schema.yaml`.
+Schema: `docs/schemas/runtime/fragments/infra-llm-cache-params.schema.yaml`.
 
 ---
 
@@ -309,7 +309,7 @@ Delete the JSON file to invalidate all entries, or use `write_mode: replace` on 
 | Ref ordering | `ctl/src/mas/ctl/workspace/config.py` (`merge_infra_refs`) |
 | Engine wiring | `ctl/src/mas/ctl/session/engine_factory.py` (`build_engine`, `_wrap_with_infra_pipeline`) |
 | Session resolve | `ctl/src/mas/ctl/session/infra_resolve.py` (`resolve_session_infra`) |
-| Schema | `docs/schemas/runtime/fragments/infra-middleware-params.schema.yaml` |
+| Schema | `docs/schemas/runtime/fragments/infra-llm-cache-params.schema.yaml` |
 | Bundled YAML | `library-standard/src/mas/library/standard/libs/standard/llm-cache.yaml`, `llm-proxy-cached.yaml`, `library-samples/infra/llm-cache-*.yaml` |
 
 ---

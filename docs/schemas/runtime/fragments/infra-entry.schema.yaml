@@ -43,15 +43,7 @@ properties:
     items:
       oneOf:
         - type: string
-        - type: object
-          additionalProperties: false
-          properties:
-            ref:
-              type: string
-            middleware:
-              type: string
-            params:
-              $ref: "../fragments/infra-middleware-params.schema.yaml"
+        - $ref: "./infra-middleware-inline.schema.yaml"
 
   applies_to:
     type: array

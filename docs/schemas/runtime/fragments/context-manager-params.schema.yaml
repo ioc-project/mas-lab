@@ -4,30 +4,10 @@ $schema: "https://json-schema.org/draft-07/schema#"
 $id: "mas/v1#context-manager-params"
 title: ContextManagerParams
 description: >
-  spec.context_manager.params — strategy plugin kwargs plus assembly knobs.
-  Strategy keys instantiate the CM plugin; assembly keys are consumed by the
-  context assembler (see fragment schemas).
-
-  The two fragments omit ``additionalProperties: false`` so draft-07 ``allOf``
-  can union them (e.g. ``keep_turns`` + ``trimmer`` + ``summarizer.params.model``).
-  Nested objects (``trimmer``, ``summarizer``) still reject unknown keys. This
-  schema re-declares the full set of allowed top-level keys (validated by the
-  fragments above) so a misspelled top-level key is still rejected here —
-  ``additionalProperties`` only looks at ``properties``/``patternProperties``
-  declared on this same schema object, not at the ``allOf`` branches.
+  Default spec.context_manager.params. Assembly knobs are always typed.
+  Extra keys stay allowed so a third-party context manager can carry its
+  own constructor kwargs. Shipped plugins replace this object with a closed
+  per-plugin schema via if/then on the sibling ``type`` field.
 allOf:
   - $ref: "./context-manager-assembly-params.schema.yaml"
-  - $ref: "./context-manager-strategy-params.schema.yaml"
-additionalProperties: false
-properties:
-  working_memory_messages: {}
-  max_in_turn_messages: {}
-  trimmer: {}
-  working_memory_ref: {}
-  max_turns: {}
-  window_size: {}
-  max_messages: {}
-  summary_threshold: {}
-  keep_turns: {}
-  hysteresis_ratio: {}
-  summarizer: {}
+additionalProperties: true

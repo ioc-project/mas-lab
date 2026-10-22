@@ -1,0 +1,38 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "infra/v1#llm-scheduler-params"
+title: LlmSchedulerMiddlewareParams
+description: >
+  Constructor kwargs for the ``llm_scheduler`` infra middleware plugin.
+  Selected when the sibling ``middleware`` id is ``llm_scheduler``
+  (aliases ``rate_limit``, ``rate_limiter``, ``llm_pace``).
+type: object
+additionalProperties: false
+properties:
+  max_in_flight:
+    type: integer
+    minimum: 0
+    description: Concurrent live LLM requests per bucket. 0 disables the in-flight cap.
+  requests_per_minute:
+    type: number
+    minimum: 0
+    description: Token-bucket RPM. 0 is concurrency-only.
+  keys:
+    type: array
+    items:
+      type: string
+      enum: [provider, model, user]
+    description: Bucket dimensions for the live-LLM scheduler.
+  user:
+    type: string
+  provider:
+    type: string
+  timeout_s:
+    type: number
+    minimum: 0
+    description: Seconds to wait for a live slot before TimeoutError.
+  state_path:
+    type: [string, "null"]
+    x-filesystem-path: true
+    description: Shared scheduler JSON store (plus a sibling .lock file).

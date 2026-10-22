@@ -13,6 +13,8 @@ title: OverlayInfraPatch
 # already-typed declaration.
 type: object
 additionalProperties: false
+allOf:
+  - $ref: "./infra-middleware-params-by-id.schema.yaml"
 properties:
   entries:
     $ref: "../infra.schema.yaml#/properties/spec/properties/entries"

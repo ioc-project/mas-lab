@@ -20,7 +20,7 @@ Every file under `docs/schemas/` is **hand-written**. It is the single source of
 
 | Generated file | Generator | Inputs |
 | --- | --- | --- |
-| `runtime/src/mas/runtime/spec/schema_bindings_generated.py` (binding key sets) | `python scripts/gen_schema_artifacts.py` (`--check` fails when stale) | `runtime/fragments/*-binding`, `context-manager-*-params`, `infra-middleware-params` |
+| `runtime/src/mas/runtime/spec/schema_bindings_generated.py` (binding key sets) | `python scripts/gen_schema_artifacts.py` (`--check` fails when stale) | `runtime/fragments/*-binding`, `context-manager-*-params`, `infra-*-params` |
 | `runtime/src/mas/runtime/spec/schema_defaults_generated.py` (default constants) | same | `execution-binding`, `context-manager-*-params`, `agent.schema.yaml` |
 | `ui/src/types/agent-types.ts`, `ui/src/types/mas-types.ts` | `yarn generate:types` in `ui/` | Resolved `agent` / `mas` schemas from `mas-lab serve` `GET /api/schemas/{id}?resolved=1` |
 

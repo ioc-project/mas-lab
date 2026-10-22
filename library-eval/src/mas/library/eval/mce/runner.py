@@ -35,6 +35,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from mas.library.eval.mce.catalog import run_mce_class, session_scope
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
@@ -202,6 +203,13 @@ def install_openai_llm_service(
     from openai import OpenAI
 
     _client = OpenAI(api_key=effective_api_key, base_url=effective_api_base)
+    try:
+        from mas.runtime.engine.llm_scheduler import install_policy_from_pipeline
+
+        proxy, _ws = _resolve_infra_proxy()
+        install_policy_from_pipeline(list((proxy or {}).get("pipeline") or []))
+    except Exception as exc:
+        logger.warning("llm_scheduler policy not installed: %s", exc)
     _openai_client = _client
     _openai_base_url = str(effective_api_base or "")
     _openai_api_key = str(effective_api_key or "")
@@ -217,7 +225,12 @@ def install_openai_llm_service(
         model = self.model or effective_model
 
         def _once() -> Any:
-            return _client.chat.completions.create(model=model, messages=messages, **{**_output_kwargs, **kwargs})
+            return paced_live_call(
+                lambda: _client.chat.completions.create(
+                    model=model, messages=messages, **{**_output_kwargs, **kwargs}
+                ),
+                model=model,
+            )
 
         try:
             return _call_with_mce_retry(_once, model=model)
@@ -403,6 +416,20 @@ def _call_with_mce_retry(fn, *, model: str):
     )
 
 
+def paced_live_call(fn, *, model: str):
+    """Run a live judge HTTP call under the shared llm_scheduler slot."""
+    from mas.runtime.engine.llm_scheduler import llm_slot
+
+    provider = ""
+    if _openai_base_url:
+        try:
+            provider = urlparse(_openai_base_url).hostname or ""
+        except Exception:
+            provider = _openai_base_url
+    with llm_slot(model=model, provider=provider):
+        return fn()
+
+
 def _llm_call_with_retry(client: Any, model: str, messages: list) -> str:
     """Call the OpenAI-compatible chat endpoint with exponential-backoff retry.
 
@@ -411,8 +438,13 @@ def _llm_call_with_retry(client: Any, model: str, messages: list) -> str:
     """
 
     def _once() -> str:
-        resp = client.chat.completions.create(model=model, messages=messages, **output_token_kwargs(model))
-        return resp.choices[0].message.content or ""
+        def _create() -> str:
+            resp = client.chat.completions.create(
+                model=model, messages=messages, **output_token_kwargs(model)
+            )
+            return resp.choices[0].message.content or ""
+
+        return paced_live_call(_create, model=model)
 
     try:
         return _call_with_mce_retry(_once, model=model)

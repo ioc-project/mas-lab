@@ -1,0 +1,14 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#context-manager-stack-strategy"
+title: StackContextManagerStrategyParams
+description: >
+  Constructor kwargs for the ``stack`` context-manager plugin
+  (alias ``full-history``).
+type: object
+properties:
+  max_messages:
+    type: integer
+    minimum: 1
+    description: Cap total past messages.

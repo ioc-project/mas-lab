@@ -1,0 +1,78 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#context-manager-summarising-strategy"
+title: SummarisingContextManagerStrategyParams
+description: Constructor kwargs for the ``summarising`` context-manager plugin.
+type: object
+properties:
+  keep_turns:
+    type: integer
+    minimum: 1
+    default: 10
+    description: >
+      Recent user turns kept verbatim (never summarized). Configurable per
+      agent; 10 is the usual conversation-buffer default (enough recency
+      for a tool-using agent, not the whole session). The live tool round
+      is in working memory, not this window.
+  hysteresis_ratio:
+    type: number
+    minimum: 0
+    maximum: 1
+    default: 0.1
+    description: >
+      Extra headroom after a compaction before summarizing again. After
+      compressing to keep_turns, new turns accumulate verbatim until the
+      managed payload exceeds the budget times (1 + hysteresis_ratio).
+      The automatic trigger is lowered so this ceiling remains inside the hard
+      context budget. Stops a summary LLM call on every subsequent iteration.
+  summary_threshold:
+    type: integer
+    minimum: 0
+    description: >
+      Token estimate that triggers compression of older turns when no
+      assembly budget is supplied. 0 means use the derived model context
+      window minus completion reserve. Never compresses the last keep_turns
+      turns.
+  summarizer:
+    description: >
+      Sub-plugin of the summarising context manager. Compresses older turns.
+      `llm` (default): spec.models[id=summarizer] if concrete, else
+      experiment.models.summarizer, else this agent's resolved turn model.
+      `drop`: discard older turns, keep keep_turns verbatim. String
+      shorthand (`summarizer: llm`) ≡ `{type: llm}`. Override with
+      `params.model` (a spec.models[].id or a LiteLLM string). See
+      docs/manifests/summarization.md.
+    oneOf:
+      - type: string
+        enum: [llm, drop]
+      - type: object
+        additionalProperties: false
+        properties:
+          type:
+            type: string
+            enum: [llm, drop]
+          model:
+            type: string
+            description: >
+              Shorthand for params.model — spec.models[].id or a LiteLLM
+              model string. Default: summarizer slot, else this agent's
+              resolved turn model.
+          params:
+            type: object
+            additionalProperties: false
+            properties:
+              model:
+                type: string
+                description: >
+                  Model for the summary call. A spec.models[].id (e.g.
+                  summarizer) or a LiteLLM model string. Default: the
+                  summarizer slot (Agent → MAS → experiment.models.summarizer),
+                  else the agent's resolved turn model.
+              instructions:
+                type: string
+                description: >
+                  System prompt for the summary call. Default is the package
+                  constant (preserve facts, decisions, identifiers; plain
+                  prose). Does not change when summarization fires — that
+                  is the history token budget. See docs/manifests/summarization.md.

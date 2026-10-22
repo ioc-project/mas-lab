@@ -48,7 +48,11 @@ def complete_json(
     ``install_openai_llm_service``). Retries on malformed JSON by appending a
     "JSON only" turn. Does not construct a second HTTP client.
     """
-    from mas.library.eval.mce.runner import get_effective_judge_model, get_openai_client
+    from mas.library.eval.mce.runner import (
+        get_effective_judge_model,
+        get_openai_client,
+        paced_live_call,
+    )
 
     client = get_openai_client()
     model = get_effective_judge_model()
@@ -62,11 +66,17 @@ def complete_json(
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
-        try:
-            response = client.chat.completions.create(**kwargs, response_format={"type": "json_object"})
-        except Exception:
-            logger.debug("JSON response_format unsupported; retrying without it")
-            response = client.chat.completions.create(**kwargs)
+
+        def _create(call_kwargs: dict[str, Any] = kwargs) -> Any:
+            try:
+                return client.chat.completions.create(
+                    **call_kwargs, response_format={"type": "json_object"}
+                )
+            except Exception:
+                logger.debug("JSON response_format unsupported; retrying without it")
+                return client.chat.completions.create(**call_kwargs)
+
+        response = paced_live_call(_create, model=model)
         last_text = ""
         try:
             last_text = response.choices[0].message.content or ""

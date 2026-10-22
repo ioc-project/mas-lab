@@ -361,6 +361,17 @@ plugins:
       - llm_cache
       - llm-cache
   - type: infra_middleware
+    name: llm_scheduler
+    urn: mas.infra_middleware.llm_scheduler
+    module: mas.library.standard.plugins.infra.llm_scheduler
+    class: LlmSchedulerMiddleware
+    shortcuts:
+      - llm_scheduler
+      - llm-scheduler
+      - rate_limit
+      - rate_limiter
+      - llm_pace
+  - type: infra_middleware
     name: fault_inject
     urn: mas.infra_middleware.fault_inject
     module: mas.library.standard.plugins.infra.fault_inject

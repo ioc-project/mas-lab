@@ -1,0 +1,36 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "infra/v1#middleware-params-by-id"
+title: InfraMiddlewareParamsById
+description: >
+  Mixin for any object that has sibling ``middleware`` and ``params``.
+  Known registry ids get that plugin's param schema; unknown ids stay open.
+allOf:
+  - if:
+      properties:
+        middleware:
+          enum: [llm_cache, llm-cache]
+      required: [middleware]
+    then:
+      properties:
+        params:
+          $ref: "./infra-llm-cache-params.schema.yaml"
+  - if:
+      properties:
+        middleware:
+          enum: [llm_scheduler, llm-scheduler, rate_limit, rate_limiter, llm_pace]
+      required: [middleware]
+    then:
+      properties:
+        params:
+          $ref: "./infra-llm-scheduler-params.schema.yaml"
+  - if:
+      properties:
+        middleware:
+          enum: [fault_inject, fault-inject, chaos_lite, chaos-lite]
+      required: [middleware]
+    then:
+      properties:
+        params:
+          $ref: "./infra-fault-inject-params.schema.yaml"

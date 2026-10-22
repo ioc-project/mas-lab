@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "infra/v1#middleware-inline"
+title: InfraMiddlewareInline
+description: >
+  Inline interceptor / pipeline step. ``params`` belongs to the plugin named
+  by ``middleware`` (or by the referenced InfraMiddleware leaf).
+type: object
+additionalProperties: false
+properties:
+  ref:
+    type: string
+  middleware:
+    type: string
+  params:
+    $ref: "./infra-middleware-params.schema.yaml"
+allOf:
+  - $ref: "./infra-middleware-params-by-id.schema.yaml"

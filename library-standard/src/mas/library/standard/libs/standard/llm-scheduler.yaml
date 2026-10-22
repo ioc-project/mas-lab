@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: InfraMiddleware
+
+metadata:
+  name: llm-scheduler
+  description: >
+    Pace live LLM_CALL after routing and after llm_cache. Shared file-backed
+    in-flight / RPM caps for runtime and pipeline judge calls.
+
+spec:
+  middleware: llm_scheduler
+  applies_to:
+    - LLM_CALL
+  params:
+    max_in_flight: 8
+    requests_per_minute: 0
+    keys: [provider, model]

@@ -180,6 +180,34 @@ properties:
                 default: []
                 items:
                   type: string
+            allOf:
+              - if:
+                  properties:
+                    type:
+                      enum: [summarising, summarizing]
+                  required: [type]
+                then:
+                  properties:
+                    params:
+                      $ref: "./fragments/context-manager-summarising-params.schema.yaml"
+              - if:
+                  properties:
+                    type:
+                      enum: [sliding-window, sliding_window]
+                  required: [type]
+                then:
+                  properties:
+                    params:
+                      $ref: "./fragments/context-manager-sliding-window-params.schema.yaml"
+              - if:
+                  properties:
+                    type:
+                      enum: [stack, full-history, full_history]
+                  required: [type]
+                then:
+                  properties:
+                    params:
+                      $ref: "./fragments/context-manager-stack-params.schema.yaml"
 
       assembler:
         description: >

@@ -41,7 +41,11 @@ spec:
 
 Spec keys have no `_plugin` suffix. Registry type names match the slot. A sub-plugin (today only `context_manager.params.summarizer`) uses the same shorthand: `summarizer: llm` is the same as `{type: llm}`.
 
-`params` holds constructor and kernel keyword arguments. `design_pattern` also accepts `config` as an alias.
+`params` holds constructor and kernel keyword arguments for **that** plugin.
+`summarising` rejects `max_messages`; `stack` rejects `summarizer`. Assembly
+knobs (`trimmer`, `working_memory_messages`) are shared. An unknown plugin id
+keeps extra keys so a third-party context manager can carry its own kwargs.
+`design_pattern` also accepts `config` as an alias.
 `type` and `ref` use the same lookup: a registered name, an alias (`full-history`, `tot`, ...), or the full plugin URN (`mas.cm.stack`). Write one of them, not both.
 File paths, `module://` and `oci://` locators are not resolved in this release. To use your own class, register it in a library manifest (see [Libraries](../libraries.md)) and name it here.
 
