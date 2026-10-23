@@ -24,7 +24,7 @@ tasks:
     dir: "{{.ROOT_DIR}}"
     cmds:
       - bash -n library-ioa/compliance/mcp/mcp-conformance.sh
-      - uv run --no-project --with pyyaml python -c "import yaml; [yaml.safe_load(open(path, encoding='utf-8')) for path in ['.github/workflows/test.yml', '.github/workflows/publish.yml']]; print('workflow YAML OK')"
+      - uv run --no-project --with pyyaml python -c "import yaml; [yaml.safe_load(open(path, encoding='utf-8')) for path in ['.github/workflows/test.yml', '.github/workflows/compliance.yml', '.github/workflows/nightly.yml', '.github/workflows/publish.yml', '.github/actions/setup-mas/action.yml', '.github/actions/fetch-base/action.yml']]; print('workflow YAML OK')"
 
   unit-tests:
     desc: Run MCP unit tests outside the compliance tree

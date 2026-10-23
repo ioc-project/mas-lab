@@ -1,0 +1,75 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+name: Nightly
+
+on:
+  schedule:
+    - cron: "17 5 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  unit-311:
+    name: Unit (3.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.11"
+          install-dev: "true"
+      - run: task verify-unit
+
+  library:
+    name: Library (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: standard
+            dir: library-standard
+            cov: mas.library.standard
+            fail_under: "90"
+          - name: eval
+            dir: library-eval
+            cov: mas.library.eval
+            fail_under: "90"
+          - name: ioa
+            dir: library-ioa
+            cov: library_ioa
+            fail_under: "90"
+          - name: telemetry
+            dir: library-telemetry
+            cov: mas.library.telemetry
+            fail_under: "90"
+          - name: kg
+            dir: library-kg
+            cov: mas.library.kg
+            fail_under: "80"
+          - name: skills
+            dir: library-skills
+            cov: mas.library.skills
+            fail_under: "90"
+          - name: samples
+            dir: library-samples
+            cov: mas.library.samples
+            fail_under: "90"
+          - name: lab
+            dir: library-lab
+            cov: mas.library.lab
+            fail_under: "90"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+          install-dev: "true"
+      - run: task verify-library LIB=${{ matrix.dir }} COV=${{ matrix.cov }} FAIL_UNDER=${{ matrix.fail_under }}
+
+  compliance:
+    uses: ./.github/workflows/compliance.yml
+    secrets: inherit

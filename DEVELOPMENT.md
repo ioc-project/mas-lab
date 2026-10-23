@@ -58,11 +58,27 @@ With go-task installed, use these tasks:
 
 | Task | What it runs |
 | --- | --- |
-| `task verify-unit` | Unit tests of all packages plus import and manifest gates |
-| `task verify-functional` | Lab smoke runs, golden runs, tutorial CLI tests |
-| `task ci` | The same gates as the CI workflow |
+| `task verify-lint` | Lockfile, path literals, Ruff on changed Python. Run this before a push. |
+| `task verify-unit` | Core unit tests (runtime, ctl, lab core/bench) plus import and manifest gates |
+| `task verify-coverage` | `verify-unit` with `coverage.xml`, then the 90% changed-line gate |
+| `task verify-library` | One library: `LIB=library-standard COV=mas.library.standard` |
+| `task verify-controller` | Controller unit tests |
+| `task verify-lab-smoke` | Lab smoke + envelope parity + cache invalidation |
+| `task verify-golden-runs` | Golden `events.jsonl` fingerprints |
+| `task verify-tutorials` | Tutorial CLI tests |
+| `task validate` | Experiment dry-runs |
+| `task verify-hitl-gate` | Scripted HITL gate |
+| `task ci-fast` | `verify-lint` then `verify-unit` |
+| `task ci` | Optional sequential run of every `verify-*` task. GitHub does not run this. |
+| `task install-hooks` | Pre-push hook that runs `task verify-lint` |
 | `task docs-gen` | Regenerate `docs/packages-reference.md`, `docs/plugins-reference.md` and path snippets; commit the result when you touch packages, plugins or path defaults |
 | `task docs-serve` | Serve the documentation site locally |
+
+GitHub Actions runs those `verify-*` tasks as separate jobs, not `task ci`. Lint starts immediately. Jobs wait for lint and run in parallel. Path groups (`scripts/ci_paths.py`) skip jobs the diff does not need: a docs PR does not run unit tests; a runtime PR does not run A2A/MCP or other libraries; each `library-*` tree has its own lint, pytest, and changed-line coverage job. MCP and A2A also run on a weekday nightly and on a published release. Python 3.11 runs on `main` (when unit tests run) and on nightly. Pushes to `main` also enforce the package 90% coverage report on the core unit job.
+
+The merge proof is the GitHub check named **ci-summary** (the repository ruleset on `main` requires that exact name). A path flag of true means that job must succeed; skipped is a failure. A path flag of false allows skipped. `changes` and `lint` must succeed.
+
+Before you push, run `task verify-lint` (`task install-hooks` installs that as a pre-push hook). GitHub Actions runs the individual `verify-*` tasks as parallel jobs. `task ci` is optional and sequential; there is no local stamp that substitutes for the GitHub run.
 
 ## Code style
 
