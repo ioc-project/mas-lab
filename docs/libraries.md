@@ -5,8 +5,10 @@
 # MAS Lab packages
 
 This page lists the installable Python packages of MAS Lab and what each does.
-Most users only call the two CLIs. Extension authors add plugins, pipeline steps,
-or libraries on top of the same contracts.
+Most users call `mas-ctl` and `mas-lab`. `mas-runtime` is the kernel library
+(its console script only points at `mas-ctl`). Extension authors add plugins,
+pipeline steps, or libraries on top of the same contracts. Surfaces:
+[command-line index](cli/index.md).
 
 Install every package from a repository checkout:
 
@@ -61,7 +63,7 @@ extension plugins and standard plots) is separate. Add it when you need it.
 | `mas-library-telemetry` | `library-telemetry/` | — | Native events to OpenTelemetry conversion and OTLP export |
 
 The PyPI upload is still pending (see the
-[README](https://github.com/outshift-open/mas-lab#get-started)). Until then,
+[README](https://github.com/ioc-project/mas-lab#get-started)). Until then,
 install from a checkout. After the upload, `uv pip install mas-lab` pulls the
 runtime, control plane, and lab stack. The generated list with dependencies and
 extras is in [packages-reference.md](packages-reference.md).
@@ -78,10 +80,10 @@ extras is in [packages-reference.md](packages-reference.md).
 | YAML manifests | [References](references/index.md) |
 | Paper reproduction | [Paper labs](paper/index.md) |
 | Library discovery | [library-discovery.md](library-discovery.md) |
-| Runtime development | [`runtime/docs/`](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/index.md) in the repository |
-| Control plane | [`ctl/docs/`](https://github.com/outshift-open/mas-lab/blob/main/ctl/docs/user-guide.md) in the repository |
+| Runtime development | [`runtime/docs/`](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/index.md) in the repository |
+| Control plane | [`ctl/docs/`](https://github.com/ioc-project/mas-lab/blob/main/ctl/docs/user-guide.md) in the repository |
 
-Site: [outshift-open.github.io/mas-lab](https://outshift-open.github.io/mas-lab/)
+Site: [ioc-project.github.io/mas-lab](https://ioc-project.github.io/mas-lab/)
 
 ---
 
@@ -99,7 +101,7 @@ Manifest field reference: [References](references/index.md).
 
 | Area | Extend | Entry points |
 |------|--------|--------------|
-| **Agent runtime** | Design patterns, tools, overlays, observability | Runtime plugin registry — see [`runtime/docs/`](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/index.md) |
+| **Agent runtime** | Design patterns, tools, overlays, observability | Runtime plugin registry — see [`runtime/docs/`](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/index.md) |
 | **Benchmark pipelines** | Custom step types (metrics, plots, reports) | Pipeline `type:` in `experiment.yaml` — see [lab manifests](manifests/pipeline.md) |
 | **Evaluation** | Session-level judges and metrics | `mas-library-eval` / MCE integration — see [Tutorial 3](tutorials/03-experiments-and-analysis/README.md) |
 | **Deployment** | Controller backends for the lab UI | `mas.lab.controller.plugins` entry-point group |

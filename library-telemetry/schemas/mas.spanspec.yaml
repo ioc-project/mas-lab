@@ -28,7 +28,7 @@ levels:
     url: "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
   - id: L2
     name: gen_ai_semconv
-    description: "observe-sdk / GenAI attribute contract required for OXP ingestion"
+    description: "observe-sdk / GenAI attribute contract required for SCOPE ingestion"
   - id: L3
     name: mas_native_roundtrip
     description: "MAS Framework observability — full MAS span taxonomy and attributes"
@@ -41,7 +41,7 @@ global_attributes:
   - level: L2
     required:
       - application_id # ClickHouse DEFAULT SpanAttributes['application_id']
-      - session.id # ClickHouse DEFAULT; OXP groups apps by this
+      - session.id # ClickHouse DEFAULT; SCOPE groups apps by this
     recommended: []
   - level: L3
     required: []
@@ -297,20 +297,20 @@ shapes:
         required: []
         recommended: [mas.agent.id, mas.context.source, mas.context.tokens]
 
-# ── OXP ioa_observe naming convention (span names matched by SUFFIX) ────────
+# ── SCOPE ioa_observe naming convention (span names matched by SUFFIX) ────────
 #
-# OXP-API identifies span types by the suffix of SpanName after the last dot:
+# SCOPE-API identifies span types by the suffix of SpanName after the last dot:
 #   - SpanName LIKE '%.agent' → agent span
 #   - SpanName LIKE '%.chat'  → LLM/chat span (token counting, model listing)
 #   - SpanName LIKE '%.tool'  → tool span
 #
 # These shapes are matched by `span_name_suffix` (not exact name).
-# They express L3 OXP requirements: what must be present for the OXP UI
+# They express L3 SCOPE requirements: what must be present for the SCOPE UI
 # to display agents, token metrics, and span details.
 
 suffix_shapes:
   - span_name_suffix: ".graph"
-    description: "Multi-agent topology span (@graph / MAS Graph) — OXP renders the agent graph from gen_ai.ioa.graph"
+    description: "Multi-agent topology span (@graph / MAS Graph) — SCOPE renders the agent graph from gen_ai.ioa.graph"
     levels:
       - level: L2
         required:
@@ -325,7 +325,7 @@ suffix_shapes:
           - mas.boundary
 
   - span_name_suffix: ".agent"
-    description: "ioa_observe agent span — triggers OXP agents listing and detail UI"
+    description: "ioa_observe agent span — triggers SCOPE agents listing and detail UI"
     levels:
       - level: L3
         required:
@@ -339,7 +339,7 @@ suffix_shapes:
           - mas.boundary
 
   - span_name_suffix: ".chat"
-    description: "ioa_observe LLM/chat span — triggers OXP token/cost charts and model listing"
+    description: "ioa_observe LLM/chat span — triggers SCOPE token/cost charts and model listing"
     levels:
       - level: L1
         required:
@@ -359,7 +359,7 @@ suffix_shapes:
           - mas.boundary
 
   - span_name_suffix: ".tool"
-    description: "ioa_observe tool span — triggers OXP tool detail UI"
+    description: "ioa_observe tool span — triggers SCOPE tool detail UI"
     levels:
       - level: L3
         required:
@@ -378,7 +378,7 @@ suffix_shapes:
 
 consistency_rules:
   - name: graph_span_present
-    description: "Every trace must contain a '<app>.graph' topology span (OXP renders the agent graph from gen_ai.ioa.graph; a trace without it cannot be processed)"
+    description: "Every trace must contain a '<app>.graph' topology span (SCOPE renders the agent graph from gen_ai.ioa.graph; a trace without it cannot be processed)"
     level: L2
     check: span_present
     span_name_suffix: ".graph"

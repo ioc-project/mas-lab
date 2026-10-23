@@ -4,12 +4,12 @@
 
 Two modes:
 
-* ``default`` — only the OXP / observe-sdk native OTel categories
+* ``default`` — only the SCOPE / observe-sdk native OTel categories
   (``*.agent`` / ``*.chat`` / ``*.tool`` / ``*.graph`` / ``session.*``).
 * ``complete`` — every export layer plus observe-sdk MAS extensions
   (``*.memory`` / ``*.processing`` / ``*.context`` / ``*.governance`` /
   ``*.skill`` / ``*.rag``). Stock ``norm.normalize()`` still owns the
-  default categories; MAS materializes the extension suffixes that OXP
+  default categories; MAS materializes the extension suffixes that SCOPE
   does not yet dispatch.
 """
 

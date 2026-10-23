@@ -36,7 +36,7 @@ properties:
             description: >
               DEPRECATED. OpenAI-style [{role, content}] from older
               datasets. Use a string or list of strings. Loader warns.
-              See https://outshift-open.github.io/mas-lab/manifests/dataset-migration/
+              See https://ioc-project.github.io/mas-lab/manifests/dataset-migration/
             minItems: 1
             items:
               type: object

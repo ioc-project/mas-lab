@@ -4,167 +4,67 @@
 -->
 # User guide
 
-This page shows how to install MAS Lab and run agents, multi-agent teams, and
-experiments. Read it after the [home page](index.md).
+Day-to-day use after you have a working install. Install first:
+[Getting started](getting-started.md).
 
-You declare agents and experiments in YAML files (manifests). `mas-ctl` runs
-agents and teams. `mas-lab` runs experiments and analyses their results with
-benchmark pipelines.
+You declare agents and experiments in YAML (manifests). `mas-ctl` runs agents
+and teams. `mas-lab` runs experiments. The web UI and live dashboard talk to
+the controller API.
 
-**Related:** [Architecture](architecture.md) · [Labs](labs.md) · [Labs vs libraries](labs-and-libraries.md) ·
-[How to write manifests](manifests/writing-manifests.md) ·
-[CLI](cli/index.md) · [mas-ctl options](cli/mas-ctl.md) ·
-[config.yaml](references/config.yaml.md) ·
-[References](references/index.md) · [Web UI](ui/index.md) ·
+**Related:** [Writing manifests](manifests/writing-manifests.md) ·
+[Labs vs libraries](labs-and-libraries.md) ·
+[User configuration](user-config.md) ·
+[Command line](cli/index.md) ·
+[Web UI](ui/index.md) ·
 [Live dashboard](ui/live.md) ·
-[Run logs](cli/observability.md) · [Paper labs](paper/index.md) · [Glossary](glossary.md)
+[Controller API](cli/serve.md) ·
+[Glossary](glossary.md) ·
+[Open standards](standards/index.md)
 
 ---
 
 ## Ways to work with MAS Lab
 
-Every entry point needs a working environment first. Complete
-**[Tutorial 0 — Environment setup](tutorials/00-environment-setup/README.md)**
-once (Docker or developer install, LLM credentials). It covers the CLI and the
-web UI.
+Install once ([Getting started](getting-started.md) or
+[Tutorial 0](tutorials/00-environment-setup/README.md)). Then pick a surface
+from the left menu:
 
-### Hands-on tutorials
+- **Guides** — manifests, labs vs libraries, user configuration
+- **Command line** — how the surfaces fit together ([index](cli/index.md))
+- **Interfaces** — [Web UI](ui/index.md), [live dashboard](ui/live.md)
+  (`task demo-ui`), [TUI](ctl/tui.md)
 
-Learn step by step: one agent, then a team, then an experiment.
+Flag tables, compile, overrides, observability, and the controller API are
+[References → CLI](references/index.md#cli).
 
-| | Tutorial | What you will do |
-| --- | ---------- | ------------------ |
-| 0 | [Environment setup](tutorials/00-environment-setup/README.md) | Install and verify your environment |
-| 1 | [Build an agent](tutorials/01-building-an-agent/README.md) | Author a manifest and chat with your agent |
-| 2 | [Orchestrate your MAS](tutorials/02-creating-a-mas/README.md) | Define a team and run it end to end |
-| 3 | [Run an experiment](tutorials/03-experiments-and-analysis/README.md) | Run a benchmark and inspect results |
-
-Tutorials 4–14 cover MCP, A2A, skills, telemetry, knowledge graphs, evaluation,
-sessions, subagents, control, and governance. See the [tutorials index](tutorials/index.md).
-
-### Paper labs
-
-Reproduce the experiments of the MAS Lab article. Three labs under `labs/`
-match Section 5 of the paper.
-
-[Paper labs & reproducibility](paper/index.md)
-
-### Web UI
-
-Design agents and experiments, browse manifests, and inspect benchmark runs in a
-browser. It starts with the Docker stack from Tutorial 0.
-
-[Web UI guide](ui/index.md)
-
-### Live dashboard
-
-Shows topology, the event log, metrics, and chat for a running session or a
-finished run. It is separate from the authoring web UI.
-
-[Live dashboard](ui/live.md)
+Hands-on path: [Discover](discover/index.md) (tutorials, labs, IoC integrations).
+Paper reproduction: [Paper](paper/index.md).
 
 ---
 
-## Command-line tools
+## Command line and interfaces
 
-| CLI | Package | Use for |
-| ----- | --------- | --------- |
-| `mas-ctl` | `ctl/` | Chat, TUI, compile, compose, validate, `run-mas`, `serve` — [options](cli/mas-ctl.md) |
-| `mas-lab` | `lab/` | Benchmarks, pipelines, telemetry, plots, `init` — [CLI overview](cli/index.md#mas-lab) |
-| `mas-mcp` | `library-ioa/` | Serve a tool manifest over MCP and call MCP servers (see [MCP](#running-tools-through-mcp)) |
+Topic map: [command-line index](cli/index.md).
+Flag tables: [References → CLI](references/index.md#cli).
 
-`mas-runtime` (`runtime/`) is the kernel library you embed in Python. Its
-`mas-runtime` console script only prints a pointer to `mas-ctl`.
+| Surface | Use for |
+|---------|---------|
+| [`mas-runtime`](cli/mas-runtime.md) | Kernel library. The console script only points at `mas-ctl`. |
+| [`mas-ctl`](cli/mas-ctl.md) | Chat, TUI, validate, compile, compose, `run-mas`, A2A `serve` |
+| [`mas-lab`](cli/mas-lab.md) | `init`, benchmarks, telemetry, plots, `kg`, `eval` |
+| `mas-mcp` | MCP tool server (see [MCP](#running-tools-through-mcp)) |
+| [Web UI](ui/index.md) | Browser studio |
+| [Live dashboard](ui/live.md) | `task demo-ui` / `mas-lab demo-ui` |
+| [TUI](ctl/tui.md) | `mas-ctl tui` |
+| [Controller API](cli/serve.md) | `mas-lab serve` — REST backend for both browser surfaces |
 
-Benchmarking is always `mas-lab`, never `mas-ctl`. Full map: [cli/index.md](cli/index.md).
-
----
-
-## Included libraries
-
-- `mas-runtime` — kernel library (contracts, plugins, design patterns)
-- `mas-ctl` — control plane CLI
-- `mas-lab` — benchmarks and pipelines (pulls `mas-lab-core`, `mas-lab-bench`,
-  `mas-lab-controller`, `mas-library-eval`)
-- `mas-library-standard` — flavours, overlays, infra bundles
-- `mas-library-samples` — sample apps and datasets
-- `mas-library-lab` — lab extension plugins and standard plots
-- `mas-library-skills`, `mas-library-ioa`, `mas-library-kg`,
-  `mas-library-telemetry` — skills, MCP bridge, knowledge-graph and
-  OpenTelemetry (trace standard) pipelines
+Benchmarking is always `mas-lab`, never `mas-ctl`. Install paths:
+[Getting started](getting-started.md). Package map:
+[libraries.md](libraries.md).
 
 A lab is a folder of experiments. A library is reusable code and YAML. See
-[labs-and-libraries.md](labs-and-libraries.md) for when to create each. For the
-ways to reference a manifest (inline, file, `LIBRARY:` id, `name@version`), see
+[labs-and-libraries.md](labs-and-libraries.md). Manifest refs:
 [writing-manifests.md](manifests/writing-manifests.md).
-
-Full package map: [libraries.md](libraries.md).
-
----
-
-## Install
-
-### Docker (recommended for new users)
-
-```bash
-git clone https://github.com/outshift-open/mas-lab.git && cd mas-lab
-cd docker && cp .env.example .env
-# Edit .env and set OPENAI_API_KEY if you plan to call a live model
-docker compose build backend
-```
-
-Then follow [Tutorial 0](tutorials/00-environment-setup/README.md) for workspace
-setup and your first `mas-ctl` commands.
-
-Mount your project at `/workspace` and persistent data at `/data` via
-`MAS_WORKSPACE_MOUNT` and `MAS_DATA_MOUNT` in `docker/.env`.
-See [docker/README.md](https://github.com/outshift-open/mas-lab/blob/main/docker/README.md).
-
-**Start the web UI** (same compose stack):
-
-```bash
-docker compose up --build
-# UI http://localhost:8080 · API http://localhost:8090
-```
-
-See [Web UI](ui/index.md) for what you can do in the browser.
-
-### From source (developers)
-
-Install the packages normally and refer to sample apps by library reference
-(`samples:apps/trip-planner/mas.yaml`). Use editable installs only when you
-change MAS Lab itself.
-
-Install from a development checkout:
-
-```bash
-uv sync --all-packages
-
-# Optional but recommended: avoid prefixing every command with `uv run`
-export PATH="$PWD/.venv/bin:$PATH"
-
-# Verify command resolution
-mas-runtime --help >/dev/null
-mas-ctl --help >/dev/null
-mas-lab --help >/dev/null
-```
-
-Editable installs per package when developing:
-
-```bash
-uv pip install -e runtime -e ctl -e library-standard -e library-lab \
-  -e lab/components/core -e lab/components/bench -e lab/components/controller -e lab
-```
-
-Or use `task install` / `task install-dev` from the repository root (see
-[DEVELOPMENT.md](https://github.com/outshift-open/mas-lab/blob/main/DEVELOPMENT.md)).
-
-Install from a package index (not available until the first PyPI upload; use
-Docker or a checkout until then):
-
-```bash
-uv pip install mas-lab mas-library-standard mas-library-samples
-```
 
 ---
 
@@ -301,7 +201,7 @@ Use MCP when infra should own the tool or when the tool needs its own process.
 Use a local provider when you debug, because everything runs in one process. The
 agent sees the same interface in both modes.
 
-See the MCP library docs in [library-ioa/README.md](https://github.com/outshift-open/mas-lab/blob/main/library-ioa/README.md),
+See [Open standards → MCP](standards/mcp.md),
 [ToolContract](references/tool-contract.md), [kind: Tool](manifests/tool.md), and
 infra [`ToolServerRegistry`](references/tool-server-registry.md)
 (`library-samples/infra/mcp-localhost.yaml`).
@@ -325,8 +225,8 @@ in-process. `serve` is the dedicated blocking process.
 
 In a MAS, `delegates_to` names the allowed target. The infra manifest chooses
 local bus or A2A by matching the endpoint name to the agent id. Public exposure
-is also an infra endpoint setting. See [A2A quickstart and feature reference](a2a/README.md) and the developer
-[A2A architecture reference](a2a/developer.md).
+is also an infra endpoint setting. See [Open standards → A2A](standards/a2a.md)
+and [A2A internals](a2a/developer.md).
 
 ---
 
@@ -334,9 +234,9 @@ is also an infra endpoint setting. See [A2A quickstart and feature reference](a2
 
 Machine-wide paths: [user-config.md](user-config.md).
 Workspace YAML fields: [config.yaml reference](references/config.yaml.md).
-CLI flags: [mas-ctl.md](cli/mas-ctl.md).
+CLI flags: [command-line index](cli/index.md) · [mas-ctl.md](cli/mas-ctl.md).
 
-Runtime contributor docs are under [`runtime/docs/`](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/index.md)
+Runtime contributor docs are under [`runtime/docs/`](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/index.md)
 (Mealy envelope, contracts, design patterns).
 
 The repository ships the [tutorials](tutorials/index.md), three paper labs under

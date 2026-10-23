@@ -1,0 +1,351 @@
+/* MAS-Lab on the IoC chrome: two stacked bars, like IoC-BHAG.
+   1. Title bar — Outshift wordmark + Internet of Cognition / MAS-Lab
+   2. Tab bar  — Home, Getting started, User guide, Discover,
+      Open standards, References, Paper, Blog */
+
+/* Always show the breadcrumb — never swap to the page title. */
+.md-header__topic:first-child {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  transform: none !important;
+}
+
+.md-header__topic[data-md-component="header-topic"] {
+  display: none !important;
+}
+
+.ioc-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.ioc-crumb a {
+  color: var(--ioc-fg) !important;
+  text-decoration: none;
+}
+
+.ioc-crumb a:hover,
+.ioc-crumb a:focus {
+  color: var(--ioc-cyan-lt) !important;
+}
+
+.ioc-crumb__sep {
+  color: var(--ioc-fg-dim);
+  font-weight: 300;
+}
+
+.ioc-crumb__here {
+  font-weight: 500;
+}
+
+.md-header__title {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.md-source {
+  color: var(--ioc-fg);
+}
+
+.md-source__repository {
+  color: var(--ioc-fg);
+}
+
+.md-source__fact {
+  color: var(--ioc-fg-dim);
+}
+
+.md-footer {
+  display: none;
+}
+
+.md-search__form {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.md-search__input {
+  color: #ffffff;
+}
+
+.md-search__input::placeholder {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.md-search__icon {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.md-tabs__link {
+  color: #ffffff !important;
+  opacity: 0.85;
+  font-size: 0.72rem;
+}
+
+.md-tabs__link:hover,
+.md-tabs__link:focus {
+  color: #ffffff !important;
+  opacity: 1;
+}
+
+.md-tabs__link--active {
+  color: #ffffff !important;
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* Material hides .md-tabs and the header logo below ~1220px, then the
+   hamburger drawer "lifts" into the current tab. Keep the IoC two-bar
+   chrome. The drawer itself is only the current tab's sections and pages. */
+@media screen and (max-width: 76.234375em) {
+  .md-tabs {
+    display: block;
+  }
+
+  .md-header__button.md-logo {
+    display: block;
+  }
+
+  .md-nav--lifted > .md-nav__list > .md-nav__item {
+    display: block;
+  }
+}
+
+.md-sidebar--primary .md-nav__link--active,
+.md-sidebar--primary .md-nav__link:focus,
+.md-sidebar--primary .md-nav__link:hover {
+  color: var(--ioc-cyan-lt);
+}
+
+/* Tab names live in the tab bar. The drawer is sections + pages only. */
+.md-sidebar--primary .md-nav__title,
+.md-sidebar--primary .md-nav--primary > .md-nav__list > .md-nav__item--active > .md-nav__link {
+  display: none;
+}
+
+/* Left panel is titles only. Page meta "status" must not inject icons. */
+.md-sidebar--primary .md-status {
+  display: none;
+}
+
+.md-sidebar--primary .md-nav--primary > .md-nav__list > .md-nav__item:not(.md-nav__item--active) {
+  display: none;
+}
+
+/* Pages not in nav have no active tab; do not empty the drawer. */
+.md-sidebar--primary .md-nav--primary:not(:has(.md-nav__item--active)) > .md-nav__list > .md-nav__item {
+  display: block;
+}
+
+/* Ancestors above the title (navigation.path). The H1 is the current page.
+   Material paints a chevron via --md-path-icon on
+   .md-path__item:not(:first-child)::before. Reuse that slot as a slash
+   so we never stack "/" and ">". Path is a sibling of .md-content__inner,
+   so its inset must match the article. */
+.md-path {
+  --md-path-icon: none;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  overflow: visible;
+  padding-top: 0.55rem;
+  padding-bottom: 0;
+  margin: 0 0.8rem;
+}
+
+@media screen and (min-width: 76.25em) {
+  .md-path {
+    margin: 0 1.2rem;
+  }
+}
+
+.md-path + .md-content__inner {
+  padding-top: 0.15rem;
+}
+
+.md-path + .md-content__inner > h1:first-of-type {
+  margin-top: 0;
+}
+
+.md-path__list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.md-path__item {
+  display: inline-flex;
+  align-items: baseline;
+  color: var(--ioc-fg-dim);
+}
+
+.md-path__item:not(:first-child) {
+  gap: 0;
+}
+
+.md-path__item:not(:first-child)::before {
+  content: "/" !important;
+  display: inline !important;
+  background: none !important;
+  background-color: transparent !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 0.45rem;
+  color: var(--ioc-fg-dim);
+  font-weight: 300;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline !important;
+}
+
+.md-path__item::after,
+.md-path__link::before,
+.md-path__link::after {
+  content: none !important;
+  display: none !important;
+}
+
+.md-path__link {
+  color: var(--ioc-fg-dim) !important;
+  text-decoration: none;
+}
+
+.md-path__link:hover,
+.md-path__link:focus {
+  color: var(--ioc-cyan-lt) !important;
+}
+
+/* Only the tab's immediate sections are kickers. Nested groups look like pages. */
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item--section > .md-nav__link {
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ioc-yellow);
+  margin-top: 1.15rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--ioc-hair);
+}
+
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item--section > .md-nav__link.md-nav__container,
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item--section > .md-nav__link.md-nav__container > a {
+  color: var(--ioc-yellow) !important;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item--section:first-child > .md-nav__link {
+  margin-top: 0;
+  padding-top: 0.2rem;
+  border-top: none;
+}
+
+.md-sidebar--primary .md-nav[data-md-level="2"] .md-nav__item--section > .md-nav__link,
+.md-sidebar--primary .md-nav[data-md-level="2"] .md-nav__item--section > .md-nav__link.md-nav__container > a {
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+  color: inherit;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.md-sidebar--primary .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item--section > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link {
+  padding-left: 0.85rem;
+}
+
+.md-sidebar--primary .md-nav__item--section + .md-nav__item:not(.md-nav__item--section) {
+  margin-top: 0.85rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--ioc-hair);
+}
+
+.mas-home h2 {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 1.75rem;
+}
+
+.mas-home h2:first-of-type {
+  margin-top: 1.25rem;
+}
+
+/* Mermaid: sit on the black ground, not a white plate. */
+.md-typeset pre.mermaid,
+.md-typeset .mermaid {
+  background: transparent;
+  text-align: center;
+}
+
+.md-typeset .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mas-blog-figure {
+  margin: 1.25rem auto 1.75rem;
+  max-width: 22rem;
+  text-align: center;
+}
+
+.mas-blog-figure img {
+  display: block;
+  width: 100%;
+  max-width: 20rem;
+  height: auto;
+  margin: 0 auto;
+  padding: 0.65rem;
+  background: #ffffff;
+  border: 1px solid var(--ioc-hair);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.mas-blog-figure--wide {
+  max-width: 50rem;
+}
+
+.mas-blog-figure--wide img {
+  max-width: 100%;
+}
+
+.mas-blog-figure figcaption {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.md-post--excerpt {
+  color: var(--md-default-fg-color);
+  opacity: 0.92;
+}
+
+.md-sidebar--post .md-nav.md-nav--primary {
+  display: flex;
+  flex-direction: column;
+}
+
+.md-sidebar--post .md-post__meta {
+  order: 1;
+  margin: 0 0.5rem 0.75rem;
+}
+
+.md-sidebar--post .md-post__meta .md-post__title {
+  display: none;
+}
+
+.md-sidebar--post .md-post__authors {
+  order: 2;
+  gap: 0.4rem;
+  margin: 0 0.5rem 1rem;
+}

@@ -20,7 +20,7 @@ mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --dry-run
 
 Sub-experiment [`02-bit-exactness/`](02-bit-exactness/) reproduces topology bit-exactness (identical traces across replicates). It uses lab-local overlays and no cross-lab symlinks.
 
-Observability: the overlays use only the `native` observability plugin, which writes `events.jsonl`. This lab has no OpenTelemetry variants or knowledge-graph span pipelines. See [Tutorial 8](../../docs/tutorials/08-telemetry/README.md) and [Tutorial 9](../../docs/tutorials/09-kg-oxp/README.md).
+Observability: the overlays use only the `native` observability plugin, which writes `events.jsonl`. This lab has no OpenTelemetry variants or knowledge-graph span pipelines. See [Tutorial 8](../../docs/tutorials/08-telemetry/README.md) and [Tutorial 9](../../docs/tutorials/09-kg-scope/README.md).
 
 ---
 

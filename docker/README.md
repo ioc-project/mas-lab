@@ -236,8 +236,8 @@ Tagged releases publish the UI and backend images to GHCR via
 The image names are:
 
 ```bash
-ghcr.io/outshift-open/mas-lab/ui:tag
-ghcr.io/outshift-open/mas-lab/backend:tag
+ghcr.io/ioc-project/mas-lab/ui:tag
+ghcr.io/ioc-project/mas-lab/backend:tag
 ```
 
 To build from this repository for local development or CI validation:

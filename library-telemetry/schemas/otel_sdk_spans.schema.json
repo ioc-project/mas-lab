@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cisco-eti.github.io/mas-lab-telemetry/schemas/otel_sdk_spans.schema.json",
+  "$id": "mas-lab/otel-sdk-spans/v1",
   "title": "MAS OTel SDK span (JSONL line)",
   "description": "One line of otel_sdk_spans.jsonl. Envelope for MAS Framework OTel export; per-span shapes are validated by mas.spanspec.yaml (SpanValidator L1–L4). Aligned with mas-ontology-kg App. E / App. P.",
   "type": "object",
@@ -45,7 +45,7 @@
         "application_id": {
           "type": "string",
           "minLength": 1,
-          "description": "Only stamped on the *.graph span (an OXP-ingest requirement) and, as application.id, on session.start. Other spans rely on the OTel resource's service.name instead -- norm's get_application_id() already falls back to it, matching the real ioa-observe-sdk, which never sets this on ordinary call spans either."
+          "description": "Only stamped on the *.graph span (an SCOPE-ingest requirement) and, as application.id, on session.start. Other spans rely on the OTel resource's service.name instead -- norm's get_application_id() already falls back to it, matching the real ioa-observe-sdk, which never sets this on ordinary call spans either."
         },
         "session.id": { "type": "string" },
         "session.name": { "type": "string" }

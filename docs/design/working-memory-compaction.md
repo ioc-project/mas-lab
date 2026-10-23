@@ -74,7 +74,7 @@ Two surfaces claimed the same job, and only one worked. [flavour-boundary.md](fl
     - `drop` discards older turns.
     - The spec does **not** store the engine.
 
-    See [summarization.md](../manifests/summarization.md). Example: [summarizer-override](https://github.com/outshift-open/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
+    See [summarization.md](../manifests/summarization.md). Example: [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
 
 3. **Package default** when both slots are omitted: `context_manager: summarising` with `summarizer: llm` (see [plugin-bindings.md](../manifests/plugin-bindings.md)). This is not unbounded stack history.
 

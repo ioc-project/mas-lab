@@ -5,7 +5,8 @@
 # Overview
 
 This page explains the problem MAS Lab addresses, how it is built and who it is for.
-For a short introduction, see the [home page](index.md).
+For a short introduction to the toolkit, see [What is MAS-Lab](what-is/index.md).
+For MAS-Lab's place in the Internet of Cognition, see the [landing page](index.md).
 
 ## The problem
 
@@ -111,4 +112,4 @@ agent's logic. You swap in an adapter and the agent stays the same. See
 [Tutorial 5](tutorials/05-a2a-agents/README.md). You do not need a clean slate:
 you can import or infer an existing system.
 
-Next: [Architecture](architecture.md) or [Tutorials](tutorials/index.md).
+Next: [Architecture](architecture.md) or [Discover](discover/index.md).

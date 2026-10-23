@@ -1,6 +1,15 @@
-# A2A developer reference
+---
+hide:
+  - navigation
+---
 
-This page is for developers who extend or debug the A2A transport. It covers the contract boundaries, routing, the AgentCard, the task lifecycle, and exposure. For setup, see the [A2A guide](README.md).
+<!--
+  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+  SPDX-License-Identifier: Apache-2.0
+-->
+# A2A internals
+
+This page is for developers who extend or debug the A2A transport. It covers the contract boundaries, routing, the AgentCard, the task lifecycle, and exposure. For setup, see [Open standards → A2A](../standards/a2a.md).
 
 Terms: a *contract* is a fixed interface the runtime checks. A *plugin* implements a contract and is selected by name. A *session* is one live run. *HITL* means human in the loop.
 
@@ -101,7 +110,7 @@ The optional tooling lives under `library-ioa/compliance/a2a`. See the top-level
 
 ## See also
 
-- [A2A guide](README.md)
+- [Open standards → A2A](../standards/a2a.md)
 - [Kernel operations](../references/kernel-primitives.md): the session queue and steer verbs.
 - [Contracts](../references/contracts.md)
 - [Tutorial 5: A2A agents](../tutorials/05-a2a-agents/README.md)

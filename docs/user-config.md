@@ -52,7 +52,7 @@ say where the LLM endpoint and tool servers are) come from workspace refs,
 `$XDG_CONFIG_HOME/mas/infra/`, or explicit `--infra-ref` paths.
 
 `config.yaml` may define top-level `aliases:` that override runtime plugin
-resolution. See [runtime/docs/plugin-aliases.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/plugin-aliases.md)
+resolution. See [runtime/docs/plugin-aliases.md](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/plugin-aliases.md)
 for the discovery order and name mapping.
 
 `plugins:` lists **runtime** plugins to add (gdb, checkpoint stores). It is off
@@ -104,14 +104,14 @@ cp config/infra/openai.example.yaml "${XDG_CONFIG_HOME:-$HOME/.config}/mas/infra
 ```
 
 Workspace checkouts use the sample at
-[`library-samples/sample-workspace/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
+[`library-samples/sample-workspace/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
 (copy it to your project root; commands find it by walking up from the
 current directory).
 
 For first-time setup via `mas-lab init`, generated files come from templates
 bundled in the `mas-lab` package:
-[`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
-and [`lab/src/mas/lab/templates/infra/llmprovider.yaml`](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/infra/llmprovider.yaml).
+[`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
+and [`lab/src/mas/lab/templates/infra/llmprovider.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/infra/llmprovider.yaml).
 
 ### 3. Set API key
 

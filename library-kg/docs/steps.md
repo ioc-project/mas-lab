@@ -135,7 +135,7 @@ def run_normalize_otel(
 ) -> KGArtifact
 ```
 
-The step delegates to the Observe and eXplain Platform (OXP) function `norm.normalize()`
+The step delegates to the SCOPE function `norm.normalize()`
 (extra `[norm]`; see [otel-telemetry.md](otel-telemetry.md)). The options
 `split_session_id`, `app_name`, `application_node`,
 `fill_synthesized_processing_defaults`, `strict`, `allow_heuristics`,

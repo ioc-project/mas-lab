@@ -134,7 +134,7 @@ block (via `envelope.export_layer_for_kind`):
 | `provenance` | trajectory | on |
 | `governance` | governance | off |
 
-OXP (Observe and eXplain Platform) requires the structure, execution and trajectory (`provenance`) layers; `semantic` stays on too. Governance is opt-in:
+SCOPE requires the structure, execution and trajectory (`provenance`) layers; `semantic` stays on too. Governance is opt-in:
 
 ```python
 replay_events_file(..., export_layers={"governance": True})

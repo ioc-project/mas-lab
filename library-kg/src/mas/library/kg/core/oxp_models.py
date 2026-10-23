@@ -121,7 +121,7 @@ def _dump_model(instance: Any, fallback: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def map_node(node: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a native node dict annotated with oxp ``@type`` when possible.
+    """Return a native node dict annotated with scope ``@type`` when possible.
 
     When an ``oxp_ontology.models`` class exists, overlapping fields are
     validated through the model and merged back. Native keys the model does
@@ -139,7 +139,7 @@ def map_node(node: Dict[str, Any]) -> Dict[str, Any]:
     try:
         instance = cls(**payload)
     except Exception as exc:  # noqa: BLE001 — extra=forbid / missing required
-        logger.debug("oxp node model %s rejected native payload: %s", ntype, exc)
+        logger.debug("scope node model %s rejected native payload: %s", ntype, exc)
         return out
     dumped = _dump_model(instance, node)
     for key, value in dumped.items():
@@ -150,7 +150,7 @@ def map_node(node: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def map_edge(edge: Dict[str, Any]) -> Dict[str, Any]:
-    """Return a native edge dict annotated with oxp ``@type`` when possible."""
+    """Return a native edge dict annotated with scope ``@type`` when possible."""
     etype = str(edge.get("edge_type") or edge.get("@type") or "")
     out = dict(edge)
     if etype:
@@ -172,7 +172,7 @@ def map_edge(edge: Dict[str, Any]) -> Dict[str, Any]:
     try:
         instance = cls(**payload)
     except Exception as exc:  # noqa: BLE001
-        logger.debug("oxp edge model %s rejected native payload: %s", etype, exc)
+        logger.debug("scope edge model %s rejected native payload: %s", etype, exc)
         return out
     dumped = _dump_model(instance, edge)
     for key, value in dumped.items():
@@ -190,5 +190,5 @@ def map_graph(
     nodes: List[Dict[str, Any]],
     edges: List[Dict[str, Any]],
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Map a native ``(nodes, edges)`` pair onto oxp model dumps when possible."""
+    """Map a native ``(nodes, edges)`` pair onto scope model dumps when possible."""
     return [map_node(n) for n in nodes], [map_edge(e) for e in edges]

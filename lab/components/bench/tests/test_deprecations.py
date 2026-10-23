@@ -23,11 +23,11 @@ def setup_function() -> None:
 def test_docs_url_strips_md_and_keeps_fragment() -> None:
     assert (
         docs_url("manifests/dataset-migration.md")
-        == "https://outshift-open.github.io/mas-lab/manifests/dataset-migration/"
+        == "https://ioc-project.github.io/mas-lab/manifests/dataset-migration/"
     )
     assert (
         docs_url("manifests/experiment.md#applications")
-        == "https://outshift-open.github.io/mas-lab/manifests/experiment/#applications"
+        == "https://ioc-project.github.io/mas-lab/manifests/experiment/#applications"
     )
 
 
@@ -45,7 +45,7 @@ def test_legacy_prompt_item_warns_with_docs_url(caplog) -> None:
         run = load_run_input({"id": "001", "prompt": "legacy prompt"})
     assert run.primary_prompt == "legacy prompt"
     assert "dataset.legacy_item" in caplog.text
-    assert "https://outshift-open.github.io/mas-lab/manifests/dataset-migration/" in caplog.text
+    assert "https://ioc-project.github.io/mas-lab/manifests/dataset-migration/" in caplog.text
     assert "docs/manifests/dataset-migration.md" in caplog.text
 
 
@@ -267,7 +267,7 @@ def test_former_ioc_dataset_still_loads_and_new_envelope_is_preferred(
 def test_docs_url_design_vs_schedule_fragment() -> None:
     assert (
         docs_url("manifests/experiment.md#design-vs-schedule")
-        == "https://outshift-open.github.io/mas-lab/manifests/experiment/#design-vs-schedule"
+        == "https://ioc-project.github.io/mas-lab/manifests/experiment/#design-vs-schedule"
     )
 
 
@@ -309,7 +309,7 @@ def test_legacy_execution_warns_once_and_maps(tmp_path: Path, caplog) -> None:
         cfg = MASExperimentConfig.from_yaml(path)
         MASExperimentConfig.from_yaml(path)
     assert caplog.text.count("experiment.execution") == 1
-    assert "https://outshift-open.github.io/mas-lab/manifests/experiment/#design-vs-schedule" in caplog.text
+    assert "https://ioc-project.github.io/mas-lab/manifests/experiment/#design-vs-schedule" in caplog.text
     assert cfg.schedule.parallel_scenarios == 8
     assert cfg.schedule.ordering == "depth"
     assert cfg.bench_emulation.runtime.cache == "disabled"

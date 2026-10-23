@@ -88,7 +88,7 @@ properties:
         description: >
           DEPRECATED. Alias of applications[0]. Loaders still accept
           lab.mas and emit a warning. Replace with lab.applications.
-          See https://outshift-open.github.io/mas-lab/manifests/experiment/#applications
+          See https://ioc-project.github.io/mas-lab/manifests/experiment/#applications
         oneOf:
           - type: object
             additionalProperties: true

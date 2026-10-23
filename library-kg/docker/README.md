@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Local OXP / Neo4j for Tutorial 9
+# Local SCOPE / Neo4j for Tutorial 9
 
-MAS-Lab Tutorial 9 (KG & OXP) serializes knowledge graphs in two ways:
+MAS-Lab Tutorial 9 (KG & SCOPE) serializes knowledge graphs in two ways:
 
 | Store | How | This package |
 | --- | --- | --- |
@@ -21,13 +21,13 @@ authentication disabled; use it on a laptop only.
 
 `$NEO4J_URI` is equivalent to passing `--infra library-kg/infra/local-neo4j.yaml`.
 
-The Observe and eXplain Platform (OXP) `norm.normalize()` path that Tutorial 9
+The SCOPE `norm.normalize()` path that Tutorial 9
 uses for **OTel → KG** does not need this compose — it is an in-process Python
 call (extra `[norm]`, installed from git until it is published). Bring up the
-full OXP stack (API, workers, UI) from the OXP repository when you want its
+full SCOPE stack (API, workers, UI) from the SCOPE repository when you want its
 UI; it is not needed for the tutorial pipelines:
 
-https://github.com/outshift-open/observe-and-explain-platform/blob/main/backend/docker-compose.yml
+https://github.com/ioc-project/scope/blob/main/deploy/docker-compose/README.md
 
-The ClickHouse instance OXP can ingest from belongs to `mas-library-telemetry`
+The ClickHouse instance SCOPE can ingest from belongs to `mas-library-telemetry`
 (`library-telemetry/docker/compose.yaml`).

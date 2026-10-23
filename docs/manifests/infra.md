@@ -263,7 +263,7 @@ Optional fields:
 - `timeout` (seconds).
 
 The legacy `expose: true` is read as `usage: use-and-deploy`.
-Canonical sample: [`library-samples/infra/a2a-agents.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/a2a-agents.yaml).
+Canonical sample: [`library-samples/infra/a2a-agents.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/a2a-agents.yaml).
 
 Reference the endpoint from an agency entry in the **MAS** manifest:
 
@@ -278,7 +278,7 @@ spec:
 ```
 
 `usage: deploy` on an in-process `run-mas` agent binds that URL for interrogation.
-See [A2A developer reference: Exposure topology](../a2a/developer.md#exposure-topology).
+See [A2A internals: Exposure topology](../a2a/developer.md#exposure-topology).
 
 ### Not used yet
 
@@ -454,7 +454,7 @@ spec:
       #   Authorization: "env:MCP_AUTH_HEADER"
 ```
 
-Canonical sample: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
+Canonical sample: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
 It sets only the required connection fields, and runtime defaults supply the optional policy.
 
 | Field | Default | Meaning |
@@ -485,7 +485,7 @@ The three `usage` values behave as follows:
 
 The runtime discovers the names that MCP advertises unless `tools` is set.
 
-[`library-samples/infra/tool-providers.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/tool-providers.yaml) is a `ToolProvider` sample (semantic name → Python class).
+[`library-samples/infra/tool-providers.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/tool-providers.yaml) is a `ToolProvider` sample (semantic name → Python class).
 `mas-ctl` does not read it in this release; see [Kinds](#kinds).
 
 ## See also

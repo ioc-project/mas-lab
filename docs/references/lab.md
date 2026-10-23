@@ -8,13 +8,13 @@ This page lists where the `mas-lab` package keeps its own docs: the benchmark en
 
 | Topic | Path in repository |
 |-------|-------------------|
-| Lab package index | [`lab/docs/index.md`](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/index.md) |
-| Benchmarking | [`lab/docs/benchmark.md`](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/benchmark.md) |
-| Designing experiments | [`lab/docs/designing-experiments.md`](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/designing-experiments.md) |
-| Pipeline steps | [`lab/docs/pipeline-steps.md`](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md) |
-| Labs quickstart | [`lab/docs/labs-quickstart.md`](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/labs-quickstart.md) |
+| Lab package index | [`lab/docs/index.md`](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/index.md) |
+| Benchmarking | [`lab/docs/benchmark.md`](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/benchmark.md) |
+| Designing experiments | [`lab/docs/designing-experiments.md`](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/designing-experiments.md) |
+| Pipeline steps | [`lab/docs/pipeline-steps.md`](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-steps.md) |
+| Labs quickstart | [`lab/docs/labs-quickstart.md`](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/labs-quickstart.md) |
 
-For the YAML fields of experiments, datasets, and pipelines, see [Specifications](index.md#lab-benchmarks).
+For the YAML fields of experiments, datasets, and pipelines, see [Lab](index.md#lab).
 
 ## See also
 

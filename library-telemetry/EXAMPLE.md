@@ -1,6 +1,6 @@
 # Worked example: native trace to verified OTel spans
 
-This walkthrough takes one multi-agent run, a travel planner, from its native `events.jsonl` to OpenTelemetry (OTel) spans that a collector and the Observe and eXplain Platform (OXP) can ingest. It is for readers who want to run the full convert, verify, push, read-back chain once.
+This walkthrough takes one multi-agent run, a travel planner, from its native `events.jsonl` to OpenTelemetry (OTel) spans that a collector and the SCOPE can ingest. It is for readers who want to run the full convert, verify, push, read-back chain once.
 
 Sample input: [`examples/travel-planner.events.jsonl`](examples/travel-planner.events.jsonl), a 14-event trace where a `moderator` routes to an `itinerary_agent` and a `budget_agent`.
 
@@ -33,7 +33,7 @@ The command prints the span count:
 }
 ```
 
-With the default `observe_sdk` profile, the span tree uses the names OXP expects:
+With the default `observe_sdk` profile, the span tree uses the names SCOPE expects:
 
 - `invoke_agent travel-planner` (session root)
 - `moderator.agent`, `itinerary_agent.agent`, `budget_agent.agent`
@@ -44,10 +44,10 @@ With the default `observe_sdk` profile, the span tree uses the names OXP expects
 
 `mas-lab telemetry inspect traces/otel_sdk_spans.jsonl` prints the same counts by `mas.boundary` (`AgentCall`, `LLMCall`, `ToolCall`, `TaskCall`, `Graph`, ...). The `raw` profile, which the golden test uses, produces the smaller MAS-native tree (`TaskCall`, `AgentCall`, `CallAnnotation`, ...).
 
-Two behaviors matter for OXP:
+Two behaviors matter for SCOPE:
 
 - The application name comes from the trace (`app_name: travel-planner`). Pass `--app-name` to override.
-- The converter emits a `<app>.graph` span that carries the agent topology on `gen_ai.ioa.graph` (nodes: `orchestrator, moderator, itinerary_agent, budget_agent`). Without it OXP cannot render the graph. See [docs/conversion.md](docs/conversion.md).
+- The converter emits a `<app>.graph` span that carries the agent topology on `gen_ai.ioa.graph` (nodes: `orchestrator, moderator, itinerary_agent, budget_agent`). Without it SCOPE cannot render the graph. See [docs/conversion.md](docs/conversion.md).
 
 The pipeline behind the command is [`pipelines/native-to-otel-json.yaml`](pipelines/native-to-otel-json.yaml):
 

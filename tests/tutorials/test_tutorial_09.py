@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tutorial 09 — KG & OXP: normalize native/OTel example traces, Neo4j dry-run."""
+"""Tutorial 09 — KG & SCOPE: normalize native/OTel example traces, Neo4j dry-run."""
 
 from __future__ import annotations
 

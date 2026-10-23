@@ -127,7 +127,7 @@ KIND_TO_CLASS: Dict[str, Optional[str]] = {
     # tool_result_injected — context provenance (tool result fed back into LLM)
     "tool_result_injected": "CallAnnotation",
     # Runtime wrappers / disabled observe-sdk categories. Mapped so default
-    # native→KG does not warn; they are not OXP ingest classes.
+    # native→KG does not warn; they are not SCOPE ingest classes.
     "boundary_ingress": "CallAnnotation",
     "context_steer": "CallAnnotation",
     "compaction": "CallAnnotation",

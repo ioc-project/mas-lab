@@ -121,7 +121,7 @@ class MasOtelConverter:
         ``session.name``).
     export_layers:
         Which observability layers to emit; defaults to structure + execution +
-        trajectory + semantic (OXP-required set; governance remains opt-in).
+        trajectory + semantic (SCOPE-required set; governance remains opt-in).
     """
 
     # Sentinel run_id / session values that must never become identifiers.
@@ -135,7 +135,7 @@ class MasOtelConverter:
         {"TaskCall", "AgentCall", "LLMCall", "ToolCall", "Session", "AgentLifecycleEvent"}
     )
 
-    # noa-trip-planner / OXP ingest categories. Everything else is an
+    # noa-trip-planner / SCOPE ingest categories. Everything else is an
     # extension (opt-in) or a CallAnnotation (opt-in via annotation_enabled).
     _OBSERVE_SDK_CORE_BOUNDARIES: ClassVar[frozenset[str]] = frozenset(
         {
@@ -214,7 +214,7 @@ class MasOtelConverter:
         self._span_meta: Dict[str, Dict[str, Any]] = {}
         self._realtime = bool(realtime)
         self._extensions = default_extensions(self._converter_profile, extensions)
-        # agent_id → OTel span id of the open/last AgentCall (OXP linkage).
+        # agent_id → OTel span id of the open/last AgentCall (SCOPE linkage).
         self._agent_span_ids: Dict[str, str] = {}
         self._agent_trace_ids: Dict[str, str] = {}
         # call_id -> tool/model name, for emit_realtime_signal's *_end event:
@@ -882,7 +882,7 @@ class MasOtelConverter:
         return bool(self._extensions or self._annotation_enabled)
 
     def _observe_sdk_export_attrs(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
-        """Pass attributes through. OXP ingest silently ignores unknown keys.
+        """Pass attributes through. SCOPE ingest silently ignores unknown keys.
 
         We used to drop ``mas.*``, ``session.name``, ``application.id``,
         ``tool_name``, ``gen_ai.completion.0.*``, and
@@ -901,7 +901,7 @@ class MasOtelConverter:
             # mas.status/execution.success/session.name/entity.name.
             # norm's own get_success() already falls back to the span's
             # OTel StatusCode when execution.success is absent, so this
-            # doesn't weaken OXP ingestion.
+            # doesn't weaken SCOPE ingestion.
             attrs: Dict[str, Any] = {
                 "mas.boundary": "Session",
                 semconv.SESSION_ID: session_id,
@@ -965,7 +965,7 @@ class MasOtelConverter:
         parent_call_id: str | None = None,
         protocol: str = "MAS",
     ) -> None:
-        """Emit the multi-agent ``<app>.graph`` topology span (OXP-required).
+        """Emit the multi-agent ``<app>.graph`` topology span (SCOPE-required).
 
         A span of kind ``graph`` carrying ``gen_ai.ioa.graph`` (+ dynamism /
         determinism), matching the IOA Observe ``@graph`` contract.  See
@@ -1261,7 +1261,7 @@ class MasOtelConverter:
         that raw id made ``_parent_ctx`` emit a root sibling, which is why
         the Observe span tree went flat.
 
-        Observe-sdk / OXP: ``*.chat`` and ``*.tool`` nest under the live
+        Observe-sdk / SCOPE: ``*.chat`` and ``*.tool`` nest under the live
         ``*.agent``. LangGraph (and norm) treat delegated ``*.agent`` spans
         as siblings under ``invoke_agent``, linked by
         ``ioa_observe.agent.previous`` — not as children of the caller.
@@ -1592,7 +1592,7 @@ class MasOtelConverter:
             value = extra.get("mas.output") or self._span_attr(span, semconv.IOA_ENTITY_OUTPUT)
             agent = str(meta.get("agent") or "agent")
             # Always wrap: if Agent output equals the last child output,
-            # OXP skips the capability-chain-boundary and Inspect parks
+            # SCOPE skips the capability-chain-boundary and Inspect parks
             # the Agent bar after the call row.
             text = self._timeline_io(
                 "output",
@@ -1658,7 +1658,7 @@ class MasOtelConverter:
     ) -> str:
         """Return real I/O when present, else a unique placeholder.
 
-        OXP ``bridge_states_if_mismatched`` is a no-op when neighbouring
+        SCOPE ``bridge_states_if_mismatched`` is a no-op when neighbouring
         State contents are equal. Cached traces often leave every output
         blank, so every state becomes ``(no content recorded)``, capability-
         chain-boundary bridges are skipped, and Inspect parks Session/MAS/

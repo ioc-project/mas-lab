@@ -19,7 +19,7 @@ credentials, and a check that everything works. The CLI and web UI share it.
 | Understand the model: agents, MAS, overlays | Tutorials [0](00-environment-setup/README.md), [1](01-building-an-agent/README.md), [2](02-creating-a-mas/README.md) |
 | Run a controlled experiment | [Tutorial 3](03-experiments-and-analysis/README.md), then the [paper labs](../labs.md) |
 | Add governance and human approval | [Tutorial 14](14-governance-hitl/README.md) |
-| Export traces to an observability stack or a knowledge graph | Tutorials [8](08-telemetry/README.md) and [9](09-kg-oxp/README.md) |
+| Export traces to an observability stack or a knowledge graph | Tutorials [8](08-telemetry/README.md) and [9](09-kg-scope/README.md) |
 | Click instead of type | The [web UI](../ui/index.md) |
 
 | # | Tutorial | What you learn |
@@ -33,7 +33,7 @@ credentials, and a check that everything works. The CLI and web UI share it.
 | 6 | [Agent skills](06-agent-skills/README.md) | Give an agent a reusable skill (procedure, reference material, checked script) outside its own instructions |
 | 7 | *(reserved)* | |
 | 8 | [Telemetry](08-telemetry/README.md) | Native traces, live OTel, replay, collector / ClickHouse |
-| 9 | [KG & OXP](09-kg-oxp/README.md) | Build a knowledge graph (KG) from native traces or OpenTelemetry (OTel) spans, using the Observe and eXplain Platform (OXP) `norm` normalizer; write to Neo4j |
+| 9 | [KG & SCOPE](09-kg-scope/README.md) | Build a knowledge graph (KG) from native traces or OpenTelemetry (OTel) spans, using the SCOPE `norm` normalizer; write to Neo4j |
 | 10 | [Evaluation metrics](10-evaluation-metrics/README.md) | Stock MCE, one-off prompts, reusable EvalMetrics, judge infra |
 | 11 | [Sessions and recovery](11-sessions-and-recovery/README.md) | Checkpoint, fork, resume and recover a conversation |
 | 12 | [Spawned subagents](12-subagents/README.md) | Run bounded, pre-authored subagent templates during a turn |
@@ -78,7 +78,7 @@ Both come with datasets. The trip planner's is `trip-planner-benchmark`.
 
 After Tutorial 14:
 
-- **Labs:** runnable experiments live in [`labs/`](https://github.com/outshift-open/mas-lab/tree/main/labs): `design-space.lab` (design patterns and topologies), `lifecycle-control.lab`, and `extensions.lab`. See [Labs](../labs.md) and the [paper index](../paper/index.md). Lab vs library: [labs-and-libraries.md](../labs-and-libraries.md).
-- **Protocol references:** the [MCP ToolServerRegistry reference](../references/tool-server-registry.md) and the [A2A developer reference](../a2a/developer.md).
+- **Labs:** runnable experiments live in [`labs/`](https://github.com/ioc-project/mas-lab/tree/main/labs): `design-space.lab` (design patterns and topologies), `lifecycle-control.lab`, and `extensions.lab`. See [Labs](../labs.md) and the [paper index](../paper/index.md). Lab vs library: [labs-and-libraries.md](../labs-and-libraries.md).
+- **Open standards:** [MCP](../standards/mcp.md), [A2A](../standards/a2a.md), and the other protocol pages under [Open standards](../standards/index.md). Flag tables: [ToolServerRegistry](../references/tool-server-registry.md).
 
 Next: [Tutorial 0 — Environment setup](00-environment-setup/README.md).

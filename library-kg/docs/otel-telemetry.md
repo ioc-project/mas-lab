@@ -2,7 +2,7 @@
 
 This page describes how `mas.library.kg` turns OpenTelemetry (OTel) spans into a knowledge graph (KG), and the span format that path expects. A span is one timed operation in a trace, the tree of operations of one run. Read it if you feed spans exported from a MAS Lab run (or another source) into the KG pipeline.
 
-The first-party code in this library only detects the span shape and reshapes SDK spans to ClickHouse-style keys. `norm`, the OTel normalizer of the open-source Observe and eXplain Platform (OXP, [github.com/outshift-open/observe-and-explain-platform](https://github.com/outshift-open/observe-and-explain-platform)), builds the nodes and edges.
+The first-party code in this library only detects the span shape and reshapes SDK spans to ClickHouse-style keys. `norm`, the OTel normalizer of SCOPE ([github.com/ioc-project/scope](https://github.com/ioc-project/scope)), builds the nodes and edges.
 
 Smallest example (needs the `[norm]` extra, see [Section 1](#1-overview)):
 
@@ -13,7 +13,7 @@ mas-lab kg otel-to-kg SPANS.jsonl --run-id RUN --output-dir OUT   # writes OUT/k
 | Part | Owner |
 |------|-------|
 | Span shape detection, SDK-to-ClickHouse reshape, CLI and step wrappers (`mas.library.kg.observability.otel_via_norm`, `steps.normalize_otel`, `mas-lab kg ...`) | this library |
-| Span dispatch, attribute reading, node and edge construction (`norm.normalize()`) | OXP `norm` (optional extra `[norm]`) |
+| Span dispatch, attribute reading, node and edge construction (`norm.normalize()`) | SCOPE `norm` (optional extra `[norm]`) |
 | Ontology classes and generated models | `oxp-ontology` (PyPI, hard dependency) |
 
 See also: [normalization.md](normalization.md), [native-telemetry.md](native-telemetry.md), [steps.md](steps.md), and [Native events to OTel conversion](../../library-telemetry/docs/conversion.md) (how MAS Lab produces these spans).
@@ -32,7 +32,7 @@ See also: [normalization.md](normalization.md), [native-telemetry.md](native-tel
 ## 1. Overview
 
 ```
-OTel spans (JSON / JSONL)                       mas.library.kg (first-party)                OXP norm
+OTel spans (JSON / JSONL)                       mas.library.kg (first-party)                SCOPE norm
   - ClickHouse rows (SpanName, SpanAttributes)   detect_span_shape()                        normalize(rows)
   - OTel SDK spans (name, context, attributes) ->to_clickhouse_spans()  -- ClickHouse rows -> (nodes, edges)
                                                   align_graph()  <---------------------------- nodes, edges
@@ -48,7 +48,7 @@ OTel spans (JSON / JSONL)                       mas.library.kg (first-party)    
 
 This library applies no heuristics, gap filling or event synthesis on the OTel path, and does not convert OTel back to `events.jsonl`.
 
-**Requirements.** `norm` is an optional extra (`pip install "mas-library-kg[norm]"`, which currently installs `backend/norm` from the OXP repository on GitHub until it is published as a package). Without it, `run_normalize_otel` and `build_kg_from_otel_spans` log a warning and return an empty KG (zero nodes and edges, no error). Likewise, a span list whose shape is not recognised yields an empty KG with `otel_format: "unknown"`.
+**Requirements.** `norm` is an optional extra (`pip install "mas-library-kg[norm]"`, which currently installs `backend/norm` from the SCOPE repository on GitHub until it is published as a package). Without it, `run_normalize_otel` and `build_kg_from_otel_spans` log a warning and return an empty KG (zero nodes and edges, no error). Likewise, a span list whose shape is not recognised yields an empty KG with `otel_format: "unknown"`.
 
 **Run id.** `norm` derives application, session and agent ids from the spans (see [Section 4](#4-attributes-read-by-norm)). The `--run-id` / `run_id` argument is only recorded in the artifact (`run_id` field), not used to rewrite node ids. Native-path options (`strict`, `synthesize_llm_gaps`, `allow_heuristics`, `write_events`, `split_session_id`, `app_name`, ...) are accepted by `run_normalize_otel` for call-site compatibility and ignored.
 
@@ -82,7 +82,7 @@ Status, span events, links and span kind are not carried over by the reshape. `n
 
 ## 3. Span names dispatched by `norm`
 
-`norm` selects a handler from the span name (`SpanName`). Spans with any other name are ignored (no node, no error). This describes the OXP `backend/norm` package; the OXP repository is authoritative and may add more.
+`norm` selects a handler from the span name (`SpanName`). Spans with any other name are ignored (no node, no error). This describes the SCOPE `backend/norm` package; the SCOPE repository is authoritative and may add more.
 
 | Span name | Handler result |
 |-----------|----------------|

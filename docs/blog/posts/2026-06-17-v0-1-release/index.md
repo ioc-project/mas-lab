@@ -341,7 +341,7 @@ MAS Lab is our open source contribution to that practice: specify workflows, run
 them under control, experiment with provenance, integrate the protocols and tools
 you already use, and carry guarantees from design into production.
 
-Explore the repository at https://github.com/outshift-open/mas-lab. Run the demos
+Explore the repository at https://github.com/ioc-project/mas-lab. Run the demos
 and tutorials, declare a system in YAML, work through the labs on design,
 governance, and memory, and connect your framework through the plugin interfaces.
 Issues, adapters, and production workloads are how the model hardens.

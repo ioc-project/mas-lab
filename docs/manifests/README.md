@@ -71,7 +71,7 @@ To reference one manifest from another (paths, `LIBRARY:` prefixes, versions, fi
 
 ## Schema files
 
-The YAML schemas live under [`docs/schemas/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas) (overview: [schemas.md](../references/schemas.md)).
+The YAML schemas live under [`docs/schemas/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas) (overview: [schemas.md](../references/schemas.md)).
 The bench UI and the validators compile them at runtime.
 `mas-ctl validate` checks any kind. `mas-lab validate` checks experiment, pipeline, lab config, and Dataset files.
 

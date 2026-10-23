@@ -238,7 +238,7 @@ Use an inline pipeline (`post:` in the experiment) for simple post-processing. U
 
 ## Part C — Compare trip planner topologies
 
-The [trip planner](https://github.com/outshift-open/mas-lab/tree/main/library-samples/apps/trip-planner) uses a moderator and three specialists.
+The [trip planner](https://github.com/ioc-project/mas-lab/tree/main/library-samples/apps/trip-planner) uses a moderator and three specialists.
 Is that better than the alternatives? Each topology is an overlay in `topologies/`:
 
 | Topology | Fields | Behaviour |
@@ -266,7 +266,7 @@ workflow: {entry: generalist, nodes: [{id: generalist}]}
 Files: [single-agent](topologies/single-agent.yaml), [linear](topologies/linear.yaml), [moderator](topologies/moderator.yaml).
 `topologies/linear.yaml` is the same overlay as `overlays/linear.yaml` in [Tutorial 2](../02-creating-a-mas/README.md).
 `topologies/moderator.yaml` keeps LLM-directed delegation. See the
-[trip-planner manifest](https://github.com/outshift-open/mas-lab/blob/main/library-samples/apps/trip-planner/mas.yaml) for the full roster.
+[trip-planner manifest](https://github.com/ioc-project/mas-lab/blob/main/library-samples/apps/trip-planner/mas.yaml) for the full roster.
 
 ### C.2 — Read the dataset and experiment
 
@@ -392,7 +392,7 @@ Drop `--dry-run` to start the server and export `T3_SERVICE_URL` to later steps.
 ## Going further
 
 - **Telemetry export:** [Tutorial 8](../08-telemetry/README.md) covers `export_otel` and service bundles end to end.
-- **Knowledge graph:** [Tutorial 9](../09-kg-oxp/README.md) normalizes traces into a graph.
+- **Knowledge graph:** [Tutorial 9](../09-kg-scope/README.md) normalizes traces into a graph.
 - **Larger experiments:** `labs/design-space.lab/` (patterns and topologies).
 - **CI:** `pytest tests/tutorials/test_scenario_commands.py -v -k tuto-03` replays the offline steps from `demo/scenario.yaml`.
 
@@ -405,6 +405,6 @@ Drop `--dry-run` to start the server and export `T3_SERVICE_URL` to later steps.
 ## Next
 
 - [Tutorial 4 — MCP tools](../04-mcp-tools/README.md) and [Tutorial 5 — A2A agents](../05-a2a-agents/README.md) move tools and peers behind protocols.
-- [Tutorial 8 — Telemetry](../08-telemetry/README.md) and [Tutorial 9 — KG and OXP](../09-kg-oxp/README.md) build on these traces.
+- [Tutorial 8 — Telemetry](../08-telemetry/README.md) and [Tutorial 9 — KG and SCOPE](../09-kg-scope/README.md) build on these traces.
 
 To build your own experiment, duplicate a `labs/*.lab/experiment.yaml`, point it at a new dataset or overlay, and run `mas-lab benchmark run ...`.

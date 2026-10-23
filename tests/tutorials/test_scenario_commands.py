@@ -23,7 +23,7 @@ editing YAML via ``MAS_INFRA_REFS`` (e.g. ``MAS_INFRA_REFS=standard:llm-proxy``
 for the Outshift OpenAI-compatible proxy).  Set ``LLM_PROXY_API_BASE`` and
 ``OPENAI_API_KEY`` in ``.env`` (see Tutorial 0).
 
-Run from the outshift-open/mas-lab repo root:
+Run from the ioc-project/mas-lab repo root:
 
     pytest tests/tutorials/test_scenario_commands.py -v
     pytest tests/tutorials/test_scenario_commands.py -v -k norm-verify
@@ -256,7 +256,7 @@ if (REPO_ROOT / "library-telemetry/examples/qa-agent").is_dir():
 if (REPO_ROOT / "library-kg/examples/qa-agent").is_dir():
     _SCENARIOS.append(
         (
-            REPO_ROOT / "docs/tutorials/09-kg-oxp/demo/scenario.yaml",
+            REPO_ROOT / "docs/tutorials/09-kg-scope/demo/scenario.yaml",
             REPO_ROOT,
             "tuto-09",
         )

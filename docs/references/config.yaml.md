@@ -30,9 +30,9 @@ Paths and XDG layout: [user-config.md](../user-config.md). CLI flags that overri
 
 Canonical samples:
 
-- [`library-samples/sample-workspace/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
+- [`library-samples/sample-workspace/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
 - Tutorials 1–3 under `docs/tutorials/*/config.yaml` (Tutorial 0 ships `config.*example.yaml` user-file samples)
-- Init template: [`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
+- Init template: [`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
 
 ### `mas_ctl` merge (exchange log and friends)
 
@@ -113,7 +113,7 @@ The exchange log is for humans. Tools read `events.jsonl` and `mas-lab telemetry
 | `context_manager` | Default plugin id for `spec.context_manager` |
 | `assembler` | Default plugin id for `spec.assembler` |
 
-See [runtime/docs/agent-defaults.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/agent-defaults.md).
+See [runtime/docs/agent-defaults.md](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/agent-defaults.md).
 
 ---
 
@@ -133,7 +133,7 @@ Env overrides: [user-config.md](../user-config.md). Relative paths resolve from 
 
 Agent YAML still chooses `design_pattern`, tools, models, `spec.observability`, `spec.governance`, and checkpoint cadence. This list turns on gdb, checkpoint stores, and the control wire from the workspace. A *plugin* is a unit of behaviour selected by name.
 
-Omitted, `[]`, or a commented catalog means **nothing extra is on**. To enable a plugin, uncomment `plugins:` and any line in the [init template](https://github.com/outshift-open/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml). Specs that already name the same plugin keep their own config.
+Omitted, `[]`, or a commented catalog means **nothing extra is on**. To enable a plugin, uncomment `plugins:` and any line in the [init template](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml). Specs that already name the same plugin keep their own config.
 
 Labs enable the same URNs under `lab.enable_plugins` in `lab-config.yaml`.
 

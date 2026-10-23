@@ -36,7 +36,7 @@ or to a Cisco-internal package index.
 ### GitHub setup
 
 Create a GitHub Actions environment named `pypi` in
-`outshift-open/mas-lab`. Add required reviewers to this environment if package
+`ioc-project/mas-lab`. Add required reviewers to this environment if package
 publication must be manually approved. The workflow grants `id-token: write`
 only to the publication job.
 
@@ -44,7 +44,7 @@ only to the publication job.
 
 For each distribution, configure a PyPI Trusted Publisher with:
 
-- owner: `outshift-open`
+- owner: `ioc-project`
 - repository: `mas-lab`
 - workflow: `.github/workflows/publish.yml`
 - environment: `pypi`

@@ -306,7 +306,7 @@ def test_explicit_app_name_overrides(tmp_path):
     op = tmp_path / "s.jsonl"
     replay_events_file(ep, op, service_name="svc", app_name="explicit-override")
     spans = [json.loads(line) for line in op.read_text().splitlines() if line.strip()]
-    # application_id is the primary MAS name (OXP/norm); service.name is
+    # application_id is the primary MAS name (SCOPE/norm); service.name is
     # only the fallback when that attribute is empty. Both must be the
     # app name, not leftover ``service_name`` / ``mas-runtime``.
     assert all(

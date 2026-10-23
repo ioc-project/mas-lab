@@ -7,7 +7,7 @@
 This page indexes the manifests that **mas-runtime** and **mas-ctl** consume.
 It also documents the two bundle kinds that have no page of their own: `ToolBundle` and `PromptBundle`.
 Use it to find the reference page and schema for a manifest kind.
-The authoritative JSON Schemas are in [`docs/schemas/runtime/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas/runtime).
+The authoritative JSON Schemas are in [`docs/schemas/runtime/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/runtime).
 
 `mas-ctl validate` checks agents, MAS, overlays, workflows, flavours, tools, bundles, and infra.
 `mas-lab validate` checks experiments, pipelines, and lab configs.

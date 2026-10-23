@@ -100,7 +100,7 @@ Set `scope:` explicitly only on a standalone pipeline file, which has no enclosi
 `in:` and `out:` name the artifact a step reads and writes.
 Declare the artifact in that level's own `artifacts:` map.
 A step whose `in:` names an artifact from the level below fans in every child instance (`config["artifact_paths"]`).
-See [experiment.md](experiment.md) and [multi-scenario-format.md](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/multi-scenario-format.md).
+See [experiment.md](experiment.md) and [multi-scenario-format.md](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/multi-scenario-format.md).
 
 On a standalone `pipeline:` file, `scope:` is one of `run`, `item`, `scenario`, `experiment`.
 `test` and `application` are deprecated aliases of `item` and `experiment`.
@@ -175,7 +175,7 @@ They are written to files or infra sinks when a step sets `outputs` paths.
   A **fork** is several steps sharing one artifact or stream (record-level for incremental consumers).
   A **join** is a step that waits on two or more different artifacts until they are sealed.
 - **Step types:** registered processors such as `extract_trajectories`, `extract_trace_stats`, `eval_mce`, and `plot_*`.
-  See the [pipeline steps catalog](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md).
+  See the [pipeline steps catalog](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-steps.md).
 - **Cache:** each step has a content-addressed **node key** built from its type, version, config, and upstream digests.
   The cache lives under `<output_dir>/.cache/` (a fingerprint sidecar plus an `artefacts/` store).
   An unchanged step restores its persisted outputs and skips execution.
@@ -213,11 +213,11 @@ They are written to files or infra sinks when a step sets `outputs` paths.
 
 Standalone CLI shortcuts (`mas-lab telemetry push`, `mas-lab kg dump`, ...) map onto these same library pipelines.
 Optional library packages register some of them. The `kg` group comes from `library-kg` and appears only when that package is installed.
-See [CLI commands and their pipelines](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/cli-reference.md).
+See [CLI commands and their pipelines](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/cli-reference.md).
 
 ## See also
 
 - [experiment.md](experiment.md)
 - [lab.md](lab.md)
 - [summarization.md](summarization.md): `eval_mce` judge model
-- [Pipeline guide](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline.md)
+- [Pipeline guide](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline.md)

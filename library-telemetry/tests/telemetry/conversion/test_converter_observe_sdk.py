@@ -45,7 +45,7 @@ def test_raw_profile_default_has_no_observe_sdk_attributes(spans):
     no ioa_observe.*/traceloop.* leakage into the toy round-trip shape.
 
     Excludes the ``.graph`` topology span: it always carries
-    ``ioa_observe.span.kind`` (a separate, always-on OXP-required)
+    ``ioa_observe.span.kind`` (a separate, always-on SCOPE-required)
     feature -- see emit_graph_span/topology.py) regardless of profile.
     """
     for s in spans:
@@ -206,7 +206,7 @@ def test_observe_sdk_profile_sets_entity_input_output_per_boundary(observe_sdk_s
         "solve the task"
     )
     # Agent output is wrapped so it cannot equal the last child output
-    # (OXP skips capability-chain-boundary when contents match).
+    # (SCOPE skips capability-chain-boundary when contents match).
     assert str(agent_span["attributes"].get("ioa_observe.entity.output") or "").endswith(
         "done"
     )
@@ -240,7 +240,7 @@ def test_observe_sdk_profile_sets_genai_semconv_prompt_and_completion(
     observe_sdk_spans,
 ):
     """Regression guard: a real GenAI-semconv-aware consumer (confirmed:
-    OXP norm's FrameworkParser.extract_payloads) reads *only*
+    SCOPE norm's FrameworkParser.extract_payloads) reads *only*
     gen_ai.prompt.{i}.content / gen_ai.completion.0.content for LLM
     entities -- it never falls back to the generic
     ioa_observe.entity.input/output overlay for that entity type. Without
@@ -433,7 +433,7 @@ def test_tool_end_closes_call_id_remapped_to_another_agent(tmp_path):
 @requires_otel
 def test_observe_sdk_profile_sets_bare_tool_name_and_ioa_start_time(observe_sdk_spans):
     """Regression guard for two attributes a real external consumer
-    (OXP norm's GenericParser) requires: `ioa_start_time` (a hard
+    (SCOPE norm's GenericParser) requires: `ioa_start_time` (a hard
     requirement -- its absence raises TypeError in extract_payloads)
     and the bare `tool_name` field (ingest also reads entity.name)."""
     tool_span = _first(observe_sdk_spans, suffix=".tool")
@@ -581,7 +581,7 @@ def test_observe_sdk_profile_gives_call_annotations_distinguishable_names(tmp_pa
     """Regression guard: every point-span kind (routing, context updates,
     compaction, checkpoints, duplicate-start annotations, ...) previously
     shared the literal span name "CallAnnotation", indistinguishable by any
-    name-suffix-dispatching consumer (confirmed against OXP norm's
+    name-suffix-dispatching consumer (confirmed against SCOPE norm's
     GenericParser, which resolved every one of them to
     entity_type="other"/"unknown"). Real consumers must be able to tell a
     context update apart from a compaction apart from anything else by name
@@ -629,7 +629,7 @@ def test_observe_sdk_profile_gives_call_annotations_distinguishable_names(tmp_pa
         )
     )
     out = tmp_path / "spans.jsonl"
-    # annotation ON: CallAnnotation is off by default (OXP norm does not
+    # annotation ON: CallAnnotation is off by default (SCOPE norm does not
     # recognize it), so it has to be explicitly enabled to test its naming.
     replay_events_file(
         events_path,

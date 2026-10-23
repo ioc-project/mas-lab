@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/outshift-open/mas-lab/main/docs/schemas/lab/pipeline-manifest.schema.json",
+  "$id": "mas-lab/pipeline-manifest/v1",
   "title": "Pipeline Manifest",
   "description": "Schema for kind: Pipeline manifests (apiVersion: mas/v1). Used by mas-lab-ui PipelineBuilder and controller pipeline validation. Steps pass in-memory artifacts between depends_on edges; file paths in step config serialize to disk. Experiment manifests declare typed artifacts for persistence targets.",
   "type": "object",

@@ -34,7 +34,7 @@ A lab is a `*.lab/` folder with `lab-config.yaml`. It stays flat and holds
 scenarios, overlays, datasets, and pipelines. It refers to other files with
 `name:path` references, for example `samples:tools/calc.tool.yaml`.
 
-Paper labs are under [`labs/`](https://github.com/outshift-open/mas-lab/blob/main/labs/README.md).
+Paper labs are under [`labs/`](https://github.com/ioc-project/mas-lab/blob/main/labs/README.md).
 Create a lab to compose an experiment. Do not create one to publish reusable tools.
 
 ## Library

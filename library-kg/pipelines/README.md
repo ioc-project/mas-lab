@@ -6,7 +6,7 @@ to `mas-lab-graph` (`normalize_events`, `validate_kg`, `compare_kg`, …) and
 
 ## Referencing pipelines
 
-Install `mas-library-kg` in the workspace venv (oxp-integration `task init` does
+Install `mas-library-kg` in the workspace venv (scope-integration `task init` does
 this). The package registers scheme **`library-kg`** via
 `mas.runtime.manifest_libraries` — no `config.yaml` entry required.
 

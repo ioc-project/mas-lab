@@ -95,7 +95,7 @@ specification. These results do not amount to blanket protocol certification.
 
 Beyond protocol integration, v0.2 grew from our research and prototypes within
 Outshift and contributions from teams using MAS Lab. It also brings
-[new features, improvements, and bug fixes](https://github.com/outshift-open/mas-lab/blob/v0.2.0/CHANGELOG.md).
+[new features, improvements, and bug fixes](https://github.com/ioc-project/mas-lab/blob/v0.2.0/CHANGELOG.md).
 
 An example of MAS Lab in use is the published
 [study of silent cognitive failures](https://outshift.cisco.com/blog/ai-ml/cognitive-challenges-in-multi-agent-systems):
@@ -135,10 +135,10 @@ This is both an accuracy goal and a way to reduce the cost of verification.
 We presented MAS Lab and its protocol extensions at
 [AGNTCon Europe](https://agntconmcpconeu26.sched.com/event/2RB9i/mas-lab-an-open-framework-for-spec-driven-interoperable-multi-agent-systems-jordan-auge-cisco-systems)
 (slides linked from the session page; recording available online). Read the
-[v0.2 release](https://github.com/outshift-open/mas-lab/releases/tag/v0.2.0)
+[v0.2 release](https://github.com/ioc-project/mas-lab/releases/tag/v0.2.0)
 for the full notes and source archives, follow
 [Tutorial 0](../../../tutorials/00-environment-setup/README.md) to try it, or
 explore the
-[repository](https://github.com/outshift-open/mas-lab) and its
-[contribution guide](https://github.com/outshift-open/mas-lab/blob/main/CONTRIBUTING.md).
+[repository](https://github.com/ioc-project/mas-lab) and its
+[contribution guide](https://github.com/ioc-project/mas-lab/blob/main/CONTRIBUTING.md).
 Issues, feedback, and contributions are welcome.

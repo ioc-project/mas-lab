@@ -22,7 +22,7 @@ The MAS workflow and agent prompts do not change.
 ## Step 1 — Read the A2A infra manifest
 
 A remote agent is an `Application` endpoint keyed by the exact agent id
-(fields: [A2A developer reference](../../a2a/developer.md), [infra.md](../../manifests/infra.md#a2a-agent-endpoints)):
+(fields: [A2A](../../standards/a2a.md), [infra.md](../../manifests/infra.md#a2a-agent-endpoints)):
 
 ```yaml
 apiVersion: infra/v1
@@ -64,7 +64,7 @@ The local plugin runs an in-process agent. The A2A plugin sends the same task th
 ## Step 2 — Serve an existing agent
 
 Serve Tutorial 2's unchanged `schedule_agent`.
-[`mixed-agents.infra.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mixed-agents.infra.yaml)
+[`mixed-agents.infra.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mixed-agents.infra.yaml)
 holds the endpoint shown in Step 1:
 
 ```bash
@@ -184,10 +184,10 @@ The first uses the official `a2a` CLI. The second uses the repository's one-shot
 - The workflow, target ids, agent behavior, and `AgentCommContract` stay stable.
 - An explicit endpoint overrides a local agent with the same id, so one MAS runs local or distributed.
 
-Reference: [A2A developer reference](../../a2a/developer.md),
+Reference: [A2A](../../standards/a2a.md), [A2A internals](../../a2a/developer.md),
 [infra.md § A2A agent endpoints](../../manifests/infra.md#a2a-agent-endpoints),
 [Kernel operations](../../references/kernel-primitives.md), [Thin waist](../../references/thin-waist.md),
-[A2A compliance workflow](https://github.com/outshift-open/mas-lab/tree/main/library-ioa/compliance/a2a).
+[A2A compliance workflow](https://github.com/ioc-project/mas-lab/tree/main/library-ioa/compliance/a2a).
 
 ## Next
 

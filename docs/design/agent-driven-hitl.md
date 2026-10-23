@@ -1,6 +1,12 @@
-Status: Implemented (as a blocking system tool; the non-blocking "pause the turn and resume later" variant described under [Not implemented](#not-implemented) is still a proposal).
-
+<!--
+  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+  SPDX-License-Identifier: Apache-2.0
+-->
 # Agent-Driven HITL via System Tools
+
+Status: Implemented as a blocking system tool. The non-blocking "pause the
+turn and resume later" variant under [Not implemented](#not-implemented) is
+still a proposal.
 
 ## Problem
 

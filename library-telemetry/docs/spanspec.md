@@ -27,7 +27,7 @@ print(SpanValidator().validate_file("otel_sdk_spans.jsonl").conformance("L3"))
 | Level | Name | What it guarantees |
 |-------|------|--------------------|
 | L1 | structural | OTel GenAI / envelope structural conventions |
-| L2 | gen_ai_semconv | observe-sdk / GenAI attribute contract required for OXP ingestion |
+| L2 | gen_ai_semconv | observe-sdk / GenAI attribute contract required for SCOPE ingestion |
 | L3 | mas_native_roundtrip | MAS Framework observability — the full MAS span taxonomy |
 | L4 | full | All recommended fields present — enough for complete KG construction |
 

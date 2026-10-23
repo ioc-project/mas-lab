@@ -228,7 +228,7 @@ def _calls(spans_file: str, tools: tuple[str, ...], as_json: bool) -> None:
 @click.option(
     "--new-session-id",
     is_flag=True,
-    help="Rewrite session.id to a new UUID so OXP treats this as a new session.",
+    help="Rewrite session.id to a new UUID so SCOPE treats this as a new session.",
 )
 def _push(
     spans_file: str,

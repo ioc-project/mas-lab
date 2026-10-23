@@ -5,7 +5,7 @@
 # by ioa-observe/observe-sdk's own `ioa_observe.*` layer, on top of the base
 # OpenLLMetry (`traceloop.*`) auto-instrumentation observe-sdk is built on.
 # It is what real ClickHouse-exported traces from a running MAS actually
-# contain, and what OXP norm
+# contain, and what SCOPE norm
 # are meant to parse.
 #
 # Contrast with mas.spanspec.yaml in this same directory: that file specifies

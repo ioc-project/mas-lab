@@ -72,7 +72,7 @@ def test_story_step2_verify(tmp_path):
     report = run_verify_spans(tmp_path / "spans.jsonl", spanspec_level="L3")
     assert report["ok"]  # no structural errors
     conf = report["spanspec"]["conformance"]
-    assert conf["L2"] == "full"  # OXP-ready
+    assert conf["L2"] == "full"  # SCOPE-ready
     assert conf["L3"] in {"full", "passing"}
 
 

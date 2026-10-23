@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://raw.githubusercontent.com/outshift-open/mas-lab/main/lab/components/core/src/mas/lab/schemas/ui/mas-manifest.schema.json",
+  "$id": "mas/v1#mas-ui",
   "title": "MAS Manifest",
   "description": "Schema for Multi-Agent System manifest files (kind: MAS). Defines the agent topology, workflow routing, and optional capabilities for a MAS application.",
   "type": "object",

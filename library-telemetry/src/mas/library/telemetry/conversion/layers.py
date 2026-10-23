@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Select which observability layers to export as OTel spans.
 
-OXP's required class layers are structure, execution, and trajectory
+SCOPE's required class layers are structure, execution, and trajectory
 (``provenance`` here). Semantic (context) stays on with that default set.
 Governance is opt-in.
 
@@ -39,7 +39,7 @@ class ExportLayers:
 
     @classmethod
     def oxp_default(cls) -> "ExportLayers":
-        """OXP-required layers: structure, execution, trajectory (plus semantic)."""
+        """SCOPE-required layers: structure, execution, trajectory (plus semantic)."""
         return cls()
 
     @classmethod

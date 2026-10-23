@@ -9,7 +9,7 @@ description: >
   pre-envelope items (prompt/query, top-level ground_truth, a bare YAML
   list) and emit a deprecation warning; those shapes are marked
   deprecated below. Migration:
-  https://outshift-open.github.io/mas-lab/manifests/dataset-migration/
+  https://ioc-project.github.io/mas-lab/manifests/dataset-migration/
 
 type: object
 required: [apiVersion, kind, metadata, spec]
@@ -98,7 +98,7 @@ properties:
               deprecated: true
               description: >
                 DEPRECATED. Use inputs.user (string). Loader warns.
-                See https://outshift-open.github.io/mas-lab/manifests/dataset-migration/
+                See https://ioc-project.github.io/mas-lab/manifests/dataset-migration/
             query:
               deprecated: true
               description: DEPRECATED. Use inputs.user.

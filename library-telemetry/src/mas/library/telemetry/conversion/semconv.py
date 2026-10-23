@@ -67,7 +67,7 @@ IOA_AGENT_TRACE_ID: Final[str] = "ioa_observe.agent.trace_id"
 IOA_AGENT_PREVIOUS: Final[str] = "ioa_observe.agent.previous"
 IOA_AGENT_SEQUENCE: Final[str] = "ioa_observe.agent.sequence"
 IOA_HANDOFF_SOURCE_SPAN_IDS: Final[str] = "ioa_observe.handoff.source.span_ids"
-# The real SDK emits this as a native OTel array attribute. OXP's own
+# The real SDK emits this as a native OTel array attribute. SCOPE's own
 # norm.heuristics.handoff._source_span_ids reads ioa_observe.handoff.source.
 # span_ids with json.loads(raw) -- it would raise (caught, returning no
 # signal) on a real array value, so both handoff attributes here stay
@@ -117,7 +117,7 @@ SPAN_SUFFIX_SKILL: Final[str] = "skill"
 SPAN_SUFFIX_RAG: Final[str] = "rag"
 
 # TaskCall is the MAS-run wrapper. Observe-sdk names the equivalent span
-# ``invoke_agent {graph}`` (e.g. ``invoke_agent LangGraph``). OXP ``norm``
+# ``invoke_agent {graph}`` (e.g. ``invoke_agent LangGraph``). SCOPE ``norm``
 # ignores it; Inspect still shows it as the workflow root.
 SPAN_NAME_TASK_CALL: Final[str] = "invoke_agent mas"
 SPAN_NAME_SESSION_START: Final[str] = "session.start"
@@ -151,7 +151,7 @@ except ImportError:
 
 
 def session_id_for(application_id: str, raw_session_id: str) -> str:
-    """OXP ``fields.get_session_id`` strips an ``<application_id>_`` prefix."""
+    """SCOPE ``fields.get_session_id`` strips an ``<application_id>_`` prefix."""
     app = (application_id or "").strip()
     sid = (raw_session_id or "").strip()
     if not sid:

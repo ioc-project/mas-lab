@@ -10,7 +10,7 @@ Our [Code of Conduct](/CODE_OF_CONDUCT.md) covers all your interactions in the p
 
 ## Reporting Issues
 
-Search the [issues list](https://github.com/outshift-open/mas-lab/issues) first. Check that nobody reported or fixed the issue already.
+Search the [issues list](https://github.com/ioc-project/mas-lab/issues) first. Check that nobody reported or fixed the issue already.
 
 A new issue needs a title and a clear description. Add all relevant information and, if possible, a test case.
 
@@ -27,7 +27,7 @@ Include tests for any affected behavior. We follow semantic versioning. We may h
 You can help without writing code. Triage and answer open issues to help troubleshoot and fix bugs. You can:
 
 - Check that existing issues follow the _[Reporting Issues](#reporting-issues)_ section. Tell the author what is missing.
-- Update the [Wiki](https://github.com/outshift-open/mas-lab/wiki) with current instructions and code samples.
+- Update the [Wiki](https://github.com/ioc-project/mas-lab/wiki) with current instructions and code samples.
 - Review pull requests. Test patches against real applications that use `mas-lab`.
 - Write a test, or add a missing case to an existing test.
 

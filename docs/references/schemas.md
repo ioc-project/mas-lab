@@ -4,7 +4,7 @@
 -->
 # Schema index
 
-This page lists the YAML and JSON schemas that `mas-ctl validate`, `mas-lab check`, and the benchmark UI use. A *schema* states which keys a manifest may hold and what type each has. The files live under [`docs/schemas/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas/).
+This page lists the YAML and JSON schemas that `mas-ctl validate`, `mas-lab check`, and the benchmark UI use. A *schema* states which keys a manifest may hold and what type each has. The files live under [`docs/schemas/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/).
 
 Example: check an agent manifest against its schema.
 
@@ -79,7 +79,7 @@ Top-level kinds (see [manifest reference](../manifests/README.md)):
 | [`runtime/tool_bundle.schema.yaml`](../schemas/runtime/tool_bundle.schema.yaml) | Bundled tools |
 | [`runtime/prompt_bundle.schema.yaml`](../schemas/runtime/prompt_bundle.schema.yaml) | Prompt bundles |
 
-Shared fragments live under [`runtime/fragments/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas/runtime/fragments/). They cover bindings, workflow nodes and edges, policy rules, and design-pattern config.
+Shared fragments live under [`runtime/fragments/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/runtime/fragments/). They cover bindings, workflow nodes and edges, policy rules, and design-pattern config.
 
 ---
 
@@ -97,7 +97,7 @@ Shared fragments live under [`runtime/fragments/`](https://github.com/outshift-o
 | [`lab/artefacts/run_info.schema.json`](../schemas/lab/artefacts/run_info.schema.json) | Run metadata artefact |
 | [`lab/artefacts/metrics.schema.json`](../schemas/lab/artefacts/metrics.schema.json) | Metrics artefact |
 
-Shared lab fragments live under [`lab/fragments/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas/lab/fragments/): `memory-seed-entry`, `message` (conversation message), `ref` (file ref), and `tool-fixture-mapping`.
+Shared lab fragments live under [`lab/fragments/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/lab/fragments/): `memory-seed-entry`, `message` (conversation message), `ref` (file ref), and `tool-fixture-mapping`.
 
 ---
 
@@ -113,14 +113,14 @@ Shared lab fragments live under [`lab/fragments/`](https://github.com/outshift-o
 
 ## Examples
 
-Sample overlays and bindings under [`schemas/examples/`](https://github.com/outshift-open/mas-lab/tree/main/docs/schemas/examples/):
+Sample overlays and bindings under [`schemas/examples/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/examples/):
 
 - [`overlays/live-llm.yaml`](../schemas/examples/overlays/live-llm.yaml)
 - [`overlays/llm-reasoning.yaml`](../schemas/examples/overlays/llm-reasoning.yaml)
 - [`overlays/llm-sampling.yaml`](../schemas/examples/overlays/llm-sampling.yaml)
 - [`overlays/observability-native.yaml`](../schemas/examples/overlays/observability-native.yaml)
 - [`infra/mcp-localhost.yaml`](../schemas/examples/infra/mcp-localhost.yaml)
-- [`library-samples/infra/mcp-localhost-deploy.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mcp-localhost-deploy.yaml): MCP server deployment posture
+- [`library-samples/infra/mcp-localhost-deploy.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost-deploy.yaml): MCP server deployment posture
 - [`tools/annotated.tool.yaml`](../schemas/examples/tools/annotated.tool.yaml)
 - [`checkpoint-axis.yaml`](../schemas/examples/checkpoint-axis.yaml)
 - [`checkpoint-v2.json`](../schemas/examples/checkpoint-v2.json)

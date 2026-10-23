@@ -2,7 +2,7 @@
 
 This tutorial follows one trace through the `library-kg` workflow: raw event log, knowledge
 graph (KG), Neo4j, round-trip dump, diff. It is for readers who finished
-[Tutorial 9](../../docs/tutorials/09-kg-oxp/README.md) (native to KG, OTel to KG,
+[Tutorial 9](../../docs/tutorials/09-kg-scope/README.md) (native to KG, OTel to KG,
 serialization, equivalence, validation) and want Neo4j push and dump, round-trip
 comparison, annotation and querying. Each `mas-lab kg` command appears next to the library
 function it calls, so you can switch to Python when the CLI is not enough.
@@ -14,12 +14,13 @@ mas-lab kg normalize library-kg/examples/qa-agent/events.jsonl --run-id tutorial
 mas-lab kg validate /tmp/tutorial-kg.jsonld
 ```
 
-**What is first-party and what is OXP.** OXP is the open-source Observe and eXplain
-Platform
-([outshift-open/observe-and-explain-platform](https://github.com/outshift-open/observe-and-explain-platform)).
-This tutorial uses two OXP pieces: `oxp-ontology` (the ontology, the SHACL shapes and the
+**What is first-party and what is SCOPE.** [SCOPE](https://ioc-project.github.io/scope/)
+(System for Cognitive Observability Provenance and Explainability,
+[ioc-project/scope](https://github.com/ioc-project/scope))
+is the observability platform.
+This tutorial uses two SCOPE pieces: `oxp-ontology` (the ontology, the SHACL shapes and the
 generated models; a hard dependency of `mas-library-kg`) and, for the OpenTelemetry (OTel)
-path only, `norm` (the OXP OTel normalizer; optional extra `[norm]`, installed from git
+path only, `norm` (the SCOPE OTel normalizer; optional extra `[norm]`, installed from git
 until it is published). The native-to-KG normalizer, validation, Neo4j push and dump, the
 `mas-lab kg` commands and the pipeline steps belong to `mas-library-kg`.
 
@@ -225,7 +226,7 @@ extract the graph.
 ## 4. Normalise OTel spans
 
 If your system emits OTel spans instead of native events, normalise those. This path calls
-the OXP function `norm.normalize()` and needs the `[norm]` extra:
+the SCOPE function `norm.normalize()` and needs the `[norm]` extra:
 
 ```bash
 uv pip install -e "library-kg[norm]"
@@ -300,7 +301,7 @@ This output is what you get without the `[validation]` extra (`rdflib`, `pyshacl
 the extra installed, the command also checks the SHACL shapes from `oxp-ontology`. On
 short captures this can add warnings (for example optional LLM token fields) and some
 cardinality findings; see
-[Tutorial 9, section 5](../../docs/tutorials/09-kg-oxp/README.md).
+[Tutorial 9, section 5](../../docs/tutorials/09-kg-scope/README.md).
 
 Useful flags: `--strict` (recommended-attribute gaps become errors), `--list-checks`,
 `--check NAME` (run only this check, repeatable), `--skip-check NAME`,

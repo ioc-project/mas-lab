@@ -24,8 +24,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/outshift-open/mas-lab"
-Issues = "https://github.com/outshift-open/mas-lab/issues"
+Homepage = "https://github.com/ioc-project/mas-lab"
+Issues = "https://github.com/ioc-project/mas-lab/issues"
 
 [project.optional-dependencies]
 curses = [

@@ -156,7 +156,7 @@ properties:
           Loaders still accept mas: {manifest|app, configs_dir} (and
           lab.mas in lab-config.yaml) and emit a one-shot warning.
           Replace with application: {app|manifest, configs_dir}.
-          See https://outshift-open.github.io/mas-lab/manifests/experiment/#applications
+          See https://ioc-project.github.io/mas-lab/manifests/experiment/#applications
         oneOf:
           - type: object
             additionalProperties: true

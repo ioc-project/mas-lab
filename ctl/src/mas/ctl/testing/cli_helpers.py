@@ -25,9 +25,14 @@ def mas_lab_root() -> Path:
     # Monorepo / Actions checkout (ctl package lives under repo root).
     if (_V2_ROOT / "lab" / "pyproject.toml").is_file():
         return _V2_ROOT
-    default = _V2_ROOT.parent / "outshift-open" / "mas-lab"
-    alt = Path.home() / "repos" / "outshift-open" / "mas-lab"
-    return default if default.is_dir() else alt
+    candidates = (
+        _V2_ROOT.parent / "ioc-project" / "mas-lab",
+        Path.home() / "repos" / "ioc-project" / "mas-lab",
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    return candidates[1]
 
 
 def _v2_env(base: dict[str, str]) -> dict[str, str]:

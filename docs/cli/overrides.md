@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# CLI Override Reference
+# CLI overrides
 
-`--override` changes one field of a manifest from the command line, without writing an overlay file. Use it for a quick patch to a single run.
+`--override` changes one field of a manifest from the command line, without writing an overlay file. Use it for a quick patch to a single run. Part of [References → CLI](../references/index.md#cli). Topic index: [command line](index.md).
 
 Terms: a *manifest* is a YAML file that declares an agent, a MAS, or an experiment. An *overlay* is a small YAML file merged on top of a manifest. See the [glossary](../glossary.md).
 

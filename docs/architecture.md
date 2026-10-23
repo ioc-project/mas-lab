@@ -4,8 +4,19 @@
 -->
 # Architecture
 
-This page explains how MAS Lab goes from a declaration to a result. It names the
-five stages, the three layers you can vary, the packages and the user interfaces.
+This page explains how MAS Lab goes from a declaration to a result: the five
+stages and the three layers you can vary.
+
+The former architecture page also covered the experiment control plane, the
+packages, and the user interfaces. Those now have their own pages in
+[What is MAS-Lab](what-is/index.md):
+
+| Topic | Page |
+| --- | --- |
+| Experiment control plane and guarantees | [Experiments](what-is/experiments.md) |
+| Installable packages | [Packages](what-is/packages.md) |
+| Directories in a checkout | [Repo structure](what-is/repo.md) |
+| CLI, TUI, web UI, dashboard | [Surfaces](what-is/surfaces.md) |
 
 ## Shape of the system
 
@@ -149,101 +160,5 @@ See the [experiment manifest](manifests/experiment.md), the
 [Tutorial 3](tutorials/03-experiments-and-analysis/README.md) and
 [Tutorial 10 — Evaluation metrics](tutorials/10-evaluation-metrics/README.md).
 
-## The lab control plane
-
-`mas-lab benchmark run` first executes all runs, then runs the analysis steps. The
-work is organised in four nested levels. Each level can have steps that run when
-that level completes:
-
-| Level | YAML key | Scope |
-|---|---|---|
-| **Experiment** | `post:` | The whole experiment, for example aggregating metrics |
-| **Scenario** | `scenario:` | One overlay stack |
-| **Item** | `item:` | One dataset item, across all its runs |
-| **Run** | `run:` | One execution of one scenario on one item. It writes `traces/events.jsonl` |
-
-`n_runs` repeats each scenario and item pair. Models are not deterministic, so one
-run proves nothing. Repeating gives you the **variance**, instead of assuming it.
-
-The experiment's `design` chooses which scenario and item pairs to run:
-
-| Mode | Cells run |
-|---|---|
-| `cartesian` | Every scenario against every item |
-| `coupled` | Only the listed (scenario, items) pairs |
-| `one_factor` | Sweep one axis, scenarios or items, while the other is pinned |
-
-Use `one_factor` to vary one thing at a time. Set `design.max_executions` to stop a
-plan that is larger than you intended. Set `dataset.limit` for a quick smoke run.
-
-Analysis steps live in these level hooks. An experiment has no separate `pipeline:`
-key. You can still run a standalone pipeline file with `mas-lab benchmark pipeline run`.
-
-## Where the guarantees come from
-
-No single layer gives all the guarantees. They add up across the three.
-
-| | Source | What it covers |
-|---|---|---|
-| **By design** | The specification and the runtime | Declared roles, allowed tools, policy checks, controlled execution |
-| **By validation** | Labs | Building blocks and combinations tested before release |
-| **By observation** | Traces and guardrails | What only appears under real workloads, delays and policies |
-
-Four properties build on each other:
-
-1. **Testable**: contracts are fixed points you can write assertions against.
-2. **Reproducible**: the configuration is fully resolved before the run, so a run
-   depends only on its manifests.
-3. **Observable**: events come from the contract boundaries, so nothing depends on
-   someone remembering to log.
-4. **Governable**: policy is an overlay outside the application, so you can change,
-   audit and vary it on its own.
-
-!!! note "The experimental claim"
-    A difference you observe is caused by the variable you changed, not by
-    something else that varied in the stack.
-
-    This holds only while the variation layers stay separate. That is why the
-    rules above (no model endpoint in a logic or control overlay, no API URL in a
-    flavour) are requirements, not style.
-
-## Packages
-
-Each layer depends only on the layers above it in this table. There are no cycles.
-
-| Layer | Package | Role |
-|---|---|---|
-| **Runtime** | `mas-runtime` | The kernel, contracts, plugins and design patterns. It is a library with no command line |
-| **Orchestration** | `mas-ctl` | Builds and runs sessions: `chat`, `run-mas`, `validate`, `compile`, `compose` |
-| **Lab** | `mas-lab-core` | Shared contracts and telemetry types |
-| | `mas-lab-bench` | Runs benchmarks and analysis pipelines |
-| | `mas-lab-controller` | A background service with an HTTP API, used by the web UI |
-| | `mas-lab` | Installs the three above and provides the `mas-lab` command |
-| **Libraries** | `mas-library-standard` | Flavours, overlays, infra bundles, built-in plugins |
-| | `mas-library-eval` | Evaluation metrics consumed by pipeline steps |
-| | `mas-library-lab` | Shared types and backend code for the lab and its UI |
-| | `mas-library-samples` | Reference applications, datasets, tutorial fixtures |
-| | `mas-library-telemetry` | Converts and replays traces, exports to OpenTelemetry |
-| | `mas-library-kg` | Turns traces into a knowledge graph |
-| | `mas-library-skills` | The skill catalogue and the tools that read skills |
-| | `mas-library-ioa` | MCP client/server bridge |
-
-A *lab* is an experiment folder. A *library* is a folder with a `library.yaml`
-holding reusable applications, tools and plugins, referenced as `name:path`. The
-two are deliberately different things.
-
-See the [package map](libraries.md), the [packages reference](packages-reference.md)
-and [labs vs libraries](labs-and-libraries.md).
-
-## Surfaces
-
-| Surface | What it is for | Docs |
-|---|---|---|
-| **`mas-ctl`** | Run, validate, compile and compose agents and MAS; chat | [CLI](cli/mas-ctl.md) |
-| **`mas-lab`** | Workspace bootstrap, benchmarks, pipelines, telemetry, plots | [CLI overview](cli/index.md) |
-| **Terminal UI** | Interactive session in the terminal | [TUI](ctl/tui.md) |
-| **Web UI** | A browser studio: browse and validate manifests, launch benchmarks, inspect runs | [Web UI](ui/index.md) |
-| **Live dashboard** | Topology, native events and chat for a running MAS or a finished run | [Live dashboard](ui/live.md) |
-| **Controller HTTP API** | The REST backend both web surfaces talk to | [Web UI](ui/index.md) |
-
-Next: [Labs](labs.md).
+Next: [Experiments](what-is/experiments.md) — the lab control plane and where
+the guarantees come from.

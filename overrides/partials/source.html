@@ -1,0 +1,23 @@
+{#- GitHub source chip: repo name plus version / stars / forks baked at build. -#}
+<a href="{{ config.repo_url }}" title="{{ config.repo_name }}" class="md-source">
+  <div class="md-source__icon md-icon">
+    {% set icon = config.theme.icon.repo or "fontawesome/brands/github" %}
+    {% include ".icons/" ~ icon ~ ".svg" %}
+  </div>
+  <div class="md-source__repository{% if config.extra.github %} md-source__repository--active{% endif %}">
+    {{ config.repo_name }}
+    {% if config.extra.github %}
+    <ul class="md-source__facts">
+      {% if config.extra.github.version %}
+      <li class="md-source__fact md-source__fact--version">{{ config.extra.github.version }}</li>
+      {% endif %}
+      {% if config.extra.github.stars %}
+      <li class="md-source__fact md-source__fact--stars">{{ config.extra.github.stars }}</li>
+      {% endif %}
+      {% if config.extra.github.forks %}
+      <li class="md-source__fact md-source__fact--forks">{{ config.extra.github.forks }}</li>
+      {% endif %}
+    </ul>
+    {% endif %}
+  </div>
+</a>

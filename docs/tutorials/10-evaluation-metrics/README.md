@@ -67,7 +67,7 @@ mas-lab benchmark run EXPERIMENT.yaml --pipeline run:post:path/to/eval-pipeline.
 ```
 
 `run:post:` means "after each run"; the other levels are `item`, `scenario`
-and `experiment` (see the [CLI reference](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/cli-reference.md)).
+and `experiment` (see the [CLI reference](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/cli-reference.md)).
 A relative path resolves from the directory of `experiment.yaml`.
 
 ---
@@ -119,7 +119,7 @@ The runner reads `input_query` from the root `execution_start` and
 5. application `spec.models[]`
 
 A runnable pin is in
-[library-eval/examples/mce/judge-override/](https://github.com/outshift-open/mas-lab/tree/main/library-eval/examples/mce/judge-override).
+[library-eval/examples/mce/judge-override/](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override).
 See also [summarization.md — MCE judge model](../../manifests/summarization.md#mce-judge-model).
 
 ---
@@ -264,8 +264,8 @@ use `mas-lab eval TRACE --metric goal_success_rate` (stock ids only).
 
 - [Tutorial 3](../03-experiments-and-analysis/README.md): first experiment and MCE
 - [LLM cache](../../manifests/llm-cache.md)
-- [pipeline-steps.md](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md): `eval_mce`
-- [library-eval README](https://github.com/outshift-open/mas-lab/blob/main/library-eval/README.md)
+- [pipeline-steps.md](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-steps.md): `eval_mce`
+- [library-eval README](https://github.com/ioc-project/mas-lab/blob/main/library-eval/README.md)
 
 ## Next
 

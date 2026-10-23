@@ -259,7 +259,7 @@ Assembly runs one pairing pass after `manage_history` and working memory (one re
 The kernel then raises `ProviderPayloadError` if the payload is still unpaired.
 The server checks **ids and counts**, not the text inside a tool result.
 
-Plugin authors find the canonical rules in the [ContextManagerContract](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract): two layers, protocol versus tokens, and ask-then-results.
+Plugin authors find the canonical rules in the [ContextManagerContract](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract): two layers, protocol versus tokens, and ask-then-results.
 
 ## See also
 
@@ -267,6 +267,6 @@ Plugin authors find the canonical rules in the [ContextManagerContract](https://
 - [plugin-bindings.md](plugin-bindings.md): string shorthand vs `{type, params}` vs list slots
 - [summarization.md](summarization.md): thresholds, which model, MCE judge, logs
 - [agent.md](agent.md): `working_memory` (live round plus persistent buffer; compaction is sugar)
-- [ContextManagerContract](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract)
+- [ContextManagerContract](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md#contextmanagercontract)
 - [working-memory-compaction.md](../design/working-memory-compaction.md)
 - [plugins-reference.md](../plugins-reference.md)

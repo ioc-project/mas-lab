@@ -5,6 +5,9 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # Refresh GitHub stars/forks baked into the header (see scripts/mkdocs_github_stats.py).
+    - cron: "17 4 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -33,6 +36,8 @@ jobs:
       - uses: actions/configure-pages@v5
 
       - name: Build MkDocs site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mkdocs build
 
       - uses: actions/upload-pages-artifact@v3

@@ -19,7 +19,7 @@ It is for three audiences:
 
 Links:
 
-- **Documentation site:** [outshift-open.github.io/mas-lab](https://outshift-open.github.io/mas-lab/)
+- **Documentation site:** [ioc-project.github.io/mas-lab](https://ioc-project.github.io/mas-lab/)
 - **Release process:** [RELEASE-PROCESS.md](RELEASE-PROCESS.md)
 - **Release notes:** [v0.1 post](docs/blog/posts/2026-06-17-v0-1-release/index.md) · [v0.2 post](docs/blog/posts/2026-09-30-v0-2-release/index.md)
 
@@ -120,7 +120,7 @@ Details:
 - [Tutorial 4](docs/tutorials/04-mcp-tools/README.md) switches local tool execution to MCP.
 - [Tutorial 5](docs/tutorials/05-a2a-agents/README.md) switches a delegated agent from local to A2A.
 - [MCP infra reference](docs/references/tool-server-registry.md)
-- [A2A contract and routing](docs/a2a/developer.md)
+- [A2A](docs/standards/a2a.md) · [A2A internals](docs/a2a/developer.md)
 - [Infra manifest model](docs/manifests/infra.md)
 
 ## Packages
@@ -160,7 +160,10 @@ Security fixes are applied to the latest release on the `main` branch.
 ## Citing this work
 
 If you use MAS Lab in research or publications, cite the
-[MAS Lab article](docs/paper/index.md) — not only this repository.
+[MAS Lab article](https://arxiv.org/abs/2606.30546)
+([arXiv:2606.30546](https://arxiv.org/abs/2606.30546)) — not only this
+repository. Reproduction of Section 5 is on the
+[Paper](docs/paper/index.md) page.
 
 ## Contributing
 

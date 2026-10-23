@@ -33,7 +33,7 @@ Terms used below:
 - **State / Transition**: trajectory nodes. A `State` holds the content of one step's input or output; a `Transition` connects the two and *represents* that call (see [section 5](#5-synthesised-nodes-and-edges)).
 - **Layer**: a group of event kinds you can switch on or off (trajectory, provenance, infrastructure, governance; see [section 8](#8-layer-defaults-and-control)).
 
-OTel telemetry is input, not a node layer: normalization never emits `Span` nodes. Call nodes carry `sourceRecordIds`, the `event_id` of each native event that created or updated the node. Validation uses `mas-ontology.ttl` from the `oxp-ontology` package (the ontology of the Observe and eXplain Platform, OXP) plus the MAS Lab extension file (see [ontology.md](ontology.md)).
+OTel telemetry is input, not a node layer: normalization never emits `Span` nodes. Call nodes carry `sourceRecordIds`, the `event_id` of each native event that created or updated the node. Validation uses `mas-ontology.ttl` from the `oxp-ontology` package (the SCOPE ontology) plus the MAS Lab extension file (see [ontology.md](ontology.md)).
 
 The native pipeline has three stages:
 
@@ -63,7 +63,7 @@ Both errors are observability gaps, not fatal: with the default `strict=False` t
 `extract_graph(normalized, ...)` in `core/graph_builder.py` is a thin wrapper: it calls `build_graph_from_normalized`, which sorts the events by timestamp (stable), feeds each to `NativeGraphBuilder.process_event`, then calls `finalize()`.
 
 - `process_event` dispatches on `mas_class` through `HANDLERS` (`observability/native/handlers/__init__.py`): `agent.py` (AgentCall, TaskCall), `chat.py` (LLMCall plus ThinkingCall), `tool.py` (ToolCall, SkillCall), `processing.py`, `memory.py`, `rag.py`, `session.py` (MASCall), `annotation.py` (CallAnnotation, GovernanceEvent, ContextContribution). `ParallelGroup`, `Branch` and `Worker` use the generic fallback in `structural.py`. All call handlers share `NativeGraphBuilder.upsert_call`, which creates the node on `*_start` and updates it on `*_end`.
-- `finalize()` runs the passes that need the complete event set, in this order: derive tool-use completions and materialise AgentCall output parts (`core/output_rendering.py`); resolve annotations to calls (`_resolve_annotation_edges`); build `Session` (and optional `Application`) and `Run`/`Agent` nodes; infer `contains` edges by time enclosure (`_infer_contains_edges`); backfill missing `parentCallId` (`_backfill_missing_parent_call_ids`); flatten delegated AgentCalls to siblings; synthesise State/Transition nodes (`core/state_transition.py`); add `derivedFrom` edges (`_derived_from_edges`); add catalog nodes (`_extract_catalog_layer`); add session trajectory anchors; normalise ids; and finally align edge names and add topology edges to the OXP ontology vocabulary (`core/ontology_align.py:align_graph`, then `core/oxp_models.py:map_graph`).
+- `finalize()` runs the passes that need the complete event set, in this order: derive tool-use completions and materialise AgentCall output parts (`core/output_rendering.py`); resolve annotations to calls (`_resolve_annotation_edges`); build `Session` (and optional `Application`) and `Run`/`Agent` nodes; infer `contains` edges by time enclosure (`_infer_contains_edges`); backfill missing `parentCallId` (`_backfill_missing_parent_call_ids`); flatten delegated AgentCalls to siblings; synthesise State/Transition nodes (`core/state_transition.py`); add `derivedFrom` edges (`_derived_from_edges`); add catalog nodes (`_extract_catalog_layer`); add session trajectory anchors; normalise ids; and finally align edge names and add topology edges to the SCOPE ontology vocabulary (`core/ontology_align.py:align_graph`, then `core/oxp_models.py:map_graph`).
 
 `build_kg_document` (`pipeline.py`) wraps both stages and adds `metadata` (event/node/edge counts, `ontology_path`, `layers`, `plot_events`).
 
@@ -77,7 +77,7 @@ Both errors are observability gaps, not fatal: with the default `strict=False` t
 
 2. **OTel spans**
    - Entry points: `build_kg_from_otel_spans(...)`, `run_normalize_otel(...)`, `mas-lab kg otel-to-kg`, `mas-lab kg normalize --otel FILE`.
-   - Code path: `observability/otel_via_norm.py:normalize_otel`. It detects ClickHouse-shaped rows (`SpanName` / `SpanAttributes`) versus OTel SDK span JSON (`name` / `context` / `attributes`), reshapes SDK spans mechanically, and calls `norm.normalize()` from the OXP OTel normalizer. Dispatch and span handlers live in `norm`, not here. The graph vocabulary is `norm`'s; no events are reconstructed.
+   - Code path: `observability/otel_via_norm.py:normalize_otel`. It detects ClickHouse-shaped rows (`SpanName` / `SpanAttributes`) versus OTel SDK span JSON (`name` / `context` / `attributes`), reshapes SDK spans mechanically, and calls `norm.normalize()` from the SCOPE OTel normalizer. Dispatch and span handlers live in `norm`, not here. The graph vocabulary is `norm`'s; no events are reconstructed.
    - `norm` is the optional `[norm]` extra (installed from git until published). Without it, the OTel entry points log a warning and return an empty graph.
 
 `pipeline.normalize(raw_input)` detects the shape (`kind` field means native; `SpanName` or `name`+`context`/`attributes` means OTel) and returns `(nodes, edges)`.
@@ -272,7 +272,7 @@ Attribute names are camelCase. Which attributes exist depends on which events ca
 | `startTime`, `endTime` | `event.timestamp` of the start / end event (epoch seconds) |
 | `status` | end event `status`, default `success` |
 | `sourceRecordIds` | ordered `event_id`s |
-| `duration`, `success`, `spanId`, `parentSpanId` | added by the OXP models and alignment; `duration` is in milliseconds |
+| `duration`, `success`, `spanId`, `parentSpanId` | added by the SCOPE models and alignment; `duration` is in milliseconds |
 
 ### Class-specific attributes
 

@@ -7,8 +7,8 @@
 > **Packages:** `mas-library-standard` (native plugin), `mas-library-telemetry`
 > (OTel plugin, replay, collector, ClickHouse)
 > **Prerequisite:** [Tutorials 0-3](../03-experiments-and-analysis/README.md)
-> **Follow-on:** [Tutorial 9 — Knowledge graphs](../09-kg-oxp/README.md)
-> **Example traces:** [`library-telemetry/examples/qa-agent/`](https://github.com/outshift-open/mas-lab/tree/main/library-telemetry/examples/qa-agent)
+> **Follow-on:** [Tutorial 9 — Knowledge graphs](../09-kg-scope/README.md)
+> **Example traces:** [`library-telemetry/examples/qa-agent/`](https://github.com/ioc-project/mas-lab/tree/main/library-telemetry/examples/qa-agent)
 
 ## Goal
 
@@ -53,7 +53,7 @@ Spans fall into five categories: `structure`, `execution`, `semantic`,
 `provenance` and `governance`. All but `governance` are on by default. Change
 them with `--layer` / `--governance` (CLI), `export_layers:` (pipeline step)
 or the plugin overlay. Details: the
-[conversion reference](https://github.com/outshift-open/mas-lab/blob/main/library-telemetry/docs/conversion.md).
+[conversion reference](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/conversion.md).
 
 ---
 
@@ -239,8 +239,8 @@ export OBSERVE_REALTIME_OBSERVABILITY_ENABLED=true
 ```
 
 Each `completed` span reuses the id of its `started` span. A reader such as
-the `norm` normalizer of the Observe and eXplain Platform (OXP) then sees one
-logical call (used in [Tutorial 9, Step 6](../09-kg-oxp/README.md#step-6-keep-the-graph-current-in-realtime)).
+the `norm` normalizer of SCOPE then sees one
+logical call (used in [Tutorial 9, Step 6](../09-kg-scope/README.md#step-6-keep-the-graph-current-in-realtime)).
 Check the pairing:
 
 ```bash
@@ -262,5 +262,5 @@ python -m pytest tests/telemetry/conversion/test_oxp_contract.py -k realtime -q
 
 ## Next
 
-[Tutorial 9 — Knowledge graphs](../09-kg-oxp/README.md) turns these files into
+[Tutorial 9 — Knowledge graphs](../09-kg-scope/README.md) turns these files into
 a knowledge graph.

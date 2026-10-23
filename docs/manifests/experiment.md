@@ -317,7 +317,7 @@ experiment:
 ```
 
 See [summarization.md](summarization.md#mce-judge-model) for the resolution order and logs.
-A feature example (not a sample app) is in [library-eval/examples/mce/judge-override/](https://github.com/outshift-open/mas-lab/tree/main/library-eval/examples/mce/judge-override).
+A feature example (not a sample app) is in [library-eval/examples/mce/judge-override/](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override).
 
 ### Artifacts
 
@@ -559,7 +559,7 @@ experiment:
 Declaring the block does not run the check.
 Add a `validate_outputs` step, typically last in the experiment-root `post:`, with `config: {schema: <the output_schema dict above>}`.
 The step only warns unless `config.warn_only: false`.
-See [pipeline-steps.md](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md).
+See [pipeline-steps.md](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-steps.md).
 
 ### Deprecated and removed keys
 

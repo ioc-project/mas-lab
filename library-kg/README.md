@@ -22,13 +22,13 @@ open standard for traces and spans.
 benchmark pipeline steps use the `mas-lab` framework. Neo4j support is an optional extra
 (`[neo4j]`).
 
-The package builds on two pieces of the open-source Observe and eXplain Platform (OXP,
-[outshift-open/observe-and-explain-platform](https://github.com/outshift-open/observe-and-explain-platform)):
+The package builds on two pieces of
+[SCOPE](https://github.com/ioc-project/scope):
 
-| OXP piece | Role here | Install |
+| SCOPE piece | Role here | Install |
 |-----------|-----------|---------|
 | `oxp-ontology` | Ontology TTL, SHACL shapes and generated `oxp_ontology.models.*`. SHACL (Shapes Constraint Language) validates graph shapes. | Hard dependency (`>=1.0.1`) |
-| `norm` | OXP's OTel normaliser; `norm.normalize()` does the OTel-to-KG step | Optional extra `[norm]`, installed from git until it is published (the PyPI name `norm` belongs to an unrelated package, so the published name will likely be `oxp-norm`) |
+| `norm` | SCOPE's OTel normaliser; `norm.normalize()` does the OTel-to-KG step | Optional extra `[norm]`, installed from git until it is published (the PyPI name `norm` belongs to an unrelated package, so the published name will likely be `oxp-norm`) |
 
 First-party to this package: the native `events.jsonl`-to-KG normaliser, KG validation,
 Neo4j push and dump, the `mas-lab kg` commands and the pipeline steps.
@@ -620,8 +620,8 @@ not need the TTL (`KIND_TO_CLASS` is the map). TTL enrichment and SHACL validati
 |---------|------|
 | `library-telemetry` (`mas.library.telemetry`) | OTel JSON schema, SpanSpec definitions, span verification and comparison, and the native events to OTel export (the inverse direction) |
 | `library-kg` (`mas.library.kg`) | Normalisation, KG extraction, KG verification, Neo4j serialisation |
-| `oxp-ontology` (OXP) | Ontology TTL, SHACL shapes and generated models. Required by `library-kg` |
-| `norm` (OXP) | OTel-to-KG normaliser for the OTel path. Optional extra `[norm]` |
+| `oxp-ontology` (SCOPE) | Ontology TTL, SHACL shapes and generated models. Required by `library-kg` |
+| `norm` (SCOPE) | OTel-to-KG normaliser for the OTel path. Optional extra `[norm]` |
 | `mas-lab-bench` | Benchmark pipeline framework that runs the steps in `mas.library.kg.bench` (extra `[bench]`) |
 
 ---

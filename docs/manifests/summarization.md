@@ -123,7 +123,7 @@ params:
         Preserve city names, dates, and numeric facts. One short paragraph.
 ```
 
-Runnable pin: [library-standard/examples/context/summarizer-override/](https://github.com/outshift-open/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
+Runnable pin: [library-standard/examples/context/summarizer-override/](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
 
 ## Plugin and CM parameters
 
@@ -371,7 +371,7 @@ Stock MCE ids use MAS input and output.
 All ids land in the same `metrics.json`.
 The map is in [Tutorial 10](../tutorials/10-evaluation-metrics/README.md).
 
-Runnable pin: [library-eval/examples/mce/judge-override/](https://github.com/outshift-open/mas-lab/tree/main/library-eval/examples/mce/judge-override).
+Runnable pin: [library-eval/examples/mce/judge-override/](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override).
 
 ## See also
 
@@ -382,6 +382,6 @@ Runnable pin: [library-eval/examples/mce/judge-override/](https://github.com/out
 - [Compiled agent defaults](../references/defaults.md): `mas-ctl compile` expansion
 - [working-memory-compaction.md](../design/working-memory-compaction.md): design notes
 - [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md): experiments that pin models
-- [Pipeline steps](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md): `eval_mce`
-- Feature examples (not sample apps): [summarizer-override](https://github.com/outshift-open/mas-lab/tree/main/library-standard/examples/context/summarizer-override) and [MCE judge-override](https://github.com/outshift-open/mas-lab/tree/main/library-eval/examples/mce/judge-override)
-- Plugin card: [summarizer.md](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/context/summarizer.md)
+- [Pipeline steps](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-steps.md): `eval_mce`
+- Feature examples (not sample apps): [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override) and [MCE judge-override](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override)
+- Plugin card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/context/summarizer.md)

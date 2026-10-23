@@ -20,8 +20,8 @@ in `.github/workflows/docker.yml`.
 
 Published images for the release line include:
 
-- `ghcr.io/outshift-open/mas-lab/ui`
-- `ghcr.io/outshift-open/mas-lab/backend`
+- `ghcr.io/ioc-project/mas-lab/ui`
+- `ghcr.io/ioc-project/mas-lab/backend`
 
 The tag is derived from the release version and git SHA so the image stays tied
 to the exact source revision that produced it.

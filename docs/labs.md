@@ -2,7 +2,12 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Labs
+# Paper labs
+
+These are the three labs shipped in this repository. They reproduce the
+experiments of the MAS-Lab paper. For the IoC motivation, protocol-evaluation,
+and cognitive-challenge labs, start at the [Discover → Labs](discover/labs.md)
+index.
 
 A **lab** is a folder named `*.lab/` that holds one experiment. Its
 `experiment.yaml` lists three things:
@@ -23,7 +28,7 @@ A run has two phases:
    is skipped.
 2. **Analysis.** MAS Lab runs the analysis steps declared in the same file.
 
-See also the [labs index](https://github.com/outshift-open/mas-lab/tree/main/labs),
+See also the [labs index](https://github.com/ioc-project/mas-lab/tree/main/labs),
 [labs vs libraries](labs-and-libraries.md) and the
 [experiment manifest](manifests/experiment.md).
 
@@ -32,14 +37,14 @@ See also the [labs index](https://github.com/outshift-open/mas-lab/tree/main/lab
 MAS Lab ships **three reproducible labs**. Each one reproduces an experiment
 section of the paper *MAS-Lab: A Specification-Driven Validation Framework for
 Reliable Multi-Agent Systems* (see the [paper page](paper/index.md)). The
-[labs README](https://github.com/outshift-open/mas-lab/blob/main/labs/README.md)
+[labs README](https://github.com/ioc-project/mas-lab/blob/main/labs/README.md)
 lists the run commands.
 
 | Lab | Paper § | What it explores |
 |---|---|---|
-| [`design-space.lab`](https://github.com/outshift-open/mas-lab/tree/main/labs/design-space.lab) | §5.1 | Reasoning patterns and team layouts |
-| [`lifecycle-control.lab`](https://github.com/outshift-open/mas-lab/tree/main/labs/lifecycle-control.lab) | §5.2 | Governance **overlays** across the lifecycle |
-| [`extensions.lab`](https://github.com/outshift-open/mas-lab/tree/main/labs/extensions.lab) | §5.3 | Memory and context **overlays** |
+| [`design-space.lab`](https://github.com/ioc-project/mas-lab/tree/main/labs/design-space.lab) | §5.1 | Reasoning patterns and team layouts |
+| [`lifecycle-control.lab`](https://github.com/ioc-project/mas-lab/tree/main/labs/lifecycle-control.lab) | §5.2 | Governance **overlays** across the lifecycle |
+| [`extensions.lab`](https://github.com/ioc-project/mas-lab/tree/main/labs/extensions.lab) | §5.3 | Memory and context **overlays** |
 
 All three change **overlays** only: a pattern, a layout, a policy or a memory. They
 never change the application. That is the point: each change can be made,

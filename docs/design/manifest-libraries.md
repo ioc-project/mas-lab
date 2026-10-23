@@ -1,6 +1,10 @@
-Status: Implemented. User-facing reference: [Library discovery](../library-discovery.md) and the runtime [plugin registry manifests](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/plugin-registry-manifests.md#availability-gate-requiresextra-for-optional-dependencies) page.
-
+<!--
+  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+  SPDX-License-Identifier: Apache-2.0
+-->
 # Folder-based manifest libraries and plugin availability
+
+Status: Implemented. User-facing reference: [Library discovery](../library-discovery.md) and the runtime [plugin registry manifests](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/plugin-registry-manifests.md#availability-gate-requiresextra-for-optional-dependencies) page.
 
 A *library* is a folder of reusable apps, tools, plugins, and datasets. A *plugin* is a unit of behaviour that a manifest selects by name. This note records how the runtime finds libraries and decides whether a plugin is usable.
 

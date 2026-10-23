@@ -96,6 +96,7 @@ tasks:
           tests/test_lab_manifests_strict.py \
           tests/test_shipped_manifest_separation.py \
           tests/test_workspace_imports.py \
+          tests/test_mkdocs_github_stats.py \
           runtime/tests/ \
           lab/components/core/tests/ \
           lab/components/bench/tests/ \
@@ -211,7 +212,7 @@ tasks:
       - "{{.VENV}}/pytest tests/test_hitl_tool_gate.py -q --tb=short"
 
   verify-reproduce:
-    desc: "Outshift-open reproduction gate — docs check, all lab dry-runs, HITL gate"
+    desc: "Reproduction gate — docs check, all lab dry-runs, HITL gate"
     deps: [install-dev]
     cmds:
       - "{{.VENV}}/python scripts/gen_docs.py --check"

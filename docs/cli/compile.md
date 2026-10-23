@@ -4,7 +4,7 @@
 -->
 # `mas-ctl compile`
 
-`mas-ctl compile` applies a manifest and its overlays, then writes the resolved spec. Use it to see what `chat` or `run-mas` will load.
+`mas-ctl compile` applies a manifest and its overlays, then writes the resolved spec. Use it to see what `chat` or `run-mas` will load. Part of [References → CLI](../references/index.md#cli). Topic index: [command line](index.md).
 
 Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. See the [glossary](../glossary.md) and the [overlay manifest](../manifests/overlay.md).
 
@@ -133,4 +133,4 @@ For target names, patch schemas, selectors, wildcards, precedence, and compatibi
 - [Tutorial 2](../tutorials/02-creating-a-mas/README.md): MAS topology overlays
 - [`mas-ctl compose`](mas-ctl.md#other-commands): effective bind and placement
 - [summarization.md](../manifests/summarization.md): compiled `summary_threshold`, summarizer model, and `params.instructions`
-- Example: [summarizer-override](https://github.com/outshift-open/mas-lab/tree/main/library-standard/examples/context/summarizer-override)
+- Example: [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override)

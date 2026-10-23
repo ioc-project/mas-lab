@@ -3,37 +3,31 @@
 site_name: MAS-Lab
 site_description: >-
   Multi-Agent System Lab — experimentation, benchmarking, and analysis for
-  reliable multi-agent systems.
-site_url: https://outshift-open.github.io/mas-lab/
-repo_url: https://github.com/outshift-open/mas-lab
-repo_name: GitHub
+  reliable multi-agent systems. Part of the Internet of Cognition.
+site_url: https://ioc-project.github.io/mas-lab/
+repo_url: https://github.com/ioc-project/mas-lab
+repo_name: ioc-project/mas-lab
 edit_uri: edit/main/docs/
 docs_dir: docs
 
 theme:
   name: material
-  logo: assets/mas-lab-logo.svg
+  custom_dir: overrides
+  language: en
+  font:
+    text: Inter
+    code: Roboto Mono
+  logo: assets/outshift-logo.svg
   favicon: assets/mas-lab-icon.svg
   palette:
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: custom
-      accent: amber
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: custom
-      accent: amber
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+    scheme: slate
+    primary: black
+    accent: cyan
   features:
     - navigation.tabs
     - navigation.tabs.sticky
     - navigation.sections
-    - navigation.indexes
+    - navigation.path
     - navigation.top
     - toc.follow
     - search.suggest
@@ -43,12 +37,19 @@ theme:
     repo: fontawesome/brands/github
 
 extra_css:
-  - stylesheets/mas-lab.css
+  - stylesheets/ioc.css
+  - stylesheets/ioc-layout.css
 
 extra:
+  generator: false
+  homepage: https://ioc-project.github.io/
+  ioc_home: https://ioc-project.github.io/
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/outshift-open/mas-lab
+      link: https://github.com/ioc-project/mas-lab
+
+hooks:
+  - scripts/mkdocs_github_stats.py
 
 plugins:
   - search
@@ -78,7 +79,11 @@ markdown_extensions:
   - pymdownx.snippets:
       base_path: ["."]
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight
   - pymdownx.tabbed:
       alternate_style: true
@@ -92,69 +97,90 @@ markdown_extensions:
       permalink: true
 
 nav:
-  - MAS-Lab:
-      - MAS-Lab: index.md
-      - Overview: overview.md
-      - Architecture: architecture.md
-      - Labs: labs.md
+  - Home:
+      - index.md
+  - Getting started:
+      - What is MAS-Lab: what-is/index.md
+      - Setup:
+          - Install: getting-started.md
+          - Docker: getting-started/docker.md
+          - From source: getting-started/developer.md
+      - Concepts:
+          - Architecture: architecture.md
+          - Repo structure: what-is/repo.md
+          - The problem: overview.md
+          - Experiments: what-is/experiments.md
+          - Packages: what-is/packages.md
+          - Surfaces: what-is/surfaces.md
   - User guide:
-      - user-guide.md
-      - Writing manifests: manifests/writing-manifests.md
-      - Packages reference: packages-reference.md
-      - Plugins reference: plugins-reference.md
-      - Labs vs libraries: labs-and-libraries.md
-      - user-config.md
-      - "config.yaml": references/config.yaml.md
-      - libraries.md
-      - CLI:
-          - Overview: cli/index.md
-          - mas-lab index: cli/mas-lab.md
-          - mas-ctl: cli/mas-ctl.md
-          - "mas-lab serve": cli/serve.md
-          - Observability / run logs: cli/observability.md
-          - compile: cli/compile.md
-          - Overrides: cli/overrides.md
-      - Web UI: ui/index.md
-      - Live dashboard: ui/live.md
-      - Live dashboard reference: ui/live-reference.md
-      - ctl/tui.md
-      - glossary.md
-  - Tutorials:
-      - tutorials/index.md
-      - "0 — Environment setup": tutorials/00-environment-setup/README.md
-      - "1 — Build an agent": tutorials/01-building-an-agent/README.md
-      - "2 — Orchestrate your MAS": tutorials/02-creating-a-mas/README.md
-      - "3 — Run an experiment": tutorials/03-experiments-and-analysis/README.md
-      - "4 — MCP tools": tutorials/04-mcp-tools/README.md
-      - "5 — A2A agents": tutorials/05-a2a-agents/README.md
-      - "6 — Agent skills": tutorials/06-agent-skills/README.md
-      - "8 — Telemetry": tutorials/08-telemetry/README.md
-      - "9 — KG & OXP": tutorials/09-kg-oxp/README.md
-      - "10 — Evaluation metrics": tutorials/10-evaluation-metrics/README.md
-      - "11 — Sessions and recovery": tutorials/11-sessions-and-recovery/README.md
-      - "12 — Spawned subagents": tutorials/12-subagents/README.md
-      - "13 — Control attach and debug scripts": tutorials/13-control-and-debug/README.md
-      - "14 — Governance and HITL": tutorials/14-governance-hitl/README.md
+      - Overview: user-guide.md
+      - Guides:
+          - Writing manifests: manifests/writing-manifests.md
+          - Labs vs libraries: labs-and-libraries.md
+          - User configuration: user-config.md
+      - Command line: cli/index.md
+      - Interfaces:
+          - Web UI: ui/index.md
+          - Live dashboard: ui/live.md
+          - TUI: ctl/tui.md
+      - Glossary: glossary.md
+  - Discover:
+      - Overview: discover/index.md
+      - IoC integrations: discover/integrations.md
+      - Tutorials:
+          - Overview: tutorials/index.md
+          - "0 Environment setup": tutorials/00-environment-setup/README.md
+          - "1 Build an agent": tutorials/01-building-an-agent/README.md
+          - "2 Orchestrate your MAS": tutorials/02-creating-a-mas/README.md
+          - "3 Run an experiment": tutorials/03-experiments-and-analysis/README.md
+          - "4 MCP tools": tutorials/04-mcp-tools/README.md
+          - "5 A2A agents": tutorials/05-a2a-agents/README.md
+          - "6 Agent skills": tutorials/06-agent-skills/README.md
+          - "8 Telemetry": tutorials/08-telemetry/README.md
+          - "9 KG and SCOPE": tutorials/09-kg-scope/README.md
+          - "10 Evaluation metrics": tutorials/10-evaluation-metrics/README.md
+          - "11 Sessions and recovery": tutorials/11-sessions-and-recovery/README.md
+          - "12 Spawned subagents": tutorials/12-subagents/README.md
+          - "13 Control and debug": tutorials/13-control-and-debug/README.md
+          - "14 Governance and HITL": tutorials/14-governance-hitl/README.md
+      - Labs:
+          - Overview: discover/labs.md
+          - Paper labs: labs.md
+  - Open standards:
+      - Overview: standards/index.md
+      - OpenAI: standards/openai.md
+      - MCP: standards/mcp.md
+      - A2A: standards/a2a.md
+      - Agent Skills: standards/agent-skills.md
+      - OpenTelemetry: standards/opentelemetry.md
   - References:
       - Overview: references/index.md
-      - "ADR 0001 — lab terminology": references/adr-0001-lab-terminology.md
-      - "ADR 0002 — observability event model": references/adr-0002-observability-event-model.md
-      - "ADR 0003 — UI backend contract": references/adr-0003-ui-backend-contract.md
-      - A2A:
-          - Overview: a2a/README.md
-          - Developer reference: a2a/developer.md
+      - CLI:
+          - mas-runtime: cli/mas-runtime.md
+          - mas-ctl: cli/mas-ctl.md
+          - mas-lab: cli/mas-lab.md
+          - Compile: cli/compile.md
+          - Overrides: cli/overrides.md
+          - Observability: cli/observability.md
+          - Controller API: cli/serve.md
+          - Live dashboard internals: ui/live-reference.md
+      - Design notes:
+          - Agent-driven HITL: design/agent-driven-hitl.md
+          - Flavour boundary: design/flavour-boundary.md
+          - Manifest libraries: design/manifest-libraries.md
+          - Working-memory compaction: design/working-memory-compaction.md
       - Specifications:
-          - Agent:
-              - Overview: manifests/agent.md
-              - Governance: manifests/governance.md
-              - Session checkpoints: manifests/checkpoint.md
-              - Subagents: manifests/subagents.md
+          - Overview: manifests/README.md
+          - Agent: manifests/agent.md
+          - Governance: manifests/governance.md
+          - Session checkpoints: manifests/checkpoint.md
+          - Subagents: manifests/subagents.md
           - Tool: manifests/tool.md
           - System tools: manifests/system-tools.md
           - Plugin bindings: manifests/plugin-bindings.md
           - Context assembly: manifests/context-assembly.md
           - Summarization: manifests/summarization.md
-          - "Compiled agent defaults": references/defaults.md
+          - Compiled defaults: references/defaults.md
           - MAS: manifests/mas.md
           - Overlay: manifests/overlay.md
           - Flavour: manifests/flavour.md
@@ -162,24 +188,25 @@ nav:
           - Tool server registry: references/tool-server-registry.md
           - Tool contract: references/tool-contract.md
           - RuntimeEngine: manifests/runtime-engine.md
-          - "LLM cache (guide)": manifests/llm-cache.md
-          - "LLM scheduler": manifests/llm-scheduler.md
-          - "LLM reasoning / thinking": manifests/llm-reasoning.md
-          - "LLM model catalog": manifests/llm-model-catalog.md
-          - "config.yaml": references/config.yaml.md
+          - LLM cache: manifests/llm-cache.md
+          - LLM scheduler: manifests/llm-scheduler.md
+          - LLM reasoning: manifests/llm-reasoning.md
+          - LLM model catalog: manifests/llm-model-catalog.md
+          - config.yaml: references/config.yaml.md
           - Schemas: references/schemas.md
       - Runtime:
           - Manifest fields: manifests/runtime.md
           - Context management: references/context-management.md
           - Reliability: references/reliability.md
-          - "LLM cache (reference)": references/llm-cache.md
+          - Event model: references/event-model.md
+          - LLM cache: references/llm-cache.md
           - Contracts: references/contracts.md
           - Snapshots vs checkpoints: references/snapshots.md
           - Kernel operations: references/kernel-primitives.md
           - Thin waist: references/thin-waist.md
           - System tools: references/system-tools.md
-          - Package documentation: references/runtime.md
-      - Lab & benchmarks:
+          - Package docs: references/runtime.md
+      - Lab:
           - Experiment: manifests/experiment.md
           - Dataset: manifests/dataset.md
           - Pipeline: manifests/pipeline.md
@@ -187,7 +214,11 @@ nav:
           - Execution: manifests/execution.md
           - Dataset migration: manifests/dataset-migration.md
           - Library discovery: library-discovery.md
-          - Package documentation: references/lab.md
+          - Package docs: references/lab.md
+      - Packages:
+          - Package map: libraries.md
+          - Packages reference: packages-reference.md
+          - Plugins reference: plugins-reference.md
   - Paper: paper/index.md
   - Blog:
       - All posts: blog/index.md

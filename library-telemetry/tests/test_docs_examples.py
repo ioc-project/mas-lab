@@ -107,7 +107,7 @@ def test_docs_conversion_registered_kinds():
 
 @requires_otel
 def test_docs_conversion_graph_span(tmp_path):
-    # docs/conversion.md — the <app>.graph topology span (OXP-required)
+    # docs/conversion.md — the <app>.graph topology span (SCOPE-required)
     from mas.library.telemetry.conversion.replay import replay_events_file
 
     events = [

@@ -37,9 +37,9 @@ dependencies = [
 # because some of them conflict with core workspace dependencies.
 
 [project.urls]
-Homepage = "https://github.com/outshift-open/mas-lab"
-Documentation = "https://github.com/outshift-open/mas-lab/tree/main/docs"
-Issues = "https://github.com/outshift-open/mas-lab/issues"
+Homepage = "https://github.com/ioc-project/mas-lab"
+Documentation = "https://github.com/ioc-project/mas-lab/tree/main/docs"
+Issues = "https://github.com/ioc-project/mas-lab/issues"
 
 [project.scripts]
 mas-lab = "mas.lab.cli:app"

@@ -4,8 +4,8 @@
 # Local Neo4j for KG file → graph serialization. Auth is disabled for a
 # laptop lab; set NEO4J_AUTH in the environment for anything else.
 #
-# Full OXP (norm worker, API, RabbitMQ, UI) is not published as a single
-# image. Clone observe-and-explain-platform and use backend/docker-compose.yml.
+# Full SCOPE (norm worker, API, RabbitMQ, UI) is not published as a single
+# image. Clone ioc-project/scope and use deploy/docker-compose.
 #
 #   docker compose -f library-kg/docker/compose.yaml up -d
 #   export NEO4J_URI=bolt://localhost:7687

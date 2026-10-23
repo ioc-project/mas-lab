@@ -68,7 +68,7 @@ def test_normalize_otel_calls_norm(monkeypatch) -> None:
     assert row["SpanId"] == "00000000000000ss"
     assert row["SpanAttributes"]["agent_id"] == "planner"
     assert nodes[0]["node_type"] == "Session"
-    # align_graph adds OXP topology (executesSession / belongsToMAS / …)
+    # align_graph adds SCOPE topology (executesSession / belongsToMAS / …)
     # on top of whatever norm returned.
     assert all(e.get("from_id") and e.get("to_id") for e in edges)
 

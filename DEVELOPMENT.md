@@ -11,7 +11,7 @@ Package map: [docs/libraries.md](docs/libraries.md). Documentation layout: [doc 
 You need Python 3.11+ and [uv](https://docs.astral.sh/uv/). [go-task](https://taskfile.dev/) is optional. It runs the same gates as CI.
 
 ```bash
-git clone https://github.com/outshift-open/mas-lab.git
+git clone https://github.com/ioc-project/mas-lab.git
 cd mas-lab
 uv sync --all-packages
 export PATH="$PWD/.venv/bin:$PATH"

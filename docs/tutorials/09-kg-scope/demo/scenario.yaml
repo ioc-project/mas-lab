@@ -1,13 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-name: tutorial-09-kg-oxp
-title: "Tutorial 09 — KG & OXP"
+name: tutorial-09-kg-scope
+title: "Tutorial 09 — KG & SCOPE"
 description: >
   Native→KG and OTel→KG using library-kg/examples/qa-agent (same layout as
   examples/trip-planner).
 version: "1.0"
 authors: ["MAS Framework Team"]
-tags: ["kg", "oxp", "norm", "tutorial"]
+tags: ["kg", "scope", "norm", "tutorial"]
 prerequisites:
   - "Tutorial 8"
   - "mas-lab on PATH with mas-library-kg"

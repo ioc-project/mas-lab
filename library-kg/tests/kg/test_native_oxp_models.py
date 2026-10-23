@@ -17,7 +17,7 @@ def native_doc():
         {
             "kind": "execution_start",
             "timestamp": 1.0,
-            "run_id": "oxp-native-1",
+            "run_id": "scope-native-1",
             "call_id": "c-agent",
             "agent_id": "planner",
             "input": "hello",
@@ -25,7 +25,7 @@ def native_doc():
         {
             "kind": "llm_call_start",
             "timestamp": 1.1,
-            "run_id": "oxp-native-1",
+            "run_id": "scope-native-1",
             "call_id": "c-llm",
             "parent_call_id": "c-agent",
             "agent_id": "planner",
@@ -34,7 +34,7 @@ def native_doc():
         {
             "kind": "llm_call_end",
             "timestamp": 1.5,
-            "run_id": "oxp-native-1",
+            "run_id": "scope-native-1",
             "call_id": "c-llm",
             "parent_call_id": "c-agent",
             "agent_id": "planner",
@@ -43,7 +43,7 @@ def native_doc():
         {
             "kind": "tool_call_start",
             "timestamp": 1.6,
-            "run_id": "oxp-native-1",
+            "run_id": "scope-native-1",
             "call_id": "c-tool",
             "parent_call_id": "c-agent",
             "agent_id": "planner",
@@ -52,7 +52,7 @@ def native_doc():
         {
             "kind": "tool_call_end",
             "timestamp": 1.8,
-            "run_id": "oxp-native-1",
+            "run_id": "scope-native-1",
             "call_id": "c-tool",
             "parent_call_id": "c-agent",
             "agent_id": "planner",
@@ -63,14 +63,14 @@ def native_doc():
         {
             "kind": "execution_end",
             "timestamp": 2.0,
-            "run_id": "oxp-native-1",
+            "run_id": "scope-native-1",
             "call_id": "c-agent",
             "agent_id": "planner",
             "status": "success",
             "output": "done",
         },
     ]
-    return build_kg_document(events, run_id="oxp-native-1")
+    return build_kg_document(events, run_id="scope-native-1")
 
 
 def test_kind_to_class_core_subset_is_documented() -> None:

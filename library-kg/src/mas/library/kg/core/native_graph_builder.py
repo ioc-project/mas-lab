@@ -370,7 +370,7 @@ class NativeGraphBuilder:
         layers -> contains-edge inference -> parent-id backfill (last
         resort) -> State/Transition synthesis -> derivedFrom edges ->
         catalog layer -> session trajectory anchors -> identity
-        normalization -> oxp-model mapping.
+        normalization -> scope-model mapping.
         """
         self._gaps.log_rollup()
 

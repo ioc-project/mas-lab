@@ -3,7 +3,7 @@
 """Align a KG dict graph onto oxp-ontology instance contracts.
 
 Native builders historically used Neo4j-style edge names (``contains``,
-``hasCall``, ``realizes``). OXP ``norm`` copies class ``:layer`` annotations
+``hasCall``, ``realizes``). SCOPE ``norm`` copies class ``:layer`` annotations
 onto instances. This module rewrites those at the graph-dict boundary so
 SHACL and ``unknown_edge_types`` see the ontology vocabulary.
 """
@@ -440,10 +440,10 @@ def ensure_oxp_topology(
         for alias in aliases:
             children.extend(by_parent.get(alias, []))
         for child in children:
-            oxp = CONTAINS_TO_OXP.get(str(child.get("node_type") or ""))
+            scope = CONTAINS_TO_OXP.get(str(child.get("node_type") or ""))
             cid = str(child.get("id") or child.get("callId") or "")
-            if oxp and cid:
-                _add_edge(edges, seen, oxp, nid, cid)
+            if scope and cid:
+                _add_edge(edges, seen, scope, nid, cid)
 
     # Norm stores AgentCall↔child links as parentSpanId (no hasLLMCall /
     # hasToolCall edges). Project those so SHACL sees the same tree.
@@ -463,13 +463,13 @@ def ensure_oxp_topology(
         parent = by_span.get(parent_span) if parent_span else None
         if parent is None:
             continue
-        oxp = CONTAINS_TO_OXP.get(str(node.get("node_type") or ""))
-        if not oxp:
+        scope = CONTAINS_TO_OXP.get(str(node.get("node_type") or ""))
+        if not scope:
             continue
         src = str(parent.get("id") or parent.get("callId") or "")
         dst = str(node.get("id") or node.get("callId") or "")
         if src and dst:
-            _add_edge(edges, seen, oxp, src, dst)
+            _add_edge(edges, seen, scope, src, dst)
         if str(node.get("node_type") or "") in {"LLMCall", "ToolCall"} and not node.get("agentId"):
             recovered = _agent_id_from_node(parent)
             if recovered:
@@ -491,7 +491,7 @@ def ensure_oxp_topology(
     for et, src, dst in extra:
         _add_edge(edges, seen, et, src, dst)
 
-    # MASCall and Session share the session-level trajectory (OXP contract).
+    # MASCall and Session share the session-level trajectory (SCOPE contract).
     if session is not None and mas_call is not None:
         sid_node = str(session.get("id") or "")
         mc_id = str(mas_call.get("id") or mas_call.get("callId") or "")

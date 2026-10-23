@@ -133,7 +133,7 @@ Each `pre:` / `post:` entry is one of:
 
 Post-run export codecs (ClickHouse, Neo4j, filesystem) use **`mas.lab.infra`** (`DatastoreSpec`, `resolve_datastore`).
 They are not part of mas-runtime or mas-ctl.
-See [`lab/components/bench/src/mas/lab/infra/README.md`](https://github.com/outshift-open/mas-lab/blob/main/lab/components/bench/src/mas/lab/infra/README.md).
+See [`lab/components/bench/src/mas/lab/infra/README.md`](https://github.com/ioc-project/mas-lab/blob/main/lab/components/bench/src/mas/lab/infra/README.md).
 
 ---
 

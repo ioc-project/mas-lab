@@ -8,6 +8,8 @@ The live dashboard shows a running multi-agent system (MAS), or a completed lab 
 
 **Who needs it:** anyone who wants to watch a run as it happens, or replay one.
 **First step:** run `task demo-ui`.
+**Also:** `mas-lab demo-ui export` writes a static copy; the live view talks to
+the [controller API](../cli/serve.md). Developer envelope: [live-reference.md](live-reference.md).
 
 Contents:
 

@@ -1,3 +1,8 @@
+---
+hide:
+  - navigation
+---
+
 <!--
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
@@ -6,6 +11,9 @@
 
 *MAS-Lab: A Specification-Driven Validation Framework for Reliable Multi-Agent
 Systems*
+
+**Paper:** [arXiv:2606.30546](https://arxiv.org/abs/2606.30546)
+([PDF](https://arxiv.org/pdf/2606.30546))
 
 The article describes the specification-driven model behind MAS Lab. Its
 **Section 5** reports experiments. This repository reproduces them as three
@@ -21,14 +29,14 @@ runnable labs. A lab is a folder of experiments.
 | `lifecycle-control.lab` | §5.2 | Governance and lifecycle control |
 | `extensions.lab` | §5.3 | Memory and context overlays |
 
-Source under [`labs/`](https://github.com/outshift-open/mas-lab/tree/main/labs) in the repository.
+Source under [`labs/`](https://github.com/ioc-project/mas-lab/tree/main/labs) in the repository.
 
 Each lab holds one or more experiments. `design-space.lab` has two.
 `extensions.lab` has extra fact-recall variants.
 
 Running an experiment also produces its charts, metrics, and comparison reports.
 Pipeline steps generate them, so you need no plotting scripts. The per-lab
-READMEs under [`labs/`](https://github.com/outshift-open/mas-lab/tree/main/labs)
+READMEs under [`labs/`](https://github.com/ioc-project/mas-lab/tree/main/labs)
 describe the scenarios, datasets, and output files. Absolute numbers depend on
 the model you use. Labs vs libraries: [labs-and-libraries.md](../labs-and-libraries.md).
 
@@ -57,7 +65,7 @@ mas-lab benchmark run labs/extensions.lab/experiment.yaml --progress
 
 Add `--dry-run` to validate an experiment without calling a model. The Letta
 scenarios of `extensions.lab` need their own virtual environment. See its
-[README](https://github.com/outshift-open/mas-lab/blob/main/labs/extensions.lab/README.md).
+[README](https://github.com/ioc-project/mas-lab/blob/main/labs/extensions.lab/README.md).
 
 Completed runs are cached. If inputs are unchanged, a re-run refreshes the
 reports without new LLM calls. Output locations: [User configuration](../user-config.md).
@@ -72,21 +80,19 @@ this repository.
 **Authors:** Jordan Augé, Giovanna Carofiglio, Giulio Grassi, Jacques Samain
 (Cisco Systems / Outshift)
 
-**arXiv:** the link will appear here when the preprint is public. Watch the
-[outshift-open/mas-lab](https://github.com/outshift-open/mas-lab) releases or
-this site.
+**arXiv:** [2606.30546](https://arxiv.org/abs/2606.30546)
+([PDF](https://arxiv.org/pdf/2606.30546))
 
 ```bibtex
 @article{maslab2026,
-  title   = {{MAS-Lab}: A Specification-Driven Validation Framework for Reliable Multi-Agent Systems},
-  author  = {Aug{\'e}, Jordan and Carofiglio, Giovanna and Grassi, Giulio and Samain, Jacques},
-  year    = {2026},
-  note    = {arXiv preprint, forthcoming},
-  url     = {https://github.com/outshift-open/mas-lab}
+  title         = {{MAS-Lab}: A Specification-Driven Validation Framework for Reliable Multi-Agent Systems},
+  author        = {Aug{\'e}, Jordan and Carofiglio, Giovanna and Grassi, Giulio and Samain, Jacques},
+  year          = {2026},
+  eprint        = {2606.30546},
+  archivePrefix = {arXiv},
+  url           = {https://arxiv.org/abs/2606.30546}
 }
 ```
-
-Update `note` and `url` with the arXiv identifier when available.
 
 ---
 
@@ -96,6 +102,7 @@ Update `note` and `url` with the arXiv identifier when available.
 - [Labs](../labs.md): per-lab detail and status
 - [Tutorial 0 — Environment setup](../tutorials/00-environment-setup/README.md)
 - [Tutorials](../tutorials/index.md)
+- [Open standards](../standards/index.md)
 - [References](../references/index.md)
 - [Blog](../blog/index.md)
 

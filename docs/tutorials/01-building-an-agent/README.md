@@ -357,7 +357,7 @@ a2a card get http://127.0.0.1:9005
 a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 ```
 
-See the [A2A documentation](../../a2a/README.md) for the full walkthrough.
+See [Open standards → A2A](../../standards/a2a.md) for the full walkthrough.
 
 ---
 
@@ -438,7 +438,7 @@ Open `output/trajectory.html` in a browser:
   Click one to see where each part of the prompt came from, with token counts.
 
 A single-agent turn reads: question, `⚙ context`, prompt, LLM, tool call, tool, LLM, answer.
-[Tutorial 8](../08-telemetry/README.md) converts the stream to OpenTelemetry; [Tutorial 9](../09-kg-oxp/README.md) builds a knowledge graph.
+[Tutorial 8](../08-telemetry/README.md) converts the stream to OpenTelemetry; [Tutorial 9](../09-kg-scope/README.md) builds a knowledge graph.
 Tutorial 3 runs this plot (`mas.lab.plots.multilevel_trajectory`) as a pipeline step on every run.
 
 ---

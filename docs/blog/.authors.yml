@@ -1,18 +1,18 @@
 authors:
   mas.team:
     name: MAS Lab Team
-    description: Outshift open-source maintainers
-    url: https://github.com/outshift-open/mas-lab
-    avatar: https://github.com/outshift-open.png
+    description: Internet of Cognition maintainers
+    url: https://github.com/ioc-project/mas-lab
+    avatar: https://github.com/ioc-project.png
   giovanna.carofiglio:
     name: Giovanna Carofiglio
     description: Outshift by Cisco
-    avatar: https://github.com/outshift-open.png
+    avatar: https://github.com/ioc-project.png
   jordan.auge:
     name: Jordan Augé
     description: Outshift by Cisco
-    avatar: https://github.com/outshift-open.png
+    avatar: https://github.com/ioc-project.png
   mayank.gupta:
     name: Mayank Gupta
     description: Outshift by Cisco
-    avatar: https://github.com/outshift-open.png
+    avatar: https://github.com/ioc-project.png

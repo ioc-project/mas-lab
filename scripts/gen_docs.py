@@ -368,7 +368,7 @@ def generate_plugins_reference(
     lines.append(
         dedent("""\
         This document is the canonical index of all plugins, tools, and flavours
-        distributed in `outshift-open/mas-lab`.  Each entry links back to the
+        distributed in `ioc-project/mas-lab`.  Each entry links back to the
         package that provides it.
 
         ---
@@ -385,7 +385,7 @@ def generate_plugins_reference(
 
         Or by short name when using a flavour that already activates it.
 
-        See [flavours documentation](https://github.com/outshift-open/mas-lab/blob/main/library-standard/docs/user-guide.md) and
+        See [flavours documentation](https://github.com/ioc-project/mas-lab/blob/main/library-standard/docs/user-guide.md) and
         [Tutorial 2 — Creating a MAS](tutorials/02-creating-a-mas/README.md) for
         practical examples.
 

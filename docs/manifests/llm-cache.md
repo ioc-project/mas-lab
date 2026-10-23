@@ -83,7 +83,7 @@ See [Known limitations](../references/llm-cache.md#known-limitations).
 | Read+write | `standard:llm-cache` | `cache_path: null` → `$XDG_CACHE_HOME/mas/llm_cache.json`; both read and write |
 | Provider + cache | `standard:llm-proxy-cached` | `InfraBundle` (cache + OpenAI) |
 
-The write and replay YAML lives in [library-samples/infra/](https://github.com/outshift-open/mas-lab/blob/main/library-samples/README.md).
+The write and replay YAML lives in [library-samples/infra/](https://github.com/ioc-project/mas-lab/blob/main/library-samples/README.md).
 The bundled `standard:llm-cache` and `standard:llm-proxy-cached` live under `library-standard/src/mas/library/standard/libs/standard/`.
 
 ## Write manifest (record)
@@ -329,4 +329,4 @@ See [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
 - [infra.md](infra.md): infra kinds and bundles
 - [runtime-engine.md](runtime-engine.md): built-in cache policy (`spec.cache` on RuntimeEngine)
 - [Tutorial 1](../tutorials/01-building-an-agent/README.md): agent and overlays used above
-- [library-samples/README.md](https://github.com/outshift-open/mas-lab/blob/main/library-samples/README.md): sample infra manifests
+- [library-samples/README.md](https://github.com/ioc-project/mas-lab/blob/main/library-samples/README.md): sample infra manifests

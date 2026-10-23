@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# CLI observability reference
+# CLI observability
 
-This page explains how to record what a run did. It covers the `events.jsonl` run log, the exchange log, and the flags and manifest settings that control them. Read it before you check an experiment result.
+This page explains how to record what a run did. It covers the `events.jsonl` run log, the exchange log, and the flags and manifest settings that control them. Read it before you check an experiment result. Part of [References → CLI](../references/index.md#cli). Topic index: [command line](index.md).
 
 Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. A *session* is one conversation with an agent. See the [glossary](../glossary.md).
 
@@ -152,8 +152,10 @@ For pipeline and figure workflows, see [Tutorial 3](../tutorials/03-experiments-
 
 ## Related
 
+- [Event model](../references/event-model.md): the native announced stream
+- [OpenTelemetry](../standards/opentelemetry.md)
 - [ctl/tui.md](../ctl/tui.md): the same `--events*` flags
 - [Web UI](../ui/index.md): browse run artifacts
 - [glossary.md](../glossary.md): manifest terms
 - [summarization.md](../manifests/summarization.md): summarizer and MCE judge models, and the summary system prompt in the log
-- Example: [summarizer-override](https://github.com/outshift-open/mas-lab/tree/main/library-standard/examples/context/summarizer-override)
+- Example: [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override)

@@ -50,6 +50,22 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- Public GitHub and docs URLs moved from `outshift-open/mas-lab` to
+  `ioc-project/mas-lab` (`https://github.com/ioc-project/mas-lab`,
+  `https://ioc-project.github.io/mas-lab/`). On an existing clone:
+  `git remote set-url origin git@github.com:ioc-project/mas-lab.git`.
+- Docs name the former Observe and eXplain Platform as SCOPE
+  (`https://ioc-project.github.io/scope/`). PyPI `oxp-ontology` and the
+  `norm` git extra are unchanged.
+- Schema `$id` values are vocabulary ids (`mas/v1#…`, `mas-lab/…`), not
+  hosting URLs.
+- Docs: [Open standards](docs/standards/index.md) covers OpenAI Chat
+  Completions, MCP, A2A, Agent Skills, and OpenTelemetry (AGNTCY
+  `ioa-observe-sdk`). ADRs are ordinary pages (terminology in
+  [repo structure](docs/what-is/repo.md), the event stream in
+  [event model](docs/references/event-model.md), UI identity in
+  [Controller API](docs/cli/serve.md)).
+
 - UI routes are `/libraries/:scope/…` and `/labs/:scope/…`. Create/edit flows
   use `POST/PUT /api/scopes/{id}/items`. Picker lists come from `/api/choices`.
   Opening the UI without a scope stays on the labs catalog instead of jumping
@@ -166,8 +182,8 @@ reconciling the release notes with the code and docs currently on that branch.
 - The GHCR-backed release pipeline now builds and publishes both the UI and
   backend container images for tagged releases via
   `.github/workflows/docker.yml` and `.github/workflows/build-push-ghcr.yaml`.
-- Release images are published under `ghcr.io/outshift-open/mas-lab/ui` and
-  `ghcr.io/outshift-open/mas-lab/backend`, using a tag scheme derived from the
+- Release images are published under `ghcr.io/ioc-project/mas-lab/ui` and
+  `ghcr.io/ioc-project/mas-lab/backend`, using a tag scheme derived from the
   release version and commit SHA. This keeps the Docker image in lockstep with
   the package release.
 - The release documentation and image references were refreshed after the branch
@@ -230,5 +246,5 @@ Initial public release.
 
 ---
 
-[0.2.0]: https://github.com/outshift-open/mas-lab/releases/tag/v0.2.0
-[0.1.0]: https://github.com/outshift-open/mas-lab/releases/tag/v0.1.0
+[0.2.0]: https://github.com/ioc-project/mas-lab/releases/tag/v0.2.0
+[0.1.0]: https://github.com/ioc-project/mas-lab/releases/tag/v0.1.0

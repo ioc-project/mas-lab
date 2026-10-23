@@ -6,7 +6,7 @@
 # Usage: ./scripts/cleanup_github_actions_runs.sh [owner/repo]
 set -euo pipefail
 
-REPO="${1:-outshift-open/mas-lab}"
+REPO="${1:-ioc-project/mas-lab}"
 deleted=0
 
 while true; do

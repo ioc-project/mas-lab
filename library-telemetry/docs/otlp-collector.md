@@ -1,6 +1,6 @@
 # Serializing spans to an OTLP collector
 
-This page shows how to send an OpenTelemetry (OTel) span set to an OTLP (OpenTelemetry Protocol) collector and read it back from ClickHouse. Use it to feed spans to a collector or to OXP.
+This page shows how to send an OpenTelemetry (OTel) span set to an OTLP (OpenTelemetry Protocol) collector and read it back from ClickHouse. Use it to feed spans to a collector or to SCOPE.
 
 ```bash
 mas-lab telemetry push otel_sdk_spans.jsonl --endpoint http://localhost:4318
@@ -26,7 +26,7 @@ result = push_file(
     "otel_sdk_spans.jsonl",
     endpoint="http://localhost:4318",
     service_name="my-app",
-    app_name="my-app",       # → application_id on every span (OXP grouping)
+    app_name="my-app",       # → application_id on every span (SCOPE grouping)
 )
 print(result)   # {"spans": N, "batches": M, "status": "ok", "detail": "..."}
 ```

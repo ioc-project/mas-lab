@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Converter output must satisfy OXP norm's required-attribute contract."""
+"""Converter output must satisfy SCOPE norm's required-attribute contract."""
 
 from __future__ import annotations
 
@@ -102,8 +102,8 @@ def test_observe_sdk_profile_has_oxp_required_attributes(tmp_path):
         assert isinstance(payload.get("nodes"), dict), payload.get("nodes")
         assert span.get("parent_id") in (None, "")
 
-    assert len(starts) == 1, "OXP session lifecycle requires session.start"
-    assert len(ends) == 1, "OXP session lifecycle requires session.end"
+    assert len(starts) == 1, "SCOPE session lifecycle requires session.start"
+    assert len(ends) == 1, "SCOPE session lifecycle requires session.end"
     assert _attrs(starts[0]).get("session.started_at")
     assert _attrs(ends[0]).get("session.ended_at")
     assert _attrs(starts[0]).get(semconv.SESSION_ID) == _attrs(ends[0]).get(

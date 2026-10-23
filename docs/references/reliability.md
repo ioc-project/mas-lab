@@ -117,7 +117,7 @@ When both are set, `spec.control.retry.llm` overrides infra `LLMProxy.spec.proxy
 
 Omit the key (or set `null`) to leave the breaker off. If the key is present, the runtime loads the library plugin (`type: circuit_breaker`, default `threshold`). It is not a kernel operation and not a governance plugin.
 
-Card: [circuit-breaker.md](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/reliability/circuit-breaker.md).
+Card: [circuit-breaker.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/reliability/circuit-breaker.md).
 
 | Field | Type | Default when present |
 |-------|------|----------------------|

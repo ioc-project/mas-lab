@@ -195,4 +195,4 @@ Use the native implementation unless your application already depends on another
 - **Answer ignores the reference or script.** Name `answer-expert` in the request, then check the trace for the three tool calls.
 - **Script cannot run.** Run it directly with the Step 3 command. Scripts must live in `scripts/`.
 
-See the [skills user guide](https://github.com/outshift-open/mas-lab/blob/main/library-skills/docs/user-guide.md) and [agentskills.io](https://agentskills.io/).
+See the [skills user guide](https://github.com/ioc-project/mas-lab/blob/main/library-skills/docs/user-guide.md) and [agentskills.io](https://agentskills.io/).

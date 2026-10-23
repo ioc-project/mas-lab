@@ -14,7 +14,7 @@ from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
-DOCS_BASE = "https://outshift-open.github.io/mas-lab"
+DOCS_BASE = "https://ioc-project.github.io/mas-lab"
 
 # code -> (docs path under /docs, short replacement)
 NOTICES: Dict[str, Tuple[str, str]] = {

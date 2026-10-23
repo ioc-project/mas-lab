@@ -345,7 +345,7 @@ Overlays change the graph, the dispatch mode, or the entry agent's design patter
 
 ### Topology in paper labs
 
-[`labs/design-space.lab/02-topologies/`](https://github.com/outshift-open/mas-lab/tree/main/labs/design-space.lab/02-topologies) varies topology only through scenario overlays. This is `topo-moderator-broker`:
+[`labs/design-space.lab/02-topologies/`](https://github.com/ioc-project/mas-lab/tree/main/labs/design-space.lab/02-topologies) varies topology only through scenario overlays. This is `topo-moderator-broker`:
 
 ```yaml
 spec:
@@ -386,7 +386,7 @@ LLM providers must implement `achat_completion` as the async twin of `chat_compl
 
 OSS has no `WorkflowContract.register_impl()`. Topology and workflow are declarative YAML. ctl composes and runs them.
 
-**Stateful governance** is separate from topology. Governance plugins track session state across turns. [`lifecycle-control.lab`](https://github.com/outshift-open/mas-lab/tree/main/labs/lifecycle-control.lab) stacks budget caps, guardrails, and HITL (human in the loop approval). See [governance.md](governance.md), the [contracts reference](../references/contracts.md#governance-oss), and [`budget.py`](https://github.com/outshift-open/mas-lab/blob/main/runtime/src/mas/runtime/boundary/gov/budget.py) (`spec.budget` call ceilings).
+**Stateful governance** is separate from topology. Governance plugins track session state across turns. [`lifecycle-control.lab`](https://github.com/ioc-project/mas-lab/tree/main/labs/lifecycle-control.lab) stacks budget caps, guardrails, and HITL (human in the loop approval). See [governance.md](governance.md), the [contracts reference](../references/contracts.md#governance-oss), and [`budget.py`](https://github.com/ioc-project/mas-lab/blob/main/runtime/src/mas/runtime/boundary/gov/budget.py) (`spec.budget` call ceilings).
 
 ---
 

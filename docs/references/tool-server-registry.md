@@ -45,7 +45,7 @@ spec:
       #   Authorization: "env:MCP_AUTH_HEADER"
 ```
 
-Canonical sample: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
+Canonical sample: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
 
 Attach it with `--infra-ref` (or workspace `infra_refs`). For the tutorial agent under `docs/tutorials/01-building-an-agent/`, the relative ref is `../../../library-samples/infra/mcp-localhost.yaml`. The preferred demo needs no MCP provider overlay on the agent.
 

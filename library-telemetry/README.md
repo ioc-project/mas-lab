@@ -2,7 +2,8 @@
 
 Converts native MAS execution events (`events.jsonl`) into OpenTelemetry (OTel) spans, verifies the spans against the MAS SpanSpec, and sends them to an OTLP collector.
 
-Use it when you want to inspect a MAS run in an OTel backend, check that the spans conform to the spec, or feed them to the Observe and eXplain Platform (OXP, [observe-and-explain-platform](https://github.com/outshift-open/observe-and-explain-platform)), whose `norm` component normalizes incoming spans.
+Use it when you want to inspect a MAS run in an OTel backend, check that the spans conform to the spec, or feed them to [SCOPE](https://ioc-project.github.io/scope/)
+([github.com/ioc-project/scope](https://github.com/ioc-project/scope)), whose `norm` component normalizes incoming spans.
 
 ## Quick start
 
@@ -54,7 +55,7 @@ events.jsonl ------------------> OTel spans ------------------> kg.json
 
 Key behaviors:
 
-- The default converter profile is `observe_sdk` everywhere (live plugin, pipeline steps, `replay_events_file`, `OtelSpanSet.from_events`, CLI). Spans then carry the attributes OXP `norm` requires: `agent_id`, `gen_ai.request.model`, `ioa_observe.entity.name`, prefixed `session.id`, `ioa_observe.agent.span_id`. Pass `converter_profile="raw"` for the unprefixed profile.
+- The default converter profile is `observe_sdk` everywhere (live plugin, pipeline steps, `replay_events_file`, `OtelSpanSet.from_events`, CLI). Spans then carry the attributes SCOPE `norm` requires: `agent_id`, `gen_ai.request.model`, `ioa_observe.entity.name`, prefixed `session.id`, `ioa_observe.agent.span_id`. Pass `converter_profile="raw"` for the unprefixed profile.
 - `otel.realtime` (plugin config) and `OBSERVE_REALTIME_OBSERVABILITY_ENABLED` default to off. When on, the plugin emits incremental `topology.node.*`, `tool.*` and `llm.*` signals and does not also emit the end-of-run `.graph` span.
 - The `[convert]` extra depends on `ioa-observe-sdk>=1.0.49` for semantic constants. MAS Lab does not call `Observe.init()`, neither for the live plugin nor for replay.
 - `session.end` is emitted on `mas_call_end`, with `finish()` or plugin close as the fallback.

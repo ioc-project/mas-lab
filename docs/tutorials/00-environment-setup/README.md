@@ -12,7 +12,7 @@ You install MAS Lab, give it access to an LLM, and run your first `mas-ctl` comm
 
 ## What you need
 
-- A clone of the repository: `git clone https://github.com/outshift-open/mas-lab.git && cd mas-lab`
+- A clone of the repository: `git clone https://github.com/ioc-project/mas-lab.git && cd mas-lab`
 - An `OPENAI_API_KEY` for live LLM runs. Offline, only `mas-ctl validate` works.
 
 ## Choose your path
@@ -130,7 +130,7 @@ Use this path to change the Python sources in `runtime/`, `ctl/`, or `lab/`.
 Install Python ≥ 3.11, `uv` (`brew install uv`), `task` (`brew install go-task`), and optionally `direnv`.
 
 ```bash
-git clone https://github.com/outshift-open/mas-lab.git && cd mas-lab
+git clone https://github.com/ioc-project/mas-lab.git && cd mas-lab
 direnv allow          # recommended; uses the committed .envrc -> ./.venv
 uv sync               # workspace packages install editable
 task install-dev      # editable packages plus test and sample dependencies

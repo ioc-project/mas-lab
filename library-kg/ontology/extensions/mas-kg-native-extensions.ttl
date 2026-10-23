@@ -9,7 +9,7 @@
 #   CallAnnotation, ContextContribution, ParallelGroup, Branch,
 #   GovernanceEvent, Worker, Run, Application, ThinkingCall
 #
-# They reuse the oxp mas: namespace so KIND_TO_CLASS local names resolve
+# They reuse the scope mas: namespace so KIND_TO_CLASS local names resolve
 # against the combined graph. Do not treat this file as a second ontology.
 
 @prefix mas: <https://outshift-open.github.io/oxp-ontology/mas#> .

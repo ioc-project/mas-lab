@@ -1,0 +1,532 @@
+/* ==========================================================================
+   Internet of Cognition — docs theme.
+
+   Styled after the Outshift IoC pages (outshift.cisco.com/internet-of-cognition):
+   black ground, thin white display headings with tight tracking, a yellow
+   eyebrow for section kickers, and Cisco cyan as the single accent. The
+   remaining values were taken from that site's own computed styles.
+   ========================================================================== */
+
+:root {
+  /* Ground and ink — black, with barely-lifted surfaces above it */
+  --ioc-bg:        #000000;
+  --ioc-bg-deep:   #000000;
+  --ioc-surface:   rgba(255, 255, 255, 0.032);
+  --ioc-fg:        #FFFFFF;
+  --ioc-fg-dim:    #B5B5B5;
+  --ioc-hair:      rgba(255, 255, 255, 0.14);
+
+  /* Accents: Cisco blue, bright cyan, yellow kicker */
+  --ioc-cyan:      #049FD9;
+  --ioc-cyan-lt:   #22D3EE;
+  --ioc-yellow:    #FACC15;
+  --ioc-violet:    #A78BFA;
+
+  /* Accent washes, as the Outshift cards use them */
+  --ioc-wash-04:   rgba(4, 159, 217, 0.04);
+  --ioc-wash-11:   rgba(4, 159, 217, 0.11);
+  --ioc-brd-22:    rgba(4, 159, 217, 0.22);
+  --ioc-brd-30:    rgba(4, 159, 217, 0.30);
+
+  /* The four IoC subsystem families — same code as the architecture diagram */
+  --ioc-l9:        #2A7BE0;
+  --ioc-fabric:    #E8A020;
+  --ioc-ce:        #A04BC0;
+  --ioc-maslab:    #63A33F;
+  --ioc-mas:       #4A5263;
+}
+
+/* Wider than Material's stock 61rem: several pages are table-heavy. */
+.md-grid { max-width: 72rem; }
+
+/* --------------------------------------------------------------------------
+   Dark scheme — the primary presentation, matching the Outshift pages.
+   -------------------------------------------------------------------------- */
+:root,
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color:            var(--ioc-bg);
+  --md-default-bg-color--light:     #0A0A0A;
+  --md-default-bg-color--lighter:   #121212;
+  --md-default-fg-color:            var(--ioc-fg);
+  --md-default-fg-color--light:     #D7DAE2;
+  --md-default-fg-color--lighter:   var(--ioc-fg-dim);
+  --md-primary-fg-color:            #000000;
+  --md-primary-bg-color:            var(--ioc-fg);
+  --md-accent-fg-color:             var(--ioc-cyan-lt);
+  --md-typeset-a-color:             var(--ioc-cyan-lt);
+  --md-code-bg-color:               rgba(255, 255, 255, 0.04);
+  --md-code-fg-color:               #E6E9F0;
+  --md-footer-bg-color:             var(--ioc-bg-deep);
+  --md-footer-bg-color--dark:       var(--ioc-bg-deep);
+}
+
+.md-header,
+.md-tabs {
+  background: var(--ioc-bg-deep);
+}
+
+/* --------------------------------------------------------------------------
+   Masthead: the site name reads as a wordmark, with an Outshift kicker above.
+   -------------------------------------------------------------------------- */
+.md-header__title { font-weight: 400; letter-spacing: -0.01em; }
+
+.md-header__topic:first-child .md-ellipsis { position: relative; }
+
+/* The wordmark carries the Outshift branding, so it is sized to read as one
+   rather than sitting at Material's default icon height. */
+.md-header__button.md-logo {
+  padding: 0 0.4rem 0 0.2rem;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  /* The wordmark is 212x88 and carries the "by CISCO" lockup, so Material's
+     1.2rem icon height leaves it unreadable. */
+  height: 2rem;
+  width: auto;
+}
+
+/* A hairline of Cisco cyan under the header, as on the Outshift nav. */
+.md-header { border-bottom: 1px solid var(--ioc-brd-30); }
+.md-tabs   { border-bottom: 1px solid var(--ioc-hair); }
+.md-tabs__link--active { border-bottom: 2px solid var(--ioc-yellow); }
+
+/* --------------------------------------------------------------------------
+   Typography: Outshift sets display headings light (350) and tightly tracked.
+   -------------------------------------------------------------------------- */
+.md-typeset h1 {
+  font-weight: 300;
+  letter-spacing: -0.022em;
+  line-height: 1.12;
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset h2 {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  margin-top: 2.2em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--ioc-hair);
+}
+
+/* A markdown `---` plus the h2 hairline stacked two rules. Keep one. */
+.md-typeset hr:has(+ h2) {
+  display: none;
+}
+
+.md-typeset hr + h2 {
+  border-top: 1px solid var(--ioc-hair);
+}
+
+.md-typeset h3 { font-weight: 500; letter-spacing: -0.01em; }
+
+.md-typeset h4 {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
+  color: var(--ioc-fg-dim);
+}
+
+/* Lead paragraph: the sentence straight after an h1. */
+.md-typeset h1 + p {
+  font-size: 1.06rem;
+  line-height: 1.6;
+  color: var(--md-default-fg-color--light);
+}
+
+/* Section kicker — write `<p class="eyebrow">TODAY'S PROBLEM</p>` in a page. */
+.md-typeset .eyebrow {
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ioc-yellow);
+  margin-bottom: 0.4em;
+}
+
+/* --------------------------------------------------------------------------
+   Figures. Every diagram is authored on black (see scripts/restyle-diagrams-dark.py),
+   so none of them wants the white plate Material would otherwise imply.
+   -------------------------------------------------------------------------- */
+.md-typeset img {
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid var(--ioc-hair);
+}
+
+.md-typeset figure { margin: 1.4em 0; }
+
+.md-typeset figcaption {
+  font-size: 0.74rem;
+  color: var(--ioc-fg-dim);
+  text-align: left;
+  margin-top: 0.6em;
+}
+
+/* --------------------------------------------------------------------------
+   Colour key — the four subsystem families, shared with the diagrams.
+   -------------------------------------------------------------------------- */
+.md-typeset .ioc-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em 1.4em;
+  margin: 0.8em 0 1.6em;
+  font-size: 0.72rem;
+  color: var(--ioc-fg-dim);
+  list-style: none;
+  padding: 0;
+}
+
+.md-typeset .ioc-key li { margin: 0; display: flex; align-items: center; gap: 0.5em; }
+
+.md-typeset .ioc-key li::before {
+  content: "";
+  width: 0.72em;
+  height: 0.72em;
+  border-radius: 3px;
+  flex: none;
+  background: var(--k, var(--ioc-cyan));
+}
+
+.md-typeset .ioc-key li.l9     { --k: var(--ioc-l9); }
+.md-typeset .ioc-key li.fabric { --k: var(--ioc-fabric); }
+.md-typeset .ioc-key li.ce     { --k: var(--ioc-ce); }
+.md-typeset .ioc-key li.maslab { --k: var(--ioc-maslab); }
+.md-typeset .ioc-key li.mas    { --k: var(--ioc-mas); }
+
+/* --------------------------------------------------------------------------
+   Cards, tables, admonitions — the Outshift wash-and-hairline treatment.
+   -------------------------------------------------------------------------- */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 12px;
+  border-color: var(--ioc-brd-22);
+  background: var(--ioc-wash-04);
+  transition: border-color 160ms, background 160ms;
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--ioc-brd-30);
+  background: var(--ioc-wash-11);
+}
+
+.md-typeset table:not([class]) {
+  background: transparent;
+  border: 1px solid var(--ioc-hair);
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--ioc-wash-04);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.66rem;
+  color: var(--ioc-fg-dim);
+}
+
+.md-typeset .admonition, .md-typeset details {
+  border-radius: 10px;
+  border-width: 1px;
+  box-shadow: none;
+}
+
+/* Buttons follow the Outshift 4px-radius pill-less shape. */
+.md-typeset .md-button {
+  border-radius: 4px;
+  border-width: 1px;
+  padding: 0.7em 1.2em;
+  font-weight: 500;
+}
+
+.md-typeset .md-button--primary {
+  background: var(--ioc-cyan);
+  border-color: var(--ioc-cyan);
+  color: #04121A;
+}
+
+/* --------------------------------------------------------------------------
+   Embedded interactive pages (the consumption-modes explorer).
+   -------------------------------------------------------------------------- */
+.ioc-embed {
+  width: 100%;
+  height: 78vh;
+  min-height: 560px;
+  border: 1px solid var(--ioc-brd-22);
+  border-radius: 12px;
+  background: var(--ioc-bg);
+  display: block;
+}
+
+@media screen and (max-width: 76.1875em) {
+  .ioc-embed { height: 70vh; }
+}
+
+/* --------------------------------------------------------------------------
+   Consumption-modes explorer, inline on the How to page. It uses the site's
+   own tokens and type rather than carrying a theme of its own.
+   -------------------------------------------------------------------------- */
+/* The architecture figure is drawn with its own token names; bind them to the
+   site palette so it inherits the theme instead of carrying a second one. */
+.ioc-explorer {
+  --c-blue:     var(--ioc-l9);
+  --c-blue-ln:  #3C86E4;
+  --c-blue-lt:  #7FB2E8;
+  --c-blue-ink: #CFE2FA;
+  --c-amb:      var(--ioc-fabric);
+  --c-amb-ln:   #F0A020;
+  --c-amb-bg:   #2A2012;
+  --c-amb-ink:  #F7DCAE;
+  --c-pur:      var(--ioc-ce);
+  --c-pur-ln:   #B562D0;
+  --c-pur-bg:   #241430;
+  --c-pur-ink:  #EAD2F5;
+  --c-lab:      var(--ioc-maslab);
+  --c-agent:    var(--ioc-mas);
+  --c-agent3p:  #363D4B;
+  --c-band:     #16161F;
+  --c-chip-bg:  #0F1018;
+  --c-neu-ln:   var(--ioc-hair);
+  --fg:         var(--ioc-fg);
+  --fg-dim:     var(--ioc-fg-dim);
+  --fg-faint:   #6B7488;
+  --accent:     var(--ioc-cyan-lt);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1.4rem;
+  margin: 1.2rem 0 0;
+}
+
+.ioc-explorer h4 { margin: 0 0 0.7em }
+
+.ioc-group {
+  font-size: 0.68rem;
+  color: var(--ioc-fg-dim);
+  margin: 0 0 0.5em;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  line-height: 1.35;
+}
+.ioc-group::after { content: ""; flex: 1; height: 1px; background: var(--ioc-hair) }
+.ioc-group.second { margin-top: 1em; padding-top: 0.9em; border-top: 2px dashed var(--ioc-brd-30) }
+
+/* Material styles every .md-typeset ul, so these need the same specificity to
+   shed the bullets and the indent. */
+.md-typeset .ioc-modes,
+.ioc-modes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.md-typeset .ioc-modes li,
+.ioc-modes li { margin: 0; padding: 0 }
+.md-typeset .ioc-modes li::before,
+.md-typeset .ioc-modes li::marker { content: none; display: none }
+
+.ioc-mode {
+  width: 100%;
+  max-width: 46rem;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.3rem 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font: inherit;
+  color: inherit;
+  transition: background 140ms, border-color 140ms;
+}
+.ioc-mode:hover { background: var(--ioc-wash-04) }
+.ioc-mode[aria-pressed="true"] { background: var(--ioc-wash-11); border-color: var(--ioc-brd-30) }
+.ioc-mode:focus-visible { outline: 2px solid var(--ioc-cyan-lt); outline-offset: 2px }
+
+.ioc-mode .n {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--ioc-fg-dim);
+  width: 0.8rem;
+  flex: none;
+  text-align: center;
+}
+.ioc-mode[aria-pressed="true"] .n { color: var(--ioc-yellow) }
+
+.ioc-stack { display: flex; gap: 3px; flex-wrap: nowrap; min-width: 0; flex: 1; overflow: hidden }
+
+.ioc-chip {
+  font-size: 0.5rem;
+  line-height: 1;
+  font-weight: 600;
+  color: #10131A;
+  border-radius: 3px;
+  padding: 0.35rem 0.3rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: filter 140ms;
+}
+.ioc-mode[aria-pressed="false"] .ioc-chip { filter: saturate(.45) brightness(.7) }
+.ioc-mode:hover .ioc-chip { filter: none }
+
+/* Each chip sizes to its own label, so the staircase comes from how many chips a
+   row has — as in the figure — rather than from widths guessed per class. The
+   rail is wide enough for the longest row; SCOPE takes any slack. */
+.ioc-chip           { flex: 0 0 auto }
+.ioc-chip.harness   { background: var(--ioc-mas); color: #fff }
+.ioc-chip.mas       { background: #E4E9EE }
+.ioc-chip.skills    { background: #7FB2E8 }
+.ioc-chip.bridge    { background: var(--ioc-l9); color: #fff }
+.ioc-chip.scope       { background: var(--ioc-fabric); flex: 0 0 5rem }
+.ioc-chip.detect    { background: var(--ioc-fabric) }
+.ioc-chip.trigger   { background: var(--ioc-fabric) }
+.ioc-chip.lab       { background: var(--ioc-maslab) }
+.ioc-chip.spacer    { background: transparent; flex: 0 0 2.6rem }
+
+/* On a phone a seven-chip row cannot fit on one line, and clipping would hide
+   the components the row exists to name — so it wraps instead. The staircase
+   offset is dropped there; it only reads when the rows are single lines. */
+@media screen and (max-width: 50em) {
+  .ioc-stack { flex-wrap: wrap; overflow: visible }
+  .ioc-chip.scope { flex: 0 0 auto }
+  .ioc-chip.spacer { display: none }
+  .ioc-mode { align-items: flex-start }
+  .ioc-mode .n { padding-top: 0.35rem }
+}
+
+.ioc-canvas {
+  border: 1px solid var(--ioc-brd-22);
+  border-radius: 12px;
+  background: var(--ioc-bg);
+  padding: 0.5rem;
+  overflow-x: auto;
+}
+.ioc-canvas svg { display: block; width: 100%; min-width: 34rem; height: auto }
+
+#ioc-arch g[data-group] { transition: opacity 280ms ease }
+#ioc-arch g[data-group].off { opacity: .13 }
+#ioc-arch g[data-group].ctx { opacity: .22 }
+#ioc-arch g[data-group].lit { opacity: 1 }
+#ioc-arch g[data-group].pulse rect,
+#ioc-arch g[data-group].pulse ellipse,
+#ioc-arch g[data-group].pulse path { filter: drop-shadow(0 0 6px var(--ioc-cyan-lt)) }
+@media (prefers-reduced-motion: reduce) { #ioc-arch g[data-group] { transition: none } }
+
+.ioc-bar { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap }
+
+.ioc-toggle {
+  font-size: 0.6rem;
+  color: var(--ioc-fg-dim);
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--ioc-hair);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  transition: color 140ms, border-color 140ms;
+}
+.ioc-toggle:hover { color: var(--ioc-fg); border-color: var(--ioc-fg-dim) }
+.ioc-toggle[aria-pressed="true"] { color: var(--ioc-cyan-lt); border-color: var(--ioc-brd-30) }
+
+.ioc-reading { margin: 0.6rem 0 0; font-size: 0.68rem; color: var(--ioc-fg-dim) }
+.ioc-reading b { color: var(--ioc-fg); font-weight: 500 }
+
+.ioc-detail { margin-top: 1.2rem; border-top: 1px solid var(--ioc-hair); padding-top: 1rem }
+.ioc-detail h3 { margin: 0 0 0.2em; font-weight: 500 }
+.ioc-detail .tag { margin: 0 0 1em; color: var(--ioc-fg-dim); font-size: 0.76rem }
+
+.ioc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.7rem }
+.ioc-fact {
+  background: var(--ioc-wash-04);
+  border: 1px solid var(--ioc-brd-22);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  min-width: 0;
+}
+.ioc-fact h5 {
+  margin: 0 0 0.35em;
+  font-size: 0.56rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ioc-fg-dim);
+}
+.ioc-fact p { margin: 0; font-size: 0.72rem; line-height: 1.5 }
+.ioc-fact.pro h5 { color: #8FD08A }
+.ioc-fact.con h5 { color: #E8956B }
+.ioc-fact.gate h5 { color: var(--ioc-yellow) }
+
+/* --------------------------------------------------------------------------
+   The architecture figure on the Overview, with its "Available today" toggle.
+   The SVG is inlined rather than shown as an <img> so the toggle can reach the
+   groups the generator tagged data-planned.
+   -------------------------------------------------------------------------- */
+.ioc-figure {
+  border: 1px solid var(--ioc-brd-22);
+  border-radius: 12px;
+  background: var(--ioc-bg);
+  padding: 0.5rem 0.6rem 0.6rem;
+  margin: 1.2rem 0 0.6rem;
+  overflow-x: auto;
+}
+
+.ioc-figure svg { display: block; width: 100%; height: auto; min-width: 40rem }
+
+.ioc-figbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.1rem 0.1rem 0.5rem;
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ioc-fg-faint, var(--ioc-fg-dim));
+}
+
+#ioc-simplified .planned { transition: opacity 260ms ease, filter 260ms ease }
+
+/* Toggled on: everything not available today drops back. */
+.ioc-figure.avail #ioc-simplified .planned { opacity: 0.16; filter: grayscale(1) }
+
+@media (prefers-reduced-motion: reduce) {
+  #ioc-simplified .planned { transition: none }
+}
+
+/* Mode 1's placement choice: the same skills either in the agents or in the
+   AgentBridge. Muted when a mode it does not apply to is selected, so it reads as
+   scoped to mode 1 rather than global. */
+.ioc-option {
+  list-style: none;
+  margin: .45rem 0 .2rem;
+  padding: .4rem .55rem;
+  font-size: .74rem;
+  border-left: 2px solid var(--c-amb-ln);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem .9rem;
+}
+.ioc-option-cap {
+  width: 100%;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--c-amb-ink);
+  opacity: .85;
+}
+.ioc-option label {
+  display: inline-flex;
+  align-items: center;
+  gap: .32rem;
+  color: var(--c-amb-ink);
+  cursor: pointer;
+}
+.ioc-option input { accent-color: var(--c-amb-ln); margin: 0; }
+.ioc-option.muted { opacity: .4; }
+.ioc-option.muted label { cursor: default; }
+

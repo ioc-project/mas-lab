@@ -462,7 +462,7 @@ _REPRODUCE_EXPERIMENTS = [
 ]
 
 _REPO_ROOT = Path(__file__).parents[3]
-"""Absolute path to the repository root (outshift-open/mas-lab)."""
+"""Absolute path to the repository root (ioc-project/mas-lab)."""
 
 _MAS_LAB = Path(sys.executable).parent / "mas-lab"
 """The ``mas-lab`` console script installed in *this* venv.

@@ -5,10 +5,10 @@
 # Tutorial 9 — Building a knowledge graph from OTel and native events
 
 > **Packages:** `mas-library-kg` (native→KG is first-party; OTel→KG reuses
-> the `norm` package from OXP), `mas-library-telemetry` (span files from
+> the `norm` package from SCOPE), `mas-library-telemetry` (span files from
 > [Tutorial 8](../08-telemetry/README.md))
 > **Prerequisite:** [Tutorial 8](../08-telemetry/README.md)
-> **Example traces:** [`library-kg/examples/qa-agent/`](https://github.com/outshift-open/mas-lab/tree/main/library-kg/examples/qa-agent)
+> **Example traces:** [`library-kg/examples/qa-agent/`](https://github.com/ioc-project/mas-lab/tree/main/library-kg/examples/qa-agent)
 
 ## Goal
 
@@ -34,9 +34,10 @@ during a run.
 
 SHACL is a W3C language for checking graph shape.
 
-OXP is the open-source
-[Observe and eXplain Platform](https://github.com/outshift-open/observe-and-explain-platform).
-Two of its pieces are not part of MAS Lab:
+[SCOPE](https://ioc-project.github.io/scope/) (System for Cognitive Observability
+Provenance and Explainability, [github.com/ioc-project/scope](https://github.com/ioc-project/scope))
+is the observability platform MAS-Lab feeds. Two of its pieces are not part of
+MAS Lab:
 
 - `oxp-ontology` (PyPI, hard dependency of `mas-library-kg`): the ontology,
   the SHACL shapes (`mas-shapes.ttl`) and the Python models
@@ -57,13 +58,13 @@ path (`-o`), an infra manifest (`--infra`, `kind: Neo4j`) or `$NEO4J_URI`.
 Layers `structure`, `execution` and `trajectory` are on by default;
 `provenance`, `governance` and `infrastructure` are off. Enable them with
 `--include-governance`, `--include-provenance` and similar flags. Reference:
-[library-kg docs](https://github.com/outshift-open/mas-lab/tree/main/library-kg/docs).
+[library-kg docs](https://github.com/ioc-project/mas-lab/tree/main/library-kg/docs).
 
 ## What you need
 
 ```bash
 uv pip install -e "library-kg[verify]"          # native → KG
-uv pip install -e "library-kg[norm,verify]"     # OTel → KG (OXP wrap)
+uv pip install -e "library-kg[norm,verify]"     # OTel → KG (SCOPE wrap)
 uv pip install -e "library-telemetry[convert]"  # if you still need replay
 ```
 
@@ -145,9 +146,9 @@ mas-lab kg neo4j-push library-kg/examples/qa-agent/kg-native.jsonld \
 
 For a shared Neo4j, copy `local-neo4j.yaml`, set the URI and pass it with
 `--infra`. See `library-kg/docker/README.md` and the
-[library-kg tutorial](https://github.com/outshift-open/mas-lab/blob/main/library-kg/docs/tutorial.md)
-for a full Neo4j round trip. The OXP platform UI stack is separate
-([compose file](https://github.com/outshift-open/observe-and-explain-platform/blob/main/backend/docker-compose.yml));
+[library-kg tutorial](https://github.com/ioc-project/mas-lab/blob/main/library-kg/docs/tutorial.md)
+for a full Neo4j round trip. The SCOPE platform UI stack is separate
+([compose file](https://github.com/ioc-project/scope/blob/main/deploy/docker-compose/README.md));
 you do not need it here.
 
 ---
@@ -230,7 +231,7 @@ and `mas-library-kg`. Neither exists yet.
 
 ## What you learned
 
-1. OTel→KG reuses OXP's `norm`; native→KG is first-party. Both target
+1. OTel→KG reuses SCOPE's `norm`; native→KG is first-party. Both target
    `oxp_ontology.models.*`, and a test keeps them aligned.
 2. `kg normalize` and `kg neo4j-push` are shortcuts for pipeline steps; a path,
    `--infra` or `$NEO4J_URI` picks the sink, and `--dry-run` needs no Neo4j.

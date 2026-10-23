@@ -17,7 +17,7 @@ ALL_KINDS = sorted(KIND_TO_CLASS.keys())
 
 schema = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://cisco-eti.github.io/mas-lab/library-kg/schemas/events.schema.json",
+    "$id": "mas-lab/events/v1",
     "title": "MAS native observability event",
     "description": (
         "One line of events.jsonl. Envelope (L1) + kind enum from KIND_TO_CLASS. "

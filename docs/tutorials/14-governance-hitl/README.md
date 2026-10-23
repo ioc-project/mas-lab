@@ -225,7 +225,7 @@ class ReadOnlyToolsOnly:
 ```
 
 For production, use the typed
-[`GovernancePlugin` contract](https://github.com/outshift-open/mas-lab/blob/main/runtime/src/mas/runtime/boundary/gov/plugin.py)
+[`GovernancePlugin` contract](https://github.com/ioc-project/mas-lab/blob/main/runtime/src/mas/runtime/boundary/gov/plugin.py)
 and register the plugin in a library. Rules run in listed order. `ALLOW`
 passes to the next rule, and `BLOCK` stops at once.
 
@@ -251,4 +251,4 @@ passes to the next rule, and `BLOCK` stops at once.
 
 Continue with the labs in the [tutorial index](../index.md#whats-next). See the
 [plugin bindings reference](../../manifests/plugin-bindings.md) and the
-[governance plugin guide](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/README.md).
+[governance plugin guide](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/README.md).

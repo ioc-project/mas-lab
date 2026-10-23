@@ -91,7 +91,7 @@ Kind `Library`, `apiVersion: mas/v1`, flat (no `metadata:` / `spec:`).
 | `plugin_manifests` | Extra plugin YAML files, if you split them |
 
 When `library.yaml` declares `types:` or `plugins:`, it is also the plugin
-manifest. See [plugin-registry-manifests.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/plugin-registry-manifests.md).
+manifest. See [plugin-registry-manifests.md](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/plugin-registry-manifests.md).
 
 In-repo labs that list a local directory ship a `library.yaml` there, so the
 directory is a real library. Pipeline YAML may still load steps by Python path

@@ -1,2 +1,2 @@
 # MkDocs site — GitHub Pages (see mkdocs.yml, task docs-serve)
-mkdocs-material>=9.5
+mkdocs-material>=9.7

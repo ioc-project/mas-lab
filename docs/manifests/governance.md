@@ -18,7 +18,7 @@ spec:
 
 - Entry syntax: [plugin-bindings.md](plugin-bindings.md).
 - Schema: [`governance-binding.schema.yaml`](../schemas/runtime/fragments/governance-binding.schema.yaml).
-- Developer contract: [runtime/docs/dev/contracts/governance.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/governance.md).
+- Developer contract: [runtime/docs/dev/contracts/governance.md](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/governance.md).
 - Retries, circuit breaker, `error_policy` defaults, and logging: [reliability.md](../references/reliability.md).
 
 ---
@@ -50,10 +50,10 @@ Without `error_recovery_plugin`, an `ERROR` follows `gov_ingress_profile` (defau
 
 | Plugin | Role | Card |
 |--------|------|------|
-| `gov_no_undeclared_tool` | Egress BLOCK if the tool name was not in this LLM call's `tools` list. | [no-undeclared-tool.md](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/no-undeclared-tool.md) |
-| `retry_on_error` | Ingress: `error_policy.<class>` maps to allow, retry, block, or skip. Egress always passes. | [retry-on-error.md](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/retry-on-error.md) |
-| `backtrack_on_error` | Ingress: retries an identical engine error, then requests a session rollback once the repeat threshold is reached. Configure it with a `backtrack` stanza key. | [governance README](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/README.md) |
-| `sample_governance` (alias of `sample`) | HITL before a tool call or before a tool result enters working memory. Also provides destructive-tool profiles. | [sample-governance.md](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/sample-governance.md) |
+| `gov_no_undeclared_tool` | Egress BLOCK if the tool name was not in this LLM call's `tools` list. | [no-undeclared-tool.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/no-undeclared-tool.md) |
+| `retry_on_error` | Ingress: `error_policy.<class>` maps to allow, retry, block, or skip. Egress always passes. | [retry-on-error.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/retry-on-error.md) |
+| `backtrack_on_error` | Ingress: retries an identical engine error, then requests a session rollback once the repeat threshold is reached. Configure it with a `backtrack` stanza key. | [governance README](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/README.md) |
+| `sample_governance` (alias of `sample`) | HITL before a tool call or before a tool result enters working memory. Also provides destructive-tool profiles. | [sample-governance.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/sample-governance.md) |
 
 Any plugin registered as `type: governance` in a library manifest can join the chain. The schema checks only the shape (a bare id or a single-key map). An unknown id fails when the agent is built.
 

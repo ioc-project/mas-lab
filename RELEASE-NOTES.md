@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+The public GitHub org and docs host are now `ioc-project/mas-lab`
+(`https://github.com/ioc-project/mas-lab`,
+`https://ioc-project.github.io/mas-lab/`). Docs name OXP as SCOPE.
+
 The web UI talks only to the controller (`/api/scopes`, items, runs, artifacts).
 `mas-lab serve` gains `--cors-origin`, `--token-file`, `--state-dir`, and `--workspace`.
 `/api/libraries`, `/api/jobs`, and `/api/experiments` are deprecated.
@@ -92,8 +96,8 @@ packages.
 
 Container images published by the release pipeline:
 
-- `ghcr.io/outshift-open/mas-lab/ui`
-- `ghcr.io/outshift-open/mas-lab/backend`
+- `ghcr.io/ioc-project/mas-lab/ui`
+- `ghcr.io/ioc-project/mas-lab/backend`
 
 ### Release scope and branch state
 

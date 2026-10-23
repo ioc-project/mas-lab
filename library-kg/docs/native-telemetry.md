@@ -136,7 +136,7 @@ Behaviour of `NativeGraphBuilder.upsert_call` (`core/native_graph_builder.py`):
 
 ## 5. Kind reference
 
-`KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` has 85 entries: 73 map to an ontology class (tables below) and 12 map to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the OXP ontology (`oxp-ontology`; see [ontology.md](ontology.md)).
+`KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` has 85 entries: 73 map to an ontology class (tables below) and 12 map to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the SCOPE ontology (`oxp-ontology`; see [ontology.md](ontology.md)).
 
 **Optional layers.** `LAYER_KINDS` groups some kinds into four layers that `normalize_events` can drop. Defaults: `trajectory` on; `infrastructure`, `provenance`, `governance` off. CLI flags: `--include-infrastructure`, `--include-trajectory`, `--include-provenance`, `--include-governance` (each with a `--no-` form); Python: the same `include_*` keyword arguments of `run_normalize`. A dropped layer produces no nodes for its kinds.
 
@@ -532,7 +532,7 @@ library-kg/src/mas/library/kg/core/event_mappings.py
    "my_new_event_end":   "ToolCall",
    ```
 
-   The value is the local name of a class in the OXP ontology (`oxp-ontology`), for example `ToolCall`, `LLMCall`, `AgentCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`. Classes with a dispatch entry in `observability/native/handlers/__init__.py` (`HANDLERS`) get class-specific enrichment; others fall back to the generic call handler.
+   The value is the local name of a class in the SCOPE ontology (`oxp-ontology`), for example `ToolCall`, `LLMCall`, `AgentCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`. Classes with a dispatch entry in `observability/native/handlers/__init__.py` (`HANDLERS`) get class-specific enrichment; others fall back to the generic call handler.
 
 2. If the kind belongs to an optional layer, add it to `LAYER_KINDS` in the same file so it is dropped when the layer is off.
 

@@ -75,9 +75,10 @@ Governance overlays that require human approval work in the TUI as they do in ch
 
 ## Related
 
-- [cli/index.md](../cli/index.md) — CLIs
+- [cli/index.md](../cli/index.md) — command-line index
 - [cli/mas-ctl.md](../cli/mas-ctl.md) — flags (`tui` has `--events*`, not `--trace`)
 - [cli/observability.md](../cli/observability.md)
+- [Web UI](../ui/index.md) · [Live dashboard](../ui/live.md) · [Controller API](../cli/serve.md)
 - [Tutorial 1](../tutorials/01-building-an-agent/README.md)
 
 Next: [Tutorial 14 — Governance and HITL](../tutorials/14-governance-hitl/README.md).

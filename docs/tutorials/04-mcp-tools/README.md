@@ -95,7 +95,7 @@ tools:
       - ref: samples:tools/calc.tool.yaml
 ```
 
-[`mixed-tools.infra.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mixed-tools.infra.yaml)
+[`mixed-tools.infra.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mixed-tools.infra.yaml)
 activates two providers:
 
 ```yaml
@@ -156,7 +156,7 @@ mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
 
 Reference: [ToolServerRegistry reference](../../references/tool-server-registry.md),
 [infra.md § ToolServerRegistry](../../manifests/infra.md#toolserverregistry),
-[MCP compliance workflow](https://github.com/outshift-open/mas-lab/tree/main/library-ioa/compliance/mcp).
+[MCP compliance workflow](https://github.com/ioc-project/mas-lab/tree/main/library-ioa/compliance/mcp).
 
 ## Next
 

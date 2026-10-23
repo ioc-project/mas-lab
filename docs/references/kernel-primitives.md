@@ -9,7 +9,7 @@ This page lists the small set of operations the kernel exposes. Read it if you w
 Terms used here:
 
 - The *kernel* is the core of the runtime. It holds the agent state and the state machines that advance it.
-- A *Mealy machine* is a state machine whose output depends on the current state and the input. One step is a *tick*. See the [Mealy machines guide](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/mealy-machines-guide.md).
+- A *Mealy machine* is a state machine whose output depends on the current state and the input. One step is a *tick*. See the [Mealy machines guide](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/mealy-machines-guide.md).
 - A *plugin* is a unit of behaviour that a manifest selects by name. A *session* is one live run you drive interactively.
 - A *snapshot* is an in-memory copy of run state. See [Snapshots vs checkpoints](snapshots.md).
 

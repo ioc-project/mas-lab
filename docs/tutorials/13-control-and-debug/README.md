@@ -233,7 +233,7 @@ in the live process. `persist` is what another chat resumes.
 - [Contracts](../../references/contracts.md): `ControlContract`.
 - [Kernel operations](../../references/kernel-primitives.md)
 - [Session checkpoints](../../manifests/checkpoint.md)
-- [Debug-script governance card](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/debug-script.md):
+- [Debug-script governance card](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/governance/debug-script.md):
   full `break` / `commands` grammar.
 
 ## Next

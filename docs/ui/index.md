@@ -14,8 +14,9 @@ It talks over HTTP to `mas-lab-controller`, the same controller that backs
 Use the UI to browse visually. Paper reproduction and CI use the CLI
 (`mas-lab benchmark run`, `task reproduce`).
 
-**Related:** [Terminal UI (TUI)](../ctl/tui.md) · [Observability](../cli/observability.md) ·
-[Docker setup](https://github.com/outshift-open/mas-lab/blob/main/docker/README.md)
+**Related:** [Command line](../cli/index.md) · [Controller API](../cli/serve.md) ·
+[Live dashboard](live.md) · [TUI](../ctl/tui.md) ·
+[Docker setup](https://github.com/ioc-project/mas-lab/blob/main/docker/README.md)
 
 ---
 
@@ -68,7 +69,7 @@ OPENAI_API_KEY=sk-...
 ```
 
 Project `config.yaml` on the workspace mount (copy from
-[`library-samples/sample-workspace/config.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/sample-workspace/config.yaml))
+[`library-samples/sample-workspace/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/sample-workspace/config.yaml))
 takes precedence over `$XDG_CONFIG_HOME/mas/config.yaml`. Without a project file,
 the Docker image uses a built-in sample. See [user-config.md](../user-config.md).
 
@@ -93,7 +94,7 @@ yarn dev
 Open http://localhost:5173 (Vite prints the port). The UI needs a running
 controller. There is no offline fallback.
 
-Developer details: [`ui/README.md`](https://github.com/outshift-open/mas-lab/blob/main/ui/README.md) in the source tree.
+Developer details: [`ui/README.md`](https://github.com/ioc-project/mas-lab/blob/main/ui/README.md) in the source tree.
 
 ---
 
@@ -146,7 +147,8 @@ Controller flags: `--cors-origin`, `--token-file`, `--state-dir`, `--workspace`,
 
 ## Controller API
 
-Headless API only (no browser):
+Headless API only (no browser). Flags, clients, and route groups:
+[Controller API](../cli/serve.md).
 
 ```bash
 mas-lab serve --host 127.0.0.1 --port 8090

@@ -80,7 +80,7 @@ The runtime groups boundaries into three families.
 | **Orchestration** | How control flows across agents | `DelegationContract` |
 | **Governance** | What is permitted | `BudgetTracker`, governance plugins |
 
-For method signatures and implementation detail, see the [developer contract reference](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/index.md) in the repository. You need a clone to read it.
+For method signatures and implementation detail, see the [developer contract reference](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/index.md) in the repository. You need a clone to read it.
 
 ---
 
@@ -95,17 +95,17 @@ For method signatures and implementation detail, see the [developer contract ref
 | Governance | Budget, policy engine, HITL |
 | Design patterns | ReAct, chain-of-thought, single-pass lifecycles |
 
-Deep dives on GitHub: [model & tools](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/model-and-tools.md)
+Deep dives on GitHub: [model & tools](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/model-and-tools.md)
 ·
-[state & context](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md)
+[state & context](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/state-and-context.md)
 ·
-[messaging & orchestration](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/messaging-and-orchestration.md)
+[messaging & orchestration](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/messaging-and-orchestration.md)
 ·
-[execution control](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/execution-control-and-observability.md)
+[execution control](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/execution-control-and-observability.md)
 ·
-[governance](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/governance.md)
+[governance](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/governance.md)
 ·
-[design patterns](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/dev/contracts/design-patterns.md)
+[design patterns](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/dev/contracts/design-patterns.md)
 
 ---
 
@@ -122,7 +122,7 @@ Egress and ingress decisions on every tool, LLM, and memory call pass through tw
 1. **Declarative policies.** `GovernancePolicyEngine` (`runtime/src/mas/runtime/boundary/gov/policy_engine.py`) matches YAML-authored `PolicyDefinition`s against the call. A policy has a trigger condition and an `action`: `hitl`, `block`, `terminate`, `log`, `modify`, `skip`, `retry`, or `blacklist`. The engine reads `spec.governance` in the agent or overlay manifest. A matched policy's own `params.message` (or `params.reason`) becomes the reported reason. Otherwise the engine builds a reason from the policy name and action.
 2. **Parametric profiles.** `GovPolicyProfile` (egress) and `GovIngressProfile` (ingress) apply when no declarative policy matches. They are fixed postures such as `block-destructive`, `hitl-destructive`, and `retry-on-error`. Implementation: `resolve_egress_governance`, `egress_governance_outcome`, and `ingress_governance_outcome` in `runtime/src/mas/runtime/boundary/gov/policy.py`.
 
-Every decision is emitted as a `governance_decision` observability event with `hook`, `checkpoint`, `decision`, `reason`, and `policy_name`. The Governance lane and per-call badges of the multilevel trajectory plot render these events. See [pipeline-processors.md, Multilevel trajectory plot](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-processors.md#multilevel-trajectory-plot).
+Every decision is emitted as a `governance_decision` observability event with `hook`, `checkpoint`, `decision`, `reason`, and `policy_name`. The Governance lane and per-call badges of the multilevel trajectory plot render these events. See [pipeline-processors.md, Multilevel trajectory plot](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-processors.md#multilevel-trajectory-plot).
 
 ---
 
@@ -190,7 +190,7 @@ Runtime
 - [ToolContract](tool-contract.md): `call_tool(name, arguments)`.
 - [ToolServerRegistry](tool-server-registry.md): infra connection policy.
 - [Thin waist](thin-waist.md): how names resolve to plugins.
-- [Mealy machines guide](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/mealy-machines-guide.md)
+- [Mealy machines guide](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/mealy-machines-guide.md)
 - [Glossary](../glossary.md): vocabulary.
-- [ADR 0002](adr-0002-observability-event-model.md): why the `ObservabilitySink` / `EventEmitter` boundary records an announced stream of events instead of exposing a query interface.
+- [Event model](event-model.md): why the `ObservabilitySink` / `EventEmitter` boundary records an announced stream of events instead of exposing a query interface.
 - [Tutorial 14: governance and HITL](../tutorials/14-governance-hitl/README.md)

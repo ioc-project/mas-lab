@@ -173,8 +173,8 @@ params:
 ```
 
 Thresholds, prompt, logs, MCE judge: [summarization.md](summarization.md).
-Example: [summarizer-override](https://github.com/outshift-open/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
-Card: [summarizer.md](https://github.com/outshift-open/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/context/summarizer.md).
+Example: [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
+Card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/context/summarizer.md).
 
 ### `memory`
 
@@ -255,5 +255,5 @@ The runtime reads an already-compiled manifest leniently (`normalize_plugin_bind
 - [agent.md](agent.md) — every agent spec field
 - [context-assembly.md](context-assembly.md) — assembler, context managers, summarizers
 - [summarization.md](summarization.md) — thresholds, summarizer/judge model overrides, logs
-- [runtime/docs/agent-defaults.md](https://github.com/outshift-open/mas-lab/blob/main/runtime/docs/agent-defaults.md)
+- [runtime/docs/agent-defaults.md](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/agent-defaults.md)
 - [plugins-reference.md](../plugins-reference.md) — catalog of registered plugins

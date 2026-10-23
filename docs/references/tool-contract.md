@@ -100,7 +100,7 @@ A caller that uses only the contract sees `list_tools()` and `call_tool(name, ar
 
 The agent spec does not declare tool providers. The infra tool-server entry declares `protocol: mcp`. The runtime discovers the tool names from the server, unless infra supplies an explicit `tools` list.
 
-Reference: [infra.md, ToolServerRegistry](../manifests/infra.md#toolserverregistry) and [tool-server-registry.md](tool-server-registry.md). Example: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/outshift-open/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
+Reference: [infra.md, ToolServerRegistry](../manifests/infra.md#toolserverregistry) and [tool-server-registry.md](tool-server-registry.md). Example: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
 
 ## See also
 

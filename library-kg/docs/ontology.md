@@ -38,7 +38,7 @@ There is no ontology module in `mas.library.kg`. The vocabulary comes from two p
 
 | Source | Contents |
 |---|---|
-| `oxp-ontology` (PyPI, a required dependency; part of the open-source Observe and eXplain Platform, OXP) | `mas-ontology.ttl` (core classes and properties), `mas-shapes.ttl` and `mas-shapes-custom.ttl` (SHACL shapes, the W3C constraint language for RDF graphs), and the generated Python models `oxp_ontology.models.*`. |
+| `oxp-ontology` (PyPI, a required dependency; part of SCOPE) | `mas-ontology.ttl` (core classes and properties), `mas-shapes.ttl` and `mas-shapes-custom.ttl` (SHACL shapes, the W3C constraint language for RDF graphs), and the generated Python models `oxp_ontology.models.*`. |
 | `library-kg/ontology/extensions/mas-kg-native-extensions.ttl` | Classes and properties the native `events.jsonl` path emits that `oxp-ontology` does not declare yet: `RAGQuery`, `MemoryCall`, `SkillCall`, `Skill`, `ThinkingCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`, `ParallelGroup`, `Branch`, `Worker`, `Run`, `Application`, and the properties `annotates`, `contributesTo`, `callsAgent`, `hasMemoryCall`, `hasSkillCall`. It is not a second ontology; entries are removed once they land in `oxp-ontology`. |
 
 `mas.library.kg.ontology` resolves the TTL paths. The validation step ([section 12](#12-verification)) loads both sources into one RDF graph.
