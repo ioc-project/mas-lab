@@ -23,7 +23,7 @@ from mas.ctl.executor.run_mas import execute_run_mas
     "--override",
     "overrides",
     multiple=True,
-    metavar="ROOT:PATH=VALUE",
+    metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
 @bind_option

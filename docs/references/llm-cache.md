@@ -21,6 +21,14 @@ Read, write, and replay are separate switches on `kind: InfraMiddleware` manifes
 
 The [manifest example](#inframiddleware-manifest) below shows the YAML.
 
+One middleware manifest can serve recording and replay. Override
+`infra:spec.interceptors[middleware=llm_cache].params.allow_read`,
+`allow_write`, and `raise_on_miss` with typed YAML booleans for a run.
+For a standalone file, `mas-ctl compile infra/llm-cache.yaml --override
+'infra:spec.params.allow_write=true'` emits a modified document without
+rewriting the original. See the [override reference](../cli/overrides.md#syntax)
+for complete commands and environment-variable usage.
+
 ---
 
 ## Two cache mechanisms

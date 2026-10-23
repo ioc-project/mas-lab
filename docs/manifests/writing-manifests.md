@@ -131,7 +131,7 @@ On disk the version is the folder name: `apps/<name>/v<N>/`.
 
 Follow these conventions and do not invent another suffix.
 `mas.yaml` is the app-root file.
-`*.mas.yaml` is an extra MAS document, not a second spelling of the app root.
+`*.mas.yaml` is an extra MAS document, not a second spelling of the app .
 
 | Kind | Conventional file | How it is found |
 | ------ | ------------------- | ----------------- |
@@ -139,7 +139,7 @@ Follow these conventions and do not invent another suffix.
 | Lab | `lab-config.yaml` | Folder `*.lab/` or a directory containing this file |
 | Experiment | `experiment.yaml` | That name, or YAML under `experiments/` |
 | MAS app root | **`mas.yaml`** (or `mas-bench.yaml`) | App directory scan; `get_app` / `app:` |
-| Extra MAS document | `*.mas.yaml` | **Explicit** `library.yaml` `apps:` path or a `LIBRARY:…` file ref. The samples topologies use this (`parallel.mas.yaml`). Not scanned as an app root. |
+| Extra MAS document | `*.mas.yaml` | **Explicit** `library.yaml` `apps:` path or a `LIBRARY:…` file ref. The samples topologies use this (`parallel.mas.yaml`). Not scanned as an app . |
 | Agent | `agents/<id>.yaml`, `agents/<id>/agent.yaml`, or `agent.yaml` | Referenced from MAS `agency.agents[].ref` |
 | Original persona tree | `agents/<id>/AGENT.md` | Non-mas-lab layout (e.g. `coding-agent-md`). The directory is still catalogued. |
 | Tool | `*.tool.yaml` | `tools/<name>.tool.yaml` or `tools/<name>/*.tool.yaml` |
@@ -213,11 +213,11 @@ spec:
   patch:
     tools: { "$op": { clear: true } }
   overrides:                 # optional ordered path assignments
-    - 'agent:spec.context.role="security reviewer"'
+    - '.mas.agent[qa].spec.context.role="security reviewer"'
 ```
 
 The [Overlay manifest reference](overlay.md) documents the full target, patch, selector, compatibility, and validation contract.
-The CLI [`--override`](../cli/overrides.md) accepts the same root-qualified assignments.
+The CLI [`--override`](../cli/overrides.md) accepts the same session-tree assignments.
 
 ---
 

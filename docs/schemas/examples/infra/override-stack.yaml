@@ -1,0 +1,37 @@
+apiVersion: infra/v1
+kind: LLMProxy
+metadata:
+  name: override-stack
+spec:
+  protocol: openai
+  proxy:
+    api_base: http://127.0.0.1:8000/v1
+    api_key_env: OPENAI_API_KEY
+  models:
+    defaults:
+      llm: any
+  interceptors:
+    - middleware: llm_cache
+      applies_to: [LLM_CALL]
+      params:
+        allow_read: true
+        allow_write: false
+        raise_on_miss: true
+        cache_path: ./cache/llm-cache.json
+    - middleware: fault_inject
+      applies_to: [LLM_CALL]
+      params: {}
+  runtime_engine:
+    cache:
+      read: true
+      write: false
+  tool_servers:
+    - id: tools
+      protocol: mcp
+      usage: use
+      url: http://127.0.0.1:8001/mcp
+  endpoints:
+    peer:
+      protocol: a2a
+      usage: use
+      url: http://127.0.0.1:8002/agents/peer/

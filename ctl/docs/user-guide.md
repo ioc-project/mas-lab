@@ -30,7 +30,7 @@ Run with an explicit prompt and an overlay (a partial manifest merged on top of 
 mas-ctl run-mas mas.yaml --overlay overlays/baseline.yaml --prompt "Plan a 3-day trip to Paris" --flavour local
 ```
 
-Add `--override ROOT:PATH=VALUE` (repeatable) for one-off, schema-validated changes applied last.
+Add `--override PATH=VALUE` (repeatable) for one-off, schema-validated changes applied last.
 
 ## Core concepts
 
@@ -82,6 +82,6 @@ Benchmarking: **`mas-lab benchmark run`** (see [Tutorial 3](../../docs/tutorials
 
 ## Troubleshooting
 
-- Overlay not applied: check the `--overlay` path and the `--override` ROOT:PATH syntax.
+- Overlay not applied: check the `--overlay` path and the `--override` session-tree path.
 - Agent startup failure: validate referenced agent manifests.
 - Policy mismatch: inspect effective config output before run.

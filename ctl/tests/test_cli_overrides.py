@@ -13,6 +13,7 @@ from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.overrides import (
     apply_cli_overrides,
     max_tokens_overrides,
+    overlay_for_session_agent,
     overrides_for_root,
     parse_override,
 )
@@ -26,8 +27,39 @@ def test_parse_root_path_and_yaml_value() -> None:
     parsed = parse_override('agent:spec.context.role="security expert"')
 
     assert parsed.path.root == "agent"
-    assert parsed.path.text == "agent:spec.context.role"
+    assert parsed.path.parent is None
+    assert parsed.path.text == ".agent.spec.context.role"
     assert parsed.value == "security expert"
+
+
+def test_parse_dotted_session_path() -> None:
+    parsed = parse_override('.agent.spec.context.role="security expert"')
+
+    assert parsed.path.root == "agent"
+    assert parsed.path.text == ".agent.spec.context.role"
+    assert parsed.value == "security expert"
+
+
+def test_parse_rejects_root_prefix() -> None:
+    with pytest.raises(ValueError, match="use .agent.spec"):
+        parse_override('root.agent.spec.context.role="security expert"')
+
+
+def test_parse_mas_agent_type_and_id() -> None:
+    parsed = parse_override(".mas.agent[planner].spec.context.role=reviewer")
+
+    assert parsed.path.root == "agent"
+    assert parsed.path.parent == "mas"
+    assert parsed.path.target_name == "planner"
+    assert parsed.path.text == ".mas.agent[planner].spec.context.role"
+    assert [segment.name for segment in parsed.path.segments] == ["spec", "context", "role"]
+
+
+def test_parse_mas_agent_id_selector_alias() -> None:
+    parsed = parse_override(".mas.agent[id=planner].spec.memory=long")
+
+    assert parsed.path.target_name == "planner"
+    assert parsed.path.parent == "mas"
 
 
 def test_parse_selector_and_equals_in_value() -> None:
@@ -51,7 +83,7 @@ def test_parse_quoted_map_key_with_dots() -> None:
 
 
 def test_parse_rejects_invalid_root_path() -> None:
-    with pytest.raises(ValueError, match="ROOT:PATH"):
+    with pytest.raises(ValueError, match="session node"):
         parse_override("spec.tools=search")
 
 
@@ -86,6 +118,22 @@ def test_apply_list_operator_uses_existing_merge_semantics() -> None:
     )
 
     assert result["spec"]["tools"] == ["calculator", "search"]
+
+
+def test_cli_identity_path_is_overlay_patch_row() -> None:
+    document = {
+        "apiVersion": "mas/v1",
+        "kind": "Agent",
+        "spec": {"description": "qa", "models": [{"id": "main", "model": "gpt-4o"}]},
+    }
+
+    result = apply_cli_overrides(
+        document,
+        ("agent:spec.models[id=main].max_tokens=4096",),
+        root="agent",
+    )
+
+    assert result["spec"]["models"] == [{"id": "main", "model": "gpt-4o", "max_tokens": 4096}]
 
 
 def test_apply_identity_selector_replaces_selected_list_entry() -> None:
@@ -181,10 +229,47 @@ def test_apply_quoted_map_key() -> None:
 
 
 def test_apply_rejects_unknown_path_before_merge() -> None:
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises(ValueError, match="not in the schema"):
         apply_cli_overrides(
             {"apiVersion": "mas/v1", "kind": "Agent", "spec": {"context": {}}},
             ("agent:spec.not_a_real_field=value",),
+            root="agent",
+        )
+
+
+def test_apply_rejects_missing_identity() -> None:
+    document = {
+        "apiVersion": "mas/v1",
+        "kind": "Agent",
+        "spec": {"description": "qa", "models": [{"id": "main", "model": "gpt-4o"}]},
+    }
+
+    with pytest.raises(ValueError, match="no 'models' entry matches id='ghost'"):
+        apply_cli_overrides(document, ("agent:spec.models[id=ghost].max_tokens=1",), root="agent")
+
+
+def test_apply_rejects_selector_on_scalar() -> None:
+    document = {
+        "apiVersion": "mas/v1",
+        "kind": "Agent",
+        "spec": {"description": "qa agent"},
+    }
+
+    with pytest.raises(ValueError, match="not a list|not in the schema"):
+        apply_cli_overrides(document, ("agent:spec.description[id=qa]=x",), root="agent")
+
+
+def test_apply_rejects_op_add_on_scalar() -> None:
+    document = {
+        "apiVersion": "mas/v1",
+        "kind": "Agent",
+        "spec": {"description": "qa agent"},
+    }
+
+    with pytest.raises(ValueError, match=r"\$op cannot apply"):
+        apply_cli_overrides(
+            document,
+            ('agent:spec.description={"$op":{"add":["x"]}}',),
             root="agent",
         )
 
@@ -244,19 +329,18 @@ def test_explicit_override_wins_over_max_tokens_alias() -> None:
 
 
 def test_apply_honors_schema_cli_deny(monkeypatch: pytest.MonkeyPatch) -> None:
-    import importlib
-
-    apply_module = importlib.import_module("mas.ctl.overrides.apply")
+    from mas.ctl.overrides import schema as override_schema
 
     monkeypatch.setattr(
-        apply_module,
+        override_schema,
         "load_schema",
         lambda _kind: {"properties": {"spec": {"properties": {"protected": {"x-cli": {"allowed": False}}}}}},
     )
     with pytest.raises(ValueError, match="not allowed"):
-        apply_module._assert_schema_cli_allowed(
-            parse_override("agent:spec.protected=new").path,
-            "Agent",
+        apply_cli_overrides(
+            {"apiVersion": "mas/v1", "kind": "Agent", "spec": {"protected": "old"}},
+            ("agent:spec.protected=new",),
+            root="agent",
         )
 
 
@@ -294,7 +378,56 @@ def test_public_commands_expose_override_option(command_module: str) -> None:
     result = CliRunner().invoke(getattr(module, command_name), ["--help"])
 
     assert result.exit_code == 0, result.output
-    assert "--override ROOT:PATH=VALUE" in result.output
+    assert "--override PATH=VALUE" in result.output
+
+
+def test_session_agent_path_becomes_overlay_target_name() -> None:
+    overlay = overlay_for_session_agent(".mas.agent[reviewer].spec.memory=long")
+
+    assert overlay["spec"]["target"] == {"kind": "Agent", "name": "reviewer"}
+    assert overlay["spec"]["patch"] == {"memory": "long"}
+    assert "overrides" not in overlay["spec"]
+    result = merge_overlay(
+        {
+            "apiVersion": "mas/v1",
+            "kind": "MAS",
+            "spec": {
+                "agency": {
+                    "agents": [
+                        {
+                            "id": "planner",
+                            "kind": "Agent",
+                            "spec": {"memory": "short"},
+                        },
+                        {
+                            "id": "reviewer",
+                            "kind": "Agent",
+                            "spec": {"memory": "short"},
+                        },
+                    ]
+                }
+            },
+        },
+        overlay,
+    )
+
+    agents = result["spec"]["agency"]["agents"]
+    assert agents[0]["spec"]["memory"] == "short"
+    assert agents[1]["spec"]["memory"] == "long"
+
+
+def test_overrides_for_root_excludes_nested_mas_agents() -> None:
+    sources = (
+        ".mas.spec.workflow.entry=moderator",
+        ".mas.agent[reviewer].spec.memory=long",
+        ".agent.spec.memory=short",
+    )
+
+    assert overrides_for_root(sources, "mas") == (".mas.spec.workflow.entry=moderator",)
+    assert overrides_for_root(sources, "agent") == (".agent.spec.memory=short",)
+    assert overrides_for_root(sources, "agent", parent="mas") == (
+        ".mas.agent[reviewer].spec.memory=long",
+    )
 
 
 def test_overlay_manifest_applies_selector_overrides_after_patch() -> None:

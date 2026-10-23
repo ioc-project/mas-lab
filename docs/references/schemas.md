@@ -28,12 +28,14 @@ Two hand-written runtime package schemas live outside this folder: `runtime/src/
 
 ## Overlay and CLI merge metadata
 
+The [session tree](../cli/overrides.md#session-tree) maps address prefixes to each owning manifest reference and schema.
+
 `x-merge` annotations define collection identity and merge behaviour. They apply to both YAML overlays and CLI `--override` patches.
 
 - CLI overrides become canonical `kind: Overlay` documents.
 - The runtime validates them against the target schema.
 - They apply last.
-- Root-qualified paths identify the document, for example `agent:spec.tools`, `mas:spec.agency.agents[id=qa].spec.memory`, or `experiment:experiment.run.n_runs`.
+- Session-tree paths identify the document, for example `.agent.spec.tools`, `.mas.agent[qa].spec.memory`, or `.experiment.experiment.run.n_runs`.
 
 The canonical overlay schema is [`runtime/overlay.schema.yaml`](../schemas/runtime/overlay.schema.yaml). Its target-specific patch fragments are [`overlay-agent-patch.schema.yaml`](../schemas/runtime/fragments/overlay-agent-patch.schema.yaml),
 [`overlay-mas-patch.schema.yaml`](../schemas/runtime/fragments/overlay-mas-patch.schema.yaml),

@@ -19,8 +19,7 @@ from mas.ctl.compose.placement_validate import validate_placement_strategy
 from mas.ctl.deployment.load import load_deployment, resolve_runtime_id
 from mas.ctl.infra.resolve import resolve_infra_refs
 from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay
-from mas.ctl.overrides import apply_cli_overrides
-from mas.ctl.overrides.parser import parse_override
+from mas.ctl.overrides import apply_cli_overrides, overlay_for_session_agent, overrides_for_root
 from mas.ctl.validate import validate_file, validation_enabled
 from mas.ctl.workspace.config import (
     UserConfig,
@@ -148,8 +147,12 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
         mas = merge_overlay(mas, overlay)
         agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
     if req.overrides:
-        from mas.ctl.overrides import overrides_for_root
-
+        bare_agent = overrides_for_root(req.overrides, "agent")
+        if bare_agent:
+            raise ValueError(
+                f"{bare_agent[0]!r} addresses a standalone agent; a MAS session has several. "
+                "Use .mas.agent[id].spec…"
+            )
         mas_overrides = overrides_for_root(req.overrides, "mas")
         if mas_overrides:
             mas = apply_cli_overrides(mas, mas_overrides, root="mas")
@@ -157,6 +160,10 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
                 from mas.ctl.validate import validate_data
 
                 validate_data(mas, source="CLI overrides", kind="mas").raise_if_failed()
+        for source in overrides_for_root(req.overrides, "agent", parent="mas"):
+            overlay = overlay_for_session_agent(source)
+            mas = merge_overlay(mas, overlay)
+            agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
     mas_id = mas.get("metadata", {}).get("name") or req.manifest.stem
 
     workspace = WorkspaceConfig.load(req.workspace_root or req.manifest.parent)
@@ -165,11 +172,7 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
         anchor=req.manifest.parent,
         cli_refs=list(req.infra_refs),
         runtime_refs=list(req.runtime_refs),
-        overrides=[
-            source
-            for source in req.overrides
-            if parse_override(source).path.root == "infra"
-        ],
+        overrides=list(overrides_for_root(tuple(req.overrides), "infra")),
     )
 
     if req.deployment_path:

@@ -30,7 +30,7 @@ mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.ya
 | Flag | Description |
 |------|-------------|
 | `-o / --overlay` | **Overlay** YAML (repeatable) |
-| `--override ROOT:PATH=VALUE` | Schema-backed patch, applied last ([overrides](../cli/overrides.md)) |
+| `--override PATH=VALUE` | Schema-backed patch, applied last ([overrides](../cli/overrides.md)) |
 | `--bind NAME=URI` | Shortcut for an A2A / MCP `usage: use` infra row |
 | `--pattern` | Design-pattern plugin id |
 | `--flavour` | Flavour (default `local`) |

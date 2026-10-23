@@ -24,7 +24,7 @@ from mas.ctl.ui.curses_app import build_curses_controller, run_curses_session
     "--override",
     "overrides",
     multiple=True,
-    metavar="ROOT:PATH=VALUE",
+    metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
 @bind_option

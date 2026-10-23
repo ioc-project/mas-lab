@@ -42,7 +42,7 @@ def normalize_overlay(data: dict[str, Any], *, name: str = "overlay") -> dict[st
         patch = {}
     overrides = spec.get("overrides", [])
     if not isinstance(overrides, list) or not all(isinstance(item, str) for item in overrides):
-        raise ValueError("Overlay spec.overrides must be a list of ROOT:PATH=VALUE strings")
+        raise ValueError("Overlay spec.overrides must be a list of PATH=VALUE strings")
 
     # Fold legacy top-level spec keys into patch if they are not already present.
     for k, v in spec.items():

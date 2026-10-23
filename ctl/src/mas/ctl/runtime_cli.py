@@ -17,8 +17,14 @@ _ROOTS_APPLIED_ELSEWHERE = frozenset({"infra", "flavour", "workspace"})
 
 
 def _apply_agent_overrides(data: dict[str, Any], overrides: tuple[str, ...]) -> dict[str, Any]:
-    """Apply ``agent:`` overrides; infra/flavour/workspace roots are applied where those documents load."""
+    """Apply standalone ``.agent`` overrides; other session nodes load with those documents."""
     parsed = [(source, parse_override(source)) for source in overrides]
+    nested = [source for source, p in parsed if p.path.parent == "mas"]
+    if nested:
+        raise ValueError(
+            f"{nested[0]!r} addresses an agent under a MAS; this session is a standalone agent. "
+            "Use .agent.spec…"
+        )
     agent = [(source, p) for source, p in parsed if p.path.root not in _ROOTS_APPLIED_ELSEWHERE]
     if not agent:
         return data

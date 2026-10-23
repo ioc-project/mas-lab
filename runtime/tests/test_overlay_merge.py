@@ -3,7 +3,6 @@
 """Overlay merge tests."""
 
 import pytest
-
 from mas.ctl.overlay.merge import (
     OverlayTargetError,
     apply_merge_patch,
@@ -166,7 +165,7 @@ def test_merge_plugins_patch_is_rejected() -> None:
     import pytest
 
     base = {"spec": {"plugins": [{"name": "p1", "enabled": True}]}}
-    with pytest.raises(OverlayTargetError, match="Unsupported Agent overlay patch field"):
+    with pytest.raises(OverlayTargetError, match="not in the schema"):
         merge_overlay(base, _overlay({"plugins": [{"name": "p1", "enabled": False}]}))
 
 
@@ -195,7 +194,7 @@ def test_merge_context_policy_is_rejected_as_dead_field():
     import pytest
 
     base = {"spec": {}}
-    with pytest.raises(OverlayTargetError, match="Unsupported Agent overlay patch field"):
+    with pytest.raises(OverlayTargetError, match="not in the schema"):
         merge_overlay(base, _overlay({"context_policy": {"foo": "bar"}}))
 
 
@@ -223,7 +222,7 @@ def test_merge_mas_governance_is_rejected_as_a_dead_field():
     import pytest
 
     base = {"kind": "MAS", "spec": {}}
-    with pytest.raises(OverlayTargetError, match="Unsupported MAS overlay patch field"):
+    with pytest.raises(OverlayTargetError, match="not in the schema"):
         merge_overlay(base, _overlay({"governance": ["policy-a"]}, target_kind="MAS"))
 
 
@@ -272,9 +271,9 @@ def test_merge_llm_block():
 
 
 def test_merge_context_manager_list():
-    base = {"spec": {"context_manager": {"include": ["a"]}}}
-    merged = merge_overlay(base, _overlay({"context_manager": {"include": ["b"]}}))
-    assert merged["spec"]["context_manager"]["include"] == ["a", "b"]
+    base = {"spec": {"context_manager": {"memory": ["a"]}}}
+    merged = merge_overlay(base, _overlay({"context_manager": {"memory": ["b"]}}))
+    assert merged["spec"]["context_manager"]["memory"] == ["a", "b"]
 
 
 def test_merge_assembler_type_keeps_existing_params():
@@ -640,7 +639,7 @@ def test_merge_mas_overlay_rejects_unsupported_patch_field() -> None:
         },
     }
     overlay = _overlay({"design_pattern": {"type": "cot"}}, target_kind="MAS")
-    with pytest.raises(OverlayTargetError, match="Unsupported MAS overlay patch field"):
+    with pytest.raises(OverlayTargetError, match="not in the schema"):
         merge_overlay(base, overlay)
 
 
@@ -823,14 +822,14 @@ def test_merge_infra_overlay_json_merge_patch_semantics() -> None:
         "spec": {
             "proxy": {"api_base": "https://api.example", "api_key_env": "OPENAI_API_KEY"},
             "models": {"allowed": ["gpt-4o-mini"]},
-            "tools": {"web": {"enabled": True}},
+            "tools": {"web": {"kind": "python"}},
         },
     }
     ov = _overlay(
         {
             "proxy": {"api_base": "https://new.example"},
             "models": {"allowed": ["gpt-4o"]},
-            "tools": {"web": None, "calc": {"enabled": True}},
+            "tools": {"web": None, "calc": {"kind": "python"}},
         },
         target_kind="Infra",
     )
@@ -840,7 +839,7 @@ def test_merge_infra_overlay_json_merge_patch_semantics() -> None:
         "api_key_env": "OPENAI_API_KEY",
     }
     assert merged["spec"]["models"] == {"allowed": ["gpt-4o"]}
-    assert merged["spec"]["tools"] == {"calc": {"enabled": True}}
+    assert merged["spec"]["tools"] == {"calc": {"kind": "python"}}
 
 
 def _gov_names(spec: dict) -> list[str]:

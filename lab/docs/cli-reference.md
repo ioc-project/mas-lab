@@ -63,7 +63,7 @@ With `-b` the command returns immediately and prints the worker id. Follow it wi
 | `--infra NAME` | experiment's `default_infra` (none otherwise) | Infra bundle, resolved to `<experiment_dir>/infra/NAME.yaml`, used by `service_start` / `service_stop` steps |
 | `--strategy coverage\|depth` | YAML `schedule.ordering`, else `coverage` | `coverage`: every condition gets one run before any gets a second. `depth`: finish all runs of a condition first |
 | `--set STEP_TYPE.KEY=VALUE` | — | Override one pipeline step config key (repeatable) |
-| `--override ROOT:PATH=VALUE` | — | Schema-validated experiment override, applied last (repeatable) |
+| `--override PATH=VALUE` | — | Schema-validated experiment override, applied last (repeatable) |
 | `-x`, `--experiment-overlay YAML` | — | Deep-merge an [experiment overlay](design-experiment-overlays.md) into `experiment.yaml` before running (repeatable, applied in order, paths relative to `experiment.yaml`; lists are replaced, not appended) |
 | `--pipeline LEVEL[:PHASE]:REF` | — | Attach a pipeline after the experiment's own hooks (repeatable) |
 | `--clean-stale` | off | Remove outputs for scenarios no longer in the experiment YAML |

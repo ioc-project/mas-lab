@@ -16,6 +16,20 @@ mas-ctl compile agent.yaml -o overlays/tools.yaml -O compiled-agent.yaml   # wri
 mas-ctl compile mas.yaml -o overlays/linear.yaml -O ./compiled/            # writes mas.yaml plus agents/ to a folder
 ```
 
+## Other manifest kinds
+
+`compile` also accepts any document with a registered schema: infrastructure leaves (`InfraMiddleware`, `LLMProxy`, `ToolServerRegistry`, `Application`, `RuntimeEngine`), tools, libraries, datasets, deployments, experiments, and pipelines. The override prefix is that file's kind (`agent:`, `infra:`, `flavour:`, `library:`, `config:`, …). For documents without a declared kind, select the schema with `--kind` (for example `config`).
+
+```bash
+mas-ctl compile infra/llm-cache.yaml \
+  --override 'infra:spec.params.allow_write=true' \
+  --override 'infra:spec.params.raise_on_miss=false'
+mas-ctl compile config.yaml --kind config \
+  --override 'config:defaults.model="my-model"'
+```
+
+The result is a single document, printed or written with `-O`. The original file is unchanged. Non-Agent/MAS documents receive no runtime defaults or reference expansion. File overlays on those targets are rejected; use ordered `--override` assignments. Omitted fields the schema documents may be created. Values and the result are checked against the selected schema. `$op` is only available for existing supported spec overlay targets.
+
 ## What "resolved" means
 
 The resolved spec is the Agent or MAS document in memory before bootstrap wiring. Overlays are merged and omitted runtime defaults are filled. Bootstrap wiring then adds delegation tools, injects skills, and expands tool refs to files.
@@ -64,15 +78,15 @@ Agents are inlined under `spec.agency.agents`.
 ### Patch one field without an overlay file
 
 ```bash
-mas-ctl compile agent.yaml --override 'agent:spec.context.role="reviewer"'
+mas-ctl compile agent.yaml --override '.agent.spec.context.role="reviewer"'
 ```
 
-Use the `agent:` root for a standalone Agent. Use the `mas:` root for a MAS. You can select agency entries that carry an inline `spec` by `id`. See [Agents in a MAS](overrides.md#agents-in-a-mas).
+Use `.agent` for a standalone Agent. Use `.mas` for a MAS, and `.mas.agent[id]` for one nested agent. See [Agents in a MAS](overrides.md#agents-in-a-mas).
 
 ### Cap tokens on every model entry
 
 ```bash
-mas-ctl compile agent.yaml --override 'agent:spec.models[*].max_tokens=4096'
+mas-ctl compile agent.yaml --override '.agent.spec.models[*].max_tokens=4096'
 ```
 
 ### See only the overlay merge
@@ -116,14 +130,15 @@ The runtime resolves automatic context windows after infra model mappings. Compi
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-o` / `--overlay` | none | Overlay YAML. Repeatable. Later wins. |
-| `--override ROOT:PATH=VALUE` | none | Schema-backed path override. Repeatable. Applies after overlays. |
+| `--override PATH=VALUE` | none | Schema-backed session-tree override. Repeatable. Applies after overlays. |
+| `--kind SCHEMA` | none | Registered schema for a document without a declared kind. |
 | `-O` / `--output` | stdout | Directory or YAML file to write. |
 | `--layout auto\|tree\|bundle` | `auto` | Output shape. See the layout table. |
 | `--no-defaults` | off | Skip filling runtime defaults. |
 | `--no-validate` | off | Skip schema validation. |
 | `--no-header` | off | Omit the generated-by comment. |
 
-Compile skips flavour and infra overlays. It emits Agent and MAS specs only. You cannot apply a MAS overlay to an Agent manifest.
+Flavour and infra file overlays are skipped when compiling Agent/MAS specs. You cannot apply a MAS overlay to an Agent manifest. Other kinds take `--override` with that kind as the prefix (or `--kind` when the file has no `kind:`).
 
 For target names, patch schemas, selectors, wildcards, precedence, and compatibility rules, see the [override reference](overrides.md) and the [overlay manifest reference](../manifests/overlay.md).
 

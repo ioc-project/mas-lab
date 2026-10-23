@@ -20,7 +20,7 @@ import yaml
 from mas.ctl.manifest.mas_agent_merge import apply_loaded_agent_patch
 from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay
 from mas.ctl.overlay.normalize import normalize_overlay
-from mas.ctl.overrides import apply_root_overrides
+from mas.ctl.overrides import apply_root_overrides, overlay_for_session_agent
 from mas.ctl.validate import validate_data, validate_file, validation_enabled
 from mas.ctl.workspace.config import WorkspaceConfig
 from mas.runtime.agent_defaults import (
@@ -47,7 +47,7 @@ class CompileError(ValueError):
 
 @dataclass
 class CompiledManifest:
-    """Resolved Agent or MAS after overlays and runtime defaults."""
+    """Compiled document; Agent/MAS additionally resolve overlays and defaults."""
 
     kind: str
     source: Path
@@ -57,6 +57,7 @@ class CompiledManifest:
     agents: dict[str, dict[str, Any]] = field(default_factory=dict)
     agent_ids: list[str] = field(default_factory=list)
     agent_relpaths: dict[str, str] = field(default_factory=dict)
+    document: dict[str, Any] | None = None
 
 
 def fill_agent_defaults(doc: dict[str, Any], *, workspace: Any = None) -> dict[str, Any]:
@@ -143,6 +144,7 @@ def compile_manifest(
     fill_defaults: bool = True,
     validate: bool = True,
     workspace: Any = None,
+    schema_kind: str | None = None,
 ) -> CompiledManifest:
     """Load ``manifest``, apply overlays in order, optionally fill runtime defaults."""
     manifest = Path(manifest)
@@ -151,7 +153,28 @@ def compile_manifest(
     kind = str(doc.get("kind") or "").strip()
     kind_l = kind.lower()
     if kind_l not in {"agent"} | _MAS_KINDS:
-        raise CompileError(f"compile supports kind Agent or MAS, got {kind!r}")
+        from mas.ctl.overrides.apply import apply_manifest_overrides
+        from mas.ctl.validate.schemas import declared_kind
+
+        selected_schema = schema_kind or declared_kind(doc)
+        if selected_schema is None:
+            raise CompileError(f"compile requires a registered manifest schema, got {kind!r}")
+        if overlays:
+            raise CompileError("file overlays on non-Agent/MAS compile targets are not supported; use --override")
+        if validate and validation_enabled():
+            validate_data(doc, source=str(manifest), kind=selected_schema).raise_if_failed()
+        result = apply_manifest_overrides(
+            doc,
+            overrides,
+            validate=validate and validation_enabled(),
+            schema_kind=selected_schema,
+        )
+        return CompiledManifest(
+            kind=kind or selected_schema,
+            source=manifest,
+            overlay_paths=overlays,
+            document=result,
+        )
 
     if validate and validation_enabled():
         validate_file(manifest, kind="agent" if kind_l == "agent" else "mas").raise_if_failed()
@@ -168,7 +191,7 @@ def compile_manifest(
             _check_agent_overlay_name(overlay, ov_path, agent)
             agent = merge_overlay(agent, overlay)
         if overrides:
-            agent = apply_root_overrides(agent, overrides, root="agent")
+            agent, _ = _apply_compile_overrides(agent, overrides, root="agent", validate=validate)
         if fill_defaults:
             agent = fill_agent_defaults(agent, workspace=ws)
         if validate and overrides and validation_enabled():
@@ -186,7 +209,8 @@ def compile_manifest(
         mas = merge_overlay(mas, overlay)
         agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
     if overrides:
-        mas = apply_root_overrides(mas, overrides, root="mas")
+        mas, cli_agent_patches = _apply_compile_overrides(mas, overrides, root="mas", validate=validate)
+        agent_patches = accumulate_agent_patches(agent_patches, cli_agent_patches)
     if fill_defaults:
         mas = fill_mas_defaults(mas)
     if validate and overrides and validation_enabled():
@@ -194,9 +218,7 @@ def compile_manifest(
 
     agents, agent_ids, relpaths = _load_mas_agents(mas, mas_dir=manifest.parent)
     for aid, adoc in list(agents.items()):
-        agents[aid] = apply_loaded_agent_patch(
-            adoc, agent_id=aid, agent_patches=agent_patches, mas_config=mas
-        )
+        agents[aid] = apply_loaded_agent_patch(adoc, agent_id=aid, agent_patches=agent_patches, mas_config=mas)
     for ov_path, overlay in classified.agent:
         target_name = _overlay_target_name(overlay)
         if target_name:
@@ -225,6 +247,45 @@ def compile_manifest(
     )
 
 
+def _apply_compile_overrides(
+    document: dict[str, Any], overrides: tuple[str, ...], *, root: str, validate: bool
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Apply session-tree assignments in CLI order."""
+    from mas.ctl.overrides.parser import parse_override
+
+    result = document
+    extra: dict[str, Any] = {}
+    for source in overrides:
+        path = parse_override(source).path
+        if path.root == "manifest":
+            raise CompileError(
+                f"override root 'manifest' is not a session node; this file is {root!r} "
+                f"— use .{root}.…"
+            )
+        if root == "mas" and path.root == "agent" and path.parent == "mas":
+            overlay = overlay_for_session_agent(source)
+            result = merge_overlay(result, overlay)
+            extra = accumulate_agent_patches(extra, loaded_agent_patches(overlay, result))
+            continue
+        if root == "mas" and path.root == "agent":
+            raise CompileError(
+                f"{source!r} addresses a standalone agent; this document is a MAS. "
+                "Use .mas.agent[id].spec…"
+            )
+        if root == "agent" and path.parent == "mas":
+            raise CompileError(
+                f"{source!r} addresses an agent under a MAS; this document is a standalone agent. "
+                "Use .agent.spec…"
+            )
+        if path.root == root and path.parent is None:
+            result = apply_root_overrides(result, (source,), root=root)
+        else:
+            raise CompileError(
+                f"compile override {path.text} is not valid for this document; use .{root}.…"
+            )
+    return result, extra
+
+
 def resolve_layout(output: Path | None, layout: str) -> ResolvedLayout:
     """Pick tree vs bundle from ``--layout`` and the output path shape."""
     layout_l = layout.lower()
@@ -245,6 +306,8 @@ def resolve_layout(output: Path | None, layout: str) -> ResolvedLayout:
 
 def compiled_documents(compiled: CompiledManifest, layout: ResolvedLayout) -> dict[str, dict[str, Any]]:
     """Map relative output paths to YAML documents for the chosen layout."""
+    if compiled.document is not None:
+        return {compiled.source.name: copy.deepcopy(compiled.document)}
     if compiled.kind == "Agent":
         if compiled.agent is None:
             raise CompileError("compiled Agent is missing agent document")

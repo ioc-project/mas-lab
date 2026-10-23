@@ -21,6 +21,11 @@ Hands-on path:
 
 ## How manifests fit together
 
+For the exact address space used by `--override PATH=VALUE`, see the
+[session tree](../cli/overrides.md#session-tree). It distinguishes
+source documents from resolved runtime nodes, and explains why `ref` bindings
+are not automatically traversable YAML subtrees.
+
 ```text
 experiment.yaml          <- what to run (scenarios x dataset x n_runs + pipelines)
     |

@@ -55,14 +55,95 @@ class InfraManifest:
     @classmethod
     def load(cls, path: Path | str) -> InfraManifest:
         from mas.ctl.infra.env_resolve import resolve_manifest_values
-        from mas.ctl.infra.resolve import _from_dict
         from mas.runtime.spec.source import load_yaml_file
 
         p = Path(path).resolve()
         data = load_yaml_file(p)
         if not isinstance(data, dict):
             raise ValueError(f"{p}: expected mapping")
-        return _from_dict(resolve_manifest_values(data))
+        return cls.from_document(resolve_manifest_values(data))
+
+    @classmethod
+    def from_document(cls, data: dict[str, Any]) -> InfraManifest:
+        """Rebuild an effective infra model from a schema-shaped document."""
+        meta = data.get("metadata") or {}
+        spec = data.get("spec") or {}
+        kind = data.get("kind", "")
+        applications: dict[str, dict[str, Any]] = {}
+        raw_endpoints = spec.get("endpoints") or {}
+        if isinstance(raw_endpoints, dict):
+            applications = {
+                str(name): dict(endpoint) if isinstance(endpoint, dict) else {"url": str(endpoint)}
+                for name, endpoint in raw_endpoints.items()
+            }
+        proxy_raw = spec.get("proxy") or spec.get("server") or {}
+        models_raw = spec.get("models") or {}
+        defaults = models_raw.get("defaults") or spec.get("defaults") or {}
+        if "api_key_env" in proxy_raw:
+            api_key_env = str(proxy_raw.get("api_key_env") or "")
+        else:
+            api_key_env = "OPENAI_API_KEY"
+        return cls(
+            name=str(meta.get("name", "")),
+            kind=kind,
+            proxy=ProxySpec(
+                api_base=str(proxy_raw.get("api_base", "") or ""),
+                api_key_env=api_key_env,
+                timeout=float(proxy_raw["timeout"]) if proxy_raw.get("timeout") is not None else None,
+            ),
+            models=ModelsSpec(
+                allowed=list(models_raw.get("allowed") or models_raw.get("available") or []),
+                default_llm=defaults.get("llm"),
+                default_embed=defaults.get("embed") or defaults.get("embedding"),
+                mappings=dict(models_raw.get("mappings") or {}),
+                generation=dict(models_raw.get("generation") or {}),
+            ),
+            model_access=dict(spec.get("model_access") or {}),
+            protocol=str(spec.get("protocol") or "").strip(),
+            tool_servers=[dict(item) for item in (spec.get("tool_servers") or []) if isinstance(item, dict)],
+            pipeline=[dict(item) for item in (spec.get("interceptors") or []) if isinstance(item, dict)],
+            runtime_engine=dict(spec.get("runtime_engine") or {}),
+            raw=data,
+            applications=applications,
+        )
+
+    def to_document(self) -> dict[str, Any]:
+        """Serialize the effective infra model for schema-backed CLI patching."""
+        proxy: dict[str, Any] = {
+            "api_base": self.proxy.api_base,
+            "api_key_env": self.proxy.api_key_env,
+        }
+        if self.proxy.timeout is not None:
+            proxy["timeout"] = self.proxy.timeout
+        defaults: dict[str, Any] = {}
+        if self.models.default_llm is not None:
+            defaults["llm"] = self.models.default_llm
+        if self.models.default_embed is not None:
+            defaults["embed"] = self.models.default_embed
+        models: dict[str, Any] = {
+            "allowed": list(self.models.allowed),
+            "mappings": dict(self.models.mappings),
+            "generation": dict(self.models.generation),
+        }
+        if defaults:
+            models["defaults"] = defaults
+        spec: dict[str, Any] = {
+            "proxy": proxy,
+            "models": models,
+            "model_access": dict(self.model_access),
+            "tool_servers": list(self.tool_servers),
+            "endpoints": {str(name): dict(endpoint) for name, endpoint in self.applications.items()},
+            "interceptors": list(self.pipeline),
+            "runtime_engine": dict(self.runtime_engine),
+        }
+        if self.protocol:
+            spec["protocol"] = self.protocol
+        return {
+            "apiVersion": "infra/v1",
+            "kind": self.kind or "InfraBundle",
+            "metadata": {"name": self.name},
+            "spec": spec,
+        }
 
     def to_llm_proxy_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {

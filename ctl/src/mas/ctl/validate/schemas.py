@@ -87,6 +87,7 @@ _YAML_KIND: dict[str, str] = {
     "SecretsProvider": "infra",
     "Infrastructure": "infra",
     "ServiceBundle": "infra",
+    "RuntimeEngine": "infra",
     "Library": "library",
 }
 

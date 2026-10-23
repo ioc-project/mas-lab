@@ -209,7 +209,7 @@ The runtime lowers a configured budget per call so that the estimated prompt plu
 | `max_completion_tokens` | Explicit answer plus reasoning budget. Takes precedence over `max_tokens`. |
 | `on_truncation` | `ignore`, `warn` (default), `error`, or `escalate`. Object form accepts `factor` (default 2), `max_tokens`, and `retries` (default 1). Retries count against `spec.budget.max_llm_calls`. |
 
-The CLI alias `--max-tokens N` expands to `agent:spec.models[*].max_tokens=N`. For example, `mas-ctl chat agent.yaml --max-tokens 4096` equals `--override 'agent:spec.models[*].max_tokens=4096'`. Explicit `--override` arguments apply afterward.
+The CLI alias `--max-tokens N` expands to `.agent.spec.models[*].max_tokens=N`. For example, `mas-ctl chat agent.yaml --max-tokens 4096` equals `--override '.agent.spec.models[*].max_tokens=4096'`. Explicit `--override` arguments apply afterward.
 The environment variables `MAS_LLM_MAX_TOKENS`, `MAS_LLM_MAX_COMPLETION_TOKENS`, and `MAS_LLM_ON_TRUNCATION` fill in settings that the model row does not declare.
 
 LLM traces include `finish_reason`, the final `max_tokens` budget, completion token usage, and `truncation_retries`. See also [infra.md, LLM output-token policy](infra.md#llm-output-token-policy) and [CLI overrides](../cli/overrides.md).

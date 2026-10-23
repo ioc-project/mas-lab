@@ -47,8 +47,8 @@ mas-ctl chat agent.yaml --tool calculator
 ### Patch one field
 
 ```bash
-mas-ctl chat agent.yaml --override 'agent:spec.context.role="security expert"'
-mas-ctl run-mas mas.yaml --override 'mas:spec.workflow.entry=moderator'
+mas-ctl chat agent.yaml --override '.agent.spec.context.role="security expert"'
+mas-ctl run-mas mas.yaml --override '.mas.spec.workflow.entry=moderator'
 ```
 
 See [CLI overrides](overrides.md) for the selector syntax.
@@ -155,20 +155,20 @@ mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace
 | `--skill NAME` | none | Inline overlay: add a skill by name. |
 | `--memory ID` | none | Inline overlay: set the memory backend id. |
 | `--set KEY=VALUE` | none | Inline overlay: set a `spec.context` value. |
-| `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
+| `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
 | `--flavour NAME` | `local` | Flavour from library-standard. |
 | `--infra-ref REF` | workspace or user | Infra bundle. Repeatable. Wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
 | `--runtime-ref REF` | workspace or user | `RuntimeEngine` ref. Repeatable. |
 | `--model ID` | `spec.models`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model for this run. |
-| `--max-tokens N` | none sent | Alias of `--override 'agent:spec.models[*].max_tokens=N'`. Infra `generation.max_output_tokens` bounds it. See [Output-token limits](../manifests/agent.md#output-token-limits). |
+| `--max-tokens N` | none sent | Alias of `--override '.agent.spec.models[*].max_tokens=N'`. Infra `generation.max_output_tokens` bounds it. See [Output-token limits](../manifests/agent.md#output-token-limits). |
 | `--no-validate` | off | Skip schema checks for seeds and checkpoints. |
 
 How the patching flags work:
 
-- `--override` uses the same overlay merge engine as `-o`. Paths start with a root (`agent:`, `mas:`, `infra:`) so the target document is explicit.
-- Selectors accept numeric indexes, identity selectors such as `[id=reviewer]`, and `[*]` wildcards. Identity selectors work only on agency entries that carry an inline `spec`. A `{id, ref}` entry has nothing to select into. See [Agents in a MAS](overrides.md#agents-in-a-mas).
+- `--override` uses the same overlay merge engine as `-o`. Paths start at the session tree (`.mas`, `.infra`, `.agent`) so the target document is explicit.
+- `.mas.agent[reviewer]` is Overlay `target.kind: Agent` plus `target.name`. It applies to `{id, ref}` rows and to inline specs. See [Agents in a MAS](overrides.md#agents-in-a-mas).
 - CLI patches outrank file overlays.
 - `--tool`, `--skill`, `--memory`, and `--set` remain supported.
 - `--bind NAME=URI` writes the same Application and ToolServerRegistry fields as `--infra-ref` YAML. See [Bind](overrides.md#bind).
@@ -266,7 +266,7 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 | `-p` / `--prompt TEXT` | none | First user turn. |
 | `-q` / `--query TEXT` | none | Extra turn. Repeatable. |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
-| `--override ROOT:PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
+| `--override PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
 | `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
 | `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest. |
 | `--flavour NAME` | `local` | Flavour. |
@@ -299,7 +299,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
-| `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
+| `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
 | `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: deploy`. Expands to `--override infra:…`. |
 | `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
@@ -315,7 +315,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
-| `--override ROOT:PATH=VALUE` | none | Schema-backed overlay patch. Applies last. |
+| `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
 | `--flavour NAME` | `local` | Flavour. |
@@ -325,7 +325,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `--runtime-ref REF` | none | `RuntimeEngine` ref. Repeatable. |
 | `--no-validate` | off | Skip schema checks. |
 | `--model ID` | `spec.models`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model. |
-| `--max-tokens N` | none sent | Alias of `--override 'agent:spec.models[*].max_tokens=N'`. |
+| `--max-tokens N` | none sent | Alias of `--override '.agent.spec.models[*].max_tokens=N'`. |
 
 `tui` also takes the `--events*` flags.
 

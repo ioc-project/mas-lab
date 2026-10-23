@@ -22,6 +22,8 @@ properties:
     $ref: "../infra.schema.yaml#/properties/spec/properties/includes"
   interceptors:
     $ref: "../infra.schema.yaml#/properties/spec/properties/interceptors"
+  runtime_engine:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/runtime_engine"
   middleware:
     $ref: "../infra.schema.yaml#/properties/spec/properties/middleware"
   applies_to:

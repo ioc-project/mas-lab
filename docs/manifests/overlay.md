@@ -54,20 +54,28 @@ No `metadata` field is required. Extension keys (`x-*`) are allowed.
 
 ## CLI overlays
 
-Command-line overrides become the same canonical Overlay document. The CLI applies them after all `-o` overlays:
+`--override` is one assignment, not an Overlay document. It has no Overlay `kind` or `metadata.name`. The session path supplies `spec.target.kind` / `spec.target.name`, and the field path is `spec.patch`:
 
 ```bash
-mas-ctl chat agent.yaml --override 'agent:spec.context.role=reviewer'
+mas-ctl chat agent.yaml --override '.agent.spec.context.role=reviewer'
 mas-ctl run-mas mas.yaml \
-  --override 'mas:spec.agency.agents[id=qa].spec.design_pattern=cot'
+  --override '.mas.agent[qa].spec.design_pattern=cot'
 ```
+
+| Overlay field | `--override` |
+| --- | --- |
+| `kind: Overlay` | (none — CLI one-shot) |
+| `metadata.name` | (none — generated as `cli-override`) |
+| `spec.target.kind` | `.mas` / `.agent` / `.infra` / … |
+| `spec.target.name` | `agent[qa]` |
+| `spec.patch` | `.spec.design_pattern=cot` |
 
 File overlays and CLI overrides share the `$op` operators and `x-merge` strategies. Selector syntax: [CLI overrides](../cli/overrides.md).
 
 ## Selector overrides in an overlay
 
-An overlay can group the same root-qualified assignments that the CLI accepts under `spec.overrides`. They apply in list order after `spec.patch`.
-Identity selectors and `[*]` wildcards update several existing list entries without repeating the surrounding manifest structure:
+An overlay can group the same session-tree assignments that the CLI accepts under `spec.overrides`. They apply in list order after `spec.patch`.
+`target.kind` plus `target.name` are the type and id; `agent[reviewer]` is that pair on the path:
 
 ```yaml
 apiVersion: mas/v1
@@ -75,14 +83,15 @@ kind: Overlay
 metadata:
   name: reviewer-policy
 spec:
-  target: {kind: MAS}
+  target: {kind: Agent, name: reviewer}
   patch: {}
   overrides:
-    - 'mas:spec.agency.agents[id=reviewer].spec.design_pattern=cot'
-    - 'mas:spec.agency.agents[*].spec.context.environment=staging'
+    - '.mas.agent[reviewer].spec.design_pattern=cot'
 ```
 
-The root must match `spec.target.kind` (`mas`, `agent`, `infra`, `flavour`, `experiment`, or `workspace`). Values use YAML syntax, including `$op` collections. A selector that matches no entry is an error.
+Omit `target.name` and use `.mas.agent[*].spec…` to patch every nested agent.
+
+`target.kind` must match the session type of every `spec.overrides` expression (`mas`, `agent`, `infra`, `flavour`, `experiment`, or `workspace`). Values use YAML syntax, including `$op` collections. A selector that matches no entry is an error.
 
 ---
 
@@ -132,7 +141,7 @@ To patch other agent fields (`governance`, `models`, `control`, ...) on agents i
 | `kind` | yes | Target document kind: `Agent`, `MAS`, `Infra`, `Flavour`, `Experiment`, or `Workspace`. |
 | `name` | no | For an `Agent` overlay applied to a MAS, selects one agency row by `id`, `name`, or `metadata.name`. For a standalone target, the command already selects the document. |
 
-The target kind must match the root of every `spec.overrides` expression.
+The target kind must match the session type of every `spec.overrides` expression.
 The overlay fails, rather than being ignored, when it has an unsupported kind, an unknown target name, or a selector with no match.
 
 ## Patch contract

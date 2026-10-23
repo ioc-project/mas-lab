@@ -105,6 +105,92 @@ spec:
     assert Path(params["cache_path"]) == (infra_dir / ".cache" / "demo-cache.json").resolve()
 
 
+def test_infra_override_creates_missing_schema_declared_param(tmp_path: Path):
+    manifest = tmp_path / "cache.yaml"
+    manifest.write_text(
+        "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata:\n  name: cache\n"
+        "spec:\n  middleware: llm_cache\n  applies_to: [LLM_CALL]\n"
+        "  params:\n    allow_read: true\n    raise_on_miss: true\n",
+        encoding="utf-8",
+    )
+    infra = resolve_infra_refs(
+        [str(manifest)],
+        anchor=tmp_path,
+        overrides=("infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",),
+    )
+
+    params = infra.llm_proxy["pipeline"][0]["params"]
+    assert params["allow_read"] is True
+    assert params["allow_write"] is True
+    assert params["raise_on_miss"] is True
+
+
+def test_infra_override_updates_cache_params_without_dropping_pipeline(tmp_path: Path):
+    manifest = tmp_path / "cache.yaml"
+    manifest.write_text(
+        "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata:\n  name: cache\n"
+        "spec:\n  middleware: llm_cache\n  applies_to: [LLM_CALL]\n"
+        "  params:\n    allow_read: true\n    allow_write: false\n    raise_on_miss: true\n",
+        encoding="utf-8",
+    )
+    infra = resolve_infra_refs(
+        [str(manifest)],
+        anchor=tmp_path,
+        overrides=("infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",),
+    )
+
+    pipeline = infra.llm_proxy["pipeline"]
+    assert len(pipeline) == 1
+    assert pipeline[0]["params"]["allow_write"] is True
+    assert pipeline[0]["params"]["raise_on_miss"] is True
+
+
+def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
+    from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
+
+    source = Path(__file__).parents[2] / "docs/schemas/examples/infra/override-stack.yaml"
+    validate_file(source, kind="infra").raise_if_failed()
+    manifest = tmp_path / "stack.yaml"
+    original = source.read_text(encoding="utf-8")
+    manifest.write_text(original, encoding="utf-8")
+    infra = resolve_infra_refs(
+        [str(manifest)],
+        anchor=tmp_path,
+        overrides=(
+            'infra:spec.proxy.api_base="http://localhost:9100/v1"',
+            "infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",
+            "infra:spec.interceptors[middleware=llm_cache].params.raise_on_miss=false",
+            'infra:spec.tool_servers[id=tools].url="http://localhost:9101/mcp"',
+            'infra:spec.endpoints["peer"].url="http://localhost:9102/agent"',
+            "infra:spec.runtime_engine.cache.write=true",
+        ),
+    )
+
+    assert infra.llm_proxy["api_base"] == "http://localhost:9100/v1"
+    pipeline = infra.llm_proxy["pipeline"]
+    assert [step["middleware"] for step in pipeline] == ["llm_cache", "fault_inject"]
+    cache = LlmCacheMiddleware.wrap(object(), pipeline[0]["params"])
+    assert cache.allow_read is True
+    assert cache.allow_write is True
+    assert cache.raise_on_miss is False
+    assert cache.cache_path == tmp_path / "cache/llm-cache.json"
+    assert infra.tool_server_registry["tools"]["url"] == "http://localhost:9101/mcp"
+    assert infra.applications["peer"]["url"] == "http://localhost:9102/agent"
+    assert infra.runtime_engine["cache"]["write"] is True
+    assert manifest.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("assignment", [
+    'infra:spec.interceptors[middleware=llm_cache].params.allow_write="false"',
+    "infra:spec.interceptors[middleware=llm_cache].params.allow_write=1",
+    'infra:spec.proxy.timeout="slow"',
+])
+def test_resolved_infra_rejects_invalid_override_types(tmp_path: Path, assignment: str):
+    source = Path(__file__).parents[2] / "docs/schemas/examples/infra/override-stack.yaml"
+    with pytest.raises(ValueError):
+        resolve_infra_refs([str(source)], anchor=tmp_path, overrides=(assignment,))
+
+
 def test_relative_ref_resolves_from_anchor_not_process_cwd(tmp_path: Path, monkeypatch):
     """A same-named file in the process CWD must never shadow the anchor-relative ref."""
     project_dir = tmp_path / "anchor-project"

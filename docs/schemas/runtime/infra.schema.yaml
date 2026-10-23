@@ -16,6 +16,17 @@ required:
   - spec
 additionalProperties: false
 
+
+allOf:
+  - if:
+      properties:
+        kind: {const: RuntimeEngine}
+      required: [kind]
+    then:
+      properties:
+        spec:
+          $ref: "./fragments/runtime-engine.schema.yaml"
+
 properties:
   apiVersion:
     type: string
@@ -87,6 +98,9 @@ properties:
           oneOf:
             - type: string
             - $ref: "./fragments/infra-middleware-inline.schema.yaml"
+
+      runtime_engine:
+        $ref: "./fragments/runtime-engine.schema.yaml"
 
       middleware:
         type: string

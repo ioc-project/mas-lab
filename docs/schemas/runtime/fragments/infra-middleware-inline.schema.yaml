@@ -13,6 +13,11 @@ properties:
     type: string
   middleware:
     type: string
+  applies_to:
+    type: array
+    items:
+      type: string
+      enum: [LLM_CALL, TOOL_HTTP, OTEL_EXPORT]
   params:
     $ref: "./infra-middleware-params.schema.yaml"
 allOf:

@@ -351,6 +351,8 @@ mas-ctl chat agent.yaml \
 This patches the effective in-memory infrastructure.
 It does not modify the referenced YAML file.
 
+Middleware parameters are under `infra:spec.interceptors[middleware=llm_cache].params`, and runtime profile values under `infra:spec.runtime_engine`. All resolved resources survive these patches. To patch a standalone infra leaf, use [`mas-ctl compile`](../cli/compile.md#other-manifest-kinds) with `manifest:`.
+
 For reusable infra changes, use an Overlay with `target.kind: Infra`.
 Put root-qualified assignments under `spec.overrides`; see the [Overlay manifest reference](overlay.md).
 

@@ -181,3 +181,24 @@ jobs:
             ${{ runner.temp }}/a2a-fixture.log
           if-no-files-found: warn
           retention-days: 30
+
+  # Repository ruleset on main requires this exact check name.
+  ci-summary:
+    name: ci-summary
+    if: always()
+    needs: [test, demo-ui, mcp-compliance, a2a-compliance]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed
+        env:
+          NEEDS: ${{ toJson(needs) }}
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["NEEDS"])
+          failed = [name for name, result in needs.items() if result.get("result") != "success"]
+          if failed:
+              print("failed:", ", ".join(failed))
+              sys.exit(1)
+          print("ok")
+          PY

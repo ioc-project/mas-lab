@@ -58,9 +58,7 @@ def application_endpoint_usage(endpoint: dict[str, Any]) -> str:
         return "use-and-deploy" if endpoint.get("expose") is True else "use"
     value = str(usage)
     if value not in _APPLICATION_USAGES:
-        raise ValueError(
-            "Application endpoint usage must be 'use', 'deploy', or 'use-and-deploy'"
-        )
+        raise ValueError("Application endpoint usage must be 'use', 'deploy', or 'use-and-deploy'")
     return value
 
 
@@ -124,27 +122,31 @@ def resolve_infra_refs(
         except Exception as exc:
             errors.append((ref, exc))
 
-    if overrides:
-        from mas.ctl.overrides import apply_cli_overrides
-        from mas.ctl.validate import validate_data
-
-        merged_document = apply_cli_overrides(_infra_document(merged), tuple(overrides), root="infra")
-        validate_data(merged_document, source="CLI overrides", kind="infra").raise_if_failed()
-        merged = _from_dict(merged_document)
-
     runtime_effective = merge_runtime_refs(
         workspace_refs=ws.effective_runtime_refs,
         user_refs=[usr.default_runtime] if usr.default_runtime else [],
         cli_refs=list(runtime_refs or []),
         workspace_found=ws.found,
     )
-    runtime_engine: dict[str, Any] = {}
+    runtime_engine: dict[str, Any] = dict(merged.runtime_engine)
     for ref in runtime_effective:
         try:
             part = _load_runtime_ref(ref, anchor=root, workspace=ws)
             runtime_engine = merge_runtime_engine_layers(runtime_engine, part.runtime_engine)
         except Exception as exc:
             errors.append((ref, exc))
+
+    merged.runtime_engine = runtime_engine
+    if overrides:
+        from mas.ctl.overrides import apply_cli_overrides
+        from mas.ctl.validate import validate_data
+
+        merged_document = apply_cli_overrides(merged.to_document(), tuple(overrides), root="infra")
+        validate_data(merged_document, source="CLI overrides", kind="infra").raise_if_failed()
+        merged = InfraManifest.from_document(merged_document)
+        for entry in merged.pipeline:
+            entry["params"] = _resolve_pipeline_param_paths(dict(entry.get("params") or {}), anchor=root)
+        runtime_engine = dict(merged.runtime_engine)
 
     if errors:
         for ref, exc in errors:
@@ -170,43 +172,6 @@ def resolve_infra_refs(
         runtime_refs=list(runtime_effective),
         applications=dict(merged.applications),
     )
-
-
-def _infra_document(manifest: InfraManifest) -> dict[str, Any]:
-    """Serialize the effective infra model for schema-backed CLI patching."""
-    proxy: dict[str, Any] = {
-        "api_base": manifest.proxy.api_base,
-        "api_key_env": manifest.proxy.api_key_env,
-    }
-    if manifest.proxy.timeout is not None:
-        proxy["timeout"] = manifest.proxy.timeout
-    defaults: dict[str, Any] = {}
-    if manifest.models.default_llm is not None:
-        defaults["llm"] = manifest.models.default_llm
-    if manifest.models.default_embed is not None:
-        defaults["embed"] = manifest.models.default_embed
-    models: dict[str, Any] = {
-        "allowed": list(manifest.models.allowed),
-        "mappings": dict(manifest.models.mappings),
-        "generation": dict(manifest.models.generation),
-    }
-    if defaults:
-        models["defaults"] = defaults
-    spec: dict[str, Any] = {
-        "proxy": proxy,
-        "models": models,
-        "model_access": dict(manifest.model_access),
-        "tool_servers": list(manifest.tool_servers),
-        "endpoints": {str(name): dict(endpoint) for name, endpoint in manifest.applications.items()},
-    }
-    if manifest.protocol:
-        spec["protocol"] = manifest.protocol
-    return {
-        "apiVersion": "infra/v1",
-        "kind": manifest.kind or "InfraBundle",
-        "metadata": {"name": manifest.name},
-        "spec": spec,
-    }
 
 
 def bidirectional_pipeline_for(
@@ -507,48 +472,7 @@ def _load_file(
             raw=data,
         )
 
-    return _from_dict(data)
-
-
-def _from_dict(data: dict[str, Any]) -> InfraManifest:
-    meta = data.get("metadata") or {}
-    spec = data.get("spec") or {}
-    kind = data.get("kind", "")
-    applications: dict[str, dict[str, Any]] = {}
-    raw_endpoints = spec.get("endpoints") or {}
-    if isinstance(raw_endpoints, dict):
-        applications = {
-            str(name): dict(endpoint) if isinstance(endpoint, dict) else {"url": str(endpoint)}
-            for name, endpoint in raw_endpoints.items()
-        }
-    proxy_raw = spec.get("proxy") or spec.get("server") or {}
-    models_raw = spec.get("models") or {}
-    defaults = models_raw.get("defaults") or spec.get("defaults") or {}
-    if "api_key_env" in proxy_raw:
-        api_key_env = str(proxy_raw.get("api_key_env") or "")
-    else:
-        api_key_env = "OPENAI_API_KEY"
-    return InfraManifest(
-        name=str(meta.get("name", "")),
-        kind=kind,
-        proxy=ProxySpec(
-            api_base=str(proxy_raw.get("api_base", "") or ""),
-            api_key_env=api_key_env,
-            timeout=float(proxy_raw["timeout"]) if proxy_raw.get("timeout") is not None else None,
-        ),
-        models=ModelsSpec(
-            allowed=list(models_raw.get("allowed") or models_raw.get("available") or []),
-            default_llm=defaults.get("llm"),
-            default_embed=defaults.get("embed") or defaults.get("embedding"),
-            mappings=dict(models_raw.get("mappings") or {}),
-            generation=dict(models_raw.get("generation") or {}),
-        ),
-        model_access=dict(spec.get("model_access") or {}),
-        protocol=str(spec.get("protocol") or "").strip(),
-        tool_servers=[dict(item) for item in (spec.get("tool_servers") or []) if isinstance(item, dict)],
-        raw=data,
-        applications=applications,
-    )
+    return InfraManifest.from_document(data)
 
 
 def _merge(a: InfraManifest, b: InfraManifest) -> InfraManifest:

@@ -16,7 +16,7 @@ import click
     "--override",
     "overrides",
     multiple=True,
-    metavar="ROOT:PATH=VALUE",
+    metavar="PATH=VALUE",
     help=(
         "Schema-validated experiment override (repeatable). Applied to experiment.yaml "
         "before -x overlays and --pipeline attachments, so an overlay can supersede it."

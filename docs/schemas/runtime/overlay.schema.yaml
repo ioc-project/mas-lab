@@ -109,8 +109,8 @@ properties:
       overrides:
         type: array
         description: >
-          Ordered root-qualified path assignments applied after patch. Uses the
-          same selector and wildcard syntax as the CLI --override option.
+          Ordered session-tree path assignments applied after patch. Uses the
+          same type/id selector syntax as the CLI --override option.
         items:
           type: string
 
