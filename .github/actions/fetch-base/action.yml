@@ -1,0 +1,23 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+name: fetch-base
+description: Fetch origin/main and the PR or push base SHA for git diff gates.
+
+inputs:
+  sha:
+    description: Base commit SHA (pull_request.base.sha or github.event.before)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch merge base
+      shell: bash
+      env:
+        BASE_SHA: ${{ inputs.sha }}
+      run: |
+        git fetch --no-tags origin main:refs/remotes/origin/main
+        if [ -n "$BASE_SHA" ] && ! printf '%s' "$BASE_SHA" | grep -qE '^0+$'; then
+          git fetch --no-tags origin "$BASE_SHA"
+        fi

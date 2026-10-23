@@ -80,7 +80,7 @@ Pick the installation mode that matches your job:
 | --- | --- | --- |
 | **PyPI + uv venv** (once published) | Running a published release | `mas-ctl validate` / `mas-ctl chat` |
 | **Docker** | Running without a local Python environment | `docker compose --profile tools run --rm cli mas-ctl validate ...` |
-| **Developer workspace** | Editing MAS Lab itself | `uv run pytest`, `task verify-unit`, or `task ci` |
+| **Developer workspace** | Editing MAS Lab itself | `uv run pytest`, `task verify-lint`, or `task verify-unit` |
 
 Full install steps: [Tutorial 0 — Environment setup](docs/tutorials/00-environment-setup/README.md).
 The documentation site mirrors [`docs/`](docs/); start at [docs/index.md](docs/index.md).

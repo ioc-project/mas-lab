@@ -198,7 +198,8 @@ Run `task --list` for all tasks. The useful ones:
 | Task | Purpose |
 | ---- | ------- |
 | `task verify` | Pre-commit gate: version and env checks, then `task ci` |
-| `task ci` | CI-parity suite |
+| `task verify-lint` | Lockfile, literals, Ruff on changed Python |
+| `task ci-fast` | Lint then unit |
 | `task verify-tutorials` | Replay each tutorial's `demo/scenario.yaml` commands |
 | `task docs-serve` | Local MkDocs site at `http://127.0.0.1:8000` |
 

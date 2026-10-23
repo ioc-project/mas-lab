@@ -36,7 +36,7 @@ tasks:
       - task: install
       - uv pip install -e library-samples
       - uv pip install -e "library-skills[all]"
-      - uv pip install pytest pytest-asyncio pytest-cov pytest-timeout import-linter pyyaml click python-dotenv jsonschema httpx httpx2 certifi truststore pyarrow opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+      - uv pip install pytest pytest-asyncio pytest-cov pytest-timeout import-linter pyyaml click python-dotenv jsonschema httpx httpx2 certifi truststore pyarrow opentelemetry-sdk opentelemetry-exporter-otlp-proto-http ruff
 
   mcp-conformance:
     desc: "Compatibility alias for the standalone MCP compliance workflow"
@@ -83,12 +83,25 @@ tasks:
     cmds:
       - python3 scripts/check_literals.py
 
+  verify-lint:
+    desc: "Fast static gates — lockfile, literals, ruff on changed Python"
+    cmds:
+      - task: verify-lock
+      - task: verify:literals
+      - python3 scripts/ruff_changed.py check
+
   verify-unit:
     desc: "Unit tests — repo gates + v2 lab/bench/core packages"
     deps: [install-dev]
+    vars:
+      COVERAGE: '{{.COVERAGE | default "0"}}'
     cmds:
       - "{{.VENV}}/import-linter lint --config lab/.importlinter"
       - |
+        cov=""
+        if [ "{{.COVERAGE}}" = "1" ]; then
+          cov="--cov=mas.runtime.kernel --cov=mas.runtime.machines --cov=mas.ctl.workspace --cov=mas.lab.benchmark.pipeline --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=0"
+        fi
         {{.VENV}}/pytest \
           tests/test_tutorial_manifests_strict.py \
           tests/test_tutorial_manifests_resolve_refs.py \
@@ -97,32 +110,68 @@ tasks:
           tests/test_shipped_manifest_separation.py \
           tests/test_workspace_imports.py \
           tests/test_mkdocs_github_stats.py \
+          tests/test_diff_cover_changed.py \
+          tests/test_ruff_changed.py \
+          tests/test_ci_paths.py \
+          tests/test_ci_gate.py \
           runtime/tests/ \
           lab/components/core/tests/ \
           lab/components/bench/tests/ \
           lab/tests/benchmark/test_experiment_schema.py \
           ctl/tests/ \
-          library-standard/tests/ \
-          library-eval/tests/ \
-          library-ioa/tests/ \
+          $cov \
           -q --tb=line
+
+  verify-coverage:
+    desc: "Core unit tests with coverage.xml, changed-line 90%, optional package 90%"
+    deps: [install-dev]
+    vars:
+      COVERAGE_PACKAGE: '{{.COVERAGE_PACKAGE | default "0"}}'
+    cmds:
+      - task verify-unit COVERAGE=1
+      - python3 scripts/diff_cover_changed.py --coverage coverage.xml --fail-under 90
       - |
-        # Separate invocation: library-skills/tests/ is its own `tests` package
-        # (needs __init__.py for its relative `from .conftest import ...`
-        # imports) and collides with lab/components/bench/tests/'s identically
-        # named package under pytest's default import mode if run in the same
-        # process.
-        {{.VENV}}/pytest library-skills/tests/ -q --tb=line
+        if [ "{{.COVERAGE_PACKAGE}}" = "1" ]; then
+          {{.VENV}}/coverage report --fail-under=90
+        fi
+
+  verify-library:
+    desc: "Ruff + pytest + changed-line coverage for one library"
+    deps: [install-dev]
+    vars:
+      LIB: "{{.LIB}}"
+      COV: "{{.COV}}"
+      FAIL_UNDER: '{{.FAIL_UNDER | default "90"}}'
+    cmds:
+      - python3 scripts/ruff_changed.py check --root {{.LIB}}
       - |
-        # Separate invocation: library-telemetry/tests/'s own tests/conftest.py
-        # collides with the root tests/conftest.py under pytest's default
-        # rootdir-relative import mode if run in the same process (same
-        # reasoning as library-skills/tests/ above).
-        {{.VENV}}/pytest library-telemetry/tests/ -q --tb=line
-      - |
-        # Separate invocation: library-kg/tests/ has the same tests/conftest.py
-        # collision as library-telemetry/tests/ above.
-        {{.VENV}}/pytest library-kg/tests/ -q --tb=line
+        {{.VENV}}/pytest {{.LIB}}/tests \
+          --cov={{.COV}} \
+          --cov-report=term-missing \
+          --cov-report=xml:coverage.xml \
+          --cov-fail-under=0 \
+          -q --tb=line
+      - python3 scripts/diff_cover_changed.py --coverage coverage.xml --fail-under {{.FAIL_UNDER}} --prefix {{.LIB}}/src/
+
+  verify-libraries:
+    desc: "Ruff + pytest + changed-line coverage for every library-*"
+    deps: [install-dev]
+    cmds:
+      - task verify-library LIB=library-standard COV=mas.library.standard
+      - task verify-library LIB=library-eval COV=mas.library.eval
+      - task verify-library LIB=library-ioa COV=library_ioa
+      - task verify-library LIB=library-telemetry COV=mas.library.telemetry
+      - task verify-library LIB=library-kg COV=mas.library.kg FAIL_UNDER=80
+      - task verify-library LIB=library-skills COV=mas.library.skills
+      - task verify-library LIB=library-samples COV=mas.library.samples
+      - task verify-library LIB=library-lab COV=mas.library.lab
+
+  verify-hitl:
+    desc: "Chat-smoke validate plus scripted HITL gate"
+    deps: [install-dev]
+    cmds:
+      - task: verify-chat-smoke
+      - task: verify-hitl-gate
 
   verify-controller:
     desc: "All controller unit tests (FastAPI routes, daemon IPC, workers, discovery, manifests)"
@@ -183,27 +232,35 @@ tasks:
       - task: verify-tutorials
 
   ci:
-    desc: "CI parity — same gates as .github/workflows/test.yml (unit + functional + dry-run + chat smoke + HITL)"
+    desc: "Optional local sequential run of every verify-* task. GitHub does not run this."
     deps: [install-dev]
     cmds:
-      - task: verify-lock
+      - task: verify-lint
       - task: verify-docs
-      - task: verify:literals
       - task: verify-unit
+      - task: verify-libraries
       - task: verify-controller
       - task: verify-demo-ui
       - task: verify-functional
       - task: validate
-      - task: verify-chat-smoke
-      - task: verify-hitl-gate
+      - task: verify-hitl
 
   ci-fast:
-    desc: "Fast CI — literals + unit gate only (skips slow functional/dry-run gates)."
+    desc: "Local fail-fast — lint then unit. Closest laptop equivalent to the PR critical path."
     deps: [install-dev]
     cmds:
-      - task: verify-lock
-      - task: verify:literals
+      - task: verify-lint
       - task: verify-unit
+
+  install-hooks:
+    desc: "Install a pre-push hook that runs task verify-lint"
+    cmds:
+      - |
+        hook="$(git rev-parse --git-path hooks)/pre-push"
+        mkdir -p "$(dirname "$hook")"
+        cp "{{.ROOT_DIR}}/scripts/git-hooks/pre-push" "$hook"
+        chmod +x "$hook"
+        echo "Installed $hook — runs task verify-lint on git push"
 
   verify-hitl-gate:
     desc: "Scripted HITL on tool — hitl_gate in events.jsonl (ctl + CLI paths)"
@@ -243,7 +300,6 @@ tasks:
         T01="{{.ROOT_DIR}}/docs/tutorials/01-building-an-agent"
         {{.VENV}}/mas-ctl validate "$T01/agent.yaml"
         {{.VENV}}/mas-ctl validate "$T01/agent.yaml" -o "$T01/overlays/tools.yaml"
-        {{.VENV}}/pytest tests/test_hitl_tool_gate.py::test_cli_batch_hitl_emits_hitl_gate -q --tb=short
 
   ui-test:
     desc: "UI unit tests (Vitest + MSW)"
