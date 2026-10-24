@@ -88,6 +88,6 @@ experiments. Tutorials 4 to 6 and 8 to 14 each cover one capability.
 | Family | Question | Where |
 | --- | --- | --- |
 | [IoC motivation](labs.md#ioc-motivation-lab) | How do multi-agent systems fail? | Labs index |
-| [L9 evaluation](labs.md#l9-evaluation-labs) | Do ACCORD and CONCORD repair those failures, and at what cost? | Labs index |
+| [Cognition protocols](labs.md#cognition-protocols) | Do ACCORD and CONCORD repair those failures, and at what cost? | Labs index |
 | [Cognitive-challenge](labs.md#cognitive-challenge-labs) | Do the failures show up on other systems too? | Labs index |
 | [Paper labs](../labs.md) | Is the method itself sound? | Toolkit labs page |

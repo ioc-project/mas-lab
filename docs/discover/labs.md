@@ -22,7 +22,7 @@ builds on.
 | Question | Lab | Where to read it |
 |---|---|---|
 | **How do multi-agent systems fail?** | [IoC motivation lab](#ioc-motivation-lab) | This page, and the Outshift study it accompanies |
-| **Do ACCORD and CONCORD repair those failures, and at what cost?** | [L9 evaluation labs](#l9-evaluation-labs) | This page, and the [Cognition Protocol benchmarks](https://ioc-project.github.io/cognition-protocols/benchmarks/) |
+| **Do ACCORD and CONCORD repair those failures, and at what cost?** | [Cognition protocols](#cognition-protocols) | This page, and the [Cognition Protocol benchmarks](https://ioc-project.github.io/cognition-protocols/benchmarks/) |
 | **Do the failures show up on other systems too?** | [Cognitive-challenge labs](#cognitive-challenge-labs) | This page |
 | **Is the method itself sound?** | [Paper labs](#paper-labs) | [Toolkit labs page](../labs.md) |
 
@@ -89,7 +89,7 @@ can be rebuilt without calling a language model at all. The lab documentation ex
 each failure, how to record the runs again from scratch, and how to browse them in
 the MAS-Lab web interface.
 
-## L9 evaluation labs
+## Cognition protocols
 
 **The question.** When ACCORD and CONCORD are added to the agents, how many failures
 do they repair, and what do they cost?

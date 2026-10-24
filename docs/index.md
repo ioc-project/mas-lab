@@ -197,7 +197,7 @@ specialists who must agree on one fix. Each incident has a known right answer.
   decision was right. It also reports the extra rounds and tokens the protocol cost.
 
 The full set-up and the results are on the
-[Labs](discover/labs.md#l9-evaluation-labs) page and under
+[Labs](discover/labs.md#cognition-protocols) page and under
 [Cognition Protocol benchmarks](https://ioc-project.github.io/cognition-protocols/benchmarks/).
 
 ## Where to go next

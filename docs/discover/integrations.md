@@ -78,7 +78,7 @@ protocol adds. The same method tests ACCORD alone, CONCORD alone, or both togeth
 
 - [Tutorial 6 — Agent skills](../tutorials/06-agent-skills/README.md)
   shows how to write a skill and add it to agents.
-- [Labs](labs.md#l9-evaluation-labs) describes the protocol experiments in full.
+- [Labs](labs.md#cognition-protocols) describes the protocol experiments in full.
 - [Benchmarks](https://ioc-project.github.io/cognition-protocols/benchmarks/)
   reports the results.
 
