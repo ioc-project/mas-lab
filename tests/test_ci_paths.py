@@ -48,6 +48,7 @@ def test_library_standard_is_independent(paths):
     assert flags["mcp"] is False
     assert flags["a2a"] is False
     assert flags["smoke"] is False
+    assert flags["golden"] is True
 
 
 def test_library_ioa_shared_skips_compliance(paths):
@@ -80,7 +81,7 @@ def test_mcp_compliance_tree_runs_mcp(paths):
     assert flags["lib_ioa"] is True
 
 
-def test_runtime_does_not_run_a2a_or_golden(paths):
+def test_runtime_runs_golden_not_a2a(paths):
     flags = paths.classify(["runtime/src/mas/runtime/kernel/engine.py"], event="pull_request")
     assert flags["runtime"] is True
     assert flags["ctl"] is False
@@ -88,7 +89,7 @@ def test_runtime_does_not_run_a2a_or_golden(paths):
     assert flags["repo"] is False
     assert flags["hitl"] is True
     assert flags["smoke"] is True
-    assert flags["golden"] is False
+    assert flags["golden"] is True
     assert flags["controller"] is False
     assert flags["mcp"] is False
     assert flags["a2a"] is False
@@ -180,7 +181,7 @@ def test_format_outputs_filters_suite_and_library_matrices(paths):
     assert parsed["unit"] == "true"
     assert parsed["suite"] == "true"
     assert parsed["hitl"] == "true"
-    assert parsed["golden"] == "false"
+    assert parsed["golden"] == "true"
     assert json.loads(parsed["unit_matrix"]) == {
         "include": [{"name": "Runtime", "task": "verify-runtime"}]
     }
@@ -196,7 +197,7 @@ def test_format_outputs_filters_suite_and_library_matrices(paths):
     }
     suite = json.loads(parsed["suite_matrix"])
     names = {row["name"] for row in suite["include"]}
-    assert names == {"HITL", "Lab smoke"}
+    assert names == {"Golden runs", "HITL", "Lab smoke"}
 
 
 def test_format_outputs_empty_matrices_when_docs_only(paths):
@@ -208,3 +209,19 @@ def test_format_outputs_empty_matrices_when_docs_only(paths):
     assert json.loads(parsed["suite_matrix"]) == {"include": []}
     assert json.loads(parsed["unit_matrix"]) == {"include": []}
     assert json.loads(parsed["library_matrix"]) == {"include": []}
+
+
+def test_ctl_and_golden_libraries_run_golden(paths):
+    for path in (
+        "ctl/src/mas/ctl/session/bootstrap.py",
+        "library-standard/src/mas/library/standard/plugins/context/assembler.py",
+        "library-skills/src/mas/library/skills/plugins/sk_tools.py",
+        "library-lab/src/mas/library/lab/__init__.py",
+        "lab/src/mas/lab/cli/commands/serve.py",
+    ):
+        assert paths.classify([path], event="pull_request")["golden"] is True, path
+
+
+def test_library_without_event_output_skips_golden(paths):
+    flags = paths.classify(["library-telemetry/src/mas/library/telemetry/__init__.py"], event="pull_request")
+    assert flags["golden"] is False

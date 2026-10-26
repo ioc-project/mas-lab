@@ -49,6 +49,9 @@ JOBS = (
     *LIBRARIES,
 )
 
+# Libraries whose code shapes the recorded event stream the golden runs compare.
+GOLDEN_LIBRARIES = frozenset({"lib_standard", "lib_skills", "lib_samples", "lib_lab"})
+
 SUITE_JOBS = ("controller", "smoke", "golden", "tutorials", "validate", "hitl")
 UNIT_JOBS = ("runtime", "ctl", "lab_unit", "repo")
 CORE_JOBS = (*UNIT_JOBS, *SUITE_JOBS, "docs", "demo_ui", "mcp", "a2a", *LIBRARIES)
@@ -231,6 +234,8 @@ def classify(
         for flag, prefix in LIBRARIES.items():
             if posix.startswith(prefix):
                 flags[flag] = True
+                if flag in GOLDEN_LIBRARIES:
+                    flags["golden"] = True
                 if flag == "lib_ioa":
                     if _starts(posix, MCP_PREFIXES):
                         flags["mcp"] = True
@@ -278,16 +283,19 @@ def classify(
         if posix.startswith("lab/"):
             flags["lab_unit"] = True
             flags["smoke"] = True
+            flags["golden"] = True
             continue
         if posix.startswith("runtime/"):
             flags["runtime"] = True
             flags["hitl"] = True
             flags["smoke"] = True
+            flags["golden"] = True
             continue
         if posix.startswith("ctl/"):
             flags["ctl"] = True
             flags["hitl"] = True
             flags["smoke"] = True
+            flags["golden"] = True
             continue
         if posix in DOCS_EXACT or _starts(posix, DOCS_PREFIXES) or posix in DOCS_SCRIPTS:
             flags["docs"] = True

@@ -1,0 +1,13 @@
+{
+  "run_hash": "240b4d15847cb9869be1",
+  "experiment": "golden-extensions",
+  "scenario": "golden",
+  "item_id": "1",
+  "run_idx": 0,
+  "referenced_at": "2026-10-26T21:15:14.683448Z",
+  "mas": {
+    "app": "trip-planner",
+    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-golden-archive-view-id/library-samples/apps/trip-planner/mas.yaml",
+    "overlay": "golden"
+  }
+}
