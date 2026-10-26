@@ -41,6 +41,16 @@ reconciling the release notes with the code and docs currently on that branch.
   `POST /api/scopes` creates a lab (optional local library) on the first
   `mas_lab.labs_search_paths` entry. New experiments are created inside the
   selected lab.
+- Session conversation archive: every turn is a leaf; summaries point at
+  children (nested ok). Assembly projects the covering set into chat
+  `messages[]` — the model never sees chunk ids. Each call records
+  `archive_view_id` on telemetry (`context.assembled`, processing-call
+  spans). Inspect with `inspect_archive(session_id)`. Persist only when
+  `mas_ctl.archive.enabled` is true (default false); a path or events file
+  does not turn it on. Off disk forces deep checkpoints.
+  `spec.checkpoint.portability` is `self_contained`/`deep` or
+  `reference`/`shallow`. Reviewed history knobs:
+  `pkg://mas.library.standard/overlays/production-memory.yaml`.
 - Output-token limits are configurable through model and infra manifests.
   `on_truncation` supports `ignore`, `warn`, `error`, and bounded `escalate`;
   `--max-tokens N` aliases the agent models `--override` path. Requests omit
@@ -90,6 +100,15 @@ reconciling the release notes with the code and docs currently on that branch.
   `spec.models[].max_tokens` to keep the previous cap. Provider-level cache
   entries recorded with the implicit 2000 no longer match.
 
+### Changed
+
+- `working_memory_messages` is accepted and ignored. Live tool rows are kept
+  until the token trimmer (model window minus completion reserve) needs space.
+  The old default of 20 rows could drop an `activate_skill` body mid-protocol.
+  Tools attach generic `chunk` metadata (`pin_policy`, `semantic`,
+  `section_id`); the archive never sniffs `<skill_content>`. Runs that never
+  hit the window assemble the same `messages[]` as before.
+
 ### Fixed
 
 - A non-ASCII API key (for example a pasted `…` placeholder) is rejected up front with a clear message
@@ -100,12 +119,12 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - Activated skill content is no longer summarized or dropped by history
   compaction (agentskills.io Step 5). `summarising`, `sliding_window`, and
-  `stack` keep each skill's latest `<skill_content>` block as its own
-  `system` row; the summarizer sees a stub instead of the body, and the
-  assembly trimmer never removes the row. This holds with
-  `pin_activated: false`, which used to lose the body after the first
-  compaction. With the default pin, the history copy is dropped from the
-  request so the body is sent once. See
+  `stack` keep each `pin_policy: never` instruction as its own `system`
+  row; the summarizer sees a stub instead of the body, and the assembly
+  trimmer never removes the row. This holds with `pin_activated: false`,
+  which used to lose the body after the first compaction. With the default
+  pin, the history copy is dropped from the request so the body is sent
+  once. See
   [Skill content is never compacted](docs/manifests/summarization.md#skill-content-is-never-compacted).
 - Overlay patches that target one agent of a MAS (`patch.agents.<id>`,
   `$entry`, `$not-entry`, `$all`, `$delegates`) are merged onto the loaded

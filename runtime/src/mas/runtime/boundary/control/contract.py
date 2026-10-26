@@ -169,6 +169,10 @@ class ContextUsageView:
     cache_misses_by_layer: dict[str, int] = field(default_factory=dict)
     estimated_cost_usd: float | None = None
     cost_status: str = "pricing_not_configured"
+    archive_view_id: str = ""
+    archive_covering_ids: tuple[str, ...] = ()
+    system_prefix_hash: str = ""
+    system_prefix_reused: bool = False
 
 
 class ControlContract(Protocol):
@@ -204,6 +208,7 @@ class ControlContract(Protocol):
     def discard_last(self, session_id: str) -> str: ...
     def inspect(self, session_id: str) -> SessionSnapshotView: ...
     def inspect_context(self, session_id: str) -> ContextUsageView: ...
+    def inspect_archive(self, session_id: str) -> dict[str, Any]: ...
     def snapshot(self, session_id: str, *, label: str = "", auto_stop: bool = False) -> Any: ...
     def persist(
         self,

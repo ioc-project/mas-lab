@@ -7,7 +7,6 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.session.controller import SessionController
 from mas.ctl.session.manager import SessionManager
 from mas.ctl.session.turn_queue import TurnInputQueue
@@ -16,11 +15,9 @@ from mas.runtime.boundary.control.contract import (
     ControlDenied,
     SessionPaused,
 )
-from mas.runtime.session import Session, SessionLineage, SessionStatus
-from mas.runtime.session.snapshot import SnapshotRef, SnapshotTree
-
-
 from mas.runtime.driver.mocks import AutoCtxAssembler
+from mas.runtime.session import Session, SessionStatus
+from mas.runtime.session.snapshot import SnapshotRef, SnapshotTree
 
 
 def _session(manager: SessionManager, session_id: str = "s1") -> Session:
@@ -161,12 +158,17 @@ def test_inspect_context_returns_numeric_snapshot_and_cache_rate() -> None:
             {"source": "skills", "section_id": "skills/active", "tokens": 80, "pinned": True}
         ],
     }
+    pricing = {
+        "input_per_million_tokens": 1.0,
+        "output_per_million_tokens": 10.0,
+        "cached_input_per_million_tokens": 0.5,
+    }
     driver.observability.record_engine_io_return(
         correlation_id=1,
         op="LLM_CALL",
         usage={"prompt_tokens": 300, "completion_tokens": 20},
         model="vertex_ai/gemini-2.5-flash",
-        pricing={"input_per_million_tokens": 1.0, "output_per_million_tokens": 10.0, "cached_input_per_million_tokens": 0.5},
+        pricing=pricing,
         cache_status="hit",
         cache_layer="infra_llm_cache",
     )
@@ -175,7 +177,7 @@ def test_inspect_context_returns_numeric_snapshot_and_cache_rate() -> None:
         op="LLM_CALL",
         usage={"prompt_tokens": 300, "completion_tokens": 21},
         model="vertex_ai/gemini-2.5-flash",
-        pricing={"input_per_million_tokens": 1.0, "output_per_million_tokens": 10.0, "cached_input_per_million_tokens": 0.5},
+        pricing=pricing,
         cache_status="miss",
         cache_layer="infra_llm_cache",
     )
@@ -199,6 +201,21 @@ def test_inspect_context_returns_numeric_snapshot_and_cache_rate() -> None:
     assert view.cost_status == "catalog_estimate"
     assert "NEVER_EXPOSE_THIS_PROMPT" not in repr(view)
     assert not hasattr(view, "messages")
+
+
+def test_inspect_archive_returns_covering_tree() -> None:
+    manager = SessionManager()
+    session = _session(manager)
+    ctx = session.instance.driver.ctx
+    ctx.note_user_input("hello")
+    ctx.note_agent_response("world")
+    dump = manager.control(
+        capability=ControlCapability(actor="debugger", surface="admin")
+    ).inspect_archive("s1")
+    assert dump["covers_archive"] is True
+    assert dump["covering_ids"]
+    assert dump["leaves"]
+    assert dump["view_id"] == ctx.conversation_chunks.view_id
 
 
 def test_checkpoint_does_not_unpause_a_paused_session() -> None:

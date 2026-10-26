@@ -30,6 +30,9 @@ class AutoCtxAssembler:
     committed_messages: list[dict[str, Any]] = field(default_factory=list)
     conversation_chunks: ConversationChunkStore = field(default_factory=ConversationChunkStore)
     working_memory: WorkingMemoryStore = field(default_factory=WorkingMemoryStore)
+    archive_dir: str = ""
+    archive_watermark_bytes: int | None = None
+    checkpoint_portability: str = "self_contained"
     manifest: dict[str, Any] | None = None
     pattern_plugin_id: str = "react@v1"
     runtime_params: dict[str, Any] = field(default_factory=dict)
@@ -175,10 +178,16 @@ class AutoCtxAssembler:
     ) -> None:
         self.working_memory.record_assistant_tool_calls(calls)
 
-    def record_tool_result(self, *, call_id: str, content: str) -> None:
+    def record_tool_result(
+        self,
+        *,
+        call_id: str,
+        content: str,
+        chunk: dict[str, Any] | None = None,
+    ) -> None:
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
-        self.working_memory.record_tool_result(call_id=call_id, content=content)
+        self.working_memory.record_tool_result(call_id=call_id, content=content, chunk=chunk)
         record_context_mutation(
             self.observability,
             action="wm_append",

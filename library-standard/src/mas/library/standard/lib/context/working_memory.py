@@ -1,35 +1,41 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""In-turn working-memory slice for the assembler plugin."""
+"""In-turn working-memory slice for the assembler plugin.
+
+``working_memory_messages`` is deprecated and ignored: the request is bounded
+by the model window (plus completion reserve), not a message count.
+``pin_policy: never`` tool groups stay in the slice if a caller still passes
+a positive limit.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
 from mas.library.standard.lib.context.payload import start_of_tool_group
-from mas.library.standard.lib.context.spec import context_manager_spec
-from mas.runtime.spec.defaults import DEFAULT_WORKING_MEMORY_MESSAGES
+from mas.library.standard.lib.context.pinned_history import split_pinned_tool_groups
 
 
 def working_memory_slice_limit(manifest: dict | None) -> int:
-    """Max in-turn working-memory messages kept for assembly (0 = unbounded)."""
-    cm = context_manager_spec(manifest)
-    params = cm.get("params") or {}
-    for key in ("working_memory_messages", "max_in_turn_messages", "max_messages"):
-        raw = params.get(key)
-        if raw is not None:
-            try:
-                return max(0, int(raw))
-            except (TypeError, ValueError):
-                break
-    return DEFAULT_WORKING_MEMORY_MESSAGES
+    """Max in-turn working-memory messages kept for assembly (0 = unbounded).
+
+    The YAML key is accepted for old manifests and silently ignored.
+    """
+    _ = manifest
+    return 0
 
 
 def bounded_working_memory_tail(
     messages: list[dict[str, Any]],
     limit: int,
 ) -> list[dict[str, Any]]:
-    """Keep at most the last *limit* messages, never splitting a tool-call group."""
+    """Keep at most the last *limit* messages, never splitting a tool-call group.
+
+    ``pin_policy: never`` tool groups are always kept.
+    """
     if limit <= 0 or len(messages) <= limit:
         return list(messages)
-    return list(messages[start_of_tool_group(messages, len(messages) - limit) :])
+    start = start_of_tool_group(messages, len(messages) - limit)
+    dropped, kept = list(messages[:start]), list(messages[start:])
+    never_pin, _ = split_pinned_tool_groups(dropped)
+    return never_pin + kept

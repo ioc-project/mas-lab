@@ -38,6 +38,8 @@ def test_cm_factory_strips_only_assembly_param_keys():
     )
 
     assert "working_memory_messages" in CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS
+    assert "archive" not in CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS
+    assert "max_in_turn_messages" not in CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS
     assert "trimmer" in CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS
     assert "token_budget" not in CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS
     assert "max_turns" in CONTEXT_MANAGER_STRATEGY_PARAM_KEYS
@@ -46,3 +48,29 @@ def test_cm_factory_strips_only_assembly_param_keys():
     assert "max_turns" not in CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS
     # Smoke: stripping is applied inside create(); keys are schema-driven.
     assert CMFactory is not None
+
+
+def test_chunk_and_archive_defaults_match_schema():
+    from mas.runtime.spec.schema_defaults_generated import (
+        ARCHIVE_DIR_NAME,
+        ARCHIVE_ENABLED,
+        ARCHIVE_MEMORY_WATERMARK_BYTES,
+        CHUNK_MESSAGE_KEY,
+        CHUNK_PIN_NEVER,
+        CHUNK_PIN_POLICIES,
+        CHUNK_PIN_POLICY_DEFAULT,
+        CHUNK_SEMANTIC_INSTRUCTION,
+        CHUNK_SEMANTICS,
+        CHUNK_SUMMARY_HEADING,
+    )
+
+    assert ARCHIVE_ENABLED is False
+    assert ARCHIVE_DIR_NAME == "archive"
+    assert ARCHIVE_MEMORY_WATERMARK_BYTES == 67108864
+    assert CHUNK_MESSAGE_KEY == "mas"
+    assert CHUNK_PIN_POLICY_DEFAULT == "ephemeral"
+    assert CHUNK_PIN_NEVER == "never"
+    assert CHUNK_PIN_POLICIES == ("never", "prefer", "ephemeral")
+    assert CHUNK_SEMANTIC_INSTRUCTION == "instruction"
+    assert "summary" in CHUNK_SEMANTICS
+    assert CHUNK_SUMMARY_HEADING.startswith("[Conversation summary")

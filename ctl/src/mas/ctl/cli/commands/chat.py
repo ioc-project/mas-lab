@@ -13,7 +13,6 @@ from mas.ctl.cli.help_text import CHAT_EPILOG
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
-from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.controller import (
     ConversationConfig,
     SessionController,
@@ -24,6 +23,7 @@ from mas.ctl.session.display_user_io_contract import ConversationDisplayUserIOCo
 from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
 from mas.ctl.session.interactive_hitl_contract import InteractiveHitlContract
 from mas.ctl.session.manager import SessionManager
+from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.observability import setup_observability
 from mas.ctl.session.protocol_hints import emit_session_protocol_hints
 from mas.ctl.ui.stdout import StdoutConversationDisplay
@@ -359,6 +359,15 @@ def chat_cmd(
             anchor=session.manifest_dir or session.original_cwd,
             with_interceptors=True,
         )
+        obs_cfg = resolve_observability_config(
+            events=events,
+            events_file=events_file,
+            events_stdout=events_stdout,
+            events_format=events_format,
+            agent_id=require_agent_id_from_manifest(agent_data),
+            manifest=agent_data,
+            flavour_spec=flavour_spec,
+        )
         try:
             instance, store = instantiate_runtime(
                 InstantiationOptions(
@@ -383,6 +392,7 @@ def chat_cmd(
                     enable_observability=not without_obs,
                     enable_governance=not without_gov,
                     model_override=model,
+                    events_file=obs_cfg.events_file,
                 ),
                 hitl=hitl_responder,
             )
@@ -401,15 +411,6 @@ def chat_cmd(
         else:
             controller_store = store
 
-        obs_cfg = resolve_observability_config(
-            events=events,
-            events_file=events_file,
-            events_stdout=events_stdout,
-            events_format=events_format,
-            agent_id=require_agent_id_from_manifest(agent_data),
-            manifest=agent_data,
-            flavour_spec=flavour_spec,
-        )
         obs_rec = setup_observability(
             instance,
             obs_cfg,

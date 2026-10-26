@@ -187,15 +187,35 @@ def _agent_model_item_defaults(agent: dict[str, Any]) -> dict[str, Any]:
     return defaults
 
 
+def _config_archive_defaults() -> dict[str, Any]:
+    config = _load(_REPO_ROOT / "docs" / "schemas" / "config.schema.yaml")
+    mas_ctl = ((config.get("properties") or {}).get("mas_ctl") or {}).get("properties") or {}
+    archive = (mas_ctl.get("archive") or {}).get("properties") or {}
+    return {
+        "enabled": (archive.get("enabled") or {}).get("default", False),
+        "dir_name": (archive.get("dir_name") or {}).get("default", "archive"),
+        "memory_watermark_bytes": (archive.get("memory_watermark_bytes") or {}).get("default", 67108864),
+    }
+
+
 def _render_defaults() -> str:
     execution = _load(_FRAGMENTS / "execution-binding.schema.yaml")
     assembly = _load(_FRAGMENTS / "context-manager-assembly-params.schema.yaml")
     strategy = _load(_FRAGMENTS / "context-manager-strategy-params.schema.yaml")
+    chunk_meta = _load(_FRAGMENTS / "chunk-meta.schema.yaml")
     agent = _load(_SCHEMA_ROOT / "agent.schema.yaml")
     exec_defaults = _property_defaults(execution, _FRAGMENTS)
     asm_defaults = _property_defaults(assembly, _FRAGMENTS)
     strategy_defaults = _property_defaults(strategy, _FRAGMENTS)
+    chunk_defaults = _property_defaults(chunk_meta, _FRAGMENTS)
+    chunk_props = chunk_meta.get("properties") or {}
+    pin_enum = list((chunk_props.get("pin_policy") or {}).get("enum") or ("never", "prefer", "ephemeral"))
+    semantic_enum = list(
+        (chunk_props.get("semantic") or {}).get("enum")
+        or ("catalog", "instruction", "history", "tool_result", "summary")
+    )
     model_defaults = _agent_model_item_defaults(agent)
+    archive_defaults = _config_archive_defaults()
     asm_props = _merged_properties(assembly, _FRAGMENTS)
     trimmer_props = (asm_props.get("trimmer") or {}).get("properties") or {}
     reserve_default = (trimmer_props.get("reserve_tokens") or {}).get("default", 512)
@@ -210,13 +230,24 @@ def _render_defaults() -> str:
         "",
         f"EXECUTION_MAX_AUTO_STEPS = {exec_defaults['max_auto_steps']!r}",
         f"EXECUTION_ENGINE_QUEUE_DEPTH = {exec_defaults['engine_queue_depth']!r}",
-        f"CONTEXT_MANAGER_WORKING_MEMORY_MESSAGES = {asm_defaults['working_memory_messages']!r}",
+        f"CONTEXT_MANAGER_WORKING_MEMORY_MESSAGES = {asm_defaults.get('working_memory_messages', 0)!r}",
         f"CONTEXT_MANAGER_RESERVE_TOKENS = {reserve_default!r}",
         f"CONTEXT_MANAGER_SAFETY_MARGIN_RATIO = {margin_default!r}",
         f"CONTEXT_MANAGER_KEEP_TURNS = {strategy_defaults.get('keep_turns', 10)!r}",
         f"CONTEXT_MANAGER_HYSTERESIS_RATIO = {strategy_defaults.get('hysteresis_ratio', 0.1)!r}",
         f"DEFAULT_MODEL_CONTEXT_WINDOW = {model_defaults.get('context_window', 128000)!r}",
         f"DEFAULT_MODEL_MAX_TOKENS = {model_defaults.get('max_tokens', 2000)!r}",
+        f"CHUNK_MESSAGE_KEY = {chunk_defaults.get('message_key', 'mas')!r}",
+        f"CHUNK_PIN_POLICY_DEFAULT = {chunk_defaults.get('pin_policy', 'ephemeral')!r}",
+        f"CHUNK_SEMANTIC_DEFAULT = {chunk_defaults.get('semantic', 'history')!r}",
+        f"CHUNK_SUMMARY_HEADING = {chunk_defaults.get('summary_heading', '[Conversation summary —')!r}",
+        *[f"CHUNK_PIN_{str(value).upper().replace('-', '_')} = {value!r}" for value in pin_enum],
+        f"CHUNK_PIN_POLICIES = {tuple(pin_enum)!r}",
+        *[f"CHUNK_SEMANTIC_{str(value).upper().replace('-', '_')} = {value!r}" for value in semantic_enum],
+        f"CHUNK_SEMANTICS = {tuple(semantic_enum)!r}",
+        f"ARCHIVE_ENABLED = {archive_defaults['enabled']!r}",
+        f"ARCHIVE_DIR_NAME = {archive_defaults['dir_name']!r}",
+        f"ARCHIVE_MEMORY_WATERMARK_BYTES = {archive_defaults['memory_watermark_bytes']!r}",
         "",
     ]
     return "\n".join(lines)

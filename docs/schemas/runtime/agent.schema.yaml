@@ -895,8 +895,16 @@ properties:
                 default: 5
           portability:
             type: string
-            enum: [self_contained, reference]
+            enum: [self_contained, reference, deep, shallow]
             default: self_contained
+            description: >
+              How much of the conversation archive a checkpoint blob
+              embeds. self_contained/deep hydrates every payload (portable
+              without the archive; right for a single snapshot).
+              reference/shallow stores covering heads that point at
+              traces/archive (cheap when tracing every checkpoint).
+              Shallow requires the archive on disk; without it the runtime
+              falls back to deep.
           auto_resume_latest:
             type: boolean
             default: false

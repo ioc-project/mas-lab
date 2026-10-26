@@ -286,18 +286,16 @@ The `ContextManagerPlugin` receives these as constructor kwargs. All fields are 
 
 | Field | Type | Description |
 | ------- | ------ | ------------- |
-| `max_turns` | `integer` ≥ 1 | Sliding-window: maximum prior user turns. Alias for `keep_turns`. |
-| `window_size` | `integer` ≥ 1 | Sliding-window: alias for `keep_turns`. |
-| `max_messages` | `integer` ≥ 1 | Stack: cap on total past messages. |
-| `summary_threshold` | `integer` ≥ 0 | Summarising: token estimate that triggers compaction. `0` uses the derived model context window. |
-| `keep_turns` | `integer` ≥ 1, default `10` | Summarising: recent user turns kept verbatim. |
-| `hysteresis_ratio` | number [0–1], default `0.1` | Summarising: reuse the cached summary until the history nears the safety-bounded hard budget. |
-| `summarizer` | string \| object | Sub-plugin: `llm` or `drop`. The object form can set the model and instructions. |
-| `working_memory_messages` | `integer` ≥ 1, default `20` | Assembly cap on in-turn working-memory messages. |
-| `max_in_turn_messages` | `integer` ≥ 1 | Alias for `working_memory_messages`. |
-| `trimmer` | object | Assembly-time token trimming: `max_tokens` (alias `token_budget`; default the model's `context_window`), `reserve_tokens` (tokens kept for the completion; default the model's `max_tokens`, else `2000` in compiled output), and `safety_margin_ratio` (0–0.5, default `0.1`). |
+| `max_turns` | `integer` ≥ 1 | Sliding-window — maximum prior user turns; alias for `keep_turns`. |
+| `window_size` | `integer` ≥ 1 | Sliding-window — alias for `keep_turns`. |
+| `max_messages` | `integer` ≥ 1 | Stack context manager — cap on total past messages. |
+| `summary_threshold` | `integer` ≥ 0 | Summarising — token estimate that triggers compaction; `0` uses the derived model context window. |
+| `keep_turns` | `integer` ≥ 1, default `10` | Summarising — recent user turns kept verbatim. |
+| `hysteresis_ratio` | number [0–1], default `0.1` | Summarising — reuse the cached summary until near the safety-bounded hard budget. |
+| `summarizer` | string \| object | Sub-plugin: `llm` or `drop`; object form can set model and instructions. |
+| `working_memory_messages` | `integer` ≥ 0 | **Deprecated, ignored.** Old count cap; overlays that set `200` still parse. |
+| `trimmer` | object | Assembly-time token trimming; accepts `max_tokens`/`token_budget`, `reserve_tokens`, and `safety_margin_ratio`. |
 | `working_memory_ref` | `string` | Registry ref for the working-memory context source plugin. |
-
 The [context-manager parameter schemas](../schemas/runtime/fragments/context-manager-params.schema.yaml) define the nested `trimmer` and `summarizer` keys.
 
 ---

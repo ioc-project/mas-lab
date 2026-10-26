@@ -8,7 +8,9 @@ from mas.library.skills.lib.resolver import resolve_skill_path
 from mas.library.skills.lib.spec import skill_refs_from_manifest
 from mas.library.skills.plugins.sk_catalog import SkillCatalogPlugin, attach_skill_catalog_plugin
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
+from mas.runtime.boundary.context.chunk_meta import attach_chunk_meta
 from mas.runtime.driver.mocks import AutoCtxAssembler
+from mas.runtime.engine.tool_dispatch import format_tool_result
 
 
 def test_skill_refs_from_manifest():
@@ -167,6 +169,11 @@ def test_activated_skill_body_survives_compaction_once(tmp_path, pin_activated):
     attach_skill_catalog_plugin(ctx, manifest, tmp_path, pin_activated=pin_activated)
     ctx.skill_pin_activated = pin_activated
     result = SkillToolsPlugin().on_execute_tool("activate_skill", {"name": "my-skill"}, ctx=ctx)
+    text = format_tool_result(result, ctx=ctx, call_id="c1")
+    tool_msg = attach_chunk_meta(
+        {"role": "tool", "tool_call_id": "c1", "content": text},
+        result.get("chunk") or {},
+    )
 
     history = [
         {"role": "user", "content": "q0"},
@@ -177,7 +184,7 @@ def test_activated_skill_body_survives_compaction_once(tmp_path, pin_activated):
                 {"id": "c1", "type": "function", "function": {"name": "activate_skill", "arguments": "{}"}}
             ],
         },
-        {"role": "tool", "tool_call_id": "c1", "content": json.dumps(result, indent=2)},
+        tool_msg,
         {"role": "assistant", "content": "a0"},
     ]
     for i in range(1, 8):

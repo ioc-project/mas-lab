@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.runtime.boundary.context.chunk_meta import strip_chunk_meta
 from mas.runtime.boundary.context.provider_invariant import tool_call_pairs
 
 
@@ -21,6 +22,24 @@ def start_of_tool_group(messages: list[dict[str, Any]], index: int) -> int:
     while i > 0 and messages[i].get("role") == "tool":
         i -= 1
     return i
+
+
+def tool_group_len(messages: list[dict[str, Any]], index: int = 0) -> int:
+    """Rows in the assistant tool-call group starting at ``index`` (ask + results)."""
+    if not messages or index < 0 or index >= len(messages):
+        return 0
+    first = messages[index]
+    if first.get("role") == "assistant" and first.get("tool_calls"):
+        call_ids = {c.get("id") for c in first["tool_calls"] if c.get("id")}
+        n = 1
+        while (
+            index + n < len(messages)
+            and messages[index + n].get("role") == "tool"
+            and messages[index + n].get("tool_call_id") in call_ids
+        ):
+            n += 1
+        return n
+    return 1
 
 
 def split_user_turns(messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -56,7 +75,7 @@ def sanitize_provider_messages(messages: list[dict[str, Any]]) -> list[dict[str,
     """
     if not messages:
         return []
-    return _sanitize_completed(_repair_tool_call_bindings(messages))
+    return strip_chunk_meta(_sanitize_completed(_repair_tool_call_bindings(messages)))
 
 
 def _empty_tool_result(call_id: str) -> dict[str, Any]:

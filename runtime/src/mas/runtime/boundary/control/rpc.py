@@ -161,6 +161,10 @@ class ControlRpcClient:
         """Return the latest context usage view without prompt contents."""
         return dict(await self.call("inspect_context", session_id) or {})
 
+    async def ainspect_archive(self, session_id: str) -> dict[str, Any]:
+        """Dump the conversation archive covering tree for debug."""
+        return dict(await self.call("inspect_archive", session_id) or {})
+
     async def alist_checkpoints(self, session_id: str) -> list[SnapshotRef]:
         rows = await self.call("list_checkpoints", session_id) or []
         return [_ref_from_payload(item, session_id) for item in rows]

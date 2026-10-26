@@ -2,12 +2,16 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Helpers for context plugins and ``mas-ctl compile``. Runtime does not import this."""
 
+from mas.library.standard.lib.context.committed_history import (
+    apply_request_view,
+    compact_committed_history,
+    request_history,
+)
 from mas.library.standard.lib.context.compaction import (
     apply_working_memory_compaction,
     context_manager_binding_from_compaction,
     resolve_working_memory_context_manager,
 )
-from mas.library.standard.lib.context.committed_history import compact_committed_history
 from mas.library.standard.lib.context.history_budget import (
     assembly_trimmer_params,
     context_manager_history_budget_hint,
@@ -25,6 +29,7 @@ from mas.library.standard.lib.context.working_memory import (
 )
 
 __all__ = [
+    "apply_request_view",
     "apply_working_memory_compaction",
     "assembly_trimmer_params",
     "bounded_working_memory_tail",
@@ -34,6 +39,7 @@ __all__ = [
     "context_manager_spec",
     "fill_context_manager_defaults",
     "is_summarising_context_manager",
+    "request_history",
     "resolve_working_memory_context_manager",
     "sanitize_provider_messages",
     "split_user_turns",

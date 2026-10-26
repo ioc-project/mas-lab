@@ -1,0 +1,36 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Production history posture. Default (no overlay) keeps the full run in the
+# archive and only fits each LLM request to the model window. Apply this
+# overlay after reviewing keep_turns — it can clip long sessions.
+#
+# Archive path and RAM watermark are not agent spec. Persist stays off
+# unless mas_ctl.archive.enabled is true (a path does not turn it on):
+#   mas_ctl.archive.enabled  (default false)
+#   paths.archive_dir  (folder after enable)
+#   mas_ctl.archive.memory_watermark_bytes  (RAM cache once on disk)
+#
+# Test before shipping: a chat longer than keep_turns, a protocol skill with
+# many in-turn tool calls, inspect_archive after summarize.
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  name: production-memory
+spec:
+  target:
+    kind: Agent
+  patch:
+    context_manager:
+      $op:
+        merge:
+          params:
+            # When a request + completion reserve would exceed the window,
+            # keep this many recent user messages verbatim.
+            keep_turns: 10
+            hysteresis_ratio: 0.1
+            trimmer:
+              safety_margin_ratio: 0.1
+    # Optional: pretend the model is smaller so summarization starts earlier.
+    # models:
+    #   - id: main
+    #     context_window: 32000

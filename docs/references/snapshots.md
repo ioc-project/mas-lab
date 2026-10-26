@@ -61,6 +61,18 @@ Restore replays those adapters. `SnapshotTree.from_events` rebuilds the tree ide
 
 Governance snapshots run during a transition that still mutates the live object. So the kernel `QProduct` is copied into a frozen `CowKernel`. Working memory freezes in place.
 
+The conversation archive is the same CoW grain: append-only `chunks{}` are
+shared; each snapshot stores a **covering head** (id list + `archive_view_id`).
+Live `/backtrack` retargets that pointer instead of restoring a second copy of
+every message.
+
+Disk `persist()` has two depths. **Shallow** (`portability: reference`) writes
+the head and relies on `traces/archive/` (every chunk, not overflow-only).
+**Deep** (`portability: self_contained`) hydrates payloads so the checkpoint
+is portable without the archive. Archive disabled ⇒ deep only. See
+[Deep vs shallow](../manifests/checkpoint.md#deep-vs-shallow) and
+[Live backtrack](context-management.md#live-backtrack-copy-on-write-heads).
+
 ## See also
 
 - [Kernel primitives](kernel-primitives.md)

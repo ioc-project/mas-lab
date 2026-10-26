@@ -102,6 +102,7 @@ class InstantiationOptions:
     stream_override: bool | None = None
     engine: Any | None = None
     runtime_refs_cli: tuple[str, ...] = ()
+    events_file: str | None = None
     model_override: str | None = None
     parent_default_model: str | None = None
     experiment_default_model: str | None = None
@@ -173,6 +174,8 @@ def instantiate_runtime(
         store.memory_seeds = [{"key": s.key, "content": s.content} for s in seeds]
 
     ctx = AutoCtxAssembler(pattern_plugin_id=options.pattern_plugin_id)
+    ctx.checkpoint_portability = policy.portability
+    _bind_archive_artefact(ctx, options)
     # Resolve local resource paths relative to the app root, not the process CWD.
     skill_base = options.manifest_dir or options.app_root or Path.cwd()
     tool_servers = (options.resolved_infra.tool_server_registry if options.resolved_infra else {}) or {}
@@ -362,6 +365,61 @@ def instantiate_runtime(
             ),
         )
     return instance, store
+
+
+def resolve_archive_dir(options: InstantiationOptions) -> str:
+    """On-disk archive directory, or empty.
+
+    Persist is off unless ``mas_ctl.archive.enabled`` is true. A path, an
+    events file, or a checkpoint directory never turns it on — scaled
+    experiments must not fill the disk by accident. ``paths.archive_dir``
+    only chooses the location after enable.
+    """
+    from mas.runtime.spec.schema_defaults_generated import ARCHIVE_DIR_NAME, ARCHIVE_ENABLED
+
+    ws = options.workspace
+    archive_cfg = ws.mas_ctl.get("archive") if ws is not None else {}
+    if not isinstance(archive_cfg, dict):
+        archive_cfg = {}
+    if not archive_cfg.get("enabled", ARCHIVE_ENABLED):
+        return ""
+    explicit = str((ws.paths.get("archive_dir") if ws is not None else "") or "").strip()
+    dir_name = str(archive_cfg.get("dir_name") or ARCHIVE_DIR_NAME)
+    if explicit and Path(explicit).is_absolute():
+        return explicit
+    events_file = str(options.events_file or "").strip()
+    if events_file:
+        events_path = Path(events_file).expanduser()
+        if not events_path.is_absolute():
+            root = options.app_root or options.manifest_dir or Path.cwd()
+            events_path = root / events_path
+        folder = events_path.parent if events_path.suffix else events_path
+        name = Path(explicit).name if explicit else dir_name
+        return str(folder / name)
+    if explicit:
+        root = options.app_root or options.manifest_dir or Path.cwd()
+        return str(root / explicit)
+    return ""
+
+
+def _bind_archive_artefact(ctx: AutoCtxAssembler, options: InstantiationOptions) -> None:
+    """Archive path/watermark come from config.yaml / run home, never agent spec."""
+    ws = options.workspace
+    watermark = None
+    if ws is not None:
+        archive_cfg = ws.mas_ctl.get("archive")
+        if isinstance(archive_cfg, dict) and archive_cfg.get("memory_watermark_bytes") is not None:
+            watermark = int(archive_cfg["memory_watermark_bytes"])
+    ctx.archive_dir = resolve_archive_dir(options)
+    if watermark is not None:
+        ctx.archive_watermark_bytes = watermark
+    if policy_needs_deep_fallback(ctx):
+        ctx.checkpoint_portability = "self_contained"
+
+
+def policy_needs_deep_fallback(ctx: AutoCtxAssembler) -> bool:
+    """Shallow checkpoints require an on-disk archive."""
+    return ctx.checkpoint_portability == "reference" and not ctx.archive_dir
 
 
 def _resolve_interface_contract(explicit: object | None, manifest: dict | None, spec_key: str) -> object:

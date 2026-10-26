@@ -61,7 +61,7 @@ spec:
 | `every_n_turns` | Positive integer; used with the `every_n_turns` trigger | unset |
 | `retention.mode` | `all`, `single`, `last_n` | `all` |
 | `retention.n` | Positive integer for `last_n` | `5` |
-| `portability` | `self_contained`, `reference` | `self_contained` (see below) |
+| `portability` | `self_contained`/`deep`, `reference`/`shallow` | `self_contained` |
 | `auto_resume_latest` | Boolean | `false` |
 
 `mode` says **when** to capture:
@@ -71,9 +71,49 @@ spec:
 - `every_turn` captures after each completed user turn.
 - `in_memory` keeps checkpoints in the process.
 
-`portability` is validated, but the current writer ignores it.
-Every version 2 checkpoint embeds the agent manifest.
+When `storage` is omitted, `mode: in_memory` means memory; `on_event` and
+`every_turn` mean disk. `auto_resume_latest` requires disk or hybrid.
 
+## Deep vs shallow
+
+A well-built archive makes `/backtrack` a covering-head retarget: the
+checkpoint does not copy every message. Two portability modes:
+
+| Mode | Aliases | What is stored | When |
+| --- | --- | --- | --- |
+| `self_contained` | `deep` | Hydrated payloads (resolve every pointer, like copying through symlinks) | A single snapshot, or when the archive is off |
+| `reference` | `shallow` | Covering ids + `archive_view_id` + `persist_dir` | Reverse debugging, every-checkpoint traces, `/backtrack` |
+
+The archive must be **fully** on disk for shallow to work — not only
+folded overflow. It colocates with the run's events file:
+
+```text
+<run_root>/
+  traces/events.jsonl
+  traces/archive/          # every leaf and summary
+  checkpoints/             # heads (shallow) or full blobs (deep)
+```
+
+`mas_ctl.archive.enabled` defaults to **false**. Then a checkpoint **must**
+be deep: there is nothing to point at. The runtime falls back from
+`reference` to `self_contained` in that case.
+
+Defaults: archive off; checkpoint `mode: none` and
+`portability: self_contained`. One explicit `--save-checkpoint` is a
+deep blob and does not need the archive. Reverse debugging: set
+`mas_ctl.archive.enabled: true` and `portability: shallow`.
+
+Harness overlays (`pkg://mas.library.skills/overlays/harness-profiles/`)
+pick the variant — cadence, portability, skill pin, overflow — so each
+framework's behaviour is a spec overlay, not a fork of the runtime.
+
+A workspace or lab may enable a store via `config.yaml` `plugins:` /
+`lab.enable_plugins` (`mas.checkpoint_store.hybrid`, …) when the spec omits
+`storage`. Spec `storage` still wins. CLI `--checkpoint-dir` overrides
+`storage.path`. When disk persistence is
+enabled without either, the CLI uses `.mas/checkpoints` beside the active
+manifest (or current working directory). Retention prunes only files belonging
+to the same session.
 `auto_resume_latest: true` loads the newest version 2 checkpoint in the checkpoint directory whose embedded manifest hash matches the current manifest.
 It requires `disk` or `hybrid` storage.
 
@@ -166,6 +206,11 @@ Design-pattern plugins do not own this policy.
 
 `on_cap_reached` accepts `hitl`, `terminate`, or `stop_backtracking`.
 `hitl` (human in the loop) hands the decision to a person.
+
+Live `/backtrack` in the same process retargets the archive **covering
+head** (copy-on-write of the id list) instead of deepcopying every message.
+Disk resume still serializes. See
+[Live backtrack](../references/context-management.md#live-backtrack-copy-on-write-heads).
 
 ## See also
 

@@ -77,11 +77,12 @@ class WorkingMemoryStore:
         self,
         rows: Sequence[Any] | None,
         extra_messages: Sequence[dict[str, Any]] | None = None,
+        ctx: Any = None,
     ) -> list[tuple[Any, str]]:
         """Copy this step's new log rows. Returns ``(row, call_id)`` for writes."""
         written: list[tuple[Any, str]] = []
         for row in rows or []:
-            call_id = self.project_event(row, extra_messages)
+            call_id = self.project_event(row, extra_messages, ctx=ctx)
             if call_id is not None:
                 written.append((row, call_id))
         return written
@@ -90,6 +91,7 @@ class WorkingMemoryStore:
         self,
         event: Any,
         extra_messages: Sequence[dict[str, Any]] | None = None,
+        ctx: Any = None,
     ) -> str | None:
         """Copy one accepted log row into the transcript. Returns a call id if any.
 
@@ -102,7 +104,9 @@ class WorkingMemoryStore:
         text = str(getattr(event, "text", "") or "")
         finish = str(getattr(event, "finish_reason", "") or "")
         if kind in {"TOOL_RESULT", "ERROR"}:
-            bound = self.project_tool_result(cid=cid, content=text, extra_messages=extra_messages)
+            bound = self.project_tool_result(
+                cid=cid, content=text, extra_messages=extra_messages, ctx=ctx
+            )
             if bound is not None:
                 return bound
             if kind == "ERROR" and text.strip():
@@ -154,6 +158,7 @@ class WorkingMemoryStore:
         cid: int,
         content: str,
         extra_messages: Sequence[dict[str, Any]] | None = None,
+        ctx: Any = None,
     ) -> str | None:
         """Bind one committed TOOL_RESULT. Returns the tool_call_id written.
 
@@ -169,7 +174,12 @@ class WorkingMemoryStore:
             if self.messages[-1].get("tool_call_id", "") == call_id:
                 self.mark_synced(cid)
                 return None
-        self.record_tool_result(call_id=call_id, content=str(content))
+        chunk = None
+        if ctx is not None:
+            from mas.runtime.boundary.context.chunk_meta import take_pending_chunk_meta
+
+            chunk = take_pending_chunk_meta(ctx, call_id) or None
+        self.record_tool_result(call_id=call_id, content=str(content), chunk=chunk)
         self.mark_synced(cid)
         return call_id
 
@@ -204,11 +214,22 @@ class WorkingMemoryStore:
             }
         )
 
-    def record_tool_result(self, *, call_id: str, content: str) -> None:
+    def record_tool_result(
+        self,
+        *,
+        call_id: str,
+        content: str,
+        chunk: dict[str, Any] | None = None,
+    ) -> None:
         resolved = call_id or self._open_tool_call_id
         if not resolved:
             raise ValueError("tool result requires call_id (no matching assistant tool_call)")
-        self.messages.append({"role": "tool", "tool_call_id": resolved, "content": content})
+        msg: dict[str, Any] = {"role": "tool", "tool_call_id": resolved, "content": content}
+        if chunk:
+            from mas.runtime.boundary.context.chunk_meta import attach_chunk_meta
+
+            attach_chunk_meta(msg, chunk)
+        self.messages.append(msg)
         if resolved == self._open_tool_call_id:
             self._open_tool_call_id = ""
 

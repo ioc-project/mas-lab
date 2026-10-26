@@ -10,10 +10,12 @@ rewrite stored history to the context manager's recency cap.
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 from typing import Any
 
+from mas.runtime.boundary.context.archive import ConversationChunkStore
 from mas.runtime.boundary.context.assembly_cache import cached_assembler
 from mas.runtime.boundary.context.provider_invariant import assert_provider_payload
 from mas.runtime.boundary.context.telemetry import record_context_assembly
@@ -29,6 +31,30 @@ def _accepts_keyword(fn: Any, name: str) -> bool:
         parameter.name == name or parameter.kind is inspect.Parameter.VAR_KEYWORD
         for parameter in parameters
     )
+
+
+def _archive_request_meta(ctx: Any, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Telemetry for the covering set used to assemble this LLM request."""
+    store = getattr(ctx, "conversation_chunks", None)
+    covering = list(store.covering_ids()) if isinstance(store, ConversationChunkStore) else []
+    view = getattr(store, "view_id", "") if isinstance(store, ConversationChunkStore) else ""
+    prefix = ""
+    if messages and messages[0].get("role") == "system":
+        prefix = str(messages[0].get("content") or "")
+    prefix_hash = hashlib.sha256(prefix.encode()).hexdigest()[:16] if prefix else ""
+    reused = bool(prefix_hash) and prefix_hash == getattr(ctx, "last_system_prefix_hash", None)
+    try:
+        ctx.last_archive_view_id = view
+        ctx.last_system_prefix_hash = prefix_hash
+        ctx.last_system_prefix_reused = reused
+    except (AttributeError, TypeError):
+        pass
+    return {
+        "archive_view_id": view,
+        "archive_covering_ids": covering,
+        "system_prefix_hash": prefix_hash,
+        "system_prefix_reused": reused,
+    }
 
 
 def _openai_tool_names(tools: list[dict[str, Any]] | None) -> list[str] | None:
@@ -105,6 +131,7 @@ def assemble_llm_messages(
     messages = assemble(ctx, **assemble_kwargs)
     assert_provider_payload(messages)
 
+    archive_meta = _archive_request_meta(ctx, messages)
     obs = getattr(ctx, "observability", None)
     cid = correlation_id or int(getattr(ctx, "_assembly_correlation_id", 0) or 0)
     tool_names = _openai_tool_names(tools)
@@ -124,6 +151,10 @@ def assemble_llm_messages(
         context_window=context_window,
         completion_reserve=completion_tokens,
         context_parts=getattr(ctx, "context_usage_parts", None),
+        archive_view_id=archive_meta["archive_view_id"],
+        archive_covering_ids=archive_meta["archive_covering_ids"],
+        system_prefix_hash=archive_meta["system_prefix_hash"],
+        system_prefix_reused=archive_meta["system_prefix_reused"],
     )
     try:
         ctx.last_context_usage = context_usage

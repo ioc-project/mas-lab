@@ -75,6 +75,9 @@ def test_activate_skill_returns_body(tmp_path: Path):
     assert "Body text" in result["content"]
     assert "<skill_content" in result["content"]
     assert "</skill_content>" in result["content"]
+    assert result["chunk"]["pin_policy"] == "never"
+    assert result["chunk"]["semantic"] == "instruction"
+    assert result["chunk"]["section_id"] == "skills/activated/my-skill"
 
 
 def test_activate_skill_strips_frontmatter(tmp_path: Path):

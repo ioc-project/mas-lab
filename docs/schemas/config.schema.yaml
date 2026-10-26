@@ -66,6 +66,32 @@ properties:
         type: boolean
         default: false
         description: Include raw InvokeEngineIo / EngineIoReturn JSON.
+      archive:
+        type: object
+        additionalProperties: false
+        description: >
+          Conversation archive (full session log). Complementary to traces/.
+          Off by default so experiments at scale do not fill the disk.
+          Enable only for reverse debugging / shallow checkpoints.
+        properties:
+          enabled:
+            type: boolean
+            default: false
+            description: >
+              Persist every archive chunk under traces/<dir_name> when an
+              events file is set. false keeps the archive in RAM only and
+              forces deep checkpoints.
+          dir_name:
+            type: string
+            default: archive
+            description: Folder name colocated with events.jsonl (traces/archive).
+          memory_watermark_bytes:
+            type: integer
+            minimum: 0
+            default: 67108864
+            description: >
+              RAM cache cap after chunks are on disk. Folded leaves drop
+              from memory past this watermark. 0 = keep every payload in RAM.
 
   mas_lab:
     type: object
@@ -217,3 +243,10 @@ properties:
         type: string
       runs_dir:
         type: string
+      archive_dir:
+        type: string
+        description: >
+          Folder for the conversation archive after mas_ctl.archive.enabled
+          is true. Setting this path does not turn persist on. Absolute
+          paths win. Relative paths resolve from the app root. Not an
+          agent spec field.

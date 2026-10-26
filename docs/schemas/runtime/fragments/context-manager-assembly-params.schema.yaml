@@ -11,13 +11,10 @@ type: object
 properties:
   working_memory_messages:
     type: integer
-    minimum: 1
-    default: 20
-    description: Max in-turn working-memory messages kept for LLM assembly (tool groups atomic).
-  max_in_turn_messages:
-    type: integer
-    minimum: 1
-    description: Alias for working_memory_messages.
+    minimum: 0
+    description: >
+      Deprecated. Ignored. Request size is the model context window minus
+      completion reserve. Kept so overlays that set 200 still parse.
   trimmer:
     type: object
     description: >

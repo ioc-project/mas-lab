@@ -10,4 +10,5 @@ description: >
   per-plugin schema via if/then on the sibling ``type`` field.
 allOf:
   - $ref: "./context-manager-assembly-params.schema.yaml"
+
 additionalProperties: true

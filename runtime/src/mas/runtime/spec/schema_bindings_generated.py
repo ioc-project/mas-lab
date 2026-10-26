@@ -97,7 +97,6 @@ ASSEMBLER_BINDING_KEYS = frozenset(
 
 CONTEXT_MANAGER_ASSEMBLY_PARAM_KEYS = frozenset(
     {
-    'max_in_turn_messages',
     'trimmer',
     'working_memory_messages',
     'working_memory_ref',

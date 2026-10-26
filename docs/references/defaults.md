@@ -66,7 +66,6 @@ spec:
       keep_turns: 10
       hysteresis_ratio: 0.1
       summarizer: llm
-      working_memory_messages: 20
       trimmer:
         reserve_tokens: 2000
         safety_margin_ratio: 0.1
@@ -83,9 +82,9 @@ spec:
 |-------|-------------------|------------|------|
 | `models[0].context_window` | none | Auto-resolved from the effective model; an unknown model warns and uses `128000` | [agent.md](../manifests/agent.md#spec-fields) · [context-management](context-management.md) |
 | `design_pattern` | `react@v1` (registry alias `react`) | `max_steps` (dispatch-loop cap), `max_cot_pass`, `parallel` | [plugin-bindings.md § design_pattern](../manifests/plugin-bindings.md#design_pattern-default-react) |
-| `assembler` | `assembler` (`ContextAssemblerPlugin`) | `emit_segments`, `always_reassemble`. Builds `messages[]`. History policy does **not** live here. | [plugin-bindings.md § assembler](../manifests/plugin-bindings.md#assembler-default-assembler) · [context-assembly.md](../manifests/context-assembly.md#assembler-required-default) |
-| `context_manager` | `summarising` | `keep_turns`, `hysteresis_ratio`, `summary_threshold`, `working_memory_messages`, `trimmer.{max_tokens,reserve_tokens,safety_margin_ratio}` | [plugin-bindings.md § context_manager](../manifests/plugin-bindings.md#context_manager-default-summarising) · [context-management](context-management.md) |
-| `context_manager.params.summarizer` | `llm` (sub-plugin of `summarising`) | If `params.model` is omitted, the summarizer slot applies (Agent, MAS, or `experiment.models.summarizer`). Otherwise the agent's primary model applies. Compile does **not** invent a cheaper summarizer. | [plugin-bindings.md § summarizer](../manifests/plugin-bindings.md#summarizer-sub-plugin-of-summarising) · [summarization.md](../manifests/summarization.md) |
+| `assembler` | `assembler` (`ContextAssemblerPlugin`) | `emit_segments`, `always_reassemble` — builds `messages[]`; **not** where history policy lives | [plugin-bindings.md § assembler](../manifests/plugin-bindings.md#assembler-default-assembler) · [context-assembly.md](../manifests/context-assembly.md#assembler-required-default) |
+| `context_manager` | `summarising` | `keep_turns`, `hysteresis_ratio`, `summary_threshold`, `archive`, `trimmer.{max_tokens,reserve_tokens,safety_margin_ratio}` | [plugin-bindings.md § context_manager](../manifests/plugin-bindings.md#context_manager-default-summarising) · [context-management](context-management.md) |
+| `context_manager.params.summarizer` | `llm` (sub-plugin of `summarising`) | `params.model` omitted → summarizer slot (Agent/MAS/`experiment.models.summarizer`) else agent's primary model. Compile does **not** invent a cheaper summarizer. | [plugin-bindings.md § summarizer](../manifests/plugin-bindings.md#summarizer-sub-plugin-of-summarising) · [summarization.md](../manifests/summarization.md) |
 
 Every block is a real registered plugin. The runtime resolves `type: react@v1`, `type: summarising`, `type: assembler`, and `type: llm` through the same registry as an explicit choice. No hidden "if omitted, do X in code" branch exists. The default *is* a binding.
 

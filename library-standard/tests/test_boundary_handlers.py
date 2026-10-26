@@ -156,6 +156,7 @@ def test_context_assembled_emits_processing_span_and_context_event() -> None:
             "context_usage": {
                 "context_window": 256000,
                 "estimated_prompt_tokens": 250,
+                "archive_view_id": "viewdeadbeef",
                 "context_parts": [{"source": "skills", "pinned": True, "tokens": 80}],
             },
         },
@@ -170,6 +171,7 @@ def test_context_assembled_emits_processing_span_and_context_event() -> None:
     assert assembled["tools"] == ["get_logs", "get_metrics"]
     assert assembled["context_usage"]["context_window"] == 256000
     assert assembled["context_usage"]["context_parts"][0]["pinned"] is True
+    assert assembled["archive_view_id"] == "viewdeadbeef"
 
     pstart = next(ev for ev in out if ev.get("kind") == "processing_call_start")
     pend = next(ev for ev in out if ev.get("kind") == "processing_call_end")
@@ -177,6 +179,8 @@ def test_context_assembled_emits_processing_span_and_context_event() -> None:
     assert pstart["context_operation"] == "PREPEND"
     assert pstart.get("parent_call_id") == "exec-1"
     assert pstart["call_id"] == pend["call_id"]
+    assert pstart["archive_view_id"] == "viewdeadbeef"
+    assert pend["archive_view_id"] == "viewdeadbeef"
 
 
 def test_cache_lookup_projects_without_creating_llm_completion() -> None:

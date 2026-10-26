@@ -69,15 +69,6 @@ from mas.runtime.contracts.base import BasePlugin  # L3->L3
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Backward-compat re-exports (moved to memory_contract.py)
-# ---------------------------------------------------------------------------
-from mas.runtime.contracts.memory_contract import (  # noqa: F401
-    RetentionPolicy,
-    WorkingMemoryAnnotation,
-)
-
-
 @dataclass
 class ContextProvenance:
     """Structured provenance for a context contribution."""
@@ -386,6 +377,7 @@ class ContextPart:
             "priority": self.priority,
             "tokens": self.token_estimate,
             "pinned": self.pinned,
+            "pin_policy": self.pin_policy,
             "restricted": self.restricted,
             "content": self.content,
             "provenance": self.provenance.to_dict() if isinstance(self.provenance, ContextProvenance) else {},
@@ -395,6 +387,12 @@ class ContextPart:
         if self.expires_after_turns is not None:
             payload["expires_after_turns"] = self.expires_after_turns
         return payload
+
+    @property
+    def pin_policy(self) -> str:
+        from mas.runtime.spec.schema_defaults_generated import CHUNK_PIN_EPHEMERAL, CHUNK_PIN_NEVER
+
+        return CHUNK_PIN_NEVER if self.pinned else CHUNK_PIN_EPHEMERAL
 
     # Convenience constructors -------------------------------------------
 

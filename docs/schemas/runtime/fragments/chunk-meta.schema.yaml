@@ -1,0 +1,40 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#chunk-meta"
+title: ChunkMeta
+description: >
+  Generic metadata every context provider (tools, catalog plugins, context
+  managers) attaches to a conversation message or archive leaf. The runtime
+  folds, pins, and projects from these fields only — it does not parse
+  provider markup.
+type: object
+additionalProperties: false
+properties:
+  message_key:
+    type: string
+    const: mas
+    default: mas
+    description: Extra OpenAI-message key that carries this object. Stripped before the provider call.
+  pin_policy:
+    type: string
+    enum: [never, prefer, ephemeral]
+    default: ephemeral
+    description: >
+      never — keep in the covering view (and fail the call if never-only
+      still overflows). prefer — shrink before never. ephemeral — fold first.
+  semantic:
+    type: string
+    enum: [catalog, instruction, history, tool_result, summary]
+    default: history
+    description: Projector selection (stub, summarize, keep).
+  source:
+    type: string
+    default: ""
+  section_id:
+    type: string
+    default: ""
+  summary_heading:
+    type: string
+    default: "[Conversation summary —"
+    description: Prefix of a summary system row. Archive fold and cover match this heading.

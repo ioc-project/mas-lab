@@ -12,20 +12,20 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from mas.runtime.boundary.control.contract import (
+    ContextUsageView,
     ControlCapability,
     ControlDenied,
     ControlEvent,
-    ContextUsageView,
     QueueAt,
-    QueueView,
     QueuedInputView,
+    QueueView,
     SessionNotStopped,
     SessionSnapshotView,
 )
 from mas.runtime.engine.llm_output_limits import estimate_model_cost_usd
+from mas.runtime.schema.observability import ObsEventKind
 from mas.runtime.session import SessionStatus
 from mas.runtime.session.snapshot import SnapshotRef, SnapshotTree
-from mas.runtime.schema.observability import ObsEventKind
 
 
 class SessionControl:
@@ -379,6 +379,10 @@ class SessionControl:
             cache_misses_by_layer=misses_by_layer,
             estimated_cost_usd=estimated_cost,
             cost_status=cost_status,
+            archive_view_id=str(usage.get("archive_view_id") or ""),
+            archive_covering_ids=tuple(str(x) for x in (usage.get("archive_covering_ids") or [])),
+            system_prefix_hash=str(usage.get("system_prefix_hash") or ""),
+            system_prefix_reused=bool(usage.get("system_prefix_reused")),
         )
         self._trace(
             "inspect_context",
@@ -392,6 +396,25 @@ class SessionControl:
             },
         )
         return view
+
+    def inspect_archive(self, session_id: str) -> dict:
+        """Dump the conversation archive tree (summaries + leaves) for debug."""
+        session = self._require("inspect_archive", session_id)
+        driver = getattr(getattr(session, "instance", None), "driver", None)
+        ctx = getattr(driver, "ctx", None)
+        store = getattr(ctx, "conversation_chunks", None)
+        dump = store.inspect() if store is not None and hasattr(store, "inspect") else {}
+        self._trace(
+            "inspect_archive",
+            session_id,
+            kind="archive_inspected",
+            payload={
+                "view_id": dump.get("view_id"),
+                "covering": len(dump.get("covering_ids") or []),
+                "leaves": len(dump.get("leaves") or []),
+            },
+        )
+        return dump
 
     def snapshot(self, session_id: str, *, label: str = "", auto_stop: bool = False) -> SnapshotRef:
         session = self._require("snapshot", session_id)

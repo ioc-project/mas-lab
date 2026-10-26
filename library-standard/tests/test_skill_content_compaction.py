@@ -4,17 +4,19 @@
 
 import json
 
-from mas.library.standard.lib.context.skill_content import (
-    drop_pinned_skill_blocks,
-    is_skill_block,
-    split_skill_content,
+from mas.library.standard.lib.context.pinned_history import (
+    drop_prefix_duplicates,
+    is_retained_instruction,
+    split_pinned_prefix,
 )
+from mas.library.standard.lib.context.working_memory import bounded_working_memory_tail
 from mas.library.standard.plugins.context.conversation import (
     SlidingWindowConversation,
     StackConversation,
     SummarizingConversation,
 )
 from mas.library.standard.plugins.context.token_budget import trim_messages_to_budget
+from mas.runtime.boundary.context.chunk_meta import attach_chunk_meta
 
 BODY = "Always end with a one-sentence summary."
 
@@ -34,7 +36,19 @@ def _activation_turn(call_id: str = "c1", name: str = "fmt", body: str = BODY) -
                 {"id": call_id, "type": "function", "function": {"name": "activate_skill", "arguments": "{}"}}
             ],
         },
-        {"role": "tool", "tool_call_id": call_id, "content": _skill_result(name, body)},
+        attach_chunk_meta(
+            {
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": _skill_result(name, body),
+            },
+            {
+                "pin_policy": "never",
+                "semantic": "instruction",
+                "section_id": f"skills/activated/{name}",
+                "source": "activate_skill",
+            },
+        ),
         {"role": "assistant", "content": "a0"},
     ]
 
@@ -50,7 +64,7 @@ def _history(n_turns: int = 6) -> list[dict]:
 
 
 def _skill_rows(messages: list[dict]) -> list[dict]:
-    return [m for m in messages if is_skill_block(m)]
+    return [m for m in messages if is_retained_instruction(m) and m.get("role") == "system"]
 
 
 def test_summarizer_never_sees_skill_body_and_body_is_retained():
@@ -61,7 +75,7 @@ def test_summarizer_never_sees_skill_body_and_body_is_retained():
     managed = cm.manage_history(_history(), 0)
 
     assert seen and BODY not in json.dumps(seen)
-    assert "[skill content retained verbatim: fmt]" in json.dumps(seen)
+    assert "[content retained verbatim: skills/activated/fmt]" in json.dumps(seen)
     assert managed[0]["content"].endswith("SUMMARY")
     rows = _skill_rows(managed)
     assert len(rows) == 1 and BODY in rows[0]["content"]
@@ -115,12 +129,12 @@ def test_stack_cap_keeps_skill_body():
 
 def test_split_ignores_user_text_that_quotes_the_tag():
     msg = {"role": "user", "content": '<skill_content name="x">hi</skill_content>'}
-    rest, retained = split_skill_content([msg])
+    rest, retained = split_pinned_prefix([msg])
     assert rest == [msg] and retained == []
 
 
 def test_trimmer_never_drops_retained_skill_rows():
-    _, retained = split_skill_content(_activation_turn())
+    _, retained = split_pinned_prefix(_activation_turn())
     messages = [{"role": "system", "content": "sys"}, *retained, *_history()[4:]]
 
     trimmed = trim_messages_to_budget(messages, max_tokens=150)
@@ -129,12 +143,39 @@ def test_trimmer_never_drops_retained_skill_rows():
     assert len(trimmed) < len(messages)
 
 
+def test_working_memory_tail_keeps_skill_tool_group():
+    """Count-slice (if a caller still passes a limit) must not drop activate_skill."""
+    history = _activation_turn()[1:]  # assistant + tool (no user)
+    for i in range(6):
+        history += [
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": f"x{i}", "function": {"name": "t", "arguments": "{}"}}],
+            },
+            {"role": "tool", "tool_call_id": f"x{i}", "content": f"r{i}"},
+        ]
+    kept = bounded_working_memory_tail(history, 4)
+    assert BODY in str(kept)
+    assert kept[-1]["tool_call_id"] == "x5"
+
+
 def test_pinned_skill_row_is_not_duplicated():
-    _, retained = split_skill_content(_activation_turn())
+    _, retained = split_pinned_prefix(_activation_turn())
     history = [*retained, {"role": "user", "content": "q"}]
 
-    pinned = drop_pinned_skill_blocks(history, '<activated_skill name="fmt">\nbody\n</activated_skill>')
-    other = drop_pinned_skill_blocks(history, '<activated_skill name="other">\nbody\n</activated_skill>')
+    pinned = drop_prefix_duplicates(history, {"skills/activated/fmt"})
+    other = drop_prefix_duplicates(history, {"skills/activated/other"})
+    unchanged = drop_prefix_duplicates(history, set())
 
     assert _skill_rows(pinned) == []
     assert len(_skill_rows(other)) == 1
+    assert unchanged == history
+
+
+def test_never_pin_tool_result_is_not_a_retained_instruction():
+    msg = attach_chunk_meta(
+        {"role": "tool", "tool_call_id": "c", "content": "payload"},
+        {"pin_policy": "never", "semantic": "tool_result", "section_id": "tools/x"},
+    )
+    assert is_retained_instruction(msg) is False

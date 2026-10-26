@@ -1,12 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-import asyncio
 import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.session.controller import SessionController
 from mas.ctl.session.manager import SessionManager
 from mas.runtime.boundary.control.contract import ControlCapability
@@ -55,6 +53,9 @@ async def test_control_rpc_unix_socket_list_and_navigate() -> None:
         assert view["cursor_snapshot_id"] == origin.ref.snapshot_id
         context = await client.ainspect_context("s1")
         assert context["available"] is False
+        archive = await client.ainspect_archive("s1")
+        assert archive.get("covers_archive") is True
+        assert archive.get("covering_ids") == []
     finally:
         await client.close()
         await server.close()

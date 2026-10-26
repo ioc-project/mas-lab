@@ -169,11 +169,10 @@ class WorkingMemoryRegistry:
 def snapshot_ctx(ctx: "AutoCtxAssembler") -> WorkingMemorySnapshot:
     """Capture the cross-turn conversation buffer off an ``AutoCtxAssembler``."""
     chunk_store = ctx.conversation_chunks
-    chunks_dict = (
-        chunk_store.to_dict()
-        if chunk_store.order or chunk_store.summary_chunk_id
-        else None
-    )
+    chunks_dict = None
+    if chunk_store.order or chunk_store.summary_chunk_id:
+        portability = str(getattr(ctx, "checkpoint_portability", "self_contained") or "self_contained")
+        chunks_dict = chunk_store.checkpoint_payload(portability)
     working_memory = getattr(ctx, "working_memory", None)
     return WorkingMemorySnapshot(
         turn_history=list(ctx.turn_history),

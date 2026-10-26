@@ -78,7 +78,7 @@ def test_hardened_overlay_validates() -> None:
 def test_pkg_refs_resolve_to_overlay_files() -> None:
     from mas.runtime.package_refs import resolve_path_ref
 
-    for name in ("with-hardened.yaml", "observability-native.yaml"):
+    for name in ("with-hardened.yaml", "observability-native.yaml", "production-memory.yaml"):
         path = resolve_path_ref(f"pkg://mas.library.standard/overlays/{name}", Path.cwd())
         assert path.is_file(), path
         assert path.name == name

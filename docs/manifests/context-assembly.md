@@ -101,7 +101,6 @@ spec:
       keep_turns: 10
       hysteresis_ratio: 0.1
       summarizer: llm            # agent's model; drop = discard older turns
-      working_memory_messages: 20
       trimmer:
         reserve_tokens: 2000
         safety_margin_ratio: 0.1
@@ -199,7 +198,6 @@ spec:
     params:
       keep_turns: 10            # recent user turns never summarized (override per agent)
       hysteresis_ratio: 0.1     # summary reuse stays within the hard safety budget
-      working_memory_messages: 20
       trimmer:
         reserve_tokens: 2000    # defaults to the effective completion budget
         safety_margin_ratio: 0.1
@@ -228,9 +226,10 @@ The kernel raises `ProviderPayloadError` if pairing is still broken after the pl
 Custom `spec.assembler` plugins must produce a paired payload.
 They can call `sanitize_provider_messages`.
 
-After each turn commit, the kernel asks the assembler plugin to apply the same recency policy to `committed_messages` and conversation chunks.
-The runtime drops folded prefix data, so snapshots stay bounded (`keep_turns`, `max_turns`, `max_messages`).
-Hysteresis still avoids re-summarizing on every in-turn LLM call.
+After each turn commit the kernel asks the assembler plugin to apply the same
+recency policy to the **covering set** (`committed_messages` is the chat
+projection of that set). Folded leaves stay in the archive; snapshots serialize
+the full tree. Hysteresis still avoids re-summarizing every in-turn LLM call.
 
 A `context_manager` value must be a plugin name or a `{type, ref, params}` object.
 Any other value is a hard error at `mas-ctl compile` or `validate` time.
@@ -238,13 +237,13 @@ At assemble time the kernel is lenient.
 It treats a malformed value that bypassed `mas-ctl` as omitted and uses the default context manager, so one bad field cannot fail every turn.
 See [plugin-bindings.md](plugin-bindings.md#two-shapes).
 
-## Working memory count cap
+---
 
-`working_memory_messages` limits how many in-turn working-memory (WM) rows assembly considers.
-The default is **20**, and the alias is `max_in_turn_messages`.
-Tool groups are atomic.
-The limit is independent of `trimmer`.
-When neither key is set, a `max_messages` value (the `stack` cap) sets this limit too.
+## Working memory count cap (deprecated)
+
+`working_memory_messages` is accepted and **ignored**. Live tool rows are kept
+until the token trimmer (model window minus completion reserve) needs space.
+See [context-management](../references/context-management.md).
 
 ### Not used yet
 

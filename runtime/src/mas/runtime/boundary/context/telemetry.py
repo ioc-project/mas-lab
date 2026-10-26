@@ -126,6 +126,10 @@ def record_context_assembly(
     context_window: int | None = None,
     completion_reserve: int | None = None,
     context_parts: list[dict[str, Any]] | None = None,
+    archive_view_id: str = "",
+    archive_covering_ids: list[str] | None = None,
+    system_prefix_hash: str = "",
+    system_prefix_reused: bool = False,
 ) -> dict[str, Any]:
     """Log the exact messages[] snapshot sent to the LLM (pre-call).
 
@@ -161,6 +165,10 @@ def record_context_assembly(
             }
             for part in (context_parts or [])
         ],
+        "archive_view_id": str(archive_view_id or ""),
+        "archive_covering_ids": list(archive_covering_ids or []),
+        "system_prefix_hash": str(system_prefix_hash or ""),
+        "system_prefix_reused": bool(system_prefix_reused),
     }
     if observability is None or not messages:
         return usage

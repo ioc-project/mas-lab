@@ -102,7 +102,7 @@ Legend: ✅ implemented, ⚠️ partial, ❌ not implemented, 🔲 out of scope.
 | Re-activation counter for telemetry | ✅ | `SkillSessionState.notices` |
 | Catalog pinned against context compaction | ✅ | `ContextPart.skills(…, pinned=True)` |
 | Activated skill body pinned against compaction | ✅ | `ActivatedSkillsContextPlugin` emits activated bodies as pinned `SYSTEM_SKILLS` parts |
-| Skill tool outputs exempt from history compaction | ✅ | library-standard context managers keep `<skill_content>` blocks out of summaries and drops (`lib/context/skill_content.py`) |
+| Skill tool outputs exempt from history compaction | ✅ | `activate_skill` attaches `chunk.pin_policy: never`; context managers fold from that metadata (`lib/context/pinned_history.py`) |
 | Subagent delegation (optional) | 🔲 | Advanced; MAS Lab supports multi-agent patterns separately |
 
 ---

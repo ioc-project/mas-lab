@@ -31,19 +31,25 @@ def h_context_assembled(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         total_tokens = ev.get("total_tokens") or sum(
             int(s.get("tokens") or 0) for s in segments
         )
+    usage = ev.get("context_usage") if isinstance(ev.get("context_usage"), dict) else {}
+    archive_view_id = str(ev.get("archive_view_id") or usage.get("archive_view_id") or "")
+    annotation: Dict[str, Any] = {
+        "segments": segment_count,
+        "total_tokens": total_tokens,
+    }
+    if archive_view_id:
+        annotation["archive_view_id"] = archive_view_id
+    attrs: Dict[str, Any] = {
+        "mas.boundary": "CallAnnotation",
+        "mas.agent.id": conv.agent_id(ev),
+        "mas.annotation.kind": "context_assembled",
+        "mas.annotation.content": json.dumps(annotation),
+    }
+    if archive_view_id:
+        attrs["mas.archive.view_id"] = archive_view_id
     conv.point_span(
         "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": "context_assembled",
-            "mas.annotation.content": json.dumps(
-                {
-                    "segments": segment_count,
-                    "total_tokens": total_tokens,
-                }
-            ),
-        },
+        attrs,
         ev.get("parent_call_id"),
         ts_ns=conv.ts_ns(ev),
     )

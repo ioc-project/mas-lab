@@ -375,6 +375,8 @@ def _boundary_context_assembled(
     _proc_call_id = (
         ctx.next_interval_call_id(cid, "PROCESSING_CALL:context_assembly") if cid else ""
     )
+    _usage = payload.get("context_usage") if isinstance(payload.get("context_usage"), dict) else {}
+    _archive_view_id = str(_usage.get("archive_view_id") or "")
     _proc_common = {
         **base,
         "call_id": _proc_call_id,
@@ -383,6 +385,8 @@ def _boundary_context_assembled(
         "context_operation": _operation,
         "messages": _asm_msgs,
     }
+    if _archive_view_id:
+        _proc_common["archive_view_id"] = _archive_view_id
     _proc_start = {"kind": "processing_call_start", "timestamp": ts, **_proc_common}
     _proc_end = {
         "kind": "processing_call_end",
@@ -406,8 +410,10 @@ def _boundary_context_assembled(
         _ca["messages"] = _asm_msgs
     if isinstance(payload.get("tools"), list):
         _ca["tools"] = list(payload["tools"])
-    if isinstance(payload.get("context_usage"), dict):
-        _ca["context_usage"] = dict(payload["context_usage"])
+    if _usage:
+        _ca["context_usage"] = dict(_usage)
+    if _archive_view_id:
+        _ca["archive_view_id"] = _archive_view_id
     out: list[dict] = [
         _with_parent(_proc_start, record, ctx),
         _ca,

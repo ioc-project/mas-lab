@@ -1,63 +1,61 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Rewrite stored committed history to the context manager's recency cap."""
+"""Assemble the model request from the archive covering set.
+
+The archive always holds every leaf. The covering set is an internal id list
+(summary nodes and/or verbatim leaves). ``project_messages`` / ``committed_messages``
+are the chat rows sent to the model. When the next request would exceed the
+window, older covering entries fold into a summary; under-budget runs leave
+both stores untouched.
+"""
 
 from __future__ import annotations
 
 from typing import Any
 
+from mas.library.standard.lib.context.history_budget import (
+    context_manager_history_budget_hint,
+)
 from mas.library.standard.lib.context.payload import split_user_turns
+from mas.library.standard.lib.context.spec import configure_archive_store
+from mas.runtime.boundary.context.archive import ConversationChunkStore
 from mas.runtime.boundary.context.assembly_cache import cached_context_manager
-from mas.runtime.boundary.context.conversation_chunks import ConversationChunkStore
 
 
-def _storage_turn_cap(cm: Any) -> int | None:
-    for attr in ("keep_turns", "max_turns"):
-        raw = getattr(cm, attr, None)
-        if raw is not None:
-            try:
-                cap = int(raw)
-            except (TypeError, ValueError):
-                continue
-            if cap >= 1:
-                return cap
-    return None
+def _turn_history_to_past(turn_history: list[tuple[str, str]]) -> list[dict[str, Any]]:
+    past: list[dict[str, Any]] = []
+    for user_q, assistant_a in turn_history:
+        past.append({"role": "user", "content": user_q})
+        if assistant_a.strip():
+            past.append({"role": "assistant", "content": assistant_a})
+    return past
 
 
-def _storage_message_cap(cm: Any) -> int | None:
-    raw = getattr(cm, "max_messages", None)
-    if raw is None:
-        return None
-    try:
-        cap = int(raw)
-    except (TypeError, ValueError):
-        return None
-    return cap if cap >= 1 else None
-
-
-def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None:
-    """Rewrite ``ctx`` committed history to the context manager's bounded view."""
+def request_history(ctx: Any, *, manifest: dict | None = None) -> list[dict[str, Any]]:
+    """Chat messages for the covering set (or committed fallback)."""
     store = getattr(ctx, "conversation_chunks", None)
+    if isinstance(store, ConversationChunkStore):
+        configure_archive_store(store, ctx, manifest)
+        if store.order or store.summary_chunk_id:
+            return store.project_messages()
     committed = list(getattr(ctx, "committed_messages", []) or [])
-    if isinstance(store, ConversationChunkStore) and (store.order or store.summary_chunk_id):
-        past = store.project_messages()
-    else:
-        past = committed
-    if not past:
-        return
+    if committed:
+        return committed
+    return _turn_history_to_past(list(getattr(ctx, "turn_history", []) or []))
 
-    resolved = manifest if manifest is not None else getattr(ctx, "manifest", None)
-    cm = cached_context_manager(ctx, resolved)
-    turn_cap = _storage_turn_cap(cm)
-    n_turns = len(split_user_turns(past))
-    over_turns = turn_cap is not None and n_turns > turn_cap
-    msg_cap = _storage_message_cap(cm)
-    over_msgs = msg_cap is not None and len(past) > msg_cap
-    if not over_turns and not over_msgs:
-        return
-    managed = cm.manage_history(past, 1)
-    if managed == past:
-        return
+
+def apply_request_view(
+    ctx: Any,
+    managed: list[dict[str, Any]],
+    *,
+    manifest: dict | None = None,
+) -> None:
+    """Align the covering set with assembled history; leaves stay stored."""
+    store = getattr(ctx, "conversation_chunks", None)
+    if isinstance(store, ConversationChunkStore):
+        configure_archive_store(store, ctx, manifest)
+        if store.order or store.summary_chunk_id:
+            store.cover_with_managed(managed)
 
     if isinstance(getattr(ctx, "committed_messages", None), list):
         ctx.committed_messages[:] = list(managed)
@@ -65,12 +63,29 @@ def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None
         ctx.committed_messages = list(managed)
 
     history = getattr(ctx, "turn_history", None)
-    if isinstance(history, list):
-        n_managed_turns = len(split_user_turns(managed))
-        if n_managed_turns == 0:
-            ctx.turn_history = []
-        elif len(history) > n_managed_turns:
-            ctx.turn_history = history[-n_managed_turns:]
+    if not isinstance(history, list):
+        return
+    n_managed_turns = len(split_user_turns(managed))
+    if n_managed_turns == 0:
+        ctx.turn_history = []
+    elif len(history) > n_managed_turns:
+        ctx.turn_history = history[-n_managed_turns:]
 
-    if isinstance(store, ConversationChunkStore):
-        store.replace_with(split_user_turns(managed))
+
+def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None:
+    """Fold the covering prefix when the next request would not fit.
+
+    Leaves stay stored. Under-budget ``managed == past`` is a no-op, so a run
+    that never hit the window keeps the same committed bytes as before.
+    """
+    resolved = manifest if manifest is not None else getattr(ctx, "manifest", None)
+    past = request_history(ctx, manifest=resolved)
+    if not past:
+        return
+
+    cm = cached_context_manager(ctx, resolved)
+    budget = context_manager_history_budget_hint(resolved, fixed_context_tokens=0)
+    managed = cm.manage_history(past, budget)
+    if managed == past:
+        return
+    apply_request_view(ctx, managed, manifest=resolved)

@@ -5,14 +5,13 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
 
-from mas.library.standard.plugins.context.assembler import ContextAssemblerPlugin
-from mas.library.standard.plugins.context.conversation import StackConversation
 from mas.library.standard.lib.context.working_memory import (
     bounded_working_memory_tail,
     working_memory_slice_limit,
 )
+from mas.library.standard.plugins.context.assembler import ContextAssemblerPlugin
+from mas.library.standard.plugins.context.conversation import StackConversation
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.boundary.context.provider_invariant import assert_provider_payload
 from mas.runtime.driver.mocks import AutoCtxAssembler
@@ -226,39 +225,36 @@ def _record_malformed_get_metrics_retry(ctx: AutoCtxAssembler, n: int) -> None:
     )
 
 
-def test_issue_65_stuck_retry_loop_ages_out_of_working_memory() -> None:
-    """Regression for #65: a stuck malformed-tool-call loop must not pin every
-    repeat into the prompt forever — old attempts should age out like any other
-    over-limit working memory, instead of only the newest ones ever being seen.
-    """
+def test_issue_65_stuck_retry_loop_ages_out_under_token_budget() -> None:
+    """A stuck retry loop is kept by default; the token trimmer ages oldest groups."""
     ctx = AutoCtxAssembler(last_user_text="plan a weekend trip to Celestia")
-    for n in range(1, 16):  # 15 retries = 30 messages, well past the default cap of 20
+    for n in range(1, 16):
         _record_malformed_get_metrics_retry(ctx, n)
     assert len(ctx.working_memory.messages) == 30
 
-    # Repro: pre-#65-fix behaviour had no cap at all — every retry pinned forever.
-    with patch(
-        "mas.library.standard.plugins.context.assembler.working_memory_slice_limit",
-        return_value=0,
-    ):
-        unbounded = assemble_llm_messages(ctx)
+    unbounded = assemble_llm_messages(ctx)
     unbounded_tool_msgs = [m for m in unbounded if m.get("role") == "tool"]
-    assert len(unbounded_tool_msgs) == 15, "sanity: with no cap, every retry is still present (the bug)"
+    assert len(unbounded_tool_msgs) == 15
+    assert_provider_payload(unbounded)
 
-    # Fix: default behaviour is capped at 20 messages / 10 tool exchanges,
-    # tool-group-atomic, keeping only the most recent retries.
-    bounded = assemble_llm_messages(ctx)
-    bounded_tool_msgs = [m for m in bounded if m.get("role") == "tool"]
-    assert len(bounded_tool_msgs) == 10
-    assert bounded_tool_msgs[0]["tool_call_id"] == "call_6"  # oldest 5 retries aged out
-    assert bounded_tool_msgs[-1]["tool_call_id"] == "call_15"  # latest retry always visible
-    assert_provider_payload(bounded)
+    tight = assemble_llm_messages(
+        ctx,
+        manifest={
+            "spec": {
+                "context_manager": {
+                    "params": {"trimmer": {"max_tokens": 80, "reserve_tokens": 0, "safety_margin_ratio": 0}}
+                }
+            }
+        },
+    )
+    tight_tool_msgs = [m for m in tight if m.get("role") == "tool"]
+    assert len(tight_tool_msgs) < 15
+    assert tight_tool_msgs[-1]["tool_call_id"] == "call_15"
+    assert_provider_payload(tight)
 
 
-def test_working_memory_messages_configurable_via_manifest() -> None:
-    """``working_memory_messages`` must be usable alongside any context_manager
-    type — it's a generic assembly knob, not a ConversationStrategy ctor kwarg.
-    """
+def test_working_memory_messages_is_ignored() -> None:
+    """Deprecated count cap is accepted in YAML and has no effect."""
     ctx = AutoCtxAssembler(last_user_text="plan a weekend trip to Celestia")
     for n in range(1, 6):
         _record_malformed_get_metrics_retry(ctx, n)
@@ -267,24 +263,15 @@ def test_working_memory_messages_configurable_via_manifest() -> None:
     }
     messages = assemble_llm_messages(ctx, manifest=manifest)
     tool_msgs = [m for m in messages if m.get("role") == "tool"]
-    assert len(tool_msgs) == 2  # 4-message cap = 2 tool-call groups
-    assert tool_msgs[-1]["tool_call_id"] == "call_5"
+    assert len(tool_msgs) == 5
     assert_provider_payload(messages)
 
 
-def test_working_memory_slice_limit_defaults_to_twenty() -> None:
-    assert working_memory_slice_limit(None) == 20
-    assert working_memory_slice_limit({"spec": {"context_manager": {"params": {"working_memory_messages": 3}}}}) == 3
-
-
-def test_working_memory_slice_limit_degrades_on_malformed_context_manager() -> None:
-    """A hand-built manifest that bypassed ctl validation must not fail the turn.
-
-    ``ctl`` rejects a non-str/dict ``spec.context_manager`` at compile time;
-    the runtime read here degrades to the default instead of raising.
-    """
-    assert working_memory_slice_limit({"spec": {"context_manager": ["not", "a", "binding"]}}) == 20
-    assert working_memory_slice_limit({"spec": {"context_manager": 42}}) == 20
+def test_working_memory_slice_limit_is_unbounded() -> None:
+    assert working_memory_slice_limit(None) == 0
+    assert working_memory_slice_limit({"spec": {"context_manager": {"params": {"working_memory_messages": 3}}}}) == 0
+    assert working_memory_slice_limit({"spec": {"context_manager": ["not", "a", "binding"]}}) == 0
+    assert working_memory_slice_limit({"spec": {"context_manager": 42}}) == 0
 
 
 def test_bounded_working_memory_tail_never_splits_tool_group() -> None:

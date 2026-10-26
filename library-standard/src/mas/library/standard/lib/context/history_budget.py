@@ -23,7 +23,6 @@ from mas.runtime.spec.defaults import (
     DEFAULT_KEEP_TURNS,
     DEFAULT_MODEL_CONTEXT_WINDOW,
     DEFAULT_MODEL_MAX_TOKENS,
-    DEFAULT_WORKING_MEMORY_MESSAGES,
 )
 
 _log = logging.getLogger(__name__)
@@ -336,8 +335,6 @@ def fill_context_manager_defaults(spec: dict[str, Any]) -> None:
     elif _is_sliding_type(cm_type) or not cm_type:
         params.setdefault("keep_turns", keep)
         params.setdefault("window_size", keep)
-
-    params.setdefault("working_memory_messages", DEFAULT_WORKING_MEMORY_MESSAGES)
 
     trimmer = params.get("trimmer")
     if not isinstance(trimmer, dict):

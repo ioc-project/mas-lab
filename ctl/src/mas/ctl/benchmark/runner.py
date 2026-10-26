@@ -14,9 +14,8 @@ from typing import Any
 from mas.ctl.adapters.memory_seed import MemorySeed, MemorySeedLoader, apply_memory_seeds
 from mas.ctl.benchmark.runner_dispatch import mas_manifest_path
 from mas.ctl.compose.models import ResolvedInfra
-from mas.ctl.compose.runner import ComposeRequest, ComposeResult, compose_run
+from mas.ctl.compose.runner import ComposeRequest, compose_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
-from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.executor.mas_session import (
     agent_manifest_label,
     entry_agent_id,
@@ -27,10 +26,10 @@ from mas.ctl.executor.mas_session import (
 )
 from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
 from mas.ctl.infra.resolve import resolve_infra_refs
+from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.session.bootstrap import InstantiationOptions, hitl_contract_for_mode, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
-from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.lab.manifest.load import (
     agent_manifest_from_path,
     entry_agent_from_compose,
@@ -40,6 +39,7 @@ from mas.lab.manifest.load import (
 )
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
 from mas.lab.runners.protocol import RunResult
+from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.runtime.run_artifact import RunArtifact
 
 logger = logging.getLogger(__name__)
@@ -406,6 +406,7 @@ class MasBenchRunner:
             return self._standalone_controller_target(
                 entry_manifest=entry_manifest,
                 entry_manifest_path=entry_manifest_path,
+                events_file=str(output_dir / "traces" / "events.jsonl"),
                 infra_refs=infra_refs,
                 checkpoint_path=checkpoint_path,
                 checkpoint_dir=checkpoint_dir,
@@ -464,6 +465,7 @@ class MasBenchRunner:
                     experiment_default_model=experiment_default_model,
                     experiment_model_slots=experiment_model_slots,
                     hitl_contract=hitl_contract_for_mode("auto"),
+                    events_file=str(output_dir / "traces" / "events.jsonl"),
                 ),
             )
             _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -554,6 +556,7 @@ class MasBenchRunner:
         workspace_root: Path | None = None,
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
+        events_file: str | None = None,
     ) -> _ControllerTarget:
         workspace = WorkspaceConfig.load(workspace_root or entry_manifest_path.parent)
         user = UserConfig.load()
@@ -583,6 +586,7 @@ class MasBenchRunner:
                 experiment_default_model=experiment_default_model,
                 experiment_model_slots=experiment_model_slots,
                 hitl_contract=hitl_contract_for_mode("auto"),
+                events_file=events_file,
             ),
         )
         _attach_tool_fixtures([instance], tool_fixtures, run_params)

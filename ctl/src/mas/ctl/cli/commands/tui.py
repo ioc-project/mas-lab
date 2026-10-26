@@ -9,10 +9,10 @@ from pathlib import Path
 import click
 from mas.ctl.cli.bind_flags import bind_option, with_binds
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
-from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, close_observability
 from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
+from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.observability import setup_observability
 from mas.ctl.ui.curses_app import build_curses_controller, run_curses_session
 
@@ -135,6 +135,15 @@ def tui_cmd(
             runtime_refs_cli=runtime_refs_cli,
             anchor=session.manifest_dir or session.original_cwd,
         )
+        obs_cfg = resolve_observability_config(
+            events=events,
+            events_file=events_file,
+            events_stdout=events_stdout,
+            events_format=events_format,
+            agent_id=require_agent_id_from_manifest(agent_data),
+            manifest=agent_data,
+            flavour_spec=flavour_spec,
+        )
         instance, store = instantiate_runtime(
             InstantiationOptions(
                 pattern_plugin_id=plugin,
@@ -146,19 +155,11 @@ def tui_cmd(
                 workspace=workspace,
                 runtime_refs_cli=runtime_refs_cli,
                 model_override=model,
+                events_file=obs_cfg.events_file,
             ),
             hitl=hitl_responder,
         )
 
-        obs_cfg = resolve_observability_config(
-            events=events,
-            events_file=events_file,
-            events_stdout=events_stdout,
-            events_format=events_format,
-            agent_id=require_agent_id_from_manifest(agent_data),
-            manifest=agent_data,
-            flavour_spec=flavour_spec,
-        )
         obs_rec = setup_observability(
             instance,
             obs_cfg,

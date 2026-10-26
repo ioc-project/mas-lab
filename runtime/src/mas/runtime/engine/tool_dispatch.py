@@ -12,8 +12,8 @@ from mas.runtime.engine.tool_routing import ExplicitToolUnavailableError, Unclai
 
 if TYPE_CHECKING:
     from mas.runtime.boundary.delegation.protocol import DelegationContract
-    from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
     from mas.runtime.boundary.engine_tools import EngineToolContract
+    from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
 
 
 class ToolExecutionError(RuntimeError):
@@ -71,18 +71,22 @@ class _DelegationEngineTool:
         )
 
 
-def format_tool_result(result: Any) -> str:
+def format_tool_result(result: Any, *, ctx: Any = None, call_id: str = "") -> str:
     """Format tool result as string for LLM consumption.
 
-    Agent-initiated HITL (via request_human_input) is now fully synchronous:
-    the wrapper blocks until resolution, so the result is always the user's
-    choice, not a marker. No special HITL detection needed here.
+    A ``chunk`` key on a dict result is generic archive metadata — it is
+    stashed on ``ctx`` and omitted from the model-facing JSON.
     """
-    if isinstance(result, str):
-        return result
-    if isinstance(result, dict):
-        return json.dumps(result, indent=2)
-    return str(result)
+    from mas.runtime.boundary.context.chunk_meta import pop_tool_chunk, stash_pending_chunk_meta
+
+    payload, meta = pop_tool_chunk(result)
+    if ctx is not None and meta:
+        stash_pending_chunk_meta(ctx, call_id, meta)
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, dict):
+        return json.dumps(payload, indent=2)
+    return str(payload)
 
 
 def _sandbox_for(ctx: Any, sandbox: Any) -> Any:
@@ -147,7 +151,7 @@ def _dispatch_once(
         )
     except (ManifestToolLoadError, UnclaimedToolError, ExplicitToolUnavailableError) as exc:
         raise ToolExecutionError(str(exc)) from exc
-    return format_tool_result(result)
+    return format_tool_result(result, ctx=ctx, call_id=caller_call_id)
 
 
 def _call_with_tool_retry(

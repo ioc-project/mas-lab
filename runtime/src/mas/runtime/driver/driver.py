@@ -1191,7 +1191,7 @@ class KernelDriver:
             return
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
-        for row, call_id in project_new(new_rows, extra_messages=extra):
+        for row, call_id in project_new(new_rows, extra_messages=extra, ctx=ctx):
             kind = str(getattr(row, "response_kind", "") or "")
             next_step = str(getattr(row, "next_step", "") or "")
             # Same events as before the copier: tool_call and tool result.

@@ -131,7 +131,6 @@ spec:
       hysteresis_ratio: 0.1
       summarizer: llm          # sub-plugin; ≡ {type: llm}. Alternative: drop
       # summarizer: {type: llm, params: {model: gpt-4o-mini}}  # cheaper summary LLM
-      working_memory_messages: 20
       trimmer:
         reserve_tokens: 2000   # effective completion budget
         safety_margin_ratio: 0.1

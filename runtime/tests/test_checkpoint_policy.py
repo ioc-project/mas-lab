@@ -1,7 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 import pytest
-
 from mas.runtime.spec.checkpoint import CheckpointPolicy, CheckpointSpecError, parse_checkpoint_policy
 from mas.runtime.spec.parser import parse_agent_spec
 
@@ -46,6 +45,17 @@ def test_checkpoint_storage_is_independent_of_cadence() -> None:
     assert hybrid.resolved_storage() == "hybrid"
     assert hybrid.uses_disk() is True
     assert hybrid.uses_memory() is True
+
+
+def test_checkpoint_portability_aliases_deep_and_shallow() -> None:
+    deep = parse_checkpoint_policy({"portability": "deep"})
+    assert deep.portability == "self_contained"
+    assert deep.is_deep() is True
+    assert deep.is_shallow() is False
+    shallow = parse_checkpoint_policy({"portability": "shallow"})
+    assert shallow.portability == "reference"
+    assert shallow.is_shallow() is True
+    assert parse_checkpoint_policy({"portability": "self_contained"}).is_deep() is True
 
 
 def test_checkpoint_storage_aliases_legacy_mode() -> None:

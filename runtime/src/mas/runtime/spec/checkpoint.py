@@ -47,11 +47,36 @@ class CheckpointPolicy:
     def uses_memory(self) -> bool:
         return self.resolved_storage() in {"memory", "hybrid"}
 
+    def is_shallow(self) -> bool:
+        """True when the checkpoint stores pointers into a persisted archive."""
+        return self.portability == "reference"
+
+    def is_deep(self) -> bool:
+        """True when the checkpoint hydrates every archive payload."""
+        return self.portability == "self_contained"
+
 
 _MODES = {"none", "in_memory", "on_event", "every_turn"}
 _STORAGE_KINDS = {"memory", "disk", "hybrid"}
 _TRIGGERS = {"after_llm_call", "after_tool_call", "before_destructive_tool", "every_n_turns"}
 _RETENTION_MODES = {"all", "single", "last_n"}
+_PORTABILITY_ALIASES = {
+    "self_contained": "self_contained",
+    "deep": "self_contained",
+    "reference": "reference",
+    "shallow": "reference",
+}
+
+
+def canonicalize_portability(raw: Any) -> str:
+    """Map ``deep``/``shallow`` onto ``self_contained``/``reference``."""
+    key = str(raw or "self_contained").strip()
+    kind = _PORTABILITY_ALIASES.get(key)
+    if kind is None:
+        raise CheckpointSpecError(
+            "spec.checkpoint.portability must be self_contained/deep or reference/shallow"
+        )
+    return kind
 
 
 def _parse_storage(raw: Any) -> tuple[str, str]:
@@ -125,9 +150,7 @@ def parse_checkpoint_policy(raw: Any) -> CheckpointPolicy:
     if not isinstance(retention_n, int) or isinstance(retention_n, bool) or retention_n < 1:
         raise CheckpointSpecError("spec.checkpoint.retention.n must be an integer >= 1")
 
-    portability = raw.get("portability", "self_contained")
-    if portability not in {"self_contained", "reference"}:
-        raise CheckpointSpecError("spec.checkpoint.portability must be self_contained or reference")
+    portability = canonicalize_portability(raw.get("portability", "self_contained"))
     auto_resume_latest = raw.get("auto_resume_latest", False)
     if not isinstance(auto_resume_latest, bool):
         raise CheckpointSpecError("spec.checkpoint.auto_resume_latest must be a boolean")

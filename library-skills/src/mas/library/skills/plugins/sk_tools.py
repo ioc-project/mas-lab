@@ -368,6 +368,12 @@ class SkillToolsPlugin(ToolContract):
             "content": content,
             "skill": name,
             "base_dir": str(record.base_dir),
+            "chunk": {
+                "pin_policy": "never",
+                "semantic": "instruction",
+                "source": "activate_skill",
+                "section_id": f"skills/activated/{name}",
+            },
         }
         # Include compatibility note so the model can check environment requirements
         if record.compatibility:

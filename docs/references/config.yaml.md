@@ -75,6 +75,9 @@ The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and ru
 | `trace_timestamps` | bool | `true` when tracing | UTC time and elapsed time on each exchange |
 | `trace_color` | bool | `false` | ANSI color. Opt-in. Same as `--trace-color`. |
 | `trace_engine` | bool | `false` | Raw engine I/O JSON. Same as `--trace-engine` or `-vv`. |
+| `archive.enabled` | bool | `false` | Persist the conversation archive next to `events.jsonl`. Must stay false unless you opt in — a path or an events file does not turn it on. |
+| `archive.dir_name` | string | `archive` | Folder name colocated with `events.jsonl` when enabled. |
+| `archive.memory_watermark_bytes` | int | `67108864` | RAM cache cap after chunks are on disk. `0` = keep payloads in RAM. |
 
 ```yaml
 mas_ctl:
@@ -84,6 +87,10 @@ mas_ctl:
   # trace_timestamps: true
   # trace_color: false    # never implied by trace: summary
   # trace_engine: false
+  # archive:
+  #   enabled: false
+  #   dir_name: archive
+  #   memory_watermark_bytes: 67108864
 ```
 
 On the CLI, `--trace` is the one-shot form of `trace: summary`. `--trace full` is `trace: full`. `--no-trace` disables a config default.
@@ -124,6 +131,7 @@ See [runtime/docs/agent-defaults.md](https://github.com/ioc-project/mas-lab/blob
 | `labs_dir` | Benchmark run output root |
 | `cache_dir` | Cache root (trace cache defaults to `<cache_dir>/traces` when set) |
 | `runs_dir` | Agent session run folders |
+| `archive_dir` | Folder used only when `mas_ctl.archive.enabled` is true. Setting the path does not persist. Relative to the app root. |
 
 Env overrides: [user-config.md](../user-config.md). Relative paths resolve from **the directory of the config file that declared them**.
 

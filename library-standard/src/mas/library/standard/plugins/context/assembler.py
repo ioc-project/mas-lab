@@ -78,23 +78,30 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from mas.library.standard.plugins.context.token_budget import (
-    estimate_tool_tokens,
-    estimate_tokens,
-    trim_messages_to_budget,
+from mas.library.standard.lib.context.committed_history import (
+    apply_request_view,
+    request_history,
+)
+from mas.library.standard.lib.context.committed_history import (
+    compact_committed_history as compact_request_view,
 )
 from mas.library.standard.lib.context.history_budget import (
     assembly_trimmer_params,
     context_manager_history_budget_hint,
 )
 from mas.library.standard.lib.context.payload import sanitize_provider_messages
-from mas.library.standard.lib.context.skill_content import drop_pinned_skill_blocks
+from mas.library.standard.lib.context.pinned_history import drop_prefix_duplicates
 from mas.library.standard.lib.context.working_memory import (
     bounded_working_memory_tail,
     working_memory_slice_limit,
 )
+from mas.library.standard.plugins.context.token_budget import (
+    estimate_tokens,
+    estimate_tool_tokens,
+    trim_messages_to_budget,
+)
 from mas.runtime.boundary.context.assembly_cache import cached_context_manager
-from mas.runtime.boundary.context.conversation_chunks import ConversationChunkStore
+from mas.runtime.boundary.context.chunk_meta import PIN_EPHEMERAL, PIN_NEVER
 from mas.runtime.boundary.context.working_memory import WorkingMemoryStore
 from mas.runtime.contracts.base import BasePlugin
 from mas.runtime.contracts.cm_factory import CMFactory
@@ -185,15 +192,6 @@ class _NoOpContextManager(ContextManagerContract):
         return past
 
 
-def _turn_history_to_past(turn_history: list[tuple[str, str]]) -> list[dict[str, Any]]:
-    past: list[dict[str, Any]] = []
-    for user_q, assistant_a in turn_history:
-        past.append({"role": "user", "content": user_q})
-        if assistant_a.strip():
-            past.append({"role": "assistant", "content": assistant_a})
-    return past
-
-
 def inject_context_plugins(
     ctx: Any,
     system_parts: list[str],
@@ -231,6 +229,7 @@ def inject_context_plugins(
                         "placement": str(getattr(part.placement, "value", part.placement)),
                         "tokens": int(part.token_estimate or 0),
                         "pinned": bool(part.pinned),
+                        "pin_policy": PIN_NEVER if part.pinned else PIN_EPHEMERAL,
                     }
                 )
 
@@ -345,16 +344,7 @@ class ContextAssemblerPlugin(BasePlugin):
         if system_parts:
             messages.append({"role": "system", "content": "\n\n".join(system_parts)})
 
-        chunk_store = getattr(ctx, "conversation_chunks", None)
-        committed = list(getattr(ctx, "committed_messages", []) or [])
-        if isinstance(chunk_store, ConversationChunkStore) and (
-            chunk_store.order or chunk_store.summary_chunk_id
-        ):
-            past = chunk_store.project_messages()
-        elif committed:
-            past = list(committed)
-        else:
-            past = _turn_history_to_past(list(getattr(ctx, "turn_history", []) or []))
+        past = request_history(ctx, manifest=manifest)
 
         last_user_text = str(getattr(ctx, "last_user_text", "") or "")
         store = getattr(ctx, "working_memory", None)
@@ -381,8 +371,15 @@ class ContextAssemblerPlugin(BasePlugin):
                 fixed_context_tokens=fixed_context_tokens,
             ),
         )
-        # A skill pinned in SYSTEM_SKILLS needs no second copy in history.
-        messages.extend(drop_pinned_skill_blocks(managed, "\n\n".join(system_parts)))
+        if managed != past:
+            apply_request_view(ctx, managed, manifest=manifest)
+        pinned_ids = {
+            str(part.get("section_id") or "")
+            for part in part_usage
+            if part.get("section_id")
+            and (part.get("pin_policy") == PIN_NEVER or part.get("pinned"))
+        }
+        messages.extend(drop_prefix_duplicates(managed, pinned_ids))
         if last_user_text:
             messages.append({"role": "user", "content": last_user_text})
 
@@ -410,12 +407,8 @@ class ContextAssemblerPlugin(BasePlugin):
         return sanitize_provider_messages(messages)
 
     def compact_committed_history(self, ctx: Any, *, manifest: Optional[Dict[str, Any]] = None) -> None:
-        """Rewrite stored committed history to the context manager's recency cap."""
-        from mas.library.standard.lib.context.committed_history import (
-            compact_committed_history as _compact,
-        )
-
-        _compact(ctx, manifest=manifest if manifest is not None else self._manifest)
+        """Fold the covering set after a turn commit; next request is re-assembled."""
+        compact_request_view(ctx, manifest=manifest if manifest is not None else self._manifest)
 
     def on_pre_llm_call(self, hook_data: Dict[str, Any], **_: Any) -> Dict[str, Any]:
         """Called by PluginRegistry before every LLM call.

@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import json
 
-from mas.runtime.boundary.context.provider_invariant import assert_provider_payload
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.boundary.context.conversation_chunks import (
     ConversationChunkStore,
     SummaryChunk,
 )
+from mas.runtime.boundary.context.provider_invariant import assert_provider_payload
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemorySnapshot,
     restore_ctx,
@@ -125,7 +125,8 @@ def test_turn_commit_keeps_chunks_while_under_keep_turns() -> None:
     assert projected[0]["content"] == "q0"
 
 
-def test_turn_commit_bounds_history_to_keep_turns() -> None:
+def test_turn_commit_folds_when_under_token_budget_keeps_archive() -> None:
+    """Short chats never fold. Archive still holds every leaf."""
     ctx = AutoCtxAssembler(
         manifest={
             "spec": {
@@ -139,33 +140,26 @@ def test_turn_commit_bounds_history_to_keep_turns() -> None:
     for i in range(6):
         ctx.note_user_input(f"q{i}")
         ctx.note_agent_response(f"a{i}")
-    contents = [m.get("content") for m in ctx.committed_messages]
-    assert "q0" not in contents
-    assert "q5" in contents
-    assert len(ctx.conversation_chunks.order) == 2
-    assert [m.get("content") for m in ctx.conversation_chunks.project_messages() if m.get("role") == "user"] == [
-        "q4",
-        "q5",
-    ]
-    assert len(ctx.turn_history) == 2
+    users = [m.get("content") for m in ctx.committed_messages if m.get("role") == "user"]
+    assert users == [f"q{i}" for i in range(6)]
     store = ctx.conversation_chunks
-    assert set(store.chunks) == set(store.order)
+    assert len(store.order) == 6
+    assert store.covers_archive()
     blob = json.dumps(snapshot_ctx(ctx).conversation_chunks)
-    assert "q0" not in blob
-    assert "q1" not in blob
+    assert "q0" in blob
     assert "q5" in blob
 
 
-def test_turn_commit_bounds_default_keep_turns() -> None:
+def test_turn_commit_default_keeps_full_short_chat() -> None:
     ctx = AutoCtxAssembler()
     for i in range(12):
         ctx.note_user_input(f"q{i}")
         ctx.note_agent_response(f"a{i}")
     contents = [m.get("content") for m in ctx.committed_messages]
-    assert "q0" not in contents
+    assert "q0" in contents
     assert "q11" in contents
-    assert len(ctx.conversation_chunks.order) == 10
-    assert len(ctx.turn_history) == 10
+    assert len(ctx.conversation_chunks.order) == 12
+    assert ctx.conversation_chunks.covers_archive()
 
 
 def test_turn_commit_bounds_sliding_window() -> None:
@@ -184,8 +178,14 @@ def test_turn_commit_bounds_sliding_window() -> None:
         ctx.note_agent_response(f"a{i}")
     users = [m.get("content") for m in ctx.committed_messages if m.get("role") == "user"]
     assert users == ["q5", "q6", "q7"]
-    assert len(ctx.conversation_chunks.order) == 3
-    assert len(ctx.turn_history) == 3
+    store = ctx.conversation_chunks
+    assert store.covers_archive()
+    assert len([c for c in store.chunks.values() if getattr(c, "kind", "") == "messages"]) == 8
+    assert [m.get("content") for m in store.project_messages() if m.get("role") == "user"] == [
+        "q5",
+        "q6",
+        "q7",
+    ]
 
 
 def test_turn_commit_bounds_stack_max_messages() -> None:
@@ -206,7 +206,9 @@ def test_turn_commit_bounds_stack_max_messages() -> None:
     contents = [m.get("content") for m in ctx.committed_messages]
     assert "q0" not in contents
     assert "q5" in contents
-    assert len(ctx.turn_history) == 2
+    store = ctx.conversation_chunks
+    assert store.covers_archive()
+    assert "q0" in json.dumps(store.to_dict())
 
 
 def test_tool_trajectory_preserved_in_message_chunk() -> None:
