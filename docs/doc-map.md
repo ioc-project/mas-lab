@@ -63,7 +63,7 @@ under **Open standards**. `navigation.path` renders ancestor breadcrumbs above t
 - [Discover](discover/index.md) — tab index
 - [IoC integrations](discover/integrations.md)
 - Tutorials → [index](tutorials/index.md), 0–6 and 8–14
-- Labs → [Overview](discover/labs.md), [paper labs](labs.md)
+- Labs → [Overview](discover/labs.md), [paper labs](discover/labs.md#paper-labs)
 
 ### Open standards
 

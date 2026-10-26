@@ -124,7 +124,7 @@ params:
         Preserve city names, dates, and numeric facts. One short paragraph.
 ```
 
-Runnable pin: [library-standard/examples/context/summarizer-override/](../../library-standard/examples/context/summarizer-override/).
+Runnable pin: [library-standard/examples/context/summarizer-override/](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override).
 
 ---
 
@@ -383,9 +383,9 @@ MCE eval provider). A pipeline may also define inline metrics on
 `eval_mce.config.prompt_metrics` (`id`, `prompt`, `unit`, `evidence`).
 Those fields belong to the metric. Stock MCE ids use MAS input/output.
 All ids land in the same `metrics.json`. Map:
-[Tutorial 10](../tutorials/10-evaluation-metrics/).
+[Tutorial 10](../tutorials/10-evaluation-metrics/README.md).
 
-Runnable pin: [library-eval/examples/mce/judge-override/](../../library-eval/examples/mce/judge-override/).
+Runnable pin: [library-eval/examples/mce/judge-override/](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override).
 
 ---
 
@@ -414,5 +414,5 @@ cheaper summarizer, judge override on the eval spec.
 - [Compiled agent defaults](../references/defaults.md) — `mas-ctl compile` expansion
 - [working-memory-compaction.md](../design/working-memory-compaction.md) — design history
 - [Pipeline steps](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md) — `eval_mce`
-- Feature examples (not sample apps): [summarizer-override](../../library-standard/examples/context/summarizer-override/) · [MCE judge-override](../../library-eval/examples/mce/judge-override/)
-- Plugin card: [summarizer.md](../../library-standard/src/mas/library/standard/plugins/context/summarizer.md)
+- Feature examples (not sample apps): [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override) · [MCE judge-override](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override)
+- Plugin card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/context/summarizer.md)

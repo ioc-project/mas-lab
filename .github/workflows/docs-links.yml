@@ -1,0 +1,57 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# Builds the docs site and checks every link in it, in the README files, and
+# the GitHub links into this repository (against the checked-out tree, so a PR
+# that adds a file and links to it passes, and one that removes a linked file
+# fails). Called by test.yml on every pull request and push to main, so it is
+# not path-filtered; also runs weekly to catch external links that rot.
+name: Docs links
+
+on:
+  workflow_call:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    name: Docs links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install MkDocs
+        run: pip install -r requirements-docs.txt
+
+      - name: Build MkDocs site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mkdocs build --site-dir site
+
+      - name: Restore link cache
+        uses: actions/cache@v4
+        with:
+          path: .lycheecache
+          key: lychee-${{ github.run_id }}
+          restore-keys: lychee-
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          lycheeVersion: v0.24.2
+          args: >-
+            --no-progress
+            --config lychee.toml
+            --root-dir ${{ github.workspace }}/site
+            --remap "https://github\.com/ioc-project/mas-lab/(?:blob|tree)/main/ file://${{ github.workspace }}/"
+            site README.md labs/README.md
+          fail: true

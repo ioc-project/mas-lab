@@ -49,7 +49,10 @@ import click
     "--workspace",
     type=click.Path(file_okay=False, exists=True, path_type=Path),
     default=None,
-    help="Project folder for config.yaml, labs, libraries, and the writable Workspace library. Sets MAS_WORKSPACE_ROOT.",
+    help=(
+        "Project folder for config.yaml, labs, libraries, and the writable "
+        "Workspace library. Sets MAS_WORKSPACE_ROOT."
+    ),
 )
 @click.pass_context
 def serve_cmd(ctx: click.Context, port: int, host: str, cors_origins, token_file, state_dir, workspace) -> None:
@@ -60,7 +63,7 @@ def serve_cmd(ctx: click.Context, port: int, host: str, cors_origins, token_file
     --------
     mas-lab serve
     mas-lab serve -p 8090
-    mas-lab serve --workspace ./labs/ioc-motivation.lab
+    mas-lab serve --workspace ./labs/my-experiment.lab
     mas-lab serve --host 0.0.0.0 --token-file ./token --cors-origin http://localhost:8080
     """
     click.echo()

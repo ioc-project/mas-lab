@@ -71,6 +71,15 @@ tasks:
     cmds:
       - uv lock --check
 
+  docs-links:
+    desc: "Build the docs site and check every link (needs lychee: brew install lychee)"
+    deps: [docs-build]
+    cmds:
+      - >-
+        lychee --no-progress --config lychee.toml --root-dir "{{.ROOT_DIR}}/site"
+        --remap "https://github\.com/ioc-project/mas-lab/(?:blob|tree)/main/ file://{{.ROOT_DIR}}/"
+        site README.md labs/README.md
+
   verify-docs:
     desc: "Generated reference docs are in sync (scripts/gen_docs.py --check)"
     deps: [install-dev]

@@ -200,6 +200,12 @@ jobs:
       a2a: ${{ needs.changes.outputs.a2a == 'true' }}
     secrets: inherit
 
+  # Not path-filtered: a change outside the docs (a renamed or removed file the
+  # docs link to) can break a link, and the check is cheap.
+  docs-links:
+    name: Docs links
+    uses: ./.github/workflows/docs-links.yml
+
   # Repository ruleset on main requires this exact check name.
   ci-summary:
     name: ci-summary
@@ -208,6 +214,7 @@ jobs:
       - changes
       - lint
       - docs
+      - docs-links
       - unit
       - unit-311
       - suite

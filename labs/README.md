@@ -33,7 +33,7 @@ Two flags help while you try things out:
 - `--dry-run` validates an experiment without calling a model.
 - `--override 'experiment:experiment.dataset.limit=5'` caps the dataset for a smoke run ([CLI overrides](../docs/cli/overrides.md)).
 
-Quickstart: [lab/docs/labs-quickstart.md](../lab/docs/labs-quickstart.md). Paper map: [docs/paper/index.md](../docs/paper/index.md). Per-lab detail and status: [docs/labs.md](../docs/labs.md).
+Quickstart: [lab/docs/labs-quickstart.md](../lab/docs/labs-quickstart.md). Paper map: [docs/paper/index.md](../docs/paper/index.md). Per-lab detail and status: [docs/discover/labs.md](../docs/discover/labs.md).
 
 ## Labs
 

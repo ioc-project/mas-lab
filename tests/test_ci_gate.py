@@ -127,3 +127,24 @@ def test_main_reads_needs_and_expected(gate, monkeypatch, capsys):
     monkeypatch.setenv("EXPECTED", json.dumps({"unit": "true", "demo_ui": "false"}))
     assert gate.main() == 0
     assert "ci-summary passed" in capsys.readouterr().out
+
+
+def test_docs_links_is_required_even_when_docs_flag_is_false(gate):
+    needs = {
+        "changes": {"result": "success"},
+        "lint": {"result": "success"},
+        "docs-links": {"result": "skipped"},
+    }
+    code, report = gate.evaluate(needs, {"docs": "false"})
+    assert code == 1
+    assert "docs-links" in report
+
+
+def test_docs_links_failure_fails_the_gate(gate):
+    needs = {
+        "changes": {"result": "success"},
+        "lint": {"result": "success"},
+        "docs-links": {"result": "failure"},
+    }
+    code, _ = gate.evaluate(needs, {"docs": "false"})
+    assert code == 1

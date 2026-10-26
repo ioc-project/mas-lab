@@ -79,6 +79,5 @@ The delegation contract is unchanged. A delegate still returns text. In multi-ag
 
 ## See also
 
-- [Implementation summary](IMPLEMENTATION-SUMMARY.md)
 - [System tools reference](../references/system-tools.md#request_human_input)
 - [Tutorial 14: governance and HITL](../tutorials/14-governance-hitl/README.md)

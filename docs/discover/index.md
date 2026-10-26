@@ -4,9 +4,9 @@
 -->
 # Discover
 
-<p class="eyebrow">Tutorials, labs, and IoC integrations</p>
+<p class="eyebrow">Tutorials, labs, and integrations</p>
 
-This section is the hands-on path: IoC integrations, tutorials, and labs.
+This section is the hands-on path: tutorials, labs, and integrations.
 
 The left menu lists every tutorial, every lab family, and the integration
 pages. Use this index to pick a route. Open protocols (OpenAI, MCP, A2A,
@@ -14,24 +14,6 @@ Agent Skills, OpenTelemetry) live under
 [Open standards](../standards/index.md).
 
 <div class="grid cards" markdown>
-
--   **IoC integrations**
-
-    ---
-
-    How Cognition Protocol skills go in, and how run records come out for
-    SCOPE.
-
-    [IoC integrations](integrations.md)
-
--   **Open standards**
-
-    ---
-
-    OpenAI Chat Completions, MCP, A2A, Agent Skills, and OpenTelemetry
-    through AGNTCY's observe-sdk.
-
-    [Open standards](../standards/index.md)
 
 -   **Tutorials**
 
@@ -51,15 +33,34 @@ Agent Skills, OpenTelemetry) live under
 
     [Labs index](labs.md)
 
+-   **IoC integrations**
+
+    ---
+
+    How Cognition Protocol skills go in, and how run records come out for
+    SCOPE.
+
+    [IoC integrations](integrations.md)
+
+-   **Third party**
+
+    ---
+
+    Labs and resources published outside this repository, and how to point
+    MAS-Lab at them.
+
+    [Third party](third-party.md)
+
+-   **Open standards**
+
+    ---
+
+    OpenAI Chat Completions, MCP, A2A, Agent Skills, and OpenTelemetry
+    through AGNTCY's observe-sdk.
+
+    [Open standards](../standards/index.md)
+
 </div>
-
-## IoC integrations
-
-| Path | What it is |
-| --- | --- |
-| [Cognition Protocols as skills](integrations.md#cognition-protocols-go-in-as-skills) | ACCORD and CONCORD enter as initiator and receiver skills |
-| [Runs out to SCOPE](integrations.md#runs-come-out-for-scope) | Live telemetry or conversion from a recorded run |
-| [Knowledge graph locally](integrations.md#a-knowledge-graph-without-the-platform) | Build the same graph SCOPE would, on your machine |
 
 ## Tutorials
 
@@ -90,4 +91,13 @@ experiments. Tutorials 4 to 6 and 8 to 14 each cover one capability.
 | [IoC motivation](labs.md#ioc-motivation-lab) | How do multi-agent systems fail? | Labs index |
 | [Cognition protocols](labs.md#cognition-protocols) | Do ACCORD and CONCORD repair those failures, and at what cost? | Labs index |
 | [Cognitive-challenge](labs.md#cognitive-challenge-labs) | Do the failures show up on other systems too? | Labs index |
-| [Paper labs](../labs.md) | Is the method itself sound? | Toolkit labs page |
+| [Paper labs](labs.md#paper-labs) | Is the method itself sound? | Labs index |
+
+## Integrations
+
+| Path | What it is |
+| --- | --- |
+| [Cognition Protocols as skills](integrations.md#cognition-protocols-go-in-as-skills) | ACCORD and CONCORD enter as initiator and receiver skills |
+| [Runs out to SCOPE](integrations.md#runs-come-out-for-scope) | Live telemetry or conversion from a recorded run |
+| [Knowledge graph locally](integrations.md#a-knowledge-graph-without-the-platform) | Build the same graph SCOPE would, on your machine |
+| [Third party](third-party.md) | Labs and resources published outside this repository |

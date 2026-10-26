@@ -19,6 +19,17 @@ flowchart TB
   RR -->|knowledge graph, on your machine| SC
 ```
 
+## IoC labs on Hugging Face
+
+The labs behind the IoC studies are published as datasets, with their recorded
+runs and scores. MAS-Lab can run or browse them from any folder; see
+[Labs from any folder](labs.md#labs-from-any-folder).
+
+| Dataset | What it holds |
+| --- | --- |
+| [ioc-motivation-labs](https://huggingface.co/datasets/ioc-project/ioc-motivation-labs) | How multi-agent systems fail; the companion of the [Outshift blog post](https://outshift.cisco.com/blog/ai-ml/cognitive-challenges-in-multi-agent-systems). See [Labs](labs.md#ioc-motivation-lab) |
+| [ioc-eval-labs](https://huggingface.co/datasets/ioc-project/ioc-eval-labs) | The ACCORD and CONCORD evaluation. See [Labs](labs.md#cognition-protocols) |
+
 ## Cognition Protocols go in as skills
 
 ### What a skill is
@@ -46,7 +57,7 @@ two roles in the conversation:
 
 [Cognition Protocols](https://ioc-project.github.io/cognition-protocols/) explains
 what each protocol does.
-[CONCORD installation](https://ioc-project.github.io/cognition-protocols/concord/installation/)
+[Getting started](https://ioc-project.github.io/cognition-protocols/getting-started/)
 shows how to add the skills to any agent, inside or outside MAS-Lab.
 
 ### Why develop a skill in MAS-Lab
@@ -79,7 +90,7 @@ protocol adds. The same method tests ACCORD alone, CONCORD alone, or both togeth
 - [Tutorial 6 — Agent skills](../tutorials/06-agent-skills/README.md)
   shows how to write a skill and add it to agents.
 - [Labs](labs.md#cognition-protocols) describes the protocol experiments in full.
-- [Benchmarks](https://ioc-project.github.io/cognition-protocols/benchmarks/)
+- [Evaluation](https://ioc-project.github.io/cognition-protocols/evaluation/)
   reports the results.
 
 ## Runs come out for SCOPE

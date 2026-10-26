@@ -1,0 +1,42 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Lychee link checker configuration (https://github.com/lycheeverse/lychee)
+# Run locally with: task docs-links
+
+max_concurrency = 10
+timeout = 20
+max_retries = 3
+retry_wait_time = 5
+max_cache_age = "1d"
+method = "get"
+cache = true
+include_verbatim = false
+
+# 403/406: hosts that reject the lychee UA. 429: backoff after max_retries.
+# Do not accept 5xx — a persistent 503 is a real failure.
+accept = [200, 201, 204, 403, 406, 429]
+
+exclude = [
+    # Local and placeholder URLs
+    'localhost',
+    'http://127\.0\.0\.1',
+    'example\.(com|org)',
+    '\.well-known',
+
+    # The site is deployed after merge, so self-referencing URLs cannot be
+    # resolved from a PR build
+    'https://ioc-project\.github\.io/mas-lab',
+
+    # Templated URLs
+    '\{[a-zA-Z_]+\}',
+
+    # Sites that block or time out from GitHub Actions IPs
+    'w3\.org',
+    'fonts\.googleapis\.com',
+    'fonts\.gstatic\.com',
+]
+
+# 404.html has root-relative links that need a base URL
+exclude_path = ['(^|/)404\.html$']
+
+user_agent = "lychee/mas-lab"

@@ -3,7 +3,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Pass or fail the always-on ci-summary aggregator.
 
-``changes`` and ``lint`` must succeed. A path flag of true means that job
+``changes``, ``lint`` and ``docs-links`` must succeed. A path flag of true means that job
 must succeed (skipped is a failure). A path flag of false allows skipped.
 """
 
@@ -13,7 +13,7 @@ import json
 import os
 import sys
 
-ALWAYS_SUCCESS = ("changes", "lint")
+ALWAYS_SUCCESS = ("changes", "lint", "docs-links")
 PASS = frozenset({"success", "skipped"})
 
 # changes.outputs key → GitHub job id. Several flags share a matrix job.

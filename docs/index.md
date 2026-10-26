@@ -198,7 +198,7 @@ specialists who must agree on one fix. Each incident has a known right answer.
 
 The full set-up and the results are on the
 [Labs](discover/labs.md#cognition-protocols) page and under
-[Cognition Protocol benchmarks](https://ioc-project.github.io/cognition-protocols/benchmarks/).
+[Cognition Protocol evaluation](https://ioc-project.github.io/cognition-protocols/evaluation/).
 
 ## Where to go next
 

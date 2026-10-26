@@ -44,7 +44,7 @@ MAS Lab is not another agent framework. It is a layer around your agents.
 | **Labs** | Repeatable experiments that change one factor at a time | *What changes when we vary one design choice or policy?* |
 
 Keeping the three apart stops a small change from spreading in unpredictable ways.
-See the [architecture](architecture.md) and the [labs](labs.md).
+See the [architecture](architecture.md) and the [labs](discover/labs.md).
 
 ### Why the specification comes first
 

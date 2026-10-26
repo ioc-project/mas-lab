@@ -126,7 +126,6 @@ nav:
       - Glossary: glossary.md
   - Discover:
       - Overview: discover/index.md
-      - IoC integrations: discover/integrations.md
       - Tutorials:
           - Overview: tutorials/index.md
           - "0 Environment setup": tutorials/00-environment-setup/README.md
@@ -143,9 +142,10 @@ nav:
           - "12 Spawned subagents": tutorials/12-subagents/README.md
           - "13 Control and debug": tutorials/13-control-and-debug/README.md
           - "14 Governance and HITL": tutorials/14-governance-hitl/README.md
-      - Labs:
-          - Overview: discover/labs.md
-          - Paper labs: labs.md
+      - Labs: discover/labs.md
+      - Integrations:
+          - IoC integrations: discover/integrations.md
+          - Third party: discover/third-party.md
   - Open standards:
       - Overview: standards/index.md
       - OpenAI: standards/openai.md

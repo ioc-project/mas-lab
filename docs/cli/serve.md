@@ -26,7 +26,7 @@ mas-lab serve --host 127.0.0.1 --port 8090
 Pin a lab or a workshop tree:
 
 ```bash
-mas-lab serve --workspace ./labs/ioc-motivation.lab
+mas-lab serve --workspace ./labs/my-experiment.lab
 mas-lab serve --workspace /workspace
 ```
 
@@ -37,7 +37,7 @@ mas-lab serve --host 0.0.0.0 --port 8090 \
   --token-file ./token \
   --cors-origin https://ui.example \
   --state-dir ./controller-state \
-  --workspace ./labs/ioc-motivation.lab
+  --workspace ./labs/my-experiment.lab
 ```
 
 Detached daemon: `mas-lab control start` (default port **9000**). Workers:

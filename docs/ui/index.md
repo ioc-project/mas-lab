@@ -113,7 +113,7 @@ To point the UI at one lab (or one workshop tree) and **only** that catalog,
 pin the project folder:
 
 ```bash
-mas-lab serve --workspace /path/to/labs/ioc-motivation.lab
+mas-lab serve --workspace /path/to/my-experiment.lab
 ```
 
 That sets `MAS_WORKSPACE_ROOT`. `config.yaml` in that folder controls the
@@ -135,9 +135,12 @@ adds the project folder on top of the usual catalog. Benchmark outputs
 under `paths.labs_dir` (imported blog results, `task fetch-results`) show
 on the experiment page.
 
-Then open the studio. `lab:ioc-motivation` is the lab; creating an
-application while it is selected writes to `ioc_motivation_lab`. Create
+Then open the studio. The pinned lab appears as `lab:<name>`; creating an
+application while it is selected writes to that lab's own library. Create
 into **Workspace** writes to `<workspace>/library`.
+
+Labs published outside this repository are loaded the same way. See
+[Labs from any folder](../discover/labs.md#labs-from-any-folder).
 
 `env-config.js` keys: `__MAS_LAB_API_BASE_URL__`, `__MAS_LAB_DEFAULT_SCOPE__`
 (alias `__MAS_LAB_DEFAULT_LIBRARY__` for one release), `__MAS_LAB_TOKEN__`.

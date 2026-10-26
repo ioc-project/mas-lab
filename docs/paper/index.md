@@ -20,54 +20,23 @@ runnable labs. A lab is a folder of experiments.
 
 ---
 
-## What you can reproduce
+## Reproducibility
 
-| Lab | Paper section | What it explores |
-|-----|---------------|------------------|
-| `design-space.lab` | §5.1 | Design patterns and team topologies |
-| `lifecycle-control.lab` | §5.2 | Governance and lifecycle control |
-| `extensions.lab` | §5.3 | Memory and context overlays |
+The experiments of Section 5 ship in this repository as three labs:
+`design-space.lab` (§5.1), `lifecycle-control.lab` (§5.2) and `extensions.lab`
+(§5.3). The [paper labs](../discover/labs.md#paper-labs) section describes each
+one. [Running them](../discover/labs.md#running-them) gives the commands, including
+`task reproduce`, and where the outputs go. New to experiments? Start with
+[Tutorial 3 — Run an experiment](../tutorials/03-experiments-and-analysis/README.md).
 
-Source under [`labs/`](https://github.com/ioc-project/mas-lab/tree/main/labs) in the repository.
+The IoC labs, which are not part of the paper, are published as Hugging Face
+datasets with their recorded runs and scores:
 
-Each lab holds one or more experiments. `design-space.lab` has two.
-`extensions.lab` has extra fact-recall variants.
-
-Running an experiment also produces its charts, metrics, and comparison reports.
-Pipeline steps generate them, so you need no plotting scripts. The per-lab
-READMEs under [`labs/`](https://github.com/ioc-project/mas-lab/tree/main/labs)
-describe the scenarios, datasets, and output files. Absolute numbers depend on
-the model you use. Labs vs libraries: [labs-and-libraries.md](../labs-and-libraries.md).
-
-New to experiments? Start with [Tutorial 3 — Run an experiment](../tutorials/03-experiments-and-analysis/README.md).
-
----
-
-## Quick reproduction
-
-After [Tutorial 0](../tutorials/00-environment-setup/README.md) (install and LLM
-access), from the repository root:
-
-```bash
-task reproduce
-```
-
-This needs [go-task](https://taskfile.dev/). It runs all Section 5 experiments
-in sequence. Without `task`, run them one by one:
-
-```bash
-mas-lab benchmark run labs/design-space.lab/01-design-patterns/experiment.yaml --progress
-mas-lab benchmark run labs/design-space.lab/02-topologies/experiment.yaml --progress
-mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --progress
-mas-lab benchmark run labs/extensions.lab/experiment.yaml --progress
-```
-
-Add `--dry-run` to validate an experiment without calling a model. The Letta
-scenarios of `extensions.lab` need their own virtual environment. See its
-[README](https://github.com/ioc-project/mas-lab/blob/main/labs/extensions.lab/README.md).
-
-Completed runs are cached. If inputs are unchanged, a re-run refreshes the
-reports without new LLM calls. Output locations: [User configuration](../user-config.md).
+- [ioc-motivation-labs](https://huggingface.co/datasets/ioc-project/ioc-motivation-labs):
+  how multi-agent systems fail; the companion of the
+  [Outshift blog post](https://outshift.cisco.com/blog/ai-ml/cognitive-challenges-in-multi-agent-systems)
+- [ioc-eval-labs](https://huggingface.co/datasets/ioc-project/ioc-eval-labs):
+  the ACCORD and CONCORD evaluation
 
 ---
 
@@ -98,7 +67,7 @@ this repository.
 ## See also
 
 - [Home](../index.md)
-- [Labs](../labs.md): per-lab detail and status
+- [Labs](../discover/labs.md#paper-labs): per-lab detail and status
 - [Tutorial 0 — Environment setup](../tutorials/00-environment-setup/README.md)
 - [Tutorials](../tutorials/index.md)
 - [Open standards](../standards/index.md)
