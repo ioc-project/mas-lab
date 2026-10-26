@@ -284,6 +284,7 @@ See [summarization.md](summarization.md) for the full chain.
 | `checkpoints` | one fresh start | Starting-state axis. See [Checkpoint axis](#checkpoint-axis). |
 | `evaluation` | none | `method` (required when the block is present): `user_emulation`, `llm_judge`, `metrics`, or `trace_only` (collect trajectories without scoring). Optional `model` (judge) and free-form `config`. |
 | `trace_cache_dir` | `$MAS_TRACE_CACHE`, then `$XDG_CACHE_HOME/mas/traces` | Trace-cache root for this experiment. The **trace cache** stores completed run traces, so a run with identical inputs reuses its trace. `--trace-cache` on the CLI wins. See [user-config.md](../user-config.md). |
+| `trace_cache_portable` | `false` | Leave the resolved LLM infra (endpoint, model mapping) out of the trace-cache key. Set it on experiments whose cache you publish: a reader with another endpoint then hits the same entries. Agent model names still enter the key. |
 | `artifacts`, `pre`, `post` | none | Experiment-level artifacts and hooks. See [Artifacts](#artifacts). |
 | `scenario`, `item` | none | Level sections (`artifacts`, `pre`, `post`). |
 | `ui` | none | Demo-UI hints (`port`, `mode`, `layout`, `node_positions`), same shape as in `lab-config.yaml`. `mas-lab benchmark run` ignores it. |

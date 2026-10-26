@@ -190,6 +190,14 @@ class MASRunBase:
     4. Default ``$XDG_CACHE_HOME/mas/traces``
     """
 
+    trace_cache_portable: bool = False
+    """Leave the resolved LLM infra (endpoint, model mapping) out of the cache key.
+
+    Set it on experiments whose trace cache is published: a reader with another
+    LLM endpoint then hits the same entries, as if the runs had been recorded
+    on their machine. The agents' own model names still enter the key.
+    """
+
     pipeline: List["PipelineStepSpec"] = field(default_factory=list)
     """Inline pipeline steps declared in the experiment manifest."""
 
@@ -381,7 +389,7 @@ class MASRunBase:
                 from mas.library_catalog import _dataset_file_in_dir, resolve_catalog_id
 
                 _dataset_name = ds.get("name", "benchmark")
-                app_root = get_app(ds["app"])
+                app_root = get_app(ds["app"], base_dir)
                 legacy = (app_root / "datasets" / f"{_dataset_name}.yaml").resolve()
                 if legacy.is_file():
                     dataset = legacy
@@ -455,6 +463,7 @@ class MASRunBase:
         trace_cache_dir: Optional[Path] = None
         if "trace_cache_dir" in data:
             trace_cache_dir = (base_dir / data["trace_cache_dir"]).resolve()
+        trace_cache_portable = bool(data.get("trace_cache_portable", False))
 
         pipeline: List["PipelineStepSpec"] = []
         pipeline_ref: Optional[str] = None
@@ -526,6 +535,7 @@ class MASRunBase:
             evaluation=evaluation,
             output_dir=output_dir,
             trace_cache_dir=trace_cache_dir,
+            trace_cache_portable=trace_cache_portable,
             pipeline=pipeline,
             pipeline_ref=pipeline_ref,
             pipeline_app=pipeline_app,

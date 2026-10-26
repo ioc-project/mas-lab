@@ -374,6 +374,13 @@ properties:
           Override the global trace-cache directory for this experiment.
           Falls back to env var MAS_TRACE_CACHE, then $XDG_CACHE_HOME/mas/traces
           (see docs/user-config.md).
+      trace_cache_portable:
+        type: boolean
+        default: false
+        description: >
+          Leave the resolved LLM infra (endpoint, model mapping) out of the
+          trace-cache key, so a published cache hits on any endpoint. Agent
+          model names still enter the key. Use it for caches you publish.
 
       # ── Design (what is compared) ─────────────────────────────────────────
       design:

@@ -220,9 +220,9 @@ async def execute_batch(
     _sem      = asyncio.Semaphore(_parallel)
     _io_lock  = asyncio.Lock()
 
+    from mas.lab.benchmark.pipeline.channel import install_channel
     from mas.lab.benchmark.pipeline.config import pipeline_settings
     from mas.lab.benchmark.pipeline.keys import run_key_from_parts
-    from mas.lab.benchmark.pipeline.channel import install_channel
     from mas.lab.benchmark.pipeline.lifecycle import attempt_reset, begin_run, terminal_run
     from mas.runtime.boundary.obs.event_stream import set_channel_emitter
 
@@ -307,13 +307,18 @@ async def execute_batch(
     from mas.ctl.workspace.config import WorkspaceConfig
 
     # Runs resolve infra from the experiment workspace; the cache key must too.
-    _infra_info = infra_cache_identity(
-        resolve_workspace_infra(
-            WorkspaceConfig.load(experiment_yaml.parent),
-            anchor=experiment_yaml.parent,
-            cli_refs=list(prepared.infra_refs),
+    # ``trace_cache_portable`` drops the infra from the key so a published
+    # cache hits on any LLM endpoint (see ExperimentConfig.trace_cache_portable).
+    if getattr(exp, "trace_cache_portable", False):
+        _infra_info = None
+    else:
+        _infra_info = infra_cache_identity(
+            resolve_workspace_infra(
+                WorkspaceConfig.load(experiment_yaml.parent),
+                anchor=experiment_yaml.parent,
+                cli_refs=list(prepared.infra_refs),
+            )
         )
-    )
 
     from mas.lab.benchmark.schedule.run_batch.pre_hooks import LevelPreHooks
 
@@ -563,8 +568,8 @@ async def execute_batch(
             _attempts_used = 0
             try:
                 def _do_mas_run() -> dict:
-                    from mas.lab.runners.infer import infer_runner_id
                     from mas.lab.benchmark.pipeline.ui_bridge import forward_native_to_channel
+                    from mas.lab.runners.infer import infer_runner_id
                     from mas.runtime.boundary.obs.event_stream import (
                         EventStream,
                         reset_event_stream,
