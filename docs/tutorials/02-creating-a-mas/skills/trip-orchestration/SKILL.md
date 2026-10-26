@@ -39,7 +39,11 @@ Wait for each specialist in turn:
 If a specialist returns `rate_limit_reached: true`, use the partial result and
 note the limitation in the final response.
 
-## Step 4 — Budget Gate (C7)
+If a specialist returns `found: false`, `error: unknown_city`, or no path,
+say that in the final answer. Do not invent attractions, fares, a budget, or a
+feasible itinerary when a lookup failed.
+
+## Step 4 — Budget Gate
 If `FareResult.total_cost_usd > 1200`:
 - Set `budget_compliant: false`.
 - Include the exact line: `⚠️ HUMAN APPROVAL REQUIRED: budget exceeds $1200`.
@@ -56,3 +60,4 @@ Combine `ScheduleResult`, `RouteOptions`, and `FareResult` into a readable natur
 
 Respond in plain readable text. Do NOT return raw JSON to the user.
 Always ground your assembly in specialist outputs — never invent fares, schedules, or route details.
+A failed route, unknown city, or missing fare must appear in the final answer.

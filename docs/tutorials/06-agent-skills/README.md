@@ -60,6 +60,11 @@ mas-ctl chat docs/tutorials/06-agent-skills/agent.yaml \
 
 `validate` prints `OK ... kind=agent`. The answer may be correct, but its format, sources, and confidence statement depend on the model. This is your baseline.
 
+Repeat runs can return from the LLM response cache. Pass `-v` to log a cache
+hit. Disable with `--no-cache-read` or `MAS_LLM_CACHE_READ=false`. See
+[Tutorial 0](../00-environment-setup/README.md) and
+[llm-cache.md](../../manifests/llm-cache.md).
+
 ## Step 2 — Describe when the skill applies
 
 `skills/answer-expert/SKILL.md` starts with YAML frontmatter, the skill's catalog entry:

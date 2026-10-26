@@ -4,11 +4,7 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
-import pytest
-from conftest import T06, load_yaml, run_cli
+from conftest import T06, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 
 class TestManifestValidation:
@@ -92,18 +88,11 @@ class TestOverlayMerging:
 # Live mas-ctl chat (real LLM)
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY required for live tutorial chat",
-)
+_LIVE = live_tutorial_chat
 _LIVE_QUERY = (
     "What is the speed of light in kilometres and miles per second? "
     "Use the answer-expert skill."
 )
-
-
-def _live_cli_env() -> dict[str, str]:
-    return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}
 
 
 @_LIVE
@@ -117,13 +106,15 @@ class TestLiveSkillChat:
                 "-o",
                 "overlays/with-skills.yaml",
                 "--no-cache-read",
+                "--model",
+                "gpt-4o",
                 "--trace",
                 "-q",
                 _LIVE_QUERY,
             ],
             cwd=T06,
             timeout=120,
-            extra_env=_live_cli_env(),
+            extra_env=live_cli_env(),
         )
         combined = f"{r.stdout}\n{r.stderr}"
         assert r.returncode == 0, r.stderr

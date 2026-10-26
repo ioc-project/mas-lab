@@ -71,3 +71,41 @@ def find_city(network: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
         if city.get("name", "").lower() == name.lower():
             return city
     return None
+
+
+def unknown_cities(network: Dict[str, Any], *names: str) -> list[str]:
+    """Return unique names that are not in the city catalogue (order preserved)."""
+    seen: set[str] = set()
+    unknown: list[str] = []
+    for name in names:
+        key = (name or "").strip()
+        if not key:
+            continue
+        fold = key.lower()
+        if fold in seen:
+            continue
+        seen.add(fold)
+        if find_city(network, key) is None:
+            unknown.append(key)
+    return unknown
+
+
+def unknown_city_result(
+    unknown: list[str],
+    *,
+    origin: str = "",
+    destination: str = "",
+) -> Dict[str, Any]:
+    """Return a tool payload that names unknown cities instead of a silent miss."""
+    listed = ", ".join(unknown)
+    noun = "city" if len(unknown) == 1 else "cities"
+    return {
+        "found": False,
+        "error": "unknown_city",
+        "unknown": unknown,
+        "origin": origin,
+        "destination": destination,
+        "message": (
+            f"Unknown {noun}: {listed}. Not in the Arborian Network catalogue."
+        ),
+    }

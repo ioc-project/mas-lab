@@ -6,11 +6,8 @@ resolution, and a governed tool call end to end (auto-approve vs auto-deny).
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
-from conftest import T14, load_yaml, run_cli
+from conftest import T14, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 OVERLAYS = [
     "tools.yaml",
@@ -203,22 +200,24 @@ class TestGovernedToolCallEndToEnd:
         # No simulated tool result reached context — the call never ran.
         assert "[simulated tool result" not in blob
         assert "Operator blocked tool 'calc' via HITL." in blob
-        assert result.text
+        # BLOCK ends the turn: the engine's follow-up stop_text must not leak.
+        assert "Operator blocked tool 'calc' via HITL." in result.text
+        assert "417" not in result.text
+        resolve_events = [
+            e
+            for e in (instance.driver.observability.events if instance.driver.observability else [])
+            if e.kind.value == "hitl.resolve"
+        ]
+        assert resolve_events
+        assert resolve_events[0].payload.get("operator_id") == "auto-denier"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Live mas-ctl chat (real LLM)
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY required for live tutorial chat",
-)
+_LIVE = live_tutorial_chat
 _LIVE_QUERY = "Calculate 125 * 3 + 42."
-
-
-def _live_cli_env() -> dict[str, str]:
-    return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}
 
 
 @_LIVE
@@ -234,12 +233,14 @@ class TestLiveGovernedChat:
                 "-o",
                 "overlays/governance-auto-approve.yaml",
                 "--no-cache-read",
+                "--model",
+                "gpt-4o",
                 "-q",
                 _LIVE_QUERY,
             ],
             cwd=T14,
             timeout=120,
-            extra_env=_live_cli_env(),
+            extra_env=live_cli_env(),
         )
         assert r.returncode == 0, r.stderr
         assert "417" in r.stdout
@@ -255,12 +256,15 @@ class TestLiveGovernedChat:
                 "-o",
                 "overlays/governance-auto-deny.yaml",
                 "--no-cache-read",
+                "--model",
+                "gpt-4o",
                 "-q",
                 _LIVE_QUERY,
             ],
             cwd=T14,
             timeout=120,
-            extra_env=_live_cli_env(),
+            extra_env=live_cli_env(),
         )
         assert r.returncode == 0, r.stderr
         assert "417" not in r.stdout
+        assert "blocked" in r.stdout.lower()

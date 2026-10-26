@@ -218,6 +218,19 @@ class TestLookupScheduleTool:
             },
         )
         assert result["found"] is False
+        assert result["error"] == "unknown_city"
+        assert "Nowhere" in result["unknown"]
+        assert "Neverland" in result["unknown"]
+
+    def test_unknown_city_is_not_a_missing_route(self):
+        tool = self._make_tool()
+        result = tool.on_execute_tool(
+            "lookup_schedule",
+            {"origin": "Celestia", "destination": "Thornhaven"},
+        )
+        assert result["found"] is False
+        assert result["error"] == "unknown_city"
+        assert result["unknown"] == ["Thornhaven"]
 
     def test_weekend_departures(self):
         tool = self._make_tool()
@@ -285,6 +298,28 @@ class TestQueryGraphDatabaseTool:
             },
         )
         assert result["found"] is False
+        assert result["error"] == "unknown_city"
+        assert result["unknown"] == ["NonExistentCity"]
+
+    def test_unknown_city_same_origin_and_destination(self):
+        tool = self._make_tool()
+        result = tool.on_execute_tool(
+            "query_graph_database",
+            {"origin": "Thornhaven", "destination": "Thornhaven"},
+        )
+        assert result["found"] is False
+        assert result["error"] == "unknown_city"
+        assert result["unknown"] == ["Thornhaven"]
+        assert "routes" not in result
+
+    def test_known_city_same_origin_and_destination_is_zero_hop(self):
+        tool = self._make_tool()
+        result = tool.on_execute_tool(
+            "query_graph_database",
+            {"origin": "Celestia", "destination": "Celestia"},
+        )
+        assert result["found"] is True
+        assert result["routes"][0]["total_hops"] == 0
 
 
 class TestGetFaresTool:

@@ -8,10 +8,12 @@ Returns route topology only — no fares, no departure times.
 
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 from mas.runtime.contracts import ToolContract
-from ._scene import load_network
+
+from ._scene import find_city, load_network, unknown_cities, unknown_city_result
 
 _SCENIC_REGIONS = {"forest_belt", "alpine", "coastal"}
 
@@ -22,7 +24,13 @@ def _build_adjacency(routes: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, A
     for r in routes:
         frm = r.get("from", "")
         to = r.get("to", "")
-        entry = {"to": to, "route_id": r.get("id", ""), "mode": r.get("mode", ""), "travel_time": r.get("travel_time", ""), "from": frm}
+        entry = {
+            "to": to,
+            "route_id": r.get("id", ""),
+            "mode": r.get("mode", ""),
+            "travel_time": r.get("travel_time", ""),
+            "from": frm,
+        }
         adj.setdefault(frm, []).append(entry)
         # bidirectional
         rev = dict(entry)
@@ -91,14 +99,21 @@ class QueryGraphDatabaseTool(ToolContract):
         max_hops = min(int(arguments.get("max_hops", 3)), 3)
 
         network = load_network(self._dataset_path)
+        unknown = unknown_cities(network, origin, destination)
+        if unknown:
+            return unknown_city_result(unknown, origin=origin, destination=destination)
+
+        origin_name = (find_city(network, origin) or {}).get("name") or origin
+        dest_name = (find_city(network, destination) or {}).get("name") or destination
         adj = _build_adjacency(network.get("routes", []))
 
-        # BFS up to max_hops to find all paths
+        # BFS up to max_hops to find all paths. City existence is checked
+        # above; origin == destination for a known city is a zero-hop route.
         paths: List[List[Dict[str, Any]]] = []
-        queue: List[tuple[str, List[Dict[str, Any]]]] = [(origin, [])]
+        queue: deque[tuple[str, List[Dict[str, Any]]]] = deque([(origin_name, [])])
         while queue:
-            current, path = queue.pop(0)
-            if current.lower() == destination.lower():
+            current, path = queue.popleft()
+            if current.lower() == dest_name.lower():
                 paths.append(path)
                 continue
             if len(path) >= max_hops:
@@ -106,7 +121,7 @@ class QueryGraphDatabaseTool(ToolContract):
             for edge in adj.get(current, []):
                 next_city = edge["to"]
                 # avoid cycles within this path
-                path_cities = {p["from"] for p in path} | ({path[-1]["to"]} if path else {origin})
+                path_cities = {p["from"] for p in path} | ({path[-1]["to"]} if path else {origin_name})
                 if next_city in path_cities:
                     continue
                 queue.append((next_city, path + [edge]))

@@ -102,7 +102,7 @@ sections:
         command: >-
           mas-ctl run-mas mas.yaml
           --events --events-file logs/events.jsonl
-          -q "Plan a 3-day trip to Thornhaven, budget €500"
+          -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
         cache_key: "run-dynamic"
         allowed_modes: [online]
         expected_exit_code: 0
@@ -136,7 +136,7 @@ sections:
           mas-ctl run-mas mas.yaml
           --events --events-file logs/events.jsonl
           -o overlays/single-agent.yaml
-          -q "Plan a 3-day trip to Thornhaven, budget €500"
+          -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
         cache_key: "run-single-agent"
         allowed_modes: [online]
         expected_exit_code: 0
@@ -147,7 +147,7 @@ sections:
           mas-ctl run-mas mas.yaml
           --events --events-file logs/events.jsonl
           -o overlays/linear.yaml
-          -q "Plan a 3-day trip to Thornhaven, budget €500"
+          -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
         cache_key: "run-linear"
         allowed_modes: [online]
         expected_exit_code: 0

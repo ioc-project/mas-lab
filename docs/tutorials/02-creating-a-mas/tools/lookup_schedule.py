@@ -10,7 +10,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from ._scene import load_network, find_route, find_city
+from ._scene import (
+    find_city,
+    find_route,
+    load_network,
+    unknown_cities,
+    unknown_city_result,
+)
 
 
 class LookupScheduleTool:
@@ -63,6 +69,10 @@ class LookupScheduleTool:
         departure_date = arguments.get("departure_date", "weekday")
 
         network = load_network(self._dataset_path)
+        unknown = unknown_cities(network, origin, destination)
+        if unknown:
+            return unknown_city_result(unknown, origin=origin, destination=destination)
+
         routes = find_route(network, origin, destination, travel_mode)
 
         if not routes:

@@ -56,6 +56,9 @@ coverage.json
 **/output/*/
 .tutorial-cache/
 tests/.tutorial-engine-cache/
+.demo-cache/
+# Local mas-ctl chat traces next to an agent (fixtures live under fixtures/ or T01 traces/)
+docs/tutorials/**/agents/**/traces/
 
 # Backup files
 *.bak

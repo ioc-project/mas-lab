@@ -95,6 +95,8 @@ class ExchangeRecord:
     # (a peer agent, not the human user, is the real other end) -- see
     # KernelDriver.caller_agent_id. None means the plain USER/AGENT boundary.
     caller_agent_id: str | None = None
+    cache_status: str | None = None
+    cache_layer: str = ""
 
 
 def engine_model_id(engine: Any) -> str:
@@ -1150,6 +1152,8 @@ class KernelDriver:
                     semantics=semantics,
                     model=model,
                     engine_raw=engine_raw,
+                    cache_status=ret.cache_status,
+                    cache_layer=ret.cache_layer or "",
                 ),
             )
         elif io.op == "TOOL_CALL" and ret.text:

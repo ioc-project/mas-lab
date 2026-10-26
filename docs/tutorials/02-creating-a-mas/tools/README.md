@@ -23,4 +23,4 @@ Files:
 - `get_fares.py` — fare lookup by route and class
 - `calc.py` — arithmetic helper
 - `*.tool.yaml` — declarative tool contracts and constructor params
-- `_scene.py` — local dataset helper only; not a framework primitive
+- `_scene.py` — dataset helper only; not a framework primitive

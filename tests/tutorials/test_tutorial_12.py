@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import T12, load_yaml, run_cli
+from conftest import T12, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 
 class TestManifestValidation:
@@ -72,7 +71,9 @@ class TestTemplateLoading:
                 ]
             }
         }
-        with pytest.raises(Exception):
+        from mas.runtime.registry.provider_protocol import ManifestToolLoadError
+
+        with pytest.raises(ManifestToolLoadError, match="escapes allowed roots"):
             load_subagent_templates(manifest, tmp_path)
 
 
@@ -84,11 +85,11 @@ class TestSpawnDispatch:
         from mas.ctl.executor.spawn_ledger import SpawnLedger
         from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
         from mas.ctl.placement.bus.inproc import InProcessCommBus
+        from mas.ctl.session.controller import TurnResult
         from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
         from mas.runtime.driver.driver import DriverTrace
         from mas.runtime.engine.tool_dispatch import execute_engine_tool
         from mas.runtime.schema.egress import EmitClientResponse
-        from mas.ctl.session.controller import TurnResult
 
         manifest = load_yaml(T12 / "agent.yaml")
         bus = InProcessCommBus()
@@ -142,14 +143,7 @@ class TestSpawnDispatch:
 # Live mas-ctl chat (real LLM)
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY required for live tutorial chat",
-)
-
-
-def _live_cli_env() -> dict[str, str]:
-    return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}
+_LIVE = live_tutorial_chat
 
 
 @_LIVE
@@ -161,12 +155,14 @@ class TestLiveSubagentChat:
                 "chat",
                 "agent.yaml",
                 "--no-cache-read",
+                "--model",
+                "gpt-4o",
                 "--trace",
                 "-q",
                 "Ask the reviewer to check: `def add(a, b): return a + b`.",
             ],
             cwd=T12,
             timeout=120,
-            extra_env=_live_cli_env(),
+            extra_env=live_cli_env(),
         )
         assert r.returncode == 0, r.stderr

@@ -40,6 +40,10 @@ A lab can ship its own library: see [labs-and-libraries.md](../../labs-and-libra
 > **Exchange log.** This directory's `config.yaml` sets `mas_ctl.trace: summary`, so every `mas-ctl` command prints
 > a readable log (`USER -> AGENT -> LLM -> TOOL …`) on stderr. Elsewhere, add `--trace`
 > ([CLI reference](../../cli/mas-ctl.md#exchange-log)). The conversation stays on stdout.
+>
+> **LLM response cache.** Repeat runs can return in tens of milliseconds with identical wording.
+> Pass `-v` to log a cache hit. Disable with `--no-cache-read`
+> or `MAS_LLM_CACHE_READ=false`. See [llm-cache.md](../../manifests/llm-cache.md).
 
 ---
 

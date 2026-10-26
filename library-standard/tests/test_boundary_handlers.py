@@ -55,7 +55,27 @@ def test_hitl_resolve_carries_resolution_and_answer() -> None:
         "agent_id": "moderator", "run_id": "run-1", "correlation_id": 5,
         "timestamp": out[0]["timestamp"],
         "resolution": "approved", "answer": "yes, proceed",
+        "operator_id": "",
+        "steering": "",
     }]
+
+
+def test_hitl_resolve_carries_operator_id_and_steering() -> None:
+    record = {
+        "kind": "hitl.resolve",
+        "correlation_id": 5,
+        "actor_id": "cli-operator",
+        "payload": {
+            "resolution": "SKIP",
+            "answer": None,
+            "operator_id": "cli-operator",
+            "steering": "Do not calculate this yourself.",
+        },
+    }
+    out = dispatch_boundary(record, ctx=_ctx())
+    assert out[0]["operator_id"] == "cli-operator"
+    assert out[0]["steering"] == "Do not calculate this yourself."
+    assert out[0]["resolution"] == "SKIP"
 
 
 def test_governance_decision_carries_reason_and_policy_name() -> None:

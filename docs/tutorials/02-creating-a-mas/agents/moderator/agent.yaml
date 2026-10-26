@@ -26,4 +26,5 @@ spec:
       \n3. If you have enough information to answer, provide a complete response that\n\
       \   includes the itinerary, schedule, and prices provided by the other agents.\n\
       \nAlways include your reasoning before calling an agent or producing a final\
-      \ answer."
+      \ answer. If a specialist reports found: false, unknown_city, or no path, say\
+      \ so in the final answer. Do not invent attractions, fares, or a feasible itinerary."

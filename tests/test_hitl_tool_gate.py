@@ -111,6 +111,7 @@ def test_scripted_hitl_block_skips_tool(tmp_path: Path) -> None:
 
     assert _boundary_hitl_requests(instance)
     assert "[calculator]" not in result.text.lower()
+    assert "blocked" in result.text.lower()
 
 
 @pytest.mark.timeout(60)

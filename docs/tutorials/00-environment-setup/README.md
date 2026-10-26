@@ -216,14 +216,23 @@ mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml -q "What is the capi
 
 `validate` works offline and prints a success line. `chat` prints an answer that names Paris.
 
+`mas-ctl` reads and writes the **LLM response cache** by default, so a repeat of
+the same query can return in tens of milliseconds with identical wording. Pass
+`-v` to log cache hits and other internals (summarization, session hints).
+Disable reads with `--no-cache-read` or `MAS_LLM_CACHE_READ=false` (PowerShell:
+`$env:MAS_LLM_CACHE_READ = "false"`). See [llm-cache.md](../../manifests/llm-cache.md).
+
 ## Where things go
 
 A trace is the record of a run. `events.jsonl` is its machine-readable form: one JSON event per line.
-The trace cache stores LLM completions so repeated runs skip the LLM call.
+The **trace cache** stores whole-run traces so experiment reruns skip execution.
+The **LLM response cache** is separate: it stores individual completions for
+`mas-ctl chat` and `run-mas` (on by default; see the note above).
 
 | Store | Default location |
 | ----- | ---------------- |
 | Trace cache | `$XDG_CACHE_HOME/mas/traces/` (default `~/.cache/mas/traces/`) |
+| LLM response cache | `$XDG_CACHE_HOME/mas/llm_cache.json` |
 | Lab outputs | `$XDG_DATA_HOME/mas/labs/<lab>/<experiment>/…/itemN/rN/traces/events.jsonl` |
 | `mas-ctl chat` traces | `traces/events.jsonl` next to the manifest |
 

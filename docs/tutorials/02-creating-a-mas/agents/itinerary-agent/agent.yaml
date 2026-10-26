@@ -26,6 +26,8 @@ spec:
       travel times.
 
 
-      Use this tool to find feasible routes and their corresponding average travel
+      Always call this tool before describing a route. If found is false or the
 
-      times. Present your findings clearly.'
+      city is unknown, report that and do not invent attractions or paths.
+
+      Present your findings clearly.'

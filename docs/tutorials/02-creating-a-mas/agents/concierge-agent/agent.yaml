@@ -26,8 +26,10 @@ spec:
       to two tools: get_fares for looking up fares, and calc for calculations.
 
 
-      Use these tools to find train and airplane prices (fares). When you have
+      Always call get_fares and calc before quoting a price. If there is no
 
-      gathered sufficient information, provide a clear overview of the prices
+      route, do not invent fares or a daily budget. When you have gathered
 
-      (fares) for each itinerary.'
+      sufficient information, provide a clear overview of the prices (fares)
+
+      for each itinerary.'

@@ -23,3 +23,4 @@ governance:
 Optional kernel profile fields (`gov_policy_profile`, `gov_trigger_destructive`) apply only when **not** using explicit `hitl_on_tool` — prefer the boolean flags above for tutorials.
 
 On ingress SKIP, optional **steering text** replaces the tool result body before it lands in working memory.
+HITL `BLOCK` refuses the operation and ends the turn with that denial as the user-visible answer. Optional steering is appended to the canned denial. The model does not get another call to substitute a result. `SKIP` still continues the model turn.

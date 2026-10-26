@@ -152,18 +152,24 @@ so `run-mas` prints each delegation on stderr. The LLM endpoint comes from your 
 
 ## Step 5 — Run the MAS
 
+Use a city from `datasets/arborian-network.yaml` (Celestia, Verdantia, and
+thirteen others). An unknown name such as Thornhaven returns `found: false`
+with `error: unknown_city` rather than a zero-hop route. Repeat runs can
+return immediately from the LLM response cache; see the note after the
+commands.
+
 ```bash
 # Default topology (LLM-directed): the moderator delegates dynamically
-mas-ctl run-mas mas.yaml -q "Plan a 3-day trip to Thornhaven, budget €500"
+mas-ctl run-mas mas.yaml -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
 
 # Interactive multi-turn
 mas-ctl run-mas mas.yaml -i
 
 # Single-agent topology: one generalist, no delegation
-mas-ctl run-mas mas.yaml -o overlays/single-agent.yaml -q "Plan a 3-day trip to Thornhaven, budget €500"
+mas-ctl run-mas mas.yaml -o overlays/single-agent.yaml -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
 
 # Deterministic-linear: specialists run in the declared order
-mas-ctl run-mas mas.yaml -o overlays/linear.yaml -q "Plan a 3-day trip to Thornhaven, budget €500"
+mas-ctl run-mas mas.yaml -o overlays/linear.yaml -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
 ```
 
 To inspect the resolved MAS, compile it (use `--layout bundle` for one file):
@@ -174,6 +180,12 @@ mas-ctl compile mas.yaml -o overlays/linear.yaml -O ./compiled-linear/
 
 In the default topology the moderator typically calls `schedule_agent`, `itinerary_agent`, `concierge_agent`,
 then assembles the itinerary with prices. Order and wording are the LLM's choice and vary between runs.
+If a specialist reports no path or an unknown city, that failure belongs in the final answer.
+
+Repeat runs can return from the LLM response cache. Pass `-v` to log a cache
+hit. Disable with `--no-cache-read` or `MAS_LLM_CACHE_READ=false`. See
+[Tutorial 0](../00-environment-setup/README.md) and
+[llm-cache.md](../../manifests/llm-cache.md).
 
 ## Step 6 — Read the event stream
 
@@ -182,7 +194,7 @@ then assembles the itinerary with prices. Order and wording are the LLM's choice
 
 ```bash
 mas-ctl run-mas mas.yaml --events --events-file logs/events.jsonl \
-  -q "Plan a 3-day trip to Thornhaven, budget €500"
+  -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
 ```
 
 Delegation shows up as `tool_call_*` events on `delegate_to_<agent_id>`, with the specialist's own tool calls in between.
@@ -215,7 +227,7 @@ Steps 5 and 6 need `OPENAI_API_KEY` (or a cache replay from Tutorial 0). Without
   To expose a specialist as a server instead, run `mas-ctl serve docs/tutorials/02-creating-a-mas/agents/schedule-agent/agent.yaml --infra-ref library-samples/infra/mixed-agents.infra.yaml` from the repo root.
 
   ```bash
-  mas-ctl run-mas mas.yaml --bind schedule_agent=a2a://127.0.0.1:9006/ -q "Plan a 3-day trip to Thornhaven, budget €500"
+  mas-ctl run-mas mas.yaml --bind schedule_agent=a2a://127.0.0.1:9006/ -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
   ```
 
 - **Design-space lab:** `labs/design-space.lab/` extends the trip planner with more patterns, topologies, and datasets.

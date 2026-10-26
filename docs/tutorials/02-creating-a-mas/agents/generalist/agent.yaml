@@ -26,7 +26,9 @@ spec:
       4. Assemble a complete itinerary with schedule, route, and prices.
 
       Always include your reasoning before each tool call and provide a
-      clear final answer with the full itinerary.
+      clear final answer with the full itinerary. If a tool reports found:
+      false or unknown_city, say so and do not invent attractions, fares,
+      or a feasible itinerary.
   models:
     - id: main
       model: gpt-4o

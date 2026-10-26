@@ -9,8 +9,8 @@ from collections.abc import Callable
 
 from mas.library.standard.lib.observability.native.tool_name import resolve_tool_name
 from mas.library.standard.lib.observability.native.transform import (
-    TransformContext,
     _SYNTHETIC_SPAN_DURATION_S,
+    TransformContext,
     _event_kind,
     _interval_call_id,
     _resolve_call_id,
@@ -591,6 +591,8 @@ def _boundary_hitl_resolve(
             "timestamp": ts,
             "resolution": payload.get("resolution", ""),
             "answer": payload.get("answer"),
+            "operator_id": payload.get("operator_id") or record.get("actor_id") or "",
+            "steering": payload.get("steering") or "",
         }
     ]
 

@@ -106,7 +106,7 @@ mas-ctl [-v] [--env FILE] COMMAND …
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `-v` / `--verbose` | off | Repeatable. `-v` adds session hints and extra logs. `-vv` also enables `--trace-engine` when tracing (`chat`, `run-mas`). |
+| `-v` / `--verbose` | off | Repeatable. `-v` adds session hints and internal logs (cache hits, summarization). `-vv` also enables `--trace-engine` when tracing (`chat`, `run-mas`). |
 | `--env FILE` | `.env` in the current directory and next to the manifest | Load this dotenv file. The file must exist. |
 
 ## Outputs
@@ -115,6 +115,7 @@ mas-ctl [-v] [--env FILE] COMMAND …
 | --- | --- | --- |
 | stdout | The conversation (`You:` and `Agent:`) | Always, for `chat` and `run-mas`. |
 | stderr | The exchange log: human-readable AGENT, LLM, TOOL, and GOV hops | `--trace` or `mas_ctl.trace`. |
+| stderr | `note: LLM response served from cache` | `-v` (cache hits and other internals; not on by default). |
 | `events.jsonl` | The machine run log | `--events`, an overlay, or the manifest. See [observability.md](observability.md). |
 
 Stdout always stays the conversation. Color is off unless you pass `--trace-color`.

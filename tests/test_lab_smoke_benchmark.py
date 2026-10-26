@@ -46,13 +46,20 @@ def smoke_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MAS_LLM_CACHE", str(tmp_path / "llm_cache.json"))
     monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(_SAMPLE_WS))
     require_ci_cache()
-    return out, trace_cache
+    preexisting = (
+        {p.name for p in _DEFAULT_GLOBAL_CACHE.iterdir()}
+        if _DEFAULT_GLOBAL_CACHE.exists()
+        else set()
+    )
+    return out, trace_cache, preexisting
 
 
-def _assert_isolated_cache(trace_cache_dir: Path) -> None:
+def _assert_isolated_cache(trace_cache_dir: Path, preexisting: set[str]) -> None:
     if not _DEFAULT_GLOBAL_CACHE.exists():
         return
     for entry in trace_cache_dir.iterdir():
+        if entry.name in preexisting:
+            continue
         assert not (_DEFAULT_GLOBAL_CACHE / entry.name).exists(), (
             "smoke run wrote to global trace-cache — set emulation.runtime.cache: "
             "disabled and MAS_TRACE_CACHE to an isolated tmp directory"
@@ -76,7 +83,7 @@ def test_lab_smoke_one_run_and_pipeline(
     from mas.lab.benchmark.golden.cache_backup import find_events_in_tree
     from mas.lab.benchmark.worker import run_benchmark_sync
 
-    output_dir, trace_cache_dir = smoke_env
+    output_dir, trace_cache_dir, preexisting = smoke_env
     assert experiment.is_file(), f"missing smoke experiment for {label}: {experiment}"
 
     ok = run_benchmark_sync(
@@ -107,7 +114,7 @@ def test_lab_smoke_one_run_and_pipeline(
             f"pipeline artefact {rel} for {label} should have header + data"
         )
 
-    _assert_isolated_cache(trace_cache_dir)
+    _assert_isolated_cache(trace_cache_dir, preexisting)
 
 
 @pytest.mark.parametrize(

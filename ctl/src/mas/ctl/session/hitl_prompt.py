@@ -44,13 +44,14 @@ def build_hitl_resolve(
         else:
             choice = HitlResolveChoice.BLOCK
     ctx: dict = {"operator_id": operator_id}
-    if choice == HitlResolveChoice.SKIP and read_line is not None:
+    if choice in {HitlResolveChoice.SKIP, HitlResolveChoice.BLOCK} and read_line is not None:
         hook = (getattr(request, "context_data", None) or {}).get("hook", "")
-        prompt = (
-            "Steering (optional, replaces tool result): "
-            if hook == "ingress"
-            else "Steering (optional, synthetic tool result): "
-        )
+        if choice == HitlResolveChoice.BLOCK:
+            prompt = "Denial (optional, shown to the user): "
+        elif hook == "ingress":
+            prompt = "Steering (optional, replaces tool result): "
+        else:
+            prompt = "Steering (optional, synthetic tool result): "
         steering = read_line(prompt)
         if steering and steering.strip():
             ctx["steering"] = steering.strip()

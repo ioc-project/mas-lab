@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-import logging
 import contextvars
+import logging
 import queue
 import threading
 import uuid
@@ -304,9 +304,7 @@ class ObservabilityOperator:
             phase,
             machine,
             correlation_id=cid,
-            actor_id=str(event.operator_context.get("operator_id", "operator"))
-            if isinstance(event, HitlResolve)
-            else "engine",
+            actor_id=event.operator_id if isinstance(event, HitlResolve) else "engine",
             attribution_code=attribution,
             payload={
                 "ingress_kind": event.kind.value,
@@ -319,7 +317,12 @@ class ObservabilityOperator:
                     "scheduled_egress": q.scheduled_egress,
                 },
                 **(
-                    {"resolution": event.resolution.value, "answer": event.answer}
+                    {
+                        "resolution": event.resolution.value,
+                        "answer": event.answer,
+                        "operator_id": event.operator_id,
+                        "steering": event.steering_text,
+                    }
                     if isinstance(event, HitlResolve)
                     else {}
                 ),

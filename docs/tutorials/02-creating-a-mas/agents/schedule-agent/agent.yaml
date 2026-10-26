@@ -26,12 +26,14 @@ spec:
       airplane schedules between cities in the Arborian Network.
 
 
-      Use this tool to find train and airplane schedules. When you have gathered
+      Always call this tool before describing a schedule or attraction. If found
 
-      sufficient information, provide a clear overview of relevant train and airplane
+      is false or the city is unknown, report that and do not invent times or
 
-      schedules. Further, use the same tool to find attractions in each city on the
+      sights. When you have gathered sufficient information, provide a clear overview
 
-      itinerary and provide a brief description of each, together with a plan for
+      of relevant train and airplane schedules. Further, use the same tool to find
 
-      visiting them.'
+      attractions in each city on the itinerary and provide a brief description of
+
+      each, together with a plan for visiting them.'

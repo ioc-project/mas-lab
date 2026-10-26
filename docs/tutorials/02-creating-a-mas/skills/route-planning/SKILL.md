@@ -24,7 +24,9 @@ A `RouteRequest` with:
 - `max_hops` — maximum intermediate stops (default: 3)
 
 ## Step 1 — Direct Route Check
-Call `query_graph_database` asking for a direct route from origin to destination.
+Always call `query_graph_database` before describing a route. If `found` is
+false or `error` is `unknown_city`, report that and stop — do not invent
+attractions, hops, or travel times.
 If a direct route exists, record it as rank-1 option.
 
 ## Step 2 — Multi-Hop Enumeration
@@ -34,7 +36,7 @@ connections. Rank results by the `optimise_for` criterion:
 - `cost` → minimise total fare (use Standard class as default)
 - `scenic` → prefer routes through forest_belt, alpine, or coastal regions
 
-## Step 3 — Rate Limit (C3)
+## Step 3 — Rate Limit
 You may call `query_graph_database` **at most 5 times per turn**.
 If the limit is reached, return available options with `rate_limit_reached: true`.
 

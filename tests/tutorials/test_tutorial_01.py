@@ -4,18 +4,17 @@
 
 Manifest validation, overlay merging, and tool execution run without an LLM.
 Bootstrap uses an injected SimulatedEngine. Chat effect is checked with a
-real model when OPENAI_API_KEY is set.
+real model when OPENAI_API_KEY and TUTORIAL_ONLINE=1 are set.
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 import yaml
 from ci_llm import stop_engine
-from conftest import T01, load_yaml, run_cli
+from conftest import T01, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Manifest & overlay validation (CLI)
@@ -322,16 +321,8 @@ class TestAgentInstantiation:
 # 4b. Live mas-ctl chat (real LLM)
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY"),
-    reason="OPENAI_API_KEY required for live tutorial chat",
-)
+_LIVE = live_tutorial_chat
 _LIVE_QUERY = "What is the speed of light?"
-
-
-def _live_cli_env() -> dict[str, str]:
-    """pytest isolates XDG_CONFIG_HOME; live chat must see the operator config."""
-    return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}
 
 
 @_LIVE
@@ -343,7 +334,7 @@ class TestLiveSkillChat:
             ["mas-ctl", "chat", "agent.yaml", "--no-cache-read", "--trace", "-q", _LIVE_QUERY],
             cwd=T01,
             timeout=120,
-            extra_env=_live_cli_env(),
+            extra_env=live_cli_env(),
         )
         combined = f"{r.stdout}\n{r.stderr}"
         assert r.returncode == 0, r.stderr
@@ -365,7 +356,7 @@ class TestLiveSkillChat:
             ],
             cwd=T01,
             timeout=120,
-            extra_env=_live_cli_env(),
+            extra_env=live_cli_env(),
         )
         combined = f"{r.stdout}\n{r.stderr}"
         assert r.returncode == 0, r.stderr

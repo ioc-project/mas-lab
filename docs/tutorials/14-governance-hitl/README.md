@@ -110,8 +110,13 @@ dollars for materials. Calculate the total.` When the agent requests `calc`, the
 prompt changes from `You:` to `HITL>` and shows the proposed operation.
 Enter `ALLOW`: the tool runs and the agent answers `$417`.
 
-Run the same command again and enter `BLOCK` at `HITL>`. The calculator does not run. The model's
-reply varies, but the protected action did not execute.
+Run the same command again and enter `BLOCK` at `HITL>`. The calculator does
+not run, and the turn ends. The user-visible answer is the operator denial
+(`Operator blocked tool 'calc' via HITL.`), not a model-computed `417`. Optional
+steering is appended to that denial. The model does not get another call after
+a BLOCK, so it cannot substitute the result. `SKIP` is different: it still
+skips the tool, injects optional steering as the tool result, and lets the
+model continue (for example to ask a question).
 
 For the curses terminal interface, run the same manifest and overlays with
 `mas-ctl tui`. It shows the same `HITL>` decision.
@@ -149,7 +154,21 @@ mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
 ```
 
 With auto-approve you should see `$417`. With auto-deny the calculator does not
-run; the model's wording varies, so check the trace in Step 6.
+run (`tool_call_end` for `calc` is absent) and the answer is the operator
+denial, not `417`:
+
+```bash
+mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
+  -o docs/tutorials/14-governance-hitl/overlays/tools.yaml \
+  -o docs/tutorials/14-governance-hitl/overlays/governance-auto-deny.yaml \
+  --trace -q "Calculate 125 * 3 + 42."
+```
+
+Repeat runs can return from the LLM response cache. Pass `-v` to log a cache
+hit. Disable with `--no-cache-read` or `MAS_LLM_CACHE_READ=false` (a cached
+ALLOW can replay `417` after a denial). See
+[Tutorial 0](../00-environment-setup/README.md) and
+[llm-cache.md](../../manifests/llm-cache.md).
 
 ## Step 6 — Inspect the evidence in the trace
 
@@ -163,8 +182,10 @@ grep -E 'governance|hitl' \
 ```
 
 The trace records the proposed operation, the rule, the decision and the
-reason. You can tell which tool was tried, whether approval came before or
-after, who resolved it, and whether the tool ran.
+reason. `hitl_resolve` includes `resolution`, `operator_id` (who decided),
+and `steering` when the operator supplied text. You can tell which tool was
+tried, whether approval came before or after, who resolved it, and whether
+the tool ran.
 
 ## Step 7 — Let the agent ask when information is missing
 
@@ -195,8 +216,8 @@ mandatory control and `request_human_input` for missing preferences.
 | `ALLOW` | Continue normally |
 | `LOG` | Record the decision and continue |
 | `HITL` | Pause and request a human or configured automated response |
-| `BLOCK` | Refuse the operation |
-| `SKIP` | Skip the operation and provide a controlled result |
+| `BLOCK` | Refuse the operation and end the turn with that denial (optional steering is appended) |
+| `SKIP` | Skip the operation and provide a controlled result (optional steering text becomes the tool result; the model continues) |
 | `RETRY` | Ask for another attempt |
 | `MODIFY` | Replace approved parts of the proposed operation |
 | `TERMINATE` | End the session |
@@ -235,7 +256,9 @@ passes to the next rule, and `BLOCK` stops at once.
    `hitl_on_tool` pauses before the call and `hitl_on_tool_result` before the
    model sees the result.
 2. Batch and CI runs need an explicit `auto-approve` or `auto-deny` overlay.
-   The decision and reason land in `traces/events.jsonl`.
+   `BLOCK` / auto-deny stops the tool and ends the turn with the operator
+   denial. `SKIP` with steering lets the model continue from that text. The
+   decision, operator, and steering land in `traces/events.jsonl`.
 3. Each layer is a separate file, so control changes without editing
    `agent.yaml`.
 
@@ -244,6 +267,11 @@ passes to the next rule, and `BLOCK` stops at once.
 - **No HITL prompt.** Check that both the tool and governance overlays and
   `-i` are present. The prompt appears only after the model asks for a tool.
 - **A non-interactive command blocks or exits.** Use a Step 5 overlay.
+- **You still see 417 after a denial.** `BLOCK` / auto-deny ends the turn
+  with the operator denial. `417` means the call was allowed, you used
+  `SKIP`, or a cached allow was replayed. Use `--no-cache-read`.
+- **A repeat run returned in tens of milliseconds.** The LLM response cache is
+  on by default. Use `--no-cache-read` or `MAS_LLM_CACHE_READ=false`.
 - **Trace file missing.** Pass `--events --events-file PATH` to choose a
   location, and do not pass `--no-events`.
 

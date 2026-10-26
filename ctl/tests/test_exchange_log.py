@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
-from mas.ctl.session.exchange_log import TraceFormatOptions, format_exchange
+from mas.ctl.session.exchange_log import (
+    CliTraceExchangePlugin,
+    TraceFormatOptions,
+    format_exchange,
+)
 from mas.runtime.driver.driver import ExchangeRecord
 
 
@@ -323,3 +327,52 @@ def test_format_exchange_gov_block_prints_agent_to_gov():
     )
     assert "AGENT[moderator] -> GOV[forbidden-destination]" in summary
     assert "Shadowmere" in summary
+
+
+def test_format_exchange_llm_response_marks_cache_hit():
+    ex = ExchangeRecord(
+        kind="llm_response",
+        text="hi",
+        correlation_id=1,
+        op="LLM_CALL",
+        response_kind="MODEL_TEXT",
+        cache_status="hit",
+        cache_layer="engine",
+    )
+    out = format_exchange("agent", ex)
+    assert "cache=hit layer=engine" in out
+
+
+def test_cache_hit_note_only_with_verbose():
+    import io
+
+    hit = ExchangeRecord(kind="llm_response", text="hi", cache_status="hit", cache_layer="engine")
+    quiet = io.StringIO()
+    plugin = CliTraceExchangePlugin(err=quiet)
+    plugin.configure(trace=False, verbose=0, agent_id="agent", fmt=TraceFormatOptions())
+    plugin.on_exchange(hit)
+    assert quiet.getvalue() == ""
+
+    traced = io.StringIO()
+    plugin = CliTraceExchangePlugin(err=traced)
+    plugin.configure(
+        trace=True, verbose=0, agent_id="agent", fmt=TraceFormatOptions(summary_only=True)
+    )
+    plugin.on_exchange(hit)
+    dump = traced.getvalue()
+    assert dump  # --trace still prints the hop
+    assert "served from cache" not in dump
+
+    verbose = io.StringIO()
+    plugin = CliTraceExchangePlugin(err=verbose)
+    plugin.configure(trace=False, verbose=1, agent_id="agent", fmt=TraceFormatOptions())
+    plugin.on_exchange(hit)
+    note = verbose.getvalue()
+    assert "LLM response served from cache (layer=engine)" in note
+    assert "MAS_LLM_CACHE_READ=false" in note
+
+    miss = io.StringIO()
+    plugin = CliTraceExchangePlugin(err=miss)
+    plugin.configure(trace=False, verbose=1, agent_id="agent", fmt=TraceFormatOptions())
+    plugin.on_exchange(ExchangeRecord(kind="llm_response", text="hi", cache_status="miss"))
+    assert miss.getvalue() == ""

@@ -9,10 +9,9 @@ from pathlib import Path
 
 import pytest
 import yaml
-
+from ci_llm import web_search_engine
 from mas.runtime.schema.hitl import HitlResolveChoice
 from mas.runtime.schema.observability import ObsEventKind
-from ci_llm import web_search_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T01 = REPO_ROOT / "docs" / "tutorials" / "01-building-an-agent"
@@ -240,7 +239,7 @@ def test_egress_block_synthetic_tool_result() -> None:
     close_observability(controller)
 
     assert "blocked" in _context_text(instance).lower()
-    assert result.text
+    assert "blocked" in result.text.lower()
 
 
 @pytest.mark.timeout(60)
@@ -283,7 +282,7 @@ def test_ingress_block_synthetic_tool_result() -> None:
     close_observability(controller)
 
     assert "blocked tool result" in _context_text(instance).lower()
-    assert result.text
+    assert "blocked tool result" in result.text.lower()
 
 
 @pytest.mark.timeout(60)

@@ -106,3 +106,14 @@ def run_cli(
         timeout=timeout,
         env=env,
     )
+
+
+live_tutorial_chat = pytest.mark.skipif(
+    not os.environ.get("OPENAI_API_KEY") or not os.environ.get("TUTORIAL_ONLINE"),
+    reason="OPENAI_API_KEY and TUTORIAL_ONLINE=1 required for live tutorial chat",
+)
+
+
+def live_cli_env() -> dict[str, str]:
+    """pytest isolates XDG_CONFIG_HOME; live chat must see the operator config."""
+    return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}

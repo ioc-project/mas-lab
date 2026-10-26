@@ -5,7 +5,7 @@
 Returns one-way adult fares for a route leg and travel class.
 Data is loaded from the Arborian Network dataset via ``_scene.py``.
 
-Privilege Isolation (C4): this tool is exclusively for concierge_agent.
+Privilege isolation: this tool is exclusively for concierge_agent.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from mas.runtime.contracts import ToolContract
+
 from ._scene import load_network
 
 

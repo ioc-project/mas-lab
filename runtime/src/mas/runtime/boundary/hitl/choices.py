@@ -9,7 +9,7 @@ from mas.runtime.schema.hitl import HitlResolveChoice
 HITL_CHOICE_HELP: dict[HitlResolveChoice, str] = {
     HitlResolveChoice.ALLOW: "Run the tool now (same as SCHEDULE)",
     HitlResolveChoice.SCHEDULE: "Run the tool now",
-    HitlResolveChoice.BLOCK: "Do not run; tell the model the tool was denied",
+    HitlResolveChoice.BLOCK: "Do not run; end the turn with the operator denial (optional steering is appended)",
     HitlResolveChoice.SKIP: "Do not run; optional steering text is sent as the tool result",
     HitlResolveChoice.TERMINATE: "Stop the agent run",
 }

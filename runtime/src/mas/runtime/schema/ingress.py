@@ -124,6 +124,15 @@ class HitlResolve(BaseModel):
     answer: object | None = None
     operator_context: dict = Field(default_factory=dict)
 
+    @property
+    def operator_id(self) -> str:
+        return str(self.operator_context.get("operator_id") or "operator")
+
+    @property
+    def steering_text(self) -> str:
+        raw = self.operator_context.get("steering") or self.operator_context.get("message") or ""
+        return raw if isinstance(raw, str) else str(raw)
+
 
 class OperatorSteerReceived(BaseModel):
     model_config = ConfigDict(frozen=True)

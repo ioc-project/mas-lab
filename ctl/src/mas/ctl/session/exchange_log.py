@@ -112,12 +112,13 @@ class CliTraceExchangePlugin(ExchangePlugin):
     plugin) are never silently discarded.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, err=sys.stderr) -> None:
         self.enabled = False
         self.trace = False
         self.verbose = 0
         self.agent_id = "agent"
         self.fmt = TraceFormatOptions()
+        self._err = err
         self._logger = logging.getLogger("mas.runtime")
 
     def configure(
@@ -135,10 +136,14 @@ class CliTraceExchangePlugin(ExchangePlugin):
         self.fmt = fmt
 
     def on_exchange(self, record: ExchangeRecord) -> None:
+        # Internals stay off the default console so demos and --trace stay
+        # the conversation + hops. Pass -v (same as summarization logs).
+        if self.verbose >= 1:
+            _maybe_note_cache_hit(record, err=self._err)
         if not self.enabled:
             return
         if self.trace:
-            print_exchange(record, err=sys.stderr, agent_id=self.agent_id, fmt=self.fmt)
+            print_exchange(record, err=self._err, agent_id=self.agent_id, fmt=self.fmt)
         elif self.verbose >= 1:
             formatted = format_exchange(self.agent_id, record, fmt=self.fmt).strip()
             for line in formatted.splitlines():
@@ -247,6 +252,20 @@ def _last_non_system_content(ex: ExchangeRecord) -> str:
     return ""
 
 
+_CACHE_HIT_NOTE = (
+    "note: LLM response served from cache{layer}; "
+    "use --no-cache-read or MAS_LLM_CACHE_READ=false to call the provider\n"
+)
+
+
+def _maybe_note_cache_hit(record: ExchangeRecord, *, err=sys.stderr) -> None:
+    if record.kind != "llm_response" or record.cache_status != "hit":
+        return
+    layer = f" (layer={record.cache_layer})" if record.cache_layer else ""
+    err.write(_CACHE_HIT_NOTE.format(layer=layer))
+    err.flush()
+
+
 def _metadata_line(ex: ExchangeRecord) -> str:
     parts: list[str] = []
     if ex.correlation_id is not None:
@@ -259,6 +278,9 @@ def _metadata_line(ex: ExchangeRecord) -> str:
         parts.append(f"finish_reason={ex.finish_reason}")
     if ex.tool_name and ex.kind in {"llm_response", "tool_call", "tool_result"}:
         parts.append(f"tool={ex.tool_name}")
+    if ex.kind == "llm_response" and ex.cache_status:
+        layer = f" layer={ex.cache_layer}" if ex.cache_layer else ""
+        parts.append(f"cache={ex.cache_status}{layer}")
     return " ".join(parts)
 
 

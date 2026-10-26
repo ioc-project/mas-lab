@@ -24,8 +24,10 @@ A `ScheduleQuery` with:
 - `departure_date` — ISO date or weekday descriptor (`weekday` / `weekend`)
 
 ## Step 1 — Identify the Route
-Call `lookup_schedule` with the origin, destination, and travel_mode.
-If no direct route exists, check for connections via an intermediate city.
+Always call `lookup_schedule` with the origin, destination, and travel_mode.
+If `found` is false or `error` is `unknown_city`, report that and stop — do
+not invent schedules or attractions. If no direct route exists between two
+known cities, check for connections via an intermediate city.
 
 ## Step 2 — Retrieve Departures
 Extract:
@@ -37,7 +39,7 @@ Extract:
 If the query includes `include_attractions: true`, look up opening hours and
 entry fees for the top highlights of the destination city.
 
-## Step 4 — Rate Limit (C3)
+## Step 4 — Rate Limit
 You may perform **at most 8 `lookup_schedule` calls per turn**.
 If the limit is reached, return the best data found so far with `rate_limit_reached: true`.
 Never invent departure times or fares.

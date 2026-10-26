@@ -119,7 +119,10 @@ governance:
       hitl_on_tool: true
 ```
 
-Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
+`BLOCK` (and `hitl_mode: auto-deny`) refuses the tool and ends the turn with
+that denial as the user-visible answer. Optional steering is appended to the
+denial. `SKIP` injects optional steering as the tool result and lets the model
+continue. Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
 
 ## See also
 

@@ -342,7 +342,7 @@ sections:
 
           ```bash
           cd docs/tutorials/02-creating-a-mas
-          mas-ctl run-mas mas.yaml -q "Plan a 3-day trip to Thornhaven, budget €500"
+          mas-ctl run-mas mas.yaml -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
           ```
 
           **Benchmark & analyse**
