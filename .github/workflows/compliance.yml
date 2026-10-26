@@ -1,0 +1,92 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+name: Compliance
+
+on:
+  workflow_call:
+    inputs:
+      mcp:
+        description: Run MCP conformance
+        type: boolean
+        default: true
+      a2a:
+        description: Run A2A TCK
+        type: boolean
+        default: true
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  mcp-compliance:
+    name: MCP
+    if: ${{ github.event_name != 'workflow_call' || inputs.mcp }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+      - name: Install MCP compliance dependencies
+        run: task --dir library-ioa/compliance/mcp install
+      - name: Validate MCP compliance configuration
+        run: task --dir library-ioa/compliance/mcp validate-config
+      - name: Run MCP unit tests
+        run: .venv/bin/pytest library-ioa/tests/mcp -q
+      - name: Run both MCP requirement sets
+        run: |
+          MCP_CONFORMANCE_RESULTS="${{ github.workspace }}/library-ioa/compliance/mcp/results" \
+            ./library-ioa/compliance/mcp/mcp-conformance.sh
+      - name: Upload MCP compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-compliance-${{ github.sha }}
+          path: library-ioa/compliance/mcp/results/
+          if-no-files-found: warn
+          retention-days: 30
+
+  a2a-compliance:
+    name: A2A
+    if: ${{ github.event_name != 'workflow_call' || inputs.a2a }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+      - name: Install and validate A2A compliance
+        run: |
+          task --dir library-ioa/compliance/a2a install
+          task --dir library-ioa/compliance/a2a validate
+          task --dir library-ioa/compliance/a2a install-tck
+      - name: Run A2A unit and fixture checks
+        run: |
+          task --dir library-ioa/compliance/a2a unit-tests
+          task --dir library-ioa/compliance/a2a compliance-tests
+      - name: Start deterministic A2A fixture
+        env:
+          OPENAI_API_KEY: ci-test-unused
+        run: |
+          MAS_LIBRARY_PATHS="${{ github.workspace }}/library-ioa/compliance/a2a" \
+            .venv/bin/mas-ctl serve \
+              "${{ github.workspace }}/library-ioa/compliance/a2a/agents/a2a-tck-agent.yaml" \
+              --infra-ref "${{ github.workspace }}/library-ioa/compliance/a2a/infra/a2a-tck-positive.yaml" \
+              >"${{ runner.temp }}/a2a-fixture.log" 2>&1 &
+          if ! curl --fail --retry 30 --retry-delay 1 --retry-connrefused \
+            http://127.0.0.1:9021/.well-known/agent-card.json; then
+            cat "${{ runner.temp }}/a2a-fixture.log"
+            exit 1
+          fi
+      - name: Run official A2A TCK
+        run: task --dir library-ioa/compliance/a2a tck-positive
+      - name: Upload A2A compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a2a-compliance-${{ github.sha }}
+          path: |
+            library-ioa/compliance/a2a/vendor/a2a-tck/reports/
+            ${{ runner.temp }}/a2a-fixture.log
+          if-no-files-found: warn
+          retention-days: 30

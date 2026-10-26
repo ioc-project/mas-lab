@@ -1,31 +1,15 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+#
+# Path filters live on jobs (scripts/ci_paths.py), not on `on:`.
+# The repository ruleset on main requires the exact check name ci-summary.
 name: Test
 
 on:
   pull_request:
-    branches: [ main ]
-    paths:
-      - "runtime/**"
-      - "ctl/**"
-      - "lab/**"
-      - "library-standard/**"
-      - "library-eval/**"
-      - "library-ioa/**"
-      - "library-telemetry/**"
-      - "library-kg/**"
-      - "tests/**"
-      - "compliance/**"
-      - "docs/**"
-      - "library-samples/**"
-      - "Taskfile.yml"
-      - "pyproject.toml"
-      - "scripts/**"
-      - "demo-ui/**"
-      - ".github/workflows/test.yml"
-      - ".github/workflows/docker.yml"
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -33,44 +17,169 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  changes:
+    name: Changes
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [ "3.11", "3.13" ]
-
+    outputs:
+      unit: ${{ steps.paths.outputs.unit }}
+      unit_matrix: ${{ steps.paths.outputs.unit_matrix }}
+      runtime: ${{ steps.paths.outputs.runtime }}
+      ctl: ${{ steps.paths.outputs.ctl }}
+      lab_unit: ${{ steps.paths.outputs.lab_unit }}
+      repo: ${{ steps.paths.outputs.repo }}
+      unit_311: ${{ steps.paths.outputs.unit_311 }}
+      controller: ${{ steps.paths.outputs.controller }}
+      smoke: ${{ steps.paths.outputs.smoke }}
+      golden: ${{ steps.paths.outputs.golden }}
+      tutorials: ${{ steps.paths.outputs.tutorials }}
+      validate: ${{ steps.paths.outputs.validate }}
+      hitl: ${{ steps.paths.outputs.hitl }}
+      docs: ${{ steps.paths.outputs.docs }}
+      demo_ui: ${{ steps.paths.outputs.demo_ui }}
+      mcp: ${{ steps.paths.outputs.mcp }}
+      a2a: ${{ steps.paths.outputs.a2a }}
+      lib_standard: ${{ steps.paths.outputs.lib_standard }}
+      lib_eval: ${{ steps.paths.outputs.lib_eval }}
+      lib_ioa: ${{ steps.paths.outputs.lib_ioa }}
+      lib_telemetry: ${{ steps.paths.outputs.lib_telemetry }}
+      lib_kg: ${{ steps.paths.outputs.lib_kg }}
+      lib_skills: ${{ steps.paths.outputs.lib_skills }}
+      lib_samples: ${{ steps.paths.outputs.lib_samples }}
+      lib_lab: ${{ steps.paths.outputs.lib_lab }}
+      suite: ${{ steps.paths.outputs.suite }}
+      library: ${{ steps.paths.outputs.library }}
+      suite_matrix: ${{ steps.paths.outputs.suite_matrix }}
+      library_matrix: ${{ steps.paths.outputs.library_matrix }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          fetch-depth: 0
+      - uses: ./.github/actions/fetch-base
+        with:
+          sha: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - id: paths
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/ci_paths.py >> "$GITHUB_OUTPUT"
 
-      - name: Setup Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+      - uses: ./.github/actions/fetch-base
+        with:
+          sha: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Lock, literals, ruff on changed Python
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: task verify-lint
 
-      - name: Install go-task
-        run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b "${{ runner.temp }}/bin"
-          echo "${{ runner.temp }}/bin" >> "$GITHUB_PATH"
+  docs:
+    name: Docs
+    needs: [changes, lint]
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+          install-dev: "true"
+      - run: task verify-docs
+      - name: Install MkDocs
+        run: pip install -r requirements-docs.txt
+      - name: Build MkDocs site
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mkdocs build
 
-      - name: CI gates (Taskfile ci = verify:literals + verify-unit + verify-controller + verify-functional + validate + verify-chat-smoke + verify-hitl-gate)
-        run: task ci
+  unit:
+    name: ${{ matrix.name }}
+    needs: [changes, lint]
+    if: needs.changes.outputs.unit == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.unit_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+          install-dev: "true"
+      - uses: ./.github/actions/fetch-base
+        with:
+          sha: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Tests and changed-line coverage
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: task ${{ matrix.task }} COVERAGE=1 COVERAGE_PACKAGE=${{ github.event_name != 'pull_request' && '1' || '0' }}
 
-      - name: Coverage gate (kernel, ctl.workspace, bench pipeline)
-        run: |
-          .venv/bin/pytest runtime/tests/ ctl/tests/ lab/components/bench/tests/ \
-            --cov=mas.runtime.kernel \
-            --cov=mas.runtime.machines \
-            --cov=mas.ctl.workspace \
-            --cov=mas.lab.benchmark.pipeline \
-            --cov-report=term-missing \
-            --cov-fail-under=0 \
-            -q
+  unit-311:
+    name: Unit (3.11)
+    needs: [changes, lint]
+    if: needs.changes.outputs.unit_311 == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.11"
+          install-dev: "true"
+      - run: task verify-unit
+
+  suite:
+    name: ${{ matrix.name }}
+    needs: [changes, lint]
+    if: needs.changes.outputs.suite == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.suite_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+          install-dev: "true"
+      - run: task ${{ matrix.task }}
+
+  library:
+    name: Library (${{ matrix.name }})
+    needs: [changes, lint]
+    if: needs.changes.outputs.library == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.library_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: "3.13"
+          install-dev: "true"
+      - uses: ./.github/actions/fetch-base
+        with:
+          sha: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Lint, test, and changed-line coverage
+        env:
+          GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: task verify-library LIB=${{ matrix.dir }} COV=${{ matrix.cov }} FAIL_UNDER=${{ matrix.fail_under }}
 
   demo-ui:
     name: Demo UI
+    needs: [changes, lint]
+    if: needs.changes.outputs.demo_ui == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,124 +190,39 @@ jobs:
         working-directory: demo-ui
         run: node --test src/*.test.js
 
-  mcp-compliance:
-    name: MCP compliance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Setup Python 3.13
-        run: uv python install 3.13
-
-      - name: Install go-task
-        run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b "${{ runner.temp }}/bin"
-          echo "${{ runner.temp }}/bin" >> "$GITHUB_PATH"
-
-      - name: Install MCP compliance dependencies
-        run: task --dir library-ioa/compliance/mcp install
-
-      - name: Validate MCP compliance configuration
-        run: task --dir library-ioa/compliance/mcp validate-config
-
-      - name: Run MCP unit tests
-        run: .venv/bin/pytest library-ioa/tests/mcp -q
-
-      - name: Run both MCP requirement sets
-        run: |
-          MCP_CONFORMANCE_RESULTS="${{ github.workspace }}/library-ioa/compliance/mcp/results" \
-            ./library-ioa/compliance/mcp/mcp-conformance.sh
-
-      - name: Upload MCP compliance report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: mcp-compliance-${{ github.sha }}
-          path: library-ioa/compliance/mcp/results/
-          if-no-files-found: warn
-          retention-days: 30
-
-  a2a-compliance:
-    name: A2A compliance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - name: Setup Python 3.13
-        run: uv python install 3.13
-
-      - name: Install go-task
-        run: |
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b "${{ runner.temp }}/bin"
-          echo "${{ runner.temp }}/bin" >> "$GITHUB_PATH"
-
-      - name: Install and validate A2A compliance
-        run: |
-          task --dir library-ioa/compliance/a2a install
-          task --dir library-ioa/compliance/a2a validate
-          task --dir library-ioa/compliance/a2a install-tck
-
-      - name: Run A2A unit and fixture checks
-        run: |
-          task --dir library-ioa/compliance/a2a unit-tests
-          task --dir library-ioa/compliance/a2a compliance-tests
-
-      - name: Start deterministic A2A fixture
-        env:
-          OPENAI_API_KEY: ci-test-unused
-        run: |
-          MAS_LIBRARY_PATHS="${{ github.workspace }}/library-ioa/compliance/a2a" \
-            .venv/bin/mas-ctl serve \
-              "${{ github.workspace }}/library-ioa/compliance/a2a/agents/a2a-tck-agent.yaml" \
-              --infra-ref "${{ github.workspace }}/library-ioa/compliance/a2a/infra/a2a-tck-positive.yaml" \
-              >"${{ runner.temp }}/a2a-fixture.log" 2>&1 &
-          if ! curl --fail --retry 30 --retry-delay 1 --retry-connrefused \
-            http://127.0.0.1:9021/.well-known/agent-card.json; then
-            cat "${{ runner.temp }}/a2a-fixture.log"
-            exit 1
-          fi
-
-      - name: Run official A2A TCK
-        run: task --dir library-ioa/compliance/a2a tck-positive
-
-      - name: Upload A2A compliance report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: a2a-compliance-${{ github.sha }}
-          path: |
-            library-ioa/compliance/a2a/vendor/a2a-tck/reports/
-            ${{ runner.temp }}/a2a-fixture.log
-          if-no-files-found: warn
-          retention-days: 30
+  compliance:
+    name: Compliance
+    needs: [changes, lint]
+    if: ${{ needs.changes.outputs.mcp == 'true' || needs.changes.outputs.a2a == 'true' }}
+    uses: ./.github/workflows/compliance.yml
+    with:
+      mcp: ${{ needs.changes.outputs.mcp == 'true' }}
+      a2a: ${{ needs.changes.outputs.a2a == 'true' }}
+    secrets: inherit
 
   # Repository ruleset on main requires this exact check name.
   ci-summary:
     name: ci-summary
     if: always()
-    needs: [test, demo-ui, mcp-compliance, a2a-compliance]
+    needs:
+      - changes
+      - lint
+      - docs
+      - unit
+      - unit-311
+      - suite
+      - library
+      - demo-ui
+      - compliance
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/ci_gate.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
       - name: All required jobs passed
         env:
           NEEDS: ${{ toJson(needs) }}
-        run: |
-          python - <<'PY'
-          import json, os, sys
-          needs = json.loads(os.environ["NEEDS"])
-          failed = [name for name, result in needs.items() if result.get("result") != "success"]
-          if failed:
-              print("failed:", ", ".join(failed))
-              sys.exit(1)
-          print("ok")
-          PY
+          EXPECTED: ${{ toJson(needs.changes.outputs) }}
+        run: python3 scripts/ci_gate.py

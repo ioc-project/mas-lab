@@ -36,6 +36,7 @@ site/
 
 # Test / coverage artifacts
 .coverage
+coverage.xml
 coverage.json
 **/coverage.json
 
@@ -74,7 +75,8 @@ docker/data/*
 # Local protocol compliance checkouts and reports
 compliance/vendor/
 
-# Session / scratch (do not commit — not gitignored; keep local only)
-# .agents/          local harness playbooks (AGENTS.md points here)
+# Local harness playbooks (not published)
+AGENTS.md
+# .agents/
 COVERAGE_REPORT.md
 MANIFEST_SCHEMA_MAPPING.md
