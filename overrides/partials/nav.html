@@ -1,0 +1,126 @@
+{#-
+  Left drawer.
+
+  With navigation.tabs the drawer is the current tab's sections and pages.
+  Home is a single landing page and Paper is a leaf, so that list is empty
+  unless we fill it. page.meta.sidebar selects the fill:
+
+  replica  — same destinations as the tab bar (also the default when the
+             current tab has no nested pages, or the page is not in nav)
+  related  — Paper: labs and getting-started pages
+-#}
+{% import "partials/nav-item.html" as item with context %}
+{% set features = config.theme.features or [] %}
+{% set sidebar = page.meta.sidebar if page and page.meta else none %}
+
+{# True when the active top-level tab would leave the drawer empty. #}
+{% set _s = namespace(empty=true) %}
+{% for nav_item in nav.items %}
+  {% if nav_item.active and nav_item.children %}
+    {% set only = nav_item.children | first %}
+    {% if nav_item.children | length > 1 or only.children %}
+      {% set _s.empty = false %}
+    {% elif page and only.url != page.url %}
+      {% set _s.empty = false %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+{% if sidebar not in ["replica", "related"] and _s.empty %}
+  {% set sidebar = "replica" %}
+{% endif %}
+
+{% macro first_url(nav_item) -%}
+  {%- if nav_item.children -%}
+    {%- set first = nav_item.children | first -%}
+    {%- if first.children -%}
+      {{ first_url(first) }}
+    {%- else -%}
+      {{ first.url | url }}
+    {%- endif -%}
+  {%- else -%}
+    {{ nav_item.url | url }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro drawer_chrome() %}
+  <label class="md-nav__title" for="__drawer">
+    <a href="{{ config.extra.homepage | d(nav.homepage.url, true) | url }}" title="{{ config.site_name | e }}" class="md-nav__button md-logo" aria-label="{{ config.site_name }}" data-md-component="logo">
+      {% include "partials/logo.html" %}
+    </a>
+    {{ config.site_name }}
+  </label>
+  {% if config.repo_url %}
+    <div class="md-nav__source">
+      {% include "partials/source.html" %}
+    </div>
+  {% endif %}
+{% endmacro %}
+
+{% macro nav_link(href, title, active=false) %}
+  <li class="md-nav__item{% if active %} md-nav__item--active{% endif %}">
+    <a href="{{ href }}" class="md-nav__link{% if active %} md-nav__link--active{% endif %}">
+      <span class="md-ellipsis">{{ title }}</span>
+    </a>
+  </li>
+{% endmacro %}
+
+{% set class = "md-nav md-nav--primary" %}
+{% if "navigation.tabs" in features %}
+  {% set class = class ~ " md-nav--lifted" %}
+{% endif %}
+{% if "toc.integrate" in features %}
+  {% set class = class ~ " md-nav--integrated" %}
+{% endif %}
+{% if sidebar == "replica" %}
+  {% set class = class ~ " md-nav--home-replica" %}
+{% elif sidebar == "related" %}
+  {% set class = class ~ " md-nav--paper-related" %}
+{% endif %}
+
+<nav class="{{ class }}" aria-label="{{ lang.t('nav') }}" data-md-level="0">
+  {{ drawer_chrome() }}
+  {% if sidebar == "replica" %}
+    <ul class="md-nav__list" data-md-scrollfix>
+      {% for nav_item in nav.items %}
+        {{ nav_link(first_url(nav_item), nav_item.title, nav_item.active) }}
+      {% endfor %}
+    </ul>
+  {% elif sidebar == "related" %}
+    <ul class="md-nav__list" data-md-scrollfix>
+      {{ nav_link("paper/" | url, "Paper", true) }}
+      <li class="md-nav__item md-nav__item--nested">
+        <nav class="md-nav" data-md-level="1" aria-label="Related">
+          <ul class="md-nav__list">
+            <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+              <label class="md-nav__link">Reproduce</label>
+              <nav class="md-nav" data-md-level="2">
+                <ul class="md-nav__list">
+                  {{ nav_link("labs/" | url, "Paper labs") }}
+                  {{ nav_link("tutorials/00-environment-setup/" | url, "Tutorial 0 — Environment setup") }}
+                  {{ nav_link("tutorials/03-experiments-and-analysis/" | url, "Tutorial 3 — Run an experiment") }}
+                </ul>
+              </nav>
+            </li>
+            <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+              <label class="md-nav__link">In the toolkit</label>
+              <nav class="md-nav" data-md-level="2">
+                <ul class="md-nav__list">
+                  {{ nav_link("what-is/" | url, "What is MAS-Lab") }}
+                  {{ nav_link("architecture/" | url, "Architecture") }}
+                  {{ nav_link("discover/" | url, "Discover") }}
+                </ul>
+              </nav>
+            </li>
+          </ul>
+        </nav>
+      </li>
+    </ul>
+  {% else %}
+    <ul class="md-nav__list" data-md-scrollfix>
+      {% for nav_item in nav.items %}
+        {% set path = "__nav_" ~ loop.index %}
+        {{ item.render(nav_item, path, 1) }}
+      {% endfor %}
+    </ul>
+  {% endif %}
+</nav>

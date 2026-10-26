@@ -1,8 +1,8 @@
 ---
 title: MAS-Lab
 hide:
-  - navigation
   - path
+sidebar: replica
 ---
 
 <!--

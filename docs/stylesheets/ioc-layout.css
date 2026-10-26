@@ -98,7 +98,8 @@
 
 /* Material hides .md-tabs and the header logo below ~1220px, then the
    hamburger drawer "lifts" into the current tab. Keep the IoC two-bar
-   chrome. The drawer itself is only the current tab's sections and pages. */
+   chrome. The drawer is the current tab's sections and pages, except on
+   Home (tab replica) and Paper (related links). */
 @media screen and (max-width: 76.234375em) {
   .md-tabs {
     display: block;
@@ -137,6 +138,24 @@
 /* Pages not in nav have no active tab; do not empty the drawer. */
 .md-sidebar--primary .md-nav--primary:not(:has(.md-nav__item--active)) > .md-nav__list > .md-nav__item {
   display: block;
+}
+
+/* Home replica and Paper related lists are the whole drawer. Keep every
+   top-level row, including the current page. */
+.md-sidebar--primary .md-nav--primary.md-nav--home-replica > .md-nav__list > .md-nav__item,
+.md-sidebar--primary .md-nav--primary.md-nav--paper-related > .md-nav__list > .md-nav__item {
+  display: block;
+}
+
+.md-sidebar--primary .md-nav--primary.md-nav--home-replica > .md-nav__list > .md-nav__item--active > .md-nav__link,
+.md-sidebar--primary .md-nav--primary.md-nav--paper-related > .md-nav__list > .md-nav__item--active > .md-nav__link {
+  display: flex;
+}
+
+.md-sidebar--primary .md-nav--paper-related .md-nav[data-md-level="1"] > .md-nav__list > .md-nav__item--section:first-child > .md-nav__link {
+  margin-top: 1.15rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--ioc-hair);
 }
 
 /* Ancestors above the title (navigation.path). The H1 is the current page.
