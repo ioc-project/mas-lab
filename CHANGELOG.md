@@ -12,6 +12,13 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- `AgentCommContract.send` / `asend` take optional `headers`. Implementers
+  must accept the argument. Only `traceparent`, `tracestate`, and `baggage`
+  copy onto a later send; other keys stay on this send. A bad trace id
+  starts a new trace. A too-long `tracestate` or `baggage` value is dropped
+  so the send still goes through. `TraceContextLayer` writes a correlation
+  id (not an OpenTelemetry span). A2A accepts `headers` and does not put
+  them on HTTP. See [Communication headers](docs/references/comm-headers.md).
 - `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
   file: count spans by status, print the conversation in order, and list the
   calls to named tools with their inputs.
@@ -115,6 +122,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- A2A still closes a finished task when the installed SDK takes the task
+  object instead of the id.
 - A non-ASCII API key (for example a pasted `…` placeholder) is rejected up front with a clear message
   instead of failing inside the HTTP client.
 - Tutorial 1 no longer repeats the tools' descriptions in a `tool_usage` prompt (they are

@@ -27,8 +27,9 @@ class A2AAgentComm(AgentCommContract):
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
+        headers: dict[str, str] | None = None,
     ) -> str:
-        del target_agent_id
+        del target_agent_id, headers
         try:
             response = self._client.send_message(
                 task,
@@ -69,6 +70,25 @@ class A2AAgentComm(AgentCommContract):
             if text:
                 return text
         return str(result)
+
+    async def asend(
+        self,
+        target_agent_id: str,
+        task: str,
+        *,
+        correlation_id: int = 0,
+        caller_call_id: str = "",
+        context_id: str = "",
+        headers: dict[str, str] | None = None,
+    ) -> str:
+        return self.send(
+            target_agent_id,
+            task,
+            correlation_id=correlation_id,
+            caller_call_id=caller_call_id,
+            context_id=context_id,
+            headers=headers,
+        )
 
     def close(self) -> None:
         self._client.close()

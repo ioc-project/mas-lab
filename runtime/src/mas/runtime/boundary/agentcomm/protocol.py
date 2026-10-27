@@ -30,6 +30,11 @@ class AgentCommContract(Protocol):
     Inbound user turns are not this contract. They are
     ``ControlContract.send_message`` (A2A ``message/send``). There is no
     steer RPC here; mid-token amend exists only on the control protocol.
+
+    ``headers`` is an optional string-to-string map. A link carries it in
+    the envelope and restores it around the receiver. Only
+    ``traceparent``, ``tracestate``, and ``baggage`` ride a later send.
+    ``mas.*`` keys stay on this hop.
     """
 
     def send(
@@ -40,6 +45,7 @@ class AgentCommContract(Protocol):
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
+        headers: dict[str, str] | None = None,
     ) -> str: ...
 
     async def asend(
@@ -50,4 +56,5 @@ class AgentCommContract(Protocol):
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
+        headers: dict[str, str] | None = None,
     ) -> str: ...

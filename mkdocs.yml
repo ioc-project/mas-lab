@@ -199,6 +199,7 @@ nav:
           - Context management: references/context-management.md
           - Reliability: references/reliability.md
           - Event model: references/event-model.md
+          - Communication headers: references/comm-headers.md
           - LLM cache: references/llm-cache.md
           - Contracts: references/contracts.md
           - Snapshots vs checkpoints: references/snapshots.md

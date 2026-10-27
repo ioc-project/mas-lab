@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -112,8 +113,18 @@ class _ClosingActiveTaskRegistry(ActiveTaskRegistry):
         cleanup_task.add_done_callback(self._cleanup_tasks.discard)
 
     async def _close_and_remove(self, active_task: ActiveTask) -> None:
-        await self._remove_task(active_task.task_id)
+        await self._remove_task(_remove_task_arg(active_task))
         await active_task.aclose()
+
+
+def _remove_task_arg(active_task: ActiveTask) -> Any:
+    """a2a-sdk 1.1 takes the task id string; 1.3 takes the task object."""
+    names = [
+        name
+        for name in inspect.signature(ActiveTaskRegistry._remove_task).parameters
+        if name != "self"
+    ]
+    return active_task if names and names[0] != "task_id" else active_task.task_id
 
 
 def _ignore_unknown_proto_fields(value: Any, descriptor: Any) -> Any:

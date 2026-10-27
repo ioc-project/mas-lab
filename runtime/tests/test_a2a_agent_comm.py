@@ -27,12 +27,17 @@ def test_a2a_agent_comm_implements_the_peer_transport_contract() -> None:
     plugin._client = client
 
     assert isinstance(plugin, AgentCommContract)
-    assert plugin.send("worker", "task") == "remote response"
-    client.send_message.assert_called_once_with(
+    assert plugin.send("worker", "task", headers={"traceparent": "00-aa-bb-01"}) == "remote response"
+    assert (
+        asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"}))
+        == "remote response"
+    )
+    client.send_message.assert_called_with(
         "task",
         context_id="",
         metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
     )
+    assert client.send_message.call_count == 2
 
 
 def test_a2a_client_sync_bridge_is_safe_inside_async_executor() -> None:
