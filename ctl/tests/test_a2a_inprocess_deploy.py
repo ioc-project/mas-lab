@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-from mas.ctl.cli.bind_flags import with_binds
+from mas.ctl.cli.bind_flags import with_connects
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.compose.runner import ComposeResult
 from mas.ctl.executor.run_mas import execute_run_mas
@@ -470,9 +470,8 @@ def test_run_mas_bind_greeter_does_not_fail_validation(tmp_path) -> None:
                 validate=False,
                 infra_refs=[str(infra_path)],
                 overrides=list(
-                    with_binds(
-                        (f"greeter=a2a://127.0.0.1:{port_greeter}/agents/greeter",),
-                        (),
+                    with_connects(
+                        connects=(f"greeter=a2a://127.0.0.1:{port_greeter}/agents/greeter",),
                     )
                 ),
                 auto_hitl=True,

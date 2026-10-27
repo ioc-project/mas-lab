@@ -32,7 +32,7 @@ spec:
       tools: [web-search]
 ```
 
-`--bind NAME=mcp://host:port/mcp#tool` is a shortcut for a `usage: use` row.
+`--connect NAME=mcp://host:port/mcp#tool` is a shortcut for a `usage: use` row. `--bind` is the hidden old name.
 Serve a tool with `mas-mcp serve --tool-manifest … --transport streamable-http`.
 
 ## Dependencies

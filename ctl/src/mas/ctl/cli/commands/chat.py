@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, with_binds
+from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
 from mas.ctl.cli.help_text import CHAT_EPILOG
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
@@ -54,6 +54,7 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
     metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
+@connect_option
 @bind_option
 @click.option("--pattern", default=None, help="Design pattern plugin id (default from manifest)")
 @click.option(
@@ -155,6 +156,7 @@ def chat_cmd(
     memory: str | None,
     set_values: tuple[str, ...],
     overrides: tuple[str, ...],
+    connects: tuple[str, ...],
     binds: tuple[str, ...],
     pattern: str | None,
     flavour: str,
@@ -200,7 +202,11 @@ def chat_cmd(
 
     if cache_read_only and (cache_write or cache_read is False):
         raise click.UsageError("--cache-read-only cannot be combined with --cache-write or --no-cache-read")
-    overrides = with_binds(binds, (*max_tokens_overrides(max_tokens), *overrides))
+    overrides = with_connects(
+        connects=connects,
+        binds=binds,
+        overrides=(*max_tokens_overrides(max_tokens), *overrides),
+    )
     verbose = int(ctx.obj.get("verbose", 0) if ctx.obj else 0)
 
     hitl_responder, hitl_terminal = None, None

@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, with_binds
+from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, close_observability
@@ -27,6 +27,7 @@ from mas.ctl.ui.curses_app import build_curses_controller, run_curses_session
     metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
+@connect_option
 @bind_option
 @click.option("--pattern", default=None)
 @click.option(
@@ -69,6 +70,7 @@ def tui_cmd(
     manifest: str | None,
     overlays: tuple[str, ...],
     overrides: tuple[str, ...],
+    connects: tuple[str, ...],
     binds: tuple[str, ...],
     pattern: str | None,
     flavour: str,
@@ -92,7 +94,11 @@ def tui_cmd(
     from mas.ctl.session.infra_resolve import resolve_session_infra
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
-    overrides = with_binds(binds, (*max_tokens_overrides(max_tokens), *overrides))
+    overrides = with_connects(
+        connects=connects,
+        binds=binds,
+        overrides=(*max_tokens_overrides(max_tokens), *overrides),
+    )
 
     with manifest_cwd(manifest, overlay_paths=overlays) as session:
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)

@@ -141,15 +141,15 @@ The quoted key keeps dots and brackets inside one map key.
 mas-ctl chat agent.yaml --override '.flavour.spec.observability=[native]'
 ```
 
-A *flavour* is a deployment preset. This override changes observability and tool exposure. It does not switch internal agents to A2A. That needs an infra Application row with `usage: use`, which `--bind` writes for you.
+A *flavour* is a deployment preset. This override changes observability and tool exposure. It does not switch internal agents to A2A. That needs an infra Application row with `usage: use`, which `--connect` writes for you.
 
-## Bind
+## Connect
 
-`--bind NAME=URI` is a shortcut for infra YAML. It expands into `--override infra:…`.
+`--connect NAME=URI` is a shortcut for infra YAML. It expands into `--override infra:…`. `--bind` is the old name for the same flag: it still works, is hidden from `--help`, and prints a deprecation warning.
 
-An *infra bundle* is a YAML file that says where services live: agent endpoints and tool servers. The bind result merges into the same in-memory infra document as `--infra-ref`. No separate bind resolver exists. `chat`, `tui`, `run-mas`, `serve`, and `compose` all read the patched infra.
+An *infra bundle* is a YAML file that says where services live: agent endpoints and tool servers. The connect result merges into the same in-memory infra document as `--infra-ref`. No separate connect resolver exists. `chat`, `tui`, `run-mas`, `serve`, and `compose` all read the patched infra.
 
-`--bind` applies first. An explicit `--override` of the same path wins.
+`--connect` applies first. An explicit `--override` of the same path wins. `--listen NAME=URI` (already on `serve`) is the mirror: it writes `usage: deploy` so this process serves the name. `--connect` never opens a port.
 
 These two forms are equivalent:
 
@@ -166,17 +166,17 @@ spec:
 ```bash
 mas-ctl run-mas mas.yaml --infra-ref infra/a2a-agents.yaml
 mas-ctl run-mas mas.yaml \
-  --bind banking_assistant=a2a://127.0.0.1:8080/agents/banking_assistant/
+  --connect banking_assistant=a2a://127.0.0.1:8080/agents/banking_assistant/
 ```
 
-Repeat `--bind` for several peers and tools:
+Repeat `--connect` for several peers and tools:
 
 ```bash
 mas-ctl run-mas mas.yaml \
-  --bind banking_assistant=a2a://127.0.0.1:8080/agents/banking_assistant/ \
-  --bind fraud_adjudicator=a2a://127.0.0.1:8080/agents/fraud_adjudicator/ \
-  --bind analyze_transaction_risk=mcp://127.0.0.1:8080/mcp#analyze_transaction_risk \
-  --bind calculate_fraud_score=mcp://127.0.0.1:8080/mcp#calculate_fraud_score
+  --connect banking_assistant=a2a://127.0.0.1:8080/agents/banking_assistant/ \
+  --connect fraud_adjudicator=a2a://127.0.0.1:8080/agents/fraud_adjudicator/ \
+  --connect analyze_transaction_risk=mcp://127.0.0.1:8080/mcp#analyze_transaction_risk \
+  --connect calculate_fraud_score=mcp://127.0.0.1:8080/mcp#calculate_fraud_score
 ```
 
 | Assignment | Expands to (same fields as the infra manifest) |
@@ -186,7 +186,7 @@ mas-ctl run-mas mas.yaml \
 
 - `a2a://` and `mcp://` are scheme tags. The stored URL is `http://` or `https://` (`a2as://` and `mcps://` give `https://`).
 - Two MCP tools on the same origin collapse to one server.
-- The MAS still names the agency peer, and the agent still lists the tool. `--bind` only fills in the location on the infra document.
+- The MAS still names the agency peer, and the agent still lists the tool. `--connect` only fills in the location on the infra document.
 - The flavour stays `local` (`agent_comm.protocol: agent-local`). The Application `usage: use` row routes that peer over A2A.
 
 ## Session tree
@@ -344,7 +344,7 @@ Later layers win:
 workspace/config defaults
   < base manifest
   < file overlays in argument order
-  < legacy shortcut flags (`--bind` expands to `--override infra:…` here)
+  < legacy shortcut flags (`--connect` expands to `--override infra:…` here)
   < --override arguments in argument order
   < runtime defaults for fields still absent
 ```
@@ -361,7 +361,7 @@ These flags still work:
 | `--skill NAME` | Add `NAME` to `.agent.spec.skills`. |
 | `--memory ID` | Replace `.agent.spec.memory`. |
 | `--set KEY=VALUE` | Set an agent context value. |
-| `--bind NAME=URI` | Shortcut for Application and ToolServerRegistry `usage: use` rows on the merged infra document. |
+| `--connect NAME=URI` | Shortcut for Application and ToolServerRegistry `usage: use` rows on the merged infra document. `--bind` is the hidden old name and prints a warning. |
 | `--max-tokens N` | Alias of `--override '.agent.spec.models[*].max_tokens=N'`. Placed before explicit `--override` values (`chat`, `tui`). |
 | `--overlay PATH` | Load a file overlay before CLI values. |
 | `--scenario-id ID` | Select a benchmark scenario. |

@@ -221,13 +221,13 @@ Steps 5 and 6 need `OPENAI_API_KEY` (or a cache replay from Tutorial 0). Without
 
 ## Going further
 
-- **A2A:** point an agent id at a remote peer with `--bind`. The MAS manifest does not change.
+- **A2A:** point an agent id at a remote peer with `--connect`. The MAS manifest does not change.
   [Tutorial 5](../05-a2a-agents/README.md) covers serving and mixed topologies.
 
   To expose a specialist as a server instead, run `mas-ctl serve docs/tutorials/02-creating-a-mas/agents/schedule-agent/agent.yaml --infra-ref library-samples/infra/mixed-agents.infra.yaml` from the repo root.
 
   ```bash
-  mas-ctl run-mas mas.yaml --bind schedule_agent=a2a://127.0.0.1:9006/ -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
+  mas-ctl run-mas mas.yaml --connect schedule_agent=a2a://127.0.0.1:9006/ -q "Plan a 3-day trip from Celestia to Verdantia, budget $500"
   ```
 
 - **Design-space lab:** `labs/design-space.lab/` extends the trip planner with more patterns, topologies, and datasets.

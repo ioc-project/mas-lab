@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 import yaml
-from mas.ctl.cli.bind_flags import bind_option, with_binds
+from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
 from mas.ctl.cli.runtime_flags import runtime_id_choice
 from mas.ctl.compose.runner import ComposeRequest, compose_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
@@ -65,6 +65,7 @@ def _compose_run(
     metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
+@connect_option
 @bind_option
 @click.option("--infra-ref", "infra_refs", multiple=True)
 @click.option("--runtime-ref", "runtime_refs", multiple=True)
@@ -81,6 +82,7 @@ def compose_cmd(
     deployment_path: str | None,
     overlay_paths: tuple[str, ...],
     overrides: tuple[str, ...],
+    connects: tuple[str, ...],
     binds: tuple[str, ...],
     infra_refs: tuple[str, ...],
     runtime_refs: tuple[str, ...],
@@ -93,7 +95,7 @@ def compose_cmd(
         manifest,
         deployment_path=deployment_path,
         overlay_paths=overlay_paths,
-        overrides=with_binds(binds, overrides),
+        overrides=with_connects(connects=connects, binds=binds, overrides=overrides),
         infra_refs=infra_refs,
         runtime_refs=runtime_refs,
         kernel_backend=kernel_backend,

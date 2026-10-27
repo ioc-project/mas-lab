@@ -85,10 +85,10 @@ The bench manifest validator (`mas.lab.mas_validator`) runs it over every `flavo
 
 Flavours select how the application exposes agents or tools.
 They do not select MCP consumption.
-A `ToolServerRegistry` with `usage: use` is an infra dependency, and `--bind NAME=mcp://...` is a shortcut for that infra row.
+A `ToolServerRegistry` with `usage: use` is an infra dependency, and `--connect NAME=mcp://...` is a shortcut for that infra row.
 `--flavour mcp` selects the tool *exposure* protocol.
 Internal agency stays in-process on flavour `local` until an Application endpoint sets `usage: use`.
-Set that endpoint with `--infra-ref` YAML or `--bind NAME=a2a://...`.
+Set that endpoint with `--infra-ref` YAML or `--connect NAME=a2a://...`.
 
 ```bash
 mas-ctl run-mas mas.yaml --infra-ref ./infra/prod-bundle.yaml

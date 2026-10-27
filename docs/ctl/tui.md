@@ -31,7 +31,7 @@ mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.ya
 |------|-------------|
 | `-o / --overlay` | **Overlay** YAML (repeatable) |
 | `--override PATH=VALUE` | Schema-backed patch, applied last ([overrides](../cli/overrides.md)) |
-| `--bind NAME=URI` | Shortcut for an A2A / MCP `usage: use` infra row |
+| `--connect NAME=URI` | Shortcut for an A2A / MCP `usage: use` infra row (`--bind` is the old name) |
 | `--pattern` | Design-pattern plugin id |
 | `--flavour` | Flavour (default `local`) |
 | `--infra-ref` / `--infra` | Infra bundle (`standard:openai`, …); repeatable |

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import click
 import yaml
-from mas.ctl.cli.bind_flags import bind_option, with_binds
+from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.runtime_flags import runtime_id_choice
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
@@ -26,6 +26,7 @@ from mas.ctl.executor.run_mas import execute_run_mas
     metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
+@connect_option
 @bind_option
 @click.option("-d", "--deployment", "deployment", default=None, type=click.Path())
 @click.option(
@@ -58,6 +59,7 @@ def run_mas_cmd(
     queries: tuple[str, ...],
     overlays: tuple[str, ...],
     overrides: tuple[str, ...],
+    connects: tuple[str, ...],
     binds: tuple[str, ...],
     deployment: str | None,
     flavour: str,
@@ -85,7 +87,7 @@ def run_mas_cmd(
     if manifest is None:
         manifest = "mas.yaml"
     verbose = int(ctx.obj.get("verbose", 0) if ctx.obj else 0)
-    overrides = with_binds(binds, overrides)
+    overrides = with_connects(connects=connects, binds=binds, overrides=overrides)
 
     from mas.ctl.session.flavour import FlavourError, resolve_flavour
 

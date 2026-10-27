@@ -7,16 +7,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, listen_option, with_binds
+from mas.ctl.cli.bind_flags import bind_option, connect_option, listen_option, with_connects
 from mas.ctl.cli.obs_flags import resolve_observability_config
 from mas.ctl.env import load_dotenv
 from mas.ctl.infra.resolve import application_endpoint_is_deployed
 from mas.ctl.runtime_cli import load_merged_agent_manifest
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
-from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.exposure import expose_agent, make_runtime_handler
 from mas.ctl.session.flavour import FlavourError, resolve_flavour
 from mas.ctl.session.infra_resolve import resolve_session_infra
+from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.observability import setup_observability
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
@@ -34,6 +34,7 @@ _make_runtime_handler = make_runtime_handler
     metavar="PATH=VALUE",
     help="Schema-validated overlay override (repeatable; applied last).",
 )
+@connect_option
 @bind_option
 @listen_option
 @click.option(
@@ -61,6 +62,7 @@ def serve_agent_cmd(
     agent: Path,
     overlays: tuple[str, ...],
     overrides: tuple[str, ...],
+    connects: tuple[str, ...],
     binds: tuple[str, ...],
     listens: tuple[str, ...],
     infra_refs_cli: tuple[str, ...],
@@ -72,7 +74,9 @@ def serve_agent_cmd(
     """Serve an agent through the agent_expose plugin selected by its infra endpoint."""
     from mas.ctl.paths import manifest_cwd
 
-    overrides = with_binds(binds, overrides, listens)
+    overrides = with_connects(
+        connects=connects, binds=binds, overrides=overrides, listens=listens
+    )
 
     with manifest_cwd(agent, overlay_paths=overlays) as session:
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)

@@ -90,7 +90,7 @@ These settings are independent of agency topology on purpose:
 - **`chat` and `tui`:** the in-process agent owns the conversation. A deployed endpoint binds in the background for interrogation. Stdin or curses stays the conversation.
 - **`run-mas`:** the entry agent is always in-process. Every hosted agent whose A2A endpoint has `usage: deploy` or `use-and-deploy` binds in this process. `usage: use` peers are client routes. Another process, such as a separate `mas-ctl serve`, owns those ports.
 
-`--bind NAME=a2a://…` is a shortcut for an Application `usage: use` row. It expands to `--override infra:spec.endpoints[...]=…` on the same merged infra document as `--infra-ref`. It is not a second exposure path. It never opens a listener.
+`--connect NAME=a2a://…` is a shortcut for an Application `usage: use` row. It expands to `--override infra:spec.endpoints[...]=…` on the same merged infra document as `--infra-ref`. It is not a second exposure path. It never opens a listener. `--bind` is the hidden old name.
 
 The advertised `url` cannot include a path prefix. A single port cannot host multiple independent AgentCards. The runtime does not infer either.
 

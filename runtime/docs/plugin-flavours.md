@@ -68,7 +68,7 @@ mas-lab benchmark run experiment.yaml --flavour local-benchmark
 
 Without `--flavour`, the runtime uses `metadata.default_flavour` of the MAS manifest (default `local`). In this release `mas-ctl run-mas` and `mas-ctl tui` accept only `local`; `mas-ctl chat` accepts `local` and `mcp`.
 
-Infra (endpoints of LLM providers, tool servers, remote agents) is selected separately, with `--infra-ref` or `--bind`. One flavour then works against several environments:
+Infra (endpoints of LLM providers, tool servers, remote agents) is selected separately, with `--infra-ref` or `--connect`. One flavour then works against several environments:
 
 ```bash
 mas-ctl run-mas mas.yaml --flavour local --infra-ref ./infra/prod-bundle.yaml

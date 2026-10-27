@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from urllib.parse import urlparse, urlunparse
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import yaml
 
@@ -18,13 +18,14 @@ _HTTP_SCHEMES = {
 }
 
 
-def expand_binds(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
+def expand_connects(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
     """Turn ``NAME=a2a://…`` / ``NAME=mcp://…#tool`` into ``infra:`` overrides.
 
     This is a shortcut over Application / ToolServerRegistry fields, not a
     second resolver. A2A peers become ``spec.endpoints`` ``usage: use`` rows;
     MCP tools become ``spec.tool_servers`` ``usage: use`` rows. Explicit
-    ``--override`` values applied after these still win.
+    ``--override`` values applied after these still win. ``--connect`` is the
+    flag; ``--bind`` is the old name for the same expansion.
     """
     endpoints: dict[str, dict[str, Any]] = {}
     mcp_servers: dict[str, dict[str, Any]] = {}
@@ -34,7 +35,7 @@ def expand_binds(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
         scheme = (parsed.scheme or "").lower()
         if scheme not in _HTTP_SCHEMES:
             raise ValueError(
-                f"bind {source!r} must use a2a://, a2as://, mcp://, or mcps:// "
+                f"{source!r} must use a2a://, a2as://, mcp://, or mcps:// "
                 f"(got {scheme or 'no scheme'!r})"
             )
         http_url = _http_url(parsed)
@@ -43,7 +44,7 @@ def expand_binds(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
             continue
         tool_name = (parsed.fragment or name).strip()
         if not tool_name:
-            raise ValueError(f"MCP bind {source!r} needs a tool name or #fragment")
+            raise ValueError(f"MCP {source!r} needs a tool name or #fragment")
         server_id = _mcp_server_id(http_url)
         server = mcp_servers.setdefault(
             server_id,
@@ -57,7 +58,7 @@ def expand_binds(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
         )
         if server.get("url") != http_url:
             raise ValueError(
-                f"MCP bind {source!r} reuses id {server_id!r} with a different URL"
+                f"MCP {source!r} reuses id {server_id!r} with a different URL"
             )
         tools = server.setdefault("tools", [])
         if tool_name not in tools:
@@ -77,13 +78,13 @@ def expand_binds(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
 def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
     """Turn ``NAME=a2a://host:port/path`` into ``infra:`` overrides that serve ``NAME``.
 
-    The mirror of :func:`expand_binds`: ``--bind`` says where to *use* a remote
-    peer (``usage: use``), ``--listen`` says where to *serve* an agent
+    The mirror of :func:`expand_connects`: ``--connect`` says where to *use* a
+    remote peer (``usage: use``), ``--listen`` says where to *serve* an agent
     (``usage: deploy``). Same Application endpoint field, same merge path.
     """
     overrides: list[str] = []
     for source in assignments:
-        name, uri = _split_assignment(source)
+        name, uri = _split_assignment(source, kind="listen")
         parsed = urlparse(uri)
         scheme = (parsed.scheme or "").lower()
         if scheme not in {"a2a", "a2as"}:
@@ -98,29 +99,29 @@ def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...
 
 def combine_overrides(
     *,
-    binds: Sequence[str] | Iterable[str] = (),
+    connects: Sequence[str] | Iterable[str] = (),
     overrides: Sequence[str] | Iterable[str] = (),
     listens: Sequence[str] | Iterable[str] = (),
 ) -> tuple[str, ...]:
-    """``--bind`` and ``--listen`` expansions first, then explicit ``--override`` (later wins)."""
-    return expand_binds(binds) + expand_listens(listens) + tuple(overrides)
+    """``--connect`` and ``--listen`` expansions first, then explicit ``--override`` (later wins)."""
+    return expand_connects(connects) + expand_listens(listens) + tuple(overrides)
 
 
-def _split_assignment(source: str) -> tuple[str, str]:
+def _split_assignment(source: str, *, kind: str = "connect") -> tuple[str, str]:
     if "=" not in source:
-        raise ValueError(f"bind must be NAME=URI, got {source!r}")
+        raise ValueError(f"{kind} must be NAME=URI, got {source!r}")
     name, uri = source.split("=", 1)
     name = name.strip()
     uri = uri.strip()
     if not name or not uri:
-        raise ValueError(f"bind must be NAME=URI, got {source!r}")
+        raise ValueError(f"{kind} must be NAME=URI, got {source!r}")
     return name, uri
 
 
 def _http_url(parsed) -> str:
     http_scheme = _HTTP_SCHEMES[parsed.scheme.lower()]
     if not parsed.netloc:
-        raise ValueError(f"bind URI is missing host: {parsed.geturl()!r}")
+        raise ValueError(f"URI is missing host: {parsed.geturl()!r}")
     return urlunparse((http_scheme, parsed.netloc, parsed.path or "/", "", "", ""))
 
 

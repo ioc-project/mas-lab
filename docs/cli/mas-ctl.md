@@ -157,7 +157,7 @@ mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace
 | `--memory ID` | none | Inline overlay: set the memory backend id. |
 | `--set KEY=VALUE` | none | Inline overlay: set a `spec.context` value. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
-| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
 | `--flavour NAME` | `local` | Flavour from library-standard. |
 | `--infra-ref REF` | workspace or user | Infra bundle. Repeatable. Wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
@@ -172,7 +172,7 @@ How the patching flags work:
 - `.mas.agent[reviewer]` is Overlay `target.kind: Agent` plus `target.name`. It applies to `{id, ref}` rows and to inline specs. See [Agents in a MAS](overrides.md#agents-in-a-mas).
 - CLI patches outrank file overlays.
 - `--tool`, `--skill`, `--memory`, and `--set` remain supported.
-- `--bind NAME=URI` writes the same Application and ToolServerRegistry fields as `--infra-ref` YAML. See [Bind](overrides.md#bind).
+- `--connect NAME=URI` writes the same Application and ToolServerRegistry fields as `--infra-ref` YAML. See [Connect](overrides.md#connect). `--bind` is the hidden old name.
 - An overlay file can group assignments under `spec.overrides`. They run after that file's `spec.patch`, in list order. See the [overlay manifest](../manifests/overlay.md).
 
 ### Cache, stream, envelope
@@ -268,7 +268,7 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 | `-q` / `--query TEXT` | none | Extra turn. Repeatable. |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
-| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest. |
 | `--flavour NAME` | `local` | Flavour. |
 | `--infra-ref REF` | none | Infra bundle. Repeatable. |
@@ -291,7 +291,7 @@ mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
 ```
 
 The same without an infra file: `--listen NAME=a2a://host:port` is the shortcut for the
-`usage: deploy` Application row, the mirror of `--bind` (which *uses* a remote peer).
+`usage: deploy` Application row, the mirror of `--connect` (which *uses* a remote peer).
 
 ```bash
 mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
@@ -301,7 +301,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
-| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: deploy`. Expands to `--override infra:…`. |
 | `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
 | `--cache-read-only` | off | Exclusive replay (see `chat`): answer from the cache only, no API key needed. |
@@ -317,7 +317,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
-| `--bind NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
 | `--flavour NAME` | `local` | Flavour. |
 | `--single-turn` | off | Exit after the first reply. |
@@ -337,7 +337,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay` |
 | `mas-ctl schemas` | List registered schema kinds. | none |
 | `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
-| `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--bind`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
+| `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--connect`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
 | `mas-ctl plan MANIFEST` | Print the placement plan only. | `-d/--deployment`, `--kernel`, `--no-validate` |
 | `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: prefer `deployment/v1`. | none |
 | `mas-ctl infra list` | List infra bundles. Alias: `mas-ctl list-bundles`. | `-v` |

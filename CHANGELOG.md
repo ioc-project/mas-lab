@@ -21,7 +21,7 @@ reconciling the release notes with the code and docs currently on that branch.
 - `mas_ctl.cache: read-only` in `config.yaml` makes `--cache-read-only` the default for `mas-ctl chat`
   and `serve` in that workspace (an explicit `--cache-write` or `--no-cache-read` wins).
 - `mas-ctl serve --listen NAME=a2a://host:port` serves an agent without an infra file, the
-  mirror of `--bind` (`usage: deploy` instead of `usage: use`).
+  mirror of `--connect` (`usage: deploy` instead of `usage: use`).
 - Scope-based controller API (`/api/scopes`, `/api/kinds`,
   `/api/scopes/{scope_id}/items`, `/api/choices`, `/api/runs`,
   `/api/artifacts`, `/api/uploads`, `/api/info`)
@@ -89,6 +89,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Deprecated
 
+- `--bind NAME=URI` is a hidden alias of `--connect`. It still works and prints
+  a warning. It remains for one release.
 - `/api/libraries/**`, `/api/jobs/**`, and `/api/experiments/**` (results tree).
   They remain for one release as adapters. `__MAS_LAB_DEFAULT_LIBRARY__` is an
   alias of `__MAS_LAB_DEFAULT_SCOPE__`.
@@ -102,6 +104,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- `--connect NAME=URI` is the shortcut for a remote peer or tool. A bad
+  `NAME=URI` value is a usage error (exit 2), not an uncaught exception.
 - `working_memory_messages` is accepted and ignored. Live tool rows are kept
   until the token trimmer (model window minus completion reserve) needs space.
   The old default of 20 rows could drop an `activate_skill` body mid-protocol.

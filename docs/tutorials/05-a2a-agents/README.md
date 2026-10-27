@@ -94,18 +94,18 @@ workflow:
       delegates_to: [schedule_agent, itinerary_agent, concierge_agent]
 ```
 
-Start the Step 2 server first (`mas-ctl serve` command above, left running). `--bind` acts as `usage: use`, so this process does not take port 9006:
+Start the Step 2 server first (`mas-ctl serve` command above, left running). `--connect` acts as `usage: use`, so this process does not take port 9006:
 
 ```bash
 mas-ctl run-mas docs/tutorials/02-creating-a-mas/mas.yaml \
-  --bind schedule_agent=a2a://127.0.0.1:9006/ \
+  --connect schedule_agent=a2a://127.0.0.1:9006/ \
   -q "Plan a trip and compare the available transport schedules."
 ```
 
 Passing `--infra-ref` to `run-mas` instead is the all-in-one path: hosted `use-and-deploy` specialists bind in this process.
 Do not combine it with a separate `mas-ctl serve` on the same port.
 When a hosted agent has `deploy` or `use-and-deploy`, `run-mas`, `chat`, and `tui` still drive the conversation in-process.
-You can query the live instance with `a2a card get http://127.0.0.1:9001`. Specialists with `usage: use` need their own `mas-ctl serve` (or `--bind`).
+You can query the live instance with `a2a card get http://127.0.0.1:9001`. Specialists with `usage: use` need their own `mas-ctl serve` (or `--connect`).
 
 | Agent id | Owner | Dispatch |
 | --- | --- | --- |
@@ -130,7 +130,7 @@ Missing routes fail when the table is built, so protocol selection is determinis
 
 ## Step 4 — Switch back to local communication
 
-Run the same MAS with no `--bind` and no `--infra-ref` (the Step 2 server is not needed):
+Run the same MAS with no `--connect` and no `--infra-ref` (the Step 2 server is not needed):
 
 ```bash
 mas-ctl run-mas docs/tutorials/02-creating-a-mas/mas.yaml \

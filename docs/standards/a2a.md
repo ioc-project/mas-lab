@@ -103,26 +103,9 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 
 The endpoint serves `/.well-known/agent-card.json`, JSON-RPC at `/`, and HTTP+JSON under `/a2a/rest`. gRPC is added when `a2a.grpc_port` is set.
 
-## `--bind`
+## `--connect`
 
-`--bind NAME=URI` is a shortcut for a `usage: use` client route. It works on `serve`, `chat`, `tui`, `run-mas`, and `compose`.
-
-- It expands to `--override infra:…` and merges with `--infra-ref` YAML. There is no second bind resolver.
-- Explicit `--override` values still win.
-- The flavour stays `local`. A *flavour* is a deployment preset.
-
-Forms:
-
-- `NAME=a2a://host:port[/path]` (or `a2as://` for HTTPS) adds `spec.endpoints[NAME]` with `protocol: a2a`, `usage: use`.
-- `NAME=mcp://host:port/mcp#tool` (or `mcps://`) adds a `spec.tool_servers` entry with `usage: use` that exposes `tool` (default: `NAME`).
-
-```bash
-mas-ctl run-mas mas.yaml \
-  --bind weather-oracle=a2a://127.0.0.1:9005 \
-  --bind analyze_transaction_risk=mcp://127.0.0.1:8080/mcp#analyze_transaction_risk
-```
-
-`--bind` never opens a listener. Something else, such as a separate `mas-ctl serve`, must own that port.
+`--connect NAME=URI` is the shortcut for a `usage: use` client route. It works on `serve`, `chat`, `tui`, `run-mas`, and `compose`. `--bind` is the hidden old name. Forms, merge order, and examples are on [CLI overrides → Connect](../cli/overrides.md#connect). `--connect` never opens a listener.
 
 ## MAS configuration
 

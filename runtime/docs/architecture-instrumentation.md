@@ -42,7 +42,7 @@ ship in this repository.
 ## 3. Tools
 
 Tools are `ToolContract` implementations behind a `kind: Tool` manifest, or remote tool servers bound
-through an infra `ToolServerRegistry` (for example `--bind tool=mcp://host:port/mcp#name` on `mas-ctl`). Both
+through an infra `ToolServerRegistry` (for example `--connect tool=mcp://host:port/mcp#name` on `mas-ctl`). Both
 paths are governed identically: every tool call is an egress that passes the governance chain, and its result
 is an ingress that is validated and recorded. See [dev/schemas/tool-definition.md](dev/schemas/tool-definition.md),
 [docs/manifests/infra.md](../../docs/manifests/infra.md) and Tutorial 4 (MCP tools).

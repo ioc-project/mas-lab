@@ -7,7 +7,7 @@ from mas.ctl.overrides.apply import (
     overlay_for_session_agent,
     overrides_for_root,
 )
-from mas.ctl.overrides.bind import combine_overrides, expand_binds, expand_listens
+from mas.ctl.overrides.bind import combine_overrides, expand_connects, expand_listens
 from mas.ctl.overrides.model import OverridePath, ParsedOverride, PathSegment
 from mas.ctl.overrides.parser import parse_override
 from mas.ctl.overrides.shortcuts import max_tokens_overrides
@@ -20,7 +20,7 @@ __all__ = [
     "apply_manifest_overrides",
     "apply_root_overrides",
     "combine_overrides",
-    "expand_binds",
+    "expand_connects",
     "expand_listens",
     "max_tokens_overrides",
     "overlay_for_session_agent",

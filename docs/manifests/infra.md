@@ -356,10 +356,10 @@ Middleware parameters are under `infra:spec.interceptors[middleware=llm_cache].p
 For reusable infra changes, use an Overlay with `target.kind: Infra`.
 Put root-qualified assignments under `spec.overrides`; see the [Overlay manifest reference](overlay.md).
 
-`--bind NAME=a2a://...` and `--bind NAME=mcp://...` are a **CLI shortcut** for the Application `usage: use` and ToolServerRegistry `usage: use` fields.
+`--connect NAME=a2a://...` and `--connect NAME=mcp://...` are a **CLI shortcut** for the Application `usage: use` and ToolServerRegistry `usage: use` fields.
 They expand to `--override infra:...` and merge into the effective infra document.
 They are not a second resolver.
-Flavour stays `local` until an Application endpoint, from YAML or `--bind`, names a remote collaborator.
+Flavour stays `local` until an Application endpoint, from YAML or `--connect`, names a remote collaborator.
 
 ## LLM output-token policy
 
