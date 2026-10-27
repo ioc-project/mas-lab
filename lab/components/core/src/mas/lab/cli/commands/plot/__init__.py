@@ -8,6 +8,7 @@ import click
 from .communication_flow import communication_flow_cmd
 from .list_cmd import list_cmd
 from .multilevel_trajectory import multilevel_trajectory_cmd
+from .topology import topology_cmd
 from .trajectory import trajectory_cmd
 
 
@@ -20,6 +21,7 @@ def plot_group() -> None:
       trajectory              Delegation-flow diagram (mermaid / table / html / svg)
       multilevel-trajectory   Multilevel swimlane diagram (html / svg)
       communication-flow      Agent-to-agent routing graph (html / mermaid)
+      topology                Agents, skills, tools and delegation of a mas.yaml (svg / html)
       list                    Discover generated plot artefacts in a directory
 
     \b
@@ -41,6 +43,7 @@ def plot_group() -> None:
 plot_group.add_command(trajectory_cmd)
 plot_group.add_command(multilevel_trajectory_cmd)
 plot_group.add_command(communication_flow_cmd)
+plot_group.add_command(topology_cmd)
 plot_group.add_command(list_cmd)
 
 __all__ = ["plot_group", "resolve_source"]
