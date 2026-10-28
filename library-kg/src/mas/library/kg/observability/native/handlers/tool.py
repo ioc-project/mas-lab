@@ -12,17 +12,16 @@ if TYPE_CHECKING:
     from mas.library.kg.core.native_graph_builder import NativeGraphBuilder
 
 
-def _delegate_target(tool_name: str) -> str:
-    name = str(tool_name or "").strip()
-    if name.startswith("delegate_to_") and name != "delegate_to_":
-        return name.removeprefix("delegate_to_")
-    return ""
+def _delegate_target(event: Dict[str, Any]) -> str:
+    from mas.runtime.boundary.delegation.handoff import handoff_target
+
+    return handoff_target(str(event.get("tool_name") or ""), event=event)
 
 
 def handle_tool_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> List[Dict[str, Any]]:
     kind = event.get("kind", "")
     tool_name = str(event.get("tool_name") or "")
-    target_agent = _delegate_target(tool_name)
+    target_agent = _delegate_target(event)
     call_id = str(event.get("call_id") or "")
     rewrite = getattr(builder, "rewrite_tool_delegation", True)
     rewritten_ids = getattr(builder, "_rewritten_delegate_ids", set())

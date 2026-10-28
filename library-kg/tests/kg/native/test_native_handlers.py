@@ -74,6 +74,135 @@ def test_delegate_to_tool_call_produces_exactly_one_calls_agent_edge(tmp_path: P
     )
 
 
+def test_user_tool_named_send_is_not_a_handoff(tmp_path: Path) -> None:
+    events = [
+        {
+            "kind": "execution_start",
+            "timestamp": 1.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+        },
+        {
+            "kind": "tool_call_start",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "c2",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+            "tool_name": "send",
+            "arguments": {"target": "worker", "message": "hi"},
+        },
+        {
+            "kind": "tool_call_end",
+            "timestamp": 3.0,
+            "run_id": "r1",
+            "call_id": "c2",
+            "agent_id": "planner",
+            "tool_name": "send",
+            "status": "success",
+        },
+        {
+            "kind": "execution_end",
+            "timestamp": 4.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+            "status": "success",
+        },
+    ]
+    _nodes, edges = normalize(str(_write_events(tmp_path, events)))
+    assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
+    assert any(
+        n.get("node_type") == "ToolCall" and n.get("toolName") == "send" for n in _nodes
+    )
+
+
+def test_tool_with_target_argument_is_not_a_handoff(tmp_path: Path) -> None:
+    events = [
+        {
+            "kind": "execution_start",
+            "timestamp": 1.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+        },
+        {
+            "kind": "tool_call_start",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "c2",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+            "tool_name": "book_flight",
+            "arguments": {"target": "paris"},
+        },
+        {
+            "kind": "tool_call_end",
+            "timestamp": 3.0,
+            "run_id": "r1",
+            "call_id": "c2",
+            "agent_id": "planner",
+            "tool_name": "book_flight",
+            "status": "success",
+        },
+        {
+            "kind": "execution_end",
+            "timestamp": 4.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+            "status": "success",
+        },
+    ]
+    _nodes, edges = normalize(str(_write_events(tmp_path, events)))
+    assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
+
+
+def test_recorded_agent_comm_semantics_are_a_handoff(tmp_path: Path) -> None:
+    events = [
+        {
+            "kind": "execution_start",
+            "timestamp": 1.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+        },
+        {
+            "kind": "tool_call_start",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "c2",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+            "tool_name": "send",
+            "arguments": {"target": "worker", "message": "hi"},
+            "semantics": {"concept": "agent_comm", "op": "send", "subject_arg": "target"},
+        },
+        {
+            "kind": "tool_call_end",
+            "timestamp": 3.0,
+            "run_id": "r1",
+            "call_id": "c2",
+            "agent_id": "planner",
+            "tool_name": "send",
+            "status": "success",
+        },
+        {
+            "kind": "execution_end",
+            "timestamp": 4.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+            "status": "success",
+        },
+    ]
+    _nodes, edges = normalize(str(_write_events(tmp_path, events)))
+    calls_agent_edges = [e for e in edges if e.get("edge_type") == "callsAgent"]
+    assert len(calls_agent_edges) == 1, calls_agent_edges
+    assert calls_agent_edges[0]["to_id"] == "worker"
+
+
 def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) -> None:
     """A session's hasInitialState/hasFinalState anchors must be derived
     from top-level transitions only. A nested AgentCall (one with a real
@@ -125,7 +254,9 @@ def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) ->
 
     def _session_anchor(edge_type: str) -> str:
         matches = [
-            e for e in edges if e.get("edge_type") == edge_type and e.get("from_id") == session_node["id"]
+            e
+            for e in edges
+            if e.get("edge_type") == edge_type and e.get("from_id") == session_node["id"]
         ]
         assert len(matches) == 1, matches
         return str(matches[0]["to_id"])

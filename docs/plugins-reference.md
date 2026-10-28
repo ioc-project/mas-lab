@@ -96,7 +96,7 @@ practical examples.
 
 | Class             | Full module path                                             | Package                |
 | ----------------- | ------------------------------------------------------------ | ---------------------- |
-| `LlmDelegator`    | `mas.library.standard.plugins.delegation.llm_delegator`      | `mas-library-standard` |
+| `SendTool`        | `mas.library.standard.plugins.system_tools.send`             | `mas-library-standard` |
 | `SubagentSpawner` | `mas.library.standard.plugins.engine_tools.subagent_spawner` | `mas-library-standard` |
 
 ### Eval_Metric
@@ -235,6 +235,7 @@ practical examples.
 | `ControlTools`          | `mas.library.standard.plugins.system_tools.control`             | `mas-library-standard` |
 | `InformUserTool`        | `mas.library.standard.plugins.system_tools.inform_user`         | `mas-library-standard` |
 | `RequestHumanInputTool` | `mas.library.standard.plugins.system_tools.request_human_input` | `mas-library-standard` |
+| `SendTool`              | `mas.library.standard.plugins.system_tools.send`                | `mas-library-standard` |
 | `SpawnSubagentTool`     | `mas.library.standard.plugins.system_tools.spawn_subagent`      | `mas-library-standard` |
 | `SpawnSubagentTool`     | `mas.library.standard.plugins.system_tools.spawn_subagent`      | `mas-library-standard` |
 
@@ -288,7 +289,6 @@ practical examples.
 | `LangChainSkillPlugin`           | skill_impl           | `mas-library-skills`    |
 | `ListClickhouseSessionsStep`     | step                 | `mas-library-telemetry` |
 | `LlmCacheMiddleware`             | infra_middleware     | `mas-library-standard`  |
-| `LlmDelegator`                   | engine_tool_provider | `mas-library-standard`  |
 | `LlmSchedulerMiddleware`         | infra_middleware     | `mas-library-standard`  |
 | `LlmSummarizer`                  | summarizer           | `mas-library-standard`  |
 | `LocalAgentComm`                 | agent_comm           | `mas-library-standard`  |
@@ -314,6 +314,8 @@ practical examples.
 | `RunSkillScriptPlugin`           | skill_shell          | `mas-library-skills`    |
 | `SampleGovernancePlugin`         | governance           | `mas-library-standard`  |
 | `SemanticMemoryPlugin`           | memory               | `mas-library-standard`  |
+| `SendTool`                       | engine_tool_provider | `mas-library-standard`  |
+| `SendTool`                       | system_tool          | `mas-library-standard`  |
 | `SinglePassPlugin`               | design_pattern       | `mas-library-standard`  |
 | `SkillCatalogPlugin`             | skill_catalog        | `mas-library-skills`    |
 | `SkillToolsPlugin`               | skill_tools          | `mas-library-skills`    |

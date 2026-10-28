@@ -38,6 +38,20 @@ reconciling the release notes with the code and docs currently on that branch.
   room someone else already made raises. If one queue is full, nobody
   gets the message. See
   [Communication stack](docs/references/comm-stack.md).
+- Send tool: the model still sees only `delegate_to_<id>`, with the same
+  `task` and `context_id` arguments. A Python `send` call uses the same
+  path. The target of `delegate_to_b` comes from the tool name; extra
+  `target` or `intent` arguments are rejected. With no peer list, nobody
+  is reached. Unknown intent is an error. A user tool named `send` is
+  left to that tool. Intent is `SendContext.intent`. `send` passes
+  `headers=` and `context=` only when the plugin's `send` takes them.
+  A session's `agent_comm` and `agent_comm_routes` replace the ones
+  given at construction; routes replace whole. Wiring the entry engine
+  passes `allowed_peers=` to the registered delegation plugin. Traces
+  and the knowledge graph treat a handoff as `concept=agent_comm` or a
+  `delegate_to_` name, not a user tool named `send` or a tool with a
+  `target` argument. See
+  [Communication stack](docs/references/comm-stack.md).
 - `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
   file: count spans by status, print the conversation in order, and list the
   calls to named tools with their inputs.

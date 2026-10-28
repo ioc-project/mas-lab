@@ -32,6 +32,15 @@ from __future__ import annotations
 from typing import Any
 
 DELEGATE_TOOL_PREFIX = "delegate_to_"
+SEND_TOOL_NAME = "send"
+INTENT_HEADER = "mas.intent"
+SEND_INTENTS = frozenset({"task", "inform", "ask", "steer"})
+SEND_SEMANTICS = {
+    "concept": "agent_comm",
+    "op": "send",
+    "subject_arg": "target",
+    "intent_arg": "intent",
+}
 _DELEGATE_PARAMS = {
     "type": "object",
     "properties": {

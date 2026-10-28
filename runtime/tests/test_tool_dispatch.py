@@ -3,16 +3,16 @@
 """Engine tool dispatch — delegation contract routing."""
 
 import pytest
-
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.delegation.llm_delegator import LlmDelegator
 from mas.runtime.engine.manifest_tool_provider import build_manifest_tool_provider
-from mas.runtime.engine.tool_dispatch import ToolExecutionError, execute_engine_tool
+from mas.runtime.engine.tool_dispatch import execute_engine_tool
 
 
 def test_execute_engine_tool_routes_delegate_tools():
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}:{task}")
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}:{task}"),
+        allowed_peers=["db"],
     )
     out = execute_engine_tool(
         "delegate_to_db",
@@ -28,7 +28,8 @@ def test_execute_engine_tool_forwards_caller_call_id_to_delegation():
     delegate's own execution_start.parent_call_id is a real native value."""
     seen: list[str] = []
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: seen.append(ccid) or f"delegated:{aid}")
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: seen.append(ccid) or f"delegated:{aid}"),
+        allowed_peers=["db"],
     )
     execute_engine_tool(
         "delegate_to_db",
@@ -37,6 +38,29 @@ def test_execute_engine_tool_forwards_caller_call_id_to_delegation():
         caller_call_id="tool-call-xyz",
     )
     assert seen == ["tool-call-xyz"]
+
+
+def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
+    seen: list[str] = []
+
+    class Provider:
+        def call_tool(self, tool, arguments, **kwargs):
+            seen.append(tool)
+            return "from-user-tool"
+
+    delegator = LlmDelegator(
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}"),
+        allowed_peers=["db"],
+    )
+    out = execute_engine_tool(
+        "send",
+        delegation=delegator,
+        arguments={"target": "db", "message": "hi"},
+        tool_provider=Provider(),
+    )
+    assert out == "from-user-tool"
+    assert seen == ["send"]
+    assert not delegator.is_delegate_tool("send")
 
 
 def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():

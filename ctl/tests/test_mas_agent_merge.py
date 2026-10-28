@@ -187,6 +187,7 @@ def test_wire_entry_engine_delegation_enables_tool_loop_on_leaf():
     assert inner.use_tool_loop is True
     assert inner.delegation is not None
     assert inner.manifest is manifest
+    assert inner.delegation._allowed == frozenset({"peer"})
 
 
 def test_reset_engine_delegation_does_not_suppress_repeated_delegation():
@@ -202,7 +203,9 @@ def test_reset_engine_delegation_does_not_suppress_repeated_delegation():
 
     class _Engine:
         def __init__(self) -> None:
-            self.delegation = LlmDelegator(comm=LocalAgentComm(run_turn))
+            self.delegation = LlmDelegator(
+                comm=LocalAgentComm(run_turn), allowed_peers=["peer"]
+            )
 
     engine = _Engine()
     assert engine.delegation.delegate("peer", "task") == "findings:peer:task"
@@ -224,7 +227,9 @@ def test_reset_engine_delegation_walks_inner_wrapper():
 
     class _Engine:
         def __init__(self) -> None:
-            self.delegation = LlmDelegator(comm=LocalAgentComm(run_turn))
+            self.delegation = LlmDelegator(
+                comm=LocalAgentComm(run_turn), allowed_peers=["peer"]
+            )
 
     class _Wrapper:
         def __init__(self, inner: object) -> None:
@@ -390,7 +395,12 @@ def test_stacked_mas_overlays_add_skills_on_top_of_agent_manifest():
     mas = {
         "kind": "MAS",
         "spec": {
-            "agency": {"agents": [{"id": "lead", "ref": "agents/lead.yaml"}, {"id": "role", "ref": "agents/role.yaml"}]},
+            "agency": {
+                "agents": [
+                    {"id": "lead", "ref": "agents/lead.yaml"},
+                    {"id": "role", "ref": "agents/role.yaml"},
+                ]
+            },
             "workflow": {"entry": "lead", "nodes": [{"id": "lead"}, {"id": "role"}]},
         },
     }

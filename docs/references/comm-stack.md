@@ -72,3 +72,25 @@ Inboxes and history are bounded (`inbox_limit`, `history_limit`,
 or `persistent_groups`. `local` stays the session turn bus. Delegation in
 a MAS still uses short agent ids on `local`; four-part names are only for
 this opt-in link.
+
+## Send tool
+
+This change puts `delegate_to_<id>` and a Python `send` call on one code
+path. The model still sees only `delegate_to_<id>` tools, with the same
+`task` and `context_id` arguments. There is no `send` tool in the model's
+list. A user tool named `send` stays that tool.
+
+The target of `delegate_to_b` comes from the tool name; an extra
+`target` or `intent` argument is rejected. With no peer list, send
+reaches nobody. Unknown intent is an error. Intent rides
+`SendContext.intent`. `send` / `asend` pass `headers=` and `context=`
+only when that plugin's `send` takes those arguments.
+
+When the session context has `agent_comm` or `agent_comm_routes`, those
+replace the ones given at construction. Routes replace whole; they do
+not merge.
+
+Traces and the knowledge graph treat a handoff as a recorded
+`concept=agent_comm` tool, or a legacy `delegate_to_<id>` name. A user
+tool named `send`, or a tool that only has a `target` argument, is not a
+handoff.

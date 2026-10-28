@@ -20,23 +20,26 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from mas.library.telemetry.conversion.tool_name import resolve_tool_name
+from mas.runtime.boundary.delegation.handoff import handoff_target
+from mas.runtime.boundary.delegation.policy import DELEGATE_TOOL_PREFIX
 
-DELEGATE_TOOL_PREFIX = "delegate_to_"
 
+def delegate_target_agent(tool_name: str | None, ev: Dict[str, Any] | None = None) -> str:
+    """Return the target agent of a recorded handoff, or ``""``.
 
-def delegate_target_agent(tool_name: str | None) -> str:
-    """Return the target agent id, or ``""`` if *tool_name* is not a delegation."""
-    name = str(tool_name or "").strip()
-    if name.startswith(DELEGATE_TOOL_PREFIX) and name != DELEGATE_TOOL_PREFIX:
-        return name[len(DELEGATE_TOOL_PREFIX) :]
-    return ""
+    Uses the shared handoff helper: ``semantics.concept == agent_comm``,
+    or a legacy ``delegate_to_<id>`` tool name. A user tool named
+    ``send``, or a tool that only has a ``target`` argument, is not a
+    handoff.
+    """
+    return handoff_target(tool_name, event=ev)
 
 
 def rewrite_delegate_tool_start(conv: Any, ev: Dict[str, Any]) -> bool:
     """Skip the tool span and record a handoff. True = caller must not emit."""
     if not getattr(conv, "_rewrite_tool_delegation", False):
         return False
-    target = delegate_target_agent(resolve_tool_name(ev))
+    target = delegate_target_agent(resolve_tool_name(ev), ev)
     if not target:
         return False
     call_id = str(ev.get("call_id") or conv.require_call_id(ev))
@@ -66,7 +69,7 @@ def rewrite_delegate_tool_end(conv: Any, ev: Dict[str, Any]) -> bool:
         resolved = conv._lookup_span_key(call_id, conv.agent_id(ev))
         if resolved and resolved in rewritten:
             return True
-    return bool(delegate_target_agent(resolve_tool_name(ev)))
+    return bool(delegate_target_agent(resolve_tool_name(ev), ev))
 
 
 def close_caller_visit(
