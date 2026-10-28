@@ -141,6 +141,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- After a dropped LLM connection, the next try opens a new HTTP client
+  instead of reusing the dead keep-alive pool.
+- A streamed LLM response is not retried once a chunk has already been shown.
 - A2A still closes a finished task when the installed SDK takes the task
   object instead of the id.
 - A non-ASCII API key (for example a pasted `…` placeholder) is rejected up front with a clear message

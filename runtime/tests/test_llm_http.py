@@ -131,6 +131,37 @@ def test_request_with_retries_retries_connection_refused(monkeypatch):
     assert client.request.call_count == 2
 
 
+def test_request_with_retries_get_client_and_on_failure(monkeypatch):
+    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
+    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+    created: list[object] = []
+    failures: list[BaseException] = []
+
+    class _FactoryClient:
+        def request(self, method, url, **kwargs):
+            if len(created) == 1:
+                raise httpx.ConnectError("boom")
+            return MagicMock(status_code=200)
+
+    def factory():
+        client = _FactoryClient()
+        created.append(client)
+        return client
+
+    result = request_with_retries(
+        None,
+        "POST",
+        "https://x",
+        get_client=factory,
+        on_failure=failures.append,
+    )
+
+    assert result.status_code == 200
+    assert len(created) == 2
+    assert len(failures) == 1
+    assert isinstance(failures[0], httpx.ConnectError)
+
+
 @pytest.mark.asyncio
 async def test_arequest_with_retries_retries_timeout(monkeypatch):
     monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")

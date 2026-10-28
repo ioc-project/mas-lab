@@ -8,6 +8,7 @@ imports this module.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import ssl
@@ -83,10 +84,7 @@ def resolve_ssl_verify(llm_proxy: dict[str, Any] | None = None) -> bool | str | 
     if bundle:
         return bundle
 
-    logger.warning(
-        "No CA bundle found (install truststore + certifi). "
-        "Falling back to httpx default verification."
-    )
+    logger.warning("No CA bundle found (install truststore + certifi). Falling back to httpx default verification.")
     return True
 
 
@@ -116,9 +114,17 @@ def request_with_retries(client: Any, method: str, url: str, **kwargs: Any) -> A
     policy = kwargs.pop("retry_policy", None) or llm_retry_policy()
     breaker = kwargs.pop("circuit_breaker", None)
     target = kwargs.pop("retry_target", None) or f"LLM HTTP {method} {url}"
+    get_client = kwargs.pop("get_client", None)
+    on_failure = kwargs.pop("on_failure", None)
 
     def _once() -> Any:
-        return _raise_if_retryable_status(client.request(method, url, **kwargs))
+        c = get_client() if get_client is not None else client
+        try:
+            return _raise_if_retryable_status(c.request(method, url, **kwargs))
+        except Exception as exc:
+            if on_failure is not None:
+                on_failure(exc)
+            raise
 
     return call_with_retry(
         _once,
@@ -139,9 +145,19 @@ async def arequest_with_retries(client: Any, method: str, url: str, **kwargs: An
     policy = kwargs.pop("retry_policy", None) or llm_retry_policy()
     breaker = kwargs.pop("circuit_breaker", None)
     target = kwargs.pop("retry_target", None) or f"LLM HTTP {method} {url}"
+    get_client = kwargs.pop("get_client", None)
+    on_failure = kwargs.pop("on_failure", None)
 
     async def _once() -> Any:
-        return _raise_if_retryable_status(await client.request(method, url, **kwargs))
+        c = get_client() if get_client is not None else client
+        try:
+            return _raise_if_retryable_status(await c.request(method, url, **kwargs))
+        except Exception as exc:
+            if on_failure is not None:
+                result = on_failure(exc)
+                if inspect.isawaitable(result):
+                    await result
+            raise
 
     return await acall_with_retry(
         _once,

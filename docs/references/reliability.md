@@ -43,7 +43,7 @@ Code:
 
 ## Defaults (bare agent, no overlay)
 
-For ordinary chat and LLM HTTP, the runtime retries a dropped socket, connect-refused, or HTTP 500. It shows a tool `ValueError` to the model. A bad TLS setup stops the turn.
+For ordinary chat and LLM HTTP, the runtime retries a dropped socket, connect-refused, or HTTP 500. It shows a tool `ValueError` to the model. A bad TLS setup stops the turn. A dropped keep-alive socket also drops the pooled HTTP client so the next try opens a new connection. A streamed response is not retried after a chunk has already been shown.
 
 | Knob | Default |
 |------|---------|

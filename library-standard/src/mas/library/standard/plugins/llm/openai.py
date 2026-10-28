@@ -8,15 +8,16 @@ Later vendors (Bedrock, …) register their own ``llm_provider`` plugin.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
-import time
 from typing import Any, Callable
 
 import httpx
 from mas.library.standard.plugins.llm.http import (
     arequest_with_retries,
+    request_with_retries,
     resolve_ssl_verify,
 )
 from mas.runtime.boundary.context.assemble import llm_tool_choice
@@ -33,6 +34,7 @@ from mas.runtime.engine.llm_request import (
     merge_extra_body,
     sampling_settings_from_entry,
 )
+from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import (
     classify_llm_failure,
     classify_llm_http_error,
@@ -40,22 +42,6 @@ from mas.runtime.reliability.classify import (
 from mas.runtime.reliability.policy import llm_retry_policy
 
 logger = logging.getLogger(__name__)
-
-#: HTTP status codes worth retrying (rate limit + transient server failures).
-_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
-_MAX_REQUEST_ATTEMPTS = 3
-_RETRY_BASE_DELAY_SECONDS = 1.0
-
-
-def _is_retryable_llm_error(exc: BaseException) -> bool:
-    """True for dropped connections, timeouts, and transient HTTP failures."""
-    if isinstance(exc, httpx.TransportError):
-        # Covers ConnectError, ReadError, WriteError, RemoteProtocolError
-        # (mid-response connection drops), PoolTimeout, TimeoutException, ...
-        return True
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in _RETRYABLE_STATUS_CODES
-    return False
 
 
 class OpenAILLMProvider:
@@ -121,36 +107,41 @@ class OpenAILLMProvider:
         DNS/connect) on the next attempt. HTTP-status failures (429/5xx) keep
         the pool — the connection itself was fine.
         """
-        if isinstance(exc, httpx.TransportError) and self._client is not None:
-            client, self._client = self._client, None
+        if not isinstance(exc, httpx.TransportError) or self._client is None:
+            return
+        client, self._client = self._client, None
+        with contextlib.suppress(Exception):
             client.close()
 
-    def _send_with_retry(self, send: Callable[[], httpx.Response]) -> httpx.Response:
-        """Retry a single request on dropped connections, timeouts, 429/5xx.
+    async def _adiscard_client_after_transport_failure(self, exc: BaseException) -> None:
+        """Async twin of :meth:`_discard_client_after_transport_failure`."""
+        if not isinstance(exc, httpx.TransportError) or self._aclient is None:
+            return
+        client, self._aclient = self._aclient, None
+        with contextlib.suppress(Exception):
+            await client.aclose()
 
-        Non-retryable failures (4xx auth/validation errors, SSL errors that
-        aren't transport drops, etc.) raise on the first attempt.
-        """
-        attempt = 0
-        while True:
-            attempt += 1
-            try:
-                resp = send()
-                resp.raise_for_status()
-                return resp
-            except Exception as exc:
-                if attempt >= _MAX_REQUEST_ATTEMPTS or not _is_retryable_llm_error(exc):
-                    raise
-                self._discard_client_after_transport_failure(exc)
-                delay = _RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
-                logger.warning(
-                    "LLM request failed (attempt %d/%d), retrying in %.1fs: %s",
-                    attempt,
-                    _MAX_REQUEST_ATTEMPTS,
-                    delay,
-                    exc,
-                )
-                time.sleep(delay)
+    def _reraise_stream_failure(self, exc: BaseException, *, emitted_any: bool) -> None:
+        """Retry a stream only if no chunk has already been shown."""
+        self._discard_client_after_transport_failure(exc)
+        if emitted_any:
+            raise ClassifiedFailure(
+                "stream failed after output was already shown",
+                failure_class=FailureClass.APPLICATION,
+                code="STREAM_PARTIAL",
+            ) from exc
+        raise exc
+
+    async def _areraise_stream_failure(self, exc: BaseException, *, emitted_any: bool) -> None:
+        """Async twin of :meth:`_reraise_stream_failure`."""
+        await self._adiscard_client_after_transport_failure(exc)
+        if emitted_any:
+            raise ClassifiedFailure(
+                "stream failed after output was already shown",
+                failure_class=FailureClass.APPLICATION,
+                code="STREAM_PARTIAL",
+            ) from exc
+        raise exc
 
     @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "OpenAILLMProvider":
@@ -398,17 +389,37 @@ class OpenAILLMProvider:
             stream_options=stream_options,
         )
         if stream:
-            return self._chat_completion_streamed(
-                url,
-                payload,
-                headers,
-                on_stream_chunk=on_stream_chunk,
-                reasoning=reasoning,
-                params=query,
+            from mas.runtime.reliability.retry import call_with_retry
+
+            return call_with_retry(
+                lambda: self._chat_completion_streamed(
+                    url,
+                    payload,
+                    headers,
+                    on_stream_chunk=on_stream_chunk,
+                    reasoning=reasoning,
+                    params=query,
+                ),
+                policy=self._retry_policy,
+                classify=classify_llm_failure,
+                breaker=self._circuit_breaker,
+                target=f"llm:{self.api_base}",
+                idempotent=True,
             )
-        resp = self._send_with_retry(
-            lambda: self._get_client().post(url, json=payload, headers=headers, params=query)
+        resp = request_with_retries(
+            self._get_client(),
+            "POST",
+            url,
+            json=payload,
+            headers=headers,
+            params=query,
+            retry_policy=self._retry_policy,
+            circuit_breaker=self._circuit_breaker,
+            retry_target=f"llm:{self.api_base}",
+            get_client=self._get_client,
+            on_failure=self._discard_client_after_transport_failure,
         )
+        resp.raise_for_status()
         return self._message_from_completion(resp.json(), reasoning)
 
     async def _apost_chat(
@@ -475,6 +486,8 @@ class OpenAILLMProvider:
             retry_policy=self._retry_policy,
             circuit_breaker=self._circuit_breaker,
             retry_target=f"llm:{self.api_base}",
+            get_client=self._get_async_client,
+            on_failure=self._adiscard_client_after_transport_failure,
         )
         resp.raise_for_status()
         return self._message_from_completion(resp.json(), reasoning)
@@ -498,89 +511,72 @@ class OpenAILLMProvider:
         stream_payload = dict(payload)
         stream_payload["stream"] = True
 
-        attempt = 0
-        while True:
-            attempt += 1
-            content_parts: list[str] = []
-            tool_call_accum: dict[int, dict[str, Any]] = {}
-            finish_reason = ""
-            usage: dict[str, Any] = {}
-            think_filter = ThinkTagStreamFilter() if reasoning.exclude else None
-            emitted_any = False
-            try:
-                with self._get_client().stream(
-                    "POST", url, json=stream_payload, headers=headers, params=params
-                ) as resp:
-                    resp.raise_for_status()
-                    for raw_line in resp.iter_lines():
-                        line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
-                        if not line.startswith("data:"):
-                            continue
-                        data_str = line[len("data:") :].strip()
-                        if not data_str or data_str == "[DONE]":
-                            continue
-                        try:
-                            chunk = json.loads(data_str)
-                        except (TypeError, ValueError):
-                            continue
-                        if isinstance(chunk.get("usage"), dict):
-                            usage = chunk["usage"]
-                        choices = chunk.get("choices") or []
-                        if not choices:
-                            continue
-                        choice = choices[0]
-                        fr = choice.get("finish_reason")
-                        if fr:
-                            finish_reason = fr
-                        delta = choice.get("delta") or {}
-                        text = delta.get("content")
+        content_parts: list[str] = []
+        tool_call_accum: dict[int, dict[str, Any]] = {}
+        finish_reason = ""
+        usage: dict[str, Any] = {}
+        think_filter = ThinkTagStreamFilter() if reasoning.exclude else None
+        emitted_any = False
+        try:
+            with self._get_client().stream("POST", url, json=stream_payload, headers=headers, params=params) as resp:
+                resp.raise_for_status()
+                for raw_line in resp.iter_lines():
+                    line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[len("data:") :].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(data_str)
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(chunk.get("usage"), dict):
+                        usage = chunk["usage"]
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    fr = choice.get("finish_reason")
+                    if fr:
+                        finish_reason = fr
+                    delta = choice.get("delta") or {}
+                    text = delta.get("content")
+                    if text:
+                        if think_filter is not None:
+                            text = think_filter.feed(text)
                         if text:
-                            if think_filter is not None:
-                                text = think_filter.feed(text)
-                            if text:
-                                content_parts.append(text)
-                                emitted_any = True
-                                if callable(on_stream_chunk):
-                                    try:
-                                        on_stream_chunk(text)
-                                    except Exception:
-                                        logger.exception("on_stream_chunk callback failed")
-                        for tc in delta.get("tool_calls") or []:
+                            content_parts.append(text)
                             emitted_any = True
-                            idx = int(tc.get("index", 0) or 0)
-                            slot = tool_call_accum.setdefault(
-                                idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
-                            )
-                            if tc.get("id"):
-                                slot["id"] = tc["id"]
-                            fn = tc.get("function") or {}
-                            if fn.get("name"):
-                                slot["function"]["name"] += fn["name"]
-                            if fn.get("arguments"):
-                                slot["function"]["arguments"] += fn["arguments"]
-            except Exception as exc:
-                if emitted_any or attempt >= _MAX_REQUEST_ATTEMPTS or not _is_retryable_llm_error(exc):
-                    raise
-                self._discard_client_after_transport_failure(exc)
-                delay = _RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
-                logger.warning(
-                    "Streamed LLM request failed before any output (attempt %d/%d), retrying in %.1fs: %s",
-                    attempt,
-                    _MAX_REQUEST_ATTEMPTS,
-                    delay,
-                    exc,
-                )
-                time.sleep(delay)
-                continue
+                            if callable(on_stream_chunk):
+                                try:
+                                    on_stream_chunk(text)
+                                except Exception:
+                                    logger.exception("on_stream_chunk callback failed")
+                    for tc in delta.get("tool_calls") or []:
+                        emitted_any = True
+                        idx = int(tc.get("index", 0) or 0)
+                        slot = tool_call_accum.setdefault(
+                            idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                        )
+                        if tc.get("id"):
+                            slot["id"] = tc["id"]
+                        fn = tc.get("function") or {}
+                        if fn.get("name"):
+                            slot["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            slot["function"]["arguments"] += fn["arguments"]
+        except Exception as exc:
+            self._reraise_stream_failure(exc, emitted_any=emitted_any)
 
-            message: dict[str, Any] = {"content": "".join(content_parts) or None}
-            if tool_call_accum:
-                message["tool_calls"] = [tool_call_accum[i] for i in sorted(tool_call_accum)]
-            if usage:
-                message["usage"] = usage
-            if finish_reason:
-                message["finish_reason"] = finish_reason
-            return sanitize_assistant_message(message, exclude=reasoning.exclude)
+        message: dict[str, Any] = {"content": "".join(content_parts) or None}
+        if tool_call_accum:
+            message["tool_calls"] = [tool_call_accum[i] for i in sorted(tool_call_accum)]
+        if usage:
+            message["usage"] = usage
+        if finish_reason:
+            message["finish_reason"] = finish_reason
+        return sanitize_assistant_message(message, exclude=reasoning.exclude)
 
     async def _achat_completion_streamed(
         self,
@@ -601,111 +597,61 @@ class OpenAILLMProvider:
         finish_reason = ""
         usage: dict[str, Any] = {}
         think_filter = ThinkTagStreamFilter() if reasoning.exclude else None
+        emitted_any = False
 
-        async with self._get_async_client().stream(
-            "POST", url, json=stream_payload, headers=headers, params=params
-        ) as resp:
-            resp.raise_for_status()
-            async for raw_line in resp.aiter_lines():
-                line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
-                if not line.startswith("data:"):
-                    continue
-                data_str = line[len("data:") :].strip()
-                if not data_str or data_str == "[DONE]":
-                    continue
-                try:
-                    chunk = json.loads(data_str)
-                except (TypeError, ValueError):
-                    continue
-                if isinstance(chunk.get("usage"), dict):
-                    usage = chunk["usage"]
-                choices = chunk.get("choices") or []
-                if not choices:
-                    continue
-                choice = choices[0]
-                fr = choice.get("finish_reason")
-                if fr:
-                    finish_reason = fr
-                delta = choice.get("delta") or {}
-                text = delta.get("content")
-                if text:
-                    if think_filter is not None:
-                        text = think_filter.feed(text)
+        try:
+            async with self._get_async_client().stream(
+                "POST", url, json=stream_payload, headers=headers, params=params
+            ) as resp:
+                resp.raise_for_status()
+                async for raw_line in resp.aiter_lines():
+                    line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
+                    if not line.startswith("data:"):
+                        continue
+                    data_str = line[len("data:") :].strip()
+                    if not data_str or data_str == "[DONE]":
+                        continue
+                    try:
+                        chunk = json.loads(data_str)
+                    except (TypeError, ValueError):
+                        continue
+                    if isinstance(chunk.get("usage"), dict):
+                        usage = chunk["usage"]
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        continue
+                    choice = choices[0]
+                    fr = choice.get("finish_reason")
+                    if fr:
+                        finish_reason = fr
+                    delta = choice.get("delta") or {}
+                    text = delta.get("content")
                     if text:
-                        content_parts.append(text)
-                        if callable(on_stream_chunk):
-                            try:
-                                on_stream_chunk(text)
-                            except Exception:
-                                logger.exception("on_stream_chunk callback failed")
-                for tc in delta.get("tool_calls") or []:
-                    idx = int(tc.get("index", 0) or 0)
-                    slot = tool_call_accum.setdefault(
-                        idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
-                    )
-                    if tc.get("id"):
-                        slot["id"] = tc["id"]
-                    fn = tc.get("function") or {}
-                    if fn.get("name"):
-                        slot["function"]["name"] += fn["name"]
-                    if fn.get("arguments"):
-                        slot["function"]["arguments"] += fn["arguments"]
-
-        message: dict[str, Any] = {"content": "".join(content_parts) or None}
-        if tool_call_accum:
-            message["tool_calls"] = [tool_call_accum[i] for i in sorted(tool_call_accum)]
-        if usage:
-            message["usage"] = usage
-        if finish_reason:
-            message["finish_reason"] = finish_reason
-        return sanitize_assistant_message(message, exclude=reasoning.exclude)
-||||||| parent of d34b455d (fix(llm): retry openai provider requests on dropped connections)
-        with self._get_client().stream("POST", url, json=stream_payload, headers=headers, params=params) as resp:
-            resp.raise_for_status()
-            for raw_line in resp.iter_lines():
-                line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
-                if not line.startswith("data:"):
-                    continue
-                data_str = line[len("data:") :].strip()
-                if not data_str or data_str == "[DONE]":
-                    continue
-                try:
-                    chunk = json.loads(data_str)
-                except (TypeError, ValueError):
-                    continue
-                if isinstance(chunk.get("usage"), dict):
-                    usage = chunk["usage"]
-                choices = chunk.get("choices") or []
-                if not choices:
-                    continue
-                choice = choices[0]
-                fr = choice.get("finish_reason")
-                if fr:
-                    finish_reason = fr
-                delta = choice.get("delta") or {}
-                text = delta.get("content")
-                if text:
-                    if think_filter is not None:
-                        text = think_filter.feed(text)
-                    if text:
-                        content_parts.append(text)
-                        if callable(on_stream_chunk):
-                            try:
-                                on_stream_chunk(text)
-                            except Exception:
-                                logger.exception("on_stream_chunk callback failed")
-                for tc in delta.get("tool_calls") or []:
-                    idx = int(tc.get("index", 0) or 0)
-                    slot = tool_call_accum.setdefault(
-                        idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
-                    )
-                    if tc.get("id"):
-                        slot["id"] = tc["id"]
-                    fn = tc.get("function") or {}
-                    if fn.get("name"):
-                        slot["function"]["name"] += fn["name"]
-                    if fn.get("arguments"):
-                        slot["function"]["arguments"] += fn["arguments"]
+                        if think_filter is not None:
+                            text = think_filter.feed(text)
+                        if text:
+                            content_parts.append(text)
+                            emitted_any = True
+                            if callable(on_stream_chunk):
+                                try:
+                                    on_stream_chunk(text)
+                                except Exception:
+                                    logger.exception("on_stream_chunk callback failed")
+                    for tc in delta.get("tool_calls") or []:
+                        emitted_any = True
+                        idx = int(tc.get("index", 0) or 0)
+                        slot = tool_call_accum.setdefault(
+                            idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
+                        )
+                        if tc.get("id"):
+                            slot["id"] = tc["id"]
+                        fn = tc.get("function") or {}
+                        if fn.get("name"):
+                            slot["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            slot["function"]["arguments"] += fn["arguments"]
+        except Exception as exc:
+            await self._areraise_stream_failure(exc, emitted_any=emitted_any)
 
         message: dict[str, Any] = {"content": "".join(content_parts) or None}
         if tool_call_accum:
