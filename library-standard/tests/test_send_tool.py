@@ -343,6 +343,8 @@ def test_headers_and_context_reach_a_plugin_that_takes_them() -> None:
     seen: list[dict[str, object]] = []
 
     class Modern:
+        HONOURED_SEND_INTENTS = frozenset({"task", "inform", "ask"})
+
         def send(
             self,
             target_agent_id: str,
@@ -365,13 +367,13 @@ def test_headers_and_context_reach_a_plugin_that_takes_them() -> None:
             return "ok"
 
     tool = SendTool(comm=Modern(), allowed_peers=["w"])  # type: ignore[arg-type]
-    assert tool.send("w", "t", intent="steer", headers={"traceparent": "00"}) == "ok"
+    assert tool.send("w", "t", intent="inform", headers={"traceparent": "00"}) == "ok"
     assert seen[0]["target"] == "w"
     assert seen[0]["task"] == "t"
     assert seen[0]["headers"] == {"traceparent": "00"}
     context = seen[0]["context"]
     assert isinstance(context, SendContext)
-    assert context.intent == "steer"
+    assert context.intent == "inform"
 
 
 def test_session_comm_and_routes_replace_configured() -> None:

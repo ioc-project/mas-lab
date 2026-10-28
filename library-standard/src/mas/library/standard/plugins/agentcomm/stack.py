@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from mas.library.standard.lib.comm.capabilities import declared_capabilities, merge_capabilities
 from mas.library.standard.lib.comm.compose import bind_bottom_up, instantiate_layers
+from mas.library.standard.lib.comm.payload import intents_honoured_by
 from mas.library.standard.lib.comm.send_context import merge_send_context
 from mas.runtime.boundary.agentcomm.protocol import SendContext
 
@@ -79,6 +80,9 @@ class StackAgentComm:
         sets = [_layer_caps(layer) for layer in self._layers]
         merged = merge_capabilities(*sets)
         return merged if merged is not None else {}
+
+    def honoured_send_intents(self) -> frozenset[str]:
+        return intents_honoured_by(self._layers[0])
 
     def bind(self, lower: object) -> None:
         bind = getattr(self._layers[0], "bind", None)

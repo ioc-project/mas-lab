@@ -14,6 +14,16 @@ from typing import Any, ClassVar
 from mas.library.standard.lib.comm.capabilities import capability_set
 from mas.library.standard.lib.comm.headers import bound_headers, merge_headers
 from mas.library.standard.lib.comm.names import namespace_of, parse_name, require_instance_name
+from mas.library.standard.lib.comm.payload import (
+    INFORM_ASK_INTENTS,
+    MAX_MESSAGE_SIZE,
+    PUBLISH_INTENT,
+    bound_inbound,
+    check_message_size,
+    inbound_payload,
+    require_honoured_intent,
+    send_result,
+)
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
@@ -53,7 +63,7 @@ class LocalGroupFabric:
         inbox_limit: int = 64,
         history_limit: int = 4096,
         overflow: str = "reject",
-        max_message_size: int = 1_048_576,
+        max_message_size: int = MAX_MESSAGE_SIZE,
         seed: int | None = 0,
         deterministic: bool = True,
     ) -> None:
@@ -103,6 +113,7 @@ class LocalGroupAgentComm(AgentCommContract):
     CAPABILITIES: ClassVar[dict[str, bool]] = capability_set(
         unicast=True, anycast=True, group=True, ordered=True, isolation=True
     )
+    HONOURED_SEND_INTENTS = INFORM_ASK_INTENTS
 
     def __init__(
         self,
@@ -115,7 +126,7 @@ class LocalGroupAgentComm(AgentCommContract):
         inbox_limit: int = 64,
         history_limit: int = 4096,
         overflow: str = "reject",
-        max_message_size: int = 1_048_576,
+        max_message_size: int = MAX_MESSAGE_SIZE,
         deterministic: bool = True,
     ) -> None:
         parts = require_instance_name(name)
@@ -148,6 +159,9 @@ class LocalGroupAgentComm(AgentCommContract):
 
     def capabilities(self) -> dict[str, bool]:
         return dict(self.CAPABILITIES)
+
+    def honoured_send_intents(self) -> frozenset[str]:
+        return self.HONOURED_SEND_INTENTS
 
     def bind(self, lower: object) -> None:
         del lower
@@ -205,7 +219,8 @@ class LocalGroupAgentComm(AgentCommContract):
             headers=headers,
             context=context,
         )
-        return peer._receive_request(envelope)
+        result = peer._receive_request(envelope)
+        return send_result(str(envelope["intent"]), result)
 
     async def asend(
         self,
@@ -227,7 +242,8 @@ class LocalGroupAgentComm(AgentCommContract):
             headers=headers,
             context=context,
         )
-        return await peer._areceive_request(envelope)
+        result = await peer._areceive_request(envelope)
+        return send_result(str(envelope["intent"]), result)
 
     def _prepare_send(
         self,
@@ -243,10 +259,13 @@ class LocalGroupAgentComm(AgentCommContract):
         self._require_live()
         self._check_size(task)
         headers, context = align_send(headers, context, sender=self.agent_id)
+        kind = require_honoured_intent(self, context.intent)
         peer = self._resolve(target_agent_id)
+        payload = inbound_payload(task, sender=context.sender, intent=kind)
         envelope = {
             "sender": self.agent_id,
-            "task": task,
+            "task": payload,
+            "intent": kind,
             "headers": merge_headers(headers),
             "correlation_id": correlation_id,
             "caller_call_id": caller_call_id,
@@ -257,6 +276,7 @@ class LocalGroupAgentComm(AgentCommContract):
     def _handler_kwargs(self, envelope: dict[str, Any]) -> dict[str, Any]:
         return {
             "sender": envelope["sender"],
+            "intent": str(envelope.get("intent") or ""),
             "agent_id": self.agent_id,
             "correlation_id": envelope.get("correlation_id", 0),
             "caller_call_id": envelope.get("caller_call_id", ""),
@@ -275,9 +295,15 @@ class LocalGroupAgentComm(AgentCommContract):
             str(envelope.get("context_id") or ""),
         )
 
+    def _inbound(self, envelope: dict[str, Any]):
+        return bound_inbound(
+            sender=str(envelope.get("sender") or ""),
+            intent=str(envelope.get("intent") or ""),
+        )
+
     def _receive_request(self, envelope: dict[str, Any]) -> str:
         self._require_live()
-        with bound_headers(envelope.get("headers")):
+        with self._inbound(envelope), bound_headers(envelope.get("headers")):
             if self._on_request is not None:
                 return self._on_request(str(envelope["task"]), **self._handler_kwargs(envelope))
             if self._run_turn is not None:
@@ -288,7 +314,7 @@ class LocalGroupAgentComm(AgentCommContract):
         self._require_live()
         asend_fn = getattr(self._run_turn, "asend", None) if self._on_request is None else None
         if callable(asend_fn):
-            with bound_headers(envelope.get("headers")):
+            with self._inbound(envelope), bound_headers(envelope.get("headers")):
                 return await asend_fn(
                     self.agent_id,
                     str(envelope["task"]),
@@ -353,13 +379,15 @@ class LocalGroupAgentComm(AgentCommContract):
             raise AgentCommError(f"channel {channel!r} is closed")
         if self.name not in state.members:
             raise AgentCommError(f"{self.name!r} is not a member of {channel!r}")
-        headers, _context = align_send(headers, context, sender=self.agent_id)
+        headers, context = align_send(headers, context, sender=self.agent_id)
+        labelled = inbound_payload(payload, sender=context.sender, intent=PUBLISH_INTENT)
         envelope = {
             "id": self.fabric.next_id(),
             "sender": self.agent_id,
             "channel": channel,
             "kind": "message",
-            "payload": payload,
+            "payload": labelled,
+            "intent": PUBLISH_INTENT,
             "headers": merge_headers(headers),
             "to": to,
         }
@@ -423,7 +451,7 @@ class LocalGroupAgentComm(AgentCommContract):
         self._inbox.append(envelope)
 
     def _notify(self, envelope: dict[str, Any]) -> None:
-        with bound_headers(envelope.get("headers")):
+        with self._inbound(envelope), bound_headers(envelope.get("headers")):
             for callback in list(self._subscribers):
                 try:
                     callback(envelope)
@@ -431,10 +459,7 @@ class LocalGroupAgentComm(AgentCommContract):
                     _log.exception("local-group subscriber failed for %s", self.name)
 
     def _check_size(self, payload: str) -> None:
-        if not isinstance(payload, str):
-            raise AgentCommError("message must be a string")
-        if len(payload.encode("utf-8")) > self.fabric.max_message_size:
-            raise AgentCommError("message exceeds max size")
+        check_message_size(payload, max_size=self.fabric.max_message_size)
 
     def _channel_key(self, channel: str, *, creating: bool = False) -> str:
         parts = parse_name(channel)

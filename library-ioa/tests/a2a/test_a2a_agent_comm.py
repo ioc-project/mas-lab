@@ -7,8 +7,9 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import Mock
 
+import pytest
 from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
-from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, SendContext
+from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
 
 def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
@@ -33,3 +34,14 @@ def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
         metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
     )
     assert client.send_message.call_count == 3
+
+
+def test_a2a_refuses_inform_and_ask() -> None:
+    client = Mock()
+    plugin = A2AAgentComm.__new__(A2AAgentComm)
+    plugin._client = client
+    assert plugin.honoured_send_intents() == frozenset({"task"})
+    for intent in ("inform", "ask", "steer"):
+        with pytest.raises(AgentCommError, match="not supported"):
+            plugin.send("worker", "fyi", context=SendContext(intent=intent))
+    client.send_message.assert_not_called()

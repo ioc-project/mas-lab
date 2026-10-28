@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import Any
 from weakref import WeakKeyDictionary
 
+from mas.library.standard.lib.comm.payload import intents_honoured_by
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
 from mas.runtime.boundary.delegation.policy import (
@@ -207,6 +208,8 @@ class SendTool:
         if target not in self._allowed:
             return f"[send] target {target!r} is not an allowed peer"
         communication, protocol = self._resolve(target, ctx=ctx)
+        if kind not in intents_honoured_by(communication):
+            return f"[send] intent {kind!r} is not supported on this link"
         return communication, protocol, payload, kind
 
     def _send_kwargs(

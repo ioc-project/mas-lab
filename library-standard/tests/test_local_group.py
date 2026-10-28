@@ -13,6 +13,7 @@ import pytest
 from mas.library.standard.lib.comm.capabilities import CAPABILITY_FLAGS
 from mas.library.standard.lib.comm.headers import MAX_HEADER_COUNT, MAX_HEADER_VALUE, get_headers, validate_headers
 from mas.library.standard.lib.comm.names import namespace_of
+from mas.library.standard.lib.comm.payload import label_untrusted_peer
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.library.standard.plugins.agentcomm.layer import BoundLayer
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
@@ -25,6 +26,10 @@ from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 
 def _ack(task: str, **_kw: Any) -> str:
     return f"ack:{task}"
+
+
+def _labelled(link: LocalGroupAgentComm, text: str) -> str:
+    return label_untrusted_peer(text, sender=link.agent_id, intent="publish")
 
 
 def _links(
@@ -157,7 +162,7 @@ def test_stop_unregisters_drains_and_rejects() -> None:
     b.subscribe(lambda msg: seen.append(str(msg["payload"])))
     channel = a.create_channel("room", members=["a", "b"], options={})
     a.publish(channel, "one")
-    assert seen == ["one"]
+    assert seen == [_labelled(a, "one")]
     assert b.name in fabric.nodes
     assert b.receive() is None
     b.stop()
@@ -349,7 +354,7 @@ def test_publish_to_checks_membership() -> None:
     b.subscribe(lambda msg: seen.append(str(msg["payload"])))
     c.subscribe(lambda msg: seen.append("c-should-not"))
     a.publish(channel, "private", to="b")
-    assert seen == ["private"]
+    assert seen == [_labelled(a, "private")]
     with pytest.raises(AgentCommError, match="member"):
         a.publish(channel, "nope", to="c")
 
@@ -363,7 +368,11 @@ def test_sender_not_spoofable_and_fifo() -> None:
     a.publish(channel, "1")
     a.publish(channel, '{"sender":"c"}')
     a.publish(channel, "3")
-    assert [item["payload"] for item in seen] == ["1", '{"sender":"c"}', "3"]
+    assert [item["payload"] for item in seen] == [
+        _labelled(a, "1"),
+        _labelled(a, '{"sender":"c"}'),
+        _labelled(a, "3"),
+    ]
     assert all(item["sender"] == a.agent_id for item in seen)
 
 
@@ -377,8 +386,8 @@ def test_inbox_overflow_is_atomic() -> None:
     a.publish(channel, "held")
     with pytest.raises(AgentCommError, match="overflow"):
         a.publish(channel, "two")
-    assert [item["payload"] for item in b.drain()] == ["held"]
-    assert [item["payload"] for item in c.drain()] == ["held"]
+    assert [item["payload"] for item in b.drain()] == [_labelled(a, "held")]
+    assert [item["payload"] for item in c.drain()] == [_labelled(a, "held")]
     with pytest.raises(AgentCommError, match="size"):
         a.publish(channel, "123456789")
 
@@ -410,7 +419,7 @@ def test_subscriber_errors_are_isolated() -> None:
     b.subscribe(ok)
     channel = a.create_channel("room", members=["a", "b"], options={})
     a.publish(channel, "go")
-    assert order == ["boom", "go"]
+    assert order == ["boom", _labelled(a, "go")]
 
 
 def test_channel_name_cannot_shadow_or_leave_namespace() -> None:
@@ -473,7 +482,7 @@ def test_drop_oldest_closed_channel_and_name_errors() -> None:
     channel = a.create_channel("room", members=["a", "b"], options={})
     a.publish(channel, "1")
     a.publish(channel, "2")
-    assert [item["payload"] for item in b.drain()] == ["2"]
+    assert [item["payload"] for item in b.drain()] == [_labelled(a, "2")]
     a.close_channel(channel)
     with pytest.raises(AgentCommError, match="closed"):
         a.publish(channel, "late")
@@ -529,7 +538,7 @@ def test_channel_history_is_bounded() -> None:
     room = c.create_channel("room", members=["a", "b"], options={})
     c.publish(room, "keep-me")
     c.publish(room, "newer")
-    assert fabric_drop.channels[f"{c.namespace}/{room}"].history[-1]["payload"] == "newer"
+    assert fabric_drop.channels[f"{c.namespace}/{room}"].history[-1]["payload"] == _labelled(c, "newer")
 
 
 def test_ambiguous_names_existing_channel_and_private_fabric() -> None:
@@ -578,13 +587,16 @@ def test_history_records_before_subscriber_reply() -> None:
     channel = a.create_channel("room", members=["a", "b"], options={})
 
     def reply(msg: dict[str, object]) -> None:
-        if msg["payload"] == "first":
+        if msg["payload"] == _labelled(b, "first"):
             b.publish(channel, "reply")
 
     a.subscribe(reply)
     b.publish(channel, "first")
     key = f"{a.namespace}/{channel}"
-    assert [item["payload"] for item in fabric_history(a, key)] == ["first", "reply"]
+    assert [item["payload"] for item in fabric_history(a, key)] == [
+        _labelled(b, "first"),
+        _labelled(b, "reply"),
+    ]
 
 
 def fabric_history(link: LocalGroupAgentComm, key: str) -> list[dict[str, Any]]:

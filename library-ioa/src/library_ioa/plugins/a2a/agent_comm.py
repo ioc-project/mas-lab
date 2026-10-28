@@ -8,7 +8,13 @@ from library_ioa.plugins.a2a.client import A2AClient
 
 
 class A2AAgentComm(AgentCommContract):
-    """Reach a remote peer using the A2A protocol and official SDK client."""
+    """Reach a remote peer using the A2A protocol and official SDK client.
+
+    A2A has no inform/ask wire. Only ``task`` is honoured. Other intents
+    raise rather than going out as an ordinary task.
+    """
+
+    HONOURED_SEND_INTENTS = frozenset({"task"})
 
     def __init__(
         self,
@@ -18,6 +24,9 @@ class A2AAgentComm(AgentCommContract):
         timeout: float | None = None,
     ) -> None:
         self._client = A2AClient(url=url, headers=headers, timeout=timeout)
+
+    def honoured_send_intents(self) -> frozenset[str]:
+        return self.HONOURED_SEND_INTENTS
 
     def send(
         self,
@@ -30,6 +39,9 @@ class A2AAgentComm(AgentCommContract):
         headers: dict[str, str] | None = None,
         context: SendContext | None = None,
     ) -> str:
+        kind = str(getattr(context, "intent", None) or "task").strip().lower() or "task"
+        if kind not in self.HONOURED_SEND_INTENTS:
+            raise AgentCommError(f"intent {kind!r} is not supported")
         del target_agent_id, headers, context
         try:
             response = self._client.send_message(

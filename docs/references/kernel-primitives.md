@@ -56,7 +56,7 @@ Inbound user turns are a subset of `ControlContract`:
 
 - A2A `message/send` is `send_message`. It queues a turn at the tail.
 - A2A has no steer RPC. `steer` exists only in the control protocol.
-- `AgentCommContract.send` is an outbound peer send after delegation. It is not user input.
+- `AgentCommContract.send` is an outbound peer send after delegation. It is not user input. `inform` and `ask` are peer sends, not steer. See [Communication stack](comm-stack.md) for what is a send and what is control.
 - `UserIOContract` carries progress output.
 - `input-required` is HITL (human in the loop: a person approves an action). It is not a splice.
 

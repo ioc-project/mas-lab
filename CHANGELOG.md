@@ -52,6 +52,17 @@ reconciling the release notes with the code and docs currently on that branch.
   `delegate_to_` name, not a user tool named `send` or a tool with a
   `target` argument. See
   [Communication stack](docs/references/comm-stack.md).
+- Send intents: `inform` and `ask` still run a turn and the caller
+  waits. `inform` then returns `delivered` and drops the reply; a peer
+  error still raises. The in-process links label the text as an
+  untrusted peer message. That label is a hint to the model only;
+  sender and intent also sit on the `inbound_send()` seam and on
+  local-group handler kwargs. A channel message is intent `publish`.
+  An empty intent stays empty. A link that does not honour `inform`
+  or `ask` (A2A is one) refuses them. `steer` is not a send: it stays
+  on the control protocol (pause, preempt, replace, after). `task`
+  and `delegate_to_*` stay the same. See
+  [Communication stack](docs/references/comm-stack.md).
 - `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
   file: count spans by status, print the conversation in order, and list the
   calls to named tools with their inputs.
