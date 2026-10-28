@@ -355,6 +355,7 @@ def wire_entry_engine_delegation(
         "delegation",
         comm=comm,
         routes=routes,
+        allowed_peers=peers,
     )
     if hasattr(leaf, "use_tool_loop"):
         if not leaf.use_tool_loop:

@@ -7,13 +7,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
+from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
+from mas.library.standard.plugins.delegation.llm_delegator import LlmDelegator
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryRegistry,
     WorkingMemorySnapshot,
 )
-from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
-from mas.library.standard.plugins.delegation.llm_delegator import LlmDelegator
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 
 
@@ -38,7 +37,9 @@ async def test_concurrent_adelegate_does_not_crosstalk_working_memory():
         raise AssertionError("sync send must not run on the async path")
 
     send.asend = asend  # type: ignore[attr-defined]
-    delegator = LlmDelegator(comm=LocalAgentComm(send))
+    delegator = LlmDelegator(
+        comm=LocalAgentComm(send), allowed_peers=["schedule", "concierge"]
+    )
     a, b = await asyncio.gather(
         delegator.adelegate("schedule", "trains", caller_call_id="c1"),
         delegator.adelegate("concierge", "fares", caller_call_id="c2"),

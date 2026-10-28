@@ -45,13 +45,19 @@ plugins:
   - type: engine_tool_provider
     name: delegation
     urn: mas.engine_tool_provider.delegation
-    module: mas.library.standard.plugins.delegation.llm_delegator
-    class: LlmDelegator
+    module: mas.library.standard.plugins.system_tools.send
+    class: SendTool
   - type: engine_tool_provider
     name: spawn_subagent
     urn: mas.engine_tool_provider.spawn_subagent
     module: mas.library.standard.plugins.engine_tools.subagent_spawner
     class: SubagentSpawner
+  - type: system_tool
+    name: send
+    urn: mas.system_tool.send
+    module: mas.library.standard.plugins.system_tools.send
+    class: SendTool
+    attributes: {default_enabled: false, semantic: agent_comm.send}
   - type: system_tool
     name: request_human_input
     urn: mas.system_tool.request_human_input
