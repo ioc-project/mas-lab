@@ -11,6 +11,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -45,6 +46,16 @@ from mas.runtime.schema.observability import ObsEventKind
 from mas.runtime.spec.defaults import DEFAULT_MAX_AUTO_STEPS
 
 _logger = logging.getLogger(__name__)
+
+
+def _inbound_scope(event: IngressSymbol):
+    sender = str(getattr(event, "sender", "") or "")
+    intent = str(getattr(event, "intent", "") or "")
+    if not sender and not intent:
+        return nullcontext()
+    from mas.runtime.boundary.agentcomm.protocol import bound_inbound
+
+    return bound_inbound(sender=sender, intent=intent)
 
 
 def _within_auto_step_budget(auto_steps: int, max_auto_steps: int | None) -> bool:
@@ -313,11 +324,11 @@ class KernelDriver:
                     self.ctx.manifest = bound_manifest
 
     def feed(self, event: IngressSymbol) -> DriverTrace:
-        with runtime_binding(self.coordination, self.observability):
+        with runtime_binding(self.coordination, self.observability), _inbound_scope(event):
             return self._feed_bounded(event)
 
     async def afeed(self, event: IngressSymbol) -> DriverTrace:
-        with runtime_binding(self.coordination, self.observability):
+        with runtime_binding(self.coordination, self.observability), _inbound_scope(event):
             return await self._afeed_bounded(event)
 
     def _working_memory_store(self) -> Any | None:
@@ -345,7 +356,8 @@ class KernelDriver:
     def _kernel_step(self, ingress: IngressSymbol):
         run = self._run_ledger()
         seen_seq = run.max_seq() if run is not None else max_event_seq(self._ledger_events())
-        result = self.kernel.transition(ingress)
+        with _inbound_scope(ingress):
+            result = self.kernel.transition(ingress)
         self._after_kernel_step(ingress, seen_seq)
         return result
 
@@ -1068,8 +1080,8 @@ class KernelDriver:
     def _with_pending_steer(self, returns: list[IngressSymbol]) -> list[IngressSymbol]:
         from mas.runtime.engine.inflight_llm import pop_preempt, pop_replace
 
-        text = pop_preempt(self.session_id)
-        if text:
+        pending = pop_preempt(self.session_id)
+        if pending is not None:
             steered = next(
                 (item for item in returns if isinstance(item, EngineIoReturn) and item.finish_reason == "preempted"),
                 None,
@@ -1080,11 +1092,14 @@ class KernelDriver:
                 *returns,
                 OperatorSteerReceived(
                     steer_id=f"steer{steered.correlation_id}",
-                    context_text=text,
+                    context_text=pending.text,
+                    source=pending.source,
+                    sender=pending.sender,
+                    intent=pending.intent,
                 ),
             ]
         replacement = pop_replace(self.session_id)
-        if not replacement:
+        if replacement is None:
             return returns
         replaced = next(
             (item for item in returns if isinstance(item, EngineIoReturn) and item.finish_reason == "replaced"),
@@ -1096,8 +1111,11 @@ class KernelDriver:
             *returns,
             UserInputReceived(
                 user_turn_id=f"replace{replaced.correlation_id}",
-                text=replacement,
+                text=replacement.text,
                 session_id=self.session_id,
+                source=replacement.source,
+                sender=replacement.sender,
+                intent=replacement.intent,
             ),
         ]
 

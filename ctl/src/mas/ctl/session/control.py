@@ -20,6 +20,7 @@ from mas.runtime.boundary.control.contract import (
     QueuedInputView,
     QueueView,
     SessionNotStopped,
+    SessionPaused,
     SessionSnapshotView,
 )
 from mas.runtime.engine.llm_output_limits import estimate_model_cost_usd
@@ -48,6 +49,19 @@ class SessionControl:
             self._trace(method, session_id, kind="control_denied", denied=True, reason="capability")
             raise ControlDenied(method, session_id, reason="capability token does not allow this call")
         return self._manager.get(session_id)
+
+    def scoped(self, capability: ControlCapability) -> SessionControl:
+        """Narrow this handle. The result cannot do more than this token already could."""
+        return SessionControl(
+            self._manager,
+            capability=self.capability.intersect(capability),
+            deny_navigate=self.deny_navigate,
+        )
+
+    def _peer_queue_at(self, requested: QueueAt) -> QueueAt:
+        if self.capability.surface == "peer":
+            return "tail"
+        return requested
 
     def _trace(
         self,
@@ -177,7 +191,8 @@ class SessionControl:
         exclusive turn with ``text``.
 
         ``after``: do not interrupt; queue ``text`` to the front and wait for
-        the current generation to finish. ``enqueue`` is an alias.
+        the current generation to finish. ``enqueue`` is an alias. A peer
+        always queues at the tail.
         """
         session = self._require("steer", session_id)
         when = {
@@ -192,49 +207,136 @@ class SessionControl:
             raise ValueError("steer mode must be 'preempt', 'replace', or 'after'")
         if when != "after" and at not in {"head", "tail"}:
             raise ValueError("steer at= is only valid with mode='after'")
+        supported = self._steer_modes(session)
+        if when not in supported:
+            plugin_id = self._pattern_id(session)
+            raise ValueError(
+                f"pattern {plugin_id} does not support steer mode {when!r} "
+                f"(supported: {', '.join(sorted(supported)) or 'none'})"
+            )
+        who = self.capability.actor
+        source = self.capability.surface
+        queue_at = self._peer_queue_at(at)
         if when == "after":
-            self.enqueue_input(session_id, text=text, source="steer", action="turn", at=at)
+            self._enqueue(
+                session_id,
+                text=text,
+                source=source,
+                action="turn",
+                at=queue_at,
+                actor=who,
+            )
             self._trace(
                 "steer",
                 session_id,
                 kind="steer_after",
-                payload={"text": text, "at": at},
+                payload={"text": text, "at": queue_at, "source": source, "sender": who},
             )
             return
+        if session.status is SessionStatus.PAUSED:
+            self._trace(
+                "steer",
+                session_id,
+                kind="control_denied",
+                denied=True,
+                reason="paused",
+            )
+            raise SessionPaused(session_id, reason=session.pause_reason or "paused")
         from mas.runtime.engine.inflight_llm import has_inflight, request_preempt, request_replace
 
+        busy = has_inflight(session_id) or bool(getattr(session.controller, "inflight", False))
+        if source == "peer" and not busy:
+            action: Literal["turn", "steer"] = "steer" if when == "preempt" else "turn"
+            self._enqueue(
+                session_id,
+                text=text,
+                source=source,
+                action=action,
+                at="tail",
+                actor=who,
+            )
+            self._trace(
+                "steer",
+                session_id,
+                kind="steer_after",
+                payload={
+                    "text": text,
+                    "at": "tail",
+                    "why": "idle",
+                    "source": source,
+                    "sender": who,
+                    "mode": when,
+                },
+            )
+            return
         if when == "replace":
             if has_inflight(session_id):
-                request_replace(session_id, text)
-                self._trace("steer", session_id, kind="steer_replaced", payload={"text": text})
+                request_replace(session_id, text, source=source, sender=who)
+                self._trace(
+                    "steer",
+                    session_id,
+                    kind="steer_replaced",
+                    payload={"text": text, "source": source, "sender": who},
+                )
                 return
             if bool(getattr(session.controller, "inflight", False)):
-                self.enqueue_input(session_id, text=text, source="steer", action="turn", at="head")
+                placed = self._peer_queue_at("head")
+                self._enqueue(
+                    session_id,
+                    text=text,
+                    source=source,
+                    action="turn",
+                    at=placed,
+                    actor=who,
+                )
                 self._trace(
                     "steer",
                     session_id,
                     kind="steer_after",
-                    payload={"text": text, "at": "head", "why": "no_llm"},
+                    payload={"text": text, "at": placed, "why": "no_llm", "source": source},
                 )
                 return
             session.controller.run_turn(text, auto_hitl=False)
-            self._trace("steer", session_id, kind="steer_replaced", payload={"text": text})
+            self._trace(
+                "steer",
+                session_id,
+                kind="steer_replaced",
+                payload={"text": text, "source": source, "sender": who},
+            )
             return
         if has_inflight(session_id):
-            request_preempt(session_id, text)
-            self._trace("steer", session_id, kind="steer_preempted", payload={"text": text})
+            request_preempt(session_id, text, source=source, sender=who)
+            self._trace(
+                "steer",
+                session_id,
+                kind="steer_preempted",
+                payload={"text": text, "source": source, "sender": who},
+            )
             return
         if bool(getattr(session.controller, "inflight", False)):
-            self.enqueue_input(session_id, text=text, source="steer", action="steer", at="head")
+            placed = self._peer_queue_at("head")
+            self._enqueue(
+                session_id,
+                text=text,
+                source=source,
+                action="steer",
+                at=placed,
+                actor=who,
+            )
             self._trace(
                 "steer",
                 session_id,
                 kind="steer_after",
-                payload={"text": text, "at": "head", "why": "no_llm"},
+                payload={"text": text, "at": placed, "why": "no_llm", "source": source},
             )
             return
         session.controller.run_turn(f"/steer {text}", auto_hitl=False)
-        self._trace("steer", session_id, kind="steer_injected", payload={"text": text})
+        self._trace(
+            "steer",
+            session_id,
+            kind="steer_injected",
+            payload={"text": text, "source": source, "sender": who},
+        )
 
     def discard_last(self, session_id: str) -> str:
         session = self._require("discard_last", session_id)
@@ -531,6 +633,50 @@ class SessionControl:
         )
         return ref
 
+    def steer_modes(self, session_id: str) -> frozenset[str]:
+        session = self._require("steer", session_id)
+        return self._steer_modes(session)
+
+    def _steer_modes(self, session: Any) -> frozenset[str]:
+        plugin = getattr(
+            getattr(getattr(session, "instance", None), "kernel", None),
+            "plugin",
+            None,
+        )
+        modes = getattr(plugin, "STEER_MODES", None)
+        if plugin is None or modes is None:
+            return frozenset({"after"})
+        return frozenset(str(item) for item in modes)
+
+    def _pattern_id(self, session: Any) -> str:
+        plugin = getattr(
+            getattr(getattr(session, "instance", None), "kernel", None),
+            "plugin",
+            None,
+        )
+        return str(getattr(plugin, "plugin_id", "") or "unknown")
+
+    def _enqueue(
+        self,
+        session_id: str,
+        *,
+        text: str,
+        source: str,
+        priority: int = 0,
+        action: Literal["turn", "steer"] = "turn",
+        actor: str = "",
+        at: QueueAt = "tail",
+    ) -> str:
+        return self._manager.turn_queue.enqueue(
+            session_id,
+            text,
+            source=source,
+            priority=priority,
+            action=action,
+            actor=actor or self.capability.actor,
+            at=at,
+        )
+
     def enqueue_input(
         self,
         session_id: str,
@@ -543,13 +689,13 @@ class SessionControl:
         at: QueueAt = "tail",
     ) -> str:
         self._require("enqueue_input", session_id)
-        input_id = self._manager.turn_queue.enqueue(
+        input_id = self._enqueue(
             session_id,
-            text,
+            text=text,
             source=source,
             priority=priority,
             action=action,
-            actor=actor or self.capability.actor,
+            actor=actor,
             at=at,
         )
         self._trace(

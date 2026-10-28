@@ -73,7 +73,7 @@ All queue mutations are serialized by a lock per session.
 | `set_queued_action` (queue to steer) | CAS on `revision`. Changes a still-queued item. |
 | `steer` (`preempt`) | Keep streamed tokens, stop the rest of this decode, continue. The decode is preempted, not a finished client response. Unavailable on A2A. |
 | `steer` (`replace`) | Discard streamed tokens, stop this decode, start a new exclusive turn. Unavailable on A2A. |
-| `steer` (`after`) | Do not interrupt. Queue `text` at the front (`at="head"`) and wait for the current generation to finish. `enqueue` is an alias. |
+| `steer` (`after`) | Do not interrupt. Queue `text` at the front for an operator (`at="head"`), at the tail for a peer. Wait for the current generation to finish. `enqueue` is an alias. On a paused session this still queues. |
 | `cancel_inflight` | A2A **Cancel Task** (`tasks/cancel`). Drops the rest of the decode. No follow-up cycle. Success is not guaranteed. |
 
 CAS means compare-and-swap: the caller passes the `revision` it last saw. `inspect_queue` returns that token. Callers retry on `QueueConflict`. There is no last-write-wins. Turns drain FIFO under the same lock, so a drop cannot race a pop.

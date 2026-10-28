@@ -4,14 +4,25 @@
 
 from __future__ import annotations
 
+from mas.runtime.kernel.client_response import client_response_from_run
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.egress_gate import emit_scheduled_egress, schedule_tool_egress
 from mas.runtime.kernel.ingress_step import apply_engine_io_return
 from mas.runtime.kernel.parallel_tools import schedule_parallel_tools_egress
+from mas.runtime.kernel.state import (
+    DpState,
+    LifecycleState,
+    QProduct,
+    RunLedger,
+    ScheduledEgress,
+)
+from mas.runtime.machines.context import ctx_on_assembly_complete, ctx_on_cycle_reset, ctx_on_user_input
 from mas.runtime.machines.design_pattern.protocol import DesignPatternPlugin
+from mas.runtime.machines.memory import memory_on_evaluate
+from mas.runtime.machines.model import model_on_evaluate
+from mas.runtime.machines.tool import tool_on_evaluate
 from mas.runtime.schema.egress import (
     EgressSymbol,
-    EmitClientResponse,
     NoOp,
     RequestCtxAssembly,
 )
@@ -19,22 +30,8 @@ from mas.runtime.schema.ingress import (
     CtxAssemblyComplete,
     EngineIoReturn,
     IngressSymbol,
-    OperatorSteerReceived,
     ToolCallSpec,
     UserInputReceived,
-)
-from mas.runtime.kernel.client_response import client_response_from_run
-from mas.runtime.kernel.response_text import response_text_from_run
-from mas.runtime.machines.context import ctx_on_assembly_complete, ctx_on_cycle_reset, ctx_on_user_input
-from mas.runtime.machines.memory import memory_on_evaluate
-from mas.runtime.machines.model import model_on_evaluate
-from mas.runtime.machines.tool import tool_on_evaluate
-from mas.runtime.kernel.state import (
-    DpState,
-    LifecycleState,
-    QProduct,
-    ScheduledEgress,
-    RunLedger,
 )
 
 
@@ -60,11 +57,6 @@ class ReactPlugin(DesignPatternPlugin):
             q.dp = self.on_user_input(q, event)
             q.ctx = ctx_on_user_input(q.ctx)
             return [RequestCtxAssembly(collect_id=event.user_turn_id)]
-
-        if isinstance(event, OperatorSteerReceived) and q.ctrl == LifecycleState.RUNNING:
-            q.dp = DpState.CTX_BUILD
-            q.ctx = ctx_on_user_input(q.ctx)
-            return [RequestCtxAssembly(collect_id=event.steer_id, operator_context=event.context_text)]
 
         if isinstance(event, CtxAssemblyComplete) and q.dp == DpState.CTX_BUILD:
             q.dp, scheduled = self.on_context_complete(q)

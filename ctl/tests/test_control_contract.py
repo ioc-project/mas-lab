@@ -28,6 +28,12 @@ def _session(manager: SessionManager, session_id: str = "s1") -> Session:
         pause=lambda **kw: None,
         resume=lambda: None,
         driver=SimpleNamespace(ctx=ctx),
+        kernel=SimpleNamespace(
+            plugin=SimpleNamespace(
+                plugin_id="react@v1",
+                STEER_MODES=frozenset({"after", "preempt", "replace"}),
+            )
+        ),
         feed=lambda event: SimpleNamespace(client_responses=[], hitl_requests=[], boundary_errors=[]),
     )
 

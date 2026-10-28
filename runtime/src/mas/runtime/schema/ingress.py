@@ -50,6 +50,9 @@ class UserInputReceived(BaseModel):
     # Observability context supplied by an upstream caller. The kernel keeps
     # allocating its engine correlation identifiers locally.
     upstream_correlation_id: int | None = Field(default=None, ge=0)
+    source: str = ""
+    sender: str = ""
+    intent: str = ""
 
 
 class LifecyclePause(BaseModel):
@@ -139,6 +142,9 @@ class OperatorSteerReceived(BaseModel):
     kind: Literal[IngressKind.OPERATOR_STEER_RECEIVED] = IngressKind.OPERATOR_STEER_RECEIVED
     steer_id: str = "steer-1"
     context_text: str = ""
+    source: str = ""
+    sender: str = ""
+    intent: str = ""
 
 
 IngressSymbol = Annotated[

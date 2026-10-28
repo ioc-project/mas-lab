@@ -222,6 +222,7 @@ class SendTool:
         context_id: str,
         headers: dict[str, str] | None,
         intent: str,
+        mode: str = "",
     ) -> dict[str, Any]:
         accepted = self._inspect(communication)[method]
         extra: dict[str, Any] = {}
@@ -232,7 +233,9 @@ class SendTool:
         if "context_id" in accepted:
             extra["context_id"] = context_id
         if "context" in accepted:
-            extra["context"] = SendContext(intent=intent, headers=dict(headers or {}))
+            extra["context"] = SendContext(
+                intent=intent, headers=dict(headers or {}), mode=mode
+            )
         if headers is not None and "headers" in accepted:
             extra["headers"] = dict(headers)
         return extra
@@ -243,6 +246,7 @@ class SendTool:
         message: str,
         *,
         intent: str = "task",
+        mode: str = "",
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
@@ -261,6 +265,7 @@ class SendTool:
             context_id=context_id,
             headers=headers,
             intent=kind,
+            mode=mode,
         )
         try:
             result = communication.send(target_agent_id, payload, **extra)
@@ -296,6 +301,7 @@ class SendTool:
         message: str,
         *,
         intent: str = "task",
+        mode: str = "",
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
@@ -316,6 +322,7 @@ class SendTool:
             context_id=context_id,
             headers=headers,
             intent=kind,
+            mode=mode,
         )
         try:
             if method == "asend":

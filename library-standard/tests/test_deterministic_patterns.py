@@ -1,7 +1,13 @@
+from mas.library.standard.plugins.design_patterns.linear import DeterministicLinearPlugin
 from mas.library.standard.plugins.design_patterns.parallel import (
     DeterministicParallelPlugin,
 )
+from mas.library.standard.plugins.design_patterns.single import DeterministicSingleAgentPlugin
 from mas.runtime.kernel.config import KernelConfig
+from mas.runtime.kernel.orchestrator import RuntimeKernel
+from mas.runtime.kernel.state import DpState
+from mas.runtime.schema.egress import RequestCtxAssembly
+from mas.runtime.schema.ingress import OperatorSteerReceived
 
 
 def _participants(agent_spec: dict) -> list[str]:
@@ -80,3 +86,19 @@ def test_moderator_remains_default_entry() -> None:
             }
         }
     ) == ["analyst", "verifier"]
+
+
+def test_deterministic_patterns_apply_operator_steer() -> None:
+    event = OperatorSteerReceived(steer_id="steer-1", context_text="go")
+    for plugin in (
+        DeterministicLinearPlugin(),
+        DeterministicParallelPlugin(),
+        DeterministicSingleAgentPlugin(),
+    ):
+        kernel = RuntimeKernel(plugin=plugin)
+        out = kernel.transition(event)
+        assert kernel.q.dp is DpState.CTX_BUILD, plugin.plugin_id
+        assert isinstance(out.egress[-1], RequestCtxAssembly), plugin.plugin_id
+        assert out.egress[-1].collect_id == "steer-1"
+        assert plugin._state().original_task == "go"
+        assert plugin.STEER_MODES == frozenset({"after"})

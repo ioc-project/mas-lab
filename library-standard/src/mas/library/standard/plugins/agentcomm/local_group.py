@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import random
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
@@ -18,14 +18,19 @@ from mas.library.standard.lib.comm.payload import (
     INFORM_ASK_INTENTS,
     MAX_MESSAGE_SIZE,
     PUBLISH_INTENT,
+    STEER_INTENT,
     bound_inbound,
     check_message_size,
+    dispatch_steer,
     inbound_payload,
+    normalize_send_intent,
     require_honoured_intent,
     send_result,
+    steer_peer_sessions,
 )
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
+from mas.runtime.boundary.control.contract import ControlContract
 
 OnRequestFn = Callable[..., str]
 RunTurnFn = Callable[[str, str, int, str, str], str]
@@ -128,6 +133,9 @@ class LocalGroupAgentComm(AgentCommContract):
         overflow: str = "reject",
         max_message_size: int = MAX_MESSAGE_SIZE,
         deterministic: bool = True,
+        control: ControlContract | None = None,
+        session_id: str = "",
+        steer_peers: Mapping[str, str] | Sequence[str] | None = None,
     ) -> None:
         parts = require_instance_name(name)
         self.name = "/".join(parts)
@@ -155,13 +163,38 @@ class LocalGroupAgentComm(AgentCommContract):
         self._sticky: dict[str, str] = {}
         self._started = False
         self._stopped = False
+        self._control = control
+        self.session_id = str(session_id or "").strip()
+        self._steer_sessions = steer_peer_sessions(steer_peers)
         self.fabric.register(self)
 
     def capabilities(self) -> dict[str, bool]:
         return dict(self.CAPABILITIES)
 
     def honoured_send_intents(self) -> frozenset[str]:
-        return self.HONOURED_SEND_INTENTS
+        if self._control is None:
+            return self.HONOURED_SEND_INTENTS
+        return self.HONOURED_SEND_INTENTS | {STEER_INTENT}
+
+    def _resolved_steer_peers(self) -> set[str]:
+        names: set[str] = set()
+        for raw in self._steer_sessions:
+            try:
+                names.add(self._resolve(raw).name)
+            except AgentCommError:
+                continue
+        return names
+
+    def _steer(self, peer: LocalGroupAgentComm, text: str, *, mode: str) -> str:
+        return dispatch_steer(
+            self._control,
+            session_id=peer.session_id,
+            text=text,
+            mode=mode,
+            target=peer.name,
+            allowed=self._resolved_steer_peers(),
+            sender=self.agent_id,
+        )
 
     def bind(self, lower: object) -> None:
         del lower
@@ -210,6 +243,9 @@ class LocalGroupAgentComm(AgentCommContract):
         headers: dict[str, str] | None = None,
         context: SendContext | None = None,
     ) -> str:
+        steered = self._steer_if_requested(target_agent_id, task, headers=headers, context=context)
+        if steered is not None:
+            return steered
         peer, envelope = self._prepare_send(
             target_agent_id,
             task,
@@ -233,6 +269,9 @@ class LocalGroupAgentComm(AgentCommContract):
         headers: dict[str, str] | None = None,
         context: SendContext | None = None,
     ) -> str:
+        steered = self._steer_if_requested(target_agent_id, task, headers=headers, context=context)
+        if steered is not None:
+            return steered
         peer, envelope = self._prepare_send(
             target_agent_id,
             task,
@@ -244,6 +283,24 @@ class LocalGroupAgentComm(AgentCommContract):
         )
         result = await peer._areceive_request(envelope)
         return send_result(str(envelope["intent"]), result)
+
+    def _steer_if_requested(
+        self,
+        target_agent_id: str,
+        task: str,
+        *,
+        headers: dict[str, str] | None,
+        context: SendContext | None,
+    ) -> str | None:
+        _headers, aligned = align_send(headers, context, sender=self.agent_id)
+        del _headers
+        if normalize_send_intent(aligned.intent) != STEER_INTENT:
+            return None
+        self._require_live()
+        self._check_size(task)
+        require_honoured_intent(self, STEER_INTENT)
+        peer = self._resolve(target_agent_id)
+        return self._steer(peer, task, mode=aligned.mode)
 
     def _prepare_send(
         self,

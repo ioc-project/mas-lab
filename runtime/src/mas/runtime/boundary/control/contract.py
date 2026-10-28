@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol
 
-Surface = Literal["plugin", "llm", "admin"]
+Surface = Literal["plugin", "llm", "admin", "peer"]
 QueueAt = int | Literal["head", "tail"]
 
 
@@ -99,6 +99,27 @@ class ControlCapability:
             return False
         return True
 
+    def intersect(self, other: ControlCapability) -> ControlCapability:
+        """Narrow ``other`` so it cannot do more than this token."""
+        if self.methods is None:
+            methods = other.methods
+        elif other.methods is None:
+            methods = self.methods
+        else:
+            methods = self.methods & other.methods
+        if self.session_ids is None:
+            session_ids = other.session_ids
+        elif other.session_ids is None:
+            session_ids = self.session_ids
+        else:
+            session_ids = self.session_ids & other.session_ids
+        return ControlCapability(
+            actor=other.actor,
+            surface=other.surface,
+            session_ids=session_ids,
+            methods=methods,
+        )
+
 
 @dataclass(frozen=True)
 class ControlEvent:
@@ -183,7 +204,12 @@ class ControlContract(Protocol):
     has no steer RPC. Default ``steer`` preempts a working decode (keep
     the prefix, replace the rest). ``mode="replace"`` discards the
     prefix and starts a new turn. ``mode="after"`` waits for the current
-    generation to finish, then runs next (queue to front).
+    generation to finish, then runs next (queue to front for an
+    operator, to the tail for a peer). ``steer`` does not take
+    ``sender`` or ``source``; those come from the capability.
+    ``scoped`` narrows a handle and cannot grant a method the parent
+    lacked. ``after`` on a paused session waits in the queue; ``preempt``
+    and ``replace`` are refused.
     """
 
     def pause(self, session_id: str, *, reason: str) -> None: ...
@@ -205,6 +231,8 @@ class ControlContract(Protocol):
         ] = "preempt",
         at: QueueAt = "head",
     ) -> None: ...
+    def steer_modes(self, session_id: str) -> frozenset[str]: ...
+    def scoped(self, capability: ControlCapability) -> ControlContract: ...
     def discard_last(self, session_id: str) -> str: ...
     def inspect(self, session_id: str) -> SessionSnapshotView: ...
     def inspect_context(self, session_id: str) -> ContextUsageView: ...

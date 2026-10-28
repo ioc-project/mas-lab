@@ -23,12 +23,12 @@ from mas.runtime.boundary.context.working_memory_registry import (
     sync_working_memory_in,
     sync_working_memory_out,
 )
+from mas.runtime.boundary.control.contract import SessionBusy, SessionPaused
 from mas.runtime.boundary.obs.exchange_plugin import ExchangePlugin
 from mas.runtime.driver.driver import DriverTrace, ExchangeRecord
 from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.schema.egress import EmitClientResponse
 from mas.runtime.session import BacktrackCapReached, Session, SessionStatus
-from mas.runtime.boundary.control.contract import SessionBusy, SessionPaused
 
 _logger = logging.getLogger("mas.runtime")
 _RED = "\033[1;31m"
@@ -446,7 +446,11 @@ class SessionController:
             queue.enqueue(session_id, text, source="run_turn")
         item = queue.pop(session_id)
         if item is None:
+            self._queued_actor = ""
+            self._queued_source = ""
             return text
+        self._queued_actor = item.actor
+        self._queued_source = item.source
         return item.text
 
     def _handle_steer(self, text: str, *, turn_id: str | None, auto_hitl: bool) -> TurnResult:
@@ -467,8 +471,16 @@ class SessionController:
         )
         # New exclusive cycle when idle. While generating, ControlContract.steer
         # preempts streamed tokens into this same session instead of calling here.
+        sender = str(getattr(self, "_queued_actor", "") or "")
+        source = str(getattr(self, "_queued_source", "") or "")
         trace = self.instance.feed(
-            OperatorSteerReceived(steer_id=tid, context_text=steer_text)
+            OperatorSteerReceived(
+                steer_id=tid,
+                context_text=steer_text,
+                source=source,
+                sender=sender,
+                intent="steer" if sender or source == "peer" else "",
+            )
         )
         if auto_hitl:
             trace = self._drain_hitl(trace)
@@ -557,8 +569,16 @@ class SessionController:
         if callable(on_working):
             on_working()
         self._setup_exchange_tracing()
+        queued_source = str(getattr(self, "_queued_source", "") or "")
+        queued_actor = str(getattr(self, "_queued_actor", "") or "")
         trace = self.instance.run_user_text(
-            text, turn_id=tid, parent_call_id=parent_call_id, session_id=self.session_id
+            text,
+            turn_id=tid,
+            parent_call_id=parent_call_id,
+            session_id=self.session_id,
+            source=queued_source,
+            sender=queued_actor,
+            intent="steer" if queued_source == "peer" else "",
         )
         end_working = getattr(self.display, "end_working", None)
         if callable(end_working):
@@ -610,8 +630,16 @@ class SessionController:
         if callable(on_working):
             on_working()
         self._setup_exchange_tracing()
+        queued_source = str(getattr(self, "_queued_source", "") or "")
+        queued_actor = str(getattr(self, "_queued_actor", "") or "")
         trace = await self.instance.arun_user_text(
-            text, turn_id=tid, parent_call_id=parent_call_id, session_id=self.session_id
+            text,
+            turn_id=tid,
+            parent_call_id=parent_call_id,
+            session_id=self.session_id,
+            source=queued_source,
+            sender=queued_actor,
+            intent="steer" if queued_source == "peer" else "",
         )
         end_working = getattr(self.display, "end_working", None)
         if callable(end_working):

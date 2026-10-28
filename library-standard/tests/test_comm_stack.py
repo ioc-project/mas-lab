@@ -378,6 +378,7 @@ def test_send_context_deepcopy_and_pickle() -> None:
     assert dict(loaded.headers) == dict(ctx.headers)
     assert loaded.intent == "task"
     assert loaded.sender == "alice"
+    assert loaded.mode == ""
 
 
 def test_stack_starts_every_layer_even_if_top_does_not_forward() -> None:

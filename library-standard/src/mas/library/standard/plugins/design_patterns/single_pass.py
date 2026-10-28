@@ -7,15 +7,6 @@ from __future__ import annotations
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.egress_gate import emit_scheduled_egress
 from mas.runtime.kernel.ingress_step import apply_engine_io_return
-from mas.runtime.machines.design_pattern.protocol import DesignPatternPlugin
-from mas.runtime.schema.egress import EgressSymbol, EmitClientResponse, NoOp, RequestCtxAssembly
-from mas.runtime.schema.ingress import (
-    CtxAssemblyComplete,
-    EngineIoReturn,
-    IngressSymbol,
-    OperatorSteerReceived,
-    UserInputReceived,
-)
 from mas.runtime.kernel.response_text import response_text_from_run
 from mas.runtime.kernel.state import (
     CtxState,
@@ -26,6 +17,14 @@ from mas.runtime.kernel.state import (
     RunLedger,
     ScheduledEgress,
     ToolState,
+)
+from mas.runtime.machines.design_pattern.protocol import DesignPatternPlugin
+from mas.runtime.schema.egress import EgressSymbol, EmitClientResponse, NoOp, RequestCtxAssembly
+from mas.runtime.schema.ingress import (
+    CtxAssemblyComplete,
+    EngineIoReturn,
+    IngressSymbol,
+    UserInputReceived,
 )
 
 
@@ -47,11 +46,6 @@ class SinglePassPlugin(DesignPatternPlugin):
             q.dp = DpState.CTX_BUILD
             q.ctx = CtxState.COLLECTING
             return [RequestCtxAssembly(collect_id=event.user_turn_id)]
-
-        if isinstance(event, OperatorSteerReceived) and q.ctrl == LifecycleState.RUNNING:
-            q.dp = DpState.CTX_BUILD
-            q.ctx = CtxState.COLLECTING
-            return [RequestCtxAssembly(collect_id=event.steer_id, operator_context=event.context_text)]
 
         if isinstance(event, CtxAssemblyComplete) and q.dp == DpState.CTX_BUILD:
             q.dp = DpState.EGRESS_PENDING

@@ -59,9 +59,28 @@ reconciling the release notes with the code and docs currently on that branch.
   sender and intent also sit on the `inbound_send()` seam and on
   local-group handler kwargs. A channel message is intent `publish`.
   An empty intent stays empty. A link that does not honour `inform`
-  or `ask` (A2A is one) refuses them. `steer` is not a send: it stays
-  on the control protocol (pause, preempt, replace, after). `task`
-  and `delegate_to_*` stay the same. See
+  or `ask` (A2A is one) refuses them. `task` and `delegate_to_*` stay
+  the same. See
+  [Communication stack](docs/references/comm-stack.md).
+- Send steer: `send(..., intent="steer")` calls `ControlContract.scoped`
+  then `steer` on the session the link maps for that target, not the
+  send `context_id`. The scoped handle is the intersection of the
+  passed control and a peer token (actor is the sender, surface
+  `peer`, only that session); it cannot gain a steer right the parent
+  lacked. `steer()` does not take `sender` or `source`; those come
+  from the capability. Mode defaults to `after` at the tail so a peer
+  does not jump a human's pending input. Peer entries queue at the
+  tail in every branch. `after` on a paused session waits in the queue;
+  `preempt` and `replace` are refused. The kernel turns
+  `OperatorSteerReceived` into context assembly for every pattern.
+  `ControlContract.steer_modes` lists what the pattern accepts.
+  Deterministic patterns accept `after` only; `preempt` and `replace`
+  raise `ValueError`. If the pattern plugin cannot be read, only
+  `after` is allowed. Idle `preempt` and `replace` from a peer queue
+  at the tail. Who may be steered is a list; empty means nobody. The
+  steer text is labelled as an untrusted peer message; sender and
+  intent ride the symbol. A send through the send tool also needs the
+  target on `allowed_peers`. A2A still refuses `steer`. See
   [Communication stack](docs/references/comm-stack.md).
 - `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
   file: count spans by status, print the conversation in order, and list the

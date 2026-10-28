@@ -3,7 +3,6 @@
 import asyncio
 
 import pytest
-
 from mas.runtime.driver.driver import KernelDriver
 from mas.runtime.engine.inflight_llm import has_inflight
 from mas.runtime.kernel.orchestrator import RuntimeKernel
@@ -57,7 +56,7 @@ async def test_steer_keeps_partial_tokens() -> None:
         if has_inflight("s-steer"):
             break
     assert has_inflight("s-steer")
-    assert request_preempt("s-steer", "Answer Lyon.") is True
+    assert request_preempt("s-steer", "Answer Lyon.", source="peer", sender="planner") is True
     ret = await asyncio.wait_for(task, timeout=2)
     assert isinstance(ret, EngineIoReturn)
     assert ret.finish_reason == "preempted"
@@ -68,6 +67,9 @@ async def test_steer_keeps_partial_tokens() -> None:
     assert followed[0] is ret
     assert isinstance(followed[1], OperatorSteerReceived)
     assert followed[1].context_text == "Answer Lyon."
+    assert followed[1].source == "peer"
+    assert followed[1].sender == "planner"
+    assert followed[1].intent == "steer"
     assert peek_preempt("s-steer") is None
 
 
@@ -92,6 +94,7 @@ async def test_replace_discards_partial_tokens() -> None:
     followed = driver._with_pending_steer([ret])
     assert isinstance(followed[1], UserInputReceived)
     assert followed[1].text == "Start over in Lyon."
+    assert followed[1].source == ""
     assert peek_replace("s-steer") is None
 
 

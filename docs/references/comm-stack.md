@@ -23,9 +23,9 @@ never goes out as an `inform`. The table below is the whole map.
 | `ask` | Peer send | Same as `task`, with the peer text marked as coming from another agent. The caller waits for the reply. | **Yes**, on `local` and `local-group`. **No** on A2A (refused). |
 | `inform` | Peer send | Same as `ask`, then drop the reply and return `delivered`. The caller still waits. A peer error still raises. | **Yes**, on `local` and `local-group`. **No** on A2A (refused). |
 | Channel `publish` | Peer send | Fan-out to a room. Intent is `publish`, not `task`. Labelled untrusted. | **Yes** on `local-group`. |
-| `send(..., intent="steer")` | Peer send | One agent interrupts another through `send`. | **No.** Known name, refused. Later change. |
+| `send(..., intent="steer")` | Peer send → control | Call `ControlContract.scoped` then `steer` on the session the link maps for that target. The new handle cannot do more than the control you passed. Default mode is `after` at the tail. `preempt` and `replace` must be set. Peer entries always queue at the tail. `after` on a paused session waits in the queue; `preempt` and `replace` are refused. The target must be on `steer_peers` (empty list means nobody) and on SendTool `allowed_peers`. | **Yes** on `local` and `local-group` when `control=` is passed at construction. **No** on A2A. Session wiring does not inject `control` yet. |
 | Pause / resume | Control | Block or continue the next user turn. | **Yes.** `mas-ctl control`. |
-| Steer `after` | Control | Do not interrupt. Queue text at the front. The current decode finishes, then the text runs. | **Yes.** Control protocol only. Not A2A. Not a peer send. |
+| Steer `after` | Control | Do not interrupt. Queue text at the front for an operator, at the tail for a peer. The current decode finishes, then the text runs. | **Yes.** Control protocol only. Not A2A. Not a peer send. |
 | Steer `preempt` | Control | Cancel the streamed model call between chunks, keep tokens so far, continue with `OperatorSteerReceived` in the Mealy machine. | **Yes.** Control protocol only. Needs a streaming provider API. |
 | Steer `replace` | Control | Discard tokens so far. Start a new turn. | **Yes.** Control protocol only. |
 | Cancel in-flight | Control | Drop the rest of the decode. No follow-up. | **Yes.** A2A `tasks/cancel`. |
@@ -67,20 +67,47 @@ text=..., mode=...)` feeds the Mealy machine:
 - `after` — leave the in-flight call alone. Queue the text.
 - `preempt` — cancel `ainvoke` between stream chunks (`achat_completion_stream`
   when the provider has it). Keep the prefix. Then
-  `OperatorSteerReceived`. ReAct and single-pass handle that event:
-  rebuild context and call the model again. Without a stream, cancel
-  aborts the one-shot await and the prefix is empty.
+  `OperatorSteerReceived`. The kernel turns that event into context
+  assembly for every pattern. Without a stream, cancel aborts the
+  one-shot await and the prefix is empty.
 - `replace` — discard the prefix. New user turn.
 
 The session id is the control session (A2A `contextId`), not an agent
 name. Inflight decode is keyed by that id. A2A has no steer RPC.
 
-`send(..., intent="steer")` is **not** wired. An earlier draft called
-`control.steer` with the target agent name as `session_id` and defaulted
-to `preempt`. That would cut off the wrong generation, or anyone who
-could set the intent. Agent-to-agent steer needs a typed
-`ControlContract`, an explicit session id, an explicit mode, and a list
-of who may steer whom. Until that exists, the send tool refuses `steer`.
+`send(..., intent="steer")` is **not** a peer turn. When the link was
+built with a `ControlContract` and the target is on `steer_peers`, it
+calls `scoped()` on the control you passed. The result is the
+intersection: actor = the sender, surface `peer`, methods `{steer}`,
+and only the mapped session, but only if the parent already allowed
+`steer` on that session. A pause-only token cannot steer. `steer()`
+does not take `sender` or `source`; those come from the capability.
+A control with no `scoped` method that can do more than steer is
+refused. The link maps the target to that session: `steer_peers` is
+name→session on `local`, and the target's `session_id` on
+`local-group` after the name is resolved. The send `context_id` is
+not the control session (for a `task` it still picks the target's
+working-memory context). A send through `SendTool` also needs the
+target on `allowed_peers`; both lists apply. The steer text is
+labelled as an untrusted peer message. Mode defaults to `after`,
+queued at the tail so a peer does not jump a human's pending input.
+Peer `preempt` and `replace` also queue at the tail when they cannot
+interrupt a decode. `after` on a paused session waits in the queue.
+`preempt` and `replace` on a paused session are refused. LLM-driven patterns
+accept `after`, `preempt`, and `replace`. Deterministic patterns
+accept `after` only; `preempt` and `replace` raise
+(`ValueError` / `AgentCommError`) instead of returning `delivered`
+and doing nothing. If the pattern plugin cannot be read, only
+`after` is allowed. Idle `preempt` and `replace` from a peer queue at
+the tail: the sender does not block, and an error in the target turn
+does not propagate. `preempt` uses the provider stream cancel, then
+`OperatorSteerReceived` in the kernel (not in each pattern). The
+labelled text is the body; `source`, sender, and `intent="steer"`
+come from the peer capability and ride the symbol and
+`inbound_send()`. An empty `steer_peers` list means nobody.
+local-group refuses an unknown target. An unknown session or a
+denied call is an `AgentCommError`. The session does not pass
+`control=` in yet; you pass it when you construct the link.
 
 ## Stack
 

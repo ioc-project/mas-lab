@@ -12,10 +12,19 @@ from fastapi import FastAPI
 from library_ioa.plugins.webserver import UvicornWebServer
 
 
-def _free_port() -> int:
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        return int(listener.getsockname()[1])
+def _hold_ports(count: int) -> list[int]:
+    sockets: list[socket.socket] = []
+    ports: list[int] = []
+    try:
+        for _ in range(count):
+            listener = socket.socket()
+            listener.bind(("127.0.0.1", 0))
+            sockets.append(listener)
+            ports.append(int(listener.getsockname()[1]))
+    finally:
+        for listener in sockets:
+            listener.close()
+    return ports
 
 
 def _wait(port: int, timeout: float = 5.0) -> None:
@@ -41,8 +50,7 @@ def test_two_background_servers_listen_on_distinct_ports() -> None:
 
         return app
 
-    port_a = _free_port()
-    port_b = _free_port()
+    port_a, port_b = _hold_ports(2)
     webserver = UvicornWebServer()
     handle_a = webserver.serve_background(app_for("a"), host="127.0.0.1", port=port_a)
     handle_b = webserver.serve_background(app_for("b"), host="127.0.0.1", port=port_b)

@@ -28,9 +28,10 @@ def merge_send_context(
     else:
         outgoing = {}
     intent = context.intent if context is not None else ""
+    mode = context.mode if context is not None else ""
     if sender is None:
         sender = context.sender if context is not None else ""
-    return SendContext(headers=outgoing, intent=intent, sender=sender)
+    return SendContext(headers=outgoing, intent=intent, sender=sender, mode=mode)
 
 
 def align_send(
@@ -42,4 +43,6 @@ def align_send(
     """One envelope. Explicit ``headers`` replace; otherwise keep ``context.headers``."""
     ctx = merge_send_context(headers, context, sender=sender)
     outgoing = dict(ctx.headers)
-    return outgoing, SendContext(headers=outgoing, intent=ctx.intent, sender=ctx.sender)
+    return outgoing, SendContext(
+        headers=outgoing, intent=ctx.intent, sender=ctx.sender, mode=ctx.mode
+    )

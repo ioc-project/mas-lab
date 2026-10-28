@@ -12,12 +12,22 @@ partial and starts a new turn. A2A has no steer RPC; additional
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True)
+class PendingSteer:
+    text: str
+    source: str = ""
+    sender: str = ""
+    intent: str = "steer"
+
 
 _tasks: dict[str, asyncio.Task[Any]] = {}
 _partials: dict[str, str] = {}
-_preempts: dict[str, str] = {}
-_replaces: dict[str, str] = {}
+_preempts: dict[str, PendingSteer] = {}
+_replaces: dict[str, PendingSteer] = {}
 
 
 def register(session_id: str, task: asyncio.Task[Any]) -> None:
@@ -42,33 +52,53 @@ def take_partial(session_id: str) -> str:
 
 
 def peek_preempt(session_id: str) -> str | None:
-    return _preempts.get(session_id)
+    rec = _preempts.get(session_id)
+    return rec.text if rec is not None else None
 
 
-def pop_preempt(session_id: str) -> str | None:
+def pop_preempt(session_id: str) -> PendingSteer | None:
     return _preempts.pop(session_id, None)
 
 
 def peek_replace(session_id: str) -> str | None:
-    return _replaces.get(session_id)
+    rec = _replaces.get(session_id)
+    return rec.text if rec is not None else None
 
 
-def pop_replace(session_id: str) -> str | None:
+def pop_replace(session_id: str) -> PendingSteer | None:
     return _replaces.pop(session_id, None)
 
 
-def request_preempt(session_id: str, text: str) -> bool:
+def request_preempt(
+    session_id: str,
+    text: str,
+    *,
+    source: str = "",
+    sender: str = "",
+    intent: str = "steer",
+) -> bool:
     """Keep streamed tokens and stop the rest of this decode (steer)."""
     if session_id:
-        _preempts[session_id] = text
+        _preempts[session_id] = PendingSteer(
+            text=text, source=source, sender=sender, intent=intent
+        )
         _replaces.pop(session_id, None)
     return cancel(session_id)
 
 
-def request_replace(session_id: str, text: str) -> bool:
+def request_replace(
+    session_id: str,
+    text: str,
+    *,
+    source: str = "",
+    sender: str = "",
+    intent: str = "steer",
+) -> bool:
     """Discard streamed tokens and stop this decode for a replacement turn."""
     if session_id:
-        _replaces[session_id] = text
+        _replaces[session_id] = PendingSteer(
+            text=text, source=source, sender=sender, intent=intent
+        )
         _preempts.pop(session_id, None)
         _partials.pop(session_id, None)
     return cancel(session_id)
@@ -79,14 +109,23 @@ def peek_amend(session_id: str) -> str | None:
     return peek_preempt(session_id)
 
 
-def pop_amend(session_id: str) -> str | None:
+def pop_amend(session_id: str) -> PendingSteer | None:
     """Alias of :func:`pop_preempt`."""
     return pop_preempt(session_id)
 
 
-def request_amend(session_id: str, text: str) -> bool:
+def request_amend(
+    session_id: str,
+    text: str,
+    *,
+    source: str = "",
+    sender: str = "",
+    intent: str = "steer",
+) -> bool:
     """Alias of :func:`request_preempt`."""
-    return request_preempt(session_id, text)
+    return request_preempt(
+        session_id, text, source=source, sender=sender, intent=intent
+    )
 
 
 def cancel(session_id: str) -> bool:

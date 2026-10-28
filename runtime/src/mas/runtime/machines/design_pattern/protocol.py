@@ -11,11 +11,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Protocol
 
+from mas.runtime.kernel.state import DpState, QProduct, RunLedger, ScheduledEgress
 from mas.runtime.schema.egress import EgressSymbol
 from mas.runtime.schema.governance import GovPolicyProfile
 from mas.runtime.schema.ingress import IngressSymbol
-from mas.runtime.kernel.state import DpState, QProduct, ScheduledEgress, RunLedger
-
 
 ContextView = QProduct
 
@@ -67,6 +66,7 @@ class DesignPatternPlugin(ABC):
     """Base class for in-process pattern plugins."""
 
     plugin_id: str
+    STEER_MODES: frozenset[str] = frozenset({"after", "preempt", "replace"})
 
     @abstractmethod
     def handle_event(
@@ -90,6 +90,16 @@ class DesignPatternPlugin(ABC):
     @abstractmethod
     def on_evaluate(self, ctx: ContextView) -> tuple[DpState, ScheduledEgress | None]:
         """Read τ tail next_step; schedule TOOL_CALL or STOP (IDLE)."""
+
+    def on_steer(
+        self,
+        ctx: ContextView,
+        event: object,
+        *,
+        config: KernelConfigProtocol,
+    ) -> None:
+        """Optional. Deterministic patterns reset their script to the steer text."""
+        return None
 
     def evaluate_next(
         self,

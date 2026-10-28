@@ -12,7 +12,12 @@ from mas.runtime.kernel.state import DpState, QProduct, RunLedger
 from mas.runtime.machines.context import ctx_on_assembly_complete, ctx_on_user_input
 from mas.runtime.machines.design_pattern.protocol import DesignPatternPlugin
 from mas.runtime.schema.egress import EgressSymbol, EmitClientResponse, NoOp, RequestCtxAssembly
-from mas.runtime.schema.ingress import CtxAssemblyComplete, EngineIoReturn, IngressSymbol, UserInputReceived
+from mas.runtime.schema.ingress import (
+    CtxAssemblyComplete,
+    EngineIoReturn,
+    IngressSymbol,
+    UserInputReceived,
+)
 
 
 @dataclass
@@ -29,6 +34,7 @@ class _DeterministicBase(DesignPatternPlugin):
 
     plugin_id = "deterministic_base@v1"
     mode: str = "single"
+    STEER_MODES = frozenset({"after"})
 
     def __init__(self) -> None:
         self._turn_state: _TurnState = self._make_state()
@@ -105,6 +111,12 @@ class _DeterministicBase(DesignPatternPlugin):
 
     def on_user_input(self, ctx: QProduct, event: object) -> DpState:
         return DpState.CTX_BUILD
+
+    def on_steer(self, ctx: QProduct, event: object, *, config: KernelConfig) -> None:
+        self._reset_state(
+            participants=self._participants_from_spec(config),
+            task=str(getattr(event, "context_text", "") or ""),
+        )
 
     def on_context_complete(self, ctx: QProduct):
         return DpState.EVALUATING, None
