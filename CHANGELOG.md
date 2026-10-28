@@ -28,6 +28,16 @@ reconciling the release notes with the code and docs currently on that branch.
   immutable. The caller may set headers and intent; the link sets
   sender from its `agent_id`. See
   [Communication stack](docs/references/comm-stack.md).
+- In-process group link: send reaches one peer, any instance of a
+  service, or a room. The shared group is passed in from Python; session
+  and config do not share one yet, so two links given only a name cannot
+  talk. send keeps the three call ids; async send uses the async handler
+  when it exists. stop removes the agent, deletes rooms it created, and
+  refuses later sends. A callback takes the message; otherwise receive
+  and drain empty the queue. A send with no handler raises. Creating a
+  room someone else already made raises. If one queue is full, nobody
+  gets the message. See
+  [Communication stack](docs/references/comm-stack.md).
 - `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
   file: count spans by status, print the conversation in order, and list the
   calls to named tools with their inputs.

@@ -31,11 +31,12 @@ practical examples.
 
 ### Agent_Comm
 
-| Class               | Full module path                                       | Package                |
-| ------------------- | ------------------------------------------------------ | ---------------------- |
-| `LocalAgentComm`    | `mas.library.standard.plugins.agentcomm.local`         | `mas-library-standard` |
-| `StackAgentComm`    | `mas.library.standard.plugins.agentcomm.stack`         | `mas-library-standard` |
-| `TraceContextLayer` | `mas.library.standard.plugins.agentcomm.trace_context` | `mas-library-standard` |
+| Class                 | Full module path                                       | Package                |
+| --------------------- | ------------------------------------------------------ | ---------------------- |
+| `LocalAgentComm`      | `mas.library.standard.plugins.agentcomm.local`         | `mas-library-standard` |
+| `LocalGroupAgentComm` | `mas.library.standard.plugins.agentcomm.local_group`   | `mas-library-standard` |
+| `StackAgentComm`      | `mas.library.standard.plugins.agentcomm.stack`         | `mas-library-standard` |
+| `TraceContextLayer`   | `mas.library.standard.plugins.agentcomm.trace_context` | `mas-library-standard` |
 
 ### Assembler
 
@@ -291,6 +292,7 @@ practical examples.
 | `LlmSchedulerMiddleware`         | infra_middleware     | `mas-library-standard`  |
 | `LlmSummarizer`                  | summarizer           | `mas-library-standard`  |
 | `LocalAgentComm`                 | agent_comm           | `mas-library-standard`  |
+| `LocalGroupAgentComm`            | agent_comm           | `mas-library-standard`  |
 | `LocalToolProvider`              | tool_provider        | `mas-library-standard`  |
 | `NativeObservabilityPlugin`      | observability        | `mas-library-standard`  |
 | `NativeSkillPlugin`              | skill_impl           | `mas-library-skills`    |

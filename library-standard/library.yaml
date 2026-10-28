@@ -119,6 +119,17 @@ plugins:
       - local
       - agent-local
   - type: agent_comm
+    name: local-group
+    urn: mas.agent_comm.local_group
+    module: mas.library.standard.plugins.agentcomm.local_group
+    class: LocalGroupAgentComm
+    shortcuts:
+      - local-group
+      - local_group
+    attributes:
+      default_enabled: false
+      semantic: agent_comm
+  - type: agent_comm
     name: stack
     urn: mas.agent_comm.stack
     module: mas.library.standard.plugins.agentcomm.stack
