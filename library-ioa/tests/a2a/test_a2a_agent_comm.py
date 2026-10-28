@@ -8,7 +8,7 @@ import asyncio
 from unittest.mock import Mock
 
 from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
-from mas.runtime.boundary.agentcomm.protocol import AgentCommContract
+from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, SendContext
 
 
 def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
@@ -22,6 +22,7 @@ def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
 
     assert isinstance(plugin, AgentCommContract)
     assert plugin.send("worker", "task", headers={"traceparent": "00-aa-bb-01"}) == "remote response"
+    assert plugin.send("worker", "task", context=SendContext(headers={"k": "v"}, sender="evil")) == "remote response"
     assert (
         asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"}))
         == "remote response"
@@ -31,4 +32,4 @@ def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
         context_id="",
         metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
     )
-    assert client.send_message.call_count == 2
+    assert client.send_message.call_count == 3

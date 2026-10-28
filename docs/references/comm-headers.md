@@ -13,6 +13,10 @@ These values are **caller-supplied and unauthenticated**. Do not use them for
 identity or authorization. A later design will authenticate the sender on the
 link. A header is the wrong carrier unless a trusted layer sets it.
 
+`SendContext` is the per-send envelope that can carry this map plus an
+intent. The caller may set those; only the link sets `sender`. See
+[Communication stack](comm-stack.md).
+
 The in-process `local` link carries the map. **A2A does not:**
 `A2AAgentComm.send` accepts `headers` so the contract is implemented, and then
 drops them. Forwarding hop headers over HTTP is a later decision.

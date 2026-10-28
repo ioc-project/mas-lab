@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError
+from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
 from library_ioa.plugins.a2a.client import A2AClient
 
@@ -28,8 +28,9 @@ class A2AAgentComm(AgentCommContract):
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
     ) -> str:
-        del target_agent_id, headers
+        del target_agent_id, headers, context
         try:
             response = self._client.send_message(
                 task,
@@ -80,6 +81,7 @@ class A2AAgentComm(AgentCommContract):
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
     ) -> str:
         return self.send(
             target_agent_id,
@@ -88,6 +90,7 @@ class A2AAgentComm(AgentCommContract):
             caller_call_id=caller_call_id,
             context_id=context_id,
             headers=headers,
+            context=context,
         )
 
     def close(self) -> None:

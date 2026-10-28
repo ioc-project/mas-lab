@@ -77,7 +77,7 @@ under **Open standards**. `navigation.path` renders ancestor breadcrumbs above t
 - CLI → [mas-runtime](cli/mas-runtime.md), [mas-ctl](cli/mas-ctl.md), [mas-lab](cli/mas-lab.md), [compile](cli/compile.md), [overrides](cli/overrides.md), [observability](cli/observability.md), [controller API](cli/serve.md), [live-reference](ui/live-reference.md)
 - Design notes → HITL, flavour boundary, manifest libraries, compaction
 - Specifications → `manifests/*.md`, [config.yaml](references/config.yaml.md), [schemas](references/schemas.md)
-- Runtime → [context management](references/context-management.md), [event model](references/event-model.md), [communication headers](references/comm-headers.md), [manifests/runtime.md](manifests/runtime.md), [runtime docs](references/runtime.md)
+- Runtime → [context management](references/context-management.md), [event model](references/event-model.md), [communication headers](references/comm-headers.md), [communication stack](references/comm-stack.md), [manifests/runtime.md](manifests/runtime.md), [runtime docs](references/runtime.md)
 - Lab → experiment/dataset/pipeline manifests, [lab bench](references/lab.md), [library discovery](library-discovery.md)
 - Packages → [package map](libraries.md), [packages](packages-reference.md), [plugins](plugins-reference.md)
 

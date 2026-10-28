@@ -200,6 +200,7 @@ nav:
           - Reliability: references/reliability.md
           - Event model: references/event-model.md
           - Communication headers: references/comm-headers.md
+          - Communication stack: references/comm-stack.md
           - LLM cache: references/llm-cache.md
           - Contracts: references/contracts.md
           - Snapshots vs checkpoints: references/snapshots.md

@@ -110,6 +110,7 @@ Shared lab fragments live under [`lab/fragments/`](https://github.com/ioc-projec
 | [`contracts-registry.yaml`](../schemas/contracts-registry.yaml) | Plugin contract registry. See [Contracts](contracts.md). |
 | [`component-registry.yaml`](../schemas/component-registry.yaml) | Embedder-chosen component ids (runtimes, placement backends, framework adapters); manifest plugins resolve through `PluginRegistry` instead. See [Thin waist](thin-waist.md). |
 | [`evaluation-envelope.schema.yaml`](../schemas/evaluation-envelope.schema.yaml) | Evaluation result envelope |
+| [`plugins/comm-layer.schema.yaml`](../schemas/plugins/comm-layer.schema.yaml) | Comm-layer capability flags. See [Communication stack](comm-stack.md). |
 
 ---
 

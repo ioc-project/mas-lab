@@ -1,7 +1,31 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from contextvars import ContextVar
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import Any, Protocol, runtime_checkable
+
+
+@dataclass(frozen=True)
+class SendContext:
+    """Per-send envelope. The caller may set headers and intent; only the link sets sender."""
+
+    headers: Mapping[str, str] = field(default_factory=dict)
+    intent: str = ""
+    sender: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "headers", MappingProxyType(dict(self.headers)))
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> SendContext:
+        copied = SendContext(headers=dict(self.headers), intent=self.intent, sender=self.sender)
+        memo[id(self)] = copied
+        return copied
+
+    def __reduce__(self) -> tuple[type[SendContext], tuple[dict[str, str], str, str]]:
+        return (type(self), (dict(self.headers), self.intent, self.sender))
+
 
 _current_transport: ContextVar[str] = ContextVar(
     "mas_agent_comm_transport",
@@ -35,6 +59,9 @@ class AgentCommContract(Protocol):
     the envelope and restores it around the receiver. Only
     ``traceparent``, ``tracestate``, and ``baggage`` ride a later send.
     ``mas.*`` keys stay on this hop.
+
+    ``context`` is the per-send envelope. The caller may set headers and
+    intent; only the link sets sender.
     """
 
     def send(
@@ -46,6 +73,7 @@ class AgentCommContract(Protocol):
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
     ) -> str: ...
 
     async def asend(
@@ -57,4 +85,5 @@ class AgentCommContract(Protocol):
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
     ) -> str: ...

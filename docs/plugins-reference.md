@@ -31,9 +31,11 @@ practical examples.
 
 ### Agent_Comm
 
-| Class            | Full module path                               | Package                |
-| ---------------- | ---------------------------------------------- | ---------------------- |
-| `LocalAgentComm` | `mas.library.standard.plugins.agentcomm.local` | `mas-library-standard` |
+| Class               | Full module path                                       | Package                |
+| ------------------- | ------------------------------------------------------ | ---------------------- |
+| `LocalAgentComm`    | `mas.library.standard.plugins.agentcomm.local`         | `mas-library-standard` |
+| `StackAgentComm`    | `mas.library.standard.plugins.agentcomm.stack`         | `mas-library-standard` |
+| `TraceContextLayer` | `mas.library.standard.plugins.agentcomm.trace_context` | `mas-library-standard` |
 
 ### Assembler
 
@@ -316,11 +318,13 @@ practical examples.
 | `SlidingWindowConversation`      | context_manager      | `mas-library-standard`  |
 | `SpawnSubagentTool`              | system_tool          | `mas-library-standard`  |
 | `SpawnSubagentTool`              | system_tool          | `mas-library-standard`  |
+| `StackAgentComm`                 | agent_comm           | `mas-library-standard`  |
 | `StackConversation`              | context_manager      | `mas-library-standard`  |
 | `SubagentSpawner`                | engine_tool_provider | `mas-library-standard`  |
 | `SummarizingConversation`        | context_manager      | `mas-library-standard`  |
 | `ThresholdCircuitBreaker`        | circuit_breaker      | `mas-library-standard`  |
 | `ToyEchoMetric`                  | eval_metric          | `mas-library-eval`      |
+| `TraceContextLayer`              | agent_comm           | `mas-library-standard`  |
 | `TreeOfThoughtsPlugin`           | design_pattern       | `mas-library-standard`  |
 | `ValidateKgStep`                 | step                 | `mas-library-kg`        |
 | `VerifyEventsStep`               | step                 | `mas-library-kg`        |

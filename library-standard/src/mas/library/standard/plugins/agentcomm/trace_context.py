@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import re
 import secrets
+from collections.abc import Mapping
 from typing import Any
 
 from mas.library.standard.lib.comm.headers import merge_headers
-from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError
+from mas.library.standard.plugins.agentcomm.layer import BoundLayer
+from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, SendContext
 
 _TRACEPARENT = re.compile(
     r"^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$",
@@ -37,25 +39,19 @@ def child_traceparent(parent: str | None) -> str:
     return f"00-{trace_id}-{span_id}-01"
 
 
-def _with_trace(headers: dict[str, str] | None) -> dict[str, str]:
+def _with_trace(headers: Mapping[str, str] | None) -> dict[str, str]:
     merged = merge_headers(headers)
     merged["traceparent"] = child_traceparent(merged.get("traceparent"))
     return merged
 
 
-class TraceContextLayer:
-    """Wraps a lower ``AgentCommContract`` and injects a child correlation id."""
+class TraceContextLayer(BoundLayer):
+    """Wraps a lower link and injects a child correlation id."""
 
-    def __init__(self, lower: AgentCommContract | None = None, **_params: Any) -> None:
-        self._lower = lower
-
-    def bind(self, lower: object) -> None:
-        self._lower = lower
-
-    def _require(self) -> AgentCommContract:
-        if self._lower is None:
-            raise AgentCommError("TraceContextLayer is unbound")
-        return self._lower
+    def __init__(self, lower: AgentCommContract | None = None, **params: Any) -> None:
+        super().__init__(**params)
+        if lower is not None:
+            self.bind(lower)
 
     def send(
         self,
@@ -66,14 +62,17 @@ class TraceContextLayer:
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
     ) -> str:
-        return self._require().send(
+        incoming = headers if headers is not None else (context.headers if context else None)
+        return super().send(
             target_agent_id,
             task,
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
             context_id=context_id,
-            headers=_with_trace(headers),
+            headers=_with_trace(incoming),
+            context=context,
         )
 
     async def asend(
@@ -85,12 +84,15 @@ class TraceContextLayer:
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
     ) -> str:
-        return await self._require().asend(
+        incoming = headers if headers is not None else (context.headers if context else None)
+        return await super().asend(
             target_agent_id,
             task,
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
             context_id=context_id,
-            headers=_with_trace(headers),
+            headers=_with_trace(incoming),
+            context=context,
         )

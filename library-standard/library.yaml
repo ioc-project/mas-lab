@@ -118,6 +118,27 @@ plugins:
     shortcuts:
       - local
       - agent-local
+  - type: agent_comm
+    name: stack
+    urn: mas.agent_comm.stack
+    module: mas.library.standard.plugins.agentcomm.stack
+    class: StackAgentComm
+    shortcuts:
+      - stack
+    attributes:
+      default_enabled: false
+      semantic: agent_comm
+  - type: agent_comm
+    name: trace_context
+    urn: mas.agent_comm.trace_context
+    module: mas.library.standard.plugins.agentcomm.trace_context
+    class: TraceContextLayer
+    shortcuts:
+      - trace_context
+      - trace-context
+    attributes:
+      default_enabled: false
+      semantic: agent_comm
   - type: control_protocol
     name: rpc
     urn: mas.control_protocol.rpc

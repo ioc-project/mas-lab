@@ -19,6 +19,15 @@ reconciling the release notes with the code and docs currently on that branch.
   so the send still goes through. `TraceContextLayer` writes a correlation
   id (not an OpenTelemetry span). A2A accepts `headers` and does not put
   them on HTTP. See [Communication headers](docs/references/comm-headers.md).
+- You can stack `agent_comm` plugins: a link at the bottom, decorator
+  layers above it. A stack of one is that layer. Starting the stack
+  starts every layer once, bottom first. Plugins declare capability
+  flags; a plugin that declares nothing is unknown and cannot claim
+  isolation, end-to-end encryption, reliable delivery, or persistent
+  groups. The stack turns flags on, never off. `SendContext` is
+  immutable. The caller may set headers and intent; the link sets
+  sender from its `agent_id`. See
+  [Communication stack](docs/references/comm-stack.md).
 - `mas-lab telemetry errors`, `conversation` and `calls` read a converted span
   file: count spans by status, print the conversation in order, and list the
   calls to named tools with their inputs.
