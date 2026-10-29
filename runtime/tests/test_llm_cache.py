@@ -7,7 +7,10 @@ from __future__ import annotations
 from mas.library.standard.plugins.llm.cache import CacheLLMProvider
 from mas.runtime.engine.llm_cache import (
     assistant_message_from_cache_content,
+    bind_route_cache_key,
+    legacy_preview_cache_key,
     llm_cache_key,
+    lookup_preview_cache,
     resolve_cache_path,
 )
 from mas.runtime.engine.llm_live import LiveLlmEngine
@@ -185,7 +188,9 @@ def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
             "function": {"name": "demo_tool", "arguments": "{}"},
         }
     ]
-    inner = _StubProvider({"role": "assistant", "content": None, "tool_calls": tool_calls, "usage": {"total_tokens": 12}})
+    inner = _StubProvider(
+        {"role": "assistant", "content": None, "tool_calls": tool_calls, "usage": {"total_tokens": 12}}
+    )
     engine = LiveLlmEngine(
         llm_provider=inner,
         cache_path=cache_path,
@@ -210,3 +215,37 @@ def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
     )
     assert out["tool_calls"][0]["function"]["name"] == "demo_tool"
     assert reader_inner.calls == 0
+
+
+def test_lookup_preview_falls_back_to_legacy_key_with_one_leaf() -> None:
+    preview = "assembled prompt"
+    old_key = legacy_preview_cache_key(preview)
+    cache = {old_key: "recorded"}
+    write_key, entry = lookup_preview_cache(cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=1)
+    assert entry == "recorded"
+    assert write_key == bind_route_cache_key(preview, leaf="arm", model="m", api_base="https://a")
+    assert write_key != old_key
+
+
+def test_lookup_preview_ignores_legacy_key_with_several_leaves() -> None:
+    preview = "assembled prompt"
+    old_key = legacy_preview_cache_key(preview)
+    cache = {old_key: "recorded-other-host"}
+    write_key, entry = lookup_preview_cache(
+        cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=2
+    )
+    assert entry is None
+    assert write_key == bind_route_cache_key(preview, leaf="arm", model="m", api_base="https://a")
+    assert old_key in cache
+
+
+def test_lookup_preview_prefers_routed_key() -> None:
+    preview = "assembled prompt"
+    write_key = bind_route_cache_key(preview, leaf="arm", model="m", api_base="https://a")
+    old_key = legacy_preview_cache_key(preview)
+    cache = {old_key: "legacy", write_key: "routed"}
+    found_key, entry = lookup_preview_cache(
+        cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=1
+    )
+    assert found_key == write_key
+    assert entry == "routed"

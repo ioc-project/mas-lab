@@ -37,6 +37,7 @@ class ResolvedInfra:
 
     refs: list[str] = field(default_factory=list)
     llm_proxy: dict[str, Any] = field(default_factory=dict)
+    llm_proxies: dict[str, dict[str, Any]] = field(default_factory=dict)
     tool_registry: dict[str, Any] = field(default_factory=dict)
     tool_server_registry: dict[str, Any] = field(default_factory=dict)
     observability: dict[str, Any] = field(default_factory=dict)

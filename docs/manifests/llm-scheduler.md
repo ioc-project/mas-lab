@@ -18,8 +18,10 @@ entry is outermost: list cache before the scheduler.
 
 ## Why this sits after routing and after cache
 
-The infra pipeline wraps the provider. There is no pre-routing hook in this
-model: a limiter can only see the engine that routing already selected.
+`llm_cache` is common (one step on the live engine). The router then selects a
+leaf, and that leaf's pipeline — including `llm_scheduler` — runs in front of
+the provider. The limiter therefore sees the model and endpoint routing already
+chose.
 
 Do not pace cache lookups. A hit is local I/O; only a miss should acquire a
 live slot:
@@ -27,7 +29,7 @@ live slot:
 ```text
 pipeline: [ llm_cache, llm_scheduler, <provider> ]
 
-invoke: llm_cache → llm_scheduler → LiveLlmEngine → provider
+invoke: llm_cache → LiveLlmEngine → router → llm_scheduler → provider
 ```
 
 Cache hits return before `llm_scheduler.invoke`. Misses (runtime `LLM_CALL`
@@ -64,10 +66,11 @@ fairly.
 
 ## Runtime and pipelines share the limiter
 
-`LlmSchedulerMiddleware.wrap` installs a process-global policy.
-`install_openai_llm_service` copies that policy from the resolved infra
-pipeline. Judge / `complete_json` live HTTP (after the judge cache miss)
-takes a slot with `llm_slot` — the same buckets as agent `LLM_CALL`.
+Each leaf wraps its own `llm_scheduler` instance. `max_in_flight` on that
+step applies to that destination only. Agent `LLM_CALL` acquires with the
+instance policy. Judge HTTP (`install_openai_llm_service` / `llm_slot`)
+installs the scheduler step of the leaf the judge **model** routes to, not
+the first leaf in the merge.
 
 Cache hits on either path never acquire a slot.
 

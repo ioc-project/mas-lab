@@ -15,6 +15,7 @@ from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
 from mas.library.standard.plugins.infra.llm_scheduler import LlmSchedulerMiddleware
 from mas.runtime.engine.llm_scheduler import (
     SchedulerPolicy,
+    current_policy,
     install_policy,
     llm_slot,
     reset_policy,
@@ -33,6 +34,9 @@ class _SlowEngine:
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         return f"preview:{op}:{correlation_id}"
+
+    def reset_turn_state(self) -> None:
+        return None
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self._inflight += 1
@@ -111,6 +115,15 @@ def test_llm_slot_noops_without_policy() -> None:
     reset_policy()
     with llm_slot(model="x") as key:
         assert key is None
+
+
+def test_scheduler_wrap_keeps_policy_on_the_instance() -> None:
+    reset_policy()
+    inner = _SlowEngine(delay_s=0)
+    wrapped = LlmSchedulerMiddleware.wrap(inner, {"max_in_flight": 3})
+    assert wrapped.policy is not None
+    assert wrapped.policy.max_in_flight == 3
+    assert current_policy() is None
 
 
 def test_max_in_flight_zero_is_unlimited(tmp_path: Path) -> None:

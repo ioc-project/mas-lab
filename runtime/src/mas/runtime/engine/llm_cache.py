@@ -39,15 +39,93 @@ def load_cache(path: Path) -> dict[str, Any]:
 
 def persist_cache(path: Path, cache: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(
-        f"{path.suffix}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp"
-    )
+    tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex[:8]}.tmp")
     try:
         tmp.write_text(json.dumps(cache, indent=2), encoding="utf-8")
         tmp.replace(path)
     except OSError:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def legacy_preview_cache_key(preview: str) -> str:
+    """Pre-routing middleware key: SHA-256 of the preview only."""
+    return hashlib.sha256(preview.encode("utf-8")).hexdigest()
+
+
+def bind_route_cache_key(
+    preview: str,
+    *,
+    leaf: str = "",
+    model: str = "",
+    api_base: str = "",
+) -> str:
+    """SHA-256 of the assembled preview plus the routed leaf and model.
+
+    A common cache file is shared across leaves; without the route, two
+    models (or two hosts) replay each other's answer for the same prompt.
+    """
+    blob = f"leaf={leaf}\nmodel={model}\napi_base={api_base}\n{preview}"
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def lookup_preview_cache(
+    cache: dict[str, Any],
+    preview: str,
+    *,
+    leaf: str = "",
+    model: str = "",
+    api_base: str = "",
+    leaf_count: int = 1,
+) -> tuple[str, Any | None]:
+    """Return ``(write_key, entry)``.
+
+    Lookup uses the routed key first. With a single leaf, a miss falls back
+    to the pre-routing preview hash so existing cache files still hit. With
+    more than one leaf the old key is ignored (it has no leaf, so it could
+    cross hosts). Writes always use the routed key. There is no version field.
+    """
+    write_key = bind_route_cache_key(preview, leaf=leaf, model=model, api_base=api_base)
+    if write_key in cache:
+        return write_key, cache[write_key]
+    if leaf_count > 1:
+        return write_key, None
+    old_key = legacy_preview_cache_key(preview)
+    if old_key in cache:
+        return write_key, cache[old_key]
+    return write_key, None
+
+
+def cache_route_from_engine(engine: Any) -> tuple[str, str, str, int]:
+    """Return ``(leaf_name, canonical_model, api_base, leaf_count)`` for a cache key."""
+    from mas.runtime.engine.infra_pipeline import call_api_base, call_model, call_proxies
+
+    model = call_model(engine)
+    leaves, proxy = call_proxies(engine)
+    api_base = call_api_base(engine)
+    leaf_name = ""
+    if leaves and model:
+        from mas.runtime.registry.llm_provider_registry import canonical_model_name, leaf_for_model
+
+        try:
+            leaf = leaf_for_model(model, leaves, default=proxy or None)
+        except (KeyError, ValueError):
+            leaf = None
+        if leaf:
+            model = canonical_model_name(model, leaf) or model
+            api_base = str(leaf.get("api_base") or api_base)
+            named = str(leaf.get("name") or "").strip()
+            if named:
+                leaf_name = named
+            else:
+                for name, item in leaves.items():
+                    if item.get("api_base") == leaf.get("api_base") and item.get("api_key_env") == leaf.get(
+                        "api_key_env"
+                    ):
+                        leaf_name = str(name)
+                        break
+    leaf_count = len(leaves) if leaves else 1
+    return leaf_name, model, api_base, leaf_count
 
 
 def llm_cache_key(

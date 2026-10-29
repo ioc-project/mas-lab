@@ -162,11 +162,12 @@ def test_wire_entry_engine_delegation_skips_when_delegates_to_empty():
 
 
 def test_wire_entry_engine_delegation_enables_tool_loop_on_leaf():
-    from mas.runtime.engine.infra_pipeline import BidirectionalPipelineEngine
     from mas.runtime.engine.llm_live import LiveLlmEngine
 
-    inner = LiveLlmEngine(manifest=None, use_tool_loop=False)
-    engine = BidirectionalPipelineEngine(inner=inner, pipeline_steps=[])
+    engine = LiveLlmEngine(manifest=None, use_tool_loop=False, use_cache=False)
+    engine.install_infra_pipeline(
+        [{"middleware": "llm_cache", "params": {"allow_read": False, "allow_write": False}}],
+    )
 
     manifest = {
         "metadata": {"name": "entry"},
@@ -184,10 +185,10 @@ def test_wire_entry_engine_delegation_enables_tool_loop_on_leaf():
         comm=_StubComm(),
         entry_agent_id="entry",
     )
-    assert inner.use_tool_loop is True
-    assert inner.delegation is not None
-    assert inner.manifest is manifest
-    assert inner.delegation._allowed == frozenset({"peer"})
+    assert engine.use_tool_loop is True
+    assert engine.delegation is not None
+    assert engine.manifest is manifest
+    assert engine.delegation._allowed == frozenset({"peer"})
 
 
 def test_reset_engine_delegation_does_not_suppress_repeated_delegation():

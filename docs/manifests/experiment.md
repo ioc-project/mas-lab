@@ -301,6 +301,7 @@ It picks its judge model in this order:
 5. The application's MAS or Agent `spec.models[]`.
 
 The value `any` (or no value) means the spec pins no provider id. Local `config.yaml` `defaults.model` fills it.
+The judge model name is routed through workspace `LLMProxy` leaves the same way as the agent turn model — give eval a different model id when it should use a different leaf. See [Several LLMProxy refs](infra.md#several-llmproxy-refs).
 
 ```yaml
 experiment:

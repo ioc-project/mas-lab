@@ -168,7 +168,9 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
 
     assert infra.llm_proxy["api_base"] == "http://localhost:9100/v1"
     pipeline = infra.llm_proxy["pipeline"]
-    assert [step["middleware"] for step in pipeline] == ["llm_cache", "fault_inject"]
+    assert [step["middleware"] for step in pipeline] == ["llm_cache"]
+    leaf = next(iter(infra.llm_proxies.values()))
+    assert [step["middleware"] for step in leaf.get("pipeline") or []] == ["fault_inject"]
     cache = LlmCacheMiddleware.wrap(object(), pipeline[0]["params"])
     assert cache.allow_read is True
     assert cache.allow_write is True
@@ -180,11 +182,14 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
     assert manifest.read_text(encoding="utf-8") == original
 
 
-@pytest.mark.parametrize("assignment", [
-    'infra:spec.interceptors[middleware=llm_cache].params.allow_write="false"',
-    "infra:spec.interceptors[middleware=llm_cache].params.allow_write=1",
-    'infra:spec.proxy.timeout="slow"',
-])
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        'infra:spec.interceptors[middleware=llm_cache].params.allow_write="false"',
+        "infra:spec.interceptors[middleware=llm_cache].params.allow_write=1",
+        'infra:spec.proxy.timeout="slow"',
+    ],
+)
 def test_resolved_infra_rejects_invalid_override_types(tmp_path: Path, assignment: str):
     source = Path(__file__).parents[2] / "docs/schemas/examples/infra/override-stack.yaml"
     with pytest.raises(ValueError):

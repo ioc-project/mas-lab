@@ -16,6 +16,7 @@ from mas.ctl.session.manifest_config import engine_use_tool_loop, kernel_config_
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.driver.mocks import AutoCtxAssembler
+from mas.runtime.engine.infra_pipeline import split_pipeline_layers
 from mas.runtime.engine.llm_cache import resolve_cache_path
 from mas.runtime.engine.llm_live import LiveLlmEngine
 from mas.runtime.engine.llm_output_limits import resolve_output_limits
@@ -59,6 +60,41 @@ def _strict_replay(llm_proxy: dict[str, Any] | None) -> bool:
         if params.get("raise_on_miss") is True:
             return True
     return False
+
+
+def _require_leaf_credentials(
+    llm_proxy: dict[str, Any],
+    llm_proxies: dict[str, dict[str, Any]],
+    *,
+    strict_replay: bool,
+) -> None:
+    """Each leaf resolves its own key; the engine never forwards the first leaf's."""
+    if strict_replay:
+        return
+    leaves = dict(llm_proxies or {})
+    if not leaves and llm_proxy.get("api_base"):
+        leaves = {"default": llm_proxy}
+    missing: list[str] = []
+    for name, leaf in leaves.items():
+        if not str((leaf or {}).get("api_base") or "").strip():
+            continue
+        env_name = str((leaf or {}).get("api_key_env") or "OPENAI_API_KEY")
+        key = api_key_for_infra(leaf)
+        if not key:
+            missing.append(f"{env_name} (leaf {name})")
+            continue
+        if not key.isascii():
+            raise RuntimeError(
+                f"{env_name} contains characters that cannot be in an API key (non-ASCII). "
+                "Did you paste a placeholder such as '…' instead of your key?"
+            )
+    if missing:
+        raise RuntimeError(
+            "Live LLM configured but API key env unset: "
+            + ", ".join(missing)
+            + ". Set the key, or replay recorded answers only with "
+            "--cache-read-only (or an llm_cache fixture with raise_on_miss: true)."
+        )
 
 
 class UnresolvedModelError(RuntimeError):
@@ -138,6 +174,15 @@ def resolve_model_name(
                 "config.yaml defaults.model, or pass --model / MAS_CTL_MODEL. "
                 "mas-lab will not substitute gpt-4o-mini."
             )
+    leaves = (infra.llm_proxies if infra is not None else None) or {}
+    if leaves:
+        from mas.runtime.registry.llm_provider_registry import (
+            canonical_model_name,
+            leaf_for_model,
+        )
+
+        leaf = leaf_for_model(raw, leaves, default=llm_proxy)
+        return canonical_model_name(raw, leaf)
     mappings = llm_proxy.get("mappings") or {}
     return str(mappings.get(raw, raw))
 
@@ -262,13 +307,6 @@ def build_engine(
     api_key_env = str(llm_proxy.get("api_key_env") or "OPENAI_API_KEY")
     http_timeout = float(llm_proxy["timeout"]) if llm_proxy.get("timeout") is not None else None
 
-    api_key = api_key_for_infra(llm_proxy)
-    if api_key and not api_key.isascii() and not strict_replay:
-        env_name = llm_proxy.get("api_key_env") or "OPENAI_API_KEY"
-        raise RuntimeError(
-            f"{env_name} contains characters that cannot be in an API key (non-ASCII). "
-            "Did you paste a placeholder such as '…' instead of your key?"
-        )
     if not api_base and not strict_replay:
         raise RuntimeError(
             "No LLM configured: resolve infra (workspace infra_refs or --infra-ref). "
@@ -278,14 +316,13 @@ def build_engine(
     runtime_engine = dict(resolved.runtime_engine or {})
     cache_read = _cache_read_enabled(runtime_engine, override=cache_read_override)
     cache_write = _cache_write_enabled(runtime_engine, override=cache_write_override)
-    cache_active = (cache_read or cache_write) and not (llm_proxy.get("pipeline"))
+    llm_proxies = getattr(resolved, "llm_proxies", None) or {}
+    from mas.runtime.engine.infra_pipeline import infra_has_cache_step
+
+    has_cache_step = infra_has_cache_step(llm_proxy.get("pipeline"), llm_proxies)
+    cache_active = (cache_read or cache_write) and not has_cache_step
     cache_path = Path(str(cache_raw)) if cache_raw else resolve_cache_path() if cache_active else None
-    if not api_key and not strict_replay:
-        env_name = llm_proxy.get("api_key_env") or "OPENAI_API_KEY"
-        raise RuntimeError(
-            f"Live LLM configured ({api_base}) but {env_name} is unset. "
-            "Set the API key, or replay recorded answers only with --cache-read-only (or an llm_cache fixture with raise_on_miss: true)."
-        )
+    _require_leaf_credentials(llm_proxy, llm_proxies, strict_replay=strict_replay)
     if strict_replay:
         mode = "replay"
         reason = "cache read-only" if cache_read_only else "llm_cache raise_on_miss"
@@ -308,6 +345,7 @@ def build_engine(
     reasoning = reasoning_settings_from_manifest(manifest, model=model)
     llm_provider = llm_provider_from_infra(
         llm_proxy,
+        llm_proxies=llm_proxies or None,
         manifest=manifest,
         stream=stream,
         reasoning_effort=reasoning.effort,
@@ -318,35 +356,35 @@ def build_engine(
         cache_write=cache_write,
         cache_raise_on_miss=cache_read_only,
     )
-    engine = _wrap_with_infra_pipeline(
-        LiveLlmEngine(
-            ctx=ctx,
-            manifest=manifest,
-            api_base=api_base or "https://api.openai.com/v1",
-            api_key_env=api_key_env,
+    engine = LiveLlmEngine(
+        ctx=ctx,
+        manifest=manifest,
+        api_base=api_base or "https://api.openai.com/v1",
+        api_key_env=api_key_env,
+        model=model,
+        temperature=_resolve_sampling_param(manifest, "temperature", 0.7, model=model),
+        output_limits=resolve_output_limits(
+            manifest,
             model=model,
-            temperature=_resolve_sampling_param(manifest, "temperature", 0.7, model=model),
-            output_limits=resolve_output_limits(
-                manifest,
-                model=model,
-                generation=llm_proxy.get("generation"),
-            ),
-            reasoning_effort=reasoning.effort,
-            reasoning=reasoning.to_spec_dict(),
-            cache_path=cache_path,
-            use_cache=False,
-            cache_read=cache_read,
-            cache_write=cache_write,
-            stream=stream,
-            use_tool_loop=tool_loop,
-            parallel_tool_calls=kernel_cfg.parallel_tool_calls,
-            llm_proxy=llm_proxy,
-            http_timeout=http_timeout,
-            llm_provider=llm_provider,
-            reliability=reliability,
+            generation=llm_proxy.get("generation"),
         ),
-        llm_proxy.get("pipeline") or [],
+        reasoning_effort=reasoning.effort,
+        reasoning=reasoning.to_spec_dict(),
+        cache_path=cache_path,
+        use_cache=False,
+        cache_read=cache_read,
+        cache_write=cache_write,
+        stream=stream,
+        use_tool_loop=tool_loop,
+        parallel_tool_calls=kernel_cfg.parallel_tool_calls,
+        llm_proxy=llm_proxy,
+        llm_proxies=llm_proxies or None,
+        http_timeout=http_timeout,
+        llm_provider=llm_provider,
+        reliability=reliability,
     )
+    common, _destination = split_pipeline_layers(llm_proxy.get("pipeline") or [])
+    engine.install_infra_pipeline(common)
     return EngineSelection(engine=engine, mode=mode, reason=reason)
 
 
@@ -411,11 +449,3 @@ def _stream_enabled(
     if env is not None:
         return env
     return False
-
-
-def _wrap_with_infra_pipeline(engine: Any, pipeline: list[dict[str, Any]]) -> Any:
-    if not pipeline:
-        return engine
-    from mas.runtime.engine.infra_pipeline import wrap_bidirectional_pipeline
-
-    return wrap_bidirectional_pipeline(engine, list(pipeline))

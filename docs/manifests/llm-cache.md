@@ -55,7 +55,7 @@ Three parts work together:
 
 1. **Provider** (`standard:openai`, `standard:ollama`, and others): where the model runs.
 2. **Cache middleware** (`middleware: llm_cache`): the read, write, and replay policy plus `cache_path`.
-3. **Pipeline**: the middleware wraps the provider. See [Pipeline order](#pipeline-order).
+3. **Pipeline**: `llm_cache` wraps the engine (one common instance). Other middleware wraps each routed provider. See [Pipeline order](#pipeline-order).
 
 MAS also has a **built-in engine disk cache**.
 Merged `RuntimeEngine` manifests (`runtime_refs` or `--runtime-ref`) set its policy, and so do the `--cache-read` and `--cache-write` flags on `mas-ctl chat`.
@@ -159,7 +159,7 @@ They supply only `api_base` and `model_access`.
 
 Refs merge left to right: workspace `infra_refs`, then the user default, then CLI `--infra-ref`.
 Agent and MAS YAML cannot add refs.
-Pipeline steps append in that order, and the **first step is the outermost**: the cache runs before the provider.
+Pipeline steps append in that order. `llm_cache` is the common outermost wrap (one instance in front of the router). Other middleware is instantiated in front of each model leaf.
 
 ### One cache and one provider
 
@@ -171,7 +171,7 @@ Either CLI order works, because only the middleware ref adds a pipeline step:
 --infra-ref library-samples/infra/llm-cache-write.yaml --infra-ref standard:openai
 ```
 
-Both merge to the pipeline `[llm_cache]` wrapping the OpenAI provider.
+Both merge to a common `[llm_cache]` step on the live engine, then the OpenAI leaf.
 
 ### Multiple middleware
 

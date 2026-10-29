@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Unwrap infra pipeline facades to the leaf engine."""
+"""Find the live engine. The public object is LiveLlmEngine; this still
+unwraps an old stack of inner layers in tests."""
 
 from __future__ import annotations
 

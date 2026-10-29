@@ -49,6 +49,7 @@ _LEAF_KINDS = {
 _VALID_KINDS = _LEAF_KINDS | {"InfraBundle"}
 
 _APPLICATION_USAGES = {"use", "deploy", "use-and-deploy"}
+_PROVIDER_KINDS = frozenset({"LLMProxy", "LLMLocal", "Infrastructure"})
 
 
 def application_endpoint_usage(endpoint: dict[str, Any]) -> str:
@@ -146,6 +147,13 @@ def resolve_infra_refs(
         merged = InfraManifest.from_document(merged_document)
         for entry in merged.pipeline:
             entry["params"] = _resolve_pipeline_param_paths(dict(entry.get("params") or {}), anchor=root)
+        for leaf in merged.providers.values():
+            for entry in leaf.get("pipeline") or []:
+                if isinstance(entry, dict):
+                    entry["params"] = _resolve_pipeline_param_paths(
+                        dict(entry.get("params") or {}),
+                        anchor=root,
+                    )
         runtime_engine = dict(merged.runtime_engine)
 
     if errors:
@@ -156,16 +164,25 @@ def resolve_infra_refs(
     llm = merged.to_llm_proxy_dict()
     cache_path = usr.cache_dir / "llm_cache.json"
     llm["cache_path"] = str(cache_path)
-    llm["pipeline"] = _filter_pipeline_for_target(llm.get("pipeline") or [], "LLM_CALL")
-    _hydrate_pipeline_cache_paths(llm.get("pipeline") or [], cache_path=cache_path)
+    shared = _filter_pipeline_for_target(llm.get("pipeline") or [], "LLM_CALL")
+    _hydrate_pipeline_cache_paths(shared, cache_path=cache_path)
 
     tool_server_registry = {
         str(item["id"]): dict(item) for item in merged.tool_servers if isinstance(item, dict) and item.get("id")
     }
 
+    leaves = dict(merged.providers or {})
+    if not leaves and llm.get("api_base"):
+        name = str(merged.name or "").strip() or "default"
+        leaf = {k: v for k, v in llm.items() if k not in {"pipeline", "cache_path"}}
+        leaves = {name: leaf}
+
+    llm["pipeline"], leaves = _layer_pipelines(shared, leaves, cache_path=cache_path)
+
     return ResolvedInfra(
         refs=effective,
         llm_proxy=llm,
+        llm_proxies=leaves,
         tool_server_registry=tool_server_registry,
         observability={},
         runtime_engine=dict(runtime_engine),
@@ -411,14 +428,21 @@ def _load_file(
                 ref = entry.get("ref")
                 if not ref:
                     continue
-                child = _resolve_ref_path(str(ref), anchor=path.parent, workspace=workspace)
-                if child in seen:
-                    raise ValueError(f"circular InfraBundle reference: {path} -> {child}")
-                parts.append(
-                    _load_file(child, workspace=workspace, _seen=seen, allow_runtime_engine=allow_runtime_engine)
+                child_path = _resolve_ref_path(str(ref), anchor=path.parent, workspace=workspace)
+                if child_path in seen:
+                    raise ValueError(f"circular InfraBundle reference: {path} -> {child_path}")
+                loaded = _load_file(
+                    child_path, workspace=workspace, _seen=seen, allow_runtime_engine=allow_runtime_engine
                 )
-                for step in entry.get("pipeline") or []:
-                    pipeline.append(_resolve_pipeline_entry(step, anchor=path.parent, workspace=workspace))
+                entry_steps = [
+                    _resolve_pipeline_entry(step, anchor=path.parent, workspace=workspace)
+                    for step in entry.get("pipeline") or []
+                ]
+                if entry_steps and _connection_leaves(loaded):
+                    loaded.pipeline = _merge_pipeline(loaded.pipeline, entry_steps)
+                else:
+                    pipeline.extend(entry_steps)
+                parts.append(loaded)
         else:
             for entry in spec.get("interceptors") or spec.get("pipeline") or []:
                 pipeline.append(_resolve_pipeline_entry(entry, anchor=path.parent, workspace=workspace))
@@ -479,6 +503,20 @@ def _merge(a: InfraManifest, b: InfraManifest) -> InfraManifest:
     return _merge_many([a, b])
 
 
+def _connection_leaves(m: InfraManifest) -> dict[str, dict[str, Any]]:
+    """LLMProxy / LLMLocal leaves that declare an endpoint (not policy overlays)."""
+    if m.providers:
+        return {
+            str(name).strip(): dict(leaf)
+            for name, leaf in m.providers.items()
+            if str(name).strip() and str((leaf or {}).get("api_base") or "").strip()
+        }
+    if m.kind in _PROVIDER_KINDS and m.proxy.api_base:
+        name = str(m.name or "").strip() or "default"
+        return {name: m.to_leaf_dict()}
+    return {}
+
+
 def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
     if not parts:
         return InfraManifest(name="empty")
@@ -496,6 +534,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
     runtime_engine: dict[str, Any] = {}
     tool_servers_by_id: dict[str, dict[str, Any]] = {}
     tool_server_order: list[str] = []
+    providers: dict[str, dict[str, Any]] = {}
     name = parts[-1].name
 
     from mas.runtime.spec.runtime_engine import merge_runtime_engine_layers
@@ -503,24 +542,12 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
     for m in parts:
         if m.runtime_engine:
             runtime_engine = merge_runtime_engine_layers(runtime_engine, m.runtime_engine)
-        if m.proxy.api_base:
-            proxy = ProxySpec(api_base=m.proxy.api_base, api_key_env=m.proxy.api_key_env, timeout=m.proxy.timeout)
-        elif m.proxy.timeout is not None:
-            proxy = ProxySpec(api_base=proxy.api_base, api_key_env=proxy.api_key_env, timeout=m.proxy.timeout)
-        pipeline = _merge_pipeline(pipeline, m.pipeline)
-        for item in m.models.allowed:
-            if item not in seen_allowed:
-                seen_allowed.add(item)
-                allowed.append(item)
-        mappings.update(m.models.mappings)
         generation.update(m.models.generation)
         if m.models.default_llm:
             default_llm = m.models.default_llm
         if m.models.default_embed:
             default_embed = m.models.default_embed
         model_access.update(m.model_access)
-        if m.protocol:
-            protocol = m.protocol
         for server in m.tool_servers:
             sid = str(server.get("id") or "").strip()
             if not sid:
@@ -530,6 +557,63 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
             previous = tool_servers_by_id.get(sid) or {}
             tool_servers_by_id[sid] = {**previous, **server}
         applications.update(m.applications)
+
+        leaves = _connection_leaves(m)
+        if leaves:
+            # LLMProxy interceptors stay on that leaf. An already-merged bundle
+            # (incremental _merge) keeps spec.pipeline as the shared wrap.
+            if m.kind in _PROVIDER_KINDS:
+                own_pipeline = [dict(step) for step in (m.pipeline or []) if isinstance(step, dict)]
+            else:
+                own_pipeline = []
+                pipeline = _merge_pipeline(pipeline, m.pipeline)
+            for leaf_name, leaf in leaves.items():
+                existing = providers.get(leaf_name)
+                stored = dict(leaf)
+                same_endpoint = existing is not None and bool(proxy.api_base)
+                replacing_seed = same_endpoint and existing.get("api_base") == proxy.api_base
+                if existing is not None:
+                    # Later file of the same name replaces the earlier one (D1).
+                    logger.info(
+                        "LLMProxy %r listed twice; later file replaces api_base/api_key_env, allowed, and steps",
+                        leaf_name,
+                    )
+                leaf_steps = list(stored.get("pipeline") or [])
+                if own_pipeline:
+                    leaf_steps = _merge_pipeline(leaf_steps, own_pipeline)
+                if leaf_steps:
+                    stored["pipeline"] = leaf_steps
+                providers[leaf_name] = stored
+                if not proxy.api_base or replacing_seed:
+                    if replacing_seed:
+                        seen_allowed.clear()
+                        allowed.clear()
+                        mappings.clear()
+                    proxy = ProxySpec(
+                        api_base=str(leaf.get("api_base") or ""),
+                        api_key_env=str(leaf.get("api_key_env") or "OPENAI_API_KEY"),
+                        timeout=float(leaf["timeout"]) if leaf.get("timeout") is not None else None,
+                    )
+                    if leaf.get("protocol"):
+                        protocol = str(leaf.get("protocol") or "")
+                    for item in leaf.get("allowed") or []:
+                        if item not in seen_allowed:
+                            seen_allowed.add(item)
+                            allowed.append(item)
+                    mappings.update(dict(leaf.get("mappings") or {}))
+            continue
+
+        pipeline = _merge_pipeline(pipeline, m.pipeline)
+        # Policy overlay (generation, timeout, mappings) — not a second connection.
+        if m.proxy.timeout is not None:
+            proxy = ProxySpec(api_base=proxy.api_base, api_key_env=proxy.api_key_env, timeout=m.proxy.timeout)
+        for item in m.models.allowed:
+            if item not in seen_allowed:
+                seen_allowed.add(item)
+                allowed.append(item)
+        mappings.update(m.models.mappings)
+        if m.protocol:
+            protocol = m.protocol
 
     return InfraManifest(
         name=name,
@@ -548,6 +632,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
         runtime_engine=runtime_engine,
         tool_servers=[tool_servers_by_id[sid] for sid in tool_server_order],
         applications=applications,
+        providers=providers,
     )
 
 
@@ -594,6 +679,30 @@ def _merge_pipeline(a: list[dict[str, Any]], b: list[dict[str, Any]]) -> list[di
     return list(a) + list(b)
 
 
+def _layer_pipelines(
+    shared: list[dict[str, Any]],
+    leaves: dict[str, dict[str, Any]],
+    *,
+    cache_path: Path,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Cache is common; remaining steps instantiate in front of each leaf."""
+    from mas.runtime.engine.infra_pipeline import is_cache_middleware, split_pipeline_layers
+
+    common, cloned = split_pipeline_layers(shared)
+    layered: dict[str, dict[str, Any]] = {}
+    for name, leaf in leaves.items():
+        stored = dict(leaf)
+        own = _filter_pipeline_for_target(list(stored.get("pipeline") or []), "LLM_CALL")
+        _hydrate_pipeline_cache_paths(own, cache_path=cache_path)
+        own_common, own_rest = split_pipeline_layers(own)
+        if own_common and not any(is_cache_middleware(step) for step in common):
+            common = _merge_pipeline(common, own_common)
+        stored["pipeline"] = cloned + own_rest
+        stored["name"] = name
+        layered[name] = stored
+    return common, layered
+
+
 def _filter_pipeline_for_target(pipeline: list[dict[str, Any]], target: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for entry in pipeline:
@@ -606,9 +715,10 @@ def _filter_pipeline_for_target(pipeline: list[dict[str, Any]], target: str) -> 
 
 
 def _hydrate_pipeline_cache_paths(pipeline: list[dict[str, Any]], *, cache_path: Path) -> None:
+    from mas.runtime.engine.infra_pipeline import is_cache_middleware
+
     for entry in pipeline:
-        mid = str(entry.get("middleware") or "")
-        if mid not in {"llm_cache", "llm-cache"}:
+        if not is_cache_middleware(entry):
             continue
         params = entry.setdefault("params", {})
         if not params.get("cache_path"):

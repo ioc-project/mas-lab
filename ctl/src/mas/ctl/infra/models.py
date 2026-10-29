@@ -9,6 +9,17 @@ from pathlib import Path
 from typing import Any
 
 
+def _providers_from_document(raw: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for name, leaf in raw.items():
+        token = str(name).strip()
+        if token and isinstance(leaf, dict):
+            out[token] = dict(leaf)
+    return out
+
+
 @dataclass
 class ProxySpec:
     api_base: str = ""
@@ -51,6 +62,7 @@ class InfraManifest:
     tool_servers: list[dict[str, Any]] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
     applications: dict[str, dict[str, Any]] = field(default_factory=dict)
+    providers: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path | str) -> InfraManifest:
@@ -105,6 +117,7 @@ class InfraManifest:
             runtime_engine=dict(spec.get("runtime_engine") or {}),
             raw=data,
             applications=applications,
+            providers=_providers_from_document(spec.get("providers")),
         )
 
     def to_document(self) -> dict[str, Any]:
@@ -133,9 +146,11 @@ class InfraManifest:
             "model_access": dict(self.model_access),
             "tool_servers": list(self.tool_servers),
             "endpoints": {str(name): dict(endpoint) for name, endpoint in self.applications.items()},
-            "interceptors": list(self.pipeline),
+            "interceptors": self._document_interceptors(),
             "runtime_engine": dict(self.runtime_engine),
         }
+        if self.providers:
+            spec["providers"] = {str(name): dict(leaf) for name, leaf in self.providers.items()}
         if self.protocol:
             spec["protocol"] = self.protocol
         return {
@@ -144,6 +159,25 @@ class InfraManifest:
             "metadata": {"name": self.name},
             "spec": spec,
         }
+
+    def _document_interceptors(self) -> list[dict[str, Any]]:
+        """Shared steps, plus cache steps hoisted from leaves for CLI addressing.
+
+        Non-cache leaf steps stay under ``spec.providers`` so an override does
+        not clone ``fault_inject`` meant for one leaf onto every leaf.
+        """
+        interceptors = [dict(item) for item in self.pipeline]
+        from mas.runtime.engine.infra_pipeline import is_cache_middleware
+
+        have_cache = any(is_cache_middleware(step) for step in interceptors)
+        if have_cache:
+            return interceptors
+        for leaf in self.providers.values():
+            for step in (leaf or {}).get("pipeline") or []:
+                if isinstance(step, dict) and is_cache_middleware(step):
+                    interceptors.append(dict(step))
+                    return interceptors
+        return interceptors
 
     def to_llm_proxy_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -161,4 +195,10 @@ class InfraManifest:
             out["generation"] = dict(self.models.generation)
         if self.protocol:
             out["protocol"] = self.protocol
+        return out
+
+    def to_leaf_dict(self) -> dict[str, Any]:
+        """Connection fields for one LLMProxy leaf (no shared pipeline)."""
+        out = self.to_llm_proxy_dict()
+        out.pop("pipeline", None)
         return out

@@ -46,6 +46,7 @@ Remote tools: [ToolServerRegistry](../references/tool-server-registry.md).
 ## Contents
 
 - [Ref merge order](#ref-merge-order)
+- [Several LLMProxy refs](#several-llmproxy-refs)
 - [Kinds](#kinds)
 - [LLMProxy models](#llmproxy-models)
 - [Bundles](#bundles)
@@ -72,14 +73,71 @@ The merge drops duplicates.
 When nothing is configured, the runtime uses `standard:production` (direct OpenAI).
 `standard:local-tools` is always merged first (see [Local tool source](#local-tool-source)).
 
-Later refs win for scalar fields: `proxy.api_base`, `models.defaults`, and `protocol`.
-Other fields merge as follows:
+Middleware, tool servers, and endpoints merge as follows:
 
-- `models.allowed` is unioned.
-- `models.mappings` and `models.generation` merge key by key.
 - `tool_servers` merge by `id`.
 - `endpoints` merge by name.
 - Middleware steps append in order.
+- `models.generation` on an `LLMProxy` that omits `proxy.api_base` overlays output-token policy onto the resolved view.
+
+Each `LLMProxy` / `LLMLocal` that declares `proxy.api_base` is a **leaf**, not a last-wins overlay of `api_base` / `api_key_env`. See [Several LLMProxy refs](#several-llmproxy-refs).
+
+## Several LLMProxy refs
+
+List as many provider manifests as you need, the same way you list tool servers.
+The agent (and eval) names a **model** — optionally an alias in `models.mappings`.
+A routing layer picks the leaf whose `models.allowed` (and mapping keys) claim that name, matching tool-name routing and A2A endpoint names.
+
+```yaml
+# workspace config.yaml
+infra_refs:
+  - standard:openai          # allowed: gpt-4o, gpt-4o-mini, …
+  - ./infra/judge-proxy.yaml # allowed: [judge-special]
+```
+
+```yaml
+experiment:
+  models:
+    main: gpt-4o-mini
+    judge: judge-special     # eval_mce uses the judge-proxy leaf
+```
+
+An empty `models.allowed` is the default (`*`) owner, like a local tool provider. Two stars, or two leaves claiming the same name, is an error.
+Two files with the same `metadata.name` do not error: the later ref **replaces** the earlier leaf, including `api_base`, `api_key_env`, `models.allowed`, mappings, and that leaf's steps.
+Pinning a call to a leaf by infra name is not in this release.
+
+Each leaf owns its credentials. The engine does not forward the first leaf's `api_key_env` value; the routed provider reads `os.environ[that leaf's api_key_env]`. `mas-ctl` checks every live leaf at engine build, including a leaf the run never calls. A named model that no leaf claims is an error.
+
+The middleware cache key includes the leaf name, canonical model, and `api_base`. A cache written for one endpoint does not hit on another. See [Cache key](../references/llm-cache.md#cache-key).
+
+A **model router** (LiteLLM, an internal gateway) is still one `LLMProxy` whose `api_base` is the router URL. Put it in `infra_refs` like any other leaf.
+
+An `LLMProxy` that only sets `models.generation` (no `api_base`) remains a policy overlay, not a second connection.
+
+### Pipeline vs several leaves
+
+The engine runs the pipeline. Callers always hold `LiveLlmEngine`. Each middleware plugin declares `per`: `all` (one shared copy on the engine's LLM call) or `destination` (one copy in front of each leaf). Cache sets `per: all`; scheduler and fault injection set `per: destination`. `PipedLLMProvider` is that leaf call.
+
+```text
+LLM_CALL
+  LiveLlmEngine
+    → llm_cache          (common step on this engine)
+      → assemble
+        → router         (model name → LLMProxy leaf)
+          → that leaf's pipeline   (llm_scheduler, fault_inject, typed entry.pipeline)
+            → that leaf's provider
+```
+
+How steps land there:
+
+| Source | Where it runs |
+| --- | --- |
+| `InfraMiddleware` / workspace `infra_interceptors` with `middleware: llm_cache` | Common step on the engine |
+| Other `InfraMiddleware` refs (scheduler, fault inject, …) | Cloned in front of **each** leaf |
+| `LLMProxy.spec.interceptors` | That leaf only, except `llm_cache` (`per: all`), which is lifted to the shared wrap and applies to every connection |
+| Typed bundle `entries[].pipeline` on an `llm_provider` slot | That leaf only |
+
+`standard:llm-proxy-paced` is `[llm_cache, llm_scheduler, openai]`: the cache is common; the scheduler wraps the OpenAI leaf. Two LLMProxy refs plus that bundle clone the scheduler in front of each connection.
 
 ## Kinds
 
@@ -114,7 +172,7 @@ Each entry has these fields:
 - `id`: the slot name.
 - `type`: the leaf kind the slot expects. One of `llm_provider`, `llm_local`, `tool_provider`, `tool_registry`, `tool_server_registry`, `otel_collector`, `datastore`, `secrets_provider`, `application`, `infra_middleware`.
 - `ref`: the leaf reference.
-- `pipeline`: optional, a serial list of middleware steps.
+- `pipeline`: optional, a serial list of middleware steps. On an `llm_provider` / `llm_local` entry this wraps **that** leaf only. On an `infra_middleware` entry it stays in the shared merge (cache still hoists to the common wrap).
 
 When `entries` is present, the loader ignores `includes` and `interceptors`.
 This is `standard:llm-proxy-cached`:
@@ -165,7 +223,7 @@ spec:
 | Key | Meaning |
 |-----|---------|
 | `models.mappings` | Logical name → provider model id. The resolver follows chains (`default → mini → gpt-4o-mini`); a cycle is an error |
-| `models.allowed` | Model ids served by this endpoint (`available` on `LLMLocal`). Informational: the runtime still sends an id outside the list |
+| `models.allowed` | Model ids this leaf serves (`available` on `LLMLocal`). With one leaf the list is informational. With several leaves it is the claim list the router uses |
 | `models.defaults.llm` / `.embed` | Default chat and embedding model ids |
 | `models.generation` | Output-token, context-window, and pricing policy; see [LLM output-token policy](#llm-output-token-policy) |
 

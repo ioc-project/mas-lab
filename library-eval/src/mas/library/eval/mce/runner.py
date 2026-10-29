@@ -186,15 +186,20 @@ def install_openai_llm_service(
     """
     global _jury, _jury_patched, _deepeval_model, _effective_model
     global _openai_client, _openai_base_url, _openai_api_key
-    infra_api_base, infra_api_key_env, infra_model = _resolve_infra()
-    effective_model = model_override or infra_model
+    infra_api_base, infra_api_key_env, infra_model = _resolve_infra(model=model_override)
+    effective_model = infra_model
 
     # Idempotency fast path: skip the reinstall only when the model this call
     # would actually use already matches the installed one — not merely
     # whether *this* call happened to pass an explicit override. A prior
     # call's override (or infra default) can differ from this call's, even
     # when both pass model_override=None.
-    if _jury_patched and api_key_env is None and effective_model == _effective_model:
+    if (
+        _jury_patched
+        and api_key_env is None
+        and effective_model == _effective_model
+        and (infra_api_base or "") == _openai_base_url
+    ):
         return _effective_model
 
     effective_api_base = infra_api_base or None
@@ -206,8 +211,8 @@ def install_openai_llm_service(
     try:
         from mas.runtime.engine.llm_scheduler import install_policy_from_pipeline
 
-        proxy, _ws = _resolve_infra_proxy()
-        install_policy_from_pipeline(list((proxy or {}).get("pipeline") or []))
+        proxy, _ws, leaves = _resolve_infra_proxy()
+        install_policy_from_pipeline(_pipeline_for_routed_model(effective_model, proxy, leaves))
     except Exception as exc:
         logger.warning("llm_scheduler policy not installed: %s", exc)
     _openai_client = _client
@@ -226,9 +231,7 @@ def install_openai_llm_service(
 
         def _once() -> Any:
             return paced_live_call(
-                lambda: _client.chat.completions.create(
-                    model=model, messages=messages, **{**_output_kwargs, **kwargs}
-                ),
+                lambda: _client.chat.completions.create(model=model, messages=messages, **{**_output_kwargs, **kwargs}),
                 model=model,
             )
 
@@ -310,51 +313,76 @@ def llm_service_config() -> dict[str, str]:
     }
 
 
-def _resolve_infra() -> tuple[str, str, str]:
-    """Resolve LLM proxy config from workspace ``config.yaml`` infra refs.
+def _pipeline_for_routed_model(
+    model: Optional[str],
+    proxy: Optional[dict[str, Any]],
+    leaves: dict[str, dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Scheduler (and other per-leaf) steps for the leaf that owns *model*."""
+    routed = proxy
+    if leaves:
+        from mas.runtime.registry.llm_provider_registry import leaf_for_model
 
+        routed = leaf_for_model(model or "", leaves, default=proxy)
+    steps = list((routed or {}).get("pipeline") or [])
+    return steps or list((proxy or {}).get("pipeline") or [])
+
+
+def _resolve_infra(*, model: Optional[str] = None) -> tuple[str, str, str]:
+    """Resolve LLM proxy config from workspace infra refs.
+
+    The judge model name selects the LLMProxy leaf (same routing as the agent).
     Returns ``(api_base, api_key_env, model)``.
     """
-    _FALLBACK = ("", "OPENAI_API_KEY", "gpt-4o")
-    proxy, ws = _resolve_infra_proxy()
+    proxy, ws, leaves = _resolve_infra_proxy()
     if proxy is None:
-        return _FALLBACK
+        return ("", "OPENAI_API_KEY", model or "gpt-4o")
     from mas.runtime.agent_defaults import resolve_default_model
+    from mas.runtime.registry.llm_provider_registry import canonical_model_name, leaf_for_model
 
+    leaf = proxy
+    if leaves:
+        leaf = leaf_for_model(model or "", leaves, default=proxy)
+    if model:
+        resolved_model = canonical_model_name(model, leaf)
+    else:
+        resolved_model = (
+            resolve_default_model(ws) or leaf.get("default_model") or proxy.get("default_model") or "gpt-4o"
+        )
     return (
-        proxy.get("api_base", ""),
-        proxy.get("api_key_env") or "OPENAI_API_KEY",
-        resolve_default_model(ws) or proxy.get("default_model") or "gpt-4o",
+        leaf.get("api_base", ""),
+        leaf.get("api_key_env") or "OPENAI_API_KEY",
+        resolved_model,
     )
 
 
 def _resolve_infra_generation() -> dict[str, Any]:
     """Infra ``spec.models.generation`` (output-token policy), empty when unresolved."""
-    proxy, _ws = _resolve_infra_proxy()
+    proxy, _ws, _leaves = _resolve_infra_proxy()
     return dict((proxy or {}).get("generation") or {})
 
 
-def _resolve_infra_proxy() -> tuple[dict[str, Any] | None, Any]:
+def _resolve_infra_proxy() -> tuple[dict[str, Any] | None, Any, dict[str, dict[str, Any]]]:
     try:
         from mas.ctl.infra.resolve import resolve_infra_refs
         from mas.lab.workspace import WorkspaceConfig
     except ImportError:
-        return None, None
+        return None, None, {}
 
     ws = WorkspaceConfig.load()
     if not ws.found:
-        return None, ws
+        return None, ws, {}
 
     refs = ws.effective_infra_refs
     if not refs:
-        return None, ws
+        return None, ws, {}
 
     try:
         resolved = resolve_infra_refs(refs, workspace=ws)
     except Exception as exc:
         logger.warning("Could not resolve infra refs %s: %s", refs, exc)
-        return None, ws
-    return resolved.llm_proxy, ws
+        return None, ws, {}
+    return resolved.llm_proxy, ws, dict(resolved.llm_proxies or {})
 
 
 # ---------------------------------------------------------------------------
@@ -439,9 +467,7 @@ def _llm_call_with_retry(client: Any, model: str, messages: list) -> str:
 
     def _once() -> str:
         def _create() -> str:
-            resp = client.chat.completions.create(
-                model=model, messages=messages, **output_token_kwargs(model)
-            )
+            resp = client.chat.completions.create(model=model, messages=messages, **output_token_kwargs(model))
             return resp.choices[0].message.content or ""
 
         return paced_live_call(_create, model=model)

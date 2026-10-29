@@ -15,6 +15,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from mas.runtime.contracts.tool_semantics import existing_attr
 from mas.runtime.registry.llm_provider_protocol import require_achat_completion
 
 _NON_PROTOCOL_KINDS = frozenset({"cache", "llm_cache", "mock"})
@@ -26,13 +27,13 @@ def leaf_llm_kind(provider: Any) -> str:
     current = provider
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        kind = str(getattr(current, "kind", None) or getattr(current, "provider_id", "") or "").strip().lower()
+        kind = str(existing_attr(current, "kind") or existing_attr(current, "provider_id") or "").strip().lower()
         if kind in _NON_PROTOCOL_KINDS:
-            current = getattr(current, "inner", None)
+            current = existing_attr(current, "inner")
             continue
         if kind:
             return kind
-        current = getattr(current, "inner", None)
+        current = existing_attr(current, "inner")
     return ""
 
 
@@ -90,14 +91,102 @@ def instantiate_llm_provider(
     return provider
 
 
+def canonical_model_name(model: str, leaf: dict[str, Any] | None) -> str:
+    """Follow ``models.mappings`` aliases on one LLMProxy leaf (cycle is an error)."""
+    mappings = dict((leaf or {}).get("mappings") or {})
+    current = str(model or "").strip()
+    seen: set[str] = set()
+    while current and current in mappings:
+        if current in seen:
+            raise ValueError(f"infra model mapping cycle involving {model!r}")
+        seen.add(current)
+        nxt = str(mappings[current] or "").strip()
+        if not nxt or nxt == current:
+            break
+        current = nxt
+    return current
+
+
+def advertised_models(leaf: dict[str, Any] | None) -> tuple[set[str], bool]:
+    """Names this LLMProxy leaf claims, plus whether it is the default (``*``) owner.
+
+    A leaf with no ``allowed`` list is the star, like a local tool provider.
+    """
+    raw = (leaf or {}).get("allowed") or []
+    allowed = [str(item).strip() for item in raw if str(item).strip()]
+    if not allowed:
+        return set(), True
+    names = set(allowed)
+    mappings = dict((leaf or {}).get("mappings") or {})
+    for src, dst in mappings.items():
+        token = str(src).strip()
+        if token:
+            names.add(token)
+        dest = str(dst or "").strip()
+        if dest:
+            names.add(canonical_model_name(dest, leaf))
+    return names, False
+
+
+def leaf_for_model(
+    model: str,
+    leaves: dict[str, dict[str, Any]] | None,
+    *,
+    default: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Pick the LLMProxy leaf that provides *model*, like tool-name routing.
+
+    One leaf: always that leaf (``allowed`` stays informational).
+    Several: ``models.allowed`` / mappings are the claim list; an empty
+    ``allowed`` is the unique default owner. A named model that no leaf
+    claims is an error (``default`` is not used as a silent first-leaf
+    fallback). Pin-to-infra is a later change.
+    """
+    items = {str(k).strip(): dict(v) for k, v in (leaves or {}).items() if str(k).strip()}
+    if not items:
+        if default is not None:
+            return dict(default)
+        raise KeyError(f"no LLMProxy leaf owns model {model!r}")
+    if len(items) == 1:
+        return next(iter(items.values()))
+
+    key = str(model or "").strip()
+    stars: list[dict[str, Any]] = []
+    owners: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for leaf in items.values():
+        names, is_star = advertised_models(leaf)
+        if is_star:
+            stars.append(leaf)
+            continue
+        canon = canonical_model_name(key, leaf) if key else ""
+        if key and (key in names or canon in names):
+            ident = id(leaf)
+            if ident not in seen:
+                owners.append(leaf)
+                seen.add(ident)
+    if len(owners) > 1:
+        raise ValueError(f"model {key!r} is claimed by more than one LLMProxy")
+    if len(owners) == 1:
+        return owners[0]
+    if len(stars) > 1:
+        raise ValueError("two LLMProxy leaves claim all models (empty models.allowed)")
+    if len(stars) == 1:
+        return stars[0]
+    if default is not None and not key:
+        return dict(default)
+    raise KeyError(f"model {key!r} is not claimed by any of {len(items)} LLMProxy connections")
+
+
 def apply_llm_endpoint_defaults(
     spec: dict[str, Any],
     llm_proxy: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Fill unset connection fields from the merged LLM infra endpoint.
+    """Fill unset connection fields from the matching LLM infra leaf.
 
-    Match is ``spec.models[].kind`` → infra ``protocol`` (single merged proxy
-    today). Overlay/spec values win over infra, like ``apply_tool_server_defaults``.
+    Match is model name → LLMProxy leaf (``models.allowed`` / mappings), then
+    ``spec.models[].kind`` → infra ``protocol``. Overlay/spec values win over
+    infra, like ``apply_tool_server_defaults``.
     """
     proxy = dict(llm_proxy or {})
     out = dict(spec)
@@ -118,36 +207,73 @@ def iter_model_provider_specs(
     manifest: dict[str, Any] | None,
     *,
     llm_proxy: dict[str, Any] | None = None,
+    llm_proxies: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Yield protocol-plugin specs from ``spec.models[]``, matching ``spec.providers[]``.
 
-    Each entry's ``kind`` is the wire protocol. Entries that share a kind become
-    one plugin claiming those model names. With no ``spec.models``, the default
-    protocol owns ``models: "*"`` (same as default local owning all tools).
+    Each entry's ``kind`` is the wire protocol. Connection comes from the
+    LLMProxy leaf that claims the model name. Entries that share kind+endpoint
+    become one plugin. With no ``spec.models``, each leaf claims its
+    ``allowed`` list (or ``*``).
     """
     proxy = dict(llm_proxy or {})
+    leaves = {str(k).strip(): dict(v) for k, v in (llm_proxies or {}).items() if str(k).strip()}
+    if not leaves and proxy:
+        leaves = {"default": proxy}
     default_kind = protocol_kind_from_infra(proxy)
     spec_block = (manifest or {}).get("spec") or {}
     models = spec_block.get("models") or []
     if not isinstance(models, list) or not models:
-        return [apply_llm_endpoint_defaults({"kind": default_kind, "models": "*"}, proxy)]
+        specs: list[dict[str, Any]] = []
+        for leaf in leaves.values() or [proxy]:
+            leaf_dict = dict(leaf or proxy)
+            kind = protocol_kind_from_infra(leaf_dict)
+            claimed, is_star = advertised_models(leaf_dict)
+            spec_payload: dict[str, Any] = {
+                "kind": kind,
+                "models": "*" if is_star or not claimed else sorted(claimed),
+            }
+            if leaf_dict.get("pipeline"):
+                spec_payload["pipeline"] = list(leaf_dict.get("pipeline") or [])
+            specs.append(apply_llm_endpoint_defaults(spec_payload, leaf_dict))
+        return specs or [apply_llm_endpoint_defaults({"kind": default_kind, "models": "*"}, proxy)]
 
-    groups: dict[str, dict[str, Any]] = {}
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
     for entry in models:
         if not isinstance(entry, dict):
             continue
-        kind = str(entry.get("kind") or entry.get("protocol") or default_kind).strip() or default_kind
+        model = str(entry.get("model") or "").strip()
+        leaf = leaf_for_model(model, leaves, default=proxy) if leaves else proxy
+        leaf_dict = dict(leaf or proxy)
+        kind = (
+            str(
+                entry.get("kind") or entry.get("protocol") or protocol_kind_from_infra(leaf_dict) or default_kind
+            ).strip()
+            or default_kind
+        )
         if kind.lower() in _NON_PROTOCOL_KINDS:
             raise ValueError(
                 f"spec.models[].kind {kind!r} is not a wire protocol; "
                 "cache wraps the routed provider and is not claimed here"
             )
+        conn = (kind, str(leaf_dict.get("api_base") or ""), str(leaf_dict.get("api_key_env") or ""))
         slot = groups.setdefault(
-            kind, {"models": [], "reasoning": None, "reasoning_effort": None, "extra": None}
+            conn,
+            {
+                "kind": kind,
+                "leaf": leaf_dict,
+                "models": [],
+                "reasoning": None,
+                "reasoning_effort": None,
+                "extra": None,
+                "pipeline": list(leaf_dict.get("pipeline") or []),
+            },
         )
-        model = str(entry.get("model") or "").strip()
         if model and model not in slot["models"]:
             slot["models"].append(model)
+        canon = canonical_model_name(model, leaf_dict) if model else ""
+        if canon and canon not in slot["models"]:
+            slot["models"].append(canon)
         if slot["reasoning"] is None and entry.get("reasoning") is not None:
             slot["reasoning"] = entry.get("reasoning")
         if slot["reasoning_effort"] is None and entry.get("reasoning_effort"):
@@ -155,16 +281,18 @@ def iter_model_provider_specs(
         if slot["extra"] is None and isinstance(entry.get("extra"), dict):
             slot["extra"] = entry.get("extra")
 
-    specs: list[dict[str, Any]] = []
-    for kind, slot in groups.items():
-        spec_payload: dict[str, Any] = {"kind": kind, "models": slot["models"] or "*"}
+    specs = []
+    for slot in groups.values():
+        spec_payload: dict[str, Any] = {"kind": slot["kind"], "models": slot["models"] or "*"}
         if slot["reasoning"] is not None:
             spec_payload["reasoning"] = slot["reasoning"]
         if slot["reasoning_effort"]:
             spec_payload["reasoning_effort"] = slot["reasoning_effort"]
         if slot["extra"] is not None:
             spec_payload["extra"] = slot["extra"]
-        specs.append(apply_llm_endpoint_defaults(spec_payload, proxy))
+        if slot.get("pipeline"):
+            spec_payload["pipeline"] = list(slot.get("pipeline") or [])
+        specs.append(apply_llm_endpoint_defaults(spec_payload, slot["leaf"]))
     return specs or [apply_llm_endpoint_defaults({"kind": default_kind, "models": "*"}, proxy)]
 
 
@@ -187,7 +315,8 @@ class LLMProviderRegistry:
         *,
         models: str | tuple[str, ...] | list[str] = "*",
     ) -> None:
-        if not callable(getattr(provider, "chat_completion", None)):
+        chat = existing_attr(provider, "chat_completion")
+        if not callable(chat):
             raise TypeError(f"LLM provider must implement chat_completion, got {type(provider)}")
         require_achat_completion(provider, name=type(provider).__name__)
         claim: str | tuple[str, ...]
@@ -244,7 +373,7 @@ class LLMProviderRegistry:
         if self._routes is None:
             self.initialize()
         inner = self._star or (self._bindings[0][0] if self._bindings else None)
-        return str(getattr(inner, "kind", None) or getattr(inner, "provider_id", "") or "")
+        return str(existing_attr(inner, "kind") or existing_attr(inner, "provider_id") or "")
 
     def chat_completion(self, *, model: str, **kwargs: Any) -> dict[str, Any]:
         return self.provider_for(model).chat_completion(model=model, **kwargs)
@@ -269,17 +398,20 @@ def llm_providers_from_manifest(
     manifest: dict[str, Any] | None,
     *,
     llm_proxy: dict[str, Any] | None = None,
+    llm_proxies: dict[str, dict[str, Any]] | None = None,
     stream: bool = False,
     reasoning_effort: str | None = None,
     reasoning: dict[str, Any] | None = None,
 ) -> Any:
     """Instantiate protocol plugins from ``spec.models[]`` + infra, like tools.
 
-    One plugin per distinct ``kind``. A single plugin is returned directly; two
-    or more kinds are wrapped in :class:`LLMProviderRegistry`.
+    One plugin per distinct kind+endpoint. A single plugin is returned
+    directly; two or more are wrapped in :class:`LLMProviderRegistry`.
     """
-    specs = iter_model_provider_specs(manifest, llm_proxy=llm_proxy)
+    specs = iter_model_provider_specs(manifest, llm_proxy=llm_proxy, llm_proxies=llm_proxies)
     bindings: list[tuple[Any, str | tuple[str, ...] | list[str]]] = []
+    from mas.runtime.engine.infra_pipeline import split_pipeline_layers, wrap_llm_provider_pipeline
+
     for spec in specs:
         kind = str(spec.get("kind") or "").strip()
         if not kind:
@@ -290,7 +422,11 @@ def llm_providers_from_manifest(
             payload.setdefault("reasoning", reasoning)
         if reasoning_effort:
             payload.setdefault("reasoning_effort", reasoning_effort)
-        provider = instantiate_llm_provider(kind, payload)
+        pipeline = list(payload.pop("pipeline", None) or [])
+        if not pipeline:
+            pipeline = list((payload.get("llm_proxy") or {}).get("pipeline") or [])
+        _, per_leaf = split_pipeline_layers(pipeline)
+        provider = wrap_llm_provider_pipeline(instantiate_llm_provider(kind, payload), per_leaf)
         bindings.append((provider, spec.get("models", "*")))
     if not bindings:
         raise ValueError("no llm_provider plugin could be instantiated")
@@ -314,7 +450,7 @@ def wrap_llm_provider_cache(
     """Decorator: disk cache in front of a routed protocol plugin (not a protocol)."""
     if inner is None:
         return inner
-    kind = str(getattr(inner, "kind", None) or getattr(inner, "provider_id", "") or "").strip().lower()
+    kind = str(existing_attr(inner, "kind") or existing_attr(inner, "provider_id") or "").strip().lower()
     if kind in _NON_PROTOCOL_KINDS:
         return inner
     return instantiate_llm_provider(
@@ -332,6 +468,7 @@ def wrap_llm_provider_cache(
 def llm_provider_from_infra(
     llm_proxy: dict[str, Any] | None,
     *,
+    llm_proxies: dict[str, dict[str, Any]] | None = None,
     stream: bool = False,
     reasoning_effort: str | None = None,
     reasoning: dict[str, Any] | None = None,
@@ -346,6 +483,7 @@ def llm_provider_from_infra(
     inner = llm_providers_from_manifest(
         manifest,
         llm_proxy=llm_proxy,
+        llm_proxies=llm_proxies,
         stream=stream,
         reasoning_effort=reasoning_effort,
         reasoning=reasoning,

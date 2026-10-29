@@ -7,10 +7,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from mas.runtime.boundary.context.assemble import (
     assemble_llm_messages,
@@ -51,6 +50,43 @@ class TruncatedCompletionError(RuntimeError):
 
 
 @dataclass
+class _InfraDispatchPort:
+    """Innermost LLM/tool body for infra steps. Listed members only; not a public engine."""
+
+    owns_call_identity: ClassVar[bool] = True
+    engine: LiveLlmEngine
+
+    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        return self.engine._dispatch(io)
+
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        return await self.engine._adispatch(io)
+
+    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return self.engine.exchange_preview(op, correlation_id=correlation_id)
+
+    @property
+    def model(self) -> str:
+        return self.engine.model
+
+    @property
+    def api_base(self) -> str:
+        return self.engine.api_base
+
+    @property
+    def llm_proxy(self) -> dict[str, Any] | None:
+        return self.engine.llm_proxy
+
+    @property
+    def llm_proxies(self) -> dict[str, dict[str, Any]] | None:
+        return self.engine.llm_proxies
+
+    @property
+    def ctx(self) -> AutoCtxAssembler | None:
+        return self.engine.ctx
+
+
+@dataclass
 class LiveLlmEngine:
     """EngineContract implementation — delegates chat completions to LLMProvider plugins."""
 
@@ -75,6 +111,7 @@ class LiveLlmEngine:
     use_tool_loop: bool = False
     parallel_tool_calls: bool = True
     llm_proxy: dict[str, Any] | None = None
+    llm_proxies: dict[str, dict[str, Any]] | None = None
     http_timeout: float | None = None
     manifest_dir: Path | None = None
     delegation: Any | None = None
@@ -89,6 +126,7 @@ class LiveLlmEngine:
     _offered_tool_names: list[str] = field(default_factory=list, init=False)
     _budget: BudgetTracker = field(default_factory=BudgetTracker, init=False)
     _model_access: Any | None = field(default=None, init=False)
+    _infra_stack: Any = field(default=None, init=False, repr=False)
 
     def set_scheduled_tool(self, name: str, arguments: dict[str, Any] | None = None) -> None:
         """Kernel-scheduled tool (e.g. plan-execute) — TLA: ToolMachine.tla."""
@@ -103,6 +141,7 @@ class LiveLlmEngine:
         # (e.g., default -> haiku -> bedrock/anthropic.claude-haiku-...)
         infra_spec = (self.llm_proxy or {}).get("spec") or {}
         from mas.runtime.engine.llm_model_catalog import resolve_model_recursive
+
         self.model = resolve_model_recursive(self.model, infra_spec) or self.model
 
         self.reasoning = coerce_reasoning_settings(
@@ -133,6 +172,31 @@ class LiveLlmEngine:
         self.llm_provider = self._wrap_cache(self.llm_provider)
         # Tests that still inspect _model_access see the routed provider.
         self._model_access = self.llm_provider
+
+    def install_infra_pipeline(self, pipeline: list[dict[str, Any]] | None) -> None:
+        """Wrap this engine's LLM call with ``per: all`` steps only.
+
+        Destination steps (scheduler, fault) wrap each leaf. Passing one
+        here is an error; split the pipeline first.
+        """
+        from mas.runtime.engine.infra_pipeline import (
+            middleware_id,
+            split_pipeline_layers,
+            wrap_call_stack,
+        )
+
+        steps = [dict(step) for step in (pipeline or []) if isinstance(step, dict)]
+        common, per_leaf = split_pipeline_layers(steps)
+        if per_leaf:
+            names = [middleware_id(step) or "?" for step in per_leaf]
+            raise ValueError(
+                "install_infra_pipeline only accepts per: all steps; "
+                f"got destination {names}. Wrap those on each leaf."
+            )
+        if not common:
+            self._infra_stack = None
+            return
+        self._infra_stack = wrap_call_stack(_InfraDispatchPort(self), common)
 
     def _default_llm_provider(self) -> Any:
         from mas.runtime.registry.llm_provider_registry import llm_provider_from_infra
@@ -183,9 +247,8 @@ class LiveLlmEngine:
             use_model,
             " (override)" if model and model != self.model else "",
         )
-        api_key = os.environ.get(self.api_key_env, "")
         message, _retries = self._complete_with_truncation_policy(
-            messages, api_key=api_key, tools=None, temperature=0.0, model=use_model
+            messages, tools=None, temperature=0.0, model=use_model
         )
         content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
         return str(content or "").strip()
@@ -224,6 +287,11 @@ class LiveLlmEngine:
         return format_exchange_snapshot(self.exchange_snapshot(op, correlation_id=correlation_id))
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        if self._infra_stack is not None:
+            return self._infra_stack.invoke(io)
+        return self._dispatch(io)
+
+    def _dispatch(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "LLM_CALL":
             return self._llm_call(io)
         if io.op == "TOOL_CALL":
@@ -296,6 +364,11 @@ class LiveLlmEngine:
         )
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        if self._infra_stack is not None:
+            return await self._infra_stack.ainvoke(io)
+        return await self._adispatch(io)
+
+    async def _adispatch(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "LLM_CALL":
             return await self._allm_call(io)
         if io.op == "TOOL_CALL":
@@ -387,7 +460,6 @@ class LiveLlmEngine:
         try:
             message, retries = self._complete_with_truncation_policy(
                 messages,
-                api_key=os.environ.get(self.api_key_env, ""),
                 tools=tools,
                 temperature=0.0 if answering_from_tools else self.temperature,
             )
@@ -446,11 +518,7 @@ class LiveLlmEngine:
             finish_reason,
             cache_status=cache_status,
             cache_layer="provider_cache" if cache_status else "",
-            cache_events=(
-                [{"layer": "provider_cache", "status": cache_status}]
-                if cache_status
-                else []
-            ),
+            cache_events=([{"layer": "provider_cache", "status": cache_status}] if cache_status else []),
             pricing=dict(self.output_limits.pricing if self.output_limits is not None else {}),
         )
         if max_tokens is None and not retries:
@@ -475,7 +543,6 @@ class LiveLlmEngine:
         try:
             message, retries = await self._acomplete_with_truncation_policy(
                 messages,
-                api_key=os.environ.get(self.api_key_env, ""),
                 tools=tools,
                 temperature=0.0 if answering_from_tools else self.temperature,
             )
@@ -515,11 +582,7 @@ class LiveLlmEngine:
             finish_reason,
             cache_status=cache_status,
             cache_layer="provider_cache" if cache_status else "",
-            cache_events=(
-                [{"layer": "provider_cache", "status": cache_status}]
-                if cache_status
-                else []
-            ),
+            cache_events=([{"layer": "provider_cache", "status": cache_status}] if cache_status else []),
             pricing=dict(self.output_limits.pricing if self.output_limits is not None else {}),
         )
         if max_tokens is None and not retries:
@@ -530,7 +593,6 @@ class LiveLlmEngine:
         self,
         messages: list[dict[str, Any]],
         *,
-        api_key: str,
         tools: list[dict[str, Any]] | None,
         temperature: float | None = None,
         model: str | None = None,
@@ -538,7 +600,7 @@ class LiveLlmEngine:
         """Async counterpart to `_complete_with_truncation_policy`."""
         assert self.output_limits is not None
         limits = self.output_limits.fit_to_prompt(estimate_prompt_tokens(messages, tools))
-        call_kwargs: dict[str, Any] = {"api_key": api_key, "tools": tools, "temperature": temperature}
+        call_kwargs: dict[str, Any] = {"tools": tools, "temperature": temperature}
         if model is not None:
             call_kwargs["model"] = model
         if limits != self.output_limits:
@@ -581,7 +643,6 @@ class LiveLlmEngine:
         self,
         messages: list[dict[str, Any]],
         *,
-        api_key: str,
         tools: list[dict[str, Any]] | None,
         temperature: float | None = None,
         model: str | None = None,
@@ -589,7 +650,7 @@ class LiveLlmEngine:
         """Run one completion and apply ``on_truncation``. Returns ``(message, retries)``."""
         assert self.output_limits is not None
         limits = self.output_limits.fit_to_prompt(estimate_prompt_tokens(messages, tools))
-        call_kwargs: dict[str, Any] = {"api_key": api_key, "tools": tools, "temperature": temperature}
+        call_kwargs: dict[str, Any] = {"tools": tools, "temperature": temperature}
         if model is not None:
             call_kwargs["model"] = model
         if limits != self.output_limits:
@@ -759,8 +820,8 @@ class LiveLlmEngine:
         self,
         messages: list[dict[str, Any]],
         *,
-        api_key: str,
         tools: list[dict[str, Any]] | None,
+        api_key: str | None = None,
         temperature: float | None = None,
         model: str | None = None,
         limits: OutputLimits | None = None,
@@ -781,12 +842,13 @@ class LiveLlmEngine:
             "max_completion_tokens": limits.max_completion_tokens,
             "stream": self.stream,
             "on_stream_chunk": on_chunk,
-            "api_key": api_key,
             "reasoning_effort": self.reasoning.effort,
             "reasoning": self.reasoning,
             "sampling": self.sampling.to_spec_dict() or None,
             "extra_body": self.extra_body or None,
         }
+        if api_key is not None:
+            kwargs["api_key"] = api_key
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         if not hasattr(provider, "chat_completion"):
             raise RuntimeError(f"LLM provider {type(provider).__name__} has no chat_completion")
@@ -796,8 +858,8 @@ class LiveLlmEngine:
         self,
         messages: list[dict[str, Any]],
         *,
-        api_key: str,
         tools: list[dict[str, Any]] | None,
+        api_key: str | None = None,
         temperature: float | None = None,
         model: str | None = None,
         limits: OutputLimits | None = None,
@@ -818,12 +880,13 @@ class LiveLlmEngine:
             "max_completion_tokens": limits.max_completion_tokens,
             "stream": self.stream,
             "on_stream_chunk": on_chunk,
-            "api_key": api_key,
             "reasoning_effort": self.reasoning.effort,
             "reasoning": self.reasoning,
             "sampling": self.sampling.to_spec_dict() or None,
             "extra_body": self.extra_body or None,
         }
+        if api_key is not None:
+            kwargs["api_key"] = api_key
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         if not hasattr(provider, "achat_completion"):
             raise RuntimeError(

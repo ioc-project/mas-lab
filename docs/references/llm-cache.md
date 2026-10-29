@@ -40,7 +40,7 @@ MAS has two separate LLM response caches:
 | **Built-in engine cache** | `RuntimeEngine.spec.cache`, `MAS_LLM_CACHE` / `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE`, `--cache-read` / `--cache-write` (and `--no-…`) on `mas-ctl chat` | Deployment-wide policy via `runtime_refs`. See [runtime-engine.md](../manifests/runtime-engine.md). |
 | **Infra middleware cache** (this reference) | `InfraMiddleware` with `middleware: llm_cache` | Shared deployment policy, write-only recording, strict replay (`raise_on_miss`), experiments |
 
-When `llm_proxy.pipeline` is non-empty, `build_engine` disables the built-in `LiveLlmEngine` disk cache (`cache_active = not pipeline`). For that session, middleware `params` own read and write. The built-in `RuntimeEngine` disk cache does not.
+When the resolved infra contains an `llm_cache` step, `build_engine` disables the built-in `LiveLlmEngine` disk cache. A scheduler-only pipeline does not. For that session, middleware `params` own read and write.
 
 Source: `ctl/src/mas/ctl/session/engine_factory.py`.
 
@@ -53,14 +53,14 @@ Source: `ctl/src/mas/ctl/session/engine_factory.py`.
 ```text
 LLM_CALL (forward):
 
-  ┌──────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-  │ LlmCacheMiddleware │ → │ LiveLlmEngine    │ → │ Provider        │
-  │ (llm_cache)        │   │ (assemble + API) │   │ (OpenAI)          │
-  └──────────────────┘     └──────────────────┘     └─────────────────┘
+  ┌──────────────┐     ┌────────────────────┐     ┌──────────┐     ┌──────────────┐
+  │ LiveLlmEngine│  →  │ LlmCacheMiddleware │  →  │ router   │  →  │ leaf pipeline│
+  │ (public)     │     │ (common step)      │     │          │     │ + provider   │
+  └──────────────┘     └────────────────────┘     └──────────┘     └──────────────┘
          ▲ miss + allow_write
          │ SHA-256(exchange_preview) → cache_path JSON
          ▼ hit + allow_read
-       return MODEL_TEXT (inner never called)
+       return MODEL_TEXT (router and leaf pipeline never called)
 ```
 
 `LlmCacheMiddleware.invoke`:
@@ -88,7 +88,8 @@ The cache stores only **`LLM_CALL`** responses. It does not cache `TOOL_CALL` or
 
 ### Cache key
 
-- **Key:** `sha256(inner.exchange_preview("LLM_CALL"))` as hex. The preview is the conversation assembled so far, including the user query and prior tool results.
+- **Key:** `sha256("leaf={name}\\nmodel={canonical}\\napi_base={url}\\n" + exchange_preview)`. The preview is the conversation assembled so far, including the user query and prior tool results. The route prefix keeps a shared cache file from replaying one leaf's answer for another model or host. The endpoint is part of the key on purpose: the same model name on two hosts can answer differently. A cache written by this key will not hit after the leaf's `api_base` changes. `trace_cache_portable` covers the lab's trace cache, not this middleware key.
+- **Lookup:** try that routed key first. If it misses and only one leaf is configured, try the older preview-only hash (`sha256(preview)`) so entries written before routing still hit. If more than one leaf is configured, ignore the old key (it has no leaf, so it could cross hosts). Writes always use the routed key. There is no version field in the file.
 - **Value:** a plain string (simple `STOP` text) or a structured dict (tool calls, parallel tools, optional `_preview` annotation).
 - **File:** a single JSON object at `cache_path`.
 - Each agentic turn has one key. Post-tool completions are separate entries.
@@ -120,17 +121,21 @@ Each ref's `pipeline` steps append via `_merge_pipeline(a, b) → a + b`.
 
 Only **`InfraMiddleware`** refs (and explicit bundle pipeline entries) append to `llm_proxy.pipeline`. **`LLMProxy`** and **`LLMLocal`** refs supply provider config only (`api_base`, `model_access`, …). They add no pipeline steps.
 
-`wrap_bidirectional_pipeline` wraps with `reversed(pipeline)`:
+`LiveLlmEngine.install_infra_pipeline` wraps `per: all` steps (cache) on
+that engine. Destination steps raise if passed there; `build_engine`
+splits first. Remaining steps run in front of each routed provider:
 
 ```text
-pipeline: [ llm_cache, fault_inject ]
+merged: [ llm_cache, fault_inject ]
 
-wrap: engine → fault_inject(engine) → llm_cache(...)
+engine steps:  LiveLlmEngine → llm_cache → assemble
+leaf steps:    router → fault_inject → provider
 
-invoke: llm_cache → fault_inject → LiveLlmEngine → provider
+invoke: LiveLlmEngine → llm_cache → assemble → router → fault_inject → provider
 ```
 
-**First entry in merged pipeline = outermost middleware.**
+**First shared `llm_cache` entry is the common outermost middleware.**
+Non-cache steps keep merge order in front of each leaf.
 
 | Scenario | CLI order effect |
 | --- | --- |
@@ -310,12 +315,12 @@ Delete the JSON file to invalidate all entries, or use `write_mode: replace` on 
 | Component | Path |
 | --- | --- |
 | Middleware | `library-standard/src/mas/library/standard/plugins/infra/llm_cache.py` (`LlmCacheMiddleware`) |
-| Pipeline | `runtime/src/mas/runtime/engine/infra_pipeline.py` (`apply_middleware`, `wrap_bidirectional_pipeline`) |
+| Pipeline | `runtime/src/mas/runtime/engine/infra_pipeline.py` (`apply_middleware`, `wrap_call_stack`) |
 | Serialize / deserialize | `runtime/src/mas/runtime/engine/llm_cache.py` (`middleware_cache_serialize`, `middleware_cache_deserialize`) |
 | Tests | `runtime/tests/test_middleware_llm_cache.py`, `runtime/tests/test_infra_pipeline_bidirectional.py` |
 | Ref merge | `ctl/src/mas/ctl/infra/resolve.py` (`resolve_infra_refs`, `_merge_pipeline`, `_hydrate_pipeline_cache_paths`) |
 | Ref ordering | `ctl/src/mas/ctl/workspace/config.py` (`merge_infra_refs`) |
-| Engine wiring | `ctl/src/mas/ctl/session/engine_factory.py` (`build_engine`, `_wrap_with_infra_pipeline`) |
+| Engine wiring | `ctl/src/mas/ctl/session/engine_factory.py` (`build_engine`, `LiveLlmEngine.install_infra_pipeline`) |
 | Session resolve | `ctl/src/mas/ctl/session/infra_resolve.py` (`resolve_session_infra`) |
 | Schema | `docs/schemas/runtime/fragments/infra-llm-cache-params.schema.yaml` |
 | Bundled YAML | `library-standard/src/mas/library/standard/libs/standard/llm-cache.yaml`, `llm-proxy-cached.yaml`, `library-samples/infra/llm-cache-*.yaml` |

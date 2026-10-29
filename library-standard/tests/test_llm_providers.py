@@ -98,6 +98,132 @@ def test_registry_routes_model_names_like_tools():
     assert registry.chat_completion(model="claude-sonnet", messages=[])["content"] == "br"
 
 
+def test_llm_providers_from_manifest_routes_two_openai_leaves():
+    from mas.runtime.registry.llm_provider_registry import LLMProviderRegistry
+
+    provider = llm_providers_from_manifest(
+        {
+            "spec": {
+                "models": [
+                    {"model": "provider-a/model-a", "kind": "openai"},
+                    {"model": "judge-model", "kind": "openai"},
+                ]
+            }
+        },
+        llm_proxy={"api_base": "https://arm.example/v1", "api_key_env": "ARM_KEY"},
+        llm_proxies={
+            "arm": {
+                "api_base": "https://arm.example/v1",
+                "api_key_env": "ARM_KEY",
+                "allowed": ["provider-a/model-a"],
+                "protocol": "openai",
+            },
+            "judge": {
+                "api_base": "https://judge.example/v1",
+                "api_key_env": "JUDGE_KEY",
+                "allowed": ["judge-model"],
+                "protocol": "openai",
+            },
+        },
+    )
+    assert isinstance(provider, LLMProviderRegistry)
+    arm = provider.provider_for("provider-a/model-a")
+    judge = provider.provider_for("judge-model")
+    assert arm.api_base == "https://arm.example/v1"
+    assert judge.api_base == "https://judge.example/v1"
+    assert arm is not judge
+
+
+def test_iter_model_specs_claims_canonical_and_alias():
+    specs = iter_model_provider_specs(
+        {"spec": {"models": [{"model": "default", "kind": "openai"}]}},
+        llm_proxies={
+            "arm": {
+                "api_base": "https://arm.example/v1",
+                "api_key_env": "ARM_KEY",
+                "allowed": ["real-a"],
+                "mappings": {"default": "real-a"},
+                "protocol": "openai",
+            },
+            "judge": {
+                "api_base": "https://judge.example/v1",
+                "api_key_env": "JUDGE_KEY",
+                "allowed": ["judge-model"],
+                "protocol": "openai",
+            },
+        },
+    )
+    arm = next(spec for spec in specs if spec.get("api_base") == "https://arm.example/v1")
+    claimed = arm["models"]
+    assert "default" in claimed
+    assert "real-a" in claimed
+    from mas.runtime.registry.llm_provider_registry import LLMProviderRegistry
+
+    provider = llm_providers_from_manifest(
+        {
+            "spec": {
+                "models": [
+                    {"model": "default", "kind": "openai"},
+                    {"model": "judge-model", "kind": "openai"},
+                ]
+            }
+        },
+        llm_proxies={
+            "arm": {
+                "api_base": "https://arm.example/v1",
+                "api_key_env": "ARM_KEY",
+                "allowed": ["real-a"],
+                "mappings": {"default": "real-a"},
+                "protocol": "openai",
+            },
+            "judge": {
+                "api_base": "https://judge.example/v1",
+                "api_key_env": "JUDGE_KEY",
+                "allowed": ["judge-model"],
+                "protocol": "openai",
+            },
+        },
+    )
+    assert isinstance(provider, LLMProviderRegistry)
+    assert provider.provider_for("real-a").api_base == "https://arm.example/v1"
+    assert provider.provider_for("default").api_base == "https://arm.example/v1"
+    assert provider.provider_for("judge-model").api_base == "https://judge.example/v1"
+
+
+def test_llm_providers_from_manifest_wraps_per_leaf_pipeline():
+    from mas.runtime.engine.infra_pipeline import PipedLLMProvider
+    from mas.runtime.registry.llm_provider_registry import LLMProviderRegistry
+
+    provider = llm_providers_from_manifest(
+        None,
+        llm_proxies={
+            "arm": {
+                "api_base": "https://arm.example/v1",
+                "api_key_env": "ARM_KEY",
+                "allowed": ["provider-a/model-a"],
+                "protocol": "openai",
+                "pipeline": [{"middleware": "fault_inject", "params": {"rate": 1.0}}],
+            },
+            "judge": {
+                "api_base": "https://judge.example/v1",
+                "api_key_env": "JUDGE_KEY",
+                "allowed": ["judge-model"],
+                "protocol": "openai",
+                "pipeline": [{"middleware": "llm_scheduler", "params": {"max_in_flight": 2}}],
+            },
+        },
+    )
+    assert isinstance(provider, LLMProviderRegistry)
+    arm = provider.provider_for("provider-a/model-a")
+    judge = provider.provider_for("judge-model")
+    assert isinstance(arm, PipedLLMProvider)
+    assert isinstance(judge, PipedLLMProvider)
+    assert arm is not judge
+    assert [step["middleware"] for step in arm.pipeline] == ["fault_inject"]
+    assert [step["middleware"] for step in judge.pipeline] == ["llm_scheduler"]
+    assert judge._stack.inner.policy.max_in_flight == 2
+
+
 def test_llm_providers_from_manifest_uses_models_kind():
     provider = llm_providers_from_manifest(
         {"spec": {"models": [{"model": "gpt-4o-mini", "kind": "openai"}]}},

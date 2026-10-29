@@ -322,14 +322,11 @@ def llm_slot(
 
 
 def infer_model(engine: Any) -> str:
-    current = engine
-    seen: set[int] = set()
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        model = getattr(current, "model", None)
-        if model:
-            return str(model)
-        current = getattr(current, "inner", None)
+    from mas.runtime.engine.infra_pipeline import call_model
+
+    model = call_model(engine)
+    if model:
+        return model
     return os.environ.get("MAS_LLM_SCHEDULER_MODEL", "").strip()
 
 
@@ -339,23 +336,15 @@ def infer_provider(engine: Any, fallback: str = "") -> str:
     env = os.environ.get("MAS_LLM_SCHEDULER_PROVIDER", "").strip()
     if env:
         return env
-    current = engine
-    seen: set[int] = set()
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        for attr in ("api_base", "base_url", "_openai_base_url"):
-            value = getattr(current, attr, None)
-            if value:
-                text = str(value)
-                if "://" in text:
-                    try:
-                        from urllib.parse import urlparse
+    from urllib.parse import urlparse
 
-                        host = urlparse(text).hostname
-                        if host:
-                            return host
-                    except Exception:
-                        return text
-                return text
-        current = getattr(current, "inner", None)
-    return "default"
+    from mas.runtime.engine.infra_pipeline import call_api_base
+
+    text = call_api_base(engine)
+    if not text:
+        return "default"
+    if "://" in text:
+        host = urlparse(text).hostname
+        if host:
+            return host
+    return text

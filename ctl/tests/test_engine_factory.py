@@ -50,7 +50,7 @@ def test_build_engine_live_requires_api_key(monkeypatch, tmp_path):
     ctx = AutoCtxAssembler()
     infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
 
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is unset"):
+    with pytest.raises(RuntimeError, match="API key env unset: OPENAI_API_KEY"):
         build_engine(ctx, {"spec": {}}, infra, anchor=tmp_path)
 
 
@@ -93,7 +93,7 @@ def test_build_engine_live_with_cache_still_requires_api_key(monkeypatch, tmp_pa
     cache.write_text('{"some-key": {"content": "Paris", "usage": {}, "source": "cache"}}', encoding="utf-8")
     infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
 
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is unset"):
+    with pytest.raises(RuntimeError, match="API key env unset: OPENAI_API_KEY"):
         build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
 
 
@@ -139,8 +139,9 @@ def test_build_engine_replay_does_not_require_api_key(monkeypatch, tmp_path):
         anchor=tmp_path,
     )
     assert sel.mode == "replay"
+    assert isinstance(sel.engine, LiveLlmEngine)
     leaf = leaf_engine(sel.engine)
-    assert isinstance(leaf, LiveLlmEngine)
+    assert leaf is sel.engine
     assert isinstance(leaf.llm_provider, OpenAILLMProvider)
 
 
@@ -248,6 +249,21 @@ def test_resolve_model_name_cli_override_beats_spec(monkeypatch):
     assert resolve_model_name(manifest, None, forced="gpt-4.1") == "gpt-4.1"
 
 
+def test_resolve_model_name_unclaimed_with_several_leaves_is_error(monkeypatch):
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = ResolvedInfra(
+        refs=[],
+        llm_proxy={"api_base": "https://arm.example/v1", "api_key_env": "ARM_KEY", "allowed": ["m-a"]},
+        llm_proxies={
+            "arm": {"api_base": "https://arm.example/v1", "api_key_env": "ARM_KEY", "allowed": ["m-a"]},
+            "judge": {"api_base": "https://judge.example/v1", "api_key_env": "JUDGE_KEY", "allowed": ["m-b"]},
+        },
+    )
+    with pytest.raises(KeyError, match="not claimed"):
+        resolve_model_name({"spec": {"models": [{"model": "gpt-4o"}]}}, infra)
+
+
 def test_resolve_sampling_param_falls_back_to_deprecated_spec_llm(caplog):
     manifest = {"spec": {"llm": {"temperature": 0.2, "max_tokens": 4096}}}
     with caplog.at_level(logging.WARNING):
@@ -327,3 +343,25 @@ def test_cache_and_stream_from_runtime_engine():
     rt = {"cache": {"read": False}, "stream": True}
     assert _cache_read_enabled(rt) is False
     assert _stream_enabled(rt) is True
+
+
+def test_build_engine_installs_infra_pipeline(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.runtime.engine.llm_live import LiveLlmEngine
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+    infra.llm_proxy["pipeline"] = [
+        {"middleware": "llm_cache", "params": {"allow_read": False, "allow_write": False}},
+    ]
+    sel = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+    )
+    assert type(sel.engine) is LiveLlmEngine
+    assert sel.engine._infra_stack is not None

@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
-
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.engine.infra_pipeline import apply_middleware
 from mas.runtime.engine.llm_cache import middleware_cache_deserialize, middleware_cache_serialize
@@ -27,6 +26,9 @@ class _SequenceEngine:
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         return self.preview_text if op == "LLM_CALL" else ""
+
+    def reset_turn_state(self) -> None:
+        return None
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self.calls += 1
@@ -50,6 +52,9 @@ class _TrajectoryEngine:
         idx = min(self.preview_calls, len(self.previews) - 1)
         self.preview_calls += 1
         return self.previews[idx]
+
+    def reset_turn_state(self) -> None:
+        return None
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self.calls += 1

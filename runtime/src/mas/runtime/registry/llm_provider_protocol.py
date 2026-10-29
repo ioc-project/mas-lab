@@ -56,6 +56,10 @@ class LLMProvider(Protocol):
     ``achat_completion`` is required — the plan-04 async path awaits it
     directly. Providers that only implement the sync method are rejected at
     plugin load / instantiation, not adapted onto a worker thread.
+
+    Optional leaf identity: ``kind``, ``api_base``, ``api_key_env``. A
+    provider that omits them still runs; the leaf pipeline treats missing
+    values as empty.
     """
 
     def chat_completion(

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import random
 import time
@@ -65,6 +64,9 @@ class LlmCacheMiddleware:
     manifest params — no code branching per mode.
     """
 
+    per = "all"
+    stores_llm_responses = True
+
     inner: Any
     middleware_id: str = "llm_cache"
     cache_path: Path | None = None
@@ -119,11 +121,9 @@ class LlmCacheMiddleware:
         self._cache = load_cache(self.cache_path) if mode == "replace" else _cache_for_path(self.cache_path)
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        preview = getattr(self.inner, "exchange_preview", None)
-        if callable(preview):
-            head = str(preview(op, correlation_id=correlation_id) or "")
-            return f"[llm_cache middleware]\n{head}".strip()
-        return "[llm_cache middleware]"
+        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+        label = "[llm_cache middleware]"
+        return f"{label}\n{head}".strip() if head else label
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not (self.allow_read or self.allow_write) or io.op != "LLM_CALL":
@@ -141,10 +141,13 @@ class LlmCacheMiddleware:
         # turn, where the useful answer is almost always the post-tool-call
         # completion.
         preview = self._preview(io)
-        key = hashlib.sha256(preview.encode("utf-8")).hexdigest()
-        if self.allow_read and key in self._cache:
+        key, cached = self._lookup(preview)
+        if self.allow_read and cached is not None:
             self._simulate_replay_delay()
-            ret = middleware_cache_deserialize(self._cache[key], io.correlation_id)
+            if self.allow_write and key not in self._cache:
+                self._cache[key] = cached
+                self._persist()
+            ret = middleware_cache_deserialize(cached, io.correlation_id)
             return ret.model_copy(
                 update={
                     "cache_status": "hit",
@@ -184,10 +187,13 @@ class LlmCacheMiddleware:
         if not (self.allow_read or self.allow_write) or io.op != "LLM_CALL":
             return await self.inner.ainvoke(io)
         preview = self._preview(io)
-        key = hashlib.sha256(preview.encode("utf-8")).hexdigest()
-        if self.allow_read and key in self._cache:
+        key, cached = self._lookup(preview)
+        if self.allow_read and cached is not None:
             await self._asimulate_replay_delay()
-            ret = middleware_cache_deserialize(self._cache[key], io.correlation_id)
+            if self.allow_write and key not in self._cache:
+                self._cache[key] = cached
+                self._persist()
+            ret = middleware_cache_deserialize(cached, io.correlation_id)
             return ret.model_copy(
                 update={
                     "cache_status": "hit",
@@ -223,14 +229,6 @@ class LlmCacheMiddleware:
             self._persist()
         return ret
 
-    def reset_turn_state(self) -> None:
-        reset_fn = getattr(self.inner, "reset_turn_state", None)
-        if callable(reset_fn):
-            reset_fn()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.inner, name)
-
     def _simulate_replay_delay(self) -> None:
         lo = max(0.0, self.replay_delay_min_s)
         hi = max(lo, self.replay_delay_max_s)
@@ -258,9 +256,11 @@ class LlmCacheMiddleware:
             pass
 
     def _record_strict_miss(self, io: InvokeEngineIo) -> None:
-        ctx = getattr(self.inner, "ctx", None)
-        observability = getattr(ctx, "observability", None)
-        record = getattr(observability, "record_cache_lookup", None)
+        from mas.runtime.engine.infra_pipeline import call_ctx
+
+        ctx = call_ctx(self.inner)
+        observability = ctx.observability if ctx is not None else None
+        record = getattr(observability, "record_cache_lookup", None) if observability is not None else None
         if callable(record):
             record(
                 correlation_id=io.correlation_id,
@@ -269,12 +269,24 @@ class LlmCacheMiddleware:
             )
 
     def _preview(self, io: InvokeEngineIo) -> str:
-        preview = getattr(self.inner, "exchange_preview", None)
-        return str(
-            preview("LLM_CALL", correlation_id=io.correlation_id)
-            if callable(preview)
-            else io.correlation_id
+        return str(self.inner.exchange_preview("LLM_CALL", correlation_id=io.correlation_id) or "")
+
+    def _lookup(self, preview: str) -> tuple[str, Any | None]:
+        from mas.runtime.engine.llm_cache import cache_route_from_engine, lookup_preview_cache
+
+        leaf, model, api_base, leaf_count = cache_route_from_engine(self.inner)
+        return lookup_preview_cache(
+            self._cache,
+            preview,
+            leaf=leaf,
+            model=model,
+            api_base=api_base,
+            leaf_count=leaf_count,
         )
+
+    def _cache_key(self, preview: str) -> str:
+        key, _entry = self._lookup(preview)
+        return key
 
     def _persist(self) -> None:
         if not self.cache_path:

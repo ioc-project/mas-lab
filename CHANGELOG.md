@@ -10,8 +10,41 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ## Unreleased
 
+### Breaking
+
+- Two `LLMProxy` files with the same `metadata.name`: the later ref replaces
+  the earlier leaf (connection, `models.allowed`, mappings, and that leaf's
+  steps). A different `api_base` on the same name is no longer an error.
+- With several LLMProxy leaves, a model none of them claims is an error.
+  Engine build requires every live leaf's `api_key_env`, including a leaf
+  the run never calls.
+- The LLM cache key now includes the leaf name, model, and endpoint. A
+  cache written on this branch will not hit after the leaf's `api_base`
+  changes. Entries written before still hit when only one leaf is
+  configured. `trace_cache_portable` does not cover this key.
+- Infra middleware plugins must define `wrap(inner, params)`. The old
+  constructor fallback `plugin_cls(inner=..., **params)` is gone.
+- `LiveLlmEngine.install_infra_pipeline` only wraps `per: all` steps.
+  A destination step (scheduler, fault) passed there is an error.
+
+### Fixed
+
+- A leaf scheduler reads the in-flight model from the call wrapper, so
+  two models on one connection get separate pacing buckets.
+
 ### Added
 
+- Several `LLMProxy` refs stay separate leaves. The model name (and
+  `models.mappings` aliases) selects which leaf provides the call —
+  same shape as tool-name routing. Eval uses `experiment.models.judge`.
+  Middleware plugins declare `per` (`all` or `destination`): `llm_cache` is
+  one step on the live engine; scheduler and fault injection run on each leaf
+  (`PipedLLMProvider` is that leaf call). Callers keep `LiveLlmEngine`. Each
+  leaf uses its own `api_key_env`.
+  Cache lookup tries the routed key, then the pre-routing preview hash when
+  a single leaf is configured; several leaves never reuse an old-key hit.
+  Writes use the routed key only. See
+  [Several LLMProxy refs](docs/manifests/infra.md#several-llmproxy-refs).
 - `AgentCommContract.send` / `asend` take optional `headers`. Implementers
   must accept the argument. Only `traceparent`, `tracestate`, and `baggage`
   copy onto a later send; other keys stay on this send. A bad trace id

@@ -16,6 +16,9 @@ from mas.runtime.schema.ingress import EngineIoReturn
 class FaultInjectMiddleware:
     """Inject random LLM failures — chaos-lite in front of any provider."""
 
+    per = "destination"
+    stores_llm_responses = False
+
     inner: Any
     middleware_id: str = "fault_inject"
     rate: float = 0.0
@@ -37,11 +40,9 @@ class FaultInjectMiddleware:
         )
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        preview = getattr(self.inner, "exchange_preview", None)
-        if callable(preview):
-            head = str(preview(op, correlation_id=correlation_id) or "")
-            return f"[fault_inject middleware rate={self.rate}]\n{head}".strip()
-        return f"[fault_inject middleware rate={self.rate}]"
+        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+        label = f"[fault_inject middleware rate={self.rate}]"
+        return f"{label}\n{head}".strip() if head else label
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "LLM_CALL" and self.rate > 0 and random.random() < self.rate:
@@ -64,11 +65,3 @@ class FaultInjectMiddleware:
                 text=f"{code}: {self.message}",
             )
         return await self.inner.ainvoke(io)
-
-    def reset_turn_state(self) -> None:
-        reset_fn = getattr(self.inner, "reset_turn_state", None)
-        if callable(reset_fn):
-            reset_fn()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.inner, name)
