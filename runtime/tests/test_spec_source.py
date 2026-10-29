@@ -3,12 +3,13 @@
 """Tests for mas.runtime.spec.source."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.runtime.spec.source import (
+    clear_yaml_file_cache,
     load_yaml_file,
     resolve_manifest_source,
     resolve_ref_with_search,
@@ -61,3 +62,39 @@ def test_load_yaml_file(tmp_path: Path) -> None:
     f = tmp_path / "x.yaml"
     f.write_text("a: 1\n", encoding="utf-8")
     assert load_yaml_file(f) == {"a": 1}
+
+
+def test_load_yaml_file_does_not_share_the_cached_mapping(tmp_path: Path) -> None:
+    f = tmp_path / "x.yaml"
+    f.write_text("a: 1\n", encoding="utf-8")
+    data = load_yaml_file(f)
+    data["a"] = 2
+    assert load_yaml_file(f) == {"a": 1}
+
+
+def test_load_yaml_file_sees_a_rewrite(tmp_path: Path) -> None:
+    f = tmp_path / "x.yaml"
+    f.write_text("a: 1\n", encoding="utf-8")
+    assert load_yaml_file(f) == {"a": 1}
+    f.write_text("a: 3\n", encoding="utf-8")
+    assert load_yaml_file(f) == {"a": 3}
+
+
+def test_load_yaml_file_keeps_the_parse_when_only_mtime_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "x.yaml"
+    f.write_text("a: 1\n", encoding="utf-8")
+    clear_yaml_file_cache()
+    assert load_yaml_file(f) == {"a": 1}
+    parsed = {"count": 0}
+    real = yaml.safe_load
+
+    def wrapped(text: object, *args: object, **kwargs: object) -> object:
+        parsed["count"] += 1
+        return real(text, *args, **kwargs)
+
+    monkeypatch.setattr("mas.runtime.spec.source.yaml.safe_load", wrapped)
+    os.utime(f, (f.stat().st_atime + 5, f.stat().st_mtime + 5))
+    assert load_yaml_file(f) == {"a": 1}
+    assert parsed["count"] == 0

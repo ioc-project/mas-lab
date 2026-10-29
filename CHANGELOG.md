@@ -29,6 +29,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- ctl keeps parsed YAML and overlay schema fragments. A file change
+  (mtime, size, or hash) drops that cache; validate used to reread
+  every schema file on each call.
 - ctl rejects a bad checkpoint on save and load. Disk or hybrid
   storage with no directory is a ValueError.
 - A leaf scheduler reads the in-flight model from the call wrapper, so

@@ -11,12 +11,11 @@ itself via ``force-include`` and resolved through ``importlib.resources``).
 
 from __future__ import annotations
 
-from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Any
 
-import yaml
+from mas.runtime.spec.source import cached_yaml_document, clear_yaml_file_cache
 
 
 def _repo_checkout_schema_root() -> Path | None:
@@ -129,14 +128,11 @@ def schema_path_for_kind(kind: str) -> Path | None:
     return path if path.exists() else None
 
 
-@lru_cache(maxsize=32)
 def load_schema(kind: str) -> dict:
     path = schema_path_for_kind(kind)
     if path is None:
         raise KeyError(f"no schema registered for kind: {kind}")
-    with path.open(encoding="utf-8") as fh:
-        raw = yaml.safe_load(fh)
-    return _resolve_local_refs(raw, path.parent)
+    return _load_resolved_schema_file(path)
 
 
 def lab_schema_registry():
@@ -144,6 +140,55 @@ def lab_schema_registry():
     from mas.lab.schemas.validate import schema_registry_from_dir
 
     return schema_registry_from_dir(_SCHEMA_ROOT)
+
+
+_RESOLVED_SCHEMA: dict[Path, tuple[tuple[tuple[str, int, int], ...], Any]] = {}
+_RESOLVE_STAMP_STACK: list[list[tuple[str, int, int]]] = []
+
+
+def _file_stamp(path: Path) -> tuple[str, int, int]:
+    st = path.stat()
+    return (str(path), st.st_mtime_ns, st.st_size)
+
+
+def _stamps_match(stamps: tuple[tuple[str, int, int], ...]) -> bool:
+    for loc, mtime_ns, size in stamps:
+        try:
+            st = Path(loc).stat()
+        except FileNotFoundError:
+            return False
+        if st.st_mtime_ns != mtime_ns or st.st_size != size:
+            return False
+    return True
+
+
+def clear_schema_caches() -> None:
+    """Drop inlined schema fragments and parsed YAML. Next load re-reads disk."""
+    _RESOLVED_SCHEMA.clear()
+    clear_yaml_file_cache()
+
+
+def _load_resolved_schema_file(path: Path) -> Any:
+    """Load *path* and inline its relative ``$ref``s once per unchanged file set."""
+    resolved = Path(path).resolve()
+    hit = _RESOLVED_SCHEMA.get(resolved)
+    if hit is not None and _stamps_match(hit[0]):
+        if _RESOLVE_STAMP_STACK:
+            _RESOLVE_STAMP_STACK[-1].extend(hit[0])
+        return hit[1]
+    _RESOLVE_STAMP_STACK.append([_file_stamp(resolved)])
+    try:
+        raw = cached_yaml_document(resolved)
+        doc = _resolve_local_refs(raw, resolved.parent)
+        acc = tuple(_RESOLVE_STAMP_STACK[-1])
+    except Exception:
+        _RESOLVE_STAMP_STACK.pop()
+        raise
+    _RESOLVE_STAMP_STACK.pop()
+    _RESOLVED_SCHEMA[resolved] = (acc, doc)
+    if _RESOLVE_STAMP_STACK:
+        _RESOLVE_STAMP_STACK[-1].extend(acc)
+    return doc
 
 
 def _resolve_json_pointer(doc: Any, pointer: str, *, ref: str, source: Path) -> Any:
@@ -177,12 +222,10 @@ def _resolve_local_refs(node: Any, base_dir: Path) -> Any:
         if _is_local_ref(ref):
             file_part, _, pointer_part = ref.partition("#")
             frag_path = (base_dir / file_part).resolve()
-            with frag_path.open(encoding="utf-8") as fh:
-                loaded = yaml.safe_load(fh)
-            target = loaded
+            loaded = _load_resolved_schema_file(frag_path)
             if pointer_part:
-                target = _resolve_json_pointer(loaded, pointer_part, ref=ref, source=frag_path)
-            return _resolve_local_refs(target, frag_path.parent)
+                return _resolve_json_pointer(loaded, pointer_part, ref=ref, source=frag_path)
+            return loaded
         return {k: _resolve_local_refs(v, base_dir) for k, v in node.items() if k != "$ref" or not _is_local_ref(ref)}
     if isinstance(node, list):
         return [_resolve_local_refs(item, base_dir) for item in node]
