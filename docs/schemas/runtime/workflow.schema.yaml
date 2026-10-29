@@ -63,9 +63,11 @@ properties:
               default: ""
             delegates_to:
               type: array
+              deprecated: true
               description: >
-                IDs of nodes this node can delegate sub-tasks to. Empty list →
-                leaf node. Only populated for broker / orchestrator nodes.
+                Deprecated, still supported, no removal date. IDs of nodes this
+                node can delegate sub-tasks to. Empty list → leaf node. Only
+                populated for broker / orchestrator nodes.
               default: []
               items:
                 type: string

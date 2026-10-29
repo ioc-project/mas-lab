@@ -180,6 +180,11 @@ export interface WorkflowNode {
   id: string;
   role?: string;
   agent?: string;
+  /**
+   * @deprecated
+   * Deprecated, still supported, no removal date. IDs of agents this node may delegate to.
+   *
+   */
   delegates_to?: string[];
   /**
    * Parallel topology dispatch mode (e.g. all).

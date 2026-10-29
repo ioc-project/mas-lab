@@ -159,6 +159,11 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Deprecated
 
+- `workflow.nodes[].delegates_to` is deprecated, still supported, no removal
+  date. `mas-ctl validate`, `compose`, and `run-mas` print the warning once
+  per compose. A second compose prints it again. `--no-validate` is silent.
+  Empty lists do not warn. Overlay patches that set a non-empty list warn
+  too.
 - `--bind NAME=URI` is a hidden alias of `--connect`. It still works and prints
   a warning. It remains for one release.
 - `/api/libraries/**`, `/api/jobs/**`, and `/api/experiments/**` (results tree).

@@ -73,20 +73,65 @@ def collect_deprecated_uses(
             if key not in instance:
                 continue
             child_path = f"{path}.{key}" if path else str(key)
-            msgs.extend(
-                collect_deprecated_uses(
-                    instance[key], sub, root=root, path=child_path
-                )
-            )
+            msgs.extend(collect_deprecated_uses(instance[key], sub, root=root, path=child_path))
     elif isinstance(instance, list):
         items = schema.get("items")
         if isinstance(items, dict):
             for i, item in enumerate(instance):
                 child_path = f"{path}[{i}]" if path else f"[{i}]"
-                msgs.extend(
-                    collect_deprecated_uses(item, items, root=root, path=child_path)
-                )
+                msgs.extend(collect_deprecated_uses(item, items, root=root, path=child_path))
     return msgs
+
+
+def _delegates_to_nodes(data: dict[str, Any]) -> tuple[list[Any] | None, str]:
+    spec = data.get("spec") if isinstance(data, dict) else None
+    if not isinstance(spec, dict):
+        return None, ""
+    workflow = spec.get("workflow")
+    if isinstance(workflow, dict) and isinstance(workflow.get("nodes"), list):
+        return workflow["nodes"], "spec.workflow.nodes"
+    if isinstance(spec.get("nodes"), list):
+        return spec["nodes"], "spec.nodes"
+    patch = spec.get("patch")
+    if isinstance(patch, dict):
+        patched = patch.get("workflow")
+        if isinstance(patched, dict) and isinstance(patched.get("nodes"), list):
+            return patched["nodes"], "spec.patch.workflow.nodes"
+    return None, ""
+
+
+def _nonempty_delegates_to(raw: object) -> bool:
+    if isinstance(raw, list):
+        return any(str(item).strip() for item in raw)
+    return bool(raw)
+
+
+def collect_delegates_to_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """One warning per validation, listing nodes with a non-empty ``delegates_to``."""
+    nodes, path = _delegates_to_nodes(data)
+    if not isinstance(nodes, list) or not path:
+        return []
+    labels: list[str] = []
+    seen: set[str] = set()
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict) or "delegates_to" not in node:
+            continue
+        if not _nonempty_delegates_to(node.get("delegates_to")):
+            continue
+        label = str(node.get("id") or "").strip() or f"nodes[{index}]"
+        if label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+    if not labels:
+        return []
+    listed = ", ".join(labels)
+    return [
+        (
+            path,
+            f"delegates_to is deprecated, still supported, no removal date; used by nodes: {listed}",
+        )
+    ]
 
 
 def collect_experiment_deprecations(
@@ -103,8 +148,7 @@ def collect_experiment_deprecations(
         keys = set(app)
         if keys & _LEVEL_SECTION_KEYS and not keys & _MAS_BINDING_KEYS:
             msgs.append(
-                "experiment.application is used as a pipeline level; "
-                "use experiment-level post: (CLI --depth exp)"
+                "experiment.application is used as a pipeline level; use experiment-level post: (CLI --depth exp)"
             )
     return msgs
 

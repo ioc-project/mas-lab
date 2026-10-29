@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -58,11 +58,7 @@ def strict_mode() -> bool:
 
 
 def _looks_like_path_ref(value: str) -> bool:
-    return (
-        "/" in value
-        or "\\" in value
-        or value.endswith((".yaml", ".yml", ".json", ".py"))
-    )
+    return "/" in value or "\\" in value or value.endswith((".yaml", ".yml", ".json", ".py"))
 
 
 def _validate_tool_manifest_semantics(data: dict[str, Any]) -> list[ValidationIssue]:
@@ -283,6 +279,12 @@ def validate_data(
 
         for msg in collect_experiment_deprecations(data, schema):
             result.issues.append(ValidationIssue("warning", msg, path="experiment"))
+
+    if resolved_kind in {"mas", "workflow", "overlay"}:
+        from mas.ctl.validate.deprecations import collect_delegates_to_deprecation
+
+        for path, msg in collect_delegates_to_deprecation(data):
+            result.issues.append(ValidationIssue("warning", msg, path=path))
 
     if any(i.level == "error" for i in result.issues):
         result.ok = False

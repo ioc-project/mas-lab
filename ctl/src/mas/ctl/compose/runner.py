@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -164,6 +165,11 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
             overlay = overlay_for_session_agent(source)
             mas = merge_overlay(mas, overlay)
             agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
+    if req.validate and validation_enabled():
+        from mas.ctl.validate.deprecations import collect_delegates_to_deprecation
+
+        for _path, msg in collect_delegates_to_deprecation(mas):
+            print(f"warning: {msg}", file=sys.stderr)
     mas_id = mas.get("metadata", {}).get("name") or req.manifest.stem
 
     workspace = WorkspaceConfig.load(req.workspace_root or req.manifest.parent)

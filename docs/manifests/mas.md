@@ -246,12 +246,14 @@ _Used by:_ `spec.workflow.nodes[]`
 | Field | Type | Required | Default | Description |
 | ------- | ------ | ---------- | --------- | ------------- |
 | `id` | `string` | **yes** | — | Node identifier. Must match an `agency.agents[].id`. |
-| `delegates_to` | `string[]` | no | `[]` | IDs of agents this node may delegate to. Sets the `delegate_to_<id>` tools that the entry agent's LLM sees. |
+| `delegates_to` | `string[]` | no | `[]` | IDs of agents this node may delegate to. Sets the `delegate_to_<id>` tools that the entry agent's LLM sees. Deprecated, still supported, no removal date. An empty list does not warn. |
 | `role` | `string` | no | — | Role label, informational. |
 | `agent` | `string` | no | — | Agent id override, for when the node id differs from the agent id. |
 | `dispatch` | `string` | no | — | Fan-out mode. `parallel` (or `all`) runs this node's `delegates_to` peers concurrently. Any other value, or none, leaves delegation to the LLM. |
 | `config` | `object` | no | `{}` | Plugin-specific parameters. Keys depend on the pattern. |
 | `description` | `string` | no | `""` | Node description, informational. |
+
+`mas-ctl validate`, `compose`, and `run-mas` print one warning per compose when any node has a non-empty list. A second compose prints it again. `--no-validate` is silent. Overlay patches that set a non-empty list warn too.
 
 ---
 

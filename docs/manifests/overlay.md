@@ -125,6 +125,8 @@ spec:
       region: eu-west-1
 ```
 
+`delegates_to` on `patch.workflow.nodes[]` is deprecated, still supported, no removal date. Empty lists do not warn. `$delegates` still names that list; the selector itself is not deprecated.
+
 `spec.tools` (outside `patch`) is a separate, scenario-level tool injection field. It is a list of semantic tool names or `{ref: path}` objects, merged onto the target agents.
 
 `patch.agents.<id>` and the `$entry`-style keys accept a subset of Agent fields: `design_pattern`, `context_manager`, `assembler`, `llm`, `memory`, `tools`, `skills`, `context`, `description`, and `ref`.
@@ -203,7 +205,7 @@ On a MAS overlay, reserved `patch.agents` keys expand onto agency ids after this
 | `$entry` | `spec.workflow.entry` |
 | `$all` | every `spec.agency.agents` id |
 | `$not-entry` | every agency id except `$entry` |
-| `$delegates` | `workflow.nodes[$entry].delegates_to` |
+| `$delegates` | `workflow.nodes[$entry].delegates_to` (that field is deprecated, still supported, no removal date; the selector is not) |
 
 The keys compose in that order. Then a named id wins. These cases are errors:
 

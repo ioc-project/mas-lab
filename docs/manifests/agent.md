@@ -603,7 +603,7 @@ Flags that set which system tools and capabilities the agent's LLM sees at run t
 
 ### Delegation
 
-Delegation means one agent hands a task to a peer through a tool call. In a MAS, an agent whose workflow node lists `delegates_to: [a, b]` gets one tool per peer: `delegate_to_a` and `delegate_to_b`.
+Delegation means one agent hands a task to a peer through a tool call. In a MAS, an agent whose workflow node lists `delegates_to: [a, b]` gets one tool per peer: `delegate_to_a` and `delegate_to_b`. `delegates_to` is deprecated, still supported, no removal date.
 
 - The runtime fixes peer IDs when it composes the MAS. The model cannot call agents outside the topology (the team shape).
 - Each tool takes a `task` and an optional `context_id`.
