@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import hashlib
+from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 from mas.runtime.package_refs import resolve_path_ref
 
 # Re-export: canonical path resolution (file may not exist yet).
@@ -48,8 +50,43 @@ def resolve_ref_with_search(
     raise FileNotFoundError(f"manifest ref not found: {ref!r} (anchor={anchor})")
 
 
+@dataclass
+class _YamlRecord:
+    digest: str
+    data: Any
+
+
+_YAML_CACHE: dict[Path, _YamlRecord] = {}
+
+
+def _content_digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def cached_yaml_document(path: Path) -> Any:
+    """Parsed YAML for *path*. Do not mutate.
+
+    A matching content hash reuses the parse (a touch). A same-size
+    rewrite within the filesystem timestamp resolution still reloads.
+    """
+    resolved = Path(path).expanduser().resolve()
+    rec = _YAML_CACHE.get(resolved)
+    text = resolved.read_text(encoding="utf-8")
+    digest = _content_digest(text)
+    if rec is not None and rec.digest == digest:
+        return rec.data
+    data = yaml.safe_load(text) or {}
+    _YAML_CACHE[resolved] = _YamlRecord(digest, data)
+    return data
+
+
+def clear_yaml_file_cache() -> None:
+    """Drop memoized YAML parses. Next :func:`load_yaml_file` re-reads from disk."""
+    _YAML_CACHE.clear()
+
+
 def load_yaml_file(path: Path) -> Any:
-    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return deepcopy(cached_yaml_document(path))
 
 
 def load_yaml_mapping(path: Path) -> dict[str, Any]:

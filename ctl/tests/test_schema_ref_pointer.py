@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 import yaml
-from mas.ctl.validate.schemas import _resolve_local_refs
+from mas.ctl.validate.schemas import (
+    _load_resolved_schema_file,
+    _resolve_local_refs,
+    clear_schema_caches,
+    load_schema,
+)
 
 
 def _write_yaml(path: Path, doc: dict) -> None:
@@ -88,6 +93,22 @@ def test_json_pointer_ref_resolves_refs_nested_inside_the_pointed_at_node(tmp_pa
     assert resolved["working_memory"]["properties"]["persistent"] == {"type": "boolean"}
 
 
+def test_pointer_ref_fails_when_an_unused_fragment_ref_is_missing(tmp_path: Path) -> None:
+    """A pointer $ref resolves the whole fragment first, so a bad $ref
+    in an unused part of that file fails every schema that includes it.
+    """
+    _write_yaml(
+        tmp_path / "fragment.yaml",
+        {
+            "used": {"type": "string"},
+            "dead": {"$ref": "./missing.yaml"},
+        },
+    )
+    schema = {"x": {"$ref": "./fragment.yaml#/used"}}
+    with pytest.raises(FileNotFoundError):
+        _resolve_local_refs(schema, tmp_path)
+
+
 def test_json_pointer_ref_missing_segment_raises_keyerror(tmp_path: Path):
     _write_yaml(tmp_path / "agent.schema.yaml", {"properties": {"spec": {"properties": {}}}})
     patch_schema = {"x": {"$ref": "./agent.schema.yaml#/properties/spec/properties/nope"}}
@@ -120,3 +141,36 @@ def test_json_pointer_ref_handles_tilde_escaping(tmp_path: Path):
     resolved = _resolve_local_refs(patch_schema, tmp_path)
 
     assert resolved["x"] == {"type": "string"}
+
+
+def test_resolved_schema_picks_up_a_changed_fragment(tmp_path: Path) -> None:
+    clear_schema_caches()
+    shared = tmp_path / "shared.yaml"
+    root = tmp_path / "root.yaml"
+    _write_yaml(shared, {"type": "string"})
+    _write_yaml(root, {"properties": {"x": {"$ref": "./shared.yaml"}}})
+    first = _load_resolved_schema_file(root)
+    assert first["properties"]["x"] == {"type": "string"}
+    _write_yaml(shared, {"type": "boolean"})
+    second = _load_resolved_schema_file(root)
+    assert second["properties"]["x"] == {"type": "boolean"}
+    assert first is not second
+
+
+def test_overlay_schema_parses_each_fragment_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_schema_caches()
+    real = yaml.safe_load
+    seen: list[str] = []
+
+    def wrapped(data: object, *args: object, **kwargs: object) -> object:
+        name = getattr(data, "name", None)
+        if isinstance(name, str) and name.endswith("llm-sampling.schema.yaml"):
+            seen.append(name)
+        if isinstance(data, str) and "mas/v1#llm-sampling" in data:
+            seen.append("text")
+        return real(data, *args, **kwargs)
+
+    monkeypatch.setattr("mas.runtime.spec.source.yaml.safe_load", wrapped)
+    load_schema("overlay")
+    load_schema("overlay")
+    assert seen.count("text") == 1

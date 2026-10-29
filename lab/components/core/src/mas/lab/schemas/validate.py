@@ -3,13 +3,13 @@
 """Load lab JSON Schema documents with cross-file $id refs."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
-from mas.runtime.spec.source import load_yaml_file
-
 from mas.lab.schemas.paths import lab_schema_dir
+from mas.runtime.spec.source import load_yaml_file
 
 _SCHEMA_SUFFIXES = {".yaml", ".yml", ".json"}
 
@@ -20,13 +20,34 @@ def _load_schema_file(path: Path) -> Any:
     return load_yaml_file(path)
 
 
+def _schema_dir_stamp(root: Path) -> tuple[tuple[str, str], ...]:
+    stamps: list[tuple[str, str]] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix not in _SCHEMA_SUFFIXES:
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        stamps.append((str(path.relative_to(root)), digest))
+    return tuple(stamps)
+
+
+_REGISTRY_CACHE: dict[Path, tuple[tuple[tuple[str, str], ...], Any]] = {}
+
+
 def schema_registry_from_dir(root: Path):
-    """Registry of every schema ``$id`` under *root*."""
+    """Registry of every schema ``$id`` under *root*.
+
+    Rebuilt when any schema file's content hash changes.
+    """
     from referencing import Registry, Resource
     from referencing.jsonschema import DRAFT7
 
+    resolved = Path(root).resolve()
+    stamp = _schema_dir_stamp(resolved)
+    hit = _REGISTRY_CACHE.get(resolved)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
     resources: list[tuple[str, Any]] = []
-    for path in sorted(root.rglob("*")):
+    for path in sorted(resolved.rglob("*")):
         if not path.is_file() or path.suffix not in _SCHEMA_SUFFIXES:
             continue
         data = _load_schema_file(path)
@@ -37,7 +58,14 @@ def schema_registry_from_dir(root: Path):
             continue
         resource = Resource.from_contents(data, default_specification=DRAFT7)
         resources.append((uri, resource))
-    return Registry().with_resources(resources).crawl()
+    registry = Registry().with_resources(resources).crawl()
+    _REGISTRY_CACHE[resolved] = (stamp, registry)
+    return registry
+
+
+def clear_schema_registry_cache() -> None:
+    """Drop memoized registries. Next :func:`schema_registry_from_dir` rebuilds."""
+    _REGISTRY_CACHE.clear()
 
 
 def lab_schema_registry():

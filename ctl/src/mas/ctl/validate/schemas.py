@@ -11,12 +11,12 @@ itself via ``force-include`` and resolved through ``importlib.resources``).
 
 from __future__ import annotations
 
-from functools import lru_cache
+import hashlib
 from importlib import resources
 from pathlib import Path
 from typing import Any
 
-import yaml
+from mas.runtime.spec.source import cached_yaml_document, clear_yaml_file_cache
 
 
 def _repo_checkout_schema_root() -> Path | None:
@@ -129,14 +129,16 @@ def schema_path_for_kind(kind: str) -> Path | None:
     return path if path.exists() else None
 
 
-@lru_cache(maxsize=32)
 def load_schema(kind: str) -> dict:
+    """Return the JSON Schema for *kind*.
+
+    The mapping is read-only: fragments are inlined by reference, so a
+    mutation can show up in other kinds that share that fragment.
+    """
     path = schema_path_for_kind(kind)
     if path is None:
         raise KeyError(f"no schema registered for kind: {kind}")
-    with path.open(encoding="utf-8") as fh:
-        raw = yaml.safe_load(fh)
-    return _resolve_local_refs(raw, path.parent)
+    return _load_resolved_schema_file(path)
 
 
 def lab_schema_registry():
@@ -144,6 +146,55 @@ def lab_schema_registry():
     from mas.lab.schemas.validate import schema_registry_from_dir
 
     return schema_registry_from_dir(_SCHEMA_ROOT)
+
+
+_RESOLVED_SCHEMA: dict[Path, tuple[tuple[tuple[str, str], ...], Any]] = {}
+
+
+def _file_digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _file_stamp(path: Path) -> tuple[str, str]:
+    return (str(path), _file_digest(path))
+
+
+def _stamps_match(stamps: tuple[tuple[str, str], ...]) -> bool:
+    for loc, digest in stamps:
+        try:
+            if _file_digest(Path(loc)) != digest:
+                return False
+        except FileNotFoundError:
+            return False
+    return True
+
+
+def clear_schema_caches() -> None:
+    """Drop inlined schema fragments and parsed YAML. Next load re-reads disk."""
+    _RESOLVED_SCHEMA.clear()
+    clear_yaml_file_cache()
+
+
+def _load_resolved_schema_file(
+    path: Path,
+    *,
+    collected: list[tuple[str, str]] | None = None,
+) -> Any:
+    """Load *path* and inline its relative ``$ref``s once per unchanged file set."""
+    resolved = Path(path).resolve()
+    hit = _RESOLVED_SCHEMA.get(resolved)
+    if hit is not None and _stamps_match(hit[0]):
+        if collected is not None:
+            collected.extend(hit[0])
+        return hit[1]
+    local: list[tuple[str, str]] = [_file_stamp(resolved)]
+    raw = cached_yaml_document(resolved)
+    doc = _resolve_local_refs(raw, resolved.parent, collected=local)
+    stamps = tuple(local)
+    _RESOLVED_SCHEMA[resolved] = (stamps, doc)
+    if collected is not None:
+        collected.extend(stamps)
+    return doc
 
 
 def _resolve_json_pointer(doc: Any, pointer: str, *, ref: str, source: Path) -> Any:
@@ -160,7 +211,12 @@ def _is_local_ref(ref: Any) -> bool:
     return isinstance(ref, str) and (ref.startswith("./") or ref.startswith("../"))
 
 
-def _resolve_local_refs(node: Any, base_dir: Path) -> Any:
+def _resolve_local_refs(
+    node: Any,
+    base_dir: Path,
+    *,
+    collected: list[tuple[str, str]] | None = None,
+) -> Any:
     """Inline relative (``./``, ``../``) JSON Schema refs so validation does
     not depend on ``$id`` URIs.
 
@@ -171,21 +227,26 @@ def _resolve_local_refs(node: Any, base_dir: Path) -> Any:
     straight at a property the canonical schema already declares, rather
     than re-declaring its shape by hand — one definition, referenced, not
     copied.
+
+    A pointer ``$ref`` resolves the whole fragment file first, then picks
+    the pointer. The result is read-only: fragments are shared by reference.
     """
     if isinstance(node, dict):
         ref = node.get("$ref")
         if _is_local_ref(ref):
             file_part, _, pointer_part = ref.partition("#")
             frag_path = (base_dir / file_part).resolve()
-            with frag_path.open(encoding="utf-8") as fh:
-                loaded = yaml.safe_load(fh)
-            target = loaded
+            loaded = _load_resolved_schema_file(frag_path, collected=collected)
             if pointer_part:
-                target = _resolve_json_pointer(loaded, pointer_part, ref=ref, source=frag_path)
-            return _resolve_local_refs(target, frag_path.parent)
-        return {k: _resolve_local_refs(v, base_dir) for k, v in node.items() if k != "$ref" or not _is_local_ref(ref)}
+                return _resolve_json_pointer(loaded, pointer_part, ref=ref, source=frag_path)
+            return loaded
+        return {
+            k: _resolve_local_refs(v, base_dir, collected=collected)
+            for k, v in node.items()
+            if k != "$ref" or not _is_local_ref(ref)
+        }
     if isinstance(node, list):
-        return [_resolve_local_refs(item, base_dir) for item in node]
+        return [_resolve_local_refs(item, base_dir, collected=collected) for item in node]
     return node
 
 

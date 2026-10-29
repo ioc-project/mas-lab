@@ -165,6 +165,10 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- load_yaml_file reuses a parse when the content hash matches; a
+  same-size rewrite with a frozen mtime still reloads. ctl inlines
+  overlay schema fragments once. validate_data on a sample mas.yaml
+  went from 0.18 s to 0.006 s.
 - A usable tool server whose protocol has no provider is an error. It
   used to bind the implicit local provider. A deploy-only server is
   not a client. The last explicit local tool server wins.
