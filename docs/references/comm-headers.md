@@ -32,13 +32,13 @@ again:
 
 Everything else stays on this hop, including `authorization` and any `mas.*`
 key. A peer cannot plant a header that silently rides every later send. To
-forward a hop-local key, pass it again in `headers`. `tracestate` follows
-the W3C 32-member cap. A longer `tracestate` or `baggage` list is dropped
-so the send still goes through.
+forward a hop-local key, pass it again in `headers`.
 
 Names must be HTTP tokens (no spaces, slashes, or newlines). Values must not
-contain control characters. There is a cap on count, name length, value size,
-and total size.
+contain control characters. Caps: 32 headers, 128-byte names, 4096-byte
+values, 16384 bytes total. `tracestate` is at most 32 members (W3C);
+`baggage` is at most 64. A longer list is dropped so the send still goes
+through.
 
 ## `trace_context`
 

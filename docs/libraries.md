@@ -29,7 +29,7 @@ Requires **Python 3.11+**.
 | **Lab** | `mas-lab` | Benchmark experiments, pipelines, reports, and the web UI controller |
 | **Standard library** | `mas-library-standard` | Flavours, overlays, infra bundles, and built-in runtime plugins |
 | **Samples** | `mas-library-samples` | Reference apps (e.g. trip planner), datasets, and tutorial fixtures |
-| **Optional libraries** | `mas-library-skills`, `mas-library-ioa`, `mas-library-kg`, `mas-library-telemetry` | Agent skills, MCP bridge, trace-to-knowledge-graph pipelines, OpenTelemetry conversion and export |
+| **Optional libraries** | `mas-library-skills`, `mas-library-ioa`, `mas-library-kg`, `mas-library-telemetry` | Agent skills, MCP/A2A, trace-to-knowledge-graph pipelines, OpenTelemetry conversion and export |
 
 A **lab** is a folder of experiments (`*.lab/` plus `lab-config.yaml`). A
 **library** is a folder with `library.yaml`. See
@@ -58,7 +58,7 @@ extension plugins and standard plots) is separate. Add it when you need it.
 | `mas-library-lab` | `library-lab/` | — | Pipeline-step and artifact-codec plugins, eval provider, standard plots |
 | `mas-library-eval` | `library-eval/` | — | Session-level evaluation metrics for benchmarks |
 | `mas-library-skills` | `library-skills/` | — | Agent skills (progressive disclosure) |
-| `mas-library-ioa` | `library-ioa/` | — | MCP client/server bridge |
+| `mas-library-ioa` | `library-ioa/` | — | MCP client/server bridge and A2A plugins |
 | `mas-library-kg` | `library-kg/` | — | Trace-to-KG normalization and KG pipelines |
 | `mas-library-telemetry` | `library-telemetry/` | — | Native events to OpenTelemetry conversion and OTLP export |
 

@@ -94,8 +94,6 @@ def _hop_from(headers: Mapping[str, str]) -> dict[str, str]:
     out: dict[str, str] = {}
     for key, value in headers.items():
         name = key.lower()
-        if name.startswith("mas."):
-            continue
         if name in HOP_HEADERS:
             out[name] = value
     return out

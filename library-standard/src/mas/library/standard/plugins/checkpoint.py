@@ -10,19 +10,11 @@ through this contract). Implementations live in mas-library-standard.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
-
-
-def _validate_checkpoint_payload(data: dict) -> None:
-    try:
-        from mas.ctl.validate import validate_data, validation_enabled
-    except ImportError:
-        return
-    if validation_enabled():
-        validate_data(data, kind="checkpoint", source="checkpoint.json").raise_if_failed()
 
 
 @dataclass
@@ -33,6 +25,7 @@ class JsonCheckpointStore:
     directory: Path
     memory_seeds: list[dict] = field(default_factory=list)
     turn_counter: int = 0
+    payload_validator: Callable[[dict], None] | None = None
 
     def __post_init__(self) -> None:
         self.directory = Path(self.directory).expanduser()
@@ -53,7 +46,8 @@ class JsonCheckpointStore:
                 "kernel": snapshot,
                 "memory_seeds": list(self.memory_seeds),
             }
-        _validate_checkpoint_payload(payload)
+        if self.payload_validator is not None:
+            self.payload_validator(payload)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         return path
 
@@ -63,7 +57,8 @@ class JsonCheckpointStore:
 
     def load_payload(self, path: Path) -> dict:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
-        _validate_checkpoint_payload(data)
+        if self.payload_validator is not None:
+            self.payload_validator(data)
         self.memory_seeds = list(data.get("memory_seeds") or [])
         self.turn_counter = int(data.get("turn", 0))
         return data
@@ -89,12 +84,14 @@ class InMemoryCheckpointStore:
     snapshots: dict[Path, dict] = field(default_factory=dict)
     counter: int = 0
     memory_seeds: list[dict] = field(default_factory=list)
+    payload_validator: Callable[[dict], None] | None = None
 
     def save(self, snapshot: dict, *, label: str = "") -> Path:
         self.counter += 1
         safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in label)
         path = Path(f"{safe or 'checkpoint'}-{self.counter:08d}.checkpoint.json")
-        _validate_checkpoint_payload(snapshot)
+        if self.payload_validator is not None:
+            self.payload_validator(snapshot)
         self.snapshots[path] = deepcopy(snapshot)
         return path
 
@@ -103,9 +100,12 @@ class InMemoryCheckpointStore:
 
     def load_payload(self, path: Path) -> dict:
         try:
-            return deepcopy(self.snapshots[Path(path)])
+            data = deepcopy(self.snapshots[Path(path)])
         except KeyError as exc:
             raise FileNotFoundError(path) from exc
+        if self.payload_validator is not None:
+            self.payload_validator(data)
+        return data
 
     def list_checkpoints(self) -> list[Path]:
         return sorted(self.snapshots)

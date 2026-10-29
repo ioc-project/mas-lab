@@ -556,3 +556,68 @@ def test_check_agent_comm_custom_reply_prefix() -> None:
 def test_check_agent_comm_rejects_short_list() -> None:
     with pytest.raises(ValueError, match="three"):
         check_agent_comm([])
+
+
+def test_stack_honours_intents_of_the_bottom_link() -> None:
+    class Bottom:
+        agent_id = "bottom"
+        HONOURED_SEND_INTENTS = frozenset({"task"})
+
+        def send(self, *args: object, **kwargs: object) -> str:
+            del args, kwargs
+            return "ok"
+
+    class Top:
+        HONOURED_SEND_INTENTS = frozenset({"task", "inform", "ask"})
+
+        def bind(self, lower: object) -> None:
+            self._lower = lower
+
+        def send(self, *args: object, **kwargs: object) -> str:
+            return self._lower.send(*args, **kwargs)
+
+    stack = StackAgentComm(layers=[Bottom(), Top()])
+    assert stack.honoured_send_intents() == frozenset({"task"})
+
+
+def test_stack_stops_top_first() -> None:
+    order: list[str] = []
+
+    class Layer:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.agent_id = name
+
+        def send(self, *args: object, **kwargs: object) -> str:
+            del args, kwargs
+            return "ok"
+
+        def bind(self, lower: object) -> None:
+            self._lower = lower
+
+        def start(self) -> None:
+            order.append(f"start:{self.name}")
+
+        def stop(self) -> None:
+            order.append(f"stop:{self.name}")
+
+    stack = StackAgentComm(layers=[Layer("bottom"), Layer("top")])
+    stack.start()
+    stack.stop()
+    assert order == ["start:bottom", "start:top", "stop:top", "stop:bottom"]
+
+
+def test_check_agent_comm_fails_a_link_that_never_raises() -> None:
+    class Silent:
+        def __init__(self, agent_id: str) -> None:
+            self.agent_id = agent_id
+
+        def send(self, target: str, task: str, **_kwargs: object) -> str:
+            del target
+            return f"ack:{task}"
+
+        def capabilities(self) -> dict[str, bool]:
+            return {flag: True for flag in CAPABILITY_FLAGS}
+
+    with pytest.raises(AssertionError, match="missing peer"):
+        check_agent_comm([Silent("a"), Silent("b"), Silent("c")])

@@ -273,6 +273,14 @@ def test_paused_session_queues_after_and_refuses_preempt() -> None:
         admin.steer("s-worker", text="cut", mode="preempt")
 
 
+def test_steer_rejects_unknown_mode() -> None:
+    manager = SessionManager()
+    _session(manager, "s-worker", plugin=_LLM)
+    admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
+    with pytest.raises(ValueError, match="steer mode must be"):
+        admin.steer("s-worker", text="cut", mode="explode")
+
+
 def test_unknown_pattern_allows_after_only() -> None:
     manager = SessionManager()
     _session(manager, "s-worker", plugin=None)

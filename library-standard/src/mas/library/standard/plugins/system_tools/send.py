@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Protocol
 from weakref import WeakKeyDictionary
 
 from mas.library.standard.lib.comm.payload import intents_honoured_by
@@ -29,6 +30,60 @@ _Prepare = tuple[AgentCommContract, str, str, str]
 _SEND_OPTIONAL = frozenset(
     {"correlation_id", "caller_call_id", "context_id", "headers", "context"}
 )
+
+
+class SendToolContext(Protocol):
+    """What the send tool reads. Separate from ``EngineToolContext``.
+
+    Delegator and spawner plugins keep the spawn-and-turn facade and do not
+    receive the comm bus through that protocol.
+    """
+
+    @property
+    def agent_id(self) -> str: ...
+
+    @property
+    def manifest(self) -> dict[str, Any] | None: ...
+
+    @property
+    def agent_comm(self) -> Any: ...
+
+    @property
+    def agent_comm_routes(self) -> dict[str, Any] | None: ...
+
+    @property
+    def delegation_peer_descriptions(self) -> dict[str, str] | None: ...
+
+    @property
+    def send_peer_descriptions(self) -> dict[str, str] | None: ...
+
+
+@dataclass(frozen=True)
+class _SendCtx:
+    """Typed view of SendToolContext fields the send tool reads."""
+
+    agent_id: str = ""
+    manifest: dict[str, Any] | None = None
+    comm: AgentCommContract | None = None
+    routes: dict[str, AgentCommRoute] | None = None
+    peer_descriptions: dict[str, str] | None = None
+
+    @classmethod
+    def of(cls, ctx: SendToolContext | None) -> "_SendCtx":
+        if ctx is None:
+            return cls()
+        descriptions = ctx.delegation_peer_descriptions
+        if descriptions is None:
+            descriptions = ctx.send_peer_descriptions
+        raw = ctx.manifest
+        routes = ctx.agent_comm_routes
+        return cls(
+            agent_id=str(ctx.agent_id or ""),
+            manifest=raw if isinstance(raw, dict) else None,
+            comm=ctx.agent_comm,
+            routes=routes if isinstance(routes, dict) else None,
+            peer_descriptions=descriptions if isinstance(descriptions, dict) else None,
+        )
 
 
 def _accepted_kwargs(fn: Any) -> frozenset[str]:
@@ -102,34 +157,22 @@ class SendTool:
             peer_descriptions=peer_descriptions,
         )
 
-    def list_tools(self, *, ctx: Any = None, manifest: dict | None = None) -> list[dict[str, Any]]:
-        doc = manifest
-        agent_id = None
-        if ctx is not None:
-            agent_id = str(getattr(ctx, "agent_id", "") or "") or None
-            if doc is None:
-                raw = getattr(ctx, "manifest", None)
-                if isinstance(raw, dict):
-                    doc = raw
-        return self.collect_tool_specs(doc, agent_id=agent_id)
+    def list_tools(
+        self,
+        *,
+        ctx: SendToolContext | None = None,
+        manifest: dict | None = None,
+    ) -> list[dict[str, Any]]:
+        view = _SendCtx.of(ctx)
+        doc = manifest if manifest is not None else view.manifest
+        return self.collect_tool_specs(doc, agent_id=view.agent_id or None)
 
-    def on_collect_tools(self, *, ctx: Any = None) -> list[dict[str, Any]]:
-        descriptions = None
-        if ctx is not None:
-            descriptions = getattr(ctx, "delegation_peer_descriptions", None)
-            if descriptions is None:
-                descriptions = getattr(ctx, "send_peer_descriptions", None)
-        manifest = None
-        agent_id = None
-        if ctx is not None:
-            raw = getattr(ctx, "manifest", None)
-            if isinstance(raw, dict):
-                manifest = raw
-            agent_id = str(getattr(ctx, "agent_id", "") or "") or None
+    def on_collect_tools(self, *, ctx: SendToolContext | None = None) -> list[dict[str, Any]]:
+        view = _SendCtx.of(ctx)
         return self.collect_tool_specs(
-            manifest,
-            agent_id=agent_id,
-            peer_descriptions=descriptions if isinstance(descriptions, dict) else None,
+            view.manifest,
+            agent_id=view.agent_id or None,
+            peer_descriptions=view.peer_descriptions,
         )
 
     def is_delegate_tool(self, tool_name: str) -> bool:
@@ -145,17 +188,11 @@ class SendTool:
         self,
         target_agent_id: str,
         *,
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
     ) -> tuple[AgentCommContract, str]:
-        routes = self._routes
-        comm = self._comm
-        if ctx is not None:
-            ctx_routes = getattr(ctx, "agent_comm_routes", None)
-            if isinstance(ctx_routes, dict) and ctx_routes:
-                routes = ctx_routes
-            ctx_comm = getattr(ctx, "agent_comm", None)
-            if ctx_comm is not None:
-                comm = ctx_comm
+        view = _SendCtx.of(ctx)
+        routes = view.routes or self._routes
+        comm = view.comm if view.comm is not None else self._comm
         route = routes.get(target_agent_id)
         if route is not None:
             self._inspect(route.handler)
@@ -192,7 +229,7 @@ class SendTool:
         message: object,
         *,
         intent: str = "task",
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
     ) -> _Prepare | str:
         target = str(target_agent_id or "").strip()
         if not target:
@@ -251,7 +288,7 @@ class SendTool:
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
     ) -> str:
         prepared = self._prepare(target_agent_id, message, intent=intent, ctx=ctx)
         if isinstance(prepared, str):
@@ -306,7 +343,7 @@ class SendTool:
         caller_call_id: str = "",
         context_id: str = "",
         headers: dict[str, str] | None = None,
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
     ) -> str:
         prepared = self._prepare(target_agent_id, message, intent=intent, ctx=ctx)
         if isinstance(prepared, str):
@@ -392,7 +429,7 @@ class SendTool:
         *,
         correlation_id: int = 0,
         caller_call_id: str = "",
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
     ) -> str:
         if not self.is_send_tool(tool_name):
             return f"[send] not a send tool: {tool_name!r}"
@@ -419,7 +456,7 @@ class SendTool:
         *,
         correlation_id: int = 0,
         caller_call_id: str = "",
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
     ) -> str:
         if not self.is_send_tool(tool_name):
             return f"[send] not a send tool: {tool_name!r}"
@@ -453,7 +490,7 @@ class SendTool:
         tool_name: str,
         arguments: dict[str, Any] | None,
         *,
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
         correlation_id: int = 0,
         caller_call_id: str = "",
     ) -> str:
@@ -470,7 +507,7 @@ class SendTool:
         tool_name: str,
         arguments: dict[str, Any] | None,
         *,
-        ctx: Any = None,
+        ctx: SendToolContext | None = None,
         correlation_id: int = 0,
         caller_call_id: str = "",
     ) -> str:

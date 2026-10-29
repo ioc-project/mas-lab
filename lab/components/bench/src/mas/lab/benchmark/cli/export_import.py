@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 _YAML_SUFFIXES = {".yaml", ".yml"}
 _GENERIC_RUN_DIR_NAMES = {"results", "output", "outputs", "benchmark", "benchmarks"}
-_HF_TOKEN_ENV = "HF_TOKEN"
 _SOURCE_ALLOWED_TOP_LEVEL_DIRS = {
     "agents",
     "apps",
@@ -408,13 +407,11 @@ def _default_hf_path_from_manifest(manifest: dict[str, Any]) -> str:
     return f"benchmarks/{experiment}/{short_id}/bundle.tar.gz"
 
 
-def _require_hf_token() -> str:
-    import os
-
-    token = os.environ.get(_HF_TOKEN_ENV, "").strip()
-    if not token:
-        raise ValueError(f"{_HF_TOKEN_ENV} is not set.")
-    return token
+def _require_hf_token(token: str | None = None) -> str:
+    value = (token or "").strip()
+    if not value:
+        raise ValueError("Hugging Face token is required (--token, --token-file, or HF_TOKEN)")
+    return value
 
 
 def _normalize_hf_visibility(value: str | None) -> str:
@@ -474,7 +471,7 @@ def publish_hf_command(args) -> int:
 
     try:
         manifest = _load_manifest_from_tarball(tarball)
-        token = _require_hf_token()
+        token = _require_hf_token(getattr(args, "token", None))
         visibility = _normalize_hf_visibility(getattr(args, "visibility", None))
         revision = (getattr(args, "revision", "") or "main").strip() or "main"
         create_pr = bool(getattr(args, "create_pr", True))
@@ -545,7 +542,12 @@ def import_hf_command(args) -> int:
         return 1
 
     try:
-        token = _require_hf_token()
+        dry_run = bool(getattr(args, "dry_run", False))
+        raw_token = getattr(args, "token", None)
+        if dry_run:
+            token = (raw_token or "").strip() or None
+        else:
+            token = _require_hf_token(raw_token)
         revision = getattr(args, "revision", None)
         expected_sha256 = (getattr(args, "sha256", "") or "").strip()
         if revision is not None:

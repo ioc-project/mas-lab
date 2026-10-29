@@ -96,6 +96,27 @@ class MCPToolProvider(ToolProvider):
             timeout=binding.timeout,
         )
 
+    @classmethod
+    def from_tool_servers(cls, server_items: list[Any]) -> list["MCPToolProvider"]:
+        """Build one provider per usable MCP infra server."""
+        providers: list[MCPToolProvider] = []
+        seen: set[str] = set()
+        for server in server_items:
+            if not isinstance(server, dict):
+                continue
+            if str(server.get("protocol") or "").lower() != "mcp":
+                continue
+            if server.get("usage", "use") not in {"use", "use-and-deploy"}:
+                continue
+            ident = str(server.get("id") or server.get("name") or "").strip()
+            if not ident or ident in seen:
+                continue
+            seen.add(ident)
+            spec = dict(server)
+            spec.update(name=ident, kind="mcp")
+            providers.append(cls.from_provider_spec(spec))
+        return providers
+
     def has_tools(self) -> bool:
         return self._client is not None
 

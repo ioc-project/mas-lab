@@ -163,12 +163,14 @@ mas-lab benchmark publish-hf RUN.tar.gz --repo-id ORG/REPO [OPTIONS]
 ```
 
 Uploads an existing benchmark archive tarball to a Hugging Face **dataset**
-repository. Authentication uses the `HF_TOKEN` environment variable.
+repository. Pass `--token` or `--token-file`, or set `HF_TOKEN`.
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--repo-id TEXT` | required | Hugging Face dataset repo id (`user-or-org/repo`) |
 | `--path-in-repo TEXT` | derived from manifest | Override remote path inside the repo |
+| `--token TEXT` | unset | Hugging Face access token |
+| `--token-file PATH` | unset | Read the access token from a file |
 
 Default remote path format:
 
@@ -184,7 +186,8 @@ mas-lab benchmark import-hf PATH_IN_REPO --repo-id ORG/REPO [OPTIONS]
 
 Downloads a benchmark archive tarball from a Hugging Face **dataset** repo,
 then forwards it into the regular `benchmark import` restore flow.
-Authentication uses the `HF_TOKEN` environment variable.
+Pass `--token` or `--token-file`, or set `HF_TOKEN`. `--dry-run` still
+uses `HF_TOKEN` when it is set, and does not require a token when it is not.
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
@@ -192,3 +195,5 @@ Authentication uses the `HF_TOKEN` environment variable.
 | `--output-dir PATH` | auto | Directory to restore the benchmark output into |
 | `--trace-cache PATH` | env / default | Directory to restore trace-cache entries into |
 | `--dry-run` | off | Download archive metadata and preview the local import |
+| `--token TEXT` | unset | Hugging Face access token |
+| `--token-file PATH` | unset | Read the access token from a file |

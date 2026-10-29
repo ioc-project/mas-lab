@@ -13,9 +13,9 @@ from typing import Any, ClassVar
 
 from mas.library.standard.lib.comm.capabilities import capability_set
 from mas.library.standard.lib.comm.headers import bound_headers, merge_headers
+from mas.library.standard.lib.comm.local_link import LocalLinkBase
 from mas.library.standard.lib.comm.names import namespace_of, parse_name, require_instance_name
 from mas.library.standard.lib.comm.payload import (
-    INFORM_ASK_INTENTS,
     MAX_MESSAGE_SIZE,
     PUBLISH_INTENT,
     STEER_INTENT,
@@ -26,7 +26,6 @@ from mas.library.standard.lib.comm.payload import (
     normalize_send_intent,
     require_honoured_intent,
     send_result,
-    steer_peer_sessions,
 )
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
@@ -106,7 +105,7 @@ class LocalGroupFabric:
         return ordered[self._rng.randrange(len(ordered))]
 
 
-class LocalGroupAgentComm(AgentCommContract):
+class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
     """L7 local-group link: unicast, seedable anycast, moderator channels.
 
     Pass a shared ``LocalGroupFabric`` from Python. ``stop`` unregisters this
@@ -118,7 +117,6 @@ class LocalGroupAgentComm(AgentCommContract):
     CAPABILITIES: ClassVar[dict[str, bool]] = capability_set(
         unicast=True, anycast=True, group=True, ordered=True, isolation=True
     )
-    HONOURED_SEND_INTENTS = INFORM_ASK_INTENTS
 
     def __init__(
         self,
@@ -142,7 +140,7 @@ class LocalGroupAgentComm(AgentCommContract):
         self.namespace = namespace_of(parts)
         self.service = "/".join(parts[:3])
         self.instance = parts[3]
-        self.agent_id = self.name
+        super().__init__(agent_id=self.name, control=control, steer_peers=steer_peers)
         self._run_turn = None if on_request is not None else run_turn
         self._on_request = on_request
         if fabric is None:
@@ -163,18 +161,8 @@ class LocalGroupAgentComm(AgentCommContract):
         self._sticky: dict[str, str] = {}
         self._started = False
         self._stopped = False
-        self._control = control
         self.session_id = str(session_id or "").strip()
-        self._steer_sessions = steer_peer_sessions(steer_peers)
         self.fabric.register(self)
-
-    def capabilities(self) -> dict[str, bool]:
-        return dict(self.CAPABILITIES)
-
-    def honoured_send_intents(self) -> frozenset[str]:
-        if self._control is None:
-            return self.HONOURED_SEND_INTENTS
-        return self.HONOURED_SEND_INTENTS | {STEER_INTENT}
 
     def _resolved_steer_peers(self) -> set[str]:
         names: set[str] = set()

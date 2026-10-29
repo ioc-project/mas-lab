@@ -10,6 +10,35 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+_HF_TOKEN_ENV = "HF_TOKEN"
+
+
+def huggingface_token(
+    *,
+    token: str | None = None,
+    token_file: str | Path | None = None,
+) -> str:
+    """Resolve a Hugging Face token. ``--token`` wins, then ``--token-file``, then ``HF_TOKEN``.
+
+    Lab commands pass the flags here. This module is the only place that reads
+    the environment for that token.
+    """
+    explicit = (token or "").strip()
+    if explicit:
+        return explicit
+    if token_file:
+        path = Path(token_file).expanduser()
+        text = path.read_text(encoding="utf-8").strip()
+        if not text:
+            raise ValueError(f"token file {path} is empty")
+        return text
+    env = os.environ.get(_HF_TOKEN_ENV, "").strip()
+    if env:
+        return env
+    raise ValueError(
+        "Hugging Face token is required (--token, --token-file, or HF_TOKEN)"
+    )
+
 _warned_overrides: set[tuple[str, str]] = set()
 
 

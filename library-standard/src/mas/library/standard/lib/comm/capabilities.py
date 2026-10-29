@@ -60,6 +60,34 @@ def binding_params(binding: Any) -> dict[str, Any]:
     return {}
 
 
+def read_capabilities(
+    source: Any,
+    *,
+    params: Mapping[str, Any] | None = None,
+    registry: Any = None,
+) -> dict[str, bool] | None:
+    """Flags a plugin class or live link declares.
+
+    Class: ``declared_capabilities(params)`` if present, else ``CAPABILITIES``.
+    Instance: ``capabilities()`` if present, else the class ``CAPABILITIES``.
+    ``None`` means unknown.
+    """
+    cls = source if isinstance(source, type) else type(source)
+    if isinstance(source, type):
+        hook = getattr(cls, "declared_capabilities", None)
+        if callable(hook):
+            flags = hook(dict(params or {}), registry=registry)
+        else:
+            flags = getattr(cls, "CAPABILITIES", None)
+        return merge_capabilities(flags) if isinstance(flags, Mapping) else None
+    fn = getattr(source, "capabilities", None)
+    if callable(fn):
+        flags = fn()
+        return dict(flags) if isinstance(flags, Mapping) else None
+    flags = getattr(cls, "CAPABILITIES", None)
+    return dict(flags) if isinstance(flags, Mapping) else None
+
+
 def declared_capabilities(binding: Any, *, registry: Any = None) -> dict[str, bool] | None:
     """Flags the plugin behind an ``agent_comm`` binding declares, or ``None``."""
     if registry is None:
@@ -72,11 +100,4 @@ def declared_capabilities(binding: Any, *, registry: Any = None) -> dict[str, bo
         cls = info.load_class()
     except Exception:
         return None
-    hook = getattr(cls, "declared_capabilities", None)
-    if callable(hook):
-        flags = hook(binding_params(binding), registry=registry)
-    else:
-        flags = getattr(cls, "CAPABILITIES", None)
-    if not isinstance(flags, Mapping):
-        return None
-    return merge_capabilities(flags)
+    return read_capabilities(cls, params=binding_params(binding), registry=registry)

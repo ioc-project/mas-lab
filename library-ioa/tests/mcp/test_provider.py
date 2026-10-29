@@ -112,6 +112,34 @@ def test_from_provider_spec_stdio_and_sse() -> None:
     assert http_alias._client._client.transport == "streamable-http"
 
 
+def test_from_tool_servers_skips_deploy_and_non_mcp() -> None:
+    providers = MCPToolProvider.from_tool_servers(
+        [
+            {"id": "local", "protocol": "local"},
+            {
+                "id": "deploy-only",
+                "protocol": "mcp",
+                "usage": "deploy",
+                "url": "http://127.0.0.1:9001/mcp",
+            },
+            {
+                "id": "mcp-tools",
+                "protocol": "mcp",
+                "url": "http://127.0.0.1:9001/mcp",
+            },
+            {
+                "name": "mcp-tools",
+                "protocol": "mcp",
+                "url": "http://127.0.0.1:9/dup",
+            },
+        ]
+    )
+    assert len(providers) == 1
+    assert providers[0].provider_name == "mcp-tools"
+    assert providers[0].kind == "mcp"
+    assert providers[0].tools_claim == "*"
+
+
 def test_factory_requires_url_or_command() -> None:
     with pytest.raises(ValueError, match="url"):
         MCPClientFactory(MCPProviderSpec.from_dict({"name": "x", "transport": "sse"})).create_client()

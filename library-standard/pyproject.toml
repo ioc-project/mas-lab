@@ -30,6 +30,7 @@ include = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mas"]
+exclude = ["src/mas/library/standard/testing"]
 
 [tool.hatch.build.targets.sdist.force-include]
 "library.yaml" = "src/mas/library/standard/library.yaml"

@@ -97,9 +97,9 @@ class DesignPatternPlugin(ABC):
         event: object,
         *,
         config: KernelConfigProtocol,
-    ) -> None:
+    ) -> DpState:
         """Optional. Deterministic patterns reset their script to the steer text."""
-        return None
+        return DpState.CTX_BUILD
 
     def evaluate_next(
         self,

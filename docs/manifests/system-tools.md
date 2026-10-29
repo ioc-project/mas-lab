@@ -76,6 +76,12 @@ spec:
         max_message_length: 8000
 ```
 
+`send` is registered in the standard library with `default_enabled: false`.
+Declaring `{kind: system, name: send}` does not put a tool named `send` in
+the model's list; `list_tools` still returns only `delegate_to_<id>`. A
+user tool with that name stays that tool.
+See [Communication stack](../references/comm-stack.md).
+
 Declaration is the only way to enable the user-communication tools, `request_human_input` and `inform_user`.
 They are never implicit.
 If a model asks the user when nothing in the protocol can answer, it can substitute a made-up or rubber-stamped answer for a real one.

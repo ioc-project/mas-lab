@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mas-library-ioa"
 version = "0.2.0"
-description = "MCP client/server bridge for MAS Lab"
+description = "MCP client/server bridge and A2A agent_comm / agent_expose plugins."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

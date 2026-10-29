@@ -86,6 +86,90 @@ def test_local_dependency_without_claim_preserves_spec_tools_beside_mcp():
     assert providers[1].tools_claim == "*"
 
 
+def test_declared_mcp_server_raises_when_mcp_provider_is_not_registered(monkeypatch):
+    from mas.runtime.registry import get_registry
+
+    real = get_registry()
+
+    class _WithoutMcp:
+        def resolve_by_type(self, plugin_type: str, kind: str):
+            if plugin_type == "tool_provider" and kind == "mcp":
+                return None
+            return real.resolve_by_type(plugin_type, kind)
+
+        def get_by_category(self, category: str):
+            kept = []
+            for entry in real.get_by_category(category):
+                variant = entry.default
+                if variant is None:
+                    kept.append(entry)
+                    continue
+                cls = variant.load_class()
+                if str(getattr(cls, "kind", "") or "") == "mcp":
+                    continue
+                kept.append(entry)
+            return kept
+
+        def default_for(self, plugin_type: str):
+            return real.default_for(plugin_type)
+
+    monkeypatch.setattr("mas.runtime.registry.get_registry", lambda: _WithoutMcp())
+    with pytest.raises(ValueError, match="protocol 'mcp' has no registered provider"):
+        providers_from_manifest(
+            {"spec": {}},
+            tool_servers=[
+                {
+                    "id": "mcp-tools",
+                    "protocol": "mcp",
+                    "url": "http://127.0.0.1:9001/mcp",
+                }
+            ],
+        )
+
+
+def test_declared_server_raises_when_protocol_has_no_provider():
+    with pytest.raises(ValueError, match="protocol 'no-such-protocol' has no registered provider"):
+        providers_from_manifest(
+            {"spec": {}},
+            tool_servers=[
+                {
+                    "id": "custom-tools",
+                    "protocol": "no-such-protocol",
+                    "url": "http://127.0.0.1:9/tools",
+                }
+            ],
+        )
+
+
+def test_deploy_only_server_with_unknown_protocol_is_ignored():
+    providers = providers_from_manifest(
+        {"spec": {}},
+        tool_servers=[
+            {
+                "id": "a2a-host",
+                "protocol": "a2a",
+                "usage": "deploy",
+            }
+        ],
+    )
+    assert len(providers) == 1
+    assert provider_origin(providers[0]) == "local"
+
+
+def test_last_explicit_local_server_wins():
+    providers = providers_from_manifest(
+        {"spec": {}},
+        tool_servers=[
+            {"id": "local-first", "protocol": "local", "tools": ["calc"]},
+            {"id": "local-last", "protocol": "local", "tools": ["search"]},
+        ],
+    )
+    assert len(providers) == 1
+    assert providers[0].kind == "local"
+    assert providers[0].provider_name == "local-last"
+    assert providers[0].tools_claim == ("search",)
+
+
 def test_deployment_only_mcp_server_is_not_a_client_provider():
     providers = providers_from_manifest(
         {"spec": {}},
@@ -494,7 +578,15 @@ def test_explicit_claim_advertises_server_schema_to_the_model():
 
         def discover_tools(self, *, ctx=None):
             self.discovered += 1
-            return [{"name": "web-search", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}]
+            return [
+                {
+                    "name": "web-search",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                    },
+                }
+            ]
 
         def call_tool(self, tool_name, arguments, **kwargs):
             return {"ok": True}

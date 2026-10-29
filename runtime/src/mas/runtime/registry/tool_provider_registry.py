@@ -373,16 +373,19 @@ def tool_provider_class(kind: str) -> type:
     return info.load_class()
 
 
+_CLIENT_SERVER_USAGE = frozenset({"use", "use-and-deploy"})
+
+
 def providers_from_manifest(
     manifest_content: dict[str, Any] | None,
     *,
     tool_servers: dict[str, Any] | list[Any] | None = None,
 ) -> list[Any]:
-    """Instantiate local/MCP providers from infra dependencies.
+    """Instantiate tool providers from infra dependencies.
 
-    The implicit local server is the default. Any MCP ``usage: use`` server
-    replaces it. An explicit local server with a ``tools`` claim re-adds local
-    alongside MCP. Deployment-only servers are not MCP clients.
+    The implicit local server is the default. A usable non-local server
+    replaces it. An explicit local server with a ``tools`` claim re-adds
+    local alongside. Deployment-only servers are not clients.
 
     Existing provider declarations are retained only for internal callers that
     bypass manifest validation. ``tool_servers`` may be the resolved infra
@@ -408,44 +411,41 @@ def providers_from_manifest(
     else:
         server_items = list(tool_servers or [])
 
-    usable_servers = [
-        server
-        for server in server_items
-        if isinstance(server, dict)
-        and str(server.get("protocol") or "").lower() == "mcp"
-        and server.get("usage", "use") in {"use", "use-and-deploy"}
-    ]
-    local_servers = [
-        server
-        for server in server_items
-        if isinstance(server, dict)
-        and str(server.get("protocol") or "").lower() == "local"
-    ]
-    providers = []
-    if usable_servers:
-        seen: set[str] = set()
-        for server in usable_servers:
-            ident = str(server.get("id") or server.get("name") or "").strip()
-            if not ident or ident in seen:
-                continue
-            seen.add(ident)
-            spec = dict(server)
-            spec.update(name=ident, kind="mcp")
-            spec.setdefault("tools", "*")
-            providers.append(tool_provider_class("mcp").from_provider_spec(spec))
-    if not usable_servers or local_servers:
-        local_class = tool_provider_class("local")
-        local_server = local_servers[-1] if local_servers else {}
-        if local_server:
-            factory = getattr(local_class, "from_provider_spec", None)
-            local_spec = {**local_server, "name": str(local_server.get("id") or "local"), "kind": "local"}
-            local_provider = factory(local_spec) if callable(factory) else local_class()
-        else:
-            local_provider = local_class(name="local", implicit=True)
-        providers.append(local_provider)
-    if not providers:
-        from mas.runtime.registry import get_registry
+    from mas.runtime.registry import get_registry
 
-        default_kind = get_registry().default_for("tool_provider") or "local"
-        return [tool_provider_class(default_kind)()]
-    return providers
+    collected: list[Any] = []
+    kinds: set[str] = set()
+    for entry in get_registry().get_by_category("tool_provider"):
+        variant = entry.default
+        if variant is None or variant.missing_requires():
+            continue
+        cls = variant.load_class()
+        kind = str(getattr(cls, "kind", "") or "")
+        if kind:
+            kinds.add(kind)
+        factory = getattr(cls, "from_tool_servers", None)
+        if callable(factory):
+            collected.extend(list(factory(server_items) or []))
+    for server in server_items:
+        if not isinstance(server, dict):
+            continue
+        if server.get("usage", "use") not in _CLIENT_SERVER_USAGE:
+            continue
+        protocol = str(server.get("protocol") or "").lower()
+        if protocol and protocol not in kinds:
+            ident = str(server.get("id") or server.get("name") or "").strip()
+            where = f"tool server {ident!r}" if ident else "tool server"
+            raise ValueError(
+                f"{where} protocol {protocol!r} has no registered provider"
+            )
+    external = [item for item in collected if str(getattr(item, "kind", "") or "") != "local"]
+    local_ones = [item for item in collected if str(getattr(item, "kind", "") or "") == "local"]
+    if external:
+        return external + local_ones
+    if local_ones:
+        return local_ones
+    default_kind = get_registry().default_for("tool_provider") or "local"
+    cls = tool_provider_class(default_kind)
+    if default_kind == "local":
+        return [cls(name="local", implicit=True)]
+    return [cls()]

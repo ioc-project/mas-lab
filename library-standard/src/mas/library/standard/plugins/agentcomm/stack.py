@@ -4,10 +4,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Mapping
+from collections.abc import Awaitable
 from typing import Any, cast
 
-from mas.library.standard.lib.comm.capabilities import declared_capabilities, merge_capabilities
+from mas.library.standard.lib.comm.capabilities import declared_capabilities, merge_capabilities, read_capabilities
 from mas.library.standard.lib.comm.compose import bind_bottom_up, instantiate_layers
 from mas.library.standard.lib.comm.payload import intents_honoured_by
 from mas.library.standard.lib.comm.send_context import merge_send_context
@@ -15,13 +15,7 @@ from mas.runtime.boundary.agentcomm.protocol import SendContext
 
 
 def _layer_caps(layer: Any) -> dict[str, bool] | None:
-    fn = getattr(layer, "capabilities", None)
-    if callable(fn):
-        return dict(fn())
-    flags = getattr(type(layer), "CAPABILITIES", None)
-    if isinstance(flags, Mapping):
-        return dict(flags)
-    return None
+    return read_capabilities(layer)
 
 
 class StackAgentComm:

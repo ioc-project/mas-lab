@@ -112,11 +112,12 @@ class _DeterministicBase(DesignPatternPlugin):
     def on_user_input(self, ctx: QProduct, event: object) -> DpState:
         return DpState.CTX_BUILD
 
-    def on_steer(self, ctx: QProduct, event: object, *, config: KernelConfig) -> None:
+    def on_steer(self, ctx: QProduct, event: object, *, config: KernelConfig) -> DpState:
         self._reset_state(
             participants=self._participants_from_spec(config),
             task=str(getattr(event, "context_text", "") or ""),
         )
+        return DpState.CTX_BUILD
 
     def on_context_complete(self, ctx: QProduct):
         return DpState.EVALUATING, None

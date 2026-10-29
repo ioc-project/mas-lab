@@ -29,6 +29,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- ctl rejects a bad checkpoint on save and load. Disk or hybrid
+  storage with no directory is a ValueError.
 - A leaf scheduler reads the in-flight model from the call wrapper, so
   two models on one connection get separate pacing buckets.
 
@@ -162,6 +164,16 @@ reconciling the release notes with the code and docs currently on that branch.
   [Output-token limits](docs/manifests/agent.md#output-token-limits).
 
 ### Changed
+
+- A usable tool server whose protocol has no provider is an error. It
+  used to bind the implicit local provider. A deploy-only server is
+  not a client. The last explicit local tool server wins.
+- A `delegate_to_` name with a blank target is not a handoff. The helper
+  strips whitespace and returns nothing.
+- `mas-lab benchmark publish-hf` and `import-hf` take `--token` or
+  `--token-file`. If neither is set, ctl reads `HF_TOKEN`. `import-hf
+  --dry-run` still uses `HF_TOKEN` when it is set, and does not require
+  a token when it is not.
 
 - Public GitHub and docs URLs moved from `outshift-open/mas-lab` to
   `ioc-project/mas-lab` (`https://github.com/ioc-project/mas-lab`,

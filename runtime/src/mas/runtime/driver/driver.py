@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from mas.runtime.boundary.coordination.chokepoint import ChokepointCoordinator
+from mas.runtime.boundary.delegation.policy import parse_delegate_tool_name
 from mas.runtime.boundary.hitl.responders import HitlResponder
 from mas.runtime.boundary.ingress_validate import validate_ingress
 from mas.runtime.boundary.obs.exchange_plugin import ExchangePlugin
@@ -1297,7 +1298,7 @@ class KernelDriver:
         if sym.op != "TOOL_CALL":
             return
         tool_name, _tool_args = self._tool_spec_for_correlation(q, sym.correlation_id)
-        if not tool_name.startswith("delegate_to_"):
+        if parse_delegate_tool_name(tool_name) is None:
             return
         from mas.runtime.boundary.gov.telemetry import get_bound_observability
         from mas.runtime.schema.observability import ObsPhase

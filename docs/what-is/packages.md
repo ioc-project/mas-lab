@@ -23,7 +23,7 @@ Each layer depends only on the layers above it in this table. There are no cycle
 | | `mas-library-telemetry` | Converts and replays traces, exports to OpenTelemetry |
 | | `mas-library-kg` | Turns traces into a knowledge graph |
 | | `mas-library-skills` | The skill catalogue and the tools that read skills |
-| | `mas-library-ioa` | MCP client/server bridge |
+| | `mas-library-ioa` | MCP client/server bridge and A2A plugins |
 
 A *lab* is an experiment folder. A *library* is a folder with a `library.yaml`
 holding reusable applications, tools and plugins, referenced as `name:path`. The

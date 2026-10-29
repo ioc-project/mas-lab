@@ -45,3 +45,13 @@ def test_a2a_refuses_inform_and_ask() -> None:
         with pytest.raises(AgentCommError, match="not supported"):
             plugin.send("worker", "fyi", context=SendContext(intent=intent))
     client.send_message.assert_not_called()
+
+
+def test_a2a_asend_refuses_non_task_intent() -> None:
+    client = Mock()
+    plugin = A2AAgentComm.__new__(A2AAgentComm)
+    plugin._client = client
+    for intent in ("inform", "ask", "steer"):
+        with pytest.raises(AgentCommError, match="not supported"):
+            asyncio.run(plugin.asend("worker", "fyi", context=SendContext(intent=intent)))
+    client.send_message.assert_not_called()

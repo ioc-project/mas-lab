@@ -10,10 +10,10 @@ from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.dp_step import step_design_pattern
 from mas.runtime.kernel.hitl_step import apply_hitl_resolve
 from mas.runtime.kernel.state import DpState, LifecycleState, QProduct, RunLedger
-from mas.runtime.machines.context import ctx_on_user_input
+from mas.runtime.kernel.steer_step import step_steer
 from mas.runtime.machines.design_pattern.protocol import DesignPatternPlugin
 from mas.runtime.registry import get_registry
-from mas.runtime.schema.egress import EgressSymbol, RequestCtxAssembly
+from mas.runtime.schema.egress import EgressSymbol
 from mas.runtime.schema.hitl import HitlResolveChoice
 from mas.runtime.schema.ingress import (
     HitlApprove,
@@ -66,20 +66,13 @@ class RuntimeKernel:
         if self.q.ctrl.value == "STOPPED":
             return StepResult(egress=egress)
 
-        if isinstance(event, OperatorSteerReceived) and self.q.ctrl == LifecycleState.RUNNING:
-            self.q.dp = DpState.CTX_BUILD
-            self.q.ctx = ctx_on_user_input(self.q.ctx)
+        if isinstance(event, OperatorSteerReceived):
             plugin = self.plugin
             if plugin is None:
                 raise RuntimeError("kernel has no design pattern plugin")
-            plugin.on_steer(self.q, event, config=self.config)
-            egress.append(
-                RequestCtxAssembly(
-                    collect_id=event.steer_id,
-                    operator_context=event.context_text,
-                )
-            )
-            return StepResult(egress=egress)
+            egress.extend(step_steer(self.q, event, plugin=plugin, config=self.config))
+            if self.q.ctrl == LifecycleState.RUNNING:
+                return StepResult(egress=egress)
 
         if isinstance(event, (HitlResolve, HitlApprove)):
             if isinstance(event, HitlApprove):

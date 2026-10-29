@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
-
 from mas.ctl.adapters.checkpoint import InMemoryCheckpointStore, JsonCheckpointStore, _validate_checkpoint_payload
 from mas.ctl.cli.commands.checkpoint import checkpoint_group
 
@@ -155,7 +154,21 @@ def test_checkpoint_retention_uses_creation_order_not_filename_order(tmp_path) -
 
 def test_in_memory_checkpoint_store_round_trips_payload() -> None:
     store = InMemoryCheckpointStore()
-    payload = {"version": 2, "label": "mem", "turn": 0, "lineage": {"session_id": "s", "parent_session_id": None, "forked_from_checkpoint": None, "root_session_id": "s", "created_at": "2026-09-30T12:00:00+00:00"}, "kernel": {"q": {}, "run": {}}, "working_memory": [], "manifest": {"content": {}, "content_hash": "a" * 64}}
+    payload = {
+        "version": 2,
+        "label": "mem",
+        "turn": 0,
+        "lineage": {
+            "session_id": "s",
+            "parent_session_id": None,
+            "forked_from_checkpoint": None,
+            "root_session_id": "s",
+            "created_at": "2026-09-30T12:00:00+00:00",
+        },
+        "kernel": {"q": {}, "run": {}},
+        "working_memory": [],
+        "manifest": {"content": {}, "content_hash": "a" * 64},
+    }
 
     path = store.save(payload, label="s-mem")
 
@@ -164,6 +177,9 @@ def test_in_memory_checkpoint_store_round_trips_payload() -> None:
 
 def test_hybrid_checkpoint_store_writes_memory_and_disk(tmp_path: Path) -> None:
     from mas.ctl.adapters.checkpoint import HybridCheckpointStore, build_checkpoint_store
+    from mas.library.standard.plugins.checkpoint import (
+        HybridCheckpointStore as LibraryHybridCheckpointStore,
+    )
     from mas.runtime.spec.checkpoint import parse_checkpoint_policy
 
     payload = {
@@ -189,4 +205,4 @@ def test_hybrid_checkpoint_store_writes_memory_and_disk(tmp_path: Path) -> None:
     assert store.list_checkpoints() == [path]
     policy = parse_checkpoint_policy({"mode": "every_turn", "storage": "hybrid"})
     built = build_checkpoint_store(policy, tmp_path)
-    assert isinstance(built, HybridCheckpointStore)
+    assert isinstance(built, LibraryHybridCheckpointStore)

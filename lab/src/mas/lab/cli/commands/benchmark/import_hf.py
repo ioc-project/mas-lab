@@ -46,6 +46,17 @@ import click
     default=False,
     help="Download metadata path and preview the local import without writing outputs.",
 )
+@click.option(
+    "--token",
+    default=None,
+    help="Hugging Face access token. Overrides --token-file and HF_TOKEN.",
+)
+@click.option(
+    "--token-file",
+    type=Path,
+    default=None,
+    help="Read the Hugging Face access token from a file.",
+)
 def import_hf_cmd(
     path_in_repo: str,
     repo_id: str,
@@ -54,13 +65,24 @@ def import_hf_cmd(
     output_dir: Path | None,
     trace_cache_dir: Path | None,
     dry_run: bool,
+    token: str | None,
+    token_file: Path | None,
 ) -> None:
     """Download a benchmark archive from a Hugging Face dataset repo and import it.
 
-    Authentication uses the ``HF_TOKEN`` environment variable.
+    ctl resolves the token from ``--token``, ``--token-file``, or ``HF_TOKEN``.
+    ``--dry-run`` still uses ``HF_TOKEN`` when it is set; it does not require
+    a token when none is available.
     """
+    from mas.ctl.env import huggingface_token
     from mas.lab.benchmark.cli.export_import import import_hf_command
 
+    try:
+        resolved: str | None = huggingface_token(token=token, token_file=token_file)
+    except ValueError:
+        if not dry_run:
+            raise
+        resolved = None
     args = SimpleNamespace(
         repo_id=repo_id,
         path_in_repo=path_in_repo,
@@ -69,5 +91,6 @@ def import_hf_cmd(
         output_dir=output_dir,
         trace_cache_dir=trace_cache_dir,
         dry_run=dry_run,
+        token=resolved,
     )
     raise SystemExit(import_hf_command(args))

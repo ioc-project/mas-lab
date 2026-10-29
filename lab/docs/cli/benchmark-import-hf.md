@@ -17,7 +17,9 @@ mas-lab benchmark import-hf [OPTIONS] PATH_IN_REPO
 ## DESCRIPTION
 
 Download a benchmark archive from a Hugging Face dataset repo and restore it locally.
-Authentication uses the `HF_TOKEN` environment variable.
+Pass `--token` or `--token-file`, or set `HF_TOKEN` (ctl reads the
+environment). `--dry-run` still uses `HF_TOKEN` when it is set, and
+does not require a token when it is not.
 
 ## OPTIONS
 
@@ -30,6 +32,8 @@ Authentication uses the `HF_TOKEN` environment variable.
 | `--output-dir` | Directory to restore the benchmark output into. |
 | `--trace-cache` | Directory to restore trace-cache entries into. |
 | `--dry-run` | Show the download/import plan without writing outputs. |
+| `--token` | Hugging Face access token. Overrides `--token-file` and `HF_TOKEN`. |
+| `--token-file` | Read the access token from a file. |
 
 ## SEE ALSO
 

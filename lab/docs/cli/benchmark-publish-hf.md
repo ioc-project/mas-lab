@@ -17,7 +17,8 @@ mas-lab benchmark publish-hf [OPTIONS] TARBALL
 ## DESCRIPTION
 
 Upload a benchmark archive tarball to a Hugging Face dataset repo.
-Authentication uses the `HF_TOKEN` environment variable.
+Pass `--token` or `--token-file`, or set `HF_TOKEN` (ctl reads the
+environment).
 
 ## OPTIONS
 
@@ -29,6 +30,8 @@ Authentication uses the `HF_TOKEN` environment variable.
 | `--visibility` | Repo visibility: `private` or `public` (default: `private`). |
 | `--revision` | Branch or commit SHA to target (default: `main`). |
 | `--create-pr / --no-create-pr` | Create a reviewable PR-style revision instead of writing directly to the default branch (default: enabled). |
+| `--token` | Hugging Face access token. Overrides `--token-file` and `HF_TOKEN`. |
+| `--token-file` | Read the access token from a file. |
 
 ## SEE ALSO
 

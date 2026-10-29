@@ -142,8 +142,9 @@ map first so `headers` and `context.headers` stay in sync.
 ## Shared checks
 
 `mas.library.standard.testing.agent_comm_checks.check_agent_comm` takes
-real endpoints. Pass `on_request` to install a handler. The expected reply
-is `ack:` plus the ping string, unless you pass another prefix.
+real endpoints. That helper is test support and is not in the installed
+wheel. Pass `on_request` to install a handler. The expected reply is
+`ack:` plus the ping string, unless you pass another prefix.
 
 ## Local group
 
@@ -183,10 +184,16 @@ this opt-in link.
 
 ## Send tool
 
-`delegate_to_<id>` and a Python `send` call share one code path. The model
-still sees only `delegate_to_<id>` tools, with the same `task` and
-`context_id` arguments. There is no `send` tool in the model's list. A
-user tool named `send` stays that tool.
+`delegate_to_<id>` and a Python `send` call share one code path. The
+standard library registers a system tool named `send` with
+`default_enabled: false`. Declaring it does not add a tool named `send`
+to the model's list; `list_tools` still returns only `delegate_to_<id>`,
+with the same `task` and `context_id` arguments. A user tool named `send`
+stays that tool.
+Cards: [local-group](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/local-group.md),
+[stack](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/stack.md),
+[trace_context](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/trace-context.md),
+[send](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/system_tools/send.md).
 
 The target of `delegate_to_b` comes from the tool name; an extra `target`
 or `intent` argument is rejected. With no peer list, send reaches nobody.

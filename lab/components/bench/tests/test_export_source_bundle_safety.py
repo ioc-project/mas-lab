@@ -7,11 +7,13 @@ import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from mas.lab.benchmark.cli import export_import
 from mas.lab.benchmark.cli.export_import import (
     _collect_source_bundle,
     _iter_allowed_source_files,
     _manifest_source_entries,
+    _require_hf_token,
     import_hf_command,
     publish_hf_command,
 )
@@ -149,7 +151,7 @@ def test_publish_hf_defaults_private_review_branch(monkeypatch, tmp_path: Path) 
         "_load_manifest_from_tarball",
         lambda _: {"short_id": "run-1", "experiment_name": "demo"},
     )
-    monkeypatch.setattr(export_import, "_require_hf_token", lambda: "hf-token")
+    monkeypatch.setattr(export_import, "_require_hf_token", lambda token=None: "hf-token")
     monkeypatch.setattr("huggingface_hub.HfApi", FakeHfApi)
 
     rc = publish_hf_command(
@@ -185,7 +187,7 @@ def test_import_hf_pins_revision_and_verifies_sha256(
         captured["revision"] = revision
         return str(tarball)
 
-    monkeypatch.setattr(export_import, "_require_hf_token", lambda: "hf-token")
+    monkeypatch.setattr(export_import, "_require_hf_token", lambda token=None: "hf-token")
     monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_hf_hub_download)
 
     def fake_import_command(args):
@@ -223,3 +225,40 @@ def test_import_hf_pins_revision_and_verifies_sha256(
     )
 
     assert rc_bad == 1
+
+
+def test_hf_token_comes_from_the_caller_not_the_environment(monkeypatch) -> None:
+    monkeypatch.setenv("HF_TOKEN", "from-env")
+    with pytest.raises(ValueError, match="HF_TOKEN"):
+        _require_hf_token(None)
+    with pytest.raises(ValueError, match="HF_TOKEN"):
+        _require_hf_token("  ")
+    assert _require_hf_token("cli-token") == "cli-token"
+
+
+def test_import_hf_dry_run_does_not_require_a_token(monkeypatch, tmp_path: Path) -> None:
+    tarball = tmp_path / "archive.tar.gz"
+    tarball.write_bytes(b"bundle")
+    captured = {}
+
+    def fake_hf_hub_download(**kwargs):
+        captured.update(kwargs)
+        return str(tarball)
+
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", fake_hf_hub_download)
+    monkeypatch.setattr(export_import, "import_command", lambda args: 0)
+
+    rc = import_hf_command(
+        SimpleNamespace(
+            repo_id="org/dataset",
+            path_in_repo="benchmarks/demo.tar.gz",
+            revision=None,
+            sha256=None,
+            output_dir=None,
+            trace_cache_dir=None,
+            dry_run=True,
+            token=None,
+        )
+    )
+    assert rc == 0
+    assert captured["token"] is None

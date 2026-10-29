@@ -5,13 +5,27 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import get_type_hints
 
 import pytest
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
-from mas.library.standard.plugins.system_tools.send import SendTool
+from mas.library.standard.plugins.system_tools.send import SendTool, SendToolContext
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
 from mas.runtime.boundary.delegation.policy import openai_delegation_tools
+
+
+def _ctx(**fields: object) -> SimpleNamespace:
+    values = {
+        "agent_id": "",
+        "manifest": None,
+        "agent_comm": None,
+        "agent_comm_routes": None,
+        "delegation_peer_descriptions": None,
+        "send_peer_descriptions": None,
+    }
+    values.update(fields)
+    return SimpleNamespace(**values)
 
 
 class _RunTurn:
@@ -107,6 +121,7 @@ def test_list_tools_follow_spec_not_bus_routes() -> None:
     tool = SendTool(comm=LocalAgentComm(run), routes=routes)
     names = [spec["name"] for spec in tool.list_tools(manifest=_legacy_manifest())]
     assert names == ["delegate_to_worker"]
+    assert "send" not in names
 
 
 def test_two_level_hierarchy_list_tools_follow_spec_not_bus() -> None:
@@ -120,7 +135,7 @@ def test_two_level_hierarchy_list_tools_follow_spec_not_bus() -> None:
         return [
             spec["name"]
             for spec in tool.list_tools(
-                ctx=SimpleNamespace(agent_id=agent_id),
+                ctx=_ctx(agent_id=agent_id),
                 manifest=manifest,
             )
         ]
@@ -215,7 +230,7 @@ def test_send_errors_and_claims() -> None:
     assert not tool.claims("spawn_subagent")
     assert tool.call_send_tool("web_search", {}) == "[send] not a send tool: 'web_search'"
     assert tool.on_execute_tool("delegate_to_worker", {"task": "go"}) == "ok:worker:go"
-    ctx = SimpleNamespace(agent_comm=LocalAgentComm(run), agent_comm_routes={})
+    ctx = _ctx(agent_comm=LocalAgentComm(run), agent_comm_routes={})
     unbound = SendTool(allowed_peers=["worker"])
     assert unbound.call("delegate_to_worker", {"task": "x"}, ctx=ctx).startswith("ok:")
 
@@ -288,13 +303,13 @@ async def test_asend_uses_same_prepare_including_routes() -> None:
     assert "failed: boom" in await SendTool(
         comm=Crash(), allowed_peers=["w"]  # type: ignore[arg-type]
     ).asend("w", "t")
-    ctx = SimpleNamespace(agent_comm=LocalAgentComm(local))
+    ctx = _ctx(agent_comm=LocalAgentComm(local))
     unbound = SendTool(allowed_peers=["worker"])
     assert (await unbound.acall("delegate_to_worker", {"task": "z"}, ctx=ctx)).startswith("async:")
     tool.reset_session()
     tool.set_routes({})
     collected = tool.on_collect_tools(
-        ctx=SimpleNamespace(agent_id="moderator", manifest=_legacy_manifest())
+        ctx=_ctx(agent_id="moderator", manifest=_legacy_manifest())
     )
     assert [spec["name"] for spec in collected] == ["delegate_to_worker"]
 
@@ -303,8 +318,8 @@ def test_bind_uses_this_call_not_the_first_session() -> None:
     first = _RunTurn()
     second = _RunTurn()
     tool = SendTool(allowed_peers=["worker"])
-    ctx1 = SimpleNamespace(agent_comm=LocalAgentComm(first), agent_comm_routes={})
-    ctx2 = SimpleNamespace(agent_comm=LocalAgentComm(second), agent_comm_routes={})
+    ctx1 = _ctx(agent_comm=LocalAgentComm(first), agent_comm_routes={})
+    ctx2 = _ctx(agent_comm=LocalAgentComm(second), agent_comm_routes={})
     assert tool.call("delegate_to_worker", {"task": "one"}, ctx=ctx1) == "ok:worker:one"
     assert tool.call("delegate_to_worker", {"task": "two"}, ctx=ctx2) == "ok:worker:two"
     assert first.calls == [("worker", "one", 0, "", "")]
@@ -384,10 +399,35 @@ def test_session_comm_and_routes_replace_configured() -> None:
         routes={"worker": AgentCommRoute("worker", "local", LocalAgentComm(configured))},
         allowed_peers=["worker"],
     )
-    ctx = SimpleNamespace(
+    ctx = _ctx(
         agent_comm=LocalAgentComm(session),
         agent_comm_routes={"worker": AgentCommRoute("worker", "local", LocalAgentComm(session))},
     )
     assert tool.send("worker", "x", ctx=ctx) == "ok:worker:x"
     assert configured.calls == []
     assert session.calls == [("worker", "x", 0, "", "")]
+
+
+def test_engine_tool_context_does_not_declare_the_comm_bus() -> None:
+    from mas.runtime.boundary.engine_tools import EngineToolContext
+
+    assert "agent_comm" not in EngineToolContext.__dict__
+    assert "run_turn" in EngineToolContext.__dict__
+
+
+def test_send_tool_reads_send_tool_context() -> None:
+    assert get_type_hints(SendTool.send)["ctx"] == SendToolContext | None
+    assert get_type_hints(SendTool._prepare)["ctx"] == SendToolContext | None
+
+
+def test_send_peer_descriptions_fill_in_when_delegation_map_is_absent() -> None:
+    tool = SendTool(allowed_peers=["worker"])
+    specs = tool.on_collect_tools(
+        ctx=_ctx(
+            agent_id="moderator",
+            manifest=_legacy_manifest(),
+            send_peer_descriptions={"worker": "Overlay peer description."},
+        )
+    )
+    assert specs[0]["name"] == "delegate_to_worker"
+    assert specs[0]["description"] == "Overlay peer description."

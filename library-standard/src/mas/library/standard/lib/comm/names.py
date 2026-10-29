@@ -15,7 +15,7 @@ def parse_name(name: str) -> tuple[str, ...]:
     """Split ``org/ns/...`` into parts, or raise ``AgentCommError``."""
     if not isinstance(name, str) or not name:
         raise AgentCommError(f"empty name {name!r}")
-    if "//" in name or name.startswith("/") or name.endswith("/"):
+    if name.startswith("/") or name.endswith("/"):
         raise AgentCommError(f"empty name part in {name!r}")
     parts = tuple(name.split("/"))
     for part in parts:

@@ -118,11 +118,54 @@ def test_in_memory_resume_does_not_keep_a_disk_store(tmp_path: Path, monkeypatch
 
 
 def test_hybrid_storage_builds_a_hybrid_store(tmp_path: Path, monkeypatch):
-    from mas.ctl.adapters.checkpoint import HybridCheckpointStore
+    from mas.library.standard.plugins.checkpoint import HybridCheckpointStore
 
     manifest = {
         "metadata": {"name": "agent"},
         "spec": {"checkpoint": {"mode": "every_turn", "storage": "hybrid"}},
     }
     _, store = _instantiate(manifest, tmp_path, monkeypatch, checkpoint_dir=tmp_path)
+    assert isinstance(store, HybridCheckpointStore)
+
+
+def test_hybrid_checkpoint_path_keeps_the_hybrid_store(tmp_path: Path, monkeypatch):
+    from mas.ctl.adapters.checkpoint import JsonCheckpointStore
+    from mas.runtime.session import ManifestRef
+
+    manifest = {
+        "metadata": {"name": "agent"},
+        "spec": {"checkpoint": {"mode": "every_turn", "storage": "hybrid"}},
+    }
+    instance, _ = _instantiate(manifest, tmp_path, monkeypatch, checkpoint_dir=tmp_path)
+    kernel = instance.snapshot()
+    path = JsonCheckpointStore(tmp_path).save(
+        {
+            "version": 2,
+            "label": "seed",
+            "turn": 1,
+            "lineage": {
+                "session_id": "s",
+                "parent_session_id": None,
+                "forked_from_checkpoint": None,
+                "root_session_id": "s",
+                "created_at": "2026-09-30T12:00:00+00:00",
+            },
+            "kernel": kernel,
+            "working_memory": [],
+            "manifest": {
+                "content": manifest,
+                "content_hash": ManifestRef.from_content(manifest).content_hash,
+            },
+        },
+        label="seed",
+    )
+    _, store = _instantiate(
+        manifest,
+        tmp_path,
+        monkeypatch,
+        checkpoint_dir=tmp_path,
+        checkpoint_path=path,
+    )
+    from mas.library.standard.plugins.checkpoint import HybridCheckpointStore
+
     assert isinstance(store, HybridCheckpointStore)

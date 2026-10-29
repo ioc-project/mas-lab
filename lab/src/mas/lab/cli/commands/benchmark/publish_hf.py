@@ -48,6 +48,17 @@ import click
     show_default=True,
     help="Create a review-based revision rather than pushing directly to the default branch.",
 )
+@click.option(
+    "--token",
+    default=None,
+    help="Hugging Face access token. Overrides --token-file and HF_TOKEN.",
+)
+@click.option(
+    "--token-file",
+    type=Path,
+    default=None,
+    help="Read the Hugging Face access token from a file.",
+)
 def publish_hf_cmd(
     tarball: Path,
     repo_id: str,
@@ -55,11 +66,14 @@ def publish_hf_cmd(
     visibility: str,
     revision: str,
     create_pr: bool,
+    token: str | None,
+    token_file: Path | None,
 ) -> None:
     """Upload a benchmark archive tarball to a Hugging Face dataset repo.
 
-    Authentication uses the ``HF_TOKEN`` environment variable.
+    ctl resolves the token from ``--token``, ``--token-file``, or ``HF_TOKEN``.
     """
+    from mas.ctl.env import huggingface_token
     from mas.lab.benchmark.cli.export_import import publish_hf_command
 
     args = SimpleNamespace(
@@ -69,5 +83,6 @@ def publish_hf_cmd(
         visibility=visibility,
         revision=revision,
         create_pr=create_pr,
+        token=huggingface_token(token=token, token_file=token_file),
     )
     raise SystemExit(publish_hf_command(args))

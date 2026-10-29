@@ -150,6 +150,8 @@ class SessionController:
     _bridge_plugin: _ToolErrorAndListenerBridge | None = field(default=None, repr=False)
     _hub_plugin: Any | None = field(default=None, repr=False)
     _checkpoint_event_counter: int = field(default=0, repr=False)
+    _queued_actor: str = field(default="", init=False, repr=False)
+    _queued_source: str = field(default="", init=False, repr=False)
 
     @property
     def turn(self) -> int:
@@ -471,8 +473,8 @@ class SessionController:
         )
         # New exclusive cycle when idle. While generating, ControlContract.steer
         # preempts streamed tokens into this same session instead of calling here.
-        sender = str(getattr(self, "_queued_actor", "") or "")
-        source = str(getattr(self, "_queued_source", "") or "")
+        sender = self._queued_actor
+        source = self._queued_source
         trace = self.instance.feed(
             OperatorSteerReceived(
                 steer_id=tid,
@@ -569,8 +571,8 @@ class SessionController:
         if callable(on_working):
             on_working()
         self._setup_exchange_tracing()
-        queued_source = str(getattr(self, "_queued_source", "") or "")
-        queued_actor = str(getattr(self, "_queued_actor", "") or "")
+        queued_source = self._queued_source
+        queued_actor = self._queued_actor
         trace = self.instance.run_user_text(
             text,
             turn_id=tid,
@@ -630,8 +632,8 @@ class SessionController:
         if callable(on_working):
             on_working()
         self._setup_exchange_tracing()
-        queued_source = str(getattr(self, "_queued_source", "") or "")
-        queued_actor = str(getattr(self, "_queued_actor", "") or "")
+        queued_source = self._queued_source
+        queued_actor = self._queued_actor
         trace = await self.instance.arun_user_text(
             text,
             turn_id=tid,

@@ -14,6 +14,7 @@ This page lists every system tool implemented in MAS-Lab. A *system tool* is a t
 | [`run_skill_script`](#run_skill_script) | `mas-library-skills` | implicit (skill `scripts/`, `auto_inject`) or declared | `run-skill-script` |
 | [`request_human_input`](#request_human_input) | `mas-library-standard` | declared only | — |
 | [`inform_user`](#inform_user) | `mas-library-standard` | declared only | — |
+| [`send`](#send) | `mas-library-standard` | declared only (`default_enabled: false`) | — |
 | [`create_subagent`](#create_subagent) | `mas-library-standard` | declared only | `spawn_subagent` |
 
 The skill tools require `mas-library-skills`. Without it, declaring one fails with an unknown system tool error.
@@ -114,6 +115,18 @@ Sends a **non-blocking** progress update. The call returns at once and the agent
 A `UserIOContract` delivers the update. If none is provided, the HITL resolver registry does.
 
 Implementation: `mas.library.standard.plugins.system_tools.inform_user.InformUserTool`.
+
+### `send`
+
+Registered in the standard library with `default_enabled: false`. Declaring
+`{kind: system, name: send}` does not put a tool named `send` in the
+model's list; `list_tools` still returns only `delegate_to_<id>`. A user
+tool with that name stays that tool.
+
+See [Communication stack](comm-stack.md). Card:
+[send.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/system_tools/send.md).
+
+Implementation: `mas.library.standard.plugins.system_tools.send.SendTool`.
 
 ## Orchestration tools
 

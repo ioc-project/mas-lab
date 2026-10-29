@@ -154,3 +154,20 @@ def test_local_execute_failure_propagates():
     provider._add_instance(Boom(), {"name": "boom"})
     with pytest.raises(RuntimeError, match="nope"):
         provider.call_tool("boom", {})
+
+
+def test_from_tool_servers_skips_non_local_and_keeps_the_last_local() -> None:
+    from mas.library.standard.plugins.tools.local import LocalToolProvider
+
+    assert LocalToolProvider.from_tool_servers([]) == []
+    assert LocalToolProvider.from_tool_servers([{"protocol": "mcp"}]) == []
+    providers = LocalToolProvider.from_tool_servers(
+        [
+            "skip",
+            {"id": "local-first", "protocol": "local", "tools": ["calc"]},
+            {"id": "local-last", "protocol": "LOCAL", "tools": ["search"]},
+        ]
+    )
+    assert len(providers) == 1
+    assert providers[0].provider_name == "local-last"
+    assert providers[0].tools_claim == ("search",)

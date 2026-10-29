@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Awaitable
 from typing import Any, ClassVar, cast
 
-from mas.library.standard.lib.comm.capabilities import capability_set
+from mas.library.standard.lib.comm.capabilities import capability_set, read_capabilities
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 
@@ -42,14 +42,7 @@ class BoundLayer:
         return str(value)
 
     def capabilities(self) -> dict[str, bool]:
-        lower = self._require()
-        fn = getattr(lower, "capabilities", None)
-        if callable(fn):
-            return dict(fn())
-        flags = getattr(type(lower), "CAPABILITIES", None)
-        if isinstance(flags, dict):
-            return dict(flags)
-        return capability_set()
+        return read_capabilities(self._require()) or capability_set()
 
     def start(self) -> None:
         if self._started:

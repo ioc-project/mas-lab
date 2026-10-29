@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 
-from mas.library.standard.lib.comm.capabilities import capability_set
 from mas.library.standard.lib.comm.headers import _bound_validated, merge_headers
+from mas.library.standard.lib.comm.local_link import LocalLinkBase
 from mas.library.standard.lib.comm.payload import (
-    INFORM_ASK_INTENTS,
     MAX_MESSAGE_SIZE,
     STEER_INTENT,
     bound_inbound,
@@ -18,7 +17,6 @@ from mas.library.standard.lib.comm.payload import (
     inbound_payload,
     require_honoured_intent,
     send_result,
-    steer_peer_sessions,
 )
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, SendContext
@@ -27,7 +25,7 @@ from mas.runtime.boundary.control.contract import ControlContract
 RunTurnFn = Callable[[str, str, int, str, str], str]
 
 
-class LocalAgentComm(AgentCommContract):
+class LocalAgentComm(LocalLinkBase, AgentCommContract):
     """Agent communication over the current in-process workflow bus.
 
     The turn runs in this process, so ``headers`` are the ambient headers of
@@ -43,9 +41,6 @@ class LocalAgentComm(AgentCommContract):
     needs the target on SendTool ``allowed_peers``.
     """
 
-    CAPABILITIES = capability_set(unicast=True)
-    HONOURED_SEND_INTENTS = INFORM_ASK_INTENTS
-
     def __init__(
         self,
         run_turn: RunTurnFn,
@@ -55,19 +50,9 @@ class LocalAgentComm(AgentCommContract):
         control: ControlContract | None = None,
         steer_peers: Mapping[str, str] | Sequence[str] | None = None,
     ) -> None:
+        super().__init__(agent_id=agent_id, control=control, steer_peers=steer_peers)
         self._run_turn = run_turn
-        self.agent_id = agent_id
         self._max_message_size = max_message_size
-        self._control = control
-        self._steer_sessions = steer_peer_sessions(steer_peers)
-
-    def capabilities(self) -> dict[str, bool]:
-        return dict(self.CAPABILITIES)
-
-    def honoured_send_intents(self) -> frozenset[str]:
-        if self._control is None:
-            return self.HONOURED_SEND_INTENTS
-        return self.HONOURED_SEND_INTENTS | {STEER_INTENT}
 
     def close(self) -> None:
         return None

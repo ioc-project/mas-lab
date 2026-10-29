@@ -470,7 +470,9 @@ mas-ctl chat agent.yaml \
 `standard:local-tools` is implicitly merged into infra for every run.
 It provides `tools_dir: tools` and `skills_dir: skills`, relative to the app root.
 Override either path with another `ToolServerRegistry` entry that uses `protocol: local`.
-A consumed MCP `usage: use` dependency replaces the implicit local provider.
+A consumed non-local `usage: use` server replaces the implicit local
+provider. A usable server whose protocol has no provider is an error.
+A `usage: deploy` server is not a client.
 Add an explicit local `tools` claim to keep both.
 
 ```yaml

@@ -118,4 +118,5 @@ def test_delegation_targets_empty_delegates_on_matched_node():
 def test_parse_delegate_tool_name():
     assert parse_delegate_tool_name("delegate_to_telemetry") == "telemetry"
     assert parse_delegate_tool_name("delegate_to_") is None
+    assert parse_delegate_tool_name("delegate_to_ ") is None
     assert parse_delegate_tool_name("calculator") is None

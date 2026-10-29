@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from mas.runtime.boundary.delegation.policy import parse_delegate_tool_name
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -246,9 +247,9 @@ def snapshot_from_records(records: list[dict[str, Any]]) -> dict[str, Any]:
         if kind != "tool_call_start":
             continue
         tool = str(record.get("tool_name") or "")
-        if not tool.startswith("delegate_to_") or not aid:
+        peer = parse_delegate_tool_name(tool)
+        if not peer or not aid:
             continue
-        peer = tool[len("delegate_to_") :]
         peers = delegates.setdefault(aid, [])
         if peer and peer not in peers:
             peers.append(peer)

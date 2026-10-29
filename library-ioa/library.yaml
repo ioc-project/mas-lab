@@ -6,11 +6,13 @@ kind: Library
 
 name: library-ioa
 description: >
-  MCP client/server bridge. Registers kind: mcp as a tool-provider plugin.
+  MCP client/server bridge and A2A agent_comm / agent_expose plugins.
 version: "0.1.0"
 dependencies:
   - mas-runtime
   - mcp>=2.2
+  - a2a-sdk[http-server,sqlite]>=1.1.5
+  - uvicorn>=0.30
 
 module_base: library_ioa
 

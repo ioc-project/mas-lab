@@ -32,6 +32,17 @@ def test_tool_with_target_argument_is_not_a_handoff() -> None:
     )
 
 
+def test_tool_with_other_semantics_is_not_a_handoff() -> None:
+    assert (
+        handoff_target(
+            "book_flight",
+            arguments={"target": "paris", "when": "tomorrow"},
+            semantics={"concept": "travel", "op": "book", "subject_arg": "target"},
+        )
+        == ""
+    )
+
+
 def test_recorded_agent_comm_semantics_are_a_handoff() -> None:
     assert (
         handoff_target(

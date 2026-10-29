@@ -108,6 +108,20 @@ class LocalToolProvider:
             implicit=False,
         )
 
+    @classmethod
+    def from_tool_servers(cls, server_items: list[Any]) -> list["LocalToolProvider"]:
+        """Bind the last explicit local infra server, if any."""
+        local_servers = [
+            server
+            for server in server_items
+            if isinstance(server, dict) and str(server.get("protocol") or "").lower() == "local"
+        ]
+        if not local_servers:
+            return []
+        local_server = local_servers[-1]
+        spec = {**local_server, "name": str(local_server.get("id") or "local"), "kind": "local"}
+        return [cls.from_provider_spec(spec)]
+
     def load_spec_tools(
         self,
         tools_spec: list[Any],

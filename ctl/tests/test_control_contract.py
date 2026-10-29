@@ -267,7 +267,9 @@ def test_steer_preempts_an_inflight_llm() -> None:
     session = _session(manager)
     control = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     session.controller.inflight = True
-    inflight_llm._tasks["s1"] = type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
+    inflight_llm.register(
+        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
+    )
     try:
         control.steer("s1", text="use Lyon")
         assert inflight_llm.peek_preempt("s1") == "use Lyon"
@@ -276,8 +278,8 @@ def test_steer_preempts_an_inflight_llm() -> None:
         assert queued.items[0].action == "turn"
         assert queued.items[0].text == "later"
     finally:
-        inflight_llm._tasks.pop("s1", None)
-        inflight_llm._preempts.pop("s1", None)
+        inflight_llm.clear("s1")
+        inflight_llm.pop_preempt("s1")
 
 
 def test_steer_replace_discards_partials() -> None:
@@ -287,7 +289,9 @@ def test_steer_replace_discards_partials() -> None:
     session = _session(manager)
     control = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     session.controller.inflight = True
-    inflight_llm._tasks["s1"] = type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
+    inflight_llm.register(
+        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
+    )
     inflight_llm.append_partial("s1", "Hello ")
     try:
         control.steer("s1", text="start over", mode="replace")
@@ -295,9 +299,9 @@ def test_steer_replace_discards_partials() -> None:
         assert inflight_llm.peek_preempt("s1") is None
         assert inflight_llm.take_partial("s1") == ""
     finally:
-        inflight_llm._tasks.pop("s1", None)
-        inflight_llm._replaces.pop("s1", None)
-        inflight_llm._partials.pop("s1", None)
+        inflight_llm.clear("s1")
+        inflight_llm.pop_replace("s1")
+        inflight_llm.take_partial("s1")
 
 
 def test_steer_while_turn_inflight_without_llm_queues_to_front() -> None:
@@ -346,7 +350,9 @@ def test_send_message_queues_and_never_amends() -> None:
     session = _session(manager)
     control = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     session.controller.inflight = True
-    inflight_llm._tasks["s1"] = type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
+    inflight_llm.register(
+        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
+    )
     try:
         input_id = control.send_message("s1", text="also consider Lyon")
         assert input_id
@@ -357,8 +363,8 @@ def test_send_message_queues_and_never_amends() -> None:
         events = [e for e in manager.control_events if e.method == "send_message"]
         assert events and events[0].kind == "input_enqueued"
     finally:
-        inflight_llm._tasks.pop("s1", None)
-        inflight_llm._preempts.pop("s1", None)
+        inflight_llm.clear("s1")
+        inflight_llm.pop_preempt("s1")
 
 
 def test_llm_tools_cannot_send_message() -> None:
@@ -367,3 +373,91 @@ def test_llm_tools_cannot_send_message() -> None:
     llm = session.instance.driver.ctx.control
     with pytest.raises(ControlDenied, match="send_message"):
         llm.send_message("s1", text="no")
+
+
+def test_scoped_drops_methods_and_sessions_the_parent_lacks() -> None:
+    manager = SessionManager()
+    _session(manager, "s1")
+    _session(manager, "s2")
+    parent = manager.control(
+        capability=ControlCapability(
+            actor="admin",
+            surface="admin",
+            methods=frozenset({"steer", "inspect"}),
+            session_ids=frozenset({"s1"}),
+        )
+    )
+    peer = parent.scoped(
+        ControlCapability(
+            actor="planner",
+            surface="peer",
+            methods=frozenset({"steer", "pause"}),
+            session_ids=frozenset({"s1", "s2"}),
+        )
+    )
+    peer.steer("s1", text="go via Lyon", mode="after")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.pause("s1", reason="no")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.steer("s2", text="no", mode="after")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.inspect("s1")
+
+
+def test_scoped_unrestricted_child_cannot_gain_methods() -> None:
+    manager = SessionManager()
+    _session(manager, "s1")
+    parent = manager.control(
+        capability=ControlCapability(
+            actor="admin",
+            surface="admin",
+            methods=frozenset({"steer"}),
+            session_ids=frozenset({"s1"}),
+        )
+    )
+    peer = parent.scoped(
+        ControlCapability(actor="planner", surface="peer", methods=None, session_ids=frozenset({"s1"}))
+    )
+    peer.steer("s1", text="go via Lyon", mode="after")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.pause("s1", reason="no")
+
+
+def test_scoped_unrestricted_child_cannot_gain_sessions() -> None:
+    manager = SessionManager()
+    _session(manager, "s1")
+    _session(manager, "s2")
+    parent = manager.control(
+        capability=ControlCapability(
+            actor="admin",
+            surface="admin",
+            methods=frozenset({"steer"}),
+            session_ids=frozenset({"s1"}),
+        )
+    )
+    peer = parent.scoped(
+        ControlCapability(actor="planner", surface="peer", methods=frozenset({"steer"}), session_ids=None)
+    )
+    peer.steer("s1", text="go via Lyon", mode="after")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.steer("s2", text="no", mode="after")
+
+
+def test_scoped_unrestricted_parent_keeps_child_methods() -> None:
+    manager = SessionManager()
+    _session(manager, "s1")
+    _session(manager, "s2")
+    parent = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
+    peer = parent.scoped(
+        ControlCapability(
+            actor="planner",
+            surface="peer",
+            methods=frozenset({"steer"}),
+            session_ids=frozenset({"s1"}),
+        )
+    )
+    peer.steer("s1", text="go via Lyon", mode="after")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.pause("s1", reason="no")
+    with pytest.raises(ControlDenied, match="capability"):
+        peer.steer("s2", text="no", mode="after")

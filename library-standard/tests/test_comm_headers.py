@@ -14,6 +14,7 @@ from mas.library.standard.lib.comm.headers import (
     bound_headers,
     get_headers,
     hop_headers,
+    merge_headers,
     validate_headers,
 )
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
@@ -90,6 +91,14 @@ def test_authorization_and_mas_headers_do_not_hop() -> None:
     assert leaked[-1].get("authorization") is None
     assert leaked[-1].get("mas.intent") is None
     assert leaked[-1]["traceparent"] == "00-aa-bb-01"
+
+
+def test_merge_headers_explicit_beats_ambient() -> None:
+    ambient = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
+    explicit = "00-" + "c" * 32 + "-" + "d" * 16 + "-01"
+    with bound_headers({"traceparent": ambient}):
+        merged = merge_headers({"traceparent": explicit})
+    assert merged["traceparent"] == explicit
 
 
 def test_explicit_headers_still_win_on_this_hop() -> None:

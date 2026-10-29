@@ -10,8 +10,9 @@ import pickle
 from typing import Any
 
 import pytest
-from mas.library.standard.lib.comm.capabilities import CAPABILITY_FLAGS
+from mas.library.standard.lib.comm.capabilities import CAPABILITY_FLAGS, capability_set
 from mas.library.standard.lib.comm.headers import MAX_HEADER_COUNT, MAX_HEADER_VALUE, get_headers, validate_headers
+from mas.library.standard.lib.comm.local_link import LocalLinkBase
 from mas.library.standard.lib.comm.names import namespace_of
 from mas.library.standard.lib.comm.payload import label_untrusted_peer
 from mas.library.standard.lib.comm.send_context import align_send
@@ -51,6 +52,20 @@ def _on_request(links: list[LocalGroupAgentComm]):
         links[index]._on_request = handler
 
     return _set
+
+
+def test_local_and_local_group_share_local_link_base() -> None:
+    assert issubclass(LocalAgentComm, LocalLinkBase)
+    assert issubclass(LocalGroupAgentComm, LocalLinkBase)
+
+
+def test_local_link_base_reads_subclass_capability_flags() -> None:
+    class _Group(LocalLinkBase):
+        CAPABILITIES = capability_set(unicast=True, group=True)
+
+    assert LocalLinkBase().capabilities()["group"] is False
+    assert _Group().capabilities()["group"] is True
+    assert _Group().capabilities()["unicast"] is True
 
 
 def test_check_agent_comm_against_local_group() -> None:
@@ -435,6 +450,18 @@ def test_channel_name_cannot_shadow_or_leave_namespace() -> None:
     with pytest.raises(AgentCommError):
         a.create_channel("room with space", members=["a"], options={})
     assert a.create_channel("room", members=["a", "b"], options={}) == "room"
+
+
+def test_channel_name_cannot_be_an_unused_four_part_agent_name() -> None:
+    _, (a, _b) = _links(2)
+    with pytest.raises(AgentCommError, match="shadows an agent name"):
+        a.create_channel("acme/lab/mas/nobody", members=["a"], options={})
+
+
+def test_channel_name_cannot_match_a_registered_node_key() -> None:
+    _, (a, _b) = _links(2)
+    with pytest.raises(AgentCommError, match="shadows an agent"):
+        a.create_channel(a.name, members=["a"], options={})
 
 
 def test_deterministic_message_ids() -> None:

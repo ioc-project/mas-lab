@@ -17,10 +17,9 @@ from typing import Any, Callable
 
 from mas.lab.controller.ui_stream.refs import DataSourceRef
 from mas.lab.controller.ui_stream.spec_snapshot import _HUB_HINTS, _HUB_TOOLS, pick_entry
-
+from mas.runtime.boundary.delegation.policy import parse_delegate_tool_name
 
 _CHANNEL_SPLIT = re.compile(r"<\|?channel\|?>", re.I)
-_DELEGATE_PREFIXES = ("delegate_to_", "delegate:", "handoff_to_")
 
 
 def _visible_text(raw: str) -> str:
@@ -44,11 +43,7 @@ def _text(event: dict[str, Any]) -> str:
 
 
 def _delegate_peer(tool: str) -> str:
-    name = str(tool or "").strip()
-    for prefix in _DELEGATE_PREFIXES:
-        if name.startswith(prefix):
-            return name[len(prefix) :].strip()
-    return ""
+    return parse_delegate_tool_name(str(tool or "").strip()) or ""
 
 
 def _event_t(event: dict[str, Any]) -> float | None:
@@ -371,8 +366,8 @@ def fold_topology_event(state: dict[str, Any], event: dict[str, Any]) -> dict[st
     tool = str(event.get("tool_name") or "")
     t = _event_t(event)
     _stamp_t0(state, t)
-    if tool.startswith("delegate_to_"):
-        peer = tool[len("delegate_to_") :]
+    peer = parse_delegate_tool_name(tool)
+    if peer:
         if agent in nodes and peer in nodes:
             activity.append(
                 {

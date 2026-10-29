@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from mas.ctl.adapters.checkpoint import (
-    HybridCheckpointStore,
     InMemoryCheckpointStore,
     JsonCheckpointStore,
     build_checkpoint_store,
@@ -27,6 +26,15 @@ from mas.ctl.infra.resolve import resolution_anchor
 from mas.ctl.session.engine_factory import EngineSelection, build_engine
 from mas.ctl.validate import validate_file, validation_enabled
 from mas.ctl.workspace.config import WorkspaceConfig
+from mas.library.standard.plugins.checkpoint import (
+    HybridCheckpointStore as LibraryHybridCheckpointStore,
+)
+from mas.library.standard.plugins.checkpoint import (
+    InMemoryCheckpointStore as LibraryInMemoryCheckpointStore,
+)
+from mas.library.standard.plugins.checkpoint import (
+    JsonCheckpointStore as LibraryJsonCheckpointStore,
+)
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.context.manifest_context import context_chunks_from_spec
 from mas.runtime.driver.instance import RuntimeInstance
@@ -137,7 +145,7 @@ def instantiate_runtime(
     hitl=None,
 ) -> tuple[
     RuntimeInstance,
-    JsonCheckpointStore | InMemoryCheckpointStore | HybridCheckpointStore | None,
+    JsonCheckpointStore | InMemoryCheckpointStore | LibraryHybridCheckpointStore | None,
 ]:
     """Ctl-owned bootstrap: validate seeds/checkpoints, build instance, restore state."""
     seeds: list[MemorySeed] = []
@@ -315,9 +323,9 @@ def instantiate_runtime(
 
     if options.checkpoint_path:
         path = Path(options.checkpoint_path)
-        if isinstance(store, (JsonCheckpointStore, HybridCheckpointStore)):
+        if isinstance(store, (LibraryJsonCheckpointStore, LibraryHybridCheckpointStore)):
             reader = store
-        elif isinstance(store, InMemoryCheckpointStore) and path in store.snapshots:
+        elif isinstance(store, LibraryInMemoryCheckpointStore) and path in store.snapshots:
             reader = store
         else:
             reader = JsonCheckpointStore(path.parent)

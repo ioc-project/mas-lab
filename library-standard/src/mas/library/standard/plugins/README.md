@@ -59,6 +59,22 @@ Same procedure as tools: a plugin speaks **one protocol**; the registry routes
 
 Infra `spec.protocol` / agent `spec.models[].kind` select the wire protocol (default `openai`). Ollama and LiteLLM proxies use the OpenAI plugin. Offline CI replays a recorded live protocol through `llm_cache` (`raise_on_miss`).
 
+## Agent communication (`mas.library.standard.plugins.agentcomm`)
+
+| ID | Role | Implementation |
+|----|------|----------------|
+| `local` | In-process turn bus | `LocalAgentComm` |
+| `local-group` | Unicast, anycast, rooms | `LocalGroupAgentComm` |
+| `stack` | Bottom-up layer bind | `StackAgentComm` |
+| `trace_context` | Child `traceparent` | `TraceContextLayer` |
+| `send` | System tool, off by default | `SendTool` |
+
+- Card: [agentcomm/local-group.md](agentcomm/local-group.md)
+- Card: [agentcomm/stack.md](agentcomm/stack.md)
+- Card: [agentcomm/trace-context.md](agentcomm/trace-context.md)
+- Card: [system_tools/send.md](system_tools/send.md)
+- Docs: [comm-stack.md](../../../../../../docs/references/comm-stack.md)
+
 ## Control protocol (`mas.library.standard.plugins.control`)
 
 JSON-lines unix/TCP attach for `ControlContract`. This is **not** A2A.

@@ -17,7 +17,7 @@
 | `mas-library-eval`      | Libraries     | Evaluation and quality metrics library for MAS Lab — MCE integration.                                   | —                    |
 | `mas-library-lab`       | Libraries     | MAS Lab provider library with public eval plugins.                                                      | —                    |
 | `mas-library-samples`   | Libraries     | Community-contributed MAS sample apps, datasets, and tools.                                             | —                    |
-| `mas-library-ioa`       | Libraries     | MCP client/server bridge for MAS Lab                                                                    | `mas-mcp`            |
+| `mas-library-ioa`       | Libraries     | MCP client/server bridge and A2A agent_comm / agent_expose plugins.                                     | `mas-mcp`            |
 | `mas-library-telemetry` | Libraries     | MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization. | —                    |
 | `mas-library-kg`        | Libraries     | MAS Lab trace normalization and knowledge-graph validation algorithms.                                  | —                    |
 ---
@@ -302,7 +302,7 @@ uv pip install mas-library-samples  # PyPI
 ### `mas-library-ioa`
 **Install path:** `library-ioa`  
 **Layer:** Libraries  
-MCP client/server bridge for MAS Lab
+MCP client/server bridge and A2A agent_comm / agent_expose plugins.
 
 ```bash
 uv pip install -e library-ioa  # source
