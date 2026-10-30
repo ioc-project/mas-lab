@@ -139,16 +139,11 @@ def resolve_model_name(
     ``gpt-4o-mini``.
     """
     llm_proxy = (infra.llm_proxy if infra else {}) or {}
+    from mas.ctl.env import env_model_override
+
     forced = (forced or "").strip()
     if not forced:
-        for env_name in ("MAS_CTL_MODEL", "MAS_LLM_MODEL"):
-            env_model = os.environ.get(env_name, "").strip()
-            if env_model:
-                from mas.ctl.env import warn_env_override
-
-                warn_env_override(env_name, env_model, replaces="the declared model")
-                forced = env_model
-                break
+        forced = env_model_override() or ""
     if forced:
         raw = forced
     else:

@@ -371,7 +371,9 @@ both are set). Interactive labs use the same fields on `lab-config.yaml`.
 3. `experiment.evaluation.config.model`
 4. pipeline template vars `eval_model` / `judge_model`
 5. `experiment.models.judge`
-6. `experiment.model` / `experiment.models.main` (`any` skipped)
+6. `experiment.model` / `experiment.models.main` (`any` skipped).
+   The env override (`MAS_CTL_MODEL` / `MAS_LLM_MODEL`) fills this slot
+   so the judge matches the agents when `models.judge` is omitted.
 7. application MAS/Agent unique concrete `spec.models[]`
 8. `experiment.metadata.model_name` (legacy annotation)
 9. local `config.yaml` `defaults.model` / package `defaults.yaml` (only for `any`)

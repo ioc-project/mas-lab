@@ -249,6 +249,13 @@ def test_resolve_model_name_cli_override_beats_spec(monkeypatch):
     assert resolve_model_name(manifest, None, forced="gpt-4.1") == "gpt-4.1"
 
 
+def test_resolve_model_name_env_override_beats_spec(monkeypatch):
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    monkeypatch.setenv("MAS_CTL_MODEL", "bedrock/claude-haiku")
+    manifest = {"spec": {"models": [{"model": "gpt-4o"}]}}
+    assert resolve_model_name(manifest, None) == "bedrock/claude-haiku"
+
+
 def test_resolve_model_name_unclaimed_with_several_leaves_is_error(monkeypatch):
     monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
     monkeypatch.delenv("MAS_LLM_MODEL", raising=False)

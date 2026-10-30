@@ -48,7 +48,7 @@ absolute paths and `..` are rejected. See [Output locations](../../docs/manifest
 
 | Type | Output |
 |------|--------|
-| `eval_mce` | One run's `events.jsonl` → `metrics.json` (`scope: run`). Judge: `experiment.evaluation.model`, else `experiment.models.judge`, else `experiment.model` / `models.main`, else application `spec.models[]`. Metric ids and inline `prompt_metrics`: [Tutorial 10](../../docs/tutorials/10-evaluation-metrics/README.md) |
+| `eval_mce` | One run's `events.jsonl` → `metrics.json` (`scope: run`). Judge: `experiment.evaluation.model`, else `experiment.models.judge`, else `experiment.model` / `models.main` (the env override fills that slot when `models.judge` is omitted), else application `spec.models[]`. Metric ids and inline `prompt_metrics`: [Tutorial 10](../../docs/tutorials/10-evaluation-metrics/README.md) |
 | `annotate_metrics` | Compute evaluation metrics on session-level trajectories |
 | `collect_metrics` | Aggregate run metrics (whole-tree walk; legacy alternative to `metrics_to_dataframe` + `gather_level`) |
 | `metrics_to_dataframe` | One run's `metrics.json` → tidy `data.csv` in that run folder (`scope: run`) |

@@ -115,7 +115,9 @@ The runner reads `input_query` from the root `execution_start` and
 1. `eval_mce` `config.model` / `config.judge_model`
 2. `experiment.evaluation.model`
 3. `experiment.models.judge`
-4. `experiment.model` / `models.main`
+4. `experiment.model` / `models.main`. The env override
+   (`MAS_CTL_MODEL` / `MAS_LLM_MODEL`) fills this slot when
+   `models.judge` is omitted.
 5. application `spec.models[]`
 
 A runnable pin is in

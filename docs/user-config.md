@@ -179,7 +179,7 @@ ref overrides log a warning when applied.
 
 | Variable | Overrides |
 |----------|-----------|
-| `MAS_CTL_MODEL` / `MAS_LLM_MODEL` | `spec.models` (use `--model` or the experiment's `models:`) |
+| `MAS_CTL_MODEL` / `MAS_LLM_MODEL` | `spec.models` and, when `models.judge` is omitted, the eval judge default (use the experiment's `models:`) |
 | `MAS_INFRA_REFS` / `MAS_RUNTIME_REFS` | Workspace `infra_refs` / `runtime_refs` (use `--infra-ref` / `--runtime-ref`) |
 | `MAS_WORKSPACE_ROOT` | Workspace discovery from the current directory |
 | `MAS_LABS_ROOT`, `MAS_RUNS_ROOT` | `paths.labs_dir`, `paths.runs_dir` |

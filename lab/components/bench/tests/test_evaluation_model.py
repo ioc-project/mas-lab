@@ -2,7 +2,11 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import inspect
+
+import pytest
 from mas.lab.benchmark.experiment import EvaluationSpec
+from mas.lab.lab.config import experiment_base
 from mas.lab.lab.config.experiment_base import MASRunBase
 
 
@@ -192,3 +196,139 @@ def test_experiment_does_not_guess_when_agents_disagree(tmp_path) -> None:
     )
     step = loaded["levels"]["experiment"].pipeline[0]
     assert "model" not in step.config
+
+
+def test_experiment_base_does_not_read_model_env() -> None:
+    src = inspect.getsource(experiment_base)
+    assert "os.environ" not in src
+    assert "MAS_CTL_MODEL" not in src
+    assert "MAS_LLM_MODEL" not in src
+
+
+def test_model_override_also_sets_the_judge_default(tmp_path) -> None:
+    data = {
+        "name": "override",
+        "model": "azure/gpt-4o-mini",
+        "post": [{"type": "eval_mce"}],
+    }
+    loaded = MASRunBase._load_base_fields(
+        data,
+        tmp_path,
+        yaml_path=tmp_path / "experiment.yaml",
+        model_override="bedrock/claude-haiku",
+    )
+    assert loaded["model"] == "bedrock/claude-haiku"
+    step = loaded["levels"]["experiment"].pipeline[0]
+    assert step.config["model"] == "bedrock/claude-haiku"
+    assert step.config["model_source"] == "experiment.model"
+
+
+def test_model_override_wins_over_models_main(tmp_path) -> None:
+    data = {
+        "name": "override-slots",
+        "model": "azure/gpt-4o-mini",
+        "models": {"main": "azure/gpt-4o-mini"},
+        "post": [{"type": "eval_mce"}],
+    }
+    loaded = MASRunBase._load_base_fields(
+        data,
+        tmp_path,
+        yaml_path=tmp_path / "experiment.yaml",
+        model_override="bedrock/claude-haiku",
+    )
+    assert loaded["model"] == "bedrock/claude-haiku"
+    assert loaded["models"]["main"] == "bedrock/claude-haiku"
+    step = loaded["levels"]["experiment"].pipeline[0]
+    assert step.config["model"] == "bedrock/claude-haiku"
+
+
+def test_model_override_does_not_override_models_judge(tmp_path) -> None:
+    data = {
+        "name": "pinned-judge",
+        "model": "azure/gpt-4o-mini",
+        "models": {"judge": "gpt-4o-mini"},
+        "post": [{"type": "eval_mce"}],
+    }
+    loaded = MASRunBase._load_base_fields(
+        data,
+        tmp_path,
+        yaml_path=tmp_path / "experiment.yaml",
+        model_override="bedrock/claude-haiku",
+    )
+    assert loaded["model"] == "bedrock/claude-haiku"
+    step = loaded["levels"]["experiment"].pipeline[0]
+    assert step.config["model"] == "gpt-4o-mini"
+    assert step.config["model_source"] == "experiment.models.judge"
+
+
+def test_model_override_does_not_override_evaluation_model(tmp_path) -> None:
+    data = {
+        "name": "eval-pin",
+        "model": "azure/gpt-4o-mini",
+        "evaluation": {"method": "llm_judge", "model": "gpt-4o"},
+        "post": [{"type": "eval_mce"}],
+    }
+    loaded = MASRunBase._load_base_fields(
+        data,
+        tmp_path,
+        yaml_path=tmp_path / "experiment.yaml",
+        model_override="bedrock/claude-haiku",
+    )
+    step = loaded["levels"]["experiment"].pipeline[0]
+    assert step.config["model"] == "gpt-4o"
+    assert step.config["model_source"] == "experiment.evaluation.model"
+
+
+def test_blank_model_override_does_not_override(tmp_path) -> None:
+    data = {
+        "name": "blank-override",
+        "model": "azure/gpt-4o-mini",
+        "post": [{"type": "eval_mce"}],
+    }
+    loaded = MASRunBase._load_base_fields(
+        data,
+        tmp_path,
+        yaml_path=tmp_path / "experiment.yaml",
+        model_override="  ",
+    )
+    assert loaded["model"] == "azure/gpt-4o-mini"
+    step = loaded["levels"]["experiment"].pipeline[0]
+    assert step.config["model"] == "azure/gpt-4o-mini"
+
+
+def test_load_base_fields_ignores_model_env(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("MAS_CTL_MODEL", "bedrock/claude-haiku")
+    data = {
+        "name": "no-env",
+        "model": "azure/gpt-4o-mini",
+        "post": [{"type": "eval_mce"}],
+    }
+    loaded = MASRunBase._load_base_fields(
+        data, tmp_path, yaml_path=tmp_path / "experiment.yaml"
+    )
+    assert loaded["model"] == "azure/gpt-4o-mini"
+    step = loaded["levels"]["experiment"].pipeline[0]
+    assert step.config["model"] == "azure/gpt-4o-mini"
+
+
+def test_per_run_step_under_experiment_post_fails_fast(tmp_path) -> None:
+    data = {
+        "name": "misplaced",
+        "post": [{"type": "metrics_to_dataframe", "per_run": True}],
+    }
+    with pytest.raises(ValueError, match="run: post:"):
+        MASRunBase._load_base_fields(
+            data, tmp_path, yaml_path=tmp_path / "experiment.yaml"
+        )
+
+
+def test_per_run_step_under_run_post_still_loads(tmp_path) -> None:
+    data = {
+        "name": "placed",
+        "run": {"post": [{"type": "metrics_to_dataframe", "per_run": True}]},
+    }
+    loaded = MASRunBase._load_base_fields(
+        data, tmp_path, yaml_path=tmp_path / "experiment.yaml"
+    )
+    step = loaded["levels"]["run"].pipeline[0]
+    assert step.per_run is True

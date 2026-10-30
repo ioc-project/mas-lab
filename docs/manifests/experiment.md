@@ -297,7 +297,9 @@ It picks its judge model in this order:
 1. `eval_mce.config.model` on the step.
 2. `experiment.evaluation.model`.
 3. `experiment.models.judge`.
-4. `models.main` / `experiment.model`.
+4. `models.main` / `experiment.model`. The env override
+   (`MAS_CTL_MODEL` / `MAS_LLM_MODEL`) fills this slot when
+   `models.judge` is omitted.
 5. The application's MAS or Agent `spec.models[]`.
 
 The value `any` (or no value) means the spec pins no provider id. Local `config.yaml` `defaults.model` fills it.

@@ -56,6 +56,22 @@ def warn_env_override(name: str, value: str, *, replaces: str) -> None:
     )
 
 
+_ENV_MODEL_VARS = ("MAS_CTL_MODEL", "MAS_LLM_MODEL")
+
+
+def env_model_override(*, replaces: str = "the declared model") -> str | None:
+    """Last-resort model id from ``MAS_CTL_MODEL``, then ``MAS_LLM_MODEL``.
+
+    Empty values are ignored. Logs once per value via :func:`warn_env_override`.
+    """
+    for env_name in _ENV_MODEL_VARS:
+        token = os.environ.get(env_name, "").strip()
+        if token:
+            warn_env_override(env_name, token, replaces=replaces)
+            return token
+    return None
+
+
 def load_dotenv(
     *,
     cwd: Path | None = None,
