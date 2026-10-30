@@ -14,6 +14,7 @@ from typing import Any, Dict, List
 
 import yaml
 from mas.runtime.manifest.schema.tool import ToolDocument
+from mas.runtime.spec.endpoint_usage import usage_listens
 from mcp.server.extension import Extension
 from mcp.server.mcpserver import Context, MCPServer
 
@@ -333,7 +334,7 @@ def _build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--tool-manifest", action="append", help="MAS Tool YAML manifest (repeatable).")
     serve.add_argument("--tools-dir", help="Directory of Tool manifests; defaults to ./tools.")
     serve.add_argument("--tool", help="Optional tool name override when the manifest contains one tool.")
-    serve.add_argument("--infra-ref", type=Path, help="ToolServerRegistry with usage: deploy.")
+    serve.add_argument("--infra-ref", type=Path, help="ToolServerRegistry with usage: listen.")
     serve.add_argument("--transport", choices=["stdio", "streamable-http", "sse"])
     serve.add_argument("--host")
     serve.add_argument("--port", type=int)
@@ -397,12 +398,12 @@ def main(argv: list[str] | None = None) -> int:
                     for server in servers
                     if isinstance(server, dict)
                     and str(server.get("protocol") or "").strip().lower() == "mcp"
-                    and server.get("usage", "use") in {"deploy", "use-and-deploy"}
+                    and usage_listens(server.get("usage"))
                 ),
                 {},
             )
             if not deployment:
-                parser.error("--infra-ref has no MCP ToolServerRegistry entry with usage: deploy")
+                parser.error("--infra-ref has no MCP ToolServerRegistry entry with usage: listen")
 
         tools_dir_value = args.tools_dir or deployment.get("tools_dir") or "tools"
         tools_dir = Path(tools_dir_value).expanduser()

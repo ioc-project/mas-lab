@@ -2,7 +2,7 @@
 
 Client and server bridge between MAS Lab tools and the Model Context Protocol (MCP), plus Agent2Agent (A2A) exposure of agents. Use it to call tools served by an MCP server, or to publish a MAS tool manifest as an MCP server. The Quickstart below shows both.
 
-Agents keep the same tool names and arguments. MCP endpoints come from infra `ToolServerRegistry` entries; the agent manifest does not declare providers. An MCP `usage: use` dependency replaces the implicit local provider. To keep in-process tools beside MCP, add an explicit `protocol: local` infra claim.
+Agents keep the same tool names and arguments. MCP endpoints come from infra `ToolServerRegistry` entries; the agent manifest does not declare providers. An MCP `usage: connect` dependency replaces the implicit local provider. To keep in-process tools beside MCP, add an explicit `protocol: local` infra claim.
 
 ## Layout
 
@@ -68,7 +68,7 @@ The serve terminal logs `MCP tool call name=web-search` for both `mas-mcp tools 
 ## A2A exposure
 
 The generic runtime server command starts the registered `agent_expose`
-plugin from the agent's Application endpoint (`usage: deploy`):
+plugin from the agent's Application endpoint (`usage: listen`):
 
 ```bash
 mas-ctl serve docs/tutorials/01-building-an-agent/agent.yaml \

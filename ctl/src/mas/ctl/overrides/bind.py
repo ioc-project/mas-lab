@@ -22,8 +22,8 @@ def expand_connects(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ..
     """Turn ``NAME=a2a://…`` / ``NAME=mcp://…#tool`` into ``infra:`` overrides.
 
     This is a shortcut over Application / ToolServerRegistry fields, not a
-    second resolver. A2A peers become ``spec.endpoints`` ``usage: use`` rows;
-    MCP tools become ``spec.tool_servers`` ``usage: use`` rows. Explicit
+    second resolver. A2A peers become ``spec.endpoints`` ``usage: connect`` rows;
+    MCP tools become ``spec.tool_servers`` ``usage: connect`` rows. Explicit
     ``--override`` values applied after these still win. ``--connect`` is the
     flag; ``--bind`` is the old name for the same expansion.
     """
@@ -40,7 +40,7 @@ def expand_connects(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ..
             )
         http_url = _http_url(parsed)
         if scheme in {"a2a", "a2as"}:
-            endpoints[name] = {"protocol": "a2a", "usage": "use", "url": http_url}
+            endpoints[name] = {"protocol": "a2a", "usage": "connect", "url": http_url}
             continue
         tool_name = (parsed.fragment or name).strip()
         if not tool_name:
@@ -51,7 +51,7 @@ def expand_connects(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ..
             {
                 "id": server_id,
                 "protocol": "mcp",
-                "usage": "use",
+                "usage": "connect",
                 "url": http_url,
                 "tools": [],
             },
@@ -79,8 +79,8 @@ def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...
     """Turn ``NAME=a2a://host:port/path`` into ``infra:`` overrides that serve ``NAME``.
 
     The mirror of :func:`expand_connects`: ``--connect`` says where to *use* a
-    remote peer (``usage: use``), ``--listen`` says where to *serve* an agent
-    (``usage: deploy``). Same Application endpoint field, same merge path.
+    remote peer (``usage: connect``), ``--listen`` says where to *serve* an agent
+    (``usage: listen``). Same Application endpoint field, same merge path.
     """
     overrides: list[str] = []
     for source in assignments:
@@ -92,7 +92,7 @@ def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...
                 f"listen {source!r} must use a2a:// or a2as:// "
                 f"(got {scheme or 'no scheme'!r}); serve an MCP tool with mas-mcp"
             )
-        endpoint = {"protocol": "a2a", "usage": "deploy", "url": _http_url(parsed)}
+        endpoint = {"protocol": "a2a", "usage": "listen", "url": _http_url(parsed)}
         overrides.append(f"infra:spec.endpoints[{name!r}]={_yaml_flow(endpoint)}")
     return tuple(overrides)
 

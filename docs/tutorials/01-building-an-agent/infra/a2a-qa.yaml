@@ -13,5 +13,5 @@ spec:
   endpoints:
     qa-agent:
       protocol: a2a
-      usage: deploy
+      usage: listen
       url: http://127.0.0.1:9005

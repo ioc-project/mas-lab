@@ -33,7 +33,7 @@ spec:
   tool_servers:
     - id: localhost-mcp-tools
       protocol: mcp
-      usage: use
+      usage: connect
       transport: streamable-http
       url: http://127.0.0.1:9001/mcp
       timeout: 30
@@ -43,7 +43,7 @@ spec:
 | Field | Meaning |
 | --- | --- |
 | `protocol` | `mcp` selects the MCP adapter. |
-| `usage` | `use` consumes a remote endpoint; `deploy` starts the local provider; `use-and-deploy` does both. |
+| `usage` | `connect` consumes a remote endpoint; `listen` starts the local provider; `[connect, listen]` does both. The old `use`, `deploy`, `use-and-deploy` still work and are deprecated. |
 | `transport` | `stdio`, `sse`, `streamable-http`, and others. |
 | `tools` | `"*"` discovers the names the server advertises. |
 | `headers` | Optional auth. Use `env:VAR`, never hardcoded secrets. |
@@ -105,7 +105,7 @@ tool_servers:
     tools: "*"
   - id: mcp-web-search
     protocol: mcp
-    usage: use
+    usage: connect
     transport: streamable-http
     url: http://127.0.0.1:9001/mcp
     tools: "*"

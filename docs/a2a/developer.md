@@ -44,7 +44,7 @@ A2A `tasks/cancel` cancels the server-side wait and emits a `CANCELED` status. I
 
 The MAS-wide in-process comm variant resolves from `spec.agent_comm` (`type` or `protocol`, with optional `params`) through `registry.create`. If it is omitted, the library default (`defaults.agent_comm`) applies. The delegation plugin does not choose it, and `ctl` does not hardcode it.
 
-The route builder resolves every `delegates_to` target against materialized local agents and against infra endpoints with `usage: use` or `use-and-deploy`. Missing targets fail during wiring.
+The route builder resolves every `delegates_to` target against materialized local agents and against infra endpoints with `usage: connect` or `[connect, listen]`. Missing targets fail during wiring.
 
 ## AgentCard
 
@@ -76,7 +76,7 @@ Tasks and push configurations live in memory (the SDK's `InMemoryTaskStore`). Th
 
 ## Exposure topology
 
-The infra endpoint entry does two jobs. It declares outbound reachability. It also marks public availability with `usage: deploy` or `use-and-deploy`. The legacy `expose: true` reads as `use-and-deploy` when `usage` is absent.
+The infra endpoint entry does two jobs. It declares outbound reachability. It also marks public availability with `usage: listen` or `[connect, listen]`. The legacy `expose: true` reads as `[connect, listen]` when `usage` is absent.
 
 These settings are independent of agency topology on purpose:
 
@@ -86,11 +86,11 @@ These settings are independent of agency topology on purpose:
 
 `mas-ctl serve`, `chat`, `tui`, and `run-mas` share one exposure helper (`mas.ctl.session.exposure`). Listen URLs come from Application endpoints.
 
-- **Dedicated `serve`:** a blocking listener for that agent. It needs `usage: deploy` or `use-and-deploy`. It advertises a control endpoint in the control directory unless you pass `--no-control`. It is the only path that starts the gRPC listener.
+- **Dedicated `serve`:** a blocking listener for that agent. It needs `usage: listen` or `[connect, listen]`. It advertises a control endpoint in the control directory unless you pass `--no-control`. It is the only path that starts the gRPC listener.
 - **`chat` and `tui`:** the in-process agent owns the conversation. A deployed endpoint binds in the background for interrogation. Stdin or curses stays the conversation.
-- **`run-mas`:** the entry agent is always in-process. Every hosted agent whose A2A endpoint has `usage: deploy` or `use-and-deploy` binds in this process. `usage: use` peers are client routes. Another process, such as a separate `mas-ctl serve`, owns those ports.
+- **`run-mas`:** the entry agent is always in-process. Every hosted agent whose A2A endpoint has `usage: listen` or `[connect, listen]` binds in this process. `usage: connect` peers are client routes. Another process, such as a separate `mas-ctl serve`, owns those ports.
 
-`--connect NAME=a2a://…` is a shortcut for an Application `usage: use` row. It expands to `--override infra:spec.endpoints[...]=…` on the same merged infra document as `--infra-ref`. It is not a second exposure path. It never opens a listener. `--bind` is the hidden old name.
+`--connect NAME=a2a://…` is a shortcut for an Application `usage: connect` row. It expands to `--override infra:spec.endpoints[...]=…` on the same merged infra document as `--infra-ref`. It is not a second exposure path. It never opens a listener. `--bind` is the hidden old name.
 
 The advertised `url` cannot include a path prefix. A single port cannot host multiple independent AgentCards. The runtime does not infer either.
 

@@ -3,7 +3,7 @@
 ## A2A
 
 Target: Tutorial 1 QA agent served by `mas-ctl serve --infra-ref` (Application
-endpoint `usage: deploy`).
+endpoint `usage: listen`).
 
 Tools:
 

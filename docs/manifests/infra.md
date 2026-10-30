@@ -330,11 +330,11 @@ spec:
 Each endpoint requires `url` and `protocol`.
 Optional fields:
 
-- `usage`: `use` (default), `deploy`, or `use-and-deploy`.
+- `usage`: `connect` (default), `listen`, or `[connect, listen]`. `use`, `deploy` and `use-and-deploy` are deprecated aliases of `connect`, `listen` and `[connect, listen]`: still read, and `mas-ctl validate` and compose warn about them.
 - `headers`.
 - `timeout` (seconds).
 
-The legacy `expose: true` is read as `usage: use-and-deploy`.
+The legacy `expose: true` is read as `usage: [connect, listen]`.
 Canonical sample: [`library-samples/infra/a2a-agents.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/a2a-agents.yaml).
 
 Reference the endpoint from an agency entry in the **MAS** manifest:
@@ -349,7 +349,7 @@ spec:
         # ref is omitted because this is an external dependency.
 ```
 
-`usage: deploy` on an in-process `run-mas` agent binds that URL for interrogation.
+`usage: listen` on an in-process `run-mas` agent binds that URL for interrogation.
 See [A2A internals: Exposure topology](../a2a/developer.md#exposure-topology).
 
 ### Not used yet
@@ -429,7 +429,7 @@ Middleware parameters are under `infra:spec.interceptors[middleware=llm_cache].p
 For reusable infra changes, use an Overlay with `target.kind: Infra`.
 Put root-qualified assignments under `spec.overrides`; see the [Overlay manifest reference](overlay.md).
 
-`--connect NAME=a2a://...` and `--connect NAME=mcp://...` are a **CLI shortcut** for the Application `usage: use` and ToolServerRegistry `usage: use` fields.
+`--connect NAME=a2a://...` and `--connect NAME=mcp://...` are a **CLI shortcut** for the Application `usage: connect` and ToolServerRegistry `usage: connect` fields.
 They expand to `--override infra:...` and merge into the effective infra document.
 They are not a second resolver.
 Flavour stays `local` until an Application endpoint, from YAML or `--connect`, names a remote collaborator.
@@ -485,9 +485,9 @@ mas-ctl chat agent.yaml \
 `standard:local-tools` is implicitly merged into infra for every run.
 It provides `tools_dir: tools` and `skills_dir: skills`, relative to the app root.
 Override either path with another `ToolServerRegistry` entry that uses `protocol: local`.
-A consumed non-local `usage: use` server replaces the implicit local
+A consumed non-local `usage: connect` server replaces the implicit local
 provider. A usable server whose protocol has no provider is an error.
-A `usage: deploy` server is not a client.
+A `usage: listen` server is not a client.
 Add an explicit local `tools` claim to keep both.
 
 ```yaml
@@ -521,7 +521,7 @@ spec:
   tool_servers:
     - id: localhost-mcp-tools
       protocol: mcp
-      usage: use
+      usage: connect
       transport: streamable-http
       url: http://127.0.0.1:9001/mcp
       timeout: 30
@@ -539,10 +539,10 @@ It sets only the required connection fields, and runtime defaults supply the opt
 | `id` | required | Stable infra key for the remote tool server |
 | `protocol` | required | `mcp` for an MCP server, `local` for app-local tool/skill directories |
 | `name` / `description` | `id` / none | Display name and free text |
-| `usage` | `use` | `use`, `deploy`, or `use-and-deploy` |
+| `usage` | `connect` | `connect`, `listen`, or `[connect, listen]` (`use`, `deploy`, `use-and-deploy`: deprecated aliases) |
 | `transport` | `streamable-http` | `stdio` \| `streamable-http` \| `sse` \| `http` |
 | `url` / `endpoint` | none | HTTP/SSE URL (manifest). Optional override `env:VAR\|default` |
-| `host` / `port` | `127.0.0.1:9001` | Listener address for `usage: deploy` |
+| `host` / `port` | `127.0.0.1:9001` | Listener address for `usage: listen` |
 | `tools_dir` | `tools` | Tool manifest directory (`protocol: local`, or served when deploying) |
 | `skills_dir` | `skills` | Skill directory (`protocol: local`) |
 | `command` / `args` / `env` / `cwd` | none | stdio process |
@@ -554,11 +554,13 @@ It sets only the required connection fields, and runtime defaults supply the opt
 | `tools` | `"*"` | Discover all names, or declare an explicit list in infra |
 
 `--infra-ref` loads this document into `ResolvedInfra.tool_server_registry`.
-The three `usage` values behave as follows:
+The `usage` values behave as follows:
 
-- `use` connects to a remote endpoint.
-- `deploy` starts the local server.
-- `use-and-deploy` does both.
+- `connect` connects to a remote endpoint (CLI `--connect`).
+- `listen` starts the local server (CLI `--listen`).
+- `[connect, listen]` does both.
+
+`use`, `deploy` and `use-and-deploy` are deprecated aliases of `connect`, `listen` and `[connect, listen]`: still read, and `mas-ctl validate` and compose warn about them.
 
 The runtime discovers the names that MCP advertises unless `tools` is set.
 

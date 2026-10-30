@@ -8,7 +8,7 @@ spec:
     a2a-tck-agent:
       protocol: a2a
       url: http://127.0.0.1:9041
-      usage: deploy
+      usage: listen
       a2a:
         listen:
           host: 127.0.0.1

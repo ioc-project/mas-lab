@@ -10,7 +10,6 @@ library-samples/infra/mixed-agents.infra.yaml.
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -37,7 +36,7 @@ class TestInfraManifest:
         infra = load_yaml(INFRA)
         endpoint = infra["spec"]["endpoints"]["schedule_agent"]
         assert endpoint["protocol"] == "a2a"
-        assert endpoint["usage"] == "use-and-deploy"
+        assert endpoint["usage"] == ["connect", "listen"]
         assert endpoint["url"].startswith("http://127.0.0.1:")
 
 

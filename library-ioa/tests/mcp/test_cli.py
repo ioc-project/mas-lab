@@ -111,7 +111,7 @@ def test_main_serve_tools_dir_without_infra(tmp_path) -> None:
     )
 
 
-def test_main_serve_uses_deploy_infra_and_tool_claim(tmp_path) -> None:
+def test_main_serve_uses_listen_infra_and_tool_claim(tmp_path) -> None:
     tools_dir = tmp_path / "tools"
     tools_dir.mkdir()
     tool_manifest = tools_dir / "sample.tool.yaml"
@@ -125,7 +125,7 @@ def test_main_serve_uses_deploy_infra_and_tool_claim(tmp_path) -> None:
         "    - id: local-mcp\n"
         "      name: Public Tools\n"
         "      protocol: MCP\n"
-        "      usage: deploy\n"
+        "      usage: listen\n"
         "      transport: streamable-http\n"
         "      host: 0.0.0.0\n"
         "      port: 9123\n"
@@ -145,6 +145,38 @@ def test_main_serve_uses_deploy_infra_and_tool_claim(tmp_path) -> None:
         json_response=True,
         stateless_http=True,
     )
+
+
+@pytest.mark.parametrize("usage", ["listen", "deploy", "[connect, listen]", "use-and-deploy"])
+def test_main_serve_accepts_new_and_deprecated_listen_usage(tmp_path, usage: str) -> None:
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "sample.tool.yaml").write_text(
+        "apiVersion: mas/v1\nkind: Tool\nmetadata:\n  name: sample-tool\n", encoding="utf-8"
+    )
+    infra = tmp_path / "mcp.yaml"
+    infra.write_text(
+        "apiVersion: infra/v1\nkind: ToolServerRegistry\nmetadata:\n  name: mcp\n"
+        f"spec:\n  tool_servers:\n    - id: local-mcp\n      protocol: mcp\n      usage: {usage}\n"
+        "      tools_dir: tools\n",
+        encoding="utf-8",
+    )
+    factory = MagicMock()
+    factory._tools = [{"name": "sample-tool"}]
+    with patch("library_ioa.plugins.mcp.server.MCPToolServerFactory.from_manifest", return_value=factory):
+        assert main(["serve", "--infra-ref", str(infra)]) == 0
+
+
+@pytest.mark.parametrize("usage", ["connect", "use"])
+def test_main_serve_rejects_a_connect_only_registry(tmp_path, usage: str) -> None:
+    infra = tmp_path / "mcp.yaml"
+    infra.write_text(
+        "apiVersion: infra/v1\nkind: ToolServerRegistry\nmetadata:\n  name: mcp\n"
+        f"spec:\n  tool_servers:\n    - id: remote\n      protocol: mcp\n      usage: {usage}\n"
+        "      url: http://127.0.0.1:9001/mcp\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit):
+        main(["serve", "--infra-ref", str(infra)])
 
 
 def test_main_module_entrypoint_imports() -> None:

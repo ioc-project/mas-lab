@@ -12,7 +12,7 @@ spec:
       tools: "*"
     - id: mcp-web-search
       protocol: mcp
-      usage: use
+      usage: connect
       transport: streamable-http
       url: http://127.0.0.1:9001/mcp
       tools: "*"
