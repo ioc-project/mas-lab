@@ -77,7 +77,7 @@ mas-lab benchmark run experiment.yaml -o /tmp/results
 ```
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ------ | --------- | ------------- |
 | `--force` | off | Always create a new run |
 | `--benchmark-id` | - | Resume a specific benchmark by ID |
 | `--progress / --no-progress` | progress | Real-time progress bar |
@@ -125,6 +125,24 @@ mas-lab benchmark pipeline plan pipeline.yaml       # execution plan
 mas-lab benchmark pipeline run pipeline.yaml
 ```
 
+### Share a run
+
+```bash
+# export: pack output, referenced trace cache, and a minimal source bundle
+mas-lab benchmark export last -o run.tar.gz [--no-trace-cache]
+
+# import: restore an archive (--dry-run to preview)
+mas-lab benchmark import run.tar.gz --output-dir DIR --trace-cache DIR
+
+# publish-hf: upload to a Hugging Face dataset repo (private, review PR by default)
+mas-lab benchmark publish-hf run.tar.gz --repo-id ORG/REPO
+
+# import-hf: download and restore, pinned to a commit and a SHA-256
+mas-lab benchmark import-hf PATH_IN_REPO --repo-id ORG/REPO --revision SHA --sha256 DIGEST
+```
+
+Archive layout and trust model: [sharing-benchmarks.md](../../docs/sharing-benchmarks.md).
+
 ## Post-processing pipeline
 
 A pipeline YAML declares steps and their dependencies. Steps run in topological order; independent steps run in parallel.
@@ -156,7 +174,7 @@ steps:
 Step implementations are library plugins registered in the runtime registry through the `types:` / `plugins:` block of [`library-lab/library.yaml`](../../../library-lab/library.yaml). `mas-lab benchmark pipeline validate` lists the registered step types. The full catalog is in [pipeline-steps.md](../../docs/pipeline-steps.md). Steps such as `embed_states` and `list_clickhouse_sessions` can live in your own package and register through entry points.
 
 | Category | Step types |
-|----------|------------|
+| ---------- | ------------ |
 | `extract/` | `extract_trace_stats`, `extract_mealy_stats`, `extract_trajectories` (builds `trajectories.jsonl` from `events.jsonl`) |
 | `eval/` | `eval_mce` (MCE LLM-as-judge scoring on `events.jsonl`), `collect_metrics`, `compute_ci` |
 | `viz/` | `plot` (declarative figure from a `plot_library/` spec: `shapley_bars`, `ablation_heatmap`, `trajectory_gantt`), `plot_trajectory` (per-run SVG), `plot_multilevel_trajectory` (swimlane HTML/SVG), `ci_plot` |
@@ -221,7 +239,7 @@ components/bench/src/mas/lab/benchmark/
 ## Documentation
 
 | Document | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | [benchmark.md](../../docs/benchmark.md) | Benchmark guide: quickstart, concepts, lifecycle |
 | [pipeline.md](../../docs/pipeline.md) | Pipeline architecture and YAML schema |
 | [pipeline-steps.md](../../docs/pipeline-steps.md) | Step type reference |
@@ -229,4 +247,5 @@ components/bench/src/mas/lab/benchmark/
 | [library-eval/README.md](../../../library-eval/README.md) | MCE metrics and `mas-lab eval` |
 | [designing-experiments.md](../../docs/designing-experiments.md) | Designing ablations and Shapley experiments |
 | [benchmark-state-architecture.md](../../docs/benchmark-state-architecture.md) | Run state machine and locking |
+| [sharing-benchmarks.md](../../docs/sharing-benchmarks.md) | Export, import, and Hugging Face publishing |
 | [multi-scenario-format.md](../../docs/multi-scenario-format.md) | Multi-scenario dataset format |

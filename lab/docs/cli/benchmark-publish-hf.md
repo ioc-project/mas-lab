@@ -16,14 +16,24 @@ mas-lab benchmark publish-hf [OPTIONS] TARBALL
 
 ## DESCRIPTION
 
-Upload a benchmark archive tarball to a Hugging Face dataset repo.
+Upload a benchmark archive tarball (from `benchmark export`) to a Hugging Face
+**dataset** repo, unchanged. The repo is created if it does not exist.
 Pass `--token` or `--token-file`, or set `HF_TOKEN` (ctl reads the
 environment).
+
+By default the repo is private and the upload opens a review PR instead of
+writing to the default branch. The command prints the resulting commit SHA;
+pass it to `benchmark import-hf --revision` to pin an import to that exact
+revision. The default remote path is
+`benchmarks/<experiment>/<short_id>/bundle.tar.gz`.
+
+The command does not print a digest of the tarball. Compute one with
+`shasum -a 256 RUN.tar.gz` and share it with the archive.
 
 ## OPTIONS
 
 | Flag | Meaning |
-|------|------|
+| ------ | ------ |
 | `TARBALL` | Positional tarball to publish. |
 | `--repo-id` | Hugging Face dataset repo id, e.g. `<user-or-org>/<repo>`. |
 | `--path-in-repo` | Destination path inside the dataset repo. |

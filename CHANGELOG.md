@@ -187,6 +187,12 @@ reconciling the release notes with the code and docs currently on that branch.
   both output-token fields by default, never send both together, and fit a
   configured budget to `context_window`. See
   [Output-token limits](docs/manifests/agent.md#output-token-limits).
+- `mas-lab benchmark publish-hf` uploads an export archive to a Hugging Face
+  dataset repo, and `import-hf` downloads and restores it. Publishing is
+  private and review-based by default (`--visibility`, `--create-pr`) and
+  prints the commit SHA. `import-hf` takes `--revision` to pin a commit and
+  `--sha256` to verify the tarball before extraction; without `--sha256`
+  nothing is verified. See [Sharing benchmarks](lab/docs/sharing-benchmarks.md).
 
 ### Changed
 
@@ -203,6 +209,11 @@ reconciling the release notes with the code and docs currently on that branch.
   `--token-file`. If neither is set, ctl reads `HF_TOKEN`. `import-hf
   --dry-run` still uses `HF_TOKEN` when it is set, and does not require
   a token when it is not.
+- `mas-lab benchmark export` builds `source/` from an allowlist of folders
+  and file types, skips `.env*`, keys, and certificates, fails if a sensitive
+  file is found, and writes archive-relative paths only to `MANIFEST.json`.
+  `import` skips members and links that resolve outside the extraction root
+  and aborts on an unsafe `MANIFEST.json` path.
 
 - Public GitHub and docs URLs moved from `outshift-open/mas-lab` to
   `ioc-project/mas-lab` (`https://github.com/ioc-project/mas-lab`,
