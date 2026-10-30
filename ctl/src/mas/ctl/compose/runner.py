@@ -38,6 +38,7 @@ def resolve_workspace_infra(
     cli_refs: list[str],
     runtime_refs: list[str] | None = None,
     overrides: list[str] | None = None,
+    middleware_refs: list[str] | None = None,
 ) -> ResolvedInfra:
     """Merge workspace, user-default and CLI infra refs, then resolve them."""
     user = UserConfig.load()
@@ -54,7 +55,7 @@ def resolve_workspace_infra(
         user=user,
         interceptors=merge_infra_interceptors(
             workspace_interceptors=workspace.infra_interceptors,
-            cli_interceptors=[],
+            cli_interceptors=list(middleware_refs or []),
         ),
         runtime_refs=list(runtime_refs or []),
         overrides=list(overrides or []),
@@ -81,6 +82,7 @@ class ComposeRequest:
     overrides: list[str] = field(default_factory=list)
     infra_refs: list[str] = field(default_factory=list)
     runtime_refs: list[str] = field(default_factory=list)
+    middleware_refs: list[str] = field(default_factory=list)
     kernel_backend: str | None = None  # CLI override of deployment.spec.runtime_id
     validate: bool = True
 
@@ -179,6 +181,7 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
         cli_refs=list(req.infra_refs),
         runtime_refs=list(req.runtime_refs),
         overrides=list(overrides_for_root(tuple(req.overrides), "infra")),
+        middleware_refs=list(req.middleware_refs),
     )
 
     if req.deployment_path:

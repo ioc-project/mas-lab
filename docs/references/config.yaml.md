@@ -53,7 +53,7 @@ The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and ru
 | `mas_lab` | object | Defaults for `mas-lab` benchmark / demo |
 | `infra_refs` | string or list | Infra bundles, merged left to right. An *infra bundle* says where things are (LLM endpoint, tool servers). Env `MAS_INFRA_REFS` (comma- or space-separated) overrides without editing the file. CLI `--infra-ref` still wins. |
 | `runtime_refs` | string or list | `RuntimeEngine` refs. Omit for package defaults. Env `MAS_RUNTIME_REFS` (comma- or space-separated). Per-run override: `--runtime-ref`. |
-| `infra_interceptors` | string or list | Optional interceptor bundle refs. |
+| `middleware` | string or list | Optional middleware bundle refs (alias `infra_interceptors`). |
 | `manifest_libraries` | list of paths | Extra library search folders: a library root or a parent of sibling library folders, same scan as `lab.libraries` / `MAS_LIBRARY_PATHS` (name = directory stem). A legacy name→path map is flattened to its paths. |
 | `aliases` | map | Runtime plugin alias to canonical URN |
 | `defaults` | object | Overrides for runtime `defaults.yaml` (`model`, `design_pattern`, `context_manager`, `assembler`) |

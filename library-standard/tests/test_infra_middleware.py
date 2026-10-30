@@ -50,6 +50,20 @@ class _SilentEngine(_EchoEngine):
         return ""
 
 
+def test_fault_inject_wrap_call_kinds_overrides_class_default() -> None:
+    wrapped = FaultInjectMiddleware.wrap(
+        _EchoEngine(),
+        {"rate": 1.0, "message": "tool fault"},
+        call_kinds=("tool",),
+    )
+    assert wrapped.call_kinds == ("tool",)
+    hit = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    assert hit.response_kind == "ERROR"
+    assert "tool fault" in (hit.text or "")
+    miss = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    assert miss.response_kind == "MODEL_TEXT"
+
+
 def test_fault_inject_exchange_preview_prefixes_inner() -> None:
     wrapped = FaultInjectMiddleware.wrap(_EchoEngine(), {"rate": 0.25})
     text = wrapped.exchange_preview("LLM_CALL", correlation_id=1)

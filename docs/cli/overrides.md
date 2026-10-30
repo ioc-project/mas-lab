@@ -241,7 +241,7 @@ Walking the MAS YAML (`.mas.spec.agency.agents[id=planner].spec.tools`) still wo
 
 You cannot select a model through `.mas.spec`. Use `--model`, or the experiment's `models:` slots.
 
-Resolved infra exposes its ordered middleware chain as `spec.interceptors`, including each entry's `middleware`, `applies_to`, and typed `params`:
+Resolved infra exposes its ordered middleware chain as `spec.pipeline` (leftover address `spec.interceptors`), including each entry's `middleware`, `for`, and typed `params`:
 
 ```bash
 mas-ctl chat agent.yaml --infra-ref infra/llm-cache.yaml \

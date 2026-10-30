@@ -1,9 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Infra access pipeline — middleware around LLM calls.
+"""Infra access pipeline — middleware around LLM and tool calls.
 
 ``llm_cache`` is common: one engine wrap outside the model router.
-Every other step is instantiated in front of each routed provider.
+Every other LLM step is instantiated in front of each routed provider.
+Tool steps use the same ``for`` / ``per`` stamps beside ``PipedLLMProvider``.
 
 Implementations register as ``type: infra_middleware``. This module owns the
 protocol, registry dispatch, and the bidirectional reply facade — no plugin
@@ -13,10 +14,16 @@ class names.
 from __future__ import annotations
 
 import contextvars
+import inspect
 import logging
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Protocol
 
+from mas.runtime.engine.call_kinds import (
+    normalize_call_kind,
+    normalize_call_kinds,
+    read_aliased_field,
+)
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -75,25 +82,34 @@ def middleware_id(spec: dict[str, Any] | None) -> str:
 def _middleware_class(mid: str) -> type | None:
     if not mid:
         return None
-    try:
-        from mas.runtime.registry import get_registry
+    from mas.runtime.registry import get_registry
 
-        variant = get_registry().resolve_by_type("infra_middleware", mid)
-    except Exception:
-        return None
+    variant = get_registry().resolve_by_type("infra_middleware", mid)
     if variant is None:
         return None
     try:
         return variant.load_class()
-    except Exception:
+    except (ImportError, AttributeError, TypeError):
         return None
+
+
+def _middleware_entry_attributes(mid: str) -> dict[str, Any]:
+    if not mid:
+        return {}
+    from mas.runtime.registry import get_registry
+
+    entry = get_registry().get_entry(mid)
+    if entry is None:
+        return {}
+    return dict(entry.attributes or {})
 
 
 def middleware_per(spec: dict[str, Any] | None) -> str:
     """``all`` (one shared copy) or ``destination`` (one copy per leaf).
 
     The step may set ``per``; otherwise the plugin class attribute ``per``
-    is used. Unknown plugins default to ``destination``.
+    (or ``library.yaml`` ``attributes.per``) is used. Unknown plugins
+    default to ``destination``.
     """
     raw = spec or {}
     explicit = str(raw.get("per") or "").strip().lower()
@@ -107,7 +123,62 @@ def middleware_per(spec: dict[str, Any] | None) -> str:
             attr = ""
         if attr in {_SHARED_PER, _DESTINATION_PER}:
             return attr
+    attr = str(_middleware_entry_attributes(middleware_id(spec)).get("per") or "").strip().lower()
+    if attr in {_SHARED_PER, _DESTINATION_PER}:
+        return attr
     return _DESTINATION_PER
+
+
+def middleware_call_kinds(spec: dict[str, Any] | None) -> tuple[str, ...]:
+    """Canonical ``for`` kinds for a step (``llm``, ``tool``). Undeclared is ``llm``."""
+    raw = spec or {}
+    if "for" in raw:
+        kinds = normalize_call_kinds(raw.get("for"))
+        return kinds or ("llm",)
+    cls = _middleware_class(middleware_id(spec))
+    if cls is not None:
+        try:
+            declared = cls.call_kinds
+        except AttributeError:
+            declared = None
+        kinds = normalize_call_kinds(declared)
+        if kinds:
+            return kinds
+    kinds = normalize_call_kinds(_middleware_entry_attributes(middleware_id(spec)).get("call_kinds"))
+    if kinds:
+        return kinds
+    return ("llm",)
+
+
+def stamp_middleware_step(spec: dict[str, Any] | None, *, where: str = "") -> dict[str, Any]:
+    """Copy a step, resolve leftover keys, and fill ``for`` / ``per``."""
+    step = dict(spec or {})
+    mid = middleware_id(step) or "middleware"
+    label = where or mid
+    raw_for = read_aliased_field(step, "for", "applies_to", where=label)
+    step.pop("applies_to", None)
+    if raw_for is not None:
+        step["for"] = list(normalize_call_kinds(raw_for))
+    step["for"] = list(middleware_call_kinds(step))
+    step["per"] = middleware_per(step)
+    return step
+
+
+def filter_pipeline_for_kind(
+    pipeline: list[dict[str, Any]] | None,
+    kind: str,
+) -> list[dict[str, Any]]:
+    """Keep steps whose ``for`` includes *kind*. Empty ``for`` is ``llm`` only."""
+    want = normalize_call_kind(kind)
+    if not want:
+        return [dict(step) for step in (pipeline or []) if isinstance(step, dict)]
+    out: list[dict[str, Any]] = []
+    for step in pipeline or []:
+        if not isinstance(step, dict):
+            continue
+        if want in middleware_call_kinds(step):
+            out.append(dict(step))
+    return out
 
 
 def is_shared_middleware(spec: dict[str, Any] | None) -> bool:
@@ -122,7 +193,18 @@ def is_cache_middleware(spec: dict[str, Any] | None) -> bool:
             return bool(cls.stores_llm_responses)
         except AttributeError:
             pass
-    return middleware_id(spec) in {"llm_cache", "llm-cache"}
+    return bool(_middleware_entry_attributes(middleware_id(spec)).get("stores_llm_responses"))
+
+
+def is_scheduler_middleware(spec: dict[str, Any] | None) -> bool:
+    """True when this step paces live LLM calls (``llm_scheduler`` plugin)."""
+    cls = _middleware_class(middleware_id(spec))
+    if cls is not None:
+        try:
+            return bool(cls.paces_llm_calls)
+        except AttributeError:
+            pass
+    return bool(_middleware_entry_attributes(middleware_id(spec)).get("paces_llm_calls"))
 
 
 def infra_has_cache_step(
@@ -181,8 +263,20 @@ def apply_middleware(engine: Any, spec: dict[str, Any]) -> Any:
     plugin_cls = variant.load_class()
     wrap = getattr(plugin_cls, "wrap", None)
     if not callable(wrap):
-        raise TypeError(f"infra middleware {mid!r} must define a wrap(inner, params) classmethod")
-    return wrap(engine, params)
+        raise TypeError(
+            f"infra middleware {mid!r} must define a wrap(inner, params, *, call_kinds=) classmethod"
+        )
+    kinds = middleware_call_kinds(spec)
+    try:
+        sig = inspect.signature(wrap)
+    except (TypeError, ValueError):
+        sig = None
+    if sig is None or (
+        "call_kinds" not in sig.parameters
+        and not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    ):
+        raise TypeError(f"infra middleware {mid!r} wrap(inner, params) must accept call_kinds=")
+    return wrap(engine, params, call_kinds=kinds)
 
 
 def innermost_call(engine: Any) -> Any:
@@ -261,11 +355,26 @@ def wrap_llm_provider_pipeline(provider: Any, pipeline: list[dict[str, Any]] | N
 
     The model router registers the returned object. Cache does not belong
     here — wrap the engine with :func:`split_pipeline_layers` common steps.
+    Tool steps are dropped; they wrap :class:`PipedToolCall` instead.
     """
-    steps = [dict(step) for step in (pipeline or []) if isinstance(step, dict)]
+    steps = filter_pipeline_for_kind(
+        [dict(step) for step in (pipeline or []) if isinstance(step, dict)],
+        "llm",
+    )
     if not steps or provider is None:
         return provider
     return PipedLLMProvider(inner=provider, pipeline=steps)
+
+
+def wrap_tool_pipeline(body: Any, pipeline: list[dict[str, Any]] | None) -> Any:
+    """Instantiate tool-kind *pipeline* in front of one tool invoke body."""
+    steps = filter_pipeline_for_kind(
+        [dict(step) for step in (pipeline or []) if isinstance(step, dict)],
+        "tool",
+    )
+    if not steps or body is None:
+        return body
+    return PipedToolCall(inner=body, pipeline=steps)
 
 
 @dataclass
@@ -429,6 +538,32 @@ class PipedLLMProvider:
             return _completion_from_pipeline(ret, payload)
         finally:
             _PROVIDER_CALL.reset(token)
+
+
+@dataclass
+class PipedToolCall:
+    """One destination's infra pipeline wrapping a tool invoke body.
+
+    Same shape as :class:`PipedLLMProvider`, for ``for: tool`` steps. The
+    engine's common tool wrap uses :func:`wrap_call_stack`; named tool
+    servers clone destination steps the way LLM leaves clone schedulers.
+    """
+
+    inner: Any
+    pipeline: list[dict[str, Any]] = field(default_factory=list)
+    _stack: Any = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._stack = wrap_call_stack(self.inner, list(self.pipeline))
+
+    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        return self._stack.invoke(io)
+
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        return await self._stack.ainvoke(io)
+
+    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return str(self._stack.exchange_preview(op, correlation_id=correlation_id) or "")
 
 
 def _completion_from_pipeline(ret: EngineIoReturn, payload: dict[str, Any]) -> dict[str, Any]:

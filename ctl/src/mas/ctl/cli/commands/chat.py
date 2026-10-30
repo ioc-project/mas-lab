@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
+from mas.ctl.cli.bind_flags import bind_option, connect_option, middleware_option, with_connects
 from mas.ctl.cli.help_text import CHAT_EPILOG
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
@@ -75,6 +75,7 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
     multiple=True,
     help="RuntimeEngine manifest ref (merged after workspace runtime_refs)",
 )
+@middleware_option
 @click.option("--memory-seed", "memory_seed_path", default=None, type=click.Path())
 @click.option("--checkpoint-dir", default=None, type=click.Path())
 @click.option("--load-checkpoint", default=None, type=click.Path())
@@ -162,6 +163,7 @@ def chat_cmd(
     flavour: str,
     infra_refs_cli: tuple[str, ...],
     runtime_refs_cli: tuple[str, ...],
+    middleware_refs: tuple[str, ...],
     memory_seed_path: str | None,
     checkpoint_dir: str | None,
     load_checkpoint: str | None,
@@ -362,6 +364,7 @@ def chat_cmd(
             infra_refs_cli=infra_refs_cli,
             overrides=overrides,
             runtime_refs_cli=runtime_refs_cli,
+            middleware_refs=middleware_refs,
             anchor=session.manifest_dir or session.original_cwd,
             with_interceptors=True,
         )

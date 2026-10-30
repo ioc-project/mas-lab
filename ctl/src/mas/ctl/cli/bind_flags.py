@@ -44,6 +44,17 @@ bind_option = click.option(
     help="Old name for --connect.",
 )
 
+middleware_option = click.option(
+    "--middleware",
+    "middleware_refs",
+    multiple=True,
+    help=(
+        "Infra middleware ref (repeatable). Merged after workspace "
+        "middleware / infra_interceptors."
+    ),
+)
+
+
 listen_option = click.option(
     "--listen",
     "listens",

@@ -341,6 +341,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `mas-ctl plan MANIFEST` | Print the placement plan only. | `-d/--deployment`, `--kernel`, `--no-validate` |
 | `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: prefer `deployment/v1`. | none |
 | `mas-ctl infra list` | List infra bundles. Alias: `mas-ctl list-bundles`. | `-v` |
+| `mas-ctl infra show` | Print each LLM and tool chain, and each agent's comm stack. | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--json` |
 | `mas-ctl list-bundles` | List infra bundles from installed libraries. | `-v` |
 | `mas-ctl registry list`, `registry query PREFIX` | List registered runtime machines, ctl registries, and schema kinds. | `query`: `-l/--layer`, `--json` |
 | `mas-ctl plugin list`, `doctor [MANIFEST …]`, `enable URN` | Show plugin availability from `library.yaml` `plugins:`. `enable` installs the missing extra. | `list`: `--type`, `--json`. `doctor`: `--json`. `enable`: `--dry-run`. |

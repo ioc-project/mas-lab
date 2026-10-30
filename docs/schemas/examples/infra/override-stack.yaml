@@ -10,16 +10,16 @@ spec:
   models:
     defaults:
       llm: any
-  interceptors:
+  pipeline:
     - middleware: llm_cache
-      applies_to: [LLM_CALL]
+      for: [llm]
       params:
         allow_read: true
         allow_write: false
         raise_on_miss: true
         cache_path: ./cache/llm-cache.json
     - middleware: fault_inject
-      applies_to: [LLM_CALL]
+      for: [llm]
       params: {}
   runtime_engine:
     cache:

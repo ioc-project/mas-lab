@@ -183,8 +183,11 @@ class WorkspaceConfig:
 
     @property
     def infra_interceptors(self) -> list[str]:
-        raw = self._data.get("infra_interceptors") or []
-        return [raw] if isinstance(raw, str) else list(raw)
+        from mas.runtime.engine.call_kinds import as_str_list, read_aliased_field
+
+        where = str(self._config_file or "workspace")
+        raw = read_aliased_field(self._data, "middleware", "infra_interceptors", where=where)
+        return as_str_list(raw)
 
     @property
     def manifest_libraries(self) -> dict[str, str]:

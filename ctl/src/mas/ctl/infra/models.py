@@ -20,6 +20,15 @@ def _providers_from_document(raw: Any) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _pipeline_from_spec(spec: dict[str, Any], *, where: str) -> list[dict[str, Any]]:
+    from mas.runtime.engine.call_kinds import read_aliased_field
+
+    raw = read_aliased_field(spec, "pipeline", "interceptors", where=where)
+    if not isinstance(raw, list):
+        return []
+    return [dict(item) for item in raw if isinstance(item, dict)]
+
+
 @dataclass
 class ProxySpec:
     api_base: str = ""
@@ -113,7 +122,7 @@ class InfraManifest:
             model_access=dict(spec.get("model_access") or {}),
             protocol=str(spec.get("protocol") or "").strip(),
             tool_servers=[dict(item) for item in (spec.get("tool_servers") or []) if isinstance(item, dict)],
-            pipeline=[dict(item) for item in (spec.get("interceptors") or []) if isinstance(item, dict)],
+            pipeline=_pipeline_from_spec(spec, where=str(meta.get("name") or kind or "infra")),
             runtime_engine=dict(spec.get("runtime_engine") or {}),
             raw=data,
             applications=applications,

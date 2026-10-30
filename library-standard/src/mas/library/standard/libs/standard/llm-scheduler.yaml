@@ -11,8 +11,8 @@ metadata:
 
 spec:
   middleware: llm_scheduler
-  applies_to:
-    - LLM_CALL
+  for: llm
+  per: destination
   params:
     max_in_flight: 8
     requests_per_minute: 0

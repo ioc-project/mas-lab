@@ -15,7 +15,8 @@ from mas.ctl.infra.resolve import (
     resolve_infra_refs,
 )
 from mas.ctl.validate import validate_file
-from mas.ctl.workspace.config import WorkspaceConfig
+from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+from mas.runtime.engine.infra_pipeline import middleware_id
 
 
 def test_bidirectional_pipeline_forward_short_circuit():
@@ -72,9 +73,19 @@ def test_infra_bundle_entries_loads_llm_proxy_cached(tmp_path: Path, monkeypatch
     ws = WorkspaceConfig.load(tmp_path)
     merged = _load_file(bundle, workspace=ws)
     assert merged.kind == "InfraBundle"
-    pipeline = merged.pipeline or []
-    assert any(step.get("middleware") == "llm_cache" for step in pipeline)
+    leaf_steps = [
+        step
+        for leaf in (merged.providers or {}).values()
+        for step in (leaf.get("pipeline") or [])
+        if isinstance(step, dict)
+    ]
+    shared = [step for step in (merged.pipeline or []) if isinstance(step, dict)]
+    assert any(step.get("middleware") == "llm_cache" for step in shared + leaf_steps)
     assert merged.proxy.api_base or merged.models.default_llm is not None or merged.name
+
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    infra = resolve_infra_refs(["standard:llm-proxy-cached"], anchor=tmp_path, workspace=ws)
+    assert "llm_cache" in [middleware_id(step) for step in infra.llm_proxy.get("pipeline") or []]
 
 
 def test_relative_llm_cache_path_is_resolved_from_infra_manifest_dir(tmp_path: Path):

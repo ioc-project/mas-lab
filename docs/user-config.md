@@ -233,7 +233,7 @@ instead:
 
 | Removed from manifests | Use instead |
 | --- | --- |
-| `spec.infra_refs`, `spec.runtime_refs`, `infra_interceptors` | `infra_refs` / `runtime_refs` in `config.yaml`, `--infra-ref` / `--runtime-ref` |
+| `spec.infra_refs`, `spec.runtime_refs`, `infra_interceptors` | `infra_refs` / `runtime_refs` / `middleware` in `config.yaml`, `--infra-ref` / `--runtime-ref` / `--middleware` |
 | `spec.execution` (cache, stream, queue depth, parallel tools, …) | `kind: RuntimeEngine` refs (see [runtime-engine.md](manifests/runtime-engine.md)) |
 | Offline LLM turns (no live provider) | [llm_cache replay](manifests/llm-cache.md) (`raise_on_miss`) recorded against a live provider |
 

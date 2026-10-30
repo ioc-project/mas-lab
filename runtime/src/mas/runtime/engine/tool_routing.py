@@ -75,6 +75,78 @@ def is_star_claim(claim: str | tuple[str, ...] | None) -> bool:
     return claim is None or claim == "*" or claim == ("*",)
 
 
+def _explicit_tool_names(raw: Any) -> tuple[str, ...]:
+    if isinstance(raw, str):
+        token = raw.strip()
+        return (token,) if token and token != "*" else ()
+    if isinstance(raw, (list, tuple)):
+        return tuple(str(item).strip() for item in raw if str(item).strip() and str(item) != "*")
+    return ()
+
+
+def _advertised_tool_names(raw: Any) -> tuple[str, ...]:
+    if isinstance(raw, str):
+        token = raw.strip()
+        return (token,) if token else ()
+    if isinstance(raw, (list, tuple)):
+        return tuple(str(item).strip() for item in raw if str(item).strip())
+    return ()
+
+
+def tool_server_claim(server_id: str, server: dict[str, Any] | None) -> ProviderClaim:
+    """Map one infra tool-server row onto the same claim object providers use."""
+    payload = server or {}
+    raw = payload.get("tools")
+    if raw == "":
+        raw = None
+    sid = str(server_id)
+    advertised = _advertised_tool_names(payload.get("advertised"))
+    if is_star_claim(raw):
+        return ProviderClaim(name=sid, advertised=advertised, claim="*", handler=sid, origin="external")
+    names = _explicit_tool_names(raw)
+    return ProviderClaim(name=sid, advertised=names, claim=names, handler=sid, origin="external")
+
+
+def owner_for_tool(tool: str, providers: list[ProviderClaim]) -> str | None:
+    """Provider that owns *tool*, or ``None`` if unclaimed or conflicting.
+
+    A star claim with no advertised names fills *tool* for this lookup
+    (one in-flight leftover), except runtime system tools, which stay
+    implicit-local unless a server lists them. A star that already has
+    advertised names wraps only those names. Two equal claims raise
+    inside :func:`build_tool_routes`; this returns ``None`` so the dest
+    wrap falls back to raw dispatch.
+    """
+    token = str(tool or "").strip()
+    if not token:
+        return None
+    filled: list[ProviderClaim] = []
+    for provider in providers:
+        if (
+            is_star_claim(provider.claim)
+            and token not in provider.advertised
+            and token not in SYSTEM_TOOL_NAMES
+            and not provider.advertised
+        ):
+            filled.append(
+                ProviderClaim(
+                    provider.name,
+                    tuple(provider.advertised) + (token,),
+                    provider.claim,
+                    provider.handler,
+                    provider.origin,
+                )
+            )
+        else:
+            filled.append(provider)
+    try:
+        routes = build_tool_routes([], filled)
+    except ToolRouteConflictError:
+        return None
+    route = routes.get(token)
+    return None if route is None else route.provider_name
+
+
 def claimed_names(claim: str | tuple[str, ...] | None, advertised: tuple[str, ...]) -> tuple[str, ...]:
     advertised_set = {n for n in advertised if n}
     if is_star_claim(claim):

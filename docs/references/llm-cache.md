@@ -173,8 +173,7 @@ metadata:
 
 spec:
   middleware: llm_cache          # required; selects LlmCacheMiddleware
-  applies_to:
-    - LLM_CALL                   # default
+  for: llm                       # default
   params:
     allow_read: false
     allow_write: true

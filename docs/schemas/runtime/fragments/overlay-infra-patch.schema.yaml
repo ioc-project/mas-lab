@@ -22,10 +22,16 @@ properties:
     $ref: "../infra.schema.yaml#/properties/spec/properties/includes"
   interceptors:
     $ref: "../infra.schema.yaml#/properties/spec/properties/interceptors"
+  pipeline:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/pipeline"
   runtime_engine:
     $ref: "../infra.schema.yaml#/properties/spec/properties/runtime_engine"
   middleware:
     $ref: "../infra.schema.yaml#/properties/spec/properties/middleware"
+  for:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/for"
+  per:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/per"
   applies_to:
     $ref: "../infra.schema.yaml#/properties/spec/properties/applies_to"
   protocol:

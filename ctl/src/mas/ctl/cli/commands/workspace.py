@@ -4,9 +4,20 @@
 
 from __future__ import annotations
 
-import click
+import json
+from pathlib import Path
 
+import click
+import yaml
+from mas.ctl.cli.bind_flags import middleware_option
 from mas.ctl.libraries.bundles import list_bundles, list_manifest_libraries
+
+INFRA_SHOW_EPILOG = """
+Examples:
+  mas-ctl infra show --infra-ref arm.yaml --infra-ref standard:llm-cache
+  mas-ctl infra show --json
+  mas-ctl infra show mas.yaml --middleware standard:llm-cache
+"""
 
 
 @click.group()
@@ -26,6 +37,72 @@ def infra_list(verbose: bool) -> None:
     for b in bundles:
         if b.kind and "Infra" in b.kind or b.kind in ("LLMProxy", "ToolRegistry", "InfraBundle"):
             click.echo(f"{b.ref}  kind={b.kind}  {b.name}")
+
+
+@infra_group.command("show", epilog=INFRA_SHOW_EPILOG)
+@click.argument("manifest", required=False)
+@click.option(
+    "--infra-ref",
+    "infra_refs",
+    multiple=True,
+    help="Infrastructure bundle ref (merged after workspace infra_refs)",
+)
+@click.option(
+    "--runtime-ref",
+    "runtime_refs",
+    multiple=True,
+    help="RuntimeEngine manifest ref (merged after workspace runtime_refs)",
+)
+@click.option(
+    "--override",
+    "overrides",
+    multiple=True,
+    metavar="PATH=VALUE",
+    help="Schema-validated overlay override (repeatable; applied last).",
+)
+@middleware_option
+@click.option("--json", "as_json", is_flag=True, help="Print the stable JSON document.")
+def infra_show(
+    manifest: str | None,
+    infra_refs: tuple[str, ...],
+    runtime_refs: tuple[str, ...],
+    overrides: tuple[str, ...],
+    middleware_refs: tuple[str, ...],
+    as_json: bool,
+) -> None:
+    """Print each LLM and tool chain, and each agent's comm stack.
+
+    Same --infra-ref / --runtime-ref / --override / --middleware flags as
+    chat and run-mas. Output is bounded (32 destinations, 16 steps each).
+    """
+    from mas.ctl.infra.show import agents_from_manifest, infra_show_payload, render_infra_show
+    from mas.ctl.session.infra_resolve import resolve_session_infra
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    start = Path(manifest).expanduser().resolve().parent if manifest else Path.cwd()
+    workspace = WorkspaceConfig.load(start)
+    workspace = workspace.with_cli_overrides(overrides)
+    user = UserConfig.load()
+    document: dict | None = None
+    if manifest:
+        loaded = yaml.safe_load(Path(manifest).expanduser().read_text(encoding="utf-8"))
+        document = loaded if isinstance(loaded, dict) else None
+    infra = resolve_session_infra(
+        document,
+        workspace,
+        user,
+        infra_refs_cli=infra_refs,
+        overrides=overrides,
+        runtime_refs_cli=runtime_refs,
+        middleware_refs=middleware_refs,
+        anchor=start,
+        with_interceptors=True,
+    )
+    payload = infra_show_payload(infra, agents=agents_from_manifest(document))
+    if as_json:
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        return
+    click.echo(render_infra_show(payload), nl=False)
 
 
 @click.group()

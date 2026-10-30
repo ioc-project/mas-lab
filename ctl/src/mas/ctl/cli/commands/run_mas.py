@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import click
 import yaml
-from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
+from mas.ctl.cli.bind_flags import bind_option, connect_option, middleware_option, with_connects
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.runtime_flags import runtime_id_choice
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
@@ -36,6 +36,7 @@ from mas.ctl.executor.run_mas import execute_run_mas
     help="Deployment flavour from library-standard (only 'local' supported for now)",
 )
 @click.option("--infra-ref", "infra_refs", multiple=True)
+@middleware_option
 @click.option(
     "--kernel",
     default=DEFAULT_RUNTIME_ID,
@@ -64,6 +65,7 @@ def run_mas_cmd(
     deployment: str | None,
     flavour: str,
     infra_refs: tuple[str, ...],
+    middleware_refs: tuple[str, ...],
     kernel: str,
     interactive: bool,
     auto_hitl: bool,
@@ -141,6 +143,7 @@ def run_mas_cmd(
             overlay_paths=list(session.overlays),
             overrides=list(overrides),
             infra_refs=list(infra_refs),
+            middleware_refs=list(middleware_refs),
             deployment_path=deployment_path,
             kernel_backend=kernel,
             single_turn=single_turn,

@@ -18,6 +18,7 @@ from mas.runtime.engine.infra_pipeline import (
     split_pipeline_layers,
     wrap_call_stack,
     wrap_llm_provider_pipeline,
+    wrap_tool_pipeline,
 )
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
@@ -367,3 +368,38 @@ def test_two_cache_steps_warn(caplog) -> None:
         ]
     )
     assert "llm_cache" in caplog.text
+
+
+def test_wrap_llm_provider_skips_tool_steps() -> None:
+    inner = _StubProvider()
+    wrapped = wrap_llm_provider_pipeline(
+        inner,
+        [{"middleware": "fault_inject", "for": "tool", "params": {"rate": 1.0}}],
+    )
+    assert wrapped is inner
+    assert inner.chat_completion(model="m", messages=[])["content"] == "ok"
+
+
+def test_wrap_tool_pipeline_skips_llm_steps() -> None:
+    body = _EchoEngine()
+    wrapped = wrap_tool_pipeline(
+        body,
+        [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+    )
+    assert wrapped is body
+
+
+def test_two_leaf_schedulers_are_separate_instances() -> None:
+    first = wrap_llm_provider_pipeline(
+        _StubProvider(),
+        [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+    )
+    second = wrap_llm_provider_pipeline(
+        _StubProvider(),
+        [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+    )
+    assert isinstance(first, PipedLLMProvider)
+    assert isinstance(second, PipedLLMProvider)
+    assert first._stack is not second._stack
+    assert first.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert second.chat_completion(model="m", messages=[])["content"] == "ok"

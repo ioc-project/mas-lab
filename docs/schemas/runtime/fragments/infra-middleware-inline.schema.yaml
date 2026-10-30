@@ -13,11 +13,22 @@ properties:
     type: string
   middleware:
     type: string
+  for:
+    description: Call kinds this step wraps (llm, tool). Alias of leftover applies_to.
+    oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
+  per:
+    type: string
+    enum: [all, destination]
   applies_to:
+    description: Read-only alias of for. Mixing for and applies_to is an error.
     type: array
     items:
       type: string
-      enum: [LLM_CALL, TOOL_HTTP, OTEL_EXPORT]
+      enum: [LLM_CALL, TOOL_HTTP, OTEL_EXPORT, llm, tool]
   params:
     $ref: "./infra-middleware-params.schema.yaml"
 allOf:

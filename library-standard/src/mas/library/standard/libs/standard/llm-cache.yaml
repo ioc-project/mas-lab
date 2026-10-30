@@ -11,8 +11,8 @@ metadata:
 
 spec:
   middleware: llm_cache
-  applies_to:
-    - LLM_CALL
+  for: llm
+  per: all
   params:
     allow_read: true
     allow_write: true

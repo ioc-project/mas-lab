@@ -19,7 +19,7 @@ metadata:
   name: llm-cache-replay
 spec:
   middleware: llm_cache
-  applies_to: [LLM_CALL]
+  for: [llm]
   params:
     allow_read: true
     allow_write: false
@@ -99,8 +99,7 @@ metadata:
 
 spec:
   middleware: llm_cache
-  applies_to:
-    - LLM_CALL
+  for: llm
   params:
     allow_read: false
     allow_write: true
@@ -124,8 +123,7 @@ metadata:
 
 spec:
   middleware: llm_cache
-  applies_to:
-    - LLM_CALL
+  for: llm
   params:
     allow_read: true
     allow_write: false
