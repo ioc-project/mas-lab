@@ -238,6 +238,12 @@ reconciling the release notes with the code and docs currently on that branch.
   per compose. A second compose prints it again. `--no-validate` is silent.
   Empty lists do not warn. Overlay patches that set a non-empty list warn
   too.
+- Infra `usage` on Application endpoints and ToolServerRegistry servers is
+  now `connect`, `listen`, or `[connect, listen]`, the same words as the
+  `--connect` and `--listen` flags. `use`, `deploy`, and `use-and-deploy` are
+  deprecated aliases: still read, no removal date. `mas-ctl validate` warns
+  per row and compose prints the warning on stderr. `--connect` and
+  `--listen` now write the new values.
 - `--bind NAME=URI` is a hidden alias of `--connect`. It still works and prints
   a warning. It remains for one release.
 - `/api/libraries/**`, `/api/jobs/**`, and `/api/experiments/**` (results tree).

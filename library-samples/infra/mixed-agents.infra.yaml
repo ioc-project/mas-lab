@@ -9,5 +9,5 @@ spec:
   endpoints:
     schedule_agent:
       protocol: a2a
-      usage: use-and-deploy
+      usage: [connect, listen]
       url: http://127.0.0.1:9006

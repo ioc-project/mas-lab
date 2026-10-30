@@ -10,5 +10,5 @@ spec:
   tool_servers:
     - id: localhost-mcp-tools
       protocol: mcp
-      usage: use
+      usage: connect
       url: http://127.0.0.1:9001/mcp

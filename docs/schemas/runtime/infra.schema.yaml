@@ -281,9 +281,27 @@ properties:
                   format: uri
                 protocol:
                   type: string
+                usage:
+                  default: connect
+                  description: >-
+                    connect (route to this agent as a client), listen (serve
+                    it from this process), or [connect, listen]. use, deploy
+                    and use-and-deploy are deprecated aliases, still read.
+                  oneOf:
+                    - type: string
+                      enum: [connect, listen]
+                    - type: array
+                      items: {type: string, enum: [connect, listen]}
+                      minItems: 1
+                      uniqueItems: true
+                    - type: string
+                      enum: [use, deploy, use-and-deploy]
+                      deprecated: true
+                      x-replaced-by: "connect, listen, or [connect, listen]"
                 expose:
                   type: boolean
                   default: false
+                  description: Legacy; true reads as usage [connect, listen].
                 headers:
                   type: object
                   additionalProperties:

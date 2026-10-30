@@ -64,7 +64,7 @@ spec:
   endpoints:
     qa-agent:
       protocol: a2a
-      usage: deploy
+      usage: listen
       url: http://127.0.0.1:9005
 ```
 
@@ -94,9 +94,9 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 | Field | Meaning |
 | --- | --- |
 | `protocol` | `a2a` selects the A2A `agent_comm` / `agent_expose` plugins. |
-| `usage` | `use` (client route only), `deploy` (listen only), or `use-and-deploy`. Omitted means `use`. The legacy `expose: true` reads as `use-and-deploy` when `usage` is absent. |
+| `usage` | `connect` (client route only), `listen` (listen only), or `[connect, listen]`. Omitted means `connect`. `use`, `deploy`, `use-and-deploy` are deprecated aliases. The legacy `expose: true` reads as `[connect, listen]` when `usage` is absent. |
 | `url` | Advertised absolute `http(s)://host:port` URL. It cannot carry a path prefix. |
-| `headers`, `timeout` | Client-side options passed to the outbound A2A client (`usage: use`). |
+| `headers`, `timeout` | Client-side options passed to the outbound A2A client (`usage: connect`). |
 | `a2a.listen.host` / `a2a.listen.port` | Local bind address when it differs from `url`. Required when `url` is `https://`. |
 | `a2a.grpc_port` / `a2a.grpc_url` | Also serve and advertise gRPC (dedicated `mas-ctl serve` only). |
 | `a2a.capabilities` | AgentCard capabilities: `streaming`, `pushNotifications`, `extendedAgentCard`, `extensions`. All default to off. |
@@ -105,7 +105,7 @@ The endpoint serves `/.well-known/agent-card.json`, JSON-RPC at `/`, and HTTP+JS
 
 ## `--connect`
 
-`--connect NAME=URI` is the shortcut for a `usage: use` client route. It works on `serve`, `chat`, `tui`, `run-mas`, and `compose`. `--bind` is the hidden old name. Forms, merge order, and examples are on [CLI overrides → Connect](../cli/overrides.md#connect). `--connect` never opens a listener.
+`--connect NAME=URI` is the shortcut for a `usage: connect` client route. It works on `serve`, `chat`, `tui`, `run-mas`, and `compose`. `--bind` is the hidden old name. Forms, merge order, and examples are on [CLI overrides → Connect](../cli/overrides.md#connect). `--connect` never opens a listener.
 
 ## MAS configuration
 
@@ -126,7 +126,7 @@ spec:
       - id: weather-oracle
 ```
 
-- An agency entry without `ref` is an external dependency. It needs an infra endpoint with `usage: use` or `use-and-deploy`.
+- An agency entry without `ref` is an external dependency. It needs an infra endpoint with `usage: connect` or `[connect, listen]`.
 - An entry with `ref` and no such endpoint is local. It uses the local agent bus.
 - The matching infra endpoint is keyed by the same agent id.
 - A `delegates_to` target that matches neither fails during wiring.
@@ -140,13 +140,13 @@ spec:
   endpoints:
     weather-oracle:
       protocol: a2a
-      usage: deploy
+      usage: listen
       url: http://127.0.0.1:9005
 ```
 
 - `mas-ctl serve` hosts one agent per process and blocks.
-- `chat`, `tui`, and `run-mas` host the conversation in-process. They also bind, in the background, every hosted agent whose A2A endpoint has `usage: deploy` or `use-and-deploy`.
-- `usage: use` stays a client route. Run a separate `mas-ctl serve` for that port.
+- `chat`, `tui`, and `run-mas` host the conversation in-process. They also bind, in the background, every hosted agent whose A2A endpoint has `usage: listen` or `[connect, listen]`.
+- `usage: connect` stays a client route. Run a separate `mas-ctl serve` for that port.
 - Each listen URL has one AgentCard. Path-based multiplexing on a single port is not supported.
 
 ## Task and session identity

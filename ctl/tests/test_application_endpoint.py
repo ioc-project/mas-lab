@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -62,7 +63,7 @@ def test_application_infra_preserves_protocol_listen_block(tmp_path: Path) -> No
     assert resolved.applications["weather-oracle"]["url"] == "http://127.0.0.1:9005"
     assert resolved.applications["weather-oracle"]["protocol"] == "a2a"
     endpoint = resolved.applications["weather-oracle"]
-    assert application_endpoint_usage(endpoint) == "use-and-deploy"
+    assert application_endpoint_usage(endpoint) == {"connect", "listen"}
     assert endpoint["a2a"]["listen"] == {"host": "0.0.0.0", "port": 9008}
     assert endpoint["a2a"]["grpc_port"] == 9007
     assert endpoint["a2a"]["grpc_url"] == "grpc://a2a.example.test:9007"
@@ -72,22 +73,32 @@ def test_application_infra_preserves_protocol_listen_block(tmp_path: Path) -> No
 @pytest.mark.parametrize(
     ("endpoint", "expected_usage", "used", "deployed"),
     [
-        ({"usage": "use"}, "use", True, False),
-        ({"usage": "deploy"}, "deploy", False, True),
-        ({"usage": "use-and-deploy"}, "use-and-deploy", True, True),
-        ({"expose": True}, "use-and-deploy", True, True),
-        ({}, "use", True, False),
+        ({"usage": "connect"}, {"connect"}, True, False),
+        ({"usage": "listen"}, {"listen"}, False, True),
+        ({"usage": ["connect", "listen"]}, {"connect", "listen"}, True, True),
+        ({"usage": ["listen"]}, {"listen"}, False, True),
+        ({"usage": "use"}, {"connect"}, True, False),
+        ({"usage": "deploy"}, {"listen"}, False, True),
+        ({"usage": "use-and-deploy"}, {"connect", "listen"}, True, True),
+        ({"expose": True}, {"connect", "listen"}, True, True),
+        ({}, {"connect"}, True, False),
     ],
 )
 def test_application_endpoint_usage_modes(
-    endpoint: dict[str, str | bool],
-    expected_usage: str,
+    endpoint: dict[str, Any],
+    expected_usage: set[str],
     used: bool,
     deployed: bool,
 ) -> None:
     assert application_endpoint_usage(endpoint) == expected_usage
     assert application_endpoint_is_used(endpoint) is used
     assert application_endpoint_is_deployed(endpoint) is deployed
+
+
+@pytest.mark.parametrize("usage", ["bind", "", [], ["connect", "connect"], ["use"], 3])
+def test_application_endpoint_usage_rejects_unknown(usage: Any) -> None:
+    with pytest.raises(ValueError, match="usage must be 'connect', 'listen'"):
+        application_endpoint_usage({"usage": usage})
 
 
 def test_mas_overlay_rejects_legacy_transport_fields() -> None:

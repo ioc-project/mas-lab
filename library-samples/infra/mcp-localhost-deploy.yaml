@@ -10,7 +10,7 @@ spec:
   tool_servers:
     - id: mcp-localhost-deploy
       protocol: mcp
-      usage: deploy
+      usage: listen
       transport: streamable-http
       host: 127.0.0.1
       port: 9001

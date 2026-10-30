@@ -9,7 +9,10 @@ supplies replacement hints for those error messages.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
+
+from mas.runtime.spec.endpoint_usage import deprecated_usage
 
 # Keys that used to appear on experiment: and are now schema-rejected.
 #
@@ -132,6 +135,55 @@ def collect_delegates_to_deprecation(data: dict[str, Any]) -> list[tuple[str, st
             f"delegates_to is deprecated, still supported, no removal date; used by nodes: {listed}",
         )
     ]
+
+
+def _usage_rows(node: Any, path: str) -> list[tuple[str, dict[str, Any]]]:
+    """Every ``spec.endpoints`` / ``spec.tool_servers`` row under ``node``, with its path."""
+    rows: list[tuple[str, dict[str, Any]]] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child = f"{path}.{key}" if path else str(key)
+            if key == "endpoints" and isinstance(value, dict):
+                rows.extend((f"{child}.{name}", row) for name, row in value.items() if isinstance(row, dict))
+            elif key == "tool_servers" and isinstance(value, list):
+                for i, row in enumerate(value):
+                    if isinstance(row, dict):
+                        label = str(row.get("id") or "").strip()
+                        rows.append((f"{child}[{label or i}]", row))
+            else:
+                rows.extend(_usage_rows(value, child))
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            rows.extend(_usage_rows(item, f"{path}[{i}]"))
+    return rows
+
+
+def collect_endpoint_usage_deprecation(
+    data: Any = None,
+    *,
+    rows: Iterable[tuple[str, Any]] = (),
+) -> list[tuple[str, str]]:
+    """One warning per endpoint or tool server row whose ``usage`` is a deprecated value.
+
+    ``data`` is an infra document (bundles included); ``rows`` are already
+    resolved ``(label, row)`` pairs, as compose has them.
+    """
+    found = list(rows) + (_usage_rows(data, "") if data is not None else [])
+    msgs: list[tuple[str, str]] = []
+    for path, row in found:
+        if not isinstance(row, dict):
+            continue
+        usage = row.get("usage")
+        replacement = deprecated_usage(usage)
+        if replacement is None:
+            continue
+        msgs.append(
+            (
+                f"{path}.usage",
+                f"usage: {usage} is deprecated, still supported; use usage: {replacement}",
+            )
+        )
+    return msgs
 
 
 def collect_experiment_deprecations(

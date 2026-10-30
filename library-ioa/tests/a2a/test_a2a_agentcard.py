@@ -66,7 +66,7 @@ def test_a2a_exposure_uses_application_for_bind_card_and_push() -> None:
         endpoint={
             "protocol": "a2a",
             "url": "http://agents.example.test:9005",
-            "usage": "deploy",
+            "usage": "listen",
             "a2a": {
                 "listen": {"host": "0.0.0.0", "port": 8005},
                 "grpc_port": 9006,
@@ -97,15 +97,15 @@ def test_a2a_exposure_uses_application_for_bind_card_and_push() -> None:
     assert app.state.a2a_request_handler._push_sender is not None
 
 
-def test_a2a_exposure_requires_deploy_usage() -> None:
+def test_a2a_exposure_requires_listen_usage() -> None:
     import pytest
 
-    with pytest.raises(ValueError, match="usage: deploy or use-and-deploy"):
+    with pytest.raises(ValueError, match="usage: listen or \[connect, listen\]"):
         A2AExposure(
             endpoint={
                 "protocol": "a2a",
                 "url": "http://127.0.0.1:9005",
-                "usage": "use",
+                "usage": "connect",
                 "expose": True,
             },
             webserver=object(),

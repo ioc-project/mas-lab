@@ -28,10 +28,10 @@ spec:
   tool_servers:
     - id: tools
       protocol: mcp
-      usage: use
+      usage: connect
       url: http://127.0.0.1:8001/mcp
   endpoints:
     peer:
       protocol: a2a
-      usage: use
+      usage: connect
       url: http://127.0.0.1:8002/agents/peer/

@@ -33,7 +33,7 @@ spec:
   endpoints:
     schedule_agent:
       protocol: a2a
-      usage: use-and-deploy
+      usage: [connect, listen]
       url: http://127.0.0.1:9006
 ```
 
@@ -41,10 +41,10 @@ spec:
 | --- | --- |
 | `protocol` | `a2a` selects the A2A transport for that route. |
 | `url` | Required. The remote agent endpoint. |
-| `usage` | `use` consumes the peer; `deploy` exposes a local A2A server; `use-and-deploy` does both. |
+| `usage` | `connect` consumes the peer; `listen` exposes a local A2A server; `[connect, listen]` does both. The old `use`, `deploy`, `use-and-deploy` still work and are deprecated. |
 | `headers` | Optional auth. Use `env:VAR`, never static secrets. |
 
-The legacy `expose: true` reads as `usage: use-and-deploy`. Prefer `usage`.
+The legacy `expose: true` reads as `usage: [connect, listen]`. Prefer `usage`.
 
 Each layer owns one thing:
 
@@ -94,7 +94,7 @@ workflow:
       delegates_to: [schedule_agent, itinerary_agent, concierge_agent]
 ```
 
-Start the Step 2 server first (`mas-ctl serve` command above, left running). `--connect` acts as `usage: use`, so this process does not take port 9006:
+Start the Step 2 server first (`mas-ctl serve` command above, left running). `--connect` acts as `usage: connect`, so this process does not take port 9006:
 
 ```bash
 mas-ctl run-mas docs/tutorials/02-creating-a-mas/mas.yaml \
@@ -102,10 +102,10 @@ mas-ctl run-mas docs/tutorials/02-creating-a-mas/mas.yaml \
   -q "Plan a trip and compare the available transport schedules."
 ```
 
-Passing `--infra-ref` to `run-mas` instead is the all-in-one path: hosted `use-and-deploy` specialists bind in this process.
+Passing `--infra-ref` to `run-mas` instead is the all-in-one path: hosted `[connect, listen]` specialists bind in this process.
 Do not combine it with a separate `mas-ctl serve` on the same port.
-When a hosted agent has `deploy` or `use-and-deploy`, `run-mas`, `chat`, and `tui` still drive the conversation in-process.
-You can query the live instance with `a2a card get http://127.0.0.1:9001`. Specialists with `usage: use` need their own `mas-ctl serve` (or `--connect`).
+When a hosted agent has `listen` or `[connect, listen]`, `run-mas`, `chat`, and `tui` still drive the conversation in-process.
+You can query the live instance with `a2a card get http://127.0.0.1:9001`. Specialists with `usage: connect` need their own `mas-ctl serve` (or `--connect`).
 
 | Agent id | Owner | Dispatch |
 | --- | --- | --- |
@@ -123,7 +123,7 @@ The A2A client reads the peer's agent card to pick a wire binding.
 How routing works:
 
 1. MAS Lab records the MAS's agents as local routes and reads `delegates_to` for target ids.
-2. An endpoint with `usage: use` or `use-and-deploy` creates an external provider that overrides the local route for that id.
+2. An endpoint with `usage: connect` or `[connect, listen]` creates an external provider that overrides the local route for that id.
 3. A delegation to `schedule_agent` fetches its card and picks an advertised interface. Other ids stay local.
 
 Missing routes fail when the table is built, so protocol selection is deterministic.

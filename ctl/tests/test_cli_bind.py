@@ -16,7 +16,7 @@ from mas.ctl.session.flavour import resolve_flavour
 from mas.ctl.workspace.config import WorkspaceConfig
 
 
-def test_expand_connects_a2a_is_infra_use_not_a_flavour_switch() -> None:
+def test_expand_connects_a2a_is_infra_connect_not_a_flavour_switch() -> None:
     overrides = expand_connects(
         (
             "banking_assistant=a2a://127.0.0.1:8080/agents/banking_assistant/",
@@ -34,10 +34,10 @@ def test_expand_connects_a2a_is_infra_use_not_a_flavour_switch() -> None:
 
     assert result["spec"]["endpoints"]["banking_assistant"] == {
         "protocol": "a2a",
-        "usage": "use",
+        "usage": "connect",
         "url": "http://127.0.0.1:8080/agents/banking_assistant/",
     }
-    assert result["spec"]["endpoints"]["fraud_adjudicator"]["usage"] == "use"
+    assert result["spec"]["endpoints"]["fraud_adjudicator"]["usage"] == "connect"
     assert all(item.startswith("infra:") for item in overrides)
     flavour = resolve_flavour("local", overrides=overrides)
     assert flavour.get("agent_comm", {}).get("protocol") == "agent-local"
@@ -76,7 +76,7 @@ def test_explicit_override_wins_over_connect() -> None:
 
     assert result["spec"]["endpoints"]["greeter"]["url"] == "http://127.0.0.1:9009"
     assert result["spec"]["endpoints"]["greeter"]["protocol"] == "a2a"
-    assert result["spec"]["endpoints"]["greeter"]["usage"] == "use"
+    assert result["spec"]["endpoints"]["greeter"]["usage"] == "connect"
 
 
 def test_connect_creates_missing_mcp_tool_server() -> None:
@@ -98,7 +98,7 @@ def test_connect_creates_missing_mcp_tool_server() -> None:
     assert "local" in servers
     assert servers["mcp-127.0.0.1-9001-mcp"]["url"] == "http://127.0.0.1:9001/mcp"
     assert servers["mcp-127.0.0.1-9001-mcp"]["tools"] == ["lookup"]
-    assert servers["mcp-127.0.0.1-9001-mcp"]["usage"] == "use"
+    assert servers["mcp-127.0.0.1-9001-mcp"]["usage"] == "connect"
 
 
 def test_bind_override_validates_when_model_defaults_are_unset(tmp_path: Path) -> None:
@@ -139,7 +139,7 @@ def test_bind_override_validates_when_model_defaults_are_unset(tmp_path: Path) -
     assert resolved.applications["assistant"]["usage"] == "use-and-deploy"
     assert resolved.applications["greeter"] == {
         "protocol": "a2a",
-        "usage": "use",
+        "usage": "connect",
         "url": "http://127.0.0.1:9002/",
     }
 
@@ -162,7 +162,7 @@ def test_public_live_commands_expose_connect_option() -> None:
         assert "--bind NAME=URI" not in result.output
 
 
-def test_expand_listens_a2a_is_infra_deploy_the_mirror_of_connect() -> None:
+def test_expand_listens_a2a_is_infra_listen_the_mirror_of_connect() -> None:
     overrides = expand_listens(("qa-agent=a2a://127.0.0.1:9006",))
     document = {
         "apiVersion": "infra/v1",
@@ -175,7 +175,7 @@ def test_expand_listens_a2a_is_infra_deploy_the_mirror_of_connect() -> None:
 
     assert result["spec"]["endpoints"]["qa-agent"] == {
         "protocol": "a2a",
-        "usage": "deploy",
+        "usage": "listen",
         "url": "http://127.0.0.1:9006/",
     }
 
@@ -190,7 +190,7 @@ def test_combine_overrides_orders_connects_listens_then_explicit() -> None:
         connects=("peer=a2a://h:1/",), listens=("me=a2a://h:2/",), overrides=("infra:spec.x=1",)
     )
     assert "usage" in combined[0] and combined[-1] == "infra:spec.x=1"
-    assert "deploy" in combined[1]
+    assert "listen" in combined[1]
 
 
 _LIVE_COMMANDS = (
