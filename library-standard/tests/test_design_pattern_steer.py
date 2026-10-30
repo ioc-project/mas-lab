@@ -7,11 +7,13 @@ from __future__ import annotations
 from mas.library.standard.plugins.design_patterns.cot import CotPlugin
 from mas.library.standard.plugins.design_patterns.introspection import IntrospectionPlugin
 from mas.library.standard.plugins.design_patterns.linear import DeterministicLinearPlugin
+from mas.library.standard.plugins.design_patterns.moderated_rounds import ModeratedRoundsPlugin
 from mas.library.standard.plugins.design_patterns.parallel import DeterministicParallelPlugin
 from mas.library.standard.plugins.design_patterns.plan_execute import PlanExecutePlugin
 from mas.library.standard.plugins.design_patterns.react import ReactPlugin
 from mas.library.standard.plugins.design_patterns.single import DeterministicSingleAgentPlugin
 from mas.library.standard.plugins.design_patterns.single_pass import SinglePassPlugin
+from mas.library.standard.plugins.design_patterns.state_machine import StateMachinePlugin
 from mas.library.standard.plugins.design_patterns.tree_of_thoughts import TreeOfThoughtsPlugin
 from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.kernel.state import DpState
@@ -28,6 +30,8 @@ _PLUGINS = (
     DeterministicLinearPlugin,
     DeterministicParallelPlugin,
     DeterministicSingleAgentPlugin,
+    StateMachinePlugin,
+    ModeratedRoundsPlugin,
 )
 
 

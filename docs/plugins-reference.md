@@ -87,9 +87,11 @@ practical examples.
 | `DeterministicParallelPlugin`    | `mas.library.standard.plugins.design_patterns.parallel`         | `mas-library-standard` |
 | `DeterministicSingleAgentPlugin` | `mas.library.standard.plugins.design_patterns.single`           | `mas-library-standard` |
 | `IntrospectionPlugin`            | `mas.library.standard.plugins.design_patterns.introspection`    | `mas-library-standard` |
+| `ModeratedRoundsPlugin`          | `mas.library.standard.plugins.design_patterns.moderated_rounds` | `mas-library-standard` |
 | `PlanExecutePlugin`              | `mas.library.standard.plugins.design_patterns.plan_execute`     | `mas-library-standard` |
 | `ReactPlugin`                    | `mas.library.standard.plugins.design_patterns.react`            | `mas-library-standard` |
 | `SinglePassPlugin`               | `mas.library.standard.plugins.design_patterns.single_pass`      | `mas-library-standard` |
+| `StateMachinePlugin`             | `mas.library.standard.plugins.design_patterns.state_machine`    | `mas-library-standard` |
 | `TreeOfThoughtsPlugin`           | `mas.library.standard.plugins.design_patterns.tree_of_thoughts` | `mas-library-standard` |
 
 ### Engine_Tool_Provider
@@ -294,6 +296,7 @@ practical examples.
 | `LocalAgentComm`                 | agent_comm           | `mas-library-standard`  |
 | `LocalGroupAgentComm`            | agent_comm           | `mas-library-standard`  |
 | `LocalToolProvider`              | tool_provider        | `mas-library-standard`  |
+| `ModeratedRoundsPlugin`          | design_pattern       | `mas-library-standard`  |
 | `NativeObservabilityPlugin`      | observability        | `mas-library-standard`  |
 | `NativeSkillPlugin`              | skill_impl           | `mas-library-skills`    |
 | `Neo4jDumpStep`                  | step                 | `mas-library-kg`        |
@@ -324,6 +327,7 @@ practical examples.
 | `SpawnSubagentTool`              | system_tool          | `mas-library-standard`  |
 | `StackAgentComm`                 | agent_comm           | `mas-library-standard`  |
 | `StackConversation`              | context_manager      | `mas-library-standard`  |
+| `StateMachinePlugin`             | design_pattern       | `mas-library-standard`  |
 | `SubagentSpawner`                | engine_tool_provider | `mas-library-standard`  |
 | `SummarizingConversation`        | context_manager      | `mas-library-standard`  |
 | `ThresholdCircuitBreaker`        | circuit_breaker      | `mas-library-standard`  |
