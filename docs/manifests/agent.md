@@ -224,7 +224,7 @@ Selects the agent's reasoning strategy. It defaults to `react` when absent. The 
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `type` | `string` | mutually exclusive with `ref` | Registered plugin name. Shipped: `react`, `cot`, `single_pass`, `introspection`, `plan_execute`, `tree_of_thoughts`, `deterministic_single`, `deterministic_linear`, `deterministic_parallel`, plus aliases (`analyst`, `planner`, `linear`, `reflection`, `tot`, `plan-execute`). |
+| `type` | `string` | mutually exclusive with `ref` | Registered plugin name. Shipped: `react`, `cot`, `single_pass`, `introspection`, `plan_execute`, `tree_of_thoughts`, `deterministic_single`, `deterministic_linear`, `deterministic_parallel`, `moderated_rounds` ([below](#moderated_rounds)), plus aliases (`analyst`, `planner`, `linear`, `reflection`, `tot`, `plan-execute`). |
 | `ref` | `string` | mutually exclusive with `type` | Same lookup as `type` (name, alias, or plugin URN such as `mas.dp.react`). File paths and `module://` / `oci://` locators are not resolved in this release. |
 | `params` | `object` | no | Plugin parameters. Common keys: `max_steps` (dispatch-loop cap, default none), `max_cot_pass` (default `1`), `parallel` (parallel tool calls, default `true`). See [plugin-bindings.md](plugin-bindings.md#design_pattern-default-react). |
 | `config` | `object` | no | Alias for `params` (overlay compatibility); `params` wins when both are set. |
@@ -242,6 +242,46 @@ design_pattern:
   type: my_cot
   params:
     max_steps: 10
+```
+
+#### moderated_rounds
+
+A deterministic moderator for a group that must agree on one plan. The entry
+agent calls no model: code decides who speaks, in which order, and when the
+group confirms. Each round sends the request to every agent of `order`, one at
+a time, with the public transcript so far (`[seq] from -> to: body`). Then the
+`decider` answers with one JSON action: `continue` (with `message`, the next
+round's request), `propose` (with `plan`), `withhold` or `escalate` (with
+`reason`). A proposed plan goes to every agent of `confirmers`; each sees the
+transcript as it stood when the plan was proposed, not the others' answers,
+and replies starting with `confirm` or `reject`. All confirm: committed. A
+rejection starts a new round, and the next plan is a new version. An
+unreadable decision or confirmation is asked once more, then ends the run with
+reason `protocol_error`.
+
+| Param | Default | Description |
+| ------- | --------- | ------------- |
+| `decider` | required | Agent that chooses the action after each round. |
+| `order` | the entry's delegates minus `decider` | Speakers of each round, in order. |
+| `confirmers` | `decider` then `order` | Agents asked to confirm a proposed plan. |
+| `max_rounds` | `6` | A run that reaches it without a committed plan is withheld with reason `round_limit`. |
+| `opening_from` | `decider` | Sender shown for the first request (the user's text). |
+| `decision_instructions` | four-action text | What the decider is told before the JSON format line. |
+| `confirm_question` | `Do you confirm this plan version?` | Asked after the plan. |
+| `hide_from_confirmers` | `[]` | Plan keys (at any depth) left out of what confirmers see. |
+| `rejected_request` | asks the group to respond to the objections | Next request after a rejection; `{version}` is the rejected plan version. |
+| `record_tool` | none | Tool the moderator calls once at the end with `status`, `reason`, `detail`, `plan_version`, `plan`, `confirmations`, `rounds`, `rejected_replies`. |
+
+The reply to the user is the outcome as JSON, with the transcript.
+
+```yaml
+design_pattern:
+  type: moderated_rounds
+  params:
+    decider: buyer
+    order: [supplier_a, supplier_b, logistics]
+    max_rounds: 6
+    record_tool: write_commitment
 ```
 
 ---

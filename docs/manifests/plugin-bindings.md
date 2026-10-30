@@ -95,7 +95,7 @@ spec:
 ```
 
 `design_pattern: cot` has the same shape with `type: cot` and the same default params.
-Other shipped ids: `single_pass`, `introspection`, `plan_execute`, `tree_of_thoughts`, `deterministic_single`, `deterministic_linear`, `deterministic_parallel`.
+Other shipped ids: `single_pass`, `introspection`, `plan_execute`, `tree_of_thoughts`, `deterministic_single`, `deterministic_linear`, `deterministic_parallel`, `moderated_rounds`.
 Aliases: `analyst` and `planner` (to `react`), `linear` (to `single_pass`), `reflection` (to `introspection`), `tot` (to `tree_of_thoughts`), `plan-execute` (to `plan_execute`).
 
 | Param | Maps to | Default | Who uses it |

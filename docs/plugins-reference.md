@@ -87,6 +87,7 @@ practical examples.
 | `DeterministicParallelPlugin`    | `mas.library.standard.plugins.design_patterns.parallel`         | `mas-library-standard` |
 | `DeterministicSingleAgentPlugin` | `mas.library.standard.plugins.design_patterns.single`           | `mas-library-standard` |
 | `IntrospectionPlugin`            | `mas.library.standard.plugins.design_patterns.introspection`    | `mas-library-standard` |
+| `ModeratedRoundsPlugin`          | `mas.library.standard.plugins.design_patterns.moderated_rounds` | `mas-library-standard` |
 | `PlanExecutePlugin`              | `mas.library.standard.plugins.design_patterns.plan_execute`     | `mas-library-standard` |
 | `ReactPlugin`                    | `mas.library.standard.plugins.design_patterns.react`            | `mas-library-standard` |
 | `SinglePassPlugin`               | `mas.library.standard.plugins.design_patterns.single_pass`      | `mas-library-standard` |
@@ -294,6 +295,7 @@ practical examples.
 | `LocalAgentComm`                 | agent_comm           | `mas-library-standard`  |
 | `LocalGroupAgentComm`            | agent_comm           | `mas-library-standard`  |
 | `LocalToolProvider`              | tool_provider        | `mas-library-standard`  |
+| `ModeratedRoundsPlugin`          | design_pattern       | `mas-library-standard`  |
 | `NativeObservabilityPlugin`      | observability        | `mas-library-standard`  |
 | `NativeSkillPlugin`              | skill_impl           | `mas-library-skills`    |
 | `Neo4jDumpStep`                  | step                 | `mas-library-kg`        |
