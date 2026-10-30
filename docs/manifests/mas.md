@@ -376,7 +376,7 @@ spec:
 | --------- | --------------- |
 | Dynamic delegation | Default multi-agent mode. The entry agent runs the session, and the LLM uses delegation tools. |
 | `dispatch: parallel` | A node with `dispatch: parallel` (or `all`) fans out to its `delegates_to` peers in one act. Parallel tool-call batches run concurrently on the async engine path (`ainvoke` / `afeed`). The sync path drains the same batch sequentially. |
-| Fixed sequence | The entry agent uses `design_pattern: deterministic_linear` (or `deterministic_parallel` / `deterministic_single`). The embedded MAS workflow has no `edges`. |
+| Fixed sequence | The entry agent uses `design_pattern: deterministic_linear` (or `deterministic_parallel` / `deterministic_single`, or `moderated_rounds` for rounds a decider closes and a group confirms). The embedded MAS workflow has no `edges`. |
 | Single agent | The `topo-single-agent` overlay gives one generalist and no inter-agent workflow. |
 
 ### Concurrency model
