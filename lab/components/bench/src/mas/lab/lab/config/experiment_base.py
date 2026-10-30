@@ -328,6 +328,7 @@ class MASRunBase:
         base_dir: Path,
         yaml_path: Optional[Path] = None,
         allow_output_dir: bool = False,
+        model_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Parse the shared fields from a raw YAML dict.
 
@@ -501,6 +502,12 @@ class MASRunBase:
             for step in levels["experiment"].pipeline:
                 if not step.scope:
                     step.scope = "experiment"
+                if step.per_run:
+                    raise ValueError(
+                        f"Step '{step.name or step.type}' sets per_run: true but "
+                        "is under the experiment-level post:, which has no "
+                        "single run_dir. Move it under run: post: instead."
+                    )
 
         raw_models = data.get("models") if isinstance(data.get("models"), dict) else {}
         authored_models = {
@@ -510,6 +517,13 @@ class MASRunBase:
         }
         slots = normalize_model_slots(model=data.get("model"), models=raw_models)
         model = slots.get("main") or ANY_MODEL
+
+        override = (model_override or "").strip()
+        if override:
+            model = override
+            slots = {**slots, "main": override}
+            if "main" in authored_models:
+                authored_models["main"] = override
 
         _inject_eval_mce_judge_model(
             levels,

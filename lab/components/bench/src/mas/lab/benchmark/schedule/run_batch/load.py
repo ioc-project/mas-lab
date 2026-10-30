@@ -102,7 +102,11 @@ def load_experiment(
 
     logger.info(f"Loading MAS experiment: {experiment_yaml}")
     try:
-        exp = MASExperimentConfig.from_data(raw, experiment_yaml)
+        from mas.ctl.env import env_model_override
+
+        exp = MASExperimentConfig.from_data(
+            raw, experiment_yaml, model_override=env_model_override()
+        )
     except Exception as exc:
         logger.error(f"Failed to load MAS experiment: {exc}")
         return None

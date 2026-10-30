@@ -80,13 +80,17 @@ class MASExperimentConfig(MASRunBase):
         return 1
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "MASExperimentConfig":
+    def from_yaml(
+        cls, path: Path, *, model_override: Optional[str] = None
+    ) -> "MASExperimentConfig":
         """Load a MASExperimentConfig from an experiment YAML file."""
         data, _manifest_version = load_experiment_data(path)
-        return cls.from_data(data, path)
+        return cls.from_data(data, path, model_override=model_override)
 
     @classmethod
-    def from_data(cls, data: dict, path: Path) -> "MASExperimentConfig":
+    def from_data(
+        cls, data: dict, path: Path, *, model_override: Optional[str] = None
+    ) -> "MASExperimentConfig":
         """Construct from an already-loaded dict (e.g. after CLI merges).
 
         Accepts the same ``data`` shape that :func:`load_experiment_data`
@@ -112,7 +116,9 @@ class MASExperimentConfig(MASRunBase):
                 f"(applications: is deprecated)"
             )
 
-        base = cls._load_base_fields(exp_data, base_dir, yaml_path=path)
+        base = cls._load_base_fields(
+            exp_data, base_dir, yaml_path=path, model_override=model_override
+        )
 
         legacy = exp_data.get("execution")
         if legacy:
@@ -186,7 +192,10 @@ def _parse_checkpoint_axis(raw: object, base_dir: Path) -> list[CheckpointAxisEn
         if (
             not isinstance(checkpoint_id, str)
             or not checkpoint_id
-            or any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in checkpoint_id)
+            or any(
+                char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+                for char in checkpoint_id
+            )
         ):
             raise ValueError(f"experiment.checkpoints[{index}].id must use letters, digits, '-' or '_'")
         if checkpoint_id in seen:

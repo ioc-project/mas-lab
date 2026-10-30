@@ -47,6 +47,11 @@ reconciling the release notes with the code and docs currently on that branch.
   with the same explicit-over-star rules as tool routing. A star
   destination does not wrap runtime system tools. Once advertised
   names are known, it wraps only those names.
+- The env override (`MAS_CTL_MODEL` / `MAS_LLM_MODEL`) also sets the
+  eval judge when `models.judge` is omitted, so scoring uses the same
+  model as the agents. `models.judge` and `evaluation.model` still win.
+- A `per_run` step under experiment-level `post:` fails at parse,
+  including `--dry-run`.
 
 ### Added
 

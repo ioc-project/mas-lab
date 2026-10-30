@@ -41,7 +41,6 @@ from typing import Any, Dict, Tuple
 
 import click
 
-
 # ---------------------------------------------------------------------------
 # Top-level group
 # ---------------------------------------------------------------------------
@@ -111,7 +110,7 @@ def processor_cmd(
             sys.exit(1)
 
     try:
-        from mas.lab.processor import list_processors, get_processor, ProcessorManifest
+        from mas.lab.processor import ProcessorManifest, get_processor, list_processors
     except ImportError as exc:
         click.echo(f"❌  Cannot import mas.lab.processor: {exc}", err=True)
         sys.exit(1)
@@ -346,13 +345,16 @@ def pipeline_step_cmd(
 
     # ── load experiment config ───────────────────────────────────────────────
     try:
+        from mas.ctl.env import env_model_override
         from mas.lab.lab.config import MASExperimentConfig
     except ImportError as exc:
         click.echo(f"❌  Cannot import MASExperimentConfig: {exc}", err=True)
         _sys.exit(1)
 
     try:
-        exp = MASExperimentConfig.from_yaml(exp_path)
+        exp = MASExperimentConfig.from_yaml(
+            exp_path, model_override=env_model_override()
+        )
     except Exception as exc:
         click.echo(f"❌  Cannot load {exp_path}: {exc}", err=True)
         _sys.exit(1)
