@@ -16,7 +16,7 @@ from mas.ctl.session.manifest_config import engine_use_tool_loop, kernel_config_
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.driver.mocks import AutoCtxAssembler
-from mas.runtime.engine.infra_pipeline import split_pipeline_layers
+from mas.runtime.engine.infra_pipeline import filter_pipeline_for_kind, split_pipeline_layers
 from mas.runtime.engine.llm_cache import resolve_cache_path
 from mas.runtime.engine.llm_live import LiveLlmEngine
 from mas.runtime.engine.llm_output_limits import resolve_output_limits
@@ -50,11 +50,10 @@ class EngineSelection:
 
 def _strict_replay(llm_proxy: dict[str, Any] | None) -> bool:
     """True when an llm_cache pipeline step will error on miss (offline replay)."""
+    from mas.runtime.engine.infra_pipeline import is_cache_middleware
+
     for step in (llm_proxy or {}).get("pipeline") or []:
-        if not isinstance(step, dict):
-            continue
-        mid = str(step.get("middleware") or "")
-        if mid not in {"llm_cache", "llm-cache"}:
+        if not isinstance(step, dict) or not is_cache_middleware(step):
             continue
         params = step.get("params") or {}
         if params.get("raise_on_miss") is True:
@@ -384,7 +383,9 @@ def build_engine(
         reliability=reliability,
     )
     common, _destination = split_pipeline_layers(llm_proxy.get("pipeline") or [])
-    engine.install_infra_pipeline(common)
+    engine.install_infra_pipeline(filter_pipeline_for_kind(common, "llm"))
+    tool_common, _tool_dest = split_pipeline_layers(list(resolved.tool_pipeline or []))
+    engine.install_tool_pipeline(tool_common, destinations=resolved.tool_server_registry)
     return EngineSelection(engine=engine, mode=mode, reason=reason)
 
 

@@ -40,6 +40,7 @@ class ResolvedInfra:
     llm_proxies: dict[str, dict[str, Any]] = field(default_factory=dict)
     tool_registry: dict[str, Any] = field(default_factory=dict)
     tool_server_registry: dict[str, Any] = field(default_factory=dict)
+    tool_pipeline: list[dict[str, Any]] = field(default_factory=list)
     observability: dict[str, Any] = field(default_factory=dict)
     runtime_engine: dict[str, Any] = field(default_factory=dict)
     runtime_refs: list[str] = field(default_factory=list)

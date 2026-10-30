@@ -8,6 +8,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -17,6 +18,7 @@ class FaultInjectMiddleware:
     """Inject random LLM failures — chaos-lite in front of any provider."""
 
     per = "destination"
+    call_kinds = ("llm",)
     stores_llm_responses = False
 
     inner: Any
@@ -26,18 +28,27 @@ class FaultInjectMiddleware:
     message: str = "injected fault"
 
     @classmethod
-    def wrap(cls, inner: Any, params: dict[str, Any] | None = None) -> "FaultInjectMiddleware":
+    def wrap(
+        cls,
+        inner: Any,
+        params: dict[str, Any] | None = None,
+        *,
+        call_kinds: tuple[str, ...] | None = None,
+    ) -> "FaultInjectMiddleware":
         params = dict(params or {})
         rate = float(params.get("rate") or params.get("failure_rate") or 0.0)
         codes_raw = params.get("status_codes") or params.get("errors") or [503]
         codes = [int(c) for c in codes_raw] if isinstance(codes_raw, list) else [503]
         msg = str(params.get("message") or "injected fault")
-        return cls(
+        wrapped = cls(
             inner=inner,
             rate=max(0.0, min(1.0, rate)),
             status_codes=codes,
             message=msg,
         )
+        if call_kinds is not None:
+            wrapped.call_kinds = call_kinds
+        return wrapped
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
@@ -45,7 +56,7 @@ class FaultInjectMiddleware:
         return f"{label}\n{head}".strip() if head else label
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if io.op == "LLM_CALL" and self.rate > 0 and random.random() < self.rate:
+        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and random.random() < self.rate:
             code = self.status_codes[0] if self.status_codes else 503
             return EngineIoReturn(
                 correlation_id=io.correlation_id,
@@ -56,7 +67,7 @@ class FaultInjectMiddleware:
         return self.inner.invoke(io)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if io.op == "LLM_CALL" and self.rate > 0 and random.random() < self.rate:
+        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and random.random() < self.rate:
             code = self.status_codes[0] if self.status_codes else 503
             return EngineIoReturn(
                 correlation_id=io.correlation_id,

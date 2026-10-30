@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.llm_scheduler import (
     SchedulerPolicy,
     acquire,
@@ -29,16 +30,27 @@ class LlmSchedulerMiddleware:
     """
 
     per = "destination"
+    call_kinds = ("llm",)
     stores_llm_responses = False
+    paces_llm_calls = True
 
     inner: Any
     middleware_id: str = "llm_scheduler"
     policy: SchedulerPolicy | None = None
 
     @classmethod
-    def wrap(cls, inner: Any, params: dict[str, Any] | None = None) -> "LlmSchedulerMiddleware":
+    def wrap(
+        cls,
+        inner: Any,
+        params: dict[str, Any] | None = None,
+        *,
+        call_kinds: tuple[str, ...] | None = None,
+    ) -> "LlmSchedulerMiddleware":
         policy = SchedulerPolicy.from_params(params)
-        return cls(inner=inner, policy=policy)
+        wrapped = cls(inner=inner, policy=policy)
+        if call_kinds is not None:
+            wrapped.call_kinds = call_kinds
+        return wrapped
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         pol = self.policy
@@ -51,7 +63,7 @@ class LlmSchedulerMiddleware:
         return f"{label}\n{head}".strip() if head else label
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if io.op != "LLM_CALL" or self.policy is None or not self.policy.enabled():
+        if not call_kind_matches(io.op, self.call_kinds) or self.policy is None or not self.policy.enabled():
             return self.inner.invoke(io)
         key = acquire(
             model=infer_model(self.inner),
@@ -65,7 +77,7 @@ class LlmSchedulerMiddleware:
             release(key, policy=self.policy)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if io.op != "LLM_CALL" or self.policy is None or not self.policy.enabled():
+        if not call_kind_matches(io.op, self.call_kinds) or self.policy is None or not self.policy.enabled():
             return await self.inner.ainvoke(io)
         key = await acquire_async(
             model=infer_model(self.inner),

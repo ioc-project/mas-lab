@@ -12,6 +12,11 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- Infra middleware writes `for` (`llm` / `tool`) and `per` (`all` /
+  `destination`). Bundle entries write `wraps` for the slots they cover.
+  `applies_to`, `interceptors`, `pipeline` (on a bundle list), and
+  workspace `infra_interceptors` still load and warn; mixing an old key
+  with its new name in one mapping is an error.
 - Two `LLMProxy` files with the same `metadata.name`: the later ref replaces
   the earlier leaf (connection, `models.allowed`, mappings, and that leaf's
   steps). A different `api_base` on the same name is no longer an error.
@@ -22,8 +27,9 @@ reconciling the release notes with the code and docs currently on that branch.
   cache written on this branch will not hit after the leaf's `api_base`
   changes. Entries written before still hit when only one leaf is
   configured. `trace_cache_portable` does not cover this key.
-- Infra middleware plugins must define `wrap(inner, params)`. The old
-  constructor fallback `plugin_cls(inner=..., **params)` is gone.
+- Infra middleware plugins must define
+  `wrap(inner, params, *, call_kinds=)`. The old constructor fallback
+  `plugin_cls(inner=..., **params)` is gone.
 - `LiveLlmEngine.install_infra_pipeline` only wraps `per: all` steps.
   A destination step (scheduler, fault) passed there is an error.
 
@@ -33,15 +39,29 @@ reconciling the release notes with the code and docs currently on that branch.
   storage with no directory is a ValueError.
 - A leaf scheduler reads the in-flight model from the call wrapper, so
   two models on one connection get separate pacing buckets.
+- A middleware step with no `for` wraps llm calls only, same as before
+  this branch. An empty `for` list is llm, not every kind.
+- `mas-ctl infra show` reads MAS `spec.agent_comm` for each agent row
+  and prints `api_base` / tool `url` without userinfo or query.
+- Destination tool steps wrap the server that claims the tool name,
+  with the same explicit-over-star rules as tool routing. A star
+  destination does not wrap runtime system tools. Once advertised
+  names are known, it wraps only those names.
 
 ### Added
 
+- `mas-ctl infra show` prints each LLM and tool chain (`for` / `per` on
+  every step) and each agent's comm stack. `--json` is a stable document.
+  `--infra-ref`, `--runtime-ref`, `--override`, and `--middleware` match
+  chat and run-mas.
 - Several `LLMProxy` refs stay separate leaves. The model name (and
   `models.mappings` aliases) selects which leaf provides the call —
   same shape as tool-name routing. Eval uses `experiment.models.judge`.
   Middleware plugins declare `per` (`all` or `destination`): `llm_cache` is
   one step on the live engine; scheduler and fault injection run on each leaf
-  (`PipedLLMProvider` is that leaf call). Callers keep `LiveLlmEngine`. Each
+  (`PipedLLMProvider` is that leaf call). `for: tool` `per: all` wraps the
+  engine's tool call; destination tool steps wrap the tool server that
+  claims the name (`PipedToolCall`). Callers keep `LiveLlmEngine`. Each
   leaf uses its own `api_key_env`.
   Cache lookup tries the routed key, then the pre-routing preview hash when
   a single leaf is configured; several leaves never reuse an old-key hit.

@@ -410,7 +410,11 @@ def llm_providers_from_manifest(
     """
     specs = iter_model_provider_specs(manifest, llm_proxy=llm_proxy, llm_proxies=llm_proxies)
     bindings: list[tuple[Any, str | tuple[str, ...] | list[str]]] = []
-    from mas.runtime.engine.infra_pipeline import split_pipeline_layers, wrap_llm_provider_pipeline
+    from mas.runtime.engine.infra_pipeline import (
+        filter_pipeline_for_kind,
+        split_pipeline_layers,
+        wrap_llm_provider_pipeline,
+    )
 
     for spec in specs:
         kind = str(spec.get("kind") or "").strip()
@@ -426,7 +430,10 @@ def llm_providers_from_manifest(
         if not pipeline:
             pipeline = list((payload.get("llm_proxy") or {}).get("pipeline") or [])
         _, per_leaf = split_pipeline_layers(pipeline)
-        provider = wrap_llm_provider_pipeline(instantiate_llm_provider(kind, payload), per_leaf)
+        provider = wrap_llm_provider_pipeline(
+            instantiate_llm_provider(kind, payload),
+            filter_pipeline_for_kind(per_leaf, "llm"),
+        )
         bindings.append((provider, spec.get("models", "*")))
     if not bindings:
         raise ValueError("no llm_provider plugin could be instantiated")

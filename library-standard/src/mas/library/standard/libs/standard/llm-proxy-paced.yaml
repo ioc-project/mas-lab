@@ -14,11 +14,11 @@ spec:
     - id: cache
       type: infra_middleware
       ref: standard:llm-cache
-      applies_to: [llm]
+      wraps: [llm]
     - id: scheduler
       type: infra_middleware
       ref: standard:llm-scheduler
-      applies_to: [llm]
+      wraps: [llm]
     - id: llm
       type: llm_provider
       ref: standard:openai

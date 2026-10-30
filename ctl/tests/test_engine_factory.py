@@ -365,3 +365,99 @@ def test_build_engine_installs_infra_pipeline(monkeypatch, tmp_path):
     )
     assert type(sel.engine) is LiveLlmEngine
     assert sel.engine._infra_stack is not None
+
+
+def test_build_engine_installs_tool_destinations(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.runtime.engine.llm_live import LiveLlmEngine
+    from mas.runtime.schema.egress import InvokeEngineIo
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+    infra.tool_server_registry = {
+        "local": {
+            "id": "local",
+            "protocol": "local",
+            "tools": ["alpha"],
+            "pipeline": [
+                {
+                    "middleware": "fault_inject",
+                    "for": ["tool"],
+                    "per": "destination",
+                    "params": {"rate": 1.0, "message": "dest fault"},
+                }
+            ],
+        }
+    }
+    sel = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+    )
+    assert type(sel.engine) is LiveLlmEngine
+    assert sel.engine._tool_destinations
+    sel.engine.set_scheduled_tool("alpha", {})
+    hit = sel.engine.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    assert hit.response_kind == "ERROR"
+    assert "dest fault" in (hit.text or "")
+    sel.engine.set_scheduled_tool("beta", {})
+    miss = sel.engine.invoke(InvokeEngineIo(correlation_id=2, op="TOOL_CALL"))
+    assert "dest fault" not in (miss.text or "")
+
+
+def test_build_engine_installs_tool_pipeline(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.runtime.engine.llm_live import LiveLlmEngine
+    from mas.runtime.schema.egress import InvokeEngineIo
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+    infra.tool_pipeline = [
+        {
+            "middleware": "fault_inject",
+            "for": ["tool"],
+            "per": "all",
+            "params": {"rate": 1.0, "message": "injected fault"},
+        }
+    ]
+    sel = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+    )
+    assert type(sel.engine) is LiveLlmEngine
+    assert sel.engine._tool_stack is not None
+    ret = sel.engine.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    assert ret.response_kind == "ERROR"
+    assert "injected fault" in (ret.text or "")
+
+
+def test_strict_replay_false_when_registry_empty(monkeypatch):
+    class _Empty:
+        def get_entry(self, urn: str):
+            del urn
+            return None
+
+        def resolve_by_type(self, *args, **kwargs):
+            del args, kwargs
+            return None
+
+    monkeypatch.setattr("mas.runtime.registry.get_registry", lambda: _Empty())
+    assert (
+        _strict_replay(
+            {
+                "pipeline": [
+                    {"middleware": "llm_cache", "params": {"raise_on_miss": True}},
+                ]
+            }
+        )
+        is False
+    )

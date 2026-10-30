@@ -27,9 +27,6 @@ _LOCK = threading.Lock()
 _POLICY: "SchedulerPolicy | None" = None
 
 _VALID_KEYS = frozenset({"provider", "model", "user"})
-_MIDDLEWARE_IDS = frozenset(
-    {"llm_scheduler", "llm-scheduler", "rate_limit", "rate_limiter", "llm_pace"}
-)
 
 
 def resolve_state_path(path: str | Path | None = None) -> Path:
@@ -118,9 +115,10 @@ def install_policy(policy: SchedulerPolicy | dict[str, Any] | None) -> Scheduler
 
 
 def install_policy_from_pipeline(pipeline: list[dict[str, Any]] | None) -> SchedulerPolicy | None:
+    from mas.runtime.engine.infra_pipeline import is_scheduler_middleware
+
     for step in pipeline or []:
-        mid = str(step.get("middleware") or step.get("id") or "").strip().lower()
-        if mid in _MIDDLEWARE_IDS:
+        if isinstance(step, dict) and is_scheduler_middleware(step):
             return install_policy(dict(step.get("params") or {}))
     return current_policy()
 

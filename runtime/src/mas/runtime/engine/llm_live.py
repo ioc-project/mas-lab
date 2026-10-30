@@ -87,6 +87,72 @@ class _InfraDispatchPort:
 
 
 @dataclass
+class _ToolDestRouter:
+    """Pick the dest wrap for the server that claims this tool, else dispatch."""
+
+    engine: LiveLlmEngine
+    destinations: dict[str, Any]
+    servers: dict[str, dict[str, Any]]
+    fallback: Any
+
+    def _pending_name(self, correlation_id: int) -> str:
+        by_cid = self.engine._pending_tools_by_cid.get(correlation_id)
+        if by_cid is not None:
+            return str(by_cid[0] or "")
+        return str(self.engine._pending_tool or "")
+
+    def _advertised_by_server(self) -> dict[str, tuple[str, ...]]:
+        from mas.runtime.engine.tool_routing import SYSTEM_TOOL_NAMES
+
+        provider = getattr(self.engine, "tool_provider", None)
+        routes = getattr(provider, "_routes", None)
+        if not isinstance(routes, dict):
+            return {}
+        buckets: dict[str, list[str]] = {}
+        for name, route in routes.items():
+            sid = str(getattr(route, "provider_name", "") or "")
+            token = str(name or "").strip()
+            if not sid or not token or token in SYSTEM_TOOL_NAMES:
+                continue
+            buckets.setdefault(sid, []).append(token)
+        return {sid: tuple(names) for sid, names in buckets.items()}
+
+    def _owner(self, tool: str) -> str | None:
+        from mas.runtime.engine.tool_routing import owner_for_tool, tool_server_claim
+
+        advertised = self._advertised_by_server()
+        claims = []
+        for sid, server in self.servers.items():
+            payload = dict(server or {})
+            extra = advertised.get(sid)
+            if extra and not payload.get("advertised"):
+                payload["advertised"] = extra
+            claims.append(tool_server_claim(sid, payload))
+        return owner_for_tool(tool, claims)
+
+    def _pick(self, correlation_id: int) -> Any:
+        sid = self._owner(self._pending_name(correlation_id))
+        if sid is not None:
+            wrap = self.destinations.get(sid)
+            if wrap is not None:
+                return wrap
+        return self.fallback
+
+    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        return self._pick(io.correlation_id).invoke(io)
+
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        return await self._pick(io.correlation_id).ainvoke(io)
+
+    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        picked = self._pick(correlation_id)
+        preview = getattr(picked, "exchange_preview", None)
+        if callable(preview):
+            return str(preview(op, correlation_id=correlation_id) or "")
+        return ""
+
+
+@dataclass
 class LiveLlmEngine:
     """EngineContract implementation — delegates chat completions to LLMProvider plugins."""
 
@@ -127,6 +193,8 @@ class LiveLlmEngine:
     _budget: BudgetTracker = field(default_factory=BudgetTracker, init=False)
     _model_access: Any | None = field(default=None, init=False)
     _infra_stack: Any = field(default=None, init=False, repr=False)
+    _tool_stack: Any = field(default=None, init=False, repr=False)
+    _tool_destinations: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def set_scheduled_tool(self, name: str, arguments: dict[str, Any] | None = None) -> None:
         """Kernel-scheduled tool (e.g. plan-execute) — TLA: ToolMachine.tla."""
@@ -197,6 +265,73 @@ class LiveLlmEngine:
             self._infra_stack = None
             return
         self._infra_stack = wrap_call_stack(_InfraDispatchPort(self), common)
+
+    def install_tool_pipeline(
+        self,
+        pipeline: list[dict[str, Any]] | None,
+        *,
+        destinations: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
+        """Wrap this engine's tool call with ``per: all`` ``for: tool`` steps.
+
+        Destination tool steps wrap each tool server via ``PipedToolCall``.
+        Passing a destination step in *pipeline* is an error; put those
+        on *destinations* instead.
+        """
+        from mas.runtime.engine.infra_pipeline import (
+            filter_pipeline_for_kind,
+            middleware_id,
+            split_pipeline_layers,
+            wrap_call_stack,
+            wrap_tool_pipeline,
+        )
+
+        steps = filter_pipeline_for_kind(
+            [dict(step) for step in (pipeline or []) if isinstance(step, dict)],
+            "tool",
+        )
+        common, per_dest = split_pipeline_layers(steps)
+        if per_dest:
+            names = [middleware_id(step) or "?" for step in per_dest]
+            raise ValueError(
+                "install_tool_pipeline only accepts per: all steps; "
+                f"got destination {names}. Wrap those on each tool server."
+            )
+        dispatch = _InfraDispatchPort(self)
+        dest_wraps: dict[str, Any] = {}
+        dest_servers = {
+            str(name): dict(server or {}) for name, server in (destinations or {}).items()
+        }
+        for name, server in dest_servers.items():
+            dest_steps = filter_pipeline_for_kind(
+                [
+                    dict(step)
+                    for step in server.get("pipeline") or []
+                    if isinstance(step, dict)
+                ],
+                "tool",
+            )
+            _, dest_only = split_pipeline_layers(dest_steps)
+            if dest_only:
+                dest_wraps[name] = wrap_tool_pipeline(dispatch, dest_only)
+        self._tool_destinations = dest_wraps
+        inner: Any = (
+            _ToolDestRouter(
+                engine=self,
+                destinations=dest_wraps,
+                servers=dest_servers,
+                fallback=dispatch,
+            )
+            if dest_wraps
+            else dispatch
+        )
+        if not common and not dest_wraps:
+            self._tool_stack = None
+            return
+        if not common:
+            self._tool_stack = inner
+            return
+        self._tool_stack = wrap_call_stack(inner, common)
 
     def _default_llm_provider(self) -> Any:
         from mas.runtime.registry.llm_provider_registry import llm_provider_from_infra
@@ -287,6 +422,8 @@ class LiveLlmEngine:
         return format_exchange_snapshot(self.exchange_snapshot(op, correlation_id=correlation_id))
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        if io.op == "TOOL_CALL" and self._tool_stack is not None:
+            return self._tool_stack.invoke(io)
         if self._infra_stack is not None:
             return self._infra_stack.invoke(io)
         return self._dispatch(io)
@@ -364,6 +501,8 @@ class LiveLlmEngine:
         )
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        if io.op == "TOOL_CALL" and self._tool_stack is not None:
+            return await self._tool_stack.ainvoke(io)
         if self._infra_stack is not None:
             return await self._infra_stack.ainvoke(io)
         return await self._adispatch(io)

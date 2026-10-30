@@ -15,6 +15,8 @@ from mas.ctl.infra.models import InfraManifest, ModelsSpec, ProxySpec
 from mas.ctl.infra.pipeline_chain import BidirectionalInfraPipeline
 from mas.ctl.libraries.bundles import list_manifest_libraries
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+from mas.runtime.engine.call_kinds import as_str_list, read_aliased_field
+from mas.runtime.engine.infra_pipeline import stamp_middleware_step
 from mas.runtime.spec.schema_bindings_generated import INFRA_MIDDLEWARE_PATH_PARAM_KEYS
 from mas.runtime.spec.source import load_yaml_file, resolve_ref_with_search
 from mas.runtime.xdg import mas_infra_dir, mas_runtime_dir
@@ -164,8 +166,15 @@ def resolve_infra_refs(
     llm = merged.to_llm_proxy_dict()
     cache_path = usr.cache_dir / "llm_cache.json"
     llm["cache_path"] = str(cache_path)
-    shared = _filter_pipeline_for_target(llm.get("pipeline") or [], "LLM_CALL")
-    _hydrate_pipeline_cache_paths(shared, cache_path=cache_path)
+    from mas.runtime.engine.infra_pipeline import (
+        filter_pipeline_for_kind,
+        split_pipeline_layers,
+    )
+
+    stamped = [stamp_middleware_step(step) for step in (llm.get("pipeline") or []) if isinstance(step, dict)]
+    llm_shared = filter_pipeline_for_kind(stamped, "llm")
+    tool_shared = filter_pipeline_for_kind(stamped, "tool")
+    _hydrate_pipeline_cache_paths(llm_shared, cache_path=cache_path)
 
     tool_server_registry = {
         str(item["id"]): dict(item) for item in merged.tool_servers if isinstance(item, dict) and item.get("id")
@@ -174,16 +183,28 @@ def resolve_infra_refs(
     leaves = dict(merged.providers or {})
     if not leaves and llm.get("api_base"):
         name = str(merged.name or "").strip() or "default"
-        leaf = {k: v for k, v in llm.items() if k not in {"pipeline", "cache_path"}}
+        leaf = {k: v for k, v in llm.items() if k not in {"pipeline", "cache_path", "tool_pipeline"}}
         leaves = {name: leaf}
 
-    llm["pipeline"], leaves = _layer_pipelines(shared, leaves, cache_path=cache_path)
+    llm["pipeline"], leaves = _layer_pipelines(llm_shared, leaves, cache_path=cache_path)
+    tool_common, tool_cloned = split_pipeline_layers(tool_shared)
+    if tool_server_registry:
+        for server in tool_server_registry.values():
+            own = [
+                stamp_middleware_step(step)
+                for step in (server.get("pipeline") or [])
+                if isinstance(step, dict)
+            ]
+            server["pipeline"] = tool_cloned + filter_pipeline_for_kind(own, "tool")
+    else:
+        tool_common = _merge_pipeline(tool_common, tool_cloned)
 
     return ResolvedInfra(
         refs=effective,
         llm_proxy=llm,
         llm_proxies=leaves,
         tool_server_registry=tool_server_registry,
+        tool_pipeline=tool_common,
         observability={},
         runtime_engine=dict(runtime_engine),
         runtime_refs=list(runtime_effective),
@@ -422,6 +443,8 @@ def _load_file(
         pipeline: list[dict[str, Any]] = []
         entries = spec.get("entries")
         if isinstance(entries, list) and entries:
+            wrap_jobs: list[tuple[tuple[str, ...], list[dict[str, Any]]]] = []
+            loaded_by_id: dict[str, InfraManifest] = {}
             for entry in entries:
                 if not isinstance(entry, dict):
                     continue
@@ -434,17 +457,52 @@ def _load_file(
                 loaded = _load_file(
                     child_path, workspace=workspace, _seen=seen, allow_runtime_engine=allow_runtime_engine
                 )
+                wraps_ids = tuple(
+                    as_str_list(
+                        read_aliased_field(
+                            entry,
+                            "wraps",
+                            "applies_to",
+                            where=f"{path}#{entry.get('id') or 'entry'}",
+                        )
+                    )
+                )
                 entry_steps = [
                     _resolve_pipeline_entry(step, anchor=path.parent, workspace=workspace)
                     for step in entry.get("pipeline") or []
                 ]
-                if entry_steps and _connection_leaves(loaded):
+                eid = str(entry.get("id") or "").strip()
+                if eid:
+                    loaded_by_id[eid] = loaded
+                if wraps_ids and not _connection_leaves(loaded):
+                    wrap_jobs.append((wraps_ids, list(loaded.pipeline) + entry_steps))
+                    loaded.pipeline = []
+                elif entry_steps and _connection_leaves(loaded):
                     loaded.pipeline = _merge_pipeline(loaded.pipeline, entry_steps)
                 else:
                     pipeline.extend(entry_steps)
                 parts.append(loaded)
+            for wrap_ids, wrap_steps in wrap_jobs:
+                attached = False
+                for eid in wrap_ids:
+                    target = loaded_by_id.get(eid)
+                    if target is None:
+                        continue
+                    if _connection_leaves(target):
+                        target.pipeline = _merge_pipeline(target.pipeline, wrap_steps)
+                    else:
+                        pipeline.extend(wrap_steps)
+                    attached = True
+                if not attached:
+                    pipeline.extend(wrap_steps)
         else:
-            for entry in spec.get("interceptors") or spec.get("pipeline") or []:
+            bundle_steps = read_aliased_field(
+                spec,
+                "pipeline",
+                "interceptors",
+                where=str(path),
+            )
+            for entry in bundle_steps or []:
                 pipeline.append(_resolve_pipeline_entry(entry, anchor=path.parent, workspace=workspace))
             for ref in spec.get("includes", []):
                 child = _resolve_ref_path(str(ref), anchor=path.parent, workspace=workspace)
@@ -479,20 +537,21 @@ def _load_file(
 
     if kind in {"InfraMiddleware", "InfraInterceptor"}:
         spec = data.get("spec") or {}
-        applies = spec.get("applies_to") or ["LLM_CALL"]
-        if isinstance(applies, str):
-            applies = [applies]
         params = _resolve_pipeline_param_paths(dict(spec.get("params") or {}), anchor=path.parent)
+        step = {
+            "middleware": spec.get("middleware") or path.stem.replace("-", "_"),
+            "params": params,
+        }
+        if "for" in spec:
+            step["for"] = spec["for"]
+        if "applies_to" in spec:
+            step["applies_to"] = spec["applies_to"]
+        if "per" in spec:
+            step["per"] = spec["per"]
         return InfraManifest(
             name=str((data.get("metadata") or {}).get("name", path.stem)),
             kind=kind,
-            pipeline=[
-                {
-                    "middleware": spec.get("middleware") or path.stem.replace("-", "_"),
-                    "params": params,
-                    "applies_to": list(applies),
-                }
-            ],
+            pipeline=[stamp_middleware_step(step, where=str(path))],
             raw=data,
         )
 
@@ -664,14 +723,21 @@ def _resolve_pipeline_entry(
                 dict(step.get("params") or {}),
                 anchor=child_path.parent,
             )
-            return step
-        return {"middleware": entry.split(":")[-1].replace("-", "_"), "params": {}}
+            return stamp_middleware_step(step, where=str(child_path))
+        return stamp_middleware_step(
+            {"middleware": entry.split(":")[-1].replace("-", "_"), "params": {}},
+            where=str(entry),
+        )
     if isinstance(entry, dict):
         if "ref" in entry:
             return _resolve_pipeline_entry(str(entry["ref"]), anchor=anchor, workspace=workspace)
         mid = entry.get("middleware") or entry.get("id")
         params = _resolve_pipeline_param_paths(dict(entry.get("params") or {}), anchor=anchor)
-        return {"middleware": mid, "params": params}
+        step = {"middleware": mid, "params": params}
+        for key in ("for", "per", "applies_to"):
+            if key in entry:
+                step[key] = entry[key]
+        return stamp_middleware_step(step, where=str(mid or "pipeline"))
     raise ValueError(f"invalid pipeline entry: {entry!r}")
 
 
@@ -686,13 +752,21 @@ def _layer_pipelines(
     cache_path: Path,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """Cache is common; remaining steps instantiate in front of each leaf."""
-    from mas.runtime.engine.infra_pipeline import is_cache_middleware, split_pipeline_layers
+    from mas.runtime.engine.infra_pipeline import (
+        filter_pipeline_for_kind,
+        is_cache_middleware,
+        split_pipeline_layers,
+        stamp_middleware_step,
+    )
 
     common, cloned = split_pipeline_layers(shared)
     layered: dict[str, dict[str, Any]] = {}
     for name, leaf in leaves.items():
         stored = dict(leaf)
-        own = _filter_pipeline_for_target(list(stored.get("pipeline") or []), "LLM_CALL")
+        own = filter_pipeline_for_kind(
+            [stamp_middleware_step(step) for step in (stored.get("pipeline") or []) if isinstance(step, dict)],
+            "llm",
+        )
         _hydrate_pipeline_cache_paths(own, cache_path=cache_path)
         own_common, own_rest = split_pipeline_layers(own)
         if own_common and not any(is_cache_middleware(step) for step in common):
@@ -701,17 +775,6 @@ def _layer_pipelines(
         stored["name"] = name
         layered[name] = stored
     return common, layered
-
-
-def _filter_pipeline_for_target(pipeline: list[dict[str, Any]], target: str) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for entry in pipeline:
-        applies = entry.get("applies_to") or ["LLM_CALL"]
-        if isinstance(applies, str):
-            applies = [applies]
-        if target in applies:
-            out.append(entry)
-    return out
 
 
 def _hydrate_pipeline_cache_paths(pipeline: list[dict[str, Any]], *, cache_path: Path) -> None:

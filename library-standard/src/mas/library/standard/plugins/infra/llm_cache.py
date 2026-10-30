@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.llm_cache import (
     load_cache,
     middleware_cache_deserialize,
@@ -65,6 +66,7 @@ class LlmCacheMiddleware:
     """
 
     per = "all"
+    call_kinds = ("llm",)
     stores_llm_responses = True
 
     inner: Any
@@ -126,7 +128,7 @@ class LlmCacheMiddleware:
         return f"{label}\n{head}".strip() if head else label
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if not (self.allow_read or self.allow_write) or io.op != "LLM_CALL":
+        if not (self.allow_read or self.allow_write) or not call_kind_matches(io.op, self.call_kinds):
             return self.inner.invoke(io)
         # Exactly one exchange_preview() call per invoke(): LiveLlmEngine's
         # preview resets ctx._assembly_correlation_id as a side effect, so
@@ -184,7 +186,7 @@ class LlmCacheMiddleware:
         return ret
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if not (self.allow_read or self.allow_write) or io.op != "LLM_CALL":
+        if not (self.allow_read or self.allow_write) or not call_kind_matches(io.op, self.call_kinds):
             return await self.inner.ainvoke(io)
         preview = self._preview(io)
         key, cached = self._lookup(preview)
@@ -302,7 +304,13 @@ class LlmCacheMiddleware:
         persist_cache(self.cache_path, self._cache)
 
     @classmethod
-    def wrap(cls, inner: Any, params: dict[str, Any] | None = None) -> "LlmCacheMiddleware":
+    def wrap(
+        cls,
+        inner: Any,
+        params: dict[str, Any] | None = None,
+        *,
+        call_kinds: tuple[str, ...] | None = None,
+    ) -> "LlmCacheMiddleware":
         """Build from an infra pipeline ``params`` mapping (alias keys allowed)."""
         params = dict(params or {})
         path_raw = params.get("cache_path") or params.get("path")
@@ -312,7 +320,7 @@ class LlmCacheMiddleware:
         allow_read = params.get("allow_read", default_on) is not False
         allow_write = params.get("allow_write", default_on) is not False
         miss_log_raw = params.get("miss_log_path")
-        return cls(
+        wrapped = cls(
             inner=inner,
             cache_path=path,
             allow_read=bool(allow_read),
@@ -324,3 +332,6 @@ class LlmCacheMiddleware:
             miss_log_path=Path(str(miss_log_raw)) if miss_log_raw else None,
             write_mode=str(params.get("write_mode") or "append"),
         )
+        if call_kinds is not None:
+            wrapped.call_kinds = call_kinds
+        return wrapped

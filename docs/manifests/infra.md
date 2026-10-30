@@ -116,7 +116,7 @@ An `LLMProxy` that only sets `models.generation` (no `api_base`) remains a polic
 
 ### Pipeline vs several leaves
 
-The engine runs the pipeline. Callers always hold `LiveLlmEngine`. Each middleware plugin declares `per`: `all` (one shared copy on the engine's LLM call) or `destination` (one copy in front of each leaf). Cache sets `per: all`; scheduler and fault injection set `per: destination`. `PipedLLMProvider` is that leaf call.
+The engine runs the pipeline. Callers always hold `LiveLlmEngine`. Each middleware plugin declares `for` (`llm` or `tool`) and `per` (`all` = one shared copy, `destination` = one copy per LLM leaf or tool server). Cache sets `for: llm` and `per: all`; scheduler and fault injection set `for: llm` and `per: destination`. A step with no `for` wraps `llm` only. `PipedLLMProvider` is the LLM leaf call; `PipedToolCall` is the tool-server wrap.
 
 ```text
 LLM_CALL
@@ -126,15 +126,23 @@ LLM_CALL
         → router         (model name → LLMProxy leaf)
           → that leaf's pipeline   (llm_scheduler, fault_inject, typed entry.pipeline)
             → that leaf's provider
+
+TOOL_CALL
+  LiveLlmEngine
+    → per: all tool steps
+      → PipedToolCall for the server that claims this tool (destination steps)
+        → execute_engine_tool
 ```
+
+A `tools: "*"` (or omitted / empty-string `tools`) destination wraps every name no other server lists, except runtime system tools (`request_human_input`, `inform_user`, `spawn_subagent`, `create_subagent`). Those stay on the local dispatch unless a server lists them. After the tool-provider registry has initialized, the dest router sees that star server's advertised names and wraps only those; leftover unknown names stay on the raw dispatch.
 
 How steps land there:
 
 | Source | Where it runs |
 | --- | --- |
-| `InfraMiddleware` / workspace `infra_interceptors` with `middleware: llm_cache` | Common step on the engine |
+| `InfraMiddleware` / workspace `middleware` with `middleware: llm_cache` | Common step on the engine |
 | Other `InfraMiddleware` refs (scheduler, fault inject, …) | Cloned in front of **each** leaf |
-| `LLMProxy.spec.interceptors` | That leaf only, except `llm_cache` (`per: all`), which is lifted to the shared wrap and applies to every connection |
+| `LLMProxy.spec.pipeline` | That leaf only, except `llm_cache` (`per: all`), which is lifted to the shared wrap and applies to every connection |
 | Typed bundle `entries[].pipeline` on an `llm_provider` slot | That leaf only |
 
 `standard:llm-proxy-paced` is `[llm_cache, llm_scheduler, openai]`: the cache is common; the scheduler wraps the OpenAI leaf. Two LLMProxy refs plus that bundle clone the scheduler in front of each connection.
@@ -144,8 +152,8 @@ How steps land there:
 | `kind` | Purpose | Main `spec` fields |
 | -------- | --------- | --------- |
 | `InfraBundle` | Compose other infra files; recursive merge | `entries[]` (typed slots) or `includes[]` + `interceptors[]` |
-| `InfraMiddleware` | Pipeline middleware (`llm_cache`, `fault_inject`) wrapped around LLM calls | `middleware`, `applies_to`, `params` |
-| `InfraInterceptor` | Same shape as `InfraMiddleware`; listed under workspace `infra_interceptors` | `middleware`, `applies_to`, `params` |
+| `InfraMiddleware` | Pipeline middleware (`llm_cache`, `fault_inject`) wrapped around LLM or tool calls | `middleware`, `for`, `per`, `params` |
+| `InfraInterceptor` | Same shape as `InfraMiddleware`; listed under workspace `middleware` | `middleware`, `for`, `per`, `params` |
 | `LLMProxy` | OpenAI-compatible endpoint, model allow-list, mappings, defaults | `protocol`, `proxy`, `models` |
 | `LLMLocal` | Local inference (e.g. Ollama); `server` and `models.available` are aliases of `proxy` / `models.allowed` | `server`, `models` |
 | `ToolServerRegistry` | MCP endpoint to consume or deploy, or local tool/skill paths (`protocol: local`) | `tool_servers[]` |
@@ -187,18 +195,24 @@ spec:
     - id: cache
       type: infra_middleware
       ref: standard:llm-cache
-      applies_to: [llm]
+      wraps: [llm]
     - id: llm
       type: llm_provider
       ref: standard:openai
 ```
 
-### `applies_to`
+### `for` and `per`
 
-`InfraMiddleware.spec.applies_to` defaults to `[LLM_CALL]`.
-The schema also accepts `TOOL_HTTP` and `OTEL_EXPORT`.
-Only `LLM_CALL` steps are wired in this release.
-The resolver drops steps for the other targets.
+`InfraMiddleware.spec.for` is `llm` or `tool` (or a list). The plugin default is used when the field is omitted: cache, scheduler, and fault injection wrap `llm`.
+`per` is `all` or `destination`. Cache is `all`; scheduler and fault injection are `destination`.
+`applies_to` is a read-only alias of `for` on middleware and of `wraps` on bundle entries. Mixing the old name with the new name in one mapping is an error.
+
+`mas-ctl infra show` prints each LLM and tool chain (and each agent's comm stack when a MAS or Agent file is passed). The comm row is MAS `spec.agent_comm` (`type`, `protocol`, or `kind`). `api_base` and tool `url` print scheme, host, and path only:
+
+```bash
+mas-ctl infra show --infra-ref arm.yaml --infra-ref standard:llm-cache
+mas-ctl infra show --json
+```
 
 ## LLMProxy models
 
@@ -270,7 +284,7 @@ spec:
 Reference a bundle from workspace `config.yaml` or CLI `--infra-ref`, not from Agent or MAS manifests.
 `includes` entries are paths (relative to the bundle file) or library refs such as `standard:openai`.
 A bundle that includes itself, directly or indirectly, is an error.
-`spec.interceptors[]` lists middleware refs, or inline `{middleware, params}` objects, that wrap the merged result, outermost first.
+`spec.pipeline[]` lists middleware refs, or inline `{middleware, params}` objects, that wrap the merged result, outermost first. `interceptors` is a read-only alias.
 
 ## Relative refs and anchor
 
@@ -361,7 +375,7 @@ Only `InfraMiddleware` and `InfraInterceptor` refs add pipeline steps.
 Provider refs (`LLMProxy`, `standard:openai`, `standard:ollama`) do not.
 With one cache middleware, the order of provider and cache `--infra-ref` is equivalent.
 With several middleware refs, the **first merged ref is outermost**.
-Refs listed under workspace `infra_interceptors` append after the `infra_refs` steps.
+Refs listed under workspace `middleware` (alias `infra_interceptors`) append after the `infra_refs` steps.
 See [llm-cache.md: Pipeline order](llm-cache.md#pipeline-order).
 
 ## LLM scheduler middleware
@@ -390,7 +404,8 @@ metadata:
   name: chaos-lite
 spec:
   middleware: fault_inject
-  applies_to: [LLM_CALL]
+  for: llm
+  per: destination
   params:
     rate: 0.05
     status_codes: [503, 429]
@@ -409,7 +424,7 @@ mas-ctl chat agent.yaml \
 This patches the effective in-memory infrastructure.
 It does not modify the referenced YAML file.
 
-Middleware parameters are under `infra:spec.interceptors[middleware=llm_cache].params`, and runtime profile values under `infra:spec.runtime_engine`. All resolved resources survive these patches. To patch a standalone infra leaf, use [`mas-ctl compile`](../cli/compile.md#other-manifest-kinds) with `manifest:`.
+Middleware parameters are under `infra:spec.interceptors[middleware=llm_cache].params` (the leftover `interceptors` address; `pipeline` is the YAML name), and runtime profile values under `infra:spec.runtime_engine`. All resolved resources survive these patches. To patch a standalone infra leaf, use [`mas-ctl compile`](../cli/compile.md#other-manifest-kinds) with `manifest:`.
 
 For reusable infra changes, use an Overlay with `target.kind: Infra`.
 Put root-qualified assignments under `spec.overrides`; see the [Overlay manifest reference](overlay.md).

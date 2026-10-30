@@ -398,6 +398,10 @@ plugins:
     shortcuts:
       - llm_cache
       - llm-cache
+    attributes:
+      per: all
+      call_kinds: [llm]
+      stores_llm_responses: true
   - type: infra_middleware
     name: llm_scheduler
     urn: mas.infra_middleware.llm_scheduler
@@ -409,6 +413,10 @@ plugins:
       - rate_limit
       - rate_limiter
       - llm_pace
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      paces_llm_calls: true
   - type: infra_middleware
     name: fault_inject
     urn: mas.infra_middleware.fault_inject
@@ -419,6 +427,9 @@ plugins:
       - fault-inject
       - chaos_lite
       - chaos-lite
+    attributes:
+      per: destination
+      call_kinds: [llm]
   - type: hitl_responder
     name: auto_approve
     urn: mas.hitl_responder.auto_approve

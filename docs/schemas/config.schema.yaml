@@ -175,13 +175,23 @@ properties:
       Omit entirely to use package defaults only. Override with env var
       MAS_RUNTIME_REFS (comma- or space-separated).
 
+  middleware:
+    oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
+    description: >
+      Infra middleware bundle refs merged after infra_refs.
+      infra_interceptors is a read-only alias; mixing both is an error.
+
   infra_interceptors:
     oneOf:
       - type: string
       - type: array
         items:
           type: string
-    description: Optional infra interceptor bundle refs.
+    description: Read-only alias of middleware.
 
   manifest_libraries:
     description: >-

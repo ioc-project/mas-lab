@@ -50,6 +50,30 @@ class _SilentEngine(_EchoEngine):
         return ""
 
 
+def test_fault_inject_wrap_call_kinds_overrides_class_default() -> None:
+    wrapped = FaultInjectMiddleware.wrap(
+        _EchoEngine(),
+        {"rate": 1.0, "message": "tool fault"},
+        call_kinds=("tool",),
+    )
+    assert wrapped.call_kinds == ("tool",)
+    hit = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    assert hit.response_kind == "ERROR"
+    assert "tool fault" in (hit.text or "")
+    miss = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    assert miss.response_kind == "MODEL_TEXT"
+
+
+@pytest.mark.asyncio
+async def test_fault_inject_ainvoke_injects() -> None:
+    wrapped = FaultInjectMiddleware.wrap(
+        _EchoEngine(), {"rate": 1.0, "message": "async fault"}
+    )
+    hit = await wrapped.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    assert hit.response_kind == "ERROR"
+    assert "async fault" in (hit.text or "")
+
+
 def test_fault_inject_exchange_preview_prefixes_inner() -> None:
     wrapped = FaultInjectMiddleware.wrap(_EchoEngine(), {"rate": 0.25})
     text = wrapped.exchange_preview("LLM_CALL", correlation_id=1)
@@ -60,6 +84,34 @@ def test_fault_inject_exchange_preview_prefixes_inner() -> None:
 def test_fault_inject_exchange_preview_empty_inner() -> None:
     wrapped = FaultInjectMiddleware.wrap(_SilentEngine(), {"rate": 0.0})
     assert wrapped.exchange_preview("LLM_CALL") == "[fault_inject middleware rate=0.0]"
+
+
+def test_scheduler_invoke_skips_when_kind_mismatches() -> None:
+    inner = _EchoEngine()
+    wrapped = LlmSchedulerMiddleware.wrap(
+        inner, {"max_in_flight": 2}, call_kinds=("llm",)
+    )
+    out = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    assert out.response_kind == "MODEL_TEXT"
+    assert inner.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_scheduler_ainvoke_skips_when_kind_mismatches() -> None:
+    inner = _EchoEngine()
+    wrapped = LlmSchedulerMiddleware.wrap(
+        inner, {"max_in_flight": 2}, call_kinds=("llm",)
+    )
+    out = await wrapped.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    assert out.response_kind == "MODEL_TEXT"
+    assert inner.calls == 1
+
+
+def test_llm_cache_wrap_sets_call_kinds() -> None:
+    wrapped = LlmCacheMiddleware.wrap(
+        _EchoEngine(), {}, call_kinds=("tool",)
+    )
+    assert wrapped.call_kinds == ("tool",)
 
 
 def test_scheduler_exchange_preview_prefixes_inner() -> None:

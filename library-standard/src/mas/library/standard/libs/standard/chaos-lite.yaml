@@ -7,12 +7,12 @@ metadata:
   name: chaos-lite
   description: >
     Random LLM fault injection for reliability experiments. Apply via
-    infra_interceptors in front of any LLM provider ref.
+    workspace middleware in front of any LLM provider ref.
 
 spec:
   middleware: fault_inject
-  applies_to:
-    - LLM_CALL
+  for: llm
+  per: destination
   params:
     rate: 0.05
     status_codes: [503, 429]

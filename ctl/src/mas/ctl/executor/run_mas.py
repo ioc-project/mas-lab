@@ -45,6 +45,7 @@ def execute_run_mas(
     overlay_ids: list[str] | None = None,
     overrides: list[str] | None = None,
     infra_refs: list[str] | None = None,
+    middleware_refs: list[str] | None = None,
     deployment_path: Path | None = None,
     kernel_backend: str = DEFAULT_RUNTIME_ID,
     single_turn: bool = False,
@@ -76,6 +77,7 @@ def execute_run_mas(
         overlay_paths=list(overlay_paths or []),
         overrides=list(overrides or []),
         infra_refs=list(infra_refs or []),
+        middleware_refs=list(middleware_refs or []),
         kernel_backend=kernel_backend,
         validate=validate,
     )

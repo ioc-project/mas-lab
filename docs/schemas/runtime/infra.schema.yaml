@@ -93,7 +93,8 @@ properties:
       interceptors:
         type: array
         description: >
-          Ordered cross-cutting middleware refs or inline entries (outer-first).
+          Read-only alias of pipeline. Mixing pipeline and interceptors
+          is an error.
         items:
           oneOf:
             - type: string
@@ -106,18 +107,41 @@ properties:
         type: string
         description: "InfraMiddleware/InfraInterceptor: registry id (e.g. llm_cache, fault_inject)."
 
+      for:
+        description: >
+          InfraMiddleware/InfraInterceptor: call kinds this step wraps
+          (llm, tool). Default comes from the plugin (cache, scheduler,
+          and fault_inject wrap llm).
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+
+      per:
+        type: string
+        enum: [all, destination]
+        description: >
+          all = one shared copy; destination = one copy per LLM leaf or
+          tool server. Default comes from the plugin.
+
       applies_to:
         type: array
         description: >
-          InfraMiddleware/InfraInterceptor: engine ops this entry wraps.
-          Default [LLM_CALL]. Future: TOOL_HTTP, OTEL_EXPORT.
+          Read-only alias of for. Mixing for and applies_to is an error.
         items:
           type: string
-          enum:
-            - LLM_CALL
-            - TOOL_HTTP
-            - OTEL_EXPORT
         default: [LLM_CALL]
+
+      pipeline:
+        type: array
+        description: >
+          Ordered middleware steps (canonical on LLMProxy / InfraBundle).
+          interceptors is a read-only alias; mixing both is an error.
+        items:
+          oneOf:
+            - type: string
+            - $ref: "./fragments/infra-middleware-inline.schema.yaml"
 
       # ── LLMProxy / LLMLocal / Infrastructure ────────────────────────────
       protocol:

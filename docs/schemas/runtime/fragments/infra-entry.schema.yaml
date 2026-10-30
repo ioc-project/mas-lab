@@ -45,8 +45,13 @@ properties:
         - type: string
         - $ref: "./infra-middleware-inline.schema.yaml"
 
-  applies_to:
+  wraps:
     type: array
     description: For infra_middleware entries — which entry ids to wrap.
+    items:
+      type: string
+  applies_to:
+    type: array
+    description: Read-only alias of wraps. Mixing wraps and applies_to is an error.
     items:
       type: string

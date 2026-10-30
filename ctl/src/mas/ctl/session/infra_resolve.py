@@ -24,6 +24,7 @@ def resolve_session_infra(
     anchor: Path | str,
     with_interceptors: bool = False,
     runtime_refs_cli: tuple[str, ...] | list[str] = (),
+    middleware_refs: tuple[str, ...] | list[str] = (),
 ) -> Any:
     """Merge MAS/workspace/user/CLI infra refs and resolve them to bundles.
 
@@ -43,10 +44,11 @@ def resolve_session_infra(
         workspace_found=workspace.found,
     )
     kwargs: dict[str, Any] = {"anchor": anchor, "workspace": workspace, "user": user}
-    if with_interceptors:
+    cli_middleware = list(middleware_refs)
+    if with_interceptors or cli_middleware:
         kwargs["interceptors"] = merge_infra_interceptors(
-            workspace_interceptors=workspace.infra_interceptors,
-            cli_interceptors=[],
+            workspace_interceptors=list(workspace.infra_interceptors) if with_interceptors else [],
+            cli_interceptors=cli_middleware,
         )
     kwargs["runtime_refs"] = list(runtime_refs_cli)
     from mas.ctl.overrides.parser import parse_override
