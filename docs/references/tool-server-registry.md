@@ -34,7 +34,7 @@ spec:
     - id: localhost-mcp-tools          # required; matched by the active infra bundle
       name: localhost-mcp-tools        # display; defaults to id
       protocol: mcp                    # explicit protocol marker
-      usage: use                       # use | deploy | use-and-deploy
+      usage: connect                   # connect | listen | [connect, listen]
       description: Local mas-mcp HTTP
       transport: streamable-http       # default
       url: http://127.0.0.1:9001/mcp
@@ -61,7 +61,7 @@ Attach it with `--infra-ref` (or workspace `infra_refs`). For the tutorial agent
 | `protocol` | required | `mcp` for an MCP server. `local` for an in-process source of app-local Tool manifests and skills. |
 | `name` | `id` | Display name. Also accepted as a lookup alias. |
 | `description` | omit | Human note. Not sent on the wire. |
-| `usage` | `use` | Consume the MCP server, deploy it locally, or both. |
+| `usage` | `connect` | `connect` consumes the MCP server, `listen` serves it locally, `[connect, listen]` does both. `use`, `deploy`, `use-and-deploy` are deprecated aliases. |
 
 ### HTTP / SSE
 
@@ -108,7 +108,7 @@ These are **not** ToolContract fields. A tool's advertise document does not know
 
 ## Infra-owned routing
 
-The agent does not carry provider connection details. For a remote tool, `ToolServerRegistry` owns protocol, URL, transport, headers, timeouts, and pagination. With `usage: deploy`, the same manifest describes the listener and the local Tool manifests it exposes.
+The agent does not carry provider connection details. For a remote tool, `ToolServerRegistry` owns protocol, URL, transport, headers, timeouts, and pagination. With `usage: listen`, the same manifest describes the listener and the local Tool manifests it exposes.
 
 The registry requires `id` and `protocol`. URL and other connection fields depend on the transport. MCP tool names are discovered by default. An infra `tools` list can pin the exposed names.
 

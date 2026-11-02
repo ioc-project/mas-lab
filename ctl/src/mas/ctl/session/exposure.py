@@ -3,13 +3,13 @@
 """Shared A2A (agent_expose) listeners for every live-agent entry point.
 
 ``mas-ctl serve``, ``chat``, ``tui``, and ``run-mas`` host ``RuntimeInstance``
-objects. When infra marks those hosted agents ``usage: deploy`` or
-``use-and-deploy``, this module binds the advertised URL through the
+objects. When infra marks those hosted agents ``usage: listen`` or
+``[connect, listen]``, this module binds the advertised URL through the
 ``agent_expose`` plugin.
 
 Dedicated ``serve`` is blocking (the process *is* the server). Chat / TUI /
 run-mas keep stdin or curses as the conversation and bind in the background
-for interrogation. ``usage: use`` peers stay client routes; another process
+for interrogation. ``usage: connect`` peers stay client routes; another process
 owns those listen ports.
 """
 
@@ -158,9 +158,9 @@ def exposure_targets(
 ) -> list[str]:
     """Hosted agents this process should bind.
 
-    Every hosted A2A endpoint with ``usage: deploy`` or ``use-and-deploy`` is
-    bound here. ``usage: use`` stays a client route so a remote
-    ``mas-ctl serve`` (or ``--bind``) keeps that listen port.
+    Every hosted A2A endpoint with ``usage: listen`` or ``[connect, listen]``
+    is bound here. ``usage: connect`` stays a client route so a remote
+    ``mas-ctl serve`` (or ``--listen``) keeps that listen port.
     """
     owned = [str(item) for item in conversation_ids if str(item).strip()]
     hosted = [str(agent_id) for agent_id in hosted_ids]

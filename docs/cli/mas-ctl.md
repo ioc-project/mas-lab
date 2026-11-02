@@ -85,7 +85,7 @@ mas-ctl checkpoint resume ckpt/<file>.json
 mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
 ```
 
-The infra bundle must declare an Application endpoint for the agent with `usage: deploy`.
+The infra bundle must declare an Application endpoint for the agent with `usage: listen`.
 
 ### Control a running session
 
@@ -157,7 +157,7 @@ mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace
 | `--memory ID` | none | Inline overlay: set the memory backend id. |
 | `--set KEY=VALUE` | none | Inline overlay: set a `spec.context` value. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
-| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
 | `--flavour NAME` | `local` | Flavour from library-standard. |
 | `--infra-ref REF` | workspace or user | Infra bundle. Repeatable. Wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
@@ -256,7 +256,7 @@ With `spec.governance.hitl_on_tool` set, interactive mode prompts SCHEDULE, BLOC
 
 ## `mas-ctl run-mas [MANIFEST]`
 
-`run-mas` composes the MAS, materializes it, and opens a session on the entry agent. `MANIFEST` defaults to `mas.yaml`. A2A Application endpoints on in-process agents bind for interrogation: `usage: deploy` on the entry agent, or on specialists that are not also `use`. The conversation stays on stdin.
+`run-mas` composes the MAS, materializes it, and opens a session on the entry agent. `MANIFEST` defaults to `mas.yaml`. A2A Application endpoints on in-process agents bind for interrogation: `usage: listen` on the entry agent, or on specialists that are not also `connect`. The conversation stays on stdin.
 
 ```bash
 mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
@@ -268,7 +268,7 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 | `-q` / `--query TEXT` | none | Extra turn. Repeatable. |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
-| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest. |
 | `--flavour NAME` | `local` | Flavour. |
 | `--infra-ref REF` | none | Infra bundle. Repeatable. |
@@ -284,14 +284,14 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 
 `serve` runs a dedicated, blocking A2A process (or another `agent_expose` target). It does not return until the listener stops.
 
-It needs an Application endpoint named after the agent's `metadata.name`, with `usage: deploy` or `use-and-deploy`. Declare it in workspace `infra_refs` or pass `--infra-ref`. It uses the same helper as `chat`, `tui`, and `run-mas` (`mas.ctl.session.exposure`).
+It needs an Application endpoint named after the agent's `metadata.name`, with `usage: listen` or `[connect, listen]`. Declare it in workspace `infra_refs` or pass `--infra-ref`. It uses the same helper as `chat`, `tui`, and `run-mas` (`mas.ctl.session.exposure`).
 
 ```bash
 mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
 ```
 
 The same without an infra file: `--listen NAME=a2a://host:port` is the shortcut for the
-`usage: deploy` Application row, the mirror of `--connect` (which *uses* a remote peer).
+`usage: listen` Application row, the mirror of `--connect` (which connects to a remote peer).
 
 ```bash
 mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
@@ -301,8 +301,8 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
-| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
-| `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: deploy`. Expands to `--override infra:…`. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
+| `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: listen`. Expands to `--override infra:…`. |
 | `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
 | `--cache-read-only` | off | Exclusive replay (see `chat`): answer from the cache only, no API key needed. |
 | `--flavour NAME` | `local` | Flavour. |
@@ -317,7 +317,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | --- | --- | --- |
 | `-o` / `--overlay PATH` | none | Overlay YAML. Repeatable. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
-| `--connect NAME=URI` | none | Shortcut for infra `usage: use` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
+| `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
 | `--flavour NAME` | `local` | Flavour. |
 | `--single-turn` | off | Exit after the first reply. |

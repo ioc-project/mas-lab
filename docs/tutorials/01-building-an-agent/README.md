@@ -352,7 +352,7 @@ The A2A protocol lets other agents discover and call your agent. An agent card i
 mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml
 ```
 
-`infra/a2a-qa.yaml` is an Application endpoint named `qa-agent` with `protocol: a2a`, `usage: deploy`, and
+`infra/a2a-qa.yaml` is an Application endpoint named `qa-agent` with `protocol: a2a`, `usage: listen`, and
 `url: http://127.0.0.1:9005`. In another terminal, use the official A2A CLI (a Go binary named `a2a`) or another client.
 Stop the server with `Ctrl-C`:
 

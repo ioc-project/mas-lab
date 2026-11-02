@@ -212,7 +212,7 @@ A2A (Agent2Agent) is a protocol for agent-to-agent and user-to-agent calls. It
 is independent of MCP tools and of the LLM's delegation decision.
 
 Expose one agent from its manifest. The listen URL is the Application endpoint
-keyed by `metadata.name` (`usage: deploy`):
+keyed by `metadata.name` (`usage: listen`):
 
 ```bash
 mas-ctl serve agent.yaml --infra-ref infra/a2a-qa.yaml

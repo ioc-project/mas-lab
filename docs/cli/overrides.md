@@ -141,7 +141,7 @@ The quoted key keeps dots and brackets inside one map key.
 mas-ctl chat agent.yaml --override '.flavour.spec.observability=[native]'
 ```
 
-A *flavour* is a deployment preset. This override changes observability and tool exposure. It does not switch internal agents to A2A. That needs an infra Application row with `usage: use`, which `--connect` writes for you.
+A *flavour* is a deployment preset. This override changes observability and tool exposure. It does not switch internal agents to A2A. That needs an infra Application row with `usage: connect`, which `--connect` writes for you.
 
 ## Connect
 
@@ -149,7 +149,7 @@ A *flavour* is a deployment preset. This override changes observability and tool
 
 An *infra bundle* is a YAML file that says where services live: agent endpoints and tool servers. The connect result merges into the same in-memory infra document as `--infra-ref`. No separate connect resolver exists. `chat`, `tui`, `run-mas`, `serve`, and `compose` all read the patched infra.
 
-`--connect` applies first. An explicit `--override` of the same path wins. `--listen NAME=URI` (already on `serve`) is the mirror: it writes `usage: deploy` so this process serves the name. `--connect` never opens a port.
+`--connect` applies first. An explicit `--override` of the same path wins. `--listen NAME=URI` (already on `serve`) is the mirror: it writes `usage: listen` so this process serves the name. `--connect` never opens a port.
 
 These two forms are equivalent:
 
@@ -159,7 +159,7 @@ spec:
   endpoints:
     banking_assistant:
       protocol: a2a
-      usage: use
+      usage: connect
       url: http://127.0.0.1:8080/agents/banking_assistant/
 ```
 
@@ -181,13 +181,13 @@ mas-ctl run-mas mas.yaml \
 
 | Assignment | Expands to (same fields as the infra manifest) |
 | --- | --- |
-| `NAME=a2a://host:port/path/` | `infra:spec.endpoints['NAME']={protocol: a2a, usage: use, url: http://host:port/path/}` |
-| `NAME=mcp://host:port/mcp#tool` | `infra:spec.tool_servers[id=…]={protocol: mcp, usage: use, url: http://…, tools: [tool]}` |
+| `NAME=a2a://host:port/path/` | `infra:spec.endpoints['NAME']={protocol: a2a, usage: connect, url: http://host:port/path/}` |
+| `NAME=mcp://host:port/mcp#tool` | `infra:spec.tool_servers[id=…]={protocol: mcp, usage: connect, url: http://…, tools: [tool]}` |
 
 - `a2a://` and `mcp://` are scheme tags. The stored URL is `http://` or `https://` (`a2as://` and `mcps://` give `https://`).
 - Two MCP tools on the same origin collapse to one server.
 - The MAS still names the agency peer, and the agent still lists the tool. `--connect` only fills in the location on the infra document.
-- The flavour stays `local` (`agent_comm.protocol: agent-local`). The Application `usage: use` row routes that peer over A2A.
+- The flavour stays `local` (`agent_comm.protocol: agent-local`). The Application `usage: connect` row routes that peer over A2A.
 
 ## Session tree
 
@@ -361,7 +361,7 @@ These flags still work:
 | `--skill NAME` | Add `NAME` to `.agent.spec.skills`. |
 | `--memory ID` | Replace `.agent.spec.memory`. |
 | `--set KEY=VALUE` | Set an agent context value. |
-| `--connect NAME=URI` | Shortcut for Application and ToolServerRegistry `usage: use` rows on the merged infra document. `--bind` is the hidden old name and prints a warning. |
+| `--connect NAME=URI` | Shortcut for Application and ToolServerRegistry `usage: connect` rows on the merged infra document. `--bind` is the hidden old name and prints a warning. |
 | `--max-tokens N` | Alias of `--override '.agent.spec.models[*].max_tokens=N'`. Placed before explicit `--override` values (`chat`, `tui`). |
 | `--overlay PATH` | Load a file overlay before CLI values. |
 | `--scenario-id ID` | Select a benchmark scenario. |

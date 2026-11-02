@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List
 
 from mas.runtime.registry.provider_protocol import ToolProvider
+from mas.runtime.spec.endpoint_usage import usage_connects
 
 from library_ioa.plugins.mcp.client import MCPClient
 from library_ioa.plugins.mcp.client.wrapper import MCPClientWrapper, run_sync
@@ -106,7 +107,7 @@ class MCPToolProvider(ToolProvider):
                 continue
             if str(server.get("protocol") or "").lower() != "mcp":
                 continue
-            if server.get("usage", "use") not in {"use", "use-and-deploy"}:
+            if not usage_connects(server.get("usage")):
                 continue
             ident = str(server.get("id") or server.get("name") or "").strip()
             if not ident or ident in seen:

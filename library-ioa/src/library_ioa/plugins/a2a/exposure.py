@@ -16,6 +16,7 @@ from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.proto_utils import to_stream_response
 from google.protobuf.json_format import MessageToDict
 from mas.runtime.boundary.webserver import WebServerContract, WebServerHandle
+from mas.runtime.spec.endpoint_usage import usage_listens
 
 from .agentcard import agent_card_from_manifest
 from .server.app import build_app
@@ -104,13 +105,11 @@ class A2AExposure:
             raise ValueError("A2A exposure requires an Application endpoint with protocol: a2a")
         usage = endpoint.get("usage")
         deploys_endpoint = (
-            usage in {"deploy", "use-and-deploy"}
-            if usage is not None
-            else endpoint.get("expose") is True
+            usage_listens(usage) if usage is not None else endpoint.get("expose") is True
         )
         if not deploys_endpoint:
             raise ValueError(
-                "A2A Application endpoint must set usage: deploy or use-and-deploy"
+                "A2A Application endpoint must set usage: listen or [connect, listen]"
             )
         public_url = str(endpoint.get("url") or "")
         parsed_url = urlsplit(public_url)

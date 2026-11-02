@@ -27,12 +27,12 @@ spec:
   tool_servers:
     - name: mcp-web-search
       protocol: mcp
-      usage: use
+      usage: connect
       url: http://127.0.0.1:9001/mcp
       tools: [web-search]
 ```
 
-`--connect NAME=mcp://host:port/mcp#tool` is a shortcut for a `usage: use` row. `--bind` is the hidden old name.
+`--connect NAME=mcp://host:port/mcp#tool` is a shortcut for a `usage: connect` row. `--bind` is the hidden old name.
 Serve a tool with `mas-mcp serve --tool-manifest … --transport streamable-http`.
 
 ## Dependencies

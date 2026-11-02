@@ -183,6 +183,13 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
         overrides=list(overrides_for_root(tuple(req.overrides), "infra")),
         middleware_refs=list(req.middleware_refs),
     )
+    if req.validate and validation_enabled():
+        from mas.ctl.validate.deprecations import collect_endpoint_usage_deprecation
+
+        rows = [(f"endpoints.{k}", v) for k, v in resolved.applications.items()]
+        rows += [(f"tool_servers[{k}]", v) for k, v in resolved.tool_server_registry.items()]
+        for _path, msg in collect_endpoint_usage_deprecation(rows=rows):
+            print(f"warning: {msg}", file=sys.stderr)
 
     if req.deployment_path:
         if req.validate and validation_enabled():
