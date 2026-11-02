@@ -35,6 +35,13 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- A design pattern's protocol lines are built for each LLM call from the
+  pattern's current phase. `plan_execute` synthesis and replan calls and the
+  `tree_of_thoughts` final call now see their own instructions instead of
+  the first phase's. The lines no longer pile up in the system prompt, one
+  copy per turn.
+- Memory seeds appear once in the system prompt. They were added twice on
+  the first turn and once more on every later turn.
 - ctl rejects a bad checkpoint on save and load. Disk or hybrid
   storage with no directory is a ValueError.
 - A leaf scheduler reads the in-flight model from the call wrapper, so
