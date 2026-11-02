@@ -58,6 +58,12 @@ def test_append_placeholder_stamps_seq() -> None:
     assert row.response_kind == "TOOL_RESULT"
     assert row.seq == 2
     assert run.since(1) == [row]
+    assert row.placeholder and not run.events[0].placeholder  # a real engine row is not a placeholder
+    from mas.runtime.kernel.state_serialize import run_from_dict, run_to_dict
+
+    again = run_from_dict(run_to_dict(run))
+    assert [r.placeholder for r in again.events] == [False, True]
+    assert "placeholder" not in run_to_dict(run)["events"][0]  # existing snapshots keep their shape
 
 
 def test_new_run_events_empty_log() -> None:

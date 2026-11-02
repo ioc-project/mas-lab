@@ -62,6 +62,18 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- `design_pattern: state_machine`: the entry agent's behaviour as a table of
+  named states. Each state delegates to agents, runs any registered design
+  pattern as its child (ReAct, plan-execute, another state machine...), runs
+  regions in parallel, calls a tool, or ends the turn; guarded transitions pick
+  the next state, and `signals` (a step budget, a timeout, an outcome, a steer) can
+  move the machine from any state. Replies are read as JSON fields (checked
+  with a pydantic model) or a leading word. The agent is told the format from
+  the same spec, an unreadable reply is asked again with the reason, then the
+  state fails closed, and a public transcript can be kept per state.
+- `design_pattern: moderated_rounds`: a preset of `state_machine` for a group
+  that must agree on one plan. Fixed-order rounds, a decider's JSON action
+  after each, and a confirmation round per proposed plan.
 - `mas-ctl infra show` prints each LLM and tool chain (`for` / `per` on
   every step) and each agent's comm stack. `--json` is a stable document.
   `--infra-ref`, `--runtime-ref`, `--override`, and `--middleware` match

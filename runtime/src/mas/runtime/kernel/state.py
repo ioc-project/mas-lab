@@ -60,6 +60,9 @@ class RunEvent:
     parallel_tools: tuple[tuple[str, dict], ...] = ()
     finish_reason: str = ""
     seq: int = 0
+    # True for a row the kernel wrote for a call that did not run (skipped, blocked,
+    # blacklisted); its text is a note for the model, not a reply.
+    placeholder: bool = False
 
 
 @dataclass
@@ -136,6 +139,7 @@ class RunLedger:
             response_kind="TOOL_RESULT",
             next_step=next_step,
             text=text,
+            placeholder=True,
         )
         self.append(record)
         return record

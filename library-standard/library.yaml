@@ -212,6 +212,16 @@ plugins:
     urn: mas.dp.deterministic_parallel
     module: mas.library.standard.plugins.design_patterns.parallel
     class: DeterministicParallelPlugin
+  - type: design_pattern
+    name: state_machine
+    urn: mas.dp.state_machine
+    module: mas.library.standard.plugins.design_patterns.state_machine
+    class: StateMachinePlugin
+  - type: design_pattern
+    name: moderated_rounds
+    urn: mas.dp.moderated_rounds
+    module: mas.library.standard.plugins.design_patterns.moderated_rounds
+    class: ModeratedRoundsPlugin
 
   # Other OSS design patterns
   - type: design_pattern
