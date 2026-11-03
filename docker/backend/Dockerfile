@@ -22,6 +22,8 @@ COPY library-samples/pyproject.toml library-samples/
 COPY library-lab/pyproject.toml library-lab/
 COPY library-eval/pyproject.toml library-eval/
 COPY library-ioa/pyproject.toml library-ioa/
+COPY library-telemetry/pyproject.toml library-telemetry/
+COPY library-kg/pyproject.toml library-kg/
 COPY lab/pyproject.toml lab/
 COPY lab/components/core/pyproject.toml lab/components/core/
 COPY lab/components/bench/pyproject.toml lab/components/bench/
@@ -36,6 +38,8 @@ COPY library-samples/ library-samples/
 COPY library-lab/ library-lab/
 COPY library-eval/ library-eval/
 COPY library-ioa/ library-ioa/
+COPY library-telemetry/ library-telemetry/
+COPY library-kg/ library-kg/
 COPY lab/ lab/
 
 # Build-time force-include sources: ctl + lab/components/core force-include
