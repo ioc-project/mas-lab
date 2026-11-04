@@ -23,6 +23,7 @@ mas-lab plot [COMMAND] SOURCE [OPTIONS]
 | `trajectory` | Delegation-flow diagram | [trajectory](plot-trajectory.md) |
 | `multilevel-trajectory` | Multilevel swimlane | [multilevel-trajectory](plot-multilevel-trajectory.md) |
 | `communication-flow` | Agent-to-agent routing graph | [communication-flow](plot-communication-flow.md) |
+| `topology` | Agents, skills, tools and delegation of a MAS | [topology](plot-topology.md) |
 | `kg` | Interactive knowledge-graph HTML | [kg](plot-kg.md) |
 | `message-graph` | Message swimlane from kg.json | [message-graph](plot-message-graph.md) |
 | `context-provenance` | Context-provenance diagram | [context-provenance](plot-context-provenance.md) |
