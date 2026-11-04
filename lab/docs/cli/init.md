@@ -16,7 +16,7 @@ mas-lab init [OPTIONS]
 
 ## DESCRIPTION
 
-Bootstrap user config and optional LLM infra.
+Bootstrap user config and optional LLM infra. Prints a short summary and the first commands to run; `--quiet` hides it.
 
 ## OPTIONS
 
@@ -24,6 +24,7 @@ Bootstrap user config and optional LLM infra.
 |------|------|
 | `--yes` | Use defaults without prompts. |
 | `--local` | Write config.yaml and infra/<name>.yaml in the current project. |
+| `-q`, `--quiet` | Print nothing once the files are written (prompts and errors still show). |
 
 ## SEE ALSO
 

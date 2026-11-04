@@ -158,7 +158,14 @@ def _confirm_overwrite(path: Path, *, label: str, yes: bool) -> bool:
     default=False,
     help="Write config.yaml and infra/<name>.yaml in the current project.",
 )
-def init_cmd(yes: bool, local_config: bool) -> None:
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    default=False,
+    help="Print nothing once the files are written (prompts and errors still show).",
+)
+def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
     """Initialize MAS configuration under XDG or in the current project.
 
     By default, creates user-level files under $XDG_CONFIG_HOME/mas. With
@@ -292,56 +299,49 @@ def init_cmd(yes: bool, local_config: bool) -> None:
             encoding="utf-8",
         )
 
+    if quiet:
+        return
+
+    _TRIP = "library-samples/apps/trip-planner"
     click.echo()
     click.echo(
         "Initialized MAS project configuration."
         if local_config
         else "Initialized MAS user configuration."
     )
-    click.echo(f"- config: {config_path}")
+    click.echo()
+    click.echo(f"  config  {config_path}")
     if infra_path is not None:
-        click.echo(f"- infra : {infra_path}")
-        click.echo(f"  URL   : {api_base}")
-        click.echo(f"  key   : ${api_key_env}  ← export this env var before running agents")
+        click.echo(f"  infra   {infra_path}")
+        click.echo(f"          {model_alias} -> {target_model} at {api_base}")
     else:
-        click.echo("- infra : skipped")
+        click.echo("  infra   skipped")
 
     click.echo()
-    click.echo("How to proceed:")
-    click.echo(f"1) Export the API key:  export {api_key_env}=<your-key>")
-    click.echo("2) You can run mas-lab commands without --infra when infra_refs is set in config.yaml.")
-    click.echo("3) Override infra per run with --infra when needed.")
-    click.echo("4) Use model mappings in infra to keep stable model names in agent manifests.")
-    click.echo("5) You can override model names globally via environment/config defaults.")
+    click.echo("Next:")
+    click.echo()
+    step = 1
+    if infra_path is not None:
+        click.echo(f"  {step}. Set your API key:")
+        click.echo(f"       export {api_key_env}=<your-key>")
+        click.echo()
+        step += 1
+    click.echo(f"  {step}. Run a first multi-agent system:")
+    click.echo(
+        f"       mas-ctl run-mas {_TRIP}/mas.yaml --infra-ref standard:openai "
+        "--trace -q \"Plan a trip from Celestia to Verdantia\""
+    )
+    click.echo()
+    click.echo(f"  {step + 1}. Look at what happened:")
+    click.echo(f"       mas-lab telemetry show {_TRIP}/traces/events.jsonl")
+    click.echo(f"       mas-lab plot trajectory {_TRIP}/traces/events.jsonl --format html -o trajectory.html")
+    click.echo()
+    click.echo("Tips:")
+    click.echo()
+    click.echo("  --trace         readable exchange log on stderr   (--trace full: payloads)")
+    click.echo("  --events-file   choose where the trace is written")
     if not local_config:
-        click.echo("6) For a self-contained project, rerun init with --local from its root.")
-    if create_infra:
-        click.echo(
-            f"{7 if not local_config else 6}) Current mapping from init: "
-            f"{model_alias} -> {target_model}"
-        )
-
+        click.echo("  init --local    config in the current project instead of your user folder")
+    click.echo("  init --quiet    print nothing")
     click.echo()
-    click.echo("Try first command:")
-    click.echo(
-        "mas-ctl run-mas library-samples/apps/trip-planner/mas.yaml "
-        "--infra-ref standard:openai "
-        "-q \"Plan a trip from Celestia to Verdantia\""
-    )
-    click.echo("Default trace file for this manifest: library-samples/apps/trip-planner/traces/events.jsonl")
-    click.echo("To control output location, rerun with --events-file:")
-    click.echo(
-        "mas-ctl run-mas library-samples/apps/trip-planner/mas.yaml "
-        "--infra-ref standard:openai "
-        "--events-file traces/trip-planner-default.events.jsonl "
-        "-q \"Plan a trip from Celestia to Verdantia\""
-    )
-    click.echo("For a human exchange log on stderr (summary + timestamps), add --trace")
-    click.echo("Verbose payload dump: --trace full    Color (opt-in): --trace-color")
-    click.echo("Then inspect traces:")
-    click.echo("mas-lab telemetry show library-samples/apps/trip-planner/traces/events.jsonl")
-    click.echo(
-        "mas-lab plot trajectory library-samples/apps/trip-planner/traces/events.jsonl "
-        "--format html -o traces/trip-planner-trajectory.html"
-    )
-    click.echo("Then continue with tutorials in docs/user-guide.md.")
+    click.echo("Tutorials: docs/user-guide.md")
