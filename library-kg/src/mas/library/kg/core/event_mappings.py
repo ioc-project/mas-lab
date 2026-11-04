@@ -164,6 +164,30 @@ LAYER_KINDS: Dict[str, FrozenSet[str]] = {
             "routing_result",
         }
     ),
+    "annotation": frozenset(
+        {
+            "context_assembled",
+            "state_update_start",
+            "state_update_end",
+            "agent_communication_start",
+            "agent_communication_end",
+            "checkpoint_start",
+            "checkpoint_end",
+            "observability_pre_execute_start",
+            "observability_pre_execute_end",
+            "observability_post_execute_start",
+            "observability_post_execute_end",
+            "user_input",
+            "user_output",
+            "client_response",
+            "tool_result_injected",
+            "boundary_ingress",
+            "context_steer",
+            "compaction",
+            "wait_state_start",
+            "wait_state_end",
+        }
+    ),
     "governance": frozenset(
         {
             "audit",

@@ -93,6 +93,7 @@ def build_kg_document(
     include_trajectory: bool = True,
     include_provenance: bool = False,
     include_governance: bool = False,
+    include_annotation: bool = False,
     split_session_id: bool = True,
     app_name: str | None = None,
     application_node: bool = False,
@@ -120,6 +121,8 @@ def build_kg_document(
         Per-part context contributions (ContextContribution nodes).
     include_governance : bool, default False
         Policy, audit, and budget events.
+    include_annotation : bool, default False
+        Point CallAnnotation kinds. Off to match observe-sdk.
     strict : bool, default False
         Observability gaps (unmapped event kinds, missing call_id, …) are
         logged as warnings and skipped rather than raised, so a single
@@ -165,6 +168,7 @@ def build_kg_document(
         include_trajectory=include_trajectory,
         include_provenance=include_provenance,
         include_governance=include_governance,
+        include_annotation=include_annotation,
         strict=strict,
     )
     nodes, edges = extract_graph(
@@ -185,6 +189,7 @@ def build_kg_document(
             "trajectory": include_trajectory,
             "provenance": include_provenance,
             "governance": include_governance,
+            "annotation": include_annotation,
         },
         "plot_events": extract_plot_events(events),
     }
@@ -274,6 +279,7 @@ def build_kg_from_events_path(
     include_trajectory: bool = True,
     include_provenance: bool = False,
     include_governance: bool = False,
+    include_annotation: bool = False,
     split_session_id: bool = True,
     app_name: str | None = None,
     application_node: bool = False,
@@ -299,6 +305,7 @@ def build_kg_from_events_path(
         include_trajectory=include_trajectory,
         include_provenance=include_provenance,
         include_governance=include_governance,
+        include_annotation=include_annotation,
         split_session_id=split_session_id,
         app_name=app_name,
         application_node=application_node,

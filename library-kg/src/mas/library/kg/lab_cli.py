@@ -142,6 +142,11 @@ def kg_group() -> None:
     default=False,
     help="Include the governance category (default: off, same as OTel export).",
 )
+@click.option(
+    "--include-annotation/--no-include-annotation",
+    default=False,
+    help="Include CallAnnotation kinds (default: off, same as observe-sdk).",
+)
 def _normalize(
     events_path: str | None,
     otel_path: str | None,
@@ -159,6 +164,7 @@ def _normalize(
     include_trajectory: bool,
     include_provenance: bool,
     include_governance: bool,
+    include_annotation: bool,
 ) -> None:
     if bool(events_path) == bool(otel_path):
         raise click.UsageError("Pass either EVENTS_PATH or --otel SPANS_PATH.")
@@ -200,6 +206,7 @@ def _normalize(
         include_trajectory=include_trajectory,
         include_provenance=include_provenance,
         include_governance=include_governance,
+        include_annotation=include_annotation,
     )
     _emit_artifact(artifact, output_path, output_dir, dry_run)
 
@@ -222,9 +229,22 @@ def _normalize(
     type=click.Choice(["experiment"], case_sensitive=False),
     help="Enable optional extension-layer validation checks.",
 )
-@click.option("--list-checks", is_flag=True, help="List available checks and show which ones run by default.")
-@click.option("--check", "include_checks", multiple=True, help="Run only this check. Repeat to run a subset.")
-@click.option("--skip-check", multiple=True, help="Disable one default check. Repeat to skip multiple checks.")
+@click.option(
+    "--list-checks",
+    is_flag=True,
+    help="List available checks and show which ones run by default.",
+)
+@click.option(
+    "--check",
+    "include_checks",
+    multiple=True,
+    help="Run only this check. Repeat to run a subset.",
+)
+@click.option(
+    "--skip-check",
+    multiple=True,
+    help="Disable one default check. Repeat to skip multiple checks.",
+)
 def _validate(
     kg_path: str | None,
     ontology_path: str | None,
@@ -244,7 +264,13 @@ def _validate(
     )
 
     requested_checks = list(include_checks)
-    unknown_requested = sorted({name for name in requested_checks + list(skip_check) if name not in ALL_EXTENDED_CHECK_NAMES})
+    unknown_requested = sorted(
+        {
+            name
+            for name in requested_checks + list(skip_check)
+            if name not in ALL_EXTENDED_CHECK_NAMES
+        }
+    )
     if unknown_requested:
         raise click.UsageError(
             "Unknown check(s): "
@@ -258,7 +284,10 @@ def _validate(
             "usage": {
                 "run_default": "mas-lab kg validate KG.jsonld",
                 "run_one": "mas-lab kg validate KG.jsonld --check shacl",
-                "run_subset": "mas-lab kg validate KG.jsonld --check unknown_node_types --check shacl",
+                "run_subset": (
+                    "mas-lab kg validate KG.jsonld "
+                    "--check unknown_node_types --check shacl"
+                ),
                 "skip_one": "mas-lab kg validate KG.jsonld --skip-check shacl",
             },
         }, indent=2))

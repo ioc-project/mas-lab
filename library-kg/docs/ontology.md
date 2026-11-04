@@ -77,13 +77,14 @@ Element
 
 ## 2. Layer overview
 
-A layer is a group of event kinds that is included or excluded as a unit (flags `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`; see [normalization.md](normalization.md#8-layer-defaults-and-control)). The tags `L0` to `L5` are labels, not an ordering, and no layer uses L3.
+A layer is a group of event kinds that is included or excluded as a unit (flags `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`; see [normalization.md](normalization.md#8-layer-defaults-and-control)). The tags `L0` to `L5` are labels, not an ordering, and no layer uses L3.
 
 | Layer | Tag | Default | Events | Node classes |
 |---|---|---|---|---|
-| Core | L0 | always on | `tool_call`, `network_call`, `llm_call`, `execution`, `mas_call`, `rag_query`, `memory_*`, `processing_call`, `workflow_transition`, `skill_execution` pairs; annotation kinds such as `context_assembled`, `state_update_*`, `checkpoint_*`, `user_input` | `Session`, `MASCall`, `AgentCall`, `TaskCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `SkillCall`, `MemoryCall`, `RAGQuery`, `ThinkingCall`, `CallAnnotation`, catalog nodes, `Run`, `Agent` |
+| Core | L0 | always on | `tool_call`, `network_call`, `llm_call`, `execution`, `mas_call`, `rag_query`, `memory_*`, `processing_call`, `workflow_transition`, `skill_execution` pairs | `Session`, `MASCall`, `AgentCall`, `TaskCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `SkillCall`, `MemoryCall`, `RAGQuery`, `ThinkingCall`, catalog nodes, `Run`, `Agent` |
 | Infrastructure | L1 | **off** | `infrastructure_info` | `Worker` |
 | Trajectory | L2 | **on** for `ParallelGroup`/`Branch`/routing; `State` and `Transition` are always built | `parallel_group_*`, `branch_*`, `routing`, `routing_result` | `ParallelGroup`, `Branch`, routing `CallAnnotation`s |
+| Annotation | — | **off** | `context_assembled`, `state_update_*`, `checkpoint_*`, `observability_*_execute_*`, `user_input`, `client_response`, `tool_result_injected`, `wait_state_*`, … | `CallAnnotation` |
 | Provenance | L4 | **off** | `context_part_contributed` | `ContextContribution` |
 | Governance | L5 | **off** | `audit`, `policy_*`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_*`, `governance_*`, `obs_wrap_gov_*` | `GovernanceEvent` |
 
@@ -409,7 +410,7 @@ The governance layer is **off** by default (`--include-governance`). Enable it t
 Both are point-in-time nodes with no `call_id`, attached to the enclosing call by `annotates` (annotation -> call), so governance data never changes the execution node it describes.
 
 - `GovernanceEvent` is the class for every governance kind in `KIND_TO_CLASS`.
-- `CallAnnotation` is the class for the always-on annotation kinds (routing, context assembly, state updates, checkpoints, user input and output, `observability_*_execute_*`, ...). Checkpoint kinds are tagged like governance events (`annotationKind`, `block = "governance"`) but are `CallAnnotation` nodes.
+- `CallAnnotation` is the class for routing (trajectory layer, on by default) and the opt-in annotation kinds (context assembly, state updates, checkpoints, user input and output, `observability_*_execute_*`, ...). Checkpoint kinds are tagged like governance events (`annotationKind`, `block = "governance"`) but are `CallAnnotation` nodes.
 
 Both are declared in the extension TTL as direct subclasses of `Element`.
 

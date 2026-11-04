@@ -29,6 +29,7 @@ def run_normalize(
     include_trajectory: bool = True,
     include_provenance: bool = False,
     include_governance: bool = False,
+    include_annotation: bool = False,
 ) -> KGArtifact:
     """Normalize events.jsonl to a :class:`~mas.library.kg.artifact.KGArtifact`.
 
@@ -51,6 +52,8 @@ def run_normalize(
             observability gap should never crash a benchmark run, so this
             defaults to *False*; enable it only for CI conformance checks
             of the mapping tables themselves.
+        include_annotation: If *True*, keep point CallAnnotation kinds.
+            Default *False* to match observe-sdk.
 
     Returns:
         :class:`KGArtifact` with the normalised KG.  If *output_dir* is given
@@ -75,6 +78,7 @@ def run_normalize(
         include_trajectory=include_trajectory,
         include_provenance=include_provenance,
         include_governance=include_governance,
+        include_annotation=include_annotation,
     )
     artifact = KGArtifact.from_doc(doc)
 

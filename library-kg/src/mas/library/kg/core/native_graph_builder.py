@@ -91,6 +91,7 @@ class NativeGraphBuilder:
         include_trajectory: bool = True,
         include_provenance: bool = False,
         include_governance: bool = False,
+        include_annotation: bool = False,
         strict: bool = False,
         session_id_override: Optional[str] = None,
         split_session_id: bool = True,
@@ -122,6 +123,7 @@ class NativeGraphBuilder:
             include_trajectory=include_trajectory,
             include_provenance=include_provenance,
             include_governance=include_governance,
+            include_annotation=include_annotation,
         )
         self._gaps = _GapDedup(run_id)
 
@@ -695,6 +697,7 @@ def build_graph_batch(
     include_trajectory: bool = True,
     include_provenance: bool = False,
     include_governance: bool = False,
+    include_annotation: bool = False,
     strict: bool = False,
     session_id_override: Optional[str] = None,
     split_session_id: bool = True,
@@ -715,6 +718,7 @@ def build_graph_batch(
         include_trajectory=include_trajectory,
         include_provenance=include_provenance,
         include_governance=include_governance,
+        include_annotation=include_annotation,
         strict=strict,
     )
     return build_graph_from_normalized(

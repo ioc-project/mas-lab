@@ -43,6 +43,8 @@ def compare_kg(
 | `reference` | `dict` | Ground-truth KG, same format. |
 | `strict` | `bool` | When `True`, check 7 (`element_level_diff`) counts toward `passed`. Default `False`: only checks 1-6 decide `passed`. |
 
+`run_compare_kg` (the pipeline step) also takes `node_types`: if set, only those node types and the edges between them are compared.
+
 | # | Name | Tests |
 |---|------|-------|
 | 1 | `agent_coverage` | Candidate contains every agent ID present in reference |

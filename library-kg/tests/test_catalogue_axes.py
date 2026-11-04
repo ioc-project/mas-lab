@@ -25,6 +25,7 @@ def full_kg() -> dict:
         run_id="full-ontology-test",
         include_provenance=True,
         include_governance=True,
+        include_annotation=True,
     )
 
 

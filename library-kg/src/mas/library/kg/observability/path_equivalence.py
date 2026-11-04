@@ -1,5 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E501, I001
 """Compare native events → KG vs native events → observe-sdk OTel → norm.
 
 Two modes:
@@ -422,6 +423,7 @@ def _native_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[s
         include_trajectory=complete,
         include_provenance=complete,
         include_governance=complete,
+        include_annotation=complete,
         fill_synthesized_processing_defaults=False,
     )
     return list(doc.get("nodes") or []), list(doc.get("edges") or [])

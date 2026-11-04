@@ -388,6 +388,7 @@ def layer_skip_kinds(
     include_trajectory: bool,
     include_provenance: bool,
     include_governance: bool,
+    include_annotation: bool,
 ) -> frozenset:
     """Event kinds to drop, given which optional layers are enabled."""
     active: Dict[str, bool] = {
@@ -395,6 +396,7 @@ def layer_skip_kinds(
         "trajectory": include_trajectory,
         "provenance": include_provenance,
         "governance": include_governance,
+        "annotation": include_annotation,
     }
     return frozenset().union(*(LAYER_KINDS[name] for name, on in active.items() if not on))
 
@@ -408,6 +410,7 @@ def normalize_events(
     include_trajectory: bool = True,
     include_provenance: bool = False,
     include_governance: bool = False,
+    include_annotation: bool = False,
     strict: bool = False,
 ) -> List[Dict[str, Any]]:
     """Annotate a list of ObsEvents with ontology metadata.
@@ -434,6 +437,10 @@ def normalize_events(
     include_governance : bool, default False
         Policy, audit, and budget events.  GovernanceEvent is mapped to
         CallAnnotation until the ontology class is finalised.
+    include_annotation : bool, default False
+        Point CallAnnotation kinds (state_update, context_assembled,
+        observability_*_execute, user I/O, …). Matches observe-sdk
+        ``annotation_enabled=False``. Routing stays on the trajectory layer.
 
     strict : bool, default False
         An observability gap (an event kind with no ``KIND_TO_CLASS`` entry,
@@ -456,6 +463,7 @@ def normalize_events(
         include_trajectory=include_trajectory,
         include_provenance=include_provenance,
         include_governance=include_governance,
+        include_annotation=include_annotation,
     )
     gaps = _GapDedup(run_id)
 

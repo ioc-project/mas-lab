@@ -33,6 +33,38 @@ def _load_events(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]  # noqa: E501
 
 
+def test_native_kg_complete_keeps_annotation_off_default() -> None:
+    from mas.library.kg.observability.path_equivalence import _native_kg
+
+    events = [
+        {
+            "kind": "agent_call_start",
+            "timestamp": 1.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "a",
+        },
+        {
+            "kind": "context_assembled",
+            "timestamp": 1.5,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "a",
+        },
+        {
+            "kind": "agent_call_end",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "a",
+        },
+    ]
+    default_types = {n.get("node_type") for n in _native_kg(events, mode="default")[0]}
+    complete_types = {n.get("node_type") for n in _native_kg(events, mode="complete")[0]}
+    assert "CallAnnotation" not in default_types
+    assert "CallAnnotation" in complete_types
+
+
 def _import_compare():
     pytest.importorskip("norm")
     pytest.importorskip("opentelemetry.sdk")

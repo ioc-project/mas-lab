@@ -87,7 +87,7 @@ Both errors are observability gaps, not fatal: with the default `strict=False` t
 | Control | Where | Meaning |
 |---|---|---|
 | `strict` | `normalize_events`, `build_kg_document`, `run_normalize` | Raise on observability gaps instead of logging and skipping the event. |
-| `include_infrastructure` / `include_trajectory` / `include_provenance` / `include_governance` | same, and `--include-*` / `--no-include-*` CLI flags | Select optional layers; defaults `False` / `True` / `False` / `False` ([section 8](#8-layer-defaults-and-control)). |
+| `include_infrastructure` / `include_trajectory` / `include_provenance` / `include_governance` / `include_annotation` | same, and `--include-*` / `--no-include-*` CLI flags | Select optional layers; defaults `False` / `True` / `False` / `False` / `False` ([section 8](#8-layer-defaults-and-control)). |
 | `split_session_id` | `build_kg_document`, `--split-session-id` | Split a `<appName>_<uuid>` run id into `Session.appName` and `Session.sessionId`; default on. |
 | `app_name` | `build_kg_document`, `--app-name` | Override `Session.appName`. |
 | `application_node` | `build_kg_document`, `--application-node` | Emit one `Application` node per app plus `hasSession` edges. |
@@ -342,7 +342,7 @@ Attribute names are camelCase. Which attributes exist depends on which events ca
 
 ## 8. Layer defaults and control
 
-Four boolean flags control which event kinds reach the KG. They are applied before any class lookup: filtered events produce no nodes or edges. The sets are `LAYER_KINDS` in `core/event_mappings.py`.
+Five boolean flags control which event kinds reach the KG. They are applied before any class lookup: filtered events produce no nodes or edges. The sets are `LAYER_KINDS` in `core/event_mappings.py`.
 
 | Flag | Default | Event kinds in the layer | Effect when `False` |
 |---|---|---|---|
@@ -350,8 +350,9 @@ Four boolean flags control which event kinds reach the KG. They are applied befo
 | `include_trajectory` | `True` | `parallel_group_start/end`, `branch_start/end`, `routing`, `routing_result` | No `ParallelGroup` / `Branch` nodes and no routing annotations; routing-derived delegation parents are not inferred, so those parents come from time enclosure instead. |
 | `include_provenance` | `False` | `context_part_contributed` | No `ContextContribution` nodes or `contributesTo` / `derivedFrom` edges. |
 | `include_governance` | `False` | the `GovernanceEvent` kinds listed in [section 4](#4-event-kg-mapping-table) | No `GovernanceEvent` nodes. |
+| `include_annotation` | `False` | `context_assembled`, `state_update_*`, `observability_*_execute_*`, `user_input` / `user_output`, `client_response`, `tool_result_injected`, `wait_state_*`, and the other point CallAnnotation kinds | No `CallAnnotation` nodes except routing (trajectory layer). Matches observe-sdk `annotation_enabled=False`. |
 
-The structural core (all call kinds in [section 4](#4-event-kg-mapping-table)) and the always-on annotation kinds cannot be switched off. CLI: `mas-lab kg normalize --include-governance`, `--no-include-trajectory`, and so on. The flags are recorded in `metadata.layers`.
+The structural core (all call kinds in [section 4](#4-event-kg-mapping-table)) cannot be switched off. CLI: `mas-lab kg normalize --include-governance`, `--include-annotation`, `--no-include-trajectory`, and so on. The flags are recorded in `metadata.layers`.
 
 Note on `Worker`: `infrastructure_info` maps to `Worker`, but no handler is registered for it. It falls through to the generic call handler, which creates a node only if the event has a `call_id`. Treat the infrastructure layer as reserved.
 
