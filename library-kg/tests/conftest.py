@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Root test configuration for mas-library-kg."""
+"""Root test configuration for the knowledge-graph library."""
 
 import sys
 from pathlib import Path

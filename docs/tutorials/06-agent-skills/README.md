@@ -10,7 +10,7 @@ calculation, with no change to the agent itself.
 
 ## What you need
 
-- **Packages:** `mas-ctl` and `mas-library-skills` (bundles the `agentskills` parser and the skill sandbox).
+- **Packages:** `ctl/` and `library-skills/` (bundles the `agentskills` parser and the skill sandbox).
 - **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) (install, LLM access). [Tutorial 1](../01-building-an-agent/README.md) helps but is optional.
 - About 35 minutes. Run every command from the repository root. Only `mas-ctl chat` calls an LLM (it needs `OPENAI_API_KEY`). Validate and the script run offline.
 

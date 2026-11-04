@@ -35,6 +35,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from mas.library.kg._dist import extra_hint
+
 # ---------------------------------------------------------------------------
 # Ontology index — derives all validation constants from mas-ontology.ttl via
 # the oxp-ontology package.  No intermediate JSON schema file required.
@@ -527,7 +529,7 @@ def run_shacl_validation(
         import rdflib
     except ImportError as exc:
         raise KGCheckSkipped(
-            "shacl check requires pyshacl and rdflib (pip install 'mas-library-kg[validation]')"
+            f"shacl check requires pyshacl and rdflib ({extra_hint('validation')})"
         ) from exc
 
     MAS = "https://outshift-open.github.io/oxp-ontology/mas#"
@@ -560,7 +562,7 @@ def run_shacl_validation(
         if ontology_path is None:
             raise KGCheckSkipped(
                 "shacl check requires oxp-ontology to resolve mas-shapes.ttl "
-                "(pip install 'mas-library-kg[validation]')"
+                f"({extra_hint('validation')})"
             )
         sibling_shapes = ontology_path.parent / "mas-shapes.ttl"
         shapes_files = [sibling_shapes if sibling_shapes.exists() else ontology_path]
@@ -660,7 +662,7 @@ def run_shacl_validation(
             entry["@id"] = f"urn:mas:agent:{local_id}"
         elif ntype in {"Tool", "LLM", "Skill", "Processing", "MAS", "Capability"}:
             name = n.get("name") or n.get("id") or ntype
-            slug = "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in str(name).strip()) or ntype.lower()
+            slug = "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in str(name).strip()) or ntype.lower()  # noqa: E501
             local_id = str(n.get("id") or slug)
             entry["@id"] = f"urn:mas:catalog:{ntype.lower()}:{slug}"
         elif n.get("callId"):

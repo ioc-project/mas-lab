@@ -48,7 +48,7 @@ OTel spans (JSON / JSONL)                       mas.library.kg (first-party)    
 
 This library applies no heuristics, gap filling or event synthesis on the OTel path, and does not convert OTel back to `events.jsonl`.
 
-**Requirements.** `norm` is an optional extra (`pip install "mas-library-kg[norm]"`, which currently installs `backend/norm` from the SCOPE repository on GitHub until it is published as a package). Without it, `run_normalize_otel` and `build_kg_from_otel_spans` log a warning and return an empty KG (zero nodes and edges, no error). Likewise, a span list whose shape is not recognised yields an empty KG with `otel_format: "unknown"`.
+**Requirements.** `norm` is an optional extra (`pip install "library-kg[norm]"`, which currently installs `backend/norm` from the SCOPE repository on GitHub until it is published as a package). Without it, `run_normalize_otel` and `build_kg_from_otel_spans` log a warning and return an empty KG (zero nodes and edges, no error). Likewise, a span list whose shape is not recognised yields an empty KG with `otel_format: "unknown"`.
 
 **Run id.** `norm` derives application, session and agent ids from the spans (see [Section 4](#4-attributes-read-by-norm)). The `--run-id` / `run_id` argument is only recorded in the artifact (`run_id` field), not used to rewrite node ids. Native-path options (`strict`, `synthesize_llm_gaps`, `allow_heuristics`, `write_events`, `split_session_id`, `app_name`, ...) are accepted by `run_normalize_otel` for call-site compatibility and ignored.
 

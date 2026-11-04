@@ -1,4 +1,4 @@
-# Taskfile for mas-library-kg — run tests from repo root or this package dir.
+# Taskfile for library-kg — run tests from repo root or this package dir.
 #
 # From mas-lab-internal root:
 #   task kg:test-validate

@@ -14,7 +14,7 @@ tasks:
     dir: "{{.ROOT_DIR}}"
     cmds:
       - uv venv .venv --allow-existing
-      - uv pip install -e runtime -e ctl -e library-standard -e library-ioa -e library-skills -e library-eval -e library-lab -e library-samples -e lab/components/core -e lab/components/bench -e lab/components/controller -e lab pytest pytest-asyncio
+      - uv pip install -e runtime -e ctl -e library-standard -e library-ioa -e library-skills -e library-eval -e library-lab -e library-samples -e lab/components/core -e lab/components/bench -e lab/components/controller -e . pytest pytest-asyncio
 
   unit-tests:
     desc: Run A2A adapter unit and contract tests

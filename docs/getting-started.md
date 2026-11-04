@@ -23,9 +23,9 @@ If unsure, pick Docker. All paths use the same YAML manifests.
     Use Docker or a source checkout until the first PyPI release is complete.
 
 ```bash
-# Once published:
+# Once published (meta-package; wheel name is root pyproject.toml [project].name):
 uv venv
-uv pip install mas-lab mas-library-standard mas-library-samples
+--8<-- "docs/includes/pypi-names.md:install-meta"
 export PATH="$PWD/.venv/bin:$PATH"
 mas-lab init
 export OPENAI_API_KEY=<your-key>

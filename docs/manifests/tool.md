@@ -4,7 +4,7 @@
 -->
 # Tool manifest (`kind: Tool`)
 
-**Package:** `mas-runtime` | **Schema:** [`tool.schema.yaml`](../schemas/runtime/tool.schema.yaml) | **apiVersion:** `mas/v1`
+**Package:** `runtime/` | **Schema:** [`tool.schema.yaml`](../schemas/runtime/tool.schema.yaml) | **apiVersion:** `mas/v1`
 
 A **Tool** manifest declares **one** tool: its name, parameters, optional protocol extras, and an `impl` pointer to the Python class that runs it.
 Write one when an agent needs an application tool that the runtime does not ship.

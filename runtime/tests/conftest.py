@@ -61,4 +61,4 @@ def require_samples_library() -> None:
     from mas.runtime.package_refs import resolve_library_scheme_root
 
     if resolve_library_scheme_root("samples") is None:
-        pytest.skip("mas-library-samples not installed")
+        pytest.skip("samples library not installed")

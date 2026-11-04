@@ -3,18 +3,18 @@
 
 from __future__ import annotations
 
-"""Resolve runtime flavours exclusively from mas-library-standard."""
+"""Resolve runtime flavours exclusively from ``mas.library.standard``."""
 
 
-import contextlib
-import importlib.resources
-from pathlib import Path
+import contextlib  # noqa: E402
+import importlib.resources  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 _FLAVOUR_PACKAGE = "mas.library.standard"
 
 
 def bundled_flavour_path(name: str) -> Path | None:
-    """Return path to ``flavours/<name>.yaml`` inside mas-library-standard."""
+    """Return path to ``flavours/<name>.yaml`` inside ``mas.library.standard``."""
     bare = name[4:] if name.startswith("lib:") else name
     filename = f"{bare}.yaml"
     try:

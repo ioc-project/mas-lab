@@ -117,6 +117,6 @@ To run fewer items, set `dataset.limit` on the experiment, or pass `--override '
 The experiment's `application:` block binds the MAS under test:
 
 - Exp 1.1: `manifest: ../apps/qa-agent/agents/qa-agent.yaml` (lab-local app, path relative to the experiment)
-- Exp 1.2: `app: trip-planner`, resolved through the library catalog of `mas-library-samples`
+- Exp 1.2: `app: trip-planner`, resolved through the library catalog of `library-samples`
 
 For metadata capture and output validation, see the experiment's `metadata:` and `output_schema:` blocks and [Tutorial 3](../../docs/tutorials/03-experiments-and-analysis/README.md).

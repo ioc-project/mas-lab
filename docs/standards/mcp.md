@@ -13,7 +13,7 @@ function or an MCP server answers.
 
 ## How MAS-Lab implements it
 
-MCP client and server plugins ship in `mas-library-ioa` and use the official
+MCP client and server plugins ship in `library-ioa` and use the official
 Python SDK (`mcp>=2.2`). The console script is `mas-mcp`.
 
 A remote tool is a `ToolServerRegistry` entry:
@@ -39,7 +39,7 @@ Serve a tool with `mas-mcp serve --tool-manifest … --transport streamable-http
 
 | Piece | Package |
 | --- | --- |
-| Client, server, `mas-mcp` | `mas-library-ioa` |
+| Client, server, `mas-mcp` | `library-ioa` |
 | Official Python SDK | `mcp>=2.2` (`mcp[cli]` extra for `mcp version` / `mcp dev`) |
 | Infra kind | [ToolServerRegistry](../references/tool-server-registry.md) |
 

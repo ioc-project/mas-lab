@@ -10,7 +10,7 @@ authors: ["MAS Framework Team"]
 tags: ["kg", "scope", "norm", "tutorial"]
 prerequisites:
   - "Tutorial 8"
-  - "mas-lab on PATH with mas-library-kg"
+  - "mas-lab on PATH with library-kg/"
   - "Offline: pytest tests/tutorials/test_scenario_commands.py -k tuto-09"
 estimated_duration_min: 20
 working_dir: . # repo root — examples live in library-kg/

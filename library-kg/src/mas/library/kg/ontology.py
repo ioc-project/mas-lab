@@ -34,7 +34,7 @@ def _get_ontology_path(name: str) -> str:
         from oxp_ontology import get_ontology_path  # type: ignore[import]
     except ImportError as exc:
         raise ImportError(
-            "oxp_ontology is required by mas-library-kg to resolve ontology TTL files"
+            "oxp_ontology is required to resolve ontology TTL files"
         ) from exc
 
     path = get_ontology_path(name)
@@ -126,7 +126,7 @@ def resolve_all_ontology_paths() -> List[Path]:
         from oxp_ontology import ONTOLOGY_FILES  # type: ignore[import]
     except ImportError as exc:
         raise ImportError(
-            "oxp_ontology is required by mas-library-kg to resolve ontology TTL files"
+            "oxp_ontology is required to resolve ontology TTL files"
         ) from exc
 
     paths: List[Path] = []

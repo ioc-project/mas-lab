@@ -4,7 +4,7 @@
 -->
 # Tutorial 3 — Experiments, Analysis and Evaluation
 
-> **Packages:** `mas-lab`, `mas-runtime`
+> **Packages:** lab CLI, `runtime/`
 > **Time:** ~60 min
 
 ## Goal

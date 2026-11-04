@@ -23,7 +23,7 @@ def _has_bench() -> bool:
         return False
 
 
-requires_bench = pytest.mark.skipif(not _has_bench(), reason="mas-lab-bench not installed")
+requires_bench = pytest.mark.skipif(not _has_bench(), reason="bench extra not installed")
 pytestmark = pytest.mark.asyncio
 
 

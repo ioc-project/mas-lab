@@ -4,7 +4,7 @@
 -->
 # Overlay manifest (`kind: Overlay`)
 
-**Package:** `mas-runtime` · **Schema:** `overlay.schema.yaml` · **apiVersion:** `mas/v1`
+**Package:** `runtime/` · **Schema:** `overlay.schema.yaml` · **apiVersion:** `mas/v1`
 
 An **overlay** (`kind: Overlay`) declares a patch to one **Agent**, **MAS**, **Infra**, **Flavour**, **Experiment**, or in-memory **Workspace** document. You change the base manifest without copying it.
 Write one to change a base manifest for a single run or a **scenario**. A scenario is a named variant in an experiment.

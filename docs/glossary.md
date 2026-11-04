@@ -22,8 +22,8 @@ up here when another page uses it without explanation.
 | **Infra (infrastructure bundle)** | `apiVersion: infra/v1` files that say *where* things are: LLM endpoint and model catalogue (`LLMProxy`, `LLMLocal`), tool servers, application endpoints, LLM cache. Referenced with `--infra-ref` or `infra_refs:` in `config.yaml` (e.g. `standard:openai`, a bundled infra). See [infra manifest](manifests/infra.md). |
 | **Lab (definition)** | A folder `*.lab/` (under `labs/`) with `experiment.yaml`, datasets, overlays, and optional custom pipeline steps. It is where you run experiments. It is not a library. See [labs-and-libraries.md](labs-and-libraries.md). |
 | **Library** | A folder with `library.yaml` that holds reusable apps, tools, plugins, and code. In a `name:path` reference, `name` is a library name. A library may live inside a lab. |
-| **Package** | An installable Python package (`mas-runtime`, `mas-ctl`, `mas-lab`, …). See [packages reference](packages-reference.md) and the [package map](libraries.md). |
-| **Component** | One of the three lab sub-wheels under `lab/components/` (`mas-lab-core`, `mas-lab-bench`, `mas-lab-controller`). Distinct from the internal `mas.lab.components` runtime modules inside the `mas-lab` package. See [Repo structure](what-is/repo.md#lab-labs-and-components). |
+| **Package** | An installable Python wheel. `mas-lab` is the meta-package that installs the rest. Wheel names are generated into the [packages reference](packages-reference.md). See also the [package map](libraries.md). |
+| **Component** | One of the three lab sub-wheels under `lab/components/` (`core`, `bench`, `controller`). Distinct from the internal `mas.lab.components` runtime modules inside core. See [Repo structure](what-is/repo.md#lab-labs-and-components). |
 | **Experiment** | The top level of the hierarchy. The `experiment:` block (usually in `experiment.yaml`) names the MAS under test (`application:`), the scenarios, the dataset, the number of runs, and the level hooks that build results. |
 | **Application (in an experiment)** | The `application:` block of an experiment: the MAS or agent under test (`app:` catalog id or `manifest:` path, plus `configs_dir:` for overlays). Not to be confused with the infra `kind: Application`, which declares named service endpoints. |
 | **Model slots** | `experiment.models` (and `lab.models`): named LLM pins matching Agent/MAS `spec.models[].id`, plus `judge`. Scalar `experiment.model` = `models.main`. `any` inherits the next layer; local `config.yaml` `defaults.model` fills remaining `any` at engine time. |
@@ -56,7 +56,7 @@ up here when another page uses it without explanation.
 | **Checkpoint** | A saved copy of a session at a point in time. You can fork it, resume it or go back to it. See [Tutorial 11](tutorials/11-sessions-and-recovery/README.md). |
 | **Governance** | Rules that decide whether an action may run: budgets, approvals, allowed tools. Written as an overlay, not in the application. See the [governance manifest](manifests/governance.md). |
 | **Context window** | The maximum amount of text a model can read in one request. When the history gets too long, MAS Lab trims or summarises it (compaction). |
-| **Kernel** | The small state machine inside `mas-runtime` that checks each contract and runs the plugins. See [kernel operations](references/kernel-primitives.md). |
+| **Kernel** | The small state machine inside `runtime/` that checks each contract and runs the plugins. See [kernel operations](references/kernel-primitives.md). |
 
 Runtime internals: see the [`runtime/docs/`](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/index.md) tree in the repository.
 

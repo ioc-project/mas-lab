@@ -141,7 +141,7 @@ def build_kg_document(
         ontology = _load_ontology(ttl_path)
     except ImportError as exc:
         # oxp_ontology (the TTL source) or rdflib (to parse it) isn't
-        # installed -- both are optional extras (mas-library-kg[validation]).
+        # installed -- both are optional extras (validation).
         # mas_class assignment comes entirely from the native KIND_TO_CLASS
         # mapping below, not from the ontology, so the KG's structure is
         # unaffected; only the ontology-derived mas_uri/span_level/mas_icon
@@ -150,8 +150,8 @@ def build_kg_document(
         # and ontology-backed validation are unavailable without it.
         logger.warning(
             "normalize: ontology-backed class enrichment unavailable (%s). "
-            "Falling back to unenriched normalization. Install "
-            "mas-library-kg[validation] to enable mas_uri/span_level/mas_icon "
+            "Falling back to unenriched normalization. Install extra "
+            "'validation' to enable mas_uri/span_level/mas_icon "
             "enrichment and ontology-backed KG validation.",
             exc,
         )
@@ -231,7 +231,7 @@ def build_kg_from_otel_spans(
     except ImportError as exc:
         logger.warning(
             "build_kg_from_otel_spans: norm is not installed (%s). "
-            "Install mas-library-kg[norm] (temporary git dependency until "
+            "Install extra 'norm' (temporary git dependency until "
             "oxp-norm is published).",
             exc,
         )

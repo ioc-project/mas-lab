@@ -16,7 +16,7 @@ A2A.
 
 ## How MAS-Lab implements it
 
-The A2A plugins ship in `mas-library-ioa` and use the official `a2a-sdk`.
+The A2A plugins ship in `library-ioa` and use the official `a2a-sdk`.
 
 - `mas.agent_comm.a2a` is the outbound client.
 - `mas.agent_expose.a2a` is the server.
@@ -30,7 +30,7 @@ or `--port` flags.
 
 | Piece | Package |
 | --- | --- |
-| Client and server plugins | `mas-library-ioa` |
+| Client and server plugins | `library-ioa` |
 | Official SDK | `a2a-sdk[http-server,sqlite]>=1.1.5` |
 | Official CLI (Go binary `a2a`) | not the PyPI package `a2a-cli` |
 

@@ -5,14 +5,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-skills"
+name = "mas-lab-library-skills"
 version = "0.2.0"
 description = "Skills library for MAS — ContextContract catalog plugin + ToolContract skill-access tools."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
-    "mas-runtime",
+    "mas-lab-runtime",
     "pyyaml>=6.0,<7.0",
     "python-frontmatter>=1.0.0,<2.0.0",
 ]

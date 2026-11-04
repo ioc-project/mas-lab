@@ -11,6 +11,7 @@ def validate_pipeline_yaml(content: str) -> dict:
     Returns {"valid": True} or {"valid": False, "errors": [...]}.
     """
     import json
+
     import jsonschema
     import yaml as _yaml
 
@@ -24,7 +25,7 @@ def validate_pipeline_yaml(content: str) -> dict:
     if not isinstance(doc, dict):
         return {"valid": False, "errors": ["Document must be a YAML mapping"]}
 
-    # JSON Schema validation (mas-lab-bench package: pipeline-manifest.schema.json)
+    # JSON Schema validation (bench package: pipeline-manifest.schema.json)
     try:
         from mas.lab.controller.schema_registry import read_schema_text
 

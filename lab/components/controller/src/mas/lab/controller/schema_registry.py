@@ -10,7 +10,7 @@ from typing import Literal
 from mas.lab.schemas.paths import bench_schema_dir, editor_schema_dir, runtime_schema_dir
 
 SchemaFormat = Literal["yaml", "json"]
-SchemaSource = Literal["mas-runtime", "mas-lab-bench", "mas-lab-core", "mas-lab-controller"]
+SchemaSource = Literal["runtime", "bench", "core", "controller"]
 
 
 @dataclass(frozen=True)
@@ -23,13 +23,13 @@ class SchemaEntry:
     description: str = ""
 
     def resolve_path(self) -> Path:
-        if self.source == "mas-runtime":
+        if self.source == "runtime":
             return runtime_schema_dir() / self.filename
-        if self.source == "mas-lab-bench":
+        if self.source == "bench":
             return bench_schema_dir() / self.filename
-        if self.source == "mas-lab-core":
+        if self.source == "core":
             return editor_schema_dir() / self.filename
-        if self.source == "mas-lab-controller":
+        if self.source == "controller":
             return _controller_schema_dir() / self.filename
         raise KeyError(self.source)
 
@@ -40,40 +40,40 @@ def _controller_schema_dir() -> Path:
 
 # Registry mirrored by GET /api/schemas — ids align with mas-lab-ui consumption.
 SCHEMA_REGISTRY: tuple[SchemaEntry, ...] = (
-    # Runtime (mas-runtime) — execution truth
-    SchemaEntry("agent", "Agent manifest", "agent.schema.yaml", "yaml", "mas-runtime",
+    # Runtime (runtime/) — execution truth
+    SchemaEntry("agent", "Agent manifest", "agent.schema.yaml", "yaml", "runtime",
                 "kind: Agent — full runtime validation schema"),
-    SchemaEntry("mas", "MAS manifest", "mas.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("mas", "MAS manifest", "mas.schema.yaml", "yaml", "runtime",
                 "kind: MAS — topology and agent references"),
-    SchemaEntry("overlay", "Overlay manifest", "overlay.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("overlay", "Overlay manifest", "overlay.schema.yaml", "yaml", "runtime",
                 "kind: Overlay — benchmark and run-mas overlays"),
-    SchemaEntry("infra", "Infra manifest", "infra.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("infra", "Infra manifest", "infra.schema.yaml", "yaml", "runtime",
                 "apiVersion: infra/v1 — LLMProxy, InfraBundle, ToolRegistry, …"),
-    SchemaEntry("workflow", "Workflow topology", "workflow.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("workflow", "Workflow topology", "workflow.schema.yaml", "yaml", "runtime",
                 "workflow/v1 topology (nodes + edges)"),
-    SchemaEntry("flavour", "Flavour", "flavour.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("flavour", "Flavour", "flavour.schema.yaml", "yaml", "runtime",
                 "Runtime flavour / model routing"),
-    SchemaEntry("tool", "Tool", "tool.schema.yaml", "yaml", "mas-runtime", "kind: Tool"),
-    SchemaEntry("tool-bundle", "Tool bundle", "tool_bundle.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("tool", "Tool", "tool.schema.yaml", "yaml", "runtime", "kind: Tool"),
+    SchemaEntry("tool-bundle", "Tool bundle", "tool_bundle.schema.yaml", "yaml", "runtime",
                 "kind: ToolBundle"),
-    SchemaEntry("prompt-bundle", "Prompt bundle", "prompt_bundle.schema.yaml", "yaml", "mas-runtime",
+    SchemaEntry("prompt-bundle", "Prompt bundle", "prompt_bundle.schema.yaml", "yaml", "runtime",
                 "kind: PromptBundle"),
-    # Bench (mas-lab-bench) — lab library manifests
-    SchemaEntry("experiment", "Experiment", "experiment.schema.yaml", "yaml", "mas-lab-bench",
+    # Bench (lab/components/bench/) — lab library manifests
+    SchemaEntry("experiment", "Experiment", "experiment.schema.yaml", "yaml", "bench",
                 "Benchmark experiment.yaml"),
-    SchemaEntry("dataset", "Dataset", "dataset.schema.yaml", "yaml", "mas-lab-bench",
+    SchemaEntry("dataset", "Dataset", "dataset.schema.yaml", "yaml", "bench",
                 "Benchmark dataset files"),
-    SchemaEntry("lab-config", "Lab config", "lab-config.schema.yaml", "yaml", "mas-lab-bench",
+    SchemaEntry("lab-config", "Lab config", "lab-config.schema.yaml", "yaml", "bench",
                 "Library lab-config.yaml"),
     SchemaEntry("pipeline-post", "Post-processing pipeline", "pipeline.schema.yaml", "yaml",
-                "mas-lab-bench", "pipeline: root — bench executor format"),
+                "bench", "pipeline: root — bench executor format"),
     SchemaEntry("pipeline", "Pipeline manifest", "pipeline-manifest.schema.json", "json",
-                "mas-lab-bench", "kind: Pipeline — UI / library pipelines"),
+                "bench", "kind: Pipeline — UI / library pipelines"),
     # Controller-local registry (step type catalog for PipelineBuilder)
     SchemaEntry("pipeline-step-types-pre", "Pipeline step types (pre)", "pipeline-step-types-pre.json",
-                "json", "mas-lab-controller", "Pre-benchmark pipeline steps"),
+                "json", "controller", "Pre-benchmark pipeline steps"),
     SchemaEntry("pipeline-step-types-post", "Pipeline step types (post)",
-                "pipeline-step-types-post.json", "json", "mas-lab-controller",
+                "pipeline-step-types-post.json", "json", "controller",
                 "Post-benchmark pipeline steps"),
 )
 

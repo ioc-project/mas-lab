@@ -3,17 +3,17 @@
 """Tests for the centralized plugin registry (mas.runtime.registry)."""
 
 import sys
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 from mas.runtime.registry import (
-    PluginRegistry,
     PluginEntry,
+    PluginRegistry,
     PluginUnavailable,
     VariantInfo,
+    add_plugin_path,
     get_registry,
     register_plugin,
-    add_plugin_path,
 )
 
 
@@ -167,7 +167,7 @@ class TestPluginAvailability:
             module="pathlib",
             class_name="Path",
             requires=["no_such_package_xyz"],
-            extra="mas-library-telemetry[convert]",
+            extra="example[convert]",
         )
         entry = PluginEntry(urn="mas.dp.test", variants={"builtin": variant})
         with pytest.raises(PluginUnavailable) as exc_info:
@@ -477,4 +477,6 @@ class TestRealPlugins:
         variant = entry.default
         assert variant is not None
         assert variant.requires == ["opentelemetry.sdk.trace"]
-        assert variant.extra == "mas-library-telemetry[convert]"
+        from mas._dist import extra_spec
+
+        assert variant.extra == extra_spec("convert", module=variant.module)

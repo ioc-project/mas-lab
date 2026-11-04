@@ -4,7 +4,7 @@
 -->
 # Flavour manifest (`kind: Flavour`)
 
-**Package:** `mas-runtime` | **Schema:** [`flavour.schema.yaml`](../schemas/runtime/flavour.schema.yaml)
+**Package:** `runtime/` | **Schema:** [`flavour.schema.yaml`](../schemas/runtime/flavour.schema.yaml)
 
 A **flavour** (`kind: Flavour`) is a deployment preset.
 It declares how a MAS exports **observability** data (traces and metrics), which agent-to-agent protocol it uses, and which tools it exposes.

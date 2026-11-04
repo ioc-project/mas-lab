@@ -17,7 +17,7 @@ The file families are:
 
 1. **Event stream**: `traces/events.jsonl`, written by the runtime for every run (`mas-ctl chat`, `run-mas`, benchmarks). See also [docs/cli/observability.md](../../docs/cli/observability.md).
 2. **Benchmark run entries**: for `mas-lab benchmark run`, each run is stored in the content-addressed trace cache with the metadata files below.
-3. **Metric files**: written by the benchmark pipeline into the pipeline output directory. The metric types are `MetricValue` and `MetricSpec` in `lab/src/mas/lab/evaluation/eval_contract.py`.
+3. **Metric files**: written by the benchmark pipeline into the pipeline output directory. The metric types are `MetricValue` and `MetricSpec` in `lab/components/core/src/mas/lab/evaluation/eval_contract.py`.
 
 The schemas are identical across use cases.
 
@@ -83,7 +83,7 @@ The observability layer adds correlation and classification fields to most event
 | `run_id` | Run identifier; empty for single `mas-ctl` runs |
 
 The examples below omit these fields and show the payload fields specific to each kind. Further keys may be present.
-Streams also contain governance and envelope events (`governance_decision`, `boundary_ingress`, `governance_authorize_start` / `_end`, `hitl_gate`, ...), `state_update_start` / `_end`, `mas_call_start` / `_end`, `processing_call_start` / `_end`, `context_part_contributed`, `context_steer`, and `client_response`. The authoritative list is `Kind` in `lab/src/mas/lab/evaluation/events.py`.
+Streams also contain governance and envelope events (`governance_decision`, `boundary_ingress`, `governance_authorize_start` / `_end`, `hitl_gate`, ...), `state_update_start` / `_end`, `mas_call_start` / `_end`, `processing_call_start` / `_end`, `context_part_contributed`, `context_steer`, and `client_response`. The authoritative list is `Kind` in `lab/components/core/src/mas/lab/evaluation/events.py`.
 
 ### Event kinds
 
@@ -204,5 +204,5 @@ An OTel span holds both start and end in one record. Conversion back to native e
 ## See also
 
 - [context-segmentation.md](context-segmentation.md): how context is assembled and attributed
-- `lab/src/mas/lab/evaluation/events.py`: `Kind`, `obs_event()`
-- `lab/src/mas/lab/evaluation/eval_contract.py`: `MetricValue`, `MetricSpec`, `EvalContract`
+- `lab/components/core/src/mas/lab/evaluation/events.py`: `Kind`, `obs_event()`
+- `lab/components/core/src/mas/lab/evaluation/eval_contract.py`: `MetricValue`, `MetricSpec`, `EvalContract`

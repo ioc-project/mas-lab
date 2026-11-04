@@ -5,7 +5,7 @@
 # Design patterns
 
 Reasoning patterns (ReAct, chain-of-thought, plan/execute, tree-of-thoughts, and others) are
-**runtime plugins** registered in `mas-library-standard` and selected from agent manifests or
+**runtime plugins** registered in `library-standard` and selected from agent manifests or
 **overlays** (`kind: Overlay`).
 
 ## Enable via overlay

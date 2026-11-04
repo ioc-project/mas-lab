@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("mas.library.skills", reason="requires the 'mas-library-skills' package")
+pytest.importorskip("mas.library.skills", reason="requires the skills library")
 
 from mas.ctl.session.controller import ConversationConfig, SessionController
 from mas.library.skills.lib.registry import SkillRecord, SkillRegistry
@@ -21,7 +21,6 @@ from mas.runtime.boundary.context.working_memory_registry import (
 )
 from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.engine.simulated import SimulatedEngine
-from mas.runtime.schema.ingress import EngineIoReturn
 
 
 class _CapturingDisplay:

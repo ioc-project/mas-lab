@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Examples (mas-library-eval)
+# Examples (library-eval)
 
 Small feature scenarios for MCE evaluation — closer to functional tests than
 to sample apps. Layout: `examples/<category>/<name>/`.

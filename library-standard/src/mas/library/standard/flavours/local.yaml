@@ -7,7 +7,7 @@ metadata:
   name: local
   description: >
     Default local development flavour. Infra bundles are resolved via
-    workspace refs or mas-library-standard bundled libs. LLM provider/model
+    workspace refs or library-standard bundled libs. LLM provider/model
     and RAG skills backend are agent-spec / workspace-infra concerns —
     see docs/design/flavour-boundary.md.
 

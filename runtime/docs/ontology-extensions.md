@@ -29,7 +29,7 @@ Pipeline steps such as `extract_trace_stats` read these fields.
 
 Paper labs may define local enums inside the lab (for example lifecycle states used by a figure step).
 Keep lab vocabularies **inside the lab**; do not extend the global event kinds without updating
-`trajectory-schema.md` and the `Kind` constants in `lab/src/mas/lab/evaluation/events.py`.
+`trajectory-schema.md` and the `Kind` constants in `lab/components/core/src/mas/lab/evaluation/events.py`.
 
 ---
 

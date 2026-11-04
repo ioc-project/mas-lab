@@ -4,12 +4,11 @@
 apiVersion: mas/v1
 kind: Library
 
-name: library-ioa
+name: ioa
 description: >
   MCP client/server bridge and A2A agent_comm / agent_expose plugins.
 version: "0.1.0"
 dependencies:
-  - mas-runtime
   - mcp>=2.2
   - a2a-sdk[http-server,sqlite]>=1.1.5
   - uvicorn>=0.30

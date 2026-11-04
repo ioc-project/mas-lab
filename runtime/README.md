@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-runtime
+# runtime
 
 > Contract-driven Mealy kernel for LLM agents.
 
@@ -38,9 +38,7 @@ mas-lab      ←  evaluation: benchmarks, pipelines, controller UI
 ### Install (from source)
 
 ```bash
-uv sync --package mas-runtime   # kernel library only
-uv sync --package mas-ctl       # required for chat / compose CLIs
-uv sync --all-packages          # full monorepo
+uv sync --all-packages          # full monorepo; wheel names are in docs/packages-reference.md
 ```
 
 ### Credentials
@@ -62,7 +60,7 @@ See [docs/plugin-flavours.md](docs/plugin-flavours.md).
 
 ### Plugin aliases
 
-`mas-library-standard` ships the canonical built-in plugin implementations and the runtime alias defaults.
+`library-standard` ships the canonical built-in plugin implementations and the runtime alias defaults.
 The runtime registry maps human-friendly names and aliases such as `react` or `planner` to canonical URNs
 such as `mas.dp.react`.
 

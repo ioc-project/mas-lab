@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import click
-
 from mas.ctl.libraries.bundles import list_bundles, list_manifest_libraries
 
 
@@ -16,7 +15,7 @@ def list_bundles_cmd(verbose: bool) -> None:
     libs = list_manifest_libraries()
     if not libs:
         click.echo("No manifest libraries registered.")
-        click.echo("Install mas-library-standard (or similar) to register bundles.")
+        click.echo("Install a library that registers mas.runtime.manifest_libraries (for example library-standard/).")
         return
 
     click.echo("Manifest libraries:")

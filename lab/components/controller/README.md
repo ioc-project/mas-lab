@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-lab-controller
+# lab/components/controller
 
-`mas-lab-controller` is the control plane for MAS Lab experiments. It runs long-lived work (benchmarks, agent runs, pipelines) in background workers, exposes a REST API for the web UI, and provides Unix-socket inter-process communication (IPC) for the CLI.
+`lab/components/controller` is the control plane for MAS Lab experiments. It runs long-lived work (benchmarks, agent runs, pipelines) in background workers, exposes a REST API for the web UI, and provides Unix-socket inter-process communication (IPC) for the CLI.
 
 Use it when you start experiments through `mas-lab benchmark run` or the `ui/` web app; both talk to this daemon.
 
@@ -28,14 +28,13 @@ The CLI and UI share one job model: submit, receive a `job_id` / `worker_id`, th
 ## Installation
 
 ```bash
-# With the full mas-lab workspace
+# Full stack (meta-package)
+uv pip install mas-lab
+
+# Lab components only
 uv pip install -e ./lab/components/core \
                -e ./lab/components/bench \
-               -e ./lab/components/controller \
-               -e ./lab
-
-# Or as part of mas-lab[all]
-uv pip install -e "mas-lab[all]"
+               -e ./lab/components/controller
 ```
 
 ---
@@ -47,7 +46,7 @@ uv pip install -e "mas-lab[all]"
 **Foreground** (recommended for development — logs in terminal):
 
 ```bash
-task install              # from repo root — installs mas-lab-controller into .venv
+task install              # from repo root — installs lab/components/controller into .venv
 mas-lab serve
 # HTTP API → http://localhost:8090  (use --port to change)
 # Unix socket → $XDG_DATA_HOME/mas/controller.sock
@@ -74,8 +73,8 @@ yarn dev
 ```
 
 The UI calls `/api/libraries/*`, `/api/jobs/*`, `/api/schemas/*`, and related routes.
-Manifest schemas are served from installed packages (`mas-runtime`, `mas-lab-bench`,
-`mas-lab-core`) — not vendored inside the controller. Contract tests mirror the UI
+Manifest schemas are served from installed packages (`mas-runtime`, `lab/components/bench`,
+`lab/components/core`) — not vendored inside the controller. Contract tests mirror the UI
 surface (`lab/components/controller/tests/test_api_calls_contract.py`).
 
 ### 3. Run a benchmark via the daemon
@@ -141,7 +140,7 @@ mas-lab serve                               # foreground controller + HTTP
 ```
 
 Benchmark and application runs are submitted through the daemon automatically;
-see [mas-lab-bench](../bench/README.md) for experiment YAML format.
+see [lab/components/bench](../bench/README.md) for experiment YAML format.
 
 ---
 
@@ -186,6 +185,6 @@ components/controller/src/mas/lab/controller/
 
 | Component | README |
 |-----------|--------|
-| `mas-lab-core` | [../core/README.md](../core/README.md) |
-| `mas-lab-bench` | [../bench/README.md](../bench/README.md) |
+| `lab/components/core` | [../core/README.md](../core/README.md) |
+| `lab/components/bench` | [../bench/README.md](../bench/README.md) |
 | `mas-lab-ui` | [mas-lab-ui README](https://github.com/mas-framework/mas-lab-ui) |

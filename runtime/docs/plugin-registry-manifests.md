@@ -10,7 +10,7 @@ For the relation between canonical URNs and short names, see [plugin-aliases.md]
 
 A plugin is a Python class that the runtime loads by name to fill one role (design pattern, tool provider, pipeline step, ...). A manifest is the YAML file that declares plugins.
 Plugin types are data, not code: a library introduces `type: my_new_thing` in a manifest with no runtime code change, as long as a builtin, a `types:` entry, or another plugin's `provides_types:` establishes the type before registration finishes.
-Benchmark steps and artifact codecs work this way: `mas-lab-bench` ships only the pipeline engine (`Pipeline`, `PipelineExecutor`, `PipelineStep` base class, caching, dependency resolution), and every concrete step or codec is a library plugin.
+Benchmark steps and artifact codecs work this way: `lab/components/bench` ships only the pipeline engine (`Pipeline`, `PipelineExecutor`, `PipelineStep` base class, caching, dependency resolution), and every concrete step or codec is a library plugin.
 
 ## Smallest example
 
@@ -160,7 +160,7 @@ A library splits plugin declarations across several manifests in one of two ways
 
 Every discovered manifest is registered through `register_manifest_file()` / `register_manifest_data()`, the same fixpoint mechanism described above. A malformed manifest or an unresolvable type raises at startup.
 
-`mas-library-lab` registers its pipeline steps and artifact codecs this way; see the `types:` / `plugins:` block of `library-lab/library.yaml`.
+`library-lab/` registers its pipeline steps and artifact codecs this way; see the `types:` / `plugins:` block of `library-lab/library.yaml`.
 
 ## Availability gate: `requires:`/`extra:` for optional dependencies
 
@@ -174,10 +174,10 @@ plugins:
     module: mas.library.telemetry.plugins.otel_plugin
     class: OtelObservabilityPlugin
     requires: [opentelemetry.sdk.trace]
-    extra: "mas-library-telemetry[convert]"
+    extra: convert
 ```
 
-This is the shipping declaration for `mas.observability.otel` in [`library-telemetry/library.yaml`](../../library-telemetry/library.yaml). `opentelemetry-sdk` is not a base dependency of `mas-library-telemetry`, only of its `convert` extra.
+This is the shipping declaration for `mas.observability.otel` in [`library-telemetry/library.yaml`](../../library-telemetry/library.yaml). `opentelemetry-sdk` is not a base dependency of the telemetry library, only of its `convert` extra. `extra:` is the extra name; `mas-ctl plugin enable` prefixes the wheel name from that library's `pyproject.toml`.
 
 **Discovery is unaffected.** A plugin with unmet `requires:` is still
 registered and still shows up in `PluginRegistry.list()` — it is *marked*
@@ -214,7 +214,7 @@ $ mas-ctl plugin list --type observability
   mas.observability.otel                   disabled  (missing: opentelemetry.sdk.trace; mas-ctl plugin enable mas.observability.otel)
 
 $ mas-ctl plugin enable mas.observability.otel
-Installing: uv pip install mas-library-telemetry[convert]
+Installing: uv pip install <telemetry-wheel>[convert]
 mas.observability.otel is now available.
 ```
 

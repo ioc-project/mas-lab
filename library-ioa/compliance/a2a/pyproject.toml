@@ -1,7 +1,7 @@
 [project]
-name = "mas-lab-compliance"
+name = "a2a-compliance"
 version = "0.2.0"
-description = "Optional third-party protocol compliance tooling for MAS Lab"
+description = "Optional third-party A2A TCK harness used by CI (not published)"
 requires-python = ">=3.11"
 dependencies = []
 

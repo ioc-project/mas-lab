@@ -3,7 +3,7 @@
 One **step type** = one **Python module** under a category folder. This
 library ships step *implementations* only — the pipeline execution engine
 (`Pipeline`, `PipelineExecutor`, `PipelineStep` base class, caching,
-dependency resolution) lives in `mas-lab-bench`
+dependency resolution) lives in `lab/components/bench`
 (`mas.lab.benchmark.pipeline`), which this library depends on but does not
 duplicate.
 
@@ -21,7 +21,7 @@ Shared utilities (not registered step types) stay in the bench engine:
 Registration is declarative, through the runtime plugin registry — see
 [`library.yaml`](../../../../../library.yaml)'s `types:`/`plugins:` block
 and [`runtime/docs/plugin-registry-manifests.md`](../../../../../../runtime/docs/plugin-registry-manifests.md).
-There is no bench-local step registry; `mas-lab-bench`'s pipeline executor
+There is no bench-local step registry; `lab/components/bench`'s pipeline executor
 resolves step types by asking `mas.runtime.registry.get_registry()`
 directly.
 

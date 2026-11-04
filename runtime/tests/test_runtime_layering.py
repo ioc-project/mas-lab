@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Kernel source must not import mas-library-standard (inverted dependency)."""
+"""Kernel source must not import ``mas.library.standard`` (inverted dependency)."""
 
 from __future__ import annotations
 

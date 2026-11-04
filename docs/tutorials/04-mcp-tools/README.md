@@ -12,7 +12,7 @@ Infra decides whether a local function or an MCP server answers.
 
 ## What you need
 
-- **Packages:** `mas-ctl` and `mas-library-ioa` (the `mas-mcp` server and client CLI, in the standard install).
+- **Packages:** `ctl/` and `library-ioa/` (the `mas-mcp` server and client CLI, in the standard install).
 - **Prerequisites:** [Tutorial 0](../00-environment-setup/README.md) (install, LLM access) and
   [Tutorial 1](../01-building-an-agent/README.md) (this tutorial reuses its agent and `tools` overlay).
 - Run all commands from the repository root. Only the `mas-ctl chat` steps call a live LLM.

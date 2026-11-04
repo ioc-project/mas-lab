@@ -4,7 +4,7 @@
 -->
 # Agent manifest (`kind: Agent`)
 
-**Package:** `mas-runtime` · **Schema:** `agent.schema.yaml` · **apiVersion:** `mas/v1`
+**Package:** `runtime/` · **Schema:** `agent.schema.yaml` · **apiVersion:** `mas/v1`
 
 An **agent** manifest (`agent.yaml`) declares one LLM actor. It sets the agent's models, context, tools, skills, design pattern, governance, and **observability** (trace output) settings.
 Write one for every agent you run alone or place in a **MAS** (multi-agent system).
@@ -127,7 +127,7 @@ assembler:
 
 _Used by:_ `spec.context_sources`
 
-An ordered list of context-source plugin ids. Today they select the skill engine (`native`, `adk`, or `langchain`, from `mas-library-skills`) that loads the skills listed in `spec.skills`. An entry is a bare id or a single-key object with these options:
+An ordered list of context-source plugin ids. Today they select the skill engine (`native`, `adk`, or `langchain`, from `library-skills`) that loads the skills listed in `spec.skills`. An entry is a bare id or a single-key object with these options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -994,8 +994,8 @@ _Used by:_ `spec.observability`
 
 An ordered list of observability sink plugin ids. Every sink sees every event: it is a sequence, not a chain. Two sinks ship, and the schema accepts only these ids:
 
-- `native` writes `events.jsonl` (from `mas-library-standard`).
-- `otel` exports OpenTelemetry spans (from `mas-library-telemetry`).
+- `native` writes `events.jsonl` (from `library-standard`).
+- `otel` exports OpenTelemetry spans (from `library-telemetry`).
 
 Each entry is a bare plugin id or a single-key config object:
 

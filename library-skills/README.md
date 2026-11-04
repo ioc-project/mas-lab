@@ -1,4 +1,4 @@
-# mas-library-skills
+# library-skills
 
 Adds [Agent Skills](https://agentskills.io) support to MAS Lab. A skill is a directory with a `SKILL.md` file that the agent loads on demand ("progressive disclosure"): the prompt carries only a catalog, and the model fetches full instructions when it needs them.
 
@@ -7,7 +7,7 @@ Use it when an agent needs specialised instructions, reference files or scripts 
 ## Quick start
 
 ```bash
-uv add mas-library-skills
+uv add library-skills
 ```
 
 ```yaml
@@ -66,9 +66,9 @@ Three interchangeable engines do discovery, frontmatter parsing and script execu
 The base install includes the agentskills.io parser and the skill sandbox. The ADK and LangChain engines wrap optional third-party frameworks:
 
 ```bash
-uv add "mas-library-skills[adk]"        # google-adk
-uv add "mas-library-skills[langchain]"  # deepagents
-uv add "mas-library-skills[all]"        # both
+uv add "library-skills[adk]"        # google-adk
+uv add "library-skills[langchain]"  # deepagents
+uv add "library-skills[all]"        # both
 ```
 
 `task install-dev`, `task ci` and `task verify` install the `[all]` extra, so the full test suite (including `tests/test_skill_plugins_functional.py`, which exercises the real frameworks) runs by default.

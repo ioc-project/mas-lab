@@ -28,7 +28,7 @@ Architecture notes:
 
 Dependency::
 
-    uv pip install 'mas-library-skills[langchain]'
+    this library's ``langchain`` extra
     # installs: deepagents (which pulls langgraph, langchain-core, etc.)
 """
 
@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 import frontmatter
+from mas._dist import extra_hint
 
 from .skill_plugin_base import (
     SkillActivation,
@@ -96,7 +97,7 @@ class LangChainSkillPlugin(SkillPlugin):
         except ImportError as e:
             msg = (
                 "deepagents not installed. "
-                "Install via: uv pip install 'mas-library-skills[langchain]'"
+                f"Install via: {extra_hint('langchain', file=__file__)}"
             )
             raise ImportError(msg) from e
 

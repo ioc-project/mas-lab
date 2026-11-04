@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Artifact kinds declared by mas-library-lab.
+"""Artifact kinds declared by the lab library.
 
 Each class is a library.yaml ``type: artifact`` plugin
 (``type`` / ``name`` / ``module`` / ``class``).

@@ -13,7 +13,7 @@ any OTel backend can read the run.
 
 MAS-Lab writes those spans in the wire format of AGNTCY's
 [`ioa-observe-sdk`](https://pypi.org/project/ioa-observe-sdk/). Conversion and
-OTLP export live in `mas-library-telemetry`. The native stream does not
+OTLP export live in `library-telemetry/`. The native stream does not
 depend on OTel; you add the library when you want spans.
 
 ## How MAS-Lab implements it
@@ -39,10 +39,10 @@ see [IoC integrations](../discover/integrations.md) and
 
 | Piece | Package |
 | --- | --- |
-| Conversion, replay, CLI | `mas-library-telemetry` extras `convert`, `verify`, `bench` |
+| Conversion, replay, CLI | `library-telemetry/` extras `convert`, `verify`, `bench` |
 | Span SDK | `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http` |
 | AGNTCY observe-sdk | `ioa-observe-sdk>=1.0.49` |
-| Native recorder | `mas-library-standard` observability plugin |
+| Native recorder | `library-standard/` observability plugin |
 
 ## Compliance
 

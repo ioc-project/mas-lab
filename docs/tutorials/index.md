@@ -59,8 +59,8 @@ pytest tests/tutorials/test_scenario_commands.py -v -k tuto-03   # one tutorial
 TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-01   # also live-LLM steps
 ```
 
-Telemetry is Tutorial 8 (`mas-library-telemetry`). Knowledge-graph
-normalization is Tutorial 9 (`mas-library-kg`).
+Telemetry is Tutorial 8 (`library-telemetry`). Knowledge-graph
+normalization is Tutorial 9 (`library-kg`).
 
 ## Sample applications
 

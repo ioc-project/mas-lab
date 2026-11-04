@@ -4,7 +4,7 @@
 -->
 # MAS manifest (`kind: MAS`)
 
-**Package:** `mas-runtime` · **Schema:** `mas.schema.yaml` · **apiVersion:** `mas/v1`
+**Package:** `runtime/` · **Schema:** `mas.schema.yaml` · **apiVersion:** `mas/v1`
 
 A **MAS** (multi-agent system) manifest (`mas.yaml`) declares a team of **agents** and the **workflow** between them: who delegates to whom. Delegation means one agent hands a task to another through a tool call.
 Write one when two or more agents cooperate, or when an **experiment** needs a named application to run.

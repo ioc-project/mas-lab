@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-skills User Guide
+# library-skills User Guide
 
-`mas-library-skills` implements the [Agent Skills specification](https://agentskills.io) for MAS Lab. Agents load specialised instructions on demand instead of carrying them all in the context window. This guide is for authors who write skills and attach them to agents.
+`library-skills` implements the [Agent Skills specification](https://agentskills.io) for MAS Lab. Agents load specialised instructions on demand instead of carrying them all in the context window. This guide is for authors who write skills and attach them to agents.
 
 Smallest example: list a skill in the agent manifest and chat.
 

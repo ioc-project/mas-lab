@@ -28,6 +28,7 @@ import logging
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from mas.library.kg._dist import extra_hint
 from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, OXP_CORE_NODE_TYPES
 
 _KNOWN_NODE_TYPES = OXP_CORE_NODE_TYPES | NATIVE_EXTENSION_NODE_TYPES
@@ -283,7 +284,7 @@ class _Neo4jWriter:
             from neo4j import GraphDatabase  # type: ignore[import]
         except ImportError as exc:
             raise ImportError(
-                'neo4j driver not installed. Install with: uv pip install "mas-library-kg[neo4j]"'
+                f"neo4j driver not installed. Install with: {extra_hint('neo4j')}"
             ) from exc
         self._driver = GraphDatabase.driver(uri, auth=(username, password))
         self._database = database
@@ -386,7 +387,7 @@ class _Neo4jWriter:
                     # creation is still best-effort: a lookup running
                     # without an index is slow, not wrong, so this does not
                     # fail the push itself.
-                    logger.warning("Index creation failed, continuing without it: %s", stmt[:60], exc_info=True)
+                    logger.warning("Index creation failed, continuing without it: %s", stmt[:60], exc_info=True)  # noqa: E501
 
 
 # ---------------------------------------------------------------------------

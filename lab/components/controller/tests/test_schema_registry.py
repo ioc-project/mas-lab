@@ -1,10 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Schema registry resolves files from mas-runtime, mas-lab-bench packages."""
+"""Schema registry resolves files from runtime/ and lab/components/bench/."""
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -39,6 +38,17 @@ def test_schema_registry_files_exist(schema_id: str):
     entry, text = read_schema_text(schema_id)
     assert entry.id == schema_id
     assert len(text) > 10
+
+
+def test_schema_sources_are_checkout_keys():
+    from mas.lab.controller.schema_registry import SCHEMA_REGISTRY
+
+    assert {entry.source for entry in SCHEMA_REGISTRY} <= {
+        "runtime",
+        "bench",
+        "core",
+        "controller",
+    }
 
 
 def test_list_schemas_includes_runtime_and_bench():

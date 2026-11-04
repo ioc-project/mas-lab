@@ -35,6 +35,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from mas.library.telemetry._dist import extra_hint
+
 OTEL_COLLECTOR_KIND = "OtelCollector"
 CLICKHOUSE_KIND = "ClickHouse"
 _ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT"
@@ -146,7 +148,7 @@ def _load_manifest(manifest: str | Path | Dict[str, Any]) -> Dict[str, Any]:
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError(
                 "pyyaml is required to read YAML infra manifests: "
-                'uv pip install -e "mas-library-telemetry[verify]"'
+                f"{extra_hint('verify')}"
             ) from exc
         return yaml.safe_load(text) or {}
     return json.loads(text)

@@ -111,7 +111,7 @@ cognitive failures and explain them in a dashboard.
 
 MAS-Lab's own record of a run is richer than plain telemetry: it knows which agent
 acted, which tool or model it called, and how the agents are wired together. The
-`mas-library-telemetry` library turns that record into spans SCOPE accepts, following
+`library-telemetry` library turns that record into spans SCOPE accepts, following
 the [observe-sdk](https://github.com/agntcy/observe) conventions. There are two ways
 to use it.
 
@@ -132,7 +132,7 @@ walks through both ways, with the commands.
 
 ### A knowledge graph without the platform
 
-Sometimes you want the graph, not the whole platform. The `mas-library-kg` library
+Sometimes you want the graph, not the whole platform. The `library-kg` library
 builds the same knowledge graph SCOPE would, from a MAS-Lab run, on your own
 machine. It uses SCOPE's own vocabulary (its *ontology*) and SCOPE's own checks, so a
 graph built locally can later be loaded into SCOPE unchanged.
@@ -146,7 +146,7 @@ Locally, you can:
 
 All of these steps can also run inside an experiment, next to the scores. To score
 runs, for example on whether the goal was met or how well the answer is grounded in
-evidence, use the metrics of `mas-library-eval`.
+evidence, use the metrics of `library-eval`.
 
 [Tutorial 9 — Knowledge graphs](../tutorials/09-kg-scope/README.md)
 and [Tutorial 10 — Evaluation metrics](../tutorials/10-evaluation-metrics/README.md)

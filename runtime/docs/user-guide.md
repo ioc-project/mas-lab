@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-runtime User Guide
+# Runtime user guide
 
 `mas-runtime` is the single-agent execution kernel of MAS Lab (MAS: multi-agent system). It runs one agent from a YAML manifest, with plugins, governance and design patterns. This guide is for teams that run and configure agents; you run them through `mas-ctl`.
 
@@ -11,7 +11,7 @@
 `mas-runtime` is a library; run agents through `mas-ctl`. From a repository checkout (the PyPI upload is still pending):
 
 ```bash
-uv sync --package mas-ctl      # installs mas-ctl and mas-runtime
+uv sync --all-packages         # installs mas-ctl and the runtime library
 ```
 
 ## Quickstart

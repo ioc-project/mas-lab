@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 # MAS Library Metadata — Lab
 # Pipeline steps, artifact types, and artifact codecs used by the
-# mas-lab-bench pipeline engine. Bench ships the engine only (Pipeline,
+# lab/components/bench pipeline engine. Bench ships the engine only (Pipeline,
 # PipelineExecutor, PipelineStep, caching, dependency resolution); every
 # concrete step, artifact type, and codec implementation lives here and
 # is registered through the runtime plugin registry — see
@@ -20,9 +20,9 @@
 apiVersion: mas/v1
 kind: Library
 
-name: mas-library-lab
+name: lab
 description: >
-  Pipeline step and artifact codec plugins for mas-lab-bench, plus the
+  Pipeline step and artifact codec plugins for lab/components/bench, plus the
   MCE v1 eval provider and the standard plot library.
 version: "0.1.0"
 

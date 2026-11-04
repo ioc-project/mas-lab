@@ -43,14 +43,14 @@ Library packages declare `PluginRegistry` categories. A manifest selects a plugi
 
 - `hitl_contract` implements `HITLContract.request_approval(...)`. HITL means human in the loop.
 - `user_io_contract` implements `UserIOContract.send_progress_update(...)`.
-- Both default to `registry` in `mas-library-standard`.
+- Both default to `registry` in `library-standard`.
 - A caller-supplied `InstantiationOptions.hitl_contract` or `.user_io_contract` instance wins over the manifest. This keeps interactive CLI adapters working.
 
 Governance ingress plugins register under the `governance` category. Select them in `spec.governance[].ingress_plugins` with `type` (or `name`) and optional `chain: stop|continue`. They receive the ingress intent snapshot. They cannot access mutable kernel state.
 
 ### `engine_tool_provider` and `EngineToolContext`
 
-Orchestration-level tools run another agent instead of calling a function. They register under `engine_tool_provider`. `mas-library-standard` ships two variants: `delegation` (existing peers) and `spawn_subagent` (new children from pre-authored templates).
+Orchestration-level tools run another agent instead of calling a function. They register under `engine_tool_provider`. `library-standard` ships two variants: `delegation` (existing peers) and `spawn_subagent` (new children from pre-authored templates).
 
 A plugin in this category never receives the materialized run or the comm bus. It receives an `EngineToolContext`. The context exposes three operations and three read-only properties:
 
@@ -138,8 +138,8 @@ The registry maps contract IDs to Python modules and, where applicable, to Mealy
 | `HitlResponder` | Human-in-the-loop approval |
 | `ObservabilitySink` | Trace and event emission |
 | `EnvelopeProduct` | Contract-call envelope (governance + observability wrap) |
-| `EventEmitter` | JSONL and stderr event sinks (`mas-library-standard`) |
-| `ObservabilityExportPlugin` | Manifest-declared export plugins (`native` in `mas-library-standard`, `otel` in `mas-library-telemetry`) |
+| `EventEmitter` | JSONL and stderr event sinks (`library-standard`) |
+| `ObservabilityExportPlugin` | Manifest-declared export plugins (`native` in `library-standard`, `otel` in `library-telemetry`) |
 | `LLMProvider` | Chat-completion wire protocol (`OpenAILLMProvider`, `CacheLLMProvider`) |
 | `EventTransform` | Boundary to native or OTel transforms |
 

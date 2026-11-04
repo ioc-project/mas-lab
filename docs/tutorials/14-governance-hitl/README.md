@@ -4,7 +4,7 @@
 -->
 # Tutorial 14 — Putting Human Approval Around Agent Actions
 
-> **Packages:** `mas-ctl`, `mas-runtime`, `mas-library-standard`
+> **Packages:** `ctl/`, `runtime/`, `library-standard/`
 > **Time:** about 40 minutes
 > **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) for
 > installation and LLM access. [Tutorial 1](../01-building-an-agent/README.md)
@@ -59,7 +59,7 @@ cannot call a calculator.
 
 ## Step 2 — Add the calculator
 
-The overlay adds the calculator from the installed `mas-library-samples`
+The overlay adds the calculator from the installed `library-samples`
 package (the `samples:` prefix), so no relative path is needed. `$op: add`
 appends to existing tools; Step 3 uses it for governance rules.
 

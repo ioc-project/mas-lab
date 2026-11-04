@@ -26,14 +26,13 @@ import os
 import re
 import tempfile
 import time
-import uuid
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -180,7 +179,7 @@ def push_file(
         )
         _stamp_mas_name(spans, resource_attrs, mas_name)
         resource_attrs["mas.run.id"] = run_id
-        resource_attrs["mas.source"] = "mas-library-telemetry"
+        resource_attrs["mas.source"] = "mas.library.telemetry"
 
     if not spans:
         return {
@@ -427,7 +426,7 @@ def _build_otlp_payload(spans: List[OtlpSpan], resource_attrs: dict) -> dict:
                 "resource": {"attributes": _attrs_to_otlp(resource_attrs)},
                 "scopeSpans": [
                     {
-                        "scope": {"name": "mas-library-telemetry", "version": "1.0"},
+                        "scope": {"name": "mas.library.telemetry", "version": "1.0"},
                         "spans": [s.to_otlp_dict() for s in spans],
                     }
                 ],

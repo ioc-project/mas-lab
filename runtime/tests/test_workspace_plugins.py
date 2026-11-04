@@ -104,7 +104,7 @@ def test_commented_init_template_enables_nothing() -> None:
     import yaml
 
     paths = [
-        _REPO / "lab" / "src" / "mas" / "lab" / "templates" / "init" / "config.yaml",
+        _REPO / "lab" / "components" / "core" / "src" / "mas" / "lab" / "templates" / "init" / "config.yaml",
         _REPO / "library-samples" / "sample-workspace" / "config.yaml",
     ]
     for path in paths:

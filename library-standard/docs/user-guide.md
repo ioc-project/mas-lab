@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-standard User Guide
+# library-standard User Guide
 
-`mas-library-standard` provides reusable plugins, tools and flavours for MAS runtime projects. This guide is for users who apply them to an agent manifest.
+`library-standard` provides reusable plugins, tools and flavours for MAS runtime projects. This guide is for users who apply them to an agent manifest.
 
 ```bash
 uv pip install -e library-standard

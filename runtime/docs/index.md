@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-runtime documentation
+# Runtime documentation
 
 `mas-runtime` is the embeddable single-agent kernel library of MAS Lab (MAS: multi-agent system).
 These pages are for users who configure agents and for developers who extend the kernel with plugins.
@@ -11,7 +11,7 @@ The library has no CLI of its own (`mas-runtime run-agent` was removed); interac
 Quick start, from the repository root:
 
 ```bash
-uv sync --package mas-ctl                    # installs mas-ctl and mas-runtime
+uv sync --all-packages                       # installs mas-ctl and the runtime library
 mas-ctl chat agent.yaml -q "What is 2+2?"    # one scripted turn
 ```
 

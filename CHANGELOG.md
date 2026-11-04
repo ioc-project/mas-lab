@@ -62,6 +62,13 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- PyPI names are `mas-lab-runtime`, `mas-lab-ctl`, `mas-lab-library-*`,
+  and `mas-lab-component-*`. `mas-lab` is an empty meta-package that
+  installs the rest. The `mas-lab`, `mas-ctl`, and `mas-runtime`
+  console scripts are unchanged. Wheel names are read from each
+  `pyproject.toml`; code, install hints, and human docs use directories
+  and `mas._dist` instead of copying those strings. Schema registry
+  `source` is a directory key (`runtime`, `bench`, `core`, `controller`).
 - `design_pattern: state_machine`: the entry agent's behaviour as a table of
   named states. Each state delegates to agents, runs any registered design
   pattern as its child (ReAct, plan-execute, another state machine...), runs

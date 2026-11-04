@@ -32,6 +32,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Set
 
+from mas.library.telemetry._dist import extra_hint
 from mas.library.telemetry.exceptions import SpecNotFoundError
 
 StrictnessMode = Literal["required", "recommended", "complete"]
@@ -148,7 +149,7 @@ class SpanValidator:
         if _yaml is None:
             raise RuntimeError(
                 "pyyaml is required for SpanValidator. Install the verify extra: "
-                'uv pip install -e "mas-library-telemetry[verify]"'
+                f"{extra_hint('verify')}"
             )
         path = Path(spec_file) if spec_file else _BUILTIN_SPEC
         if not path.exists():

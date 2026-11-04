@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-telemetry"
-version = "0.1.0"
+name = "mas-lab-library-telemetry"
+version = "0.2.0"
 description = "MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization."
 requires-python = ">=3.10"
 # Zero required dependencies — the package imports with nothing installed.
@@ -36,10 +36,10 @@ clickhouse = [
 # + the `mas-lab telemetry` CLI component (mas.library.telemetry.lab_cli).
 # Discovered via the entry-point groups below.
 bench = [
-  "mas-lab-bench",
+  "mas-lab-component-bench",
   "click>=8.0",
 ]
-# Normal dev/test tooling, deliberately WITHOUT mas-lab-bench/
+# Normal dev/test tooling, deliberately WITHOUT mas-lab-component-bench/
 # clickhouse-connect -- those stay optional (see [all] below), same
 # reasoning as library-kg's [neo4j]: tests that need them skip cleanly and
 # visibly (pytest.mark.skipif) instead of being forced into every install.
@@ -55,14 +55,14 @@ dev = [
   "click>=8.0",
 ]
 # Literally everything -- what a complete CI run installs, so no test skips
-# silently for a missing optional extra. mas-lab-bench resolves via this
+# silently for a missing optional extra. mas-lab-component-bench resolves via this
 # repo's own [tool.uv.sources] workspace mapping (works because this
 # package's Taskfile installs into the shared repo-root .venv, unlike
 # library-kg's standalone one). Local dev keeps using [dev] directly (or
 # NO_OPTIONAL=true on `task ci`/`task install-dev`) for a faster,
 # dependency-light loop.
 all = [
-  "mas-library-telemetry[dev,bench,clickhouse]",
+  "mas-lab-library-telemetry[dev,bench,clickhouse]",
 ]
 
 # No standalone console script — the library exposes its functionality as
@@ -83,10 +83,10 @@ addopts = "--tb=short -q"
 [tool.coverage.run]
 source = ["mas/library/telemetry"]
 # bench.py / codecs.py / list_clickhouse_sessions.py are thin glue over the
-# bench framework — exercised by integration runs (need mas-lab-bench), not
+# bench framework — exercised by integration runs (need mas-lab-component-bench), not
 # unit tests. lab_cli.py IS unit-tested (click CliRunner), so it stays
 # measured. list_clickhouse_sessions.py's own tests exist (mocking urllib
-# directly, no real ClickHouse needed) but are skipped whenever mas-lab-bench
+# directly, no real ClickHouse needed) but are skipped whenever mas-lab-component-bench
 # isn't installed -- PipelineStep is its base class -- so it's omitted here
 # for the same reason bench.py is, not because it's untested.
 omit = ["*/tests/*", "*/bench.py", "*/codecs.py", "*/list_clickhouse_sessions.py"]
@@ -115,8 +115,3 @@ telemetry = "mas.library.telemetry"
 # the one previously provided by the deleted mas-lab-telemetry package.
 [project.entry-points."mas.lab.cli.components"]
 telemetry = "mas.library.telemetry.lab_cli:TelemetryCliComponent"
-
-[tool.hatch.build.targets.wheel.force-include]
-"schemas/otel_sdk_spans.schema.json" = "mas/library/telemetry/schemas/otel_sdk_spans.schema.json"
-"schemas/mas.spanspec.yaml" = "mas/library/telemetry/schemas/mas.spanspec.yaml"
-"schemas/genai-observe-sdk.spanspec.yaml" = "mas/library/telemetry/schemas/genai-observe-sdk.spanspec.yaml"

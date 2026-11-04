@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-lab-bench
+# lab/components/bench
 
 Runs reproducible benchmark experiments: scenarios x dataset items x runs, then pipeline steps on the resulting `events.jsonl` logs. Runs resume from the trace cache when inputs match.
 
@@ -11,8 +11,8 @@ Use it when you compare multi-agent system (MAS) variants, for example an ablati
 ## Quick start
 
 ```bash
-uv pip install -e "mas-lab[all]"            # all extras
-uv pip install -e mas-lab/components/bench  # or this component alone
+uv pip install mas-lab                      # full stack (meta-package)
+uv pip install -e lab/components/bench      # or this component alone
 
 mas-lab benchmark run my-experiment.yaml --dry-run    # validate config, show plan
 mas-lab benchmark run my-experiment.yaml --progress   # execute (resumes a prior run)

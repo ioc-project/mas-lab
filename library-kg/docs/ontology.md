@@ -490,7 +490,7 @@ Two sessions with identical state content get different session-scoped URNs but 
 | Check | Default |
 |---|---|
 | `unknown_node_types`, `unknown_edge_types`, `block_vocabulary`, `layer_vocabulary`, `orphaned_edges` | on |
-| `shacl` | on; reported as **skipped** (not passed) unless `pyshacl` and `rdflib` are installed (`mas-library-kg[validation]`) |
+| `shacl` | on; reported as **skipped** (not passed) unless `pyshacl` and `rdflib` are installed (`library-kg[validation]`) |
 | `experiment_extension` | off; enabled with `--enable-extension-layer experiment` |
 
 It returns a report dict:

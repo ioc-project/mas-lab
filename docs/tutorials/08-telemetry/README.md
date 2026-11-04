@@ -4,7 +4,7 @@
 -->
 # Tutorial 8 — Telemetry: native, OTel, and replay
 
-> **Packages:** `mas-library-standard` (native plugin), `mas-library-telemetry`
+> **Packages:** `library-standard/` (native plugin), `library-telemetry/`
 > (OTel plugin, replay, collector, ClickHouse)
 > **Prerequisite:** [Tutorials 0-3](../03-experiments-and-analysis/README.md)
 > **Follow-on:** [Tutorial 9 — Knowledge graphs](../09-kg-scope/README.md)

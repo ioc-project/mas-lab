@@ -14,7 +14,7 @@ use the Assistants API or the Responses API.
 
 ## How MAS-Lab implements it
 
-`OpenAILLMProvider` in `mas-library-standard` is the `LLMProvider` plugin.
+`OpenAILLMProvider` in `library-standard` is the `LLMProvider` plugin.
 It speaks the wire protocol with `httpx` (not the `openai` Python SDK). Infra
 selects it:
 
@@ -43,9 +43,9 @@ is separate from the runtime provider.
 
 | Piece | Package |
 | --- | --- |
-| Chat Completions client | `mas-library-standard` (`OpenAILLMProvider`, `httpx`) |
+| Chat Completions client | `library-standard` (`OpenAILLMProvider`, `httpx`) |
 | Bundled infra | `standard:openai`, `standard:llm-proxy`, `standard:llm-proxy-cached` |
-| Optional eval SDK | `openai` on `mas-lab-bench` |
+| Optional eval SDK | `openai` on `lab/components/bench` |
 
 ## Compliance
 

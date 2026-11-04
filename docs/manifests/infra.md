@@ -4,7 +4,7 @@
 -->
 # Infrastructure manifests (`apiVersion: infra/v1`)
 
-**Package:** `mas-ctl` | **Model:** `mas.ctl.infra.models.InfraManifest` | **Resolver:** `mas.ctl.infra.resolve.resolve_infra_refs`
+**Package:** `ctl/` | **Model:** `mas.ctl.infra.models.InfraManifest` | **Resolver:** `mas.ctl.infra.resolve.resolve_infra_refs`
 
 An **infra** manifest declares *where* deployment resources live.
 It covers LLM endpoints (proxy URL, API-key env var name, model mappings), tool servers, application and A2A agent endpoints, and middleware wrapped around LLM calls.

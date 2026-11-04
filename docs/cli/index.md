@@ -18,7 +18,7 @@ when a page and the code disagree.
 | [Web UI](../ui/index.md) | `ui/` + controller | Browser studio: manifests, labs, benchmark jobs | [Web UI](../ui/index.md) |
 | [Live dashboard](../ui/live.md) | `demo-ui/` | Watch a running MAS or replay a finished run | [Live dashboard](../ui/live.md) |
 | [TUI](../ctl/tui.md) | `ctl/` | Interactive session in the terminal (`mas-ctl tui`) | [TUI](../ctl/tui.md) |
-| [Controller API](serve.md) | `mas-lab-controller` | REST backend for the web UI and the live dashboard | [Controller API](serve.md) |
+| [Controller API](serve.md) | `lab/components/controller/` | REST backend for the web UI and the live dashboard | [Controller API](serve.md) |
 
 `mas-ctl --help` / `mas-lab --help` / `mas-lab COMMAND --help` are always
 current. Installed libraries add `mas-lab` groups (`telemetry`, `kg`, `eval`,

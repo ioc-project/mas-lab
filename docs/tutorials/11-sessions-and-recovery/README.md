@@ -4,7 +4,7 @@
 -->
 # Tutorial 11 — Sessions and recovery
 
-> **Packages:** `mas-runtime`, `mas-ctl`
+> **Packages:** `runtime/`, `ctl/`
 > **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) and
 > [Tutorial 1](../01-building-an-agent/README.md), with a model configured.
 > Run all commands from the repository root.
@@ -58,7 +58,7 @@ changes.
 ## Step 3 — Know the checkpoint stores
 
 All stores implement `CheckpointStore` (`plugins/checkpoint.py` in
-`mas-library-standard`).
+`library-standard`).
 
 | Store | Backs | Survives exit |
 | --- | --- | --- |

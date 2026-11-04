@@ -42,6 +42,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
+from mas.library.kg._dist import extra_hint
 from mas.library.kg.core.event_mappings import KIND_TO_CLASS, LAYER_KINDS
 from mas.library.kg.exceptions import (
     MissingCallIdError,
@@ -144,7 +145,7 @@ class _OntologyIndex:
         except ImportError:
             raise ImportError(
                 "rdflib is required for OTel→KG normalization. "
-                'Install with: uv sync (or uv add "mas-library-kg[graph]")'
+                f"Install with: uv sync (or {extra_hint('graph')})"
             ) from None
 
         g = rdflib.Graph()

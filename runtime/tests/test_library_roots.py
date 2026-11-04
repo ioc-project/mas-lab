@@ -308,7 +308,7 @@ def test_discover_library_roots_does_not_scan_git_checkout_siblings(tmp_path, mo
     (checkout / ".git").mkdir(parents=True)
     lab = checkout / "library-lab"
     lab.mkdir()
-    (lab / "library.yaml").write_text("name: mas-library-lab\n", encoding="utf-8")
+    (lab / "library.yaml").write_text("name: lab\n", encoding="utf-8")
     nested = checkout / "labs" / "lifecycle-control.lab"
     nested.mkdir(parents=True)
 

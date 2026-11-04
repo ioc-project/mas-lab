@@ -17,10 +17,10 @@ and where the tutorials live.
 | Protocol | What it carries | MAS-Lab surface |
 | --- | --- | --- |
 | [OpenAI Chat Completions](openai.md) | Model calls | `standard:openai` and any OpenAI-compatible proxy |
-| [MCP](mcp.md) | Remote tools | `mas-library-ioa`, `mas-mcp` |
-| [A2A](a2a.md) | Remote agents | `mas-library-ioa`, `mas-ctl serve` |
-| [Agent Skills](agent-skills.md) | Reusable instruction packs | `mas-library-skills`, [agentskills.io](https://agentskills.io/) |
-| [OpenTelemetry](opentelemetry.md) | Traces | `mas-library-telemetry` and AGNTCY's `ioa-observe-sdk` |
+| [MCP](mcp.md) | Remote tools | `library-ioa/`, `mas-mcp` |
+| [A2A](a2a.md) | Remote agents | `library-ioa/`, `mas-ctl serve` |
+| [Agent Skills](agent-skills.md) | Reusable instruction packs | `library-skills/`, [agentskills.io](https://agentskills.io/) |
+| [OpenTelemetry](opentelemetry.md) | Traces | `library-telemetry/` and AGNTCY's `ioa-observe-sdk` |
 
 Protocols sit in infra, not in agent logic. You can develop with local tools
 and local delegation, then point the same agent at an MCP server or an A2A

@@ -4,8 +4,8 @@
 -->
 # Tutorial 10 — Evaluation metrics
 
-> **Packages:** `mas-lab`, `mas-library-eval` (metrics and the `eval_metric`
-> plugin type), `mas-library-lab` (the `eval_mce` pipeline step)
+> **Packages:** lab CLI, `library-eval/` (metrics and the `eval_metric`
+> plugin type), `library-lab/` (the `eval_mce` pipeline step)
 > **Prerequisite:** [Tutorial 3](../03-experiments-and-analysis/README.md). You
 > have scored a run with stock MCE, the Metrics Computation Engine: an
 > open-source set of LLM-as-judge metrics.
@@ -225,7 +225,7 @@ runtime `llm_cache` does not replay them; only a caching gateway can.
 ## Step 4 — Run the mixed pipeline
 
 [eval-pipeline.yaml](eval-pipeline.yaml) mixes the three sources: stock
-`groundedness`, registered `toy_echo` (ships with `mas-library-eval`, no LLM
+`groundedness`, registered `toy_echo` (ships with `library-eval`, no LLM
 needed) and inline `used_a_tool`. First validate it, with no LLM:
 
 ```bash

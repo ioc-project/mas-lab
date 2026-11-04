@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-standard Developer Guide
+# library-standard Developer Guide
 
-This guide is for contributors who add plugins or tools to `mas-library-standard`. Each plugin or tool needs an implementation, a test and (for plugins) a card and manifest example; the steps below list them.
+This guide is for contributors who add plugins or tools to `library-standard`. Each plugin or tool needs an implementation, a test and (for plugins) a card and manifest example; the steps below list them.
 
 ## Module map
 

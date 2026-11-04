@@ -13,7 +13,7 @@ The MAS workflow and agent prompts do not change.
 
 ## What you need
 
-- **Packages:** `mas-ctl` and `mas-library-ioa` (A2A plugins, in the standard install).
+- **Packages:** `ctl/` and `library-ioa/` (A2A plugins, in the standard install).
 - **Prerequisites:** [Tutorial 0](../00-environment-setup/README.md) (install, LLM access) and
   [Tutorial 2](../02-creating-a-mas/README.md) (this tutorial reuses its MAS and `schedule_agent`).
 - The official A2A client: a Go binary named `a2a` (not the PyPI package `a2a-cli`).

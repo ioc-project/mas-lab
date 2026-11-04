@@ -14,7 +14,7 @@ This is a REAL wrapper around google.adk.skills:
 
 Dependency::
 
-    uv pip install 'mas-library-skills[adk]'
+    this library's ``adk`` extra
 """
 
 from __future__ import annotations

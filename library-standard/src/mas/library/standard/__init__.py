@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+from mas._dist import installed_version
 
 
 def package_root() -> Path:
@@ -17,7 +18,4 @@ def package_root() -> Path:
     return here
 
 
-try:
-    __version__ = version("mas-library-standard")
-except PackageNotFoundError:
-    __version__ = "0.1.0"
+__version__ = installed_version(file=__file__)

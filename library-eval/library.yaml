@@ -8,7 +8,7 @@
 apiVersion: mas/v1
 kind: Library
 
-name: mas-library-eval
+name: eval
 description: >
   Evaluation metrics and LLM-as-judge scoring. Hosts the eval_metric plugin
   type so other libraries can register session metrics onto an eval provider.

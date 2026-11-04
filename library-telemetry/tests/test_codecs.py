@@ -17,13 +17,14 @@ def _has_codec_base() -> bool:
 
 
 requires_codec_base = pytest.mark.skipif(
-    not _has_codec_base(), reason="mas-lab-bench not installed"
+    not _has_codec_base(), reason="bench extra not installed"
 )
 
 
 def test_core_does_not_require_codec_base():
-    import mas.library.telemetry  # noqa: F401
     import sys
+
+    import mas.library.telemetry  # noqa: F401
 
     assert "mas.library.telemetry.codecs" not in sys.modules or _has_codec_base()
 

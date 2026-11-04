@@ -223,7 +223,7 @@ properties:
     type: object
     additionalProperties: false
     description: >-
-      Overrides merged over mas-runtime's built-in defaults.yaml (per key,
+      Overrides merged over the runtime's built-in defaults.yaml (per key,
       workspace value wins). See runtime/docs/agent-defaults.md.
     properties:
       model:

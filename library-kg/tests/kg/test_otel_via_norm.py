@@ -130,13 +130,13 @@ _TRIP_PLANNER_SPANS = _EXAMPLES / "trip-planner" / "otel_spans.jsonl"
 def _load_spans(path: Path) -> list[dict]:
     import json
 
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]  # noqa: E501
 
 
 def test_norm_accepts_realistic_converter_output() -> None:
-    """A real observe_sdk-profile export (mas-library-telemetry's replay,
+    """A real observe_sdk-profile export (the telemetry library's replay,
     checked in here as a static fixture so this package never needs to
-    depend on mas-library-telemetry to test its own OTel ingest path)
+    depend on that library to test its own OTel ingest path)
     reaches norm.normalize() without being silently dropped by its
     required-attribute dispatch.
 

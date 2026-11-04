@@ -4,13 +4,13 @@ from __future__ import annotations
 
 """EventsToOtelStep — offline replay of events.jsonl to OTel SDK spans JSONL."""
 
-import logging
-import shutil
-from pathlib import Path
-from typing import Any
+import logging  # noqa: E402
+import shutil  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from mas.lab.benchmark.pipeline import ConfigParam, PipelineStep, StepOutput
-from mas.lab.benchmark.pipeline.executor import ExecutionContext
+from mas.lab.benchmark.pipeline import ConfigParam, PipelineStep, StepOutput  # noqa: E402
+from mas.lab.benchmark.pipeline.executor import ExecutionContext  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class EventsToOtelStep(PipelineStep):
             "export_layers",
             dict,
             default=None,
-            description="Layer toggles: structure, execution, semantic (default on); provenance, governance (default off).",
+            description="Layer toggles: structure, execution, semantic (default on); provenance, governance (default off).",  # noqa: E501
         ),
     ]
 
@@ -48,7 +48,7 @@ class EventsToOtelStep(PipelineStep):
 
         if not OTEL_AVAILABLE:
             raise RuntimeError(
-                "events_to_otel requires mas-library-telemetry[convert] "
+                "events_to_otel requires the telemetry library's convert extra "
                 "(opentelemetry-sdk)."
             )
 

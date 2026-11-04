@@ -1,6 +1,6 @@
 # Telemetry pipeline library
 
-Reusable `kind: Pipeline` manifests shipped with **mas-library-telemetry**.
+Reusable `kind: Pipeline` manifests shipped with **library-telemetry**.
 
 The conversion, verification, and collector-serialization logic lives in
 `mas.library.telemetry.*`. The `mas-lab` CLI and `mas-lab-graph` step adapters
@@ -21,7 +21,7 @@ opensource merge.
 
 ## Referencing pipelines
 
-Install `mas-library-telemetry` in the workspace venv. The package registers
+Install `library-telemetry` in the workspace venv. The package registers
 scheme **`telemetry`** via `mas.runtime.manifest_libraries` — no
 `config.yaml` entry required.
 

@@ -18,7 +18,7 @@ mas-ctl chat agent.yaml --flavour local
 
 ## Shipped flavours
 
-`mas-library-standard` ships three flavours (`library-standard/src/mas/library/standard/flavours/`):
+`library-standard` ships three flavours (`library-standard/src/mas/library/standard/flavours/`):
 
 | Flavour | Purpose |
 |---------|---------|

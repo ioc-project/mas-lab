@@ -110,8 +110,8 @@ current directory).
 
 For first-time setup via `mas-lab init`, generated files come from templates
 bundled in the `mas-lab` package:
-[`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
-and [`lab/src/mas/lab/templates/infra/llmprovider.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/infra/llmprovider.yaml).
+[`lab/components/core/src/mas/lab/templates/init/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/components/core/src/mas/lab/templates/init/config.yaml)
+and [`lab/components/core/src/mas/lab/templates/infra/llmprovider.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/components/core/src/mas/lab/templates/infra/llmprovider.yaml).
 
 ### 3. Set API key
 

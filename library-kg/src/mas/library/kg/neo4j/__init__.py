@@ -1,10 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Neo4j integration for mas-library-kg.
+"""Neo4j integration for the knowledge-graph library.
 
 Requires the ``neo4j`` Python driver (optional dep)::
 
-    uv pip install "mas-library-kg[neo4j]"
+    this library's ``neo4j`` extra
 
 Public API
 ----------

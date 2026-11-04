@@ -62,7 +62,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Type, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Type
 
 if TYPE_CHECKING:
     from mas.lab.artifacts import Artifact
@@ -296,8 +296,8 @@ def list_processors() -> List[Type[Processor]]:
 def _ensure_defaults_loaded() -> None:
     """Import the default processor bundle (mas.lab.processors) if not yet done.
 
-    This is a lazy import so that mas-lab-core does not hard-depend on
-    mas-lab-bench.  The import is idempotent.  Uses a dedicated flag instead
+    This is a lazy import so that lab/components/core does not hard-depend on
+    lab/components/bench.  The import is idempotent.  Uses a dedicated flag instead
     of checking ``_REGISTRY`` — other sub-packages (e.g. mas.lab.plots) may
     have already registered processors before this is called, which would
     cause the registry to appear non-empty and skip the import.

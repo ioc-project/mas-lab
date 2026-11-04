@@ -26,9 +26,9 @@ from textwrap import dedent
 from typing import Any
 
 try:
-    import yaml  # PyYAML — installed as part of mas-runtime
+    import yaml  # PyYAML — installed with the runtime package
 except ImportError:
-    print("PyYAML not available — install mas-runtime first.", file=sys.stderr)
+    print("PyYAML not available — install the runtime package first.", file=sys.stderr)
     sys.exit(1)
 
 
@@ -55,7 +55,7 @@ class Plugin:
     module: str  # short module name (relative to module_base)
     full_module: str  # absolute Python module path
     category: str
-    library: str  # library package name
+    library: str  # checkout directory (stable across PyPI renames)
 
 
 @dataclass
@@ -81,6 +81,15 @@ class FlavourManifest:
 def _load_toml(path: Path) -> dict[str, Any]:
     with open(path, "rb") as f:
         return tomllib.load(f)
+
+
+def _checkout_dir(path: Path, root: Path) -> str:
+    """Top-level checkout directory that owns *path* (not the PyPI wheel name)."""
+    rel = path.resolve().relative_to(root.resolve())
+    parts = rel.parts
+    if parts[:2] == ("lab", "components") and len(parts) >= 3:
+        return "/".join(parts[:3])
+    return parts[0]
 
 
 def _pkg_from_toml(path: Path, install_path: str, layer: str) -> Package:
@@ -264,7 +273,7 @@ def generate_packages_reference(packages: list[Package]) -> str:
         # From the repository root (uses UV_PROJECT_ENVIRONMENT if set):
         task install
         # Equivalent to:
-        uv pip install -e runtime -e ctl -e library-standard -e lab
+        uv pip install -e runtime -e ctl -e library-standard -e lab/components/core
         ```
 
         ### Full install (all packages + optional extras)
@@ -279,7 +288,10 @@ def generate_packages_reference(packages: list[Package]) -> str:
           -e runtime \\
           -e ctl \\
           -e library-standard \\
-          -e lab \\
+          -e lab/components/core \\
+          -e lab/components/bench \\
+          -e lab/components/controller \\
+          -e . \\
           -e library-eval \\
           -e library-lab \\
           -e library-samples
@@ -299,7 +311,9 @@ def generate_packages_reference(packages: list[Package]) -> str:
         task install-lab LAB=labs/extensions.lab
         ```
 
-        OpenTelemetry export and knowledge-graph normalisation ship as separate libraries (`mas-library-telemetry`, `mas-library-kg`), not as extras of this package.
+        OpenTelemetry export and knowledge-graph normalisation ship as
+        separate libraries (see the tables below), not as extras of this
+        package.
 
         ---
 
@@ -368,8 +382,9 @@ def generate_plugins_reference(
     lines.append(
         dedent("""\
         This document is the canonical index of all plugins, tools, and flavours
-        distributed in `ioc-project/mas-lab`.  Each entry links back to the
-        package that provides it.
+        distributed in `ioc-project/mas-lab`.  Each entry names the checkout
+        directory that provides it. Wheel names live in the
+        [packages reference](packages-reference.md).
 
         ---
 
@@ -385,7 +400,8 @@ def generate_plugins_reference(
 
         Or by short name when using a flavour that already activates it.
 
-        See [flavours documentation](https://github.com/ioc-project/mas-lab/blob/main/library-standard/docs/user-guide.md) and
+        See [flavours documentation](https://github.com/ioc-project/mas-lab/blob/main/library-standard/docs/user-guide.md)
+        and
         [Tutorial 2 — Creating a MAS](tutorials/02-creating-a-mas/README.md) for
         practical examples.
 
@@ -415,7 +431,7 @@ def generate_plugins_reference(
                     f"`{p.library}`",
                 ]
             )
-        lines.append(_md_table(["Class", "Full module path", "Package"], rows))
+        lines.append(_md_table(["Class", "Full module path", "Library"], rows))
         lines.append("\n\n")
 
     lines.append("---\n\n")
@@ -431,7 +447,7 @@ def generate_plugins_reference(
                 f"`{p.library}`",
             ]
         )
-    lines.append(_md_table(["Class", "Category", "Package"], rows_all))
+    lines.append(_md_table(["Class", "Category", "Library"], rows_all))
     lines.append("\n\n---\n\n")
 
     # ── Tools ────────────────────────────────────────────────────────────────
@@ -452,7 +468,7 @@ def generate_plugins_reference(
             )
         lines.append(
             _md_table(
-                ["Name", "Description", "Class", "Tags", "Package"],
+                ["Name", "Description", "Class", "Tags", "Library"],
                 rows_t,
             )
         )
@@ -475,7 +491,7 @@ def generate_plugins_reference(
                     f"`{f.library}`",
                 ]
             )
-        lines.append(_md_table(["Name", "Description", "Package"], rows_f))
+        lines.append(_md_table(["Name", "Description", "Library"], rows_f))
         lines.append("\n\n")
     else:
         lines.append("_No flavour manifests found._\n\n")
@@ -488,9 +504,9 @@ def generate_plugins_reference(
 # Package registry: (pyproject path, install path, layer)
 PACKAGE_REGISTRY: list[tuple[str, str, str]] = [
     # (pyproject.toml relative path, install path, layer label)
+    ("pyproject.toml", ".", "Meta"),
     ("runtime/pyproject.toml", "runtime", "Runtime core"),
     ("ctl/pyproject.toml", "ctl", "Orchestration"),
-    ("lab/pyproject.toml", "lab", "Lab framework"),
     ("lab/components/core/pyproject.toml", "lab/components/core", "Lab framework"),
     ("lab/components/bench/pyproject.toml", "lab/components/bench", "Lab framework"),
     ("lab/components/controller/pyproject.toml", "lab/components/controller", "Lab framework"),
@@ -504,22 +520,55 @@ PACKAGE_REGISTRY: list[tuple[str, str, str]] = [
     ("library-kg/pyproject.toml", "library-kg", "Libraries"),
 ]
 
-# Library manifests: (library.yaml relative path, library package name)
-LIBRARY_MANIFESTS: list[tuple[str, str]] = [
-    ("library-standard/library.yaml", "mas-library-standard"),
-    ("library-skills/library.yaml", "mas-library-skills"),
-    ("library-samples/library.yaml", "mas-library-samples"),
-    ("library-telemetry/library.yaml", "mas-library-telemetry"),
-    ("library-kg/library.yaml", "mas-library-kg"),
-    ("library-eval/library.yaml", "mas-library-eval"),
+# Library manifests: library.yaml relative path (PyPI name comes from pyproject).
+LIBRARY_MANIFESTS: list[str] = [
+    "library-standard/library.yaml",
+    "library-skills/library.yaml",
+    "library-samples/library.yaml",
+    "library-telemetry/library.yaml",
+    "library-kg/library.yaml",
+    "library-eval/library.yaml",
 ]
 
-# Tool/flavour search roots: (relative path, library package name)
-ASSET_ROOTS: list[tuple[str, str]] = [
-    ("library-standard/src", "mas-library-standard"),
-    ("library-skills/tools", "mas-library-skills"),
-    ("library-samples/apps", "mas-library-samples"),
+# Tool/flavour search roots: relative path (PyPI name comes from pyproject).
+ASSET_ROOTS: list[str] = [
+    "library-standard/src",
+    "library-skills/tools",
+    "library-samples/apps",
 ]
+
+
+def generate_pypi_names_snippet(packages: list[Package]) -> str:
+    """MkDocs snippet file: install command and per-wheel names from pyproject."""
+    lines = [
+        "<!--",
+        "  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates",
+        "  SPDX-License-Identifier: Apache-2.0",
+        "-->",
+        "<!-- Auto-generated by scripts/gen_docs.py — do not edit; run task docs-gen -->",
+        "",
+    ]
+    meta = next((p for p in packages if p.path == "."), None)
+    if meta is not None:
+        lines.extend(
+            [
+                "--8<-- [start:install-meta]",
+                f"uv pip install {meta.name}",
+                "--8<-- [end:install-meta]",
+                "",
+            ]
+        )
+    for p in packages:
+        slug = "meta" if p.path == "." else p.path.replace("/", "-")
+        lines.extend(
+            [
+                f"--8<-- [start:{slug}-name]",
+                p.name,
+                f"--8<-- [end:{slug}-name]",
+                "",
+            ]
+        )
+    return "\n".join(lines) + "\n"
 
 
 def main() -> None:
@@ -550,30 +599,32 @@ def main() -> None:
 
     # ── Collect plugins ──────────────────────────────────────────────────────
     all_plugins: list[Plugin] = []
-    for rel_manifest, library_name in LIBRARY_MANIFESTS:
+    for rel_manifest in LIBRARY_MANIFESTS:
         manifest_path = root / rel_manifest
         if not manifest_path.exists():
             print(f"  [skip] {rel_manifest} not found", file=sys.stderr)
             continue
-        plugins = _plugins_from_library_yaml(manifest_path, library_name)
+        library_dir = _checkout_dir(manifest_path, root)
+        plugins = _plugins_from_library_yaml(manifest_path, library_dir)
         all_plugins.extend(plugins)
-        print(f"  [lib]  {library_name}: {len(plugins)} plugin(s)")
+        print(f"  [lib]  {library_dir}: {len(plugins)} plugin(s)")
 
     # ── Collect tools & flavours ─────────────────────────────────────────────
     all_tools: list[ToolManifest] = []
     all_flavours: list[FlavourManifest] = []
-    for rel_root, library_name in ASSET_ROOTS:
+    for rel_root in ASSET_ROOTS:
         asset_root = root / rel_root
         if not asset_root.exists():
             continue
-        tools = _tools_from_yaml_files(asset_root, library_name)
-        flavours = _flavours_from_yaml_files(asset_root, library_name)
+        library_dir = _checkout_dir(asset_root, root)
+        tools = _tools_from_yaml_files(asset_root, library_dir)
+        flavours = _flavours_from_yaml_files(asset_root, library_dir)
         all_tools.extend(tools)
         all_flavours.extend(flavours)
         if tools:
-            print(f"  [tool] {library_name}: {len(tools)} tool manifest(s)")
+            print(f"  [tool] {library_dir}: {len(tools)} tool manifest(s)")
         if flavours:
-            print(f"  [flv]  {library_name}: {len(flavours)} flavour(s)")
+            print(f"  [flv]  {library_dir}: {len(flavours)} flavour(s)")
 
     # ── Write packages-reference.md ──────────────────────────────────────────
     pkg_ref = out_dir / "packages-reference.md"
@@ -610,6 +661,15 @@ def main() -> None:
             print("  [check FAIL] stale docs/includes/mas-paths.md — run: task docs-gen", file=sys.stderr)
             sys.exit(1)
         print("  [check OK] docs/includes/mas-paths.md")
+        names_snippet = root / "docs" / "includes" / "pypi-names.md"
+        names_content = generate_pypi_names_snippet(packages)
+        if not names_snippet.is_file():
+            print("  [check FAIL] missing docs/includes/pypi-names.md — run: task docs-gen", file=sys.stderr)
+            sys.exit(1)
+        if names_snippet.read_text(encoding="utf-8") != names_content:
+            print("  [check FAIL] stale docs/includes/pypi-names.md — run: task docs-gen", file=sys.stderr)
+            sys.exit(1)
+        print("  [check OK] docs/includes/pypi-names.md")
         return
 
     pkg_ref.write_text(pkg_content, encoding="utf-8")
@@ -627,6 +687,10 @@ def main() -> None:
     paths_snippet.parent.mkdir(parents=True, exist_ok=True)
     paths_snippet.write_text(paths_content, encoding="utf-8")
     print(f"  → wrote {paths_snippet.relative_to(root)}")
+
+    names_snippet = root / "docs" / "includes" / "pypi-names.md"
+    names_snippet.write_text(generate_pypi_names_snippet(packages), encoding="utf-8")
+    print(f"  → wrote {names_snippet.relative_to(root)}")
 
 
 if __name__ == "__main__":

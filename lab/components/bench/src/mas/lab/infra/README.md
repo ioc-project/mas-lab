@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Bench infrastructure types (`mas-lab-bench`)
+# Bench infrastructure types (`lab/components/bench`)
 
 **Not part of mas-runtime or mas-ctl.** These modules are lab/bench-only helpers
 for benchmark pipelines and telemetry codecs.

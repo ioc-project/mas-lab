@@ -7,7 +7,7 @@
 apiVersion: mas/v1
 kind: Library
 
-name: mas-library-samples
+name: samples
 description: >
   Community-contributed MAS sample applications, datasets, and tools for
   benchmarks, tutorials, and experimentation.

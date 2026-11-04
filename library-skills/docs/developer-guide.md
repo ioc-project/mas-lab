@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-skills Developer Guide
+# library-skills Developer Guide
 
 This guide explains how the skills plugins are built and how to extend them. It is for contributors who add a context source or a skill tool. Run the tests with `uv run pytest library-skills/tests/ -v`; user-facing usage is in the [user guide](user-guide.md).
 

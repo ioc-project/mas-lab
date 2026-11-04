@@ -21,21 +21,20 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "mas-ctl",
     "mas-lab",
-    "mas-lab-bench",
-    "mas-lab-controller",
-    "mas-lab-core",
-    "mas-lab-workspace",
-    "mas-library-eval",
-    "mas-library-ioa",
-    "mas-library-kg",
-    "mas-library-lab",
-    "mas-library-samples",
-    "mas-library-skills",
-    "mas-library-standard",
-    "mas-library-telemetry",
-    "mas-runtime",
+    "mas-lab-component-bench",
+    "mas-lab-component-controller",
+    "mas-lab-component-core",
+    "mas-lab-ctl",
+    "mas-lab-library-eval",
+    "mas-lab-library-ioa",
+    "mas-lab-library-kg",
+    "mas-lab-library-lab",
+    "mas-lab-library-samples",
+    "mas-lab-library-skills",
+    "mas-lab-library-standard",
+    "mas-lab-library-telemetry",
+    "mas-lab-runtime",
 ]
 
 [[package]]
@@ -198,9 +197,9 @@ name = "aiologic"
 version = "0.17.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "sniffio" },
-    { name = "typing-extensions" },
-    { name = "wrapt" },
+    { name = "sniffio", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "wrapt", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f1/7a/d51f2fde1e8ae8a83431f8e97b7a71e9358cdb1d4d2ce6be387fa44d68de/aiologic-0.17.1.tar.gz", hash = "sha256:2e1b93b9e88ced318c2a63ad7b382688f40cbfe40e3d42258d49dc9c5aea179d", size = 252354, upload-time = "2026-06-27T20:41:33.25Z" }
 wheels = [
@@ -1022,8 +1021,8 @@ name = "culsans"
 version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiologic" },
-    { name = "typing-extensions" },
+    { name = "aiologic", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d9/e3/49afa1bc180e0d28008ec6bcdf82a4072d1c7a41032b5b759b60814ca4b0/culsans-0.11.0.tar.gz", hash = "sha256:0b43d0d05dce6106293d114c86e3fb4bfc63088cfe8ff08ed3fe36891447fe33", size = 107546, upload-time = "2025-12-31T23:15:38.196Z" }
 wheels = [
@@ -1144,7 +1143,7 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "wrapt" },
+    { name = "wrapt", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/49/85/12f0a49a7c4ffb70572b6c2ef13c90c88fd190debda93b23f026b25f9634/deprecated-1.3.1.tar.gz", hash = "sha256:b1b50e0ff0c1fddaa5708a2c6b0a6588bb09b892825ab2b214ac9ea9d92a5223", size = 2932523, upload-time = "2025-10-30T08:19:02.757Z" }
 wheels = [
@@ -1170,7 +1169,7 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "wrapt" },
+    { name = "wrapt", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f7/9c/16649913bf14c73e0a9453782e148362ff2657067deff6aa9c7ebcddcc31/deprecated-3.0.0.tar.gz", hash = "sha256:16850204d3a1e6bb0acd06bff48d96e8b0a0d25d1c52f71705405a0f4894192d", size = 166912, upload-time = "2026-09-26T13:58:10.675Z" }
 wheels = [
@@ -1923,8 +1922,8 @@ name = "httpcore2"
 version = "2.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11" },
-    { name = "truststore" },
+    { name = "h11", marker = "sys_platform != 'emscripten'" },
+    { name = "truststore", marker = "sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/be/ad/f4f0e57345f1870f3e8cb624e058d7eca6e5a27d33bcc3311d9b618734cd/httpcore2-2.12.0.tar.gz", hash = "sha256:9293522bba0aa7c4c8e9e3f040c16575bd8868e155a77fa30c7a9085a5eae648", size = 67548, upload-time = "2026-08-18T13:22:08.211Z" }
 wheels = [
@@ -3086,7 +3085,177 @@ wheels = [
 ]
 
 [[package]]
-name = "mas-ctl"
+name = "mas-lab"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "mas-lab-component-bench" },
+    { name = "mas-lab-component-controller" },
+    { name = "mas-lab-component-core" },
+    { name = "mas-lab-ctl" },
+    { name = "mas-lab-library-eval" },
+    { name = "mas-lab-library-ioa", extra = ["cli"] },
+    { name = "mas-lab-library-kg" },
+    { name = "mas-lab-library-lab" },
+    { name = "mas-lab-library-samples" },
+    { name = "mas-lab-library-skills" },
+    { name = "mas-lab-library-standard" },
+    { name = "mas-lab-library-telemetry" },
+    { name = "mas-lab-runtime" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "hypothesis" },
+    { name = "import-linter" },
+    { name = "mypy" },
+    { name = "pyarrow" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "pytest-timeout" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mas-lab-component-bench", editable = "lab/components/bench" },
+    { name = "mas-lab-component-controller", editable = "lab/components/controller" },
+    { name = "mas-lab-component-core", editable = "lab/components/core" },
+    { name = "mas-lab-ctl", editable = "ctl" },
+    { name = "mas-lab-library-eval", editable = "library-eval" },
+    { name = "mas-lab-library-ioa", extras = ["cli"], editable = "library-ioa" },
+    { name = "mas-lab-library-kg", editable = "library-kg" },
+    { name = "mas-lab-library-lab", editable = "library-lab" },
+    { name = "mas-lab-library-samples", editable = "library-samples" },
+    { name = "mas-lab-library-skills", editable = "library-skills" },
+    { name = "mas-lab-library-standard", editable = "library-standard" },
+    { name = "mas-lab-library-telemetry", editable = "library-telemetry" },
+    { name = "mas-lab-runtime", editable = "runtime" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "hypothesis", specifier = ">=6.0" },
+    { name = "import-linter", specifier = ">=2.0" },
+    { name = "mypy", specifier = ">=1.19.1" },
+    { name = "pyarrow", specifier = ">=14.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov", specifier = ">=6.0" },
+    { name = "pytest-timeout", specifier = ">=2.3" },
+    { name = "ruff", specifier = ">=0.15.0" },
+]
+
+[[package]]
+name = "mas-lab-component-bench"
+version = "0.2.0"
+source = { editable = "lab/components/bench" }
+dependencies = [
+    { name = "click" },
+    { name = "huggingface-hub" },
+    { name = "jsonschema" },
+    { name = "mas-lab-component-core" },
+    { name = "mas-lab-ctl" },
+    { name = "mas-lab-library-eval" },
+    { name = "mas-lab-runtime" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "playwright" },
+    { name = "plotnine" },
+    { name = "psutil" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.0" },
+    { name = "huggingface-hub", specifier = ">=0.30.0" },
+    { name = "jsonschema", specifier = ">=4.0" },
+    { name = "mas-lab-component-core", editable = "lab/components/core" },
+    { name = "mas-lab-ctl", editable = "ctl" },
+    { name = "mas-lab-library-eval", editable = "library-eval" },
+    { name = "mas-lab-runtime", editable = "runtime" },
+    { name = "openai", specifier = ">=1.0.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
+    { name = "playwright", specifier = ">=1.40" },
+    { name = "plotnine", specifier = ">=0.12.0" },
+    { name = "psutil", specifier = ">=5.9.0" },
+    { name = "scipy", specifier = ">=1.10.0" },
+]
+
+[[package]]
+name = "mas-lab-component-controller"
+version = "0.2.0"
+source = { editable = "lab/components/controller" }
+dependencies = [
+    { name = "click" },
+    { name = "fastapi" },
+    { name = "mas-lab-component-bench" },
+    { name = "mas-lab-component-core" },
+    { name = "mas-lab-ctl" },
+    { name = "mas-lab-runtime" },
+    { name = "pydantic" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.0" },
+    { name = "fastapi", specifier = ">=0.110" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "mas-lab-component-bench", editable = "lab/components/bench" },
+    { name = "mas-lab-component-core", editable = "lab/components/core" },
+    { name = "mas-lab-ctl", editable = "ctl" },
+    { name = "mas-lab-runtime", editable = "runtime" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "python-multipart", specifier = ">=0.0.9" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.27" },
+]
+provides-extras = ["dev"]
+
+[[package]]
+name = "mas-lab-component-core"
+version = "0.2.0"
+source = { editable = "lab/components/core" }
+dependencies = [
+    { name = "click" },
+    { name = "jsonschema" },
+    { name = "mas-lab-ctl" },
+    { name = "mas-lab-runtime" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.0" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
+    { name = "mas-lab-ctl", editable = "ctl" },
+    { name = "mas-lab-runtime", editable = "runtime" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "mas-lab-ctl"
 version = "0.2.0"
 source = { editable = "ctl" }
 dependencies = [
@@ -3094,9 +3263,9 @@ dependencies = [
     { name = "click" },
     { name = "httpx" },
     { name = "jsonschema" },
-    { name = "mas-library-skills" },
-    { name = "mas-library-standard" },
-    { name = "mas-runtime" },
+    { name = "mas-lab-library-skills" },
+    { name = "mas-lab-library-standard" },
+    { name = "mas-lab-runtime" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
 ]
@@ -3117,9 +3286,9 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "jsonschema", specifier = ">=4.0" },
-    { name = "mas-library-skills", editable = "library-skills" },
-    { name = "mas-library-standard", editable = "library-standard" },
-    { name = "mas-runtime", editable = "runtime" },
+    { name = "mas-lab-library-skills", editable = "library-skills" },
+    { name = "mas-lab-library-standard", editable = "library-standard" },
+    { name = "mas-lab-runtime", editable = "runtime" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
@@ -3128,202 +3297,15 @@ requires-dist = [
 provides-extras = ["curses", "dev"]
 
 [[package]]
-name = "mas-lab"
-version = "0.2.0"
-source = { editable = "lab" }
-dependencies = [
-    { name = "jsonschema" },
-    { name = "mas-ctl" },
-    { name = "mas-lab-bench" },
-    { name = "mas-lab-controller" },
-    { name = "mas-lab-core" },
-    { name = "mas-library-eval" },
-    { name = "mas-runtime" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "mas-ctl", editable = "ctl" },
-    { name = "mas-lab-bench", editable = "lab/components/bench" },
-    { name = "mas-lab-controller", editable = "lab/components/controller" },
-    { name = "mas-lab-core", editable = "lab/components/core" },
-    { name = "mas-library-eval", editable = "library-eval" },
-    { name = "mas-runtime", editable = "runtime" },
-]
-
-[[package]]
-name = "mas-lab-bench"
-version = "0.2.0"
-source = { editable = "lab/components/bench" }
-dependencies = [
-    { name = "click" },
-    { name = "huggingface-hub" },
-    { name = "jsonschema" },
-    { name = "mas-ctl" },
-    { name = "mas-lab-core" },
-    { name = "mas-library-eval" },
-    { name = "mas-runtime" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "playwright" },
-    { name = "plotnine" },
-    { name = "psutil" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.0" },
-    { name = "huggingface-hub", specifier = ">=0.30.0" },
-    { name = "jsonschema", specifier = ">=4.0" },
-    { name = "mas-ctl" },
-    { name = "mas-lab-core" },
-    { name = "mas-library-eval" },
-    { name = "mas-runtime" },
-    { name = "openai", specifier = ">=1.0.0" },
-    { name = "pandas", specifier = ">=2.0.0" },
-    { name = "playwright", specifier = ">=1.40" },
-    { name = "plotnine", specifier = ">=0.12.0" },
-    { name = "psutil", specifier = ">=5.9.0" },
-    { name = "scipy", specifier = ">=1.10.0" },
-]
-
-[[package]]
-name = "mas-lab-controller"
-version = "0.2.0"
-source = { editable = "lab/components/controller" }
-dependencies = [
-    { name = "click" },
-    { name = "fastapi" },
-    { name = "mas-ctl" },
-    { name = "mas-lab-bench" },
-    { name = "mas-lab-core" },
-    { name = "mas-runtime" },
-    { name = "pydantic" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.0" },
-    { name = "fastapi", specifier = ">=0.110" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
-    { name = "mas-ctl" },
-    { name = "mas-lab-bench" },
-    { name = "mas-lab-core" },
-    { name = "mas-runtime" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
-    { name = "python-multipart", specifier = ">=0.0.9" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.27" },
-]
-provides-extras = ["dev"]
-
-[[package]]
-name = "mas-lab-core"
-version = "0.2.0"
-source = { editable = "lab/components/core" }
-dependencies = [
-    { name = "mas-runtime" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "mas-runtime" },
-    { name = "pyyaml", specifier = ">=6.0" },
-]
-
-[[package]]
-name = "mas-lab-workspace"
-version = "0.2.0"
-source = { editable = "." }
-dependencies = [
-    { name = "mas-ctl" },
-    { name = "mas-lab" },
-    { name = "mas-lab-controller" },
-    { name = "mas-library-eval" },
-    { name = "mas-library-ioa", extra = ["cli"] },
-    { name = "mas-library-kg" },
-    { name = "mas-library-lab" },
-    { name = "mas-library-samples" },
-    { name = "mas-library-skills" },
-    { name = "mas-library-standard" },
-    { name = "mas-library-telemetry" },
-    { name = "mas-runtime" },
-    { name = "pika" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "httpx" },
-    { name = "hypothesis" },
-    { name = "import-linter" },
-    { name = "mypy" },
-    { name = "pyarrow" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "pytest-timeout" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "mas-ctl", editable = "ctl" },
-    { name = "mas-lab", editable = "lab" },
-    { name = "mas-lab-controller", editable = "lab/components/controller" },
-    { name = "mas-library-eval", editable = "library-eval" },
-    { name = "mas-library-ioa", extras = ["cli"], editable = "library-ioa" },
-    { name = "mas-library-kg", editable = "library-kg" },
-    { name = "mas-library-lab", editable = "library-lab" },
-    { name = "mas-library-samples", editable = "library-samples" },
-    { name = "mas-library-skills", editable = "library-skills" },
-    { name = "mas-library-standard", editable = "library-standard" },
-    { name = "mas-library-telemetry", editable = "library-telemetry" },
-    { name = "mas-runtime", editable = "runtime" },
-    { name = "pika", specifier = ">=1.4.1" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "hypothesis", specifier = ">=6.0" },
-    { name = "import-linter", specifier = ">=2.0" },
-    { name = "mypy", specifier = ">=1.19.1" },
-    { name = "pyarrow", specifier = ">=14.0" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov", specifier = ">=6.0" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "ruff", specifier = ">=0.15.0" },
-]
-
-[[package]]
-name = "mas-library-eval"
+name = "mas-lab-library-eval"
 version = "0.2.0"
 source = { editable = "library-eval" }
 dependencies = [
     { name = "click" },
     { name = "deepeval" },
-    { name = "mas-lab-bench" },
-    { name = "mas-lab-core" },
-    { name = "mas-runtime" },
+    { name = "mas-lab-component-bench" },
+    { name = "mas-lab-component-core" },
+    { name = "mas-lab-runtime" },
     { name = "mce-metrics-plugin" },
     { name = "metrics-computation-engine" },
     { name = "pandas" },
@@ -3339,9 +3321,9 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.0" },
     { name = "deepeval", specifier = ">=4.0.0" },
-    { name = "mas-lab-bench", editable = "lab/components/bench" },
-    { name = "mas-lab-core", editable = "lab/components/core" },
-    { name = "mas-runtime", editable = "runtime" },
+    { name = "mas-lab-component-bench", editable = "lab/components/bench" },
+    { name = "mas-lab-component-core", editable = "lab/components/core" },
+    { name = "mas-lab-runtime", editable = "runtime" },
     { name = "mce-metrics-plugin", specifier = ">=0.1.0" },
     { name = "metrics-computation-engine", specifier = ">=0.1.0" },
     { name = "pandas", specifier = ">=2.0.0" },
@@ -3351,12 +3333,12 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [[package]]
-name = "mas-library-ioa"
+name = "mas-lab-library-ioa"
 version = "0.2.0"
 source = { editable = "library-ioa" }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server", "sqlite"] },
-    { name = "mas-runtime" },
+    { name = "mas-lab-runtime" },
     { name = "mcp" },
     { name = "uvicorn" },
 ]
@@ -3372,7 +3354,7 @@ cli = [
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server", "sqlite"], specifier = ">=1.1.5" },
-    { name = "mas-runtime", editable = "runtime" },
+    { name = "mas-lab-runtime", editable = "runtime" },
     { name = "mcp", specifier = ">=2.2" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'all'" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'cli'" },
@@ -3381,8 +3363,8 @@ requires-dist = [
 provides-extras = ["cli", "all"]
 
 [[package]]
-name = "mas-library-kg"
-version = "0.1.1"
+name = "mas-lab-library-kg"
+version = "0.2.0"
 source = { editable = "library-kg" }
 dependencies = [
     { name = "oxp-ontology", extra = ["models"] },
@@ -3405,10 +3387,10 @@ all = [
 ]
 bench = [
     { name = "click" },
-    { name = "mas-lab-bench" },
+    { name = "mas-lab-component-bench" },
 ]
 compare-native-otel = [
-    { name = "mas-library-telemetry" },
+    { name = "mas-lab-library-telemetry" },
 ]
 dev = [
     { name = "click" },
@@ -3436,8 +3418,7 @@ ontology = [
     { name = "oxp-ontology", extra = ["models"] },
 ]
 plot = [
-    { name = "mas-lab" },
-    { name = "mas-lab-bench" },
+    { name = "mas-lab-component-bench" },
 ]
 validation = [
     { name = "oxp-ontology", extra = ["models"] },
@@ -3455,11 +3436,10 @@ requires-dist = [
     { name = "click", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "jsonschema", marker = "extra == 'verify'", specifier = ">=4.0.0" },
-    { name = "mas-lab", marker = "extra == 'plot'", editable = "lab" },
-    { name = "mas-lab-bench", marker = "extra == 'bench'", editable = "lab/components/bench" },
-    { name = "mas-lab-bench", marker = "extra == 'plot'", editable = "lab/components/bench" },
-    { name = "mas-library-kg", extras = ["dev", "neo4j", "norm"], marker = "extra == 'all'", editable = "library-kg" },
-    { name = "mas-library-telemetry", marker = "extra == 'compare-native-otel'", editable = "library-telemetry" },
+    { name = "mas-lab-component-bench", marker = "extra == 'bench'", editable = "lab/components/bench" },
+    { name = "mas-lab-component-bench", marker = "extra == 'plot'", editable = "lab/components/bench" },
+    { name = "mas-lab-library-kg", extras = ["dev", "neo4j", "norm"], marker = "extra == 'all'", editable = "library-kg" },
+    { name = "mas-lab-library-telemetry", marker = "extra == 'compare-native-otel'", editable = "library-telemetry" },
     { name = "neo4j", marker = "extra == 'neo4j'", specifier = ">=5.0" },
     { name = "norm", marker = "extra == 'norm'", git = "https://github.com/outshift-open/observe-and-explain-platform.git?subdirectory=backend%2Fnorm" },
     { name = "oxp-ontology", extras = ["models"], specifier = ">=1.0.1" },
@@ -3482,27 +3462,31 @@ requires-dist = [
 provides-extras = ["ontology", "graph", "validation", "verify", "neo4j", "bench", "plot", "norm", "compare-native-otel", "dev", "all"]
 
 [[package]]
-name = "mas-library-lab"
+name = "mas-lab-library-lab"
 version = "0.2.0"
 source = { editable = "library-lab" }
 dependencies = [
-    { name = "mas-lab" },
+    { name = "mas-lab-component-bench" },
+    { name = "mas-lab-component-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mas-lab", editable = "lab" }]
+requires-dist = [
+    { name = "mas-lab-component-bench", editable = "lab/components/bench" },
+    { name = "mas-lab-component-core", editable = "lab/components/core" },
+]
 
 [[package]]
-name = "mas-library-samples"
+name = "mas-lab-library-samples"
 version = "0.2.0"
 source = { editable = "library-samples" }
 
 [[package]]
-name = "mas-library-skills"
+name = "mas-lab-library-skills"
 version = "0.2.0"
 source = { editable = "library-skills" }
 dependencies = [
-    { name = "mas-runtime" },
+    { name = "mas-lab-runtime" },
     { name = "python-frontmatter" },
     { name = "pyyaml" },
 ]
@@ -3525,32 +3509,32 @@ requires-dist = [
     { name = "deepagents", marker = "extra == 'langchain'", specifier = ">=0.7.0,<1.0.0" },
     { name = "google-adk", marker = "extra == 'adk'", specifier = ">=1.0.0,<3.0.0" },
     { name = "google-adk", marker = "extra == 'all'", specifier = ">=1.0.0,<3.0.0" },
-    { name = "mas-runtime", editable = "runtime" },
+    { name = "mas-lab-runtime", editable = "runtime" },
     { name = "python-frontmatter", specifier = ">=1.0.0,<2.0.0" },
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
 ]
 provides-extras = ["adk", "langchain", "all"]
 
 [[package]]
-name = "mas-library-standard"
+name = "mas-lab-library-standard"
 version = "0.2.0"
 source = { editable = "library-standard" }
 dependencies = [
     { name = "ddgs" },
     { name = "httpx" },
-    { name = "mas-runtime" },
+    { name = "mas-lab-runtime" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "ddgs", specifier = ">=9.14.0" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "mas-runtime", editable = "runtime" },
+    { name = "mas-lab-runtime", editable = "runtime" },
 ]
 
 [[package]]
-name = "mas-library-telemetry"
-version = "0.1.0"
+name = "mas-lab-library-telemetry"
+version = "0.2.0"
 source = { editable = "library-telemetry" }
 
 [package.optional-dependencies]
@@ -3559,7 +3543,7 @@ all = [
     { name = "clickhouse-connect" },
     { name = "ioa-observe-sdk" },
     { name = "jsonschema" },
-    { name = "mas-lab-bench" },
+    { name = "mas-lab-component-bench" },
     { name = "opentelemetry-sdk" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -3567,7 +3551,7 @@ all = [
 ]
 bench = [
     { name = "click" },
-    { name = "mas-lab-bench" },
+    { name = "mas-lab-component-bench" },
 ]
 clickhouse = [
     { name = "clickhouse-connect" },
@@ -3604,8 +3588,8 @@ requires-dist = [
     { name = "ioa-observe-sdk", marker = "extra == 'observe'", specifier = ">=1.0.49" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "jsonschema", marker = "extra == 'verify'", specifier = ">=4.0.0" },
-    { name = "mas-lab-bench", marker = "extra == 'bench'", editable = "lab/components/bench" },
-    { name = "mas-library-telemetry", extras = ["dev", "bench", "clickhouse"], marker = "extra == 'all'", editable = "library-telemetry" },
+    { name = "mas-lab-component-bench", marker = "extra == 'bench'", editable = "lab/components/bench" },
+    { name = "mas-lab-library-telemetry", extras = ["dev", "bench", "clickhouse"], marker = "extra == 'all'", editable = "library-telemetry" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'convert'", specifier = ">=1.20" },
     { name = "opentelemetry-sdk", marker = "extra == 'convert'", specifier = ">=1.20" },
     { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.20" },
@@ -3617,7 +3601,7 @@ requires-dist = [
 provides-extras = ["convert", "observe", "verify", "clickhouse", "bench", "dev", "all"]
 
 [[package]]
-name = "mas-runtime"
+name = "mas-lab-runtime"
 version = "0.2.0"
 source = { editable = "runtime" }
 dependencies = [
@@ -4916,15 +4900,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pika"
-version = "1.4.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f7/09/8c42dd00c4b3e09ebd174455d30823c261eefef9d2b7e94ae9ca779704c1/pika-1.4.1.tar.gz", hash = "sha256:e851f3e4992adfbf8eb64e9b86d94e3382f92ba0200055abedbb29676b8e713b", size = 154268, upload-time = "2026-05-22T18:01:24.855Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/7b/a09c0d378ee8604220902c58103104b2304ef99744c4b7fc45312d280484/pika-1.4.1-py3-none-any.whl", hash = "sha256:2daae7bd422a0fc4f4879fd48c9a1932ed74a0bc7172e1e5f9bde63a101ed074", size = 164962, upload-time = "2026-05-22T18:01:23.429Z" },
-]
-
-[[package]]
 name = "pillow"
 version = "12.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -6171,7 +6146,7 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -6256,7 +6231,7 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/25/c2700dfaf6442b4effaa91af24ebce5dc9d31bb4a69706313aae70d72cd0/scipy-1.18.0.tar.gz", hash = "sha256:67b2ad2ad54c72ca6d04975a9b2df8c3638c34ddd5b28738e94fc2b57929d378", size = 30774447, upload-time = "2026-06-19T15:01:43.456Z" }
 wheels = [
@@ -6498,13 +6473,13 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform == 'emscripten'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "packaging" },
-    { name = "pandas" },
-    { name = "patsy" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and sys_platform == 'emscripten'" },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and sys_platform == 'emscripten'" },
+    { name = "packaging", marker = "sys_platform == 'emscripten'" },
+    { name = "pandas", marker = "sys_platform == 'emscripten'" },
+    { name = "patsy", marker = "sys_platform == 'emscripten'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and sys_platform == 'emscripten'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and sys_platform == 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1f/3b/963a015dd8ea17e10c7b0e2f14d7c4daec903baf60a017e756b57953a4bf/statsmodels-0.14.4.tar.gz", hash = "sha256:5d69e0f39060dc72c067f9bb6e8033b6dccdb0bae101d76a7ef0bcc94e898b67", size = 20354802, upload-time = "2024-10-03T16:15:36.273Z" }
 
@@ -6525,13 +6500,13 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "packaging" },
-    { name = "pandas" },
-    { name = "patsy" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and sys_platform != 'emscripten'" },
+    { name = "numpy", version = "2.5.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and sys_platform != 'emscripten'" },
+    { name = "packaging", marker = "sys_platform != 'emscripten'" },
+    { name = "pandas", marker = "sys_platform != 'emscripten'" },
+    { name = "patsy", marker = "sys_platform != 'emscripten'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and sys_platform != 'emscripten'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' and sys_platform != 'emscripten'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0d/81/e8d74b34f85285f7335d30c5e3c2d7c0346997af9f3debf9a0a9a63de184/statsmodels-0.14.6.tar.gz", hash = "sha256:4d17873d3e607d398b85126cd4ed7aad89e4e9d89fc744cdab1af3189a996c2a", size = 20689085, upload-time = "2025-12-05T23:08:39.522Z" }
 wheels = [

@@ -4,7 +4,7 @@
 -->
 # Dataset manifest (`kind: Dataset`)
 
-**Package:** `mas-lab-bench` · **Schema:** `dataset.schema.yaml` · **apiVersion:** `lab/v1`
+**Package:** `lab/components/bench` · **Schema:** `dataset.schema.yaml` · **apiVersion:** `lab/v1`
 
 A **dataset** manifest lists the inputs of a benchmark.
 Each **item** is one case. It holds a user prompt and, optionally, human-in-the-loop (HITL) replies, memory seeds, tool fixtures, and expected results.

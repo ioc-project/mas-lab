@@ -184,8 +184,8 @@ Card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-s
 | Slot | Default | Shipped plugins |
 |------|---------|-----------------|
 | `governance` | `[]` | `sample` / `sample_governance`, `gov_no_undeclared_tool` (alias `no_undeclared_tool`), `retry_on_error`, `backtrack_on_error` |
-| `observability` | `[]` (flavour/CLI may attach `native`) | `native`, `otel` (from `mas-library-telemetry`) |
-| `context_sources` | `[]` | `native`, `adk`, `langchain` (skill engines from `mas-library-skills`) |
+| `observability` | `[]` (flavour/CLI may attach `native`) | `native`, `otel` (from `library-telemetry`) |
+| `context_sources` | `[]` | `native`, `adk`, `langchain` (skill engines from `library-skills`) |
 
 Tool providers are not an agent slot. The `local` provider loads `spec.tools`. Remote MCP endpoints come from infra [`ToolServerRegistry`](infra.md#toolserverregistry). Agent and overlay schemas reject a `providers` key.
 

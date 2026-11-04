@@ -4,8 +4,8 @@
 -->
 # Tutorial 9 — Building a knowledge graph from OTel and native events
 
-> **Packages:** `mas-library-kg` (native→KG is first-party; OTel→KG reuses
-> the `norm` package from SCOPE), `mas-library-telemetry` (span files from
+> **Packages:** `library-kg/` (native→KG is first-party; OTel→KG reuses
+> the `norm` package from SCOPE), `library-telemetry/` (span files from
 > [Tutorial 8](../08-telemetry/README.md))
 > **Prerequisite:** [Tutorial 8](../08-telemetry/README.md)
 > **Example traces:** [`library-kg/examples/qa-agent/`](https://github.com/ioc-project/mas-lab/tree/main/library-kg/examples/qa-agent)
@@ -39,13 +39,13 @@ Provenance and Explainability, [github.com/ioc-project/scope](https://github.com
 is the observability platform MAS-Lab feeds. Two of its pieces are not part of
 MAS Lab:
 
-- `oxp-ontology` (PyPI, hard dependency of `mas-library-kg`): the ontology,
+- `oxp-ontology` (PyPI, hard dependency of the kg library): the ontology,
   the SHACL shapes (`mas-shapes.ttl`) and the Python models
   `oxp_ontology.models.*`.
-- `norm` (extra `mas-library-kg[norm]`, installed from git): turns OTel spans
+- `norm` (kg library extra `norm`, installed from git): turns OTel spans
   into ontology nodes and edges with `norm.normalize()`.
 
-`mas-library-kg` is first-party: the native→KG normalizer, validation, Neo4j
+The kg library is first-party: the native→KG normalizer, validation, Neo4j
 serialization, `mas-lab kg` commands and pipeline steps. The OTel path wraps
 `norm.normalize()`, so it matches the platform's graph. The native path builds
 the same models without OTel or `norm`, because nothing else reads
@@ -164,7 +164,7 @@ cd library-kg
 python -m pytest tests/kg/test_native_otel_norm_equivalence.py -q
 ```
 
-It needs `mas-library-kg[norm]` and `mas-library-telemetry[convert]`. Every
+It needs the kg library's `norm` extra and the telemetry library's `convert` extra. Every
 case should pass.
 
 ---
@@ -207,7 +207,7 @@ mas-lab kg neo4j-push /tmp/t9-realtime-kg.jsonld --dry-run
 ```
 
 You should see a normalize summary with node and edge counts, then `MERGE`
-statements. This path needs `mas-library-kg[norm]`; without it the KG is empty.
+statements. This path needs the kg library's `norm` extra; without it the KG is empty.
 To go live, replace the first command with an agent run that uses the
 `observability-otel-realtime` overlay, and run the other two on a timer.
 
@@ -225,7 +225,7 @@ This is not incremental ingestion. `norm.normalize()` builds a fresh
 `Registry()` per call, so normalizing only new spans would leave tool calls
 disconnected. It does not scale to long-running agents. True streaming needs
 an event stream with a resumable cursor and an incremental registry in `norm`
-and `mas-library-kg`. Neither exists yet.
+and the kg library. Neither exists yet.
 
 ---
 

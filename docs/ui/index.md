@@ -7,7 +7,7 @@
 The MAS Lab web UI is a browser studio. You use it to edit manifests, launch
 experiments, and inspect the files a run produced.
 
-It talks over HTTP to `mas-lab-controller`, the same controller that backs
+It talks over HTTP to `lab/components/controller`, the same controller that backs
 `mas-lab serve`. To watch a running system (topology, events, chat), use the
 [live dashboard](live.md). It does not replace this studio.
 

@@ -5,17 +5,17 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-lab-bench"
+name = "mas-lab-component-bench"
 version = "0.2.0"
 description = "Benchmark engine, pipeline execution, plots and validation for MAS Lab."
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 
 dependencies = [
-    "mas-lab-core",
-    "mas-library-eval",
-    "mas-runtime",
-    "mas-ctl",
+    "mas-lab-component-core",
+    "mas-lab-library-eval",
+    "mas-lab-runtime",
+    "mas-lab-ctl",
     "jsonschema>=4.0",
     "click>=8.0",
     "huggingface_hub>=0.30.0",
@@ -25,7 +25,7 @@ dependencies = [
     "scipy>=1.10.0",
     "psutil>=5.9.0",
     "playwright>=1.40",
-    # MCE evaluation metrics are provided by mas-library-eval (workspace member)
+    # MCE evaluation metrics are provided by mas-lab-library-eval (workspace member)
 ]
 
 [tool.hatch.build.targets.wheel]

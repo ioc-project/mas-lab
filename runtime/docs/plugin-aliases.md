@@ -18,8 +18,8 @@ aliases:
 
 | Component | Role |
 | --- | --- |
-| `mas-runtime` | Owns the runtime registry, default alias manifest, validation, and lookup. |
-| `mas-library-standard` | Ships canonical built-in plugin implementations and the default alias data used by the runtime. |
+| `runtime/` | Owns the runtime registry, default alias manifest, validation, and lookup. |
+| `library-standard` | Ships canonical built-in plugin implementations and the default alias data used by the runtime. |
 | `config.yaml` | Workspace or user override file for aliases and other runtime configuration. |
 
 ## Naming

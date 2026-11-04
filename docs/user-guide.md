@@ -49,7 +49,7 @@ Flag tables: [References → CLI](references/index.md#cli).
 
 | Surface | Use for |
 |---------|---------|
-| [`mas-runtime`](cli/mas-runtime.md) | Kernel library. The console script only points at `mas-ctl`. |
+| [`runtime/`](cli/mas-runtime.md) | Kernel library. The console script only points at `mas-ctl`. |
 | [`mas-ctl`](cli/mas-ctl.md) | Chat, TUI, validate, compile, compose, `run-mas`, A2A `serve` |
 | [`mas-lab`](cli/mas-lab.md) | `init`, benchmarks, telemetry, plots, `kg`, `eval` |
 | `mas-mcp` | MCP tool server (see [MCP](#running-tools-through-mcp)) |
@@ -73,7 +73,7 @@ A lab is a folder of experiments. A library is reusable code and YAML. See
 Two ways to name a sample app:
 
 - `app: trip-planner` in an experiment's `application:` block. It resolves the
-  app's `mas.yaml` through the library catalog (here `mas-library-samples`).
+  app's `mas.yaml` through the library catalog (here `library-samples`).
 - `samples:apps/trip-planner/mas.yaml` anywhere a manifest path is accepted,
   for example `mas-ctl run-mas samples:apps/trip-planner/mas.yaml`.
 
@@ -166,7 +166,7 @@ The runtime uses local tools by default and loads MCP servers from infra (the
 infrastructure bundle that says where things are). Moving a tool from local to
 MCP does not change the agent spec.
 
-`mas-mcp` comes with `mas-library-ioa`. Serve a tool manifest, then point the
+`mas-mcp` comes with `library-ioa`. Serve a tool manifest, then point the
 runtime at that server with an infra `ToolServerRegistry`:
 
 ```bash

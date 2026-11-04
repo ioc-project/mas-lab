@@ -123,7 +123,7 @@ def test_from_yaml_does_not_read_env() -> None:
 
 
 def test_pipeline_step_cmd_passes_env_model_override() -> None:
-    src = (_REPO / "lab/src/mas/lab/cli/commands/run.py").read_text(
+    src = (_REPO / "lab/components/core/src/mas/lab/cli/commands/run.py").read_text(
         encoding="utf-8"
     )
     assert "model_override=env_model_override()" in src
@@ -135,7 +135,7 @@ def test_read_only_loaders_do_not_call_env_model_override() -> None:
         "lab/components/bench/src/mas/lab/benchmark/cli/clean.py",
         "lab/components/bench/src/mas/lab/benchmark/cli/analyze.py",
         "lab/components/bench/src/mas/lab/benchmark/cli/artifacts.py",
-        "lab/src/mas/lab/cli/commands/benchmark/follow.py",
+        "lab/components/core/src/mas/lab/cli/commands/benchmark/follow.py",
         "lab/components/bench/src/mas/lab/benchmark/engine.py",
     )
     for rel in files:

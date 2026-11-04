@@ -35,9 +35,18 @@ jobs:
           - name: bench
             path: lab/components/bench
             pyproject: lab/components/bench/pyproject.toml
+          - name: controller
+            path: lab/components/controller
+            pyproject: lab/components/controller/pyproject.toml
+          - name: telemetry
+            path: library-telemetry
+            pyproject: library-telemetry/pyproject.toml
+          - name: kg
+            path: library-kg
+            pyproject: library-kg/pyproject.toml
           - name: lab
-            path: lab
-            pyproject: lab/pyproject.toml
+            path: .
+            pyproject: pyproject.toml
 
     steps:
       - uses: actions/checkout@v4

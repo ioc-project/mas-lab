@@ -3,7 +3,7 @@
 """Flavour selection + validation for chat / tui / run-mas.
 
 A *flavour* is a deployment posture — a ``kind: Flavour`` manifest bundled in
-``mas-library-standard`` (``flavours/<name>.yaml``). It selects protocols and
+``mas.library.standard`` (``flavours/<name>.yaml``). It selects protocols and
 observability/control plugins. It is **not** a place for LLM parameters
 (those live in the agent spec) or infra coordinates — see
 ``docs/design/flavour-boundary.md``.

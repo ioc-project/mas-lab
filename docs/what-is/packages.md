@@ -6,29 +6,31 @@
 
 <p class="eyebrow">What you install</p>
 
-Each layer depends only on the layers above it in this table. There are no cycles.
+Each layer depends only on the layers above it. There are no cycles.
 
-| Layer | Package | Role |
+| Layer | Directory | Role |
 |---|---|---|
-| **Runtime** | `mas-runtime` | The kernel, contracts, plugins and design patterns. Library only; the console script points at `mas-ctl` |
-| **Orchestration** | `mas-ctl` | Builds and runs sessions: `chat`, `run-mas`, `validate`, `compile`, `compose` |
-| **Lab** | `mas-lab-core` | Shared contracts and telemetry types |
-| | `mas-lab-bench` | Runs benchmarks and analysis pipelines |
-| | `mas-lab-controller` | A background service with an HTTP API, used by the web UI |
-| | `mas-lab` | Installs the three above and provides the `mas-lab` command |
-| **Libraries** | `mas-library-standard` | Flavours, overlays, infra bundles, built-in plugins |
-| | `mas-library-eval` | Evaluation metrics consumed by pipeline steps |
-| | `mas-library-lab` | Shared types and backend code for the lab and its UI |
-| | `mas-library-samples` | Reference applications, datasets, tutorial fixtures |
-| | `mas-library-telemetry` | Converts and replays traces, exports to OpenTelemetry |
-| | `mas-library-kg` | Turns traces into a knowledge graph |
-| | `mas-library-skills` | The skill catalogue and the tools that read skills |
-| | `mas-library-ioa` | MCP client/server bridge and A2A plugins |
+| **Runtime** | `runtime/` | The kernel, contracts, plugins and design patterns. Library only; the console script points at `mas-ctl` |
+| **Orchestration** | `ctl/` | Builds and runs sessions: `chat`, `run-mas`, `validate`, `compile`, `compose` |
+| **Lab** | `lab/components/core/` | Shared contracts, telemetry types, and the `mas-lab` command |
+| | `lab/components/bench/` | Runs benchmarks and analysis pipelines |
+| | `lab/components/controller/` | A background service with an HTTP API, used by the web UI |
+| | `.` (repo root) | Empty meta-package that installs the rest of the stack |
+| **Libraries** | `library-standard/` | Flavours, overlays, infra bundles, built-in plugins |
+| | `library-eval/` | Evaluation metrics consumed by pipeline steps |
+| | `library-lab/` | Shared types and backend code for the lab and its UI |
+| | `library-samples/` | Reference applications, datasets, tutorial fixtures |
+| | `library-telemetry/` | Converts and replays traces, exports to OpenTelemetry |
+| | `library-kg/` | Turns traces into a knowledge graph |
+| | `library-skills/` | The skill catalogue and the tools that read skills |
+| | `library-ioa/` | MCP client/server bridge and A2A plugins |
 
 A *lab* is an experiment folder. A *library* is a folder with a `library.yaml`
 holding reusable applications, tools and plugins, referenced as `name:path`. The
 two are deliberately different things.
 
-See the [package map](../libraries.md), the [packages reference](../packages-reference.md)
-and [labs vs libraries](../labs-and-libraries.md). Directories in a checkout are
-on [Repo structure](repo.md).
+PyPI wheel names are generated from each directory's `pyproject.toml` into the
+[packages reference](../packages-reference.md). Plugin entry points are in the
+[plugins reference](../plugins-reference.md). Directories in a checkout are
+on [Repo structure](repo.md). See also the [package map](../libraries.md)
+and [labs vs libraries](../labs-and-libraries.md).
