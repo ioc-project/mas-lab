@@ -183,6 +183,48 @@ def test_provenance_on_includes_context_contributions() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Annotation layer
+# ---------------------------------------------------------------------------
+
+
+def test_annotation_off_by_default() -> None:
+    """annotation layer is off by default — CallAnnotation kinds are excluded."""
+    events = [
+        _event("execution_start"),
+        _event("context_assembled"),
+        _event("state_update_start"),
+        _event("observability_pre_execute_start"),
+        _event("client_response"),
+        _event("tool_result_injected"),
+        _event("user_input"),
+    ]
+    result = normalize_events(events, ONTOLOGY, "run-1")
+    kinds = _kinds(result)
+    assert "context_assembled" not in kinds
+    assert "state_update_start" not in kinds
+    assert "observability_pre_execute_start" not in kinds
+    assert "client_response" not in kinds
+    assert "tool_result_injected" not in kinds
+    assert "user_input" not in kinds
+    assert "execution_start" in kinds
+
+
+def test_annotation_on_includes_call_annotation_kinds() -> None:
+    """include_annotation=True includes point CallAnnotation kinds."""
+    events = [
+        _event("execution_start"),
+        _event("context_assembled"),
+        _event("state_update_end"),
+        _event("wait_state_start"),
+    ]
+    result = normalize_events(events, ONTOLOGY, "run-1", include_annotation=True)
+    kinds = _kinds(result)
+    assert "context_assembled" in kinds
+    assert "state_update_end" in kinds
+    assert "wait_state_start" in kinds
+
+
+# ---------------------------------------------------------------------------
 # Structural events are always included regardless of layer flags
 # ---------------------------------------------------------------------------
 
@@ -205,6 +247,7 @@ def test_structural_events_always_included() -> None:
         include_trajectory=False,
         include_provenance=False,
         include_governance=False,
+        include_annotation=False,
     )
     kinds = _kinds(result)
     assert "execution_start" in kinds

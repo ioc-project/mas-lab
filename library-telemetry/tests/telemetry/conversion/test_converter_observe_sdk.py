@@ -445,13 +445,13 @@ def test_observe_sdk_profile_sets_bare_tool_name_and_ioa_start_time(observe_sdk_
 
 @requires_otel
 def test_annotation_and_provenance_gate_independently(tmp_path):
-    """`annotation` and `provenance` are two independent toggles, not one
-    renamed the other: a parallel-group event needs `provenance` on to be
-    processed at all (its native-event block is `trajectory`) and
-    `annotation` on to actually render as a CallAnnotation span once it is
-    -- neither toggle alone is enough for it, but `annotation` alone is
-    enough for a non-trajectory-block CallAnnotation kind like `routing`
-    (`execution` block, no `provenance` dependency)."""
+    """`annotation` and `provenance` are two independent toggles.
+
+    Parallel-group events live on the trajectory block (`provenance` export
+    layer) and emit a ParallelGroup span — not a CallAnnotation. Routing
+    stays a CallAnnotation on the execution block, so it needs
+    `annotation` and does not depend on `provenance`.
+    """
     import json
 
     from mas.library.telemetry.conversion.replay import replay_events_file
@@ -510,15 +510,15 @@ def test_annotation_and_provenance_gate_independently(tmp_path):
 
     default = _names({})
     assert not any(n.endswith(".routing_annotation") for n in default)
-    assert not any("parallel_group" in n for n in default)
+    assert any("parallel_group" in n for n in default)
     # annotation=True is required for CallAnnotation on observe_sdk.
     with_ann = _names({"annotation": True})
     assert any(n.endswith(".routing_annotation") for n in with_ann)
     assert any("parallel_group" in n for n in with_ann)
-    # annotation=False drops CallAnnotation even when the export layer is on.
+    # annotation=False drops CallAnnotation; ParallelGroup stays on.
     no_ann = _names({"annotation": False})
     assert not any(n.endswith(".routing_annotation") for n in no_ann)
-    assert not any("parallel_group" in n for n in no_ann)
+    assert any("parallel_group" in n for n in no_ann)
     # provenance=False drops trajectory events before they reach the handler.
     no_prov = _names({"provenance": False, "annotation": True})
     assert any(n.endswith(".routing_annotation") for n in no_prov)

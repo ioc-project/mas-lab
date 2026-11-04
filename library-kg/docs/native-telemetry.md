@@ -138,7 +138,7 @@ Behaviour of `NativeGraphBuilder.upsert_call` (`core/native_graph_builder.py`):
 
 `KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` has 85 entries: 73 map to an ontology class (tables below) and 12 map to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the SCOPE ontology (`oxp-ontology`; see [ontology.md](ontology.md)).
 
-**Optional layers.** `LAYER_KINDS` groups some kinds into four layers that `normalize_events` can drop. Defaults: `trajectory` on; `infrastructure`, `provenance`, `governance` off. CLI flags: `--include-infrastructure`, `--include-trajectory`, `--include-provenance`, `--include-governance` (each with a `--no-` form); Python: the same `include_*` keyword arguments of `run_normalize`. A dropped layer produces no nodes for its kinds.
+**Optional layers.** `LAYER_KINDS` groups some kinds into five layers that `normalize_events` can drop. Defaults: `trajectory` on; `infrastructure`, `provenance`, `governance`, `annotation` off. CLI flags: `--include-infrastructure`, `--include-trajectory`, `--include-provenance`, `--include-governance`, `--include-annotation` (each with a `--no-` form); Python: the same `include_*` keyword arguments of `run_normalize`. A dropped layer produces no nodes for its kinds.
 
 | Layer | Kinds | Default |
 |-------|-------|---------|
@@ -146,6 +146,7 @@ Behaviour of `NativeGraphBuilder.upsert_call` (`core/native_graph_builder.py`):
 | `trajectory` | `parallel_group_*`, `branch_*`, `routing`, `routing_result` | on |
 | `provenance` | `context_part_contributed` | off |
 | `governance` | `audit`, `policy_denial`, `policy_allow`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_gate`, `hitl_request`, `governance_denied`, `governance_checked`, `governance_decision`, `governance_event`, `governance_policy`, `governance_authorize_*`, `governance_validate_*`, `obs_wrap_gov_authorize_*`, `obs_wrap_gov_validate_*` | off |
+| `annotation` | `context_assembled`, `state_update_*`, `agent_communication_*`, `checkpoint_*`, `observability_*_execute_*`, `user_input`, `user_output`, `client_response`, `tool_result_injected`, `boundary_ingress`, `context_steer`, `compaction`, `wait_state_*` | off |
 
 The "Spec required" and "Spec recommended" columns below come from `events.spec.yaml` (what `mas-lab kg verify` checks). Every `*_start` / `*_end` kind additionally requires `call_id` (L2) and recommends `parent_call_id`. The "Normalizer reads" details are in [Section 6](#6-per-kind-payload-reference).
 

@@ -128,6 +128,7 @@ def compare(
         run_id=run_id,
         include_trajectory=True,
         include_governance=True,
+        include_annotation=True,
     )
     native_nodes = doc["nodes"]
     native_edges = doc["edges"]
@@ -138,7 +139,6 @@ def compare(
     native_node_types = _type_counts(native_nodes, "node")
     otel_node_types = _type_counts(otel_nodes, "node")
     native_only = set(native_node_types) - set(otel_node_types)
-    otel_only = set(otel_node_types) - set(native_node_types)
 
     expected_extra = sorted(native_only & EXPECTED_NATIVE_EXTRA)
     unexpected_native = sorted(native_only - EXPECTED_NATIVE_EXTRA - CORE_TYPES)

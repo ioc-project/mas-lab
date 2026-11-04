@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Standalone step: structurally compare two kg.jsonld documents."""
+
 from __future__ import annotations
 
 import json
@@ -11,6 +12,43 @@ from typing import Any, Dict, Optional, Union
 from mas.library.kg.artifact import KGArtifact
 
 logger = logging.getLogger(__name__)
+
+
+def _node_type(node: Dict[str, Any]) -> str:
+    for key in ("node_type", "nodeType", "@type", "type"):
+        val = node.get(key)
+        if val:
+            text = str(val)
+            if "/" in text:
+                text = text.rsplit("/", 1)[-1]
+            if "#" in text:
+                text = text.rsplit("#", 1)[-1]
+            return text
+    return "unknown"
+
+
+def _edge_end(edge: Dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        val = edge.get(key)
+        if val:
+            return str(val)
+    return ""
+
+
+def _filter_doc(doc: Dict[str, Any], node_types: Optional[list[str]]) -> Dict[str, Any]:
+    if not node_types:
+        return doc
+    allowed = {str(t) for t in node_types}
+    nodes = [n for n in (doc.get("nodes") or []) if _node_type(n) in allowed]
+    keep = {str(n.get("id") or "") for n in nodes}
+    keep.discard("")
+    edges = []
+    for edge in doc.get("edges") or []:
+        src = _edge_end(edge, "from_id", "source", "from")
+        dst = _edge_end(edge, "to_id", "target", "to")
+        if src in keep and dst in keep:
+            edges.append(edge)
+    return {**doc, "nodes": nodes, "edges": edges}
 
 
 def _as_artifact(inp: "KGArtifact | str | Path") -> KGArtifact:
@@ -31,6 +69,7 @@ def run_compare_kg(
     strict: bool = False,
     fail_on_error: bool = False,
     output_path: Optional[Union[str, Path]] = None,
+    node_types: Optional[list[str]] = None,
 ) -> Dict[str, Any]:
     """Compare two KG documents and return a parity report.
 
@@ -41,6 +80,8 @@ def run_compare_kg(
         strict: When True, element-level diff failures count as failures.
         fail_on_error: Raise RuntimeError if the comparison fails.
         output_path: Optional path to write the parity report JSON.
+        node_types: If set, only these node types (and edges between them)
+            are compared. Used to keep a SCOPE default check.
 
     Returns:
         Parity report dict::
@@ -79,8 +120,12 @@ def run_compare_kg(
         strict,
     )
 
-    result = compare_kg(cand_artifact.to_doc(), ref_artifact.to_doc(), strict=strict)
+    cand_doc = _filter_doc(cand_artifact.to_doc(), node_types)
+    ref_doc = _filter_doc(ref_artifact.to_doc(), node_types)
+    result = compare_kg(cand_doc, ref_doc, strict=strict)
     report = result.to_dict()
+    if node_types:
+        report["node_types"] = list(node_types)
 
     if cand_was_path:
         report["candidate_path"] = str(cand_path_obj)

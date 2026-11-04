@@ -277,6 +277,48 @@ class TestCompareKG:
         assert "a" in result.reference_stats["agents"]
         assert "b" in result.reference_stats["agents"]
 
+    def test_node_types_filter_ignores_other_classes(self, tmp_path):
+        from mas.library.kg.steps.compare_kg import run_compare_kg
+
+        ref = _make_kg(agents=("a",))
+        cand = _make_kg(agents=("a",))
+        cand["nodes"].append({"id": "ann-1", "node_type": "CallAnnotation"})
+        rp = tmp_path / "ref.json"
+        cp = tmp_path / "cand.json"
+        rp.write_text(json.dumps(ref))
+        cp.write_text(json.dumps(cand))
+        report = run_compare_kg(cp, rp, node_types=["Session", "Agent", "AgentCall"])
+        assert report["passed"] is True
+        assert report["node_types"] == ["Session", "Agent", "AgentCall"]
+        assert report["candidate_stats"]["nodes"] == report["reference_stats"]["nodes"]
+
+    def test_node_types_filter_reads_alt_type_and_edge_keys(self, tmp_path):
+        from mas.library.kg.steps.compare_kg import run_compare_kg
+
+        def _doc():
+            return {
+                "nodes": [
+                    {"id": "sess", "@type": "https://ex.example/kg#Session"},
+                    {"id": "ac-a", "type": "https://ex.example/AgentCall"},
+                    {"id": "ann-1", "nodeType": "CallAnnotation"},
+                    {"id": "", "node_type": "AgentCall"},
+                ],
+                "edges": [
+                    {"source": "sess", "target": "ac-a", "edge_type": "contains"},
+                    {"from": "ac-a", "to": "ann-1", "edge_type": "annotates"},
+                    {"from_id": "missing", "to_id": "ac-a", "edge_type": "contains"},
+                ],
+            }
+
+        rp = tmp_path / "ref.json"
+        cp = tmp_path / "cand.json"
+        rp.write_text(json.dumps(_doc()))
+        cp.write_text(json.dumps(_doc()))
+        report = run_compare_kg(cp, rp, node_types=["Session", "AgentCall"])
+        assert report["passed"] is True
+        assert report["reference_stats"]["nodes"] == 3
+        assert report["candidate_stats"]["nodes"] == 3
+
 
 # ---------------------------------------------------------------------------
 # run_compare_kg step integration

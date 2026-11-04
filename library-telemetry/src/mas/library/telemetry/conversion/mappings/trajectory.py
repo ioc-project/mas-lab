@@ -2,9 +2,10 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Trajectory & annotation handlers.
 
-Routing decisions, user I/O, parallel-group fork/join markers, and the
-``obs_wrap_gov_*`` observability wrapper events.  Most emit ``CallAnnotation``
-point spans that record *what happened around* the structural calls.
+Routing decisions, user I/O, wait-state markers, and the
+``obs_wrap_gov_*`` observability wrapper events emit ``CallAnnotation``
+point spans. Parallel-group fork/join events emit a ``ParallelGroup``
+interval span (only when those events exist).
 
 Ontology blocks: ``trajectory`` (parallel groups) and ``execution``
 (routing / user I/O annotations).
@@ -69,9 +70,7 @@ def h_user_input(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.boundary": "CallAnnotation",
             "mas.agent.id": conv.agent_id(ev),
             "mas.annotation.kind": "user_input",
-            "mas.annotation.content": str(ev.get("content") or ev.get("input", ""))[
-                :2000
-            ],
+            "mas.annotation.content": str(ev.get("content") or ev.get("input", ""))[:2000],
         },
         ev.get("parent_call_id"),
         ts_ns=conv.ts_ns(ev),
@@ -99,23 +98,35 @@ def h_user_output(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     )
 
 
-@register("parallel_group_start", "parallel_group_end", "parallel_group_merge")
-def h_parallel_group(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.point_span(
-        "CallAnnotation",
+@register("parallel_group_start")
+def h_parallel_group_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    """Interval ParallelGroup span. Emitted only when a fork event exists."""
+    call_id = conv.require_call_id(ev)
+    conv.open_span(
+        call_id,
+        "ParallelGroup",
         {
-            "mas.boundary": "CallAnnotation",
+            "mas.boundary": "ParallelGroup",
             "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": ev.get("kind", "parallel_group"),
             "mas.parallel.group_id": ev.get("group_id", ""),
             "mas.parallel.phase": ev.get("phase", ""),
-            "mas.parallel.agent_ids": ",".join(
-                str(a) for a in (ev.get("agent_ids") or [])
-            ),
+            "mas.parallel.agent_ids": ",".join(str(a) for a in (ev.get("agent_ids") or [])),
         },
         ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-        call_id=ev.get("call_id") or None,
+        start_ns=conv.ts_ns(ev),
+    )
+
+
+@register("parallel_group_end", "parallel_group_merge")
+def h_parallel_group_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    conv.close_span(
+        ev.get("call_id") or conv.require_call_id(ev),
+        extra={
+            "mas.parallel.group_id": ev.get("group_id", ""),
+            "mas.parallel.phase": ev.get("phase", ""),
+        },
+        status=ev.get("status", "success"),
+        end_ns=conv.ts_ns(ev),
     )
 
 
@@ -167,7 +178,8 @@ __all__ = [
     "h_routing_result",
     "h_user_input",
     "h_user_output",
-    "h_parallel_group",
+    "h_parallel_group_start",
+    "h_parallel_group_end",
     "h_wait_state_start",
     "h_wait_state_end",
     "h_obs_wrap_gov",

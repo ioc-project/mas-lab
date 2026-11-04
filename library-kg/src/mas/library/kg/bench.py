@@ -121,6 +121,7 @@ class NormalizeEventsStep(PipelineStep):
             include_trajectory=bool(config.get("include_trajectory", True)),
             include_provenance=bool(config.get("include_provenance", False)),
             include_governance=bool(config.get("include_governance", False)),
+            include_annotation=bool(config.get("include_annotation", False)),
         )
         kg_path = output_dir / "kg.jsonld"
         return StepOutput(
@@ -289,13 +290,24 @@ class CompareKgStep(PipelineStep):
         output_dir = ctx.get_step_output_dir(self.name)
         output_dir.mkdir(parents=True, exist_ok=True)
         report_file = output_dir / "kg_compare_report.json"
+        raw_types = config.get("node_types")
+        node_types = [str(t) for t in raw_types] if isinstance(raw_types, list) else None
         report = run_compare_kg(
             candidate,
             reference,
             strict=bool(config.get("strict", False)),
             fail_on_error=bool(config.get("fail_on_error", False)),
             output_path=report_file,
+            node_types=node_types,
         )
+        if bool(config.get("fail_on_error", False)):
+            ref_n = int((report.get("reference_stats") or {}).get("nodes") or 0)
+            cand_n = int((report.get("candidate_stats") or {}).get("nodes") or 0)
+            if ref_n == 0 or cand_n == 0:
+                raise ValueError(
+                    f"Step '{self.name}': compare_kg saw an empty graph "
+                    f"(reference={ref_n} nodes, candidate={cand_n} nodes)"
+                )
         return StepOutput(
             data={
                 "passed": report.get("passed"),

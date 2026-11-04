@@ -45,17 +45,23 @@ import time
 import uuid
 from typing import Any, ClassVar, Dict, Optional, Set, Tuple
 
+from mas.library.telemetry.conversion import semconv
+from mas.library.telemetry.conversion.delegation import (
+    ensure_resumed_agent_call as _ensure_resumed_agent_call,
+)
+from mas.library.telemetry.conversion.delegation import (
+    resolve_agent_end_call_id as _resolve_agent_end_call_id,
+)
+from mas.library.telemetry.conversion.delegation import (
+    rewrite_delegate_tool_end as _rewrite_delegate_tool_end,
+)
+from mas.library.telemetry.conversion.delegation import (
+    rewrite_delegate_tool_start as _rewrite_delegate_tool_start,
+)
 from mas.library.telemetry.conversion.envelope import envelope_for_kind
 from mas.library.telemetry.conversion.exporter import OTEL_AVAILABLE
 from mas.library.telemetry.conversion.layers import ExportLayers, should_export_event
 from mas.library.telemetry.conversion.mappings.base import Handler, build_handler_table
-from mas.library.telemetry.conversion import semconv
-from mas.library.telemetry.conversion.delegation import (
-    ensure_resumed_agent_call as _ensure_resumed_agent_call,
-    resolve_agent_end_call_id as _resolve_agent_end_call_id,
-    rewrite_delegate_tool_end as _rewrite_delegate_tool_end,
-    rewrite_delegate_tool_start as _rewrite_delegate_tool_start,
-)
 from mas.library.telemetry.conversion.profiles import (
     default_extensions,
     normalize_converter_profile,
@@ -147,6 +153,7 @@ class MasOtelConverter:
             "ToolCall",
             "RealtimeSignal",
             "AgentLifecycleEvent",
+            "ParallelGroup",
         }
     )
     _OBSERVE_SDK_EXTENSION_BOUNDARIES: ClassVar[frozenset[str]] = frozenset(
@@ -1424,6 +1431,8 @@ class MasOtelConverter:
             if kind in {"routing", "routing_result"}:
                 kind = "routing_annotation"
             return f"{agent}.{kind}"
+        if boundary == "ParallelGroup":
+            return f"{agent}.parallel_group"
         if self._extensions:
             if boundary == "MemoryCall":
                 mem = str(attrs.get("mas.memory.type") or agent or "memory")
@@ -1455,6 +1464,7 @@ class MasOtelConverter:
             "LLMCall": "llm",
             "ToolCall": "tool",
             "CallAnnotation": "annotation",
+            "ParallelGroup": "parallel_group",
             "ProcessingCall": "processing",
             "ContextContribution": "context",
             "MemoryCall": "memory",

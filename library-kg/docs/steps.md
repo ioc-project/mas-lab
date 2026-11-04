@@ -79,6 +79,7 @@ def run_normalize(
     include_trajectory: bool = True,
     include_provenance: bool = False,
     include_governance: bool = False,
+    include_annotation: bool = False,
 ) -> KGArtifact
 ```
 
@@ -94,7 +95,7 @@ def run_normalize(
 | `fill_synthesized_processing_defaults` | `True` | Populate recommended fields on synthesized `ProcessingCall` nodes. |
 | `dry_run` | `False` | Parse and validate, write nothing. |
 | `strict` | `False` | Raise on an observability gap (unmapped event kind, missing `call_id`, ...) instead of logging a warning and skipping the event. |
-| `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance` | `False`, `True`, `False`, `False` | Event categories (layers) to include; see [normalization.md](normalization.md#8-layer-defaults-and-control). |
+| `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation` | `False`, `True`, `False`, `False`, `False` | Event categories (layers) to include; see [normalization.md](normalization.md#8-layer-defaults-and-control). |
 
 Returns the normalised `KGArtifact`. With `output_dir` set and `dry_run` false, it also
 writes `<output_dir>/kg.jsonld`.
@@ -347,6 +348,7 @@ def run_compare_kg(
     strict: bool = False,
     fail_on_error: bool = False,
     output_path: Optional[str | Path] = None,
+    node_types: Optional[list[str]] = None,
 ) -> dict
 ```
 
@@ -357,6 +359,7 @@ def run_compare_kg(
 | `strict` | `False` | Count element-level diff failures as comparison failures. |
 | `fail_on_error` | `False` | Raise `RuntimeError` if the comparison fails. |
 | `output_path` | `None` | Write the parity report JSON to this path. |
+| `node_types` | `None` | If set, only these node types (and edges between them) are compared. |
 
 Return value:
 
@@ -601,10 +604,10 @@ what it writes to the step output directory.
 | Step `type` | Wraps | Config keys read | Output |
 |-------------|-------|------------------|--------|
 | `verify_events` | `run_verify_events` | `events_path`, `filename`, `strictness`, `fail_on_error` | `events_verify_report.json` |
-| `normalize_events` | `run_normalize` | `events_path`, `filename`, `run_id`, `ontology_path`, `strict`, `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `artifact` (default `kg`) | `kg.jsonld` |
+| `normalize_events` | `run_normalize` | `events_path`, `filename`, `run_id`, `ontology_path`, `strict`, `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`, `artifact` (default `kg`) | `kg.jsonld` |
 | `normalize_otel` | `run_normalize_otel` | `spans_path`, `filename`, `run_id`, `ontology_path`, `strict`, `artifact` (default `kg_otel`) | `kg.jsonld` |
 | `validate_kg` | `run_validate_kg` | `kg_path`, `ontology_path`, `strict`, `fail_on_error` | `kg_validation_report.json` |
-| `compare_kg` | `run_compare_kg` | `reference_artifact`, `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`, `strict`, `fail_on_error` | `kg_compare_report.json` |
+| `compare_kg` | `run_compare_kg` | `reference_artifact`, `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`, `strict`, `fail_on_error`, `node_types` | `kg_compare_report.json` |
 | `neo4j_push` | `run_neo4j_push` | `kg_path`, `infra`, `uri`, `username`, `password_env`, `database`, `app_name`, `batch_size`, `clear_session`, `dry_run` | push summary |
 | `neo4j_dump` | `run_neo4j_dump` | `session_id`, `run_id`, `infra`, `uri`, `username`, `password_env`, `database` | `kg.jsonld` |
 

@@ -35,6 +35,12 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- Native CallAnnotation kinds (`state_update_*`, `context_assembled`,
+  `observability_*_execute_*`, `client_response`, …) sit in an
+  `annotation` layer, off by default, matching observe-sdk. Parallel
+  group events emit a `ParallelGroup` span when a run actually forks,
+  not a CallAnnotation. `compare_kg` can restrict the check to a list
+  of `node_types`.
 - A design pattern's protocol lines are built for each LLM call from the
   pattern's current phase. `plan_execute` synthesis and replan calls and the
   `tree_of_thoughts` final call now see their own instructions instead of
