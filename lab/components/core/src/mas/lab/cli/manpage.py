@@ -283,6 +283,12 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "plot",
     ),
     ManPage(
+        "mas-lab plot topology",
+        "lab/docs/cli/plot-topology.md",
+        "Agents, skills, tools and delegation of a MAS",
+        "plot",
+    ),
+    ManPage(
         "mas-lab plot list",
         "lab/docs/cli/plot-list.md",
         "Discover generated plot artefacts",
