@@ -28,6 +28,8 @@ Paths and XDG layout: [user-config.md](../user-config.md). CLI flags that overri
 | `<project>/config.yaml` | Workspace. The CLI walks up from the current directory, or uses `MAS_WORKSPACE_ROOT`. |
 | `$XDG_CONFIG_HOME/mas/config.yaml` | User fallback. `mas-lab init` writes it. |
 
+`mas-lab init` writes the [init template](https://github.com/ioc-project/mas-lab/blob/main/lab/components/core/src/mas/lab/templates/init/config.yaml): a minimal active setup at the top, then every other option commented out with its default. Uncomment a line to change it.
+
 Canonical samples:
 
 - [`library-samples/sample-workspace/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
@@ -71,6 +73,7 @@ The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and ru
 | `deployment` | string | none | Deployment manifest path, relative to the workspace |
 | `runtime_id` | string | none | Kernel or runtime id override |
 | `runtime_profile` | string | none | Path to a runtime-profile manifest |
+| `cache` | `read-only` | not set | `read-only` answers from the recorded answers only: no model call, no cache write, no API key, like `--cache-read-only`. Not set: call the model, replaying a recorded answer first. `--cache-write` on the command line overrides it. |
 | `trace` | `off` · `summary` · `full` or bool | `off` | Human exchange log on **stderr**. `true` means `summary`. `full` dumps payloads. Color is **not** implied. |
 | `trace_timestamps` | bool | `true` when tracing | UTC time and elapsed time on each exchange |
 | `trace_color` | bool | `false` | ANSI color. Opt-in. Same as `--trace-color`. |

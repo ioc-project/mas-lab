@@ -1,14 +1,50 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 # Canonical config template for `mas-lab init` (bundled in the mas-lab package).
+#
+# The lines below that are not commented out are the minimal setup.
+# Every other option is listed commented out, with its default when it has
+# one: uncomment a line to change it. Secrets never go in this file; put API
+# keys in the file named by `mas_ctl.env` or in the process environment.
+# Reference: docs/references/config.yaml.md
 
 mas_ctl:
   # Human exchange log on stderr. Machines use events.jsonl / telemetry.
   trace: summary
+  # --- Optional, all commented out. The value shown is the default. ---
+  # flavour: local                  # deployment preset (library-standard or ./flavours/)
+  # env: .env                       # gitignored secrets file, relative to the workspace
+  # deployment: deployment.yaml     # deployment manifest, relative to the workspace
+  # runtime_id: my-runtime          # kernel / runtime id override
+  # runtime_profile: runtime/profile.yaml
+  # trace_timestamps: true          # UTC time and elapsed time on each exchange
+  # trace_color: false              # ANSI color on the exchange log
+  # trace_engine: false             # raw engine I/O JSON
+  #
+  # LLM answers: which source `mas-ctl chat` and `serve` use.
+  #   (not set)       call the model, replaying a recorded answer first when the
+  #                   cache has one. Needs the API key. This is the default.
+  #   cache: read-only  answer only from recorded answers: no model call, no cache
+  #                   write, no API key. A question with no recording fails.
+  # To call the model live (and record answers) with a key, leave this line
+  # commented out, or pass --cache-write on the command line.
+  # cache: read-only
+  #
+  # Conversation archive (full session log). Off by default.
+  # archive:
+  #   enabled: false
+  #   dir_name: archive
+  #   memory_watermark_bytes: 67108864
 
 mas_lab:
   flavour: local
   benchmark_flavour: local-benchmark
+  # --- Optional, all commented out. The value shown is the default. ---
+  # benchmark:
+  #   clean_stale_outputs: false      # drop output of scenarios removed from experiment.yaml
+  #   clean_stale_trace_cache: true   # also drop trace-cache entries nothing refers to
+  # labs_search_paths:                # folders scanned for *.lab; when set, the only catalog
+  #   - labs
 
 # Included when infra setup is enabled by mas-lab init.
 # infra_refs registers additional infra yaml files into the library,
@@ -20,6 +56,8 @@ infra_refs:
 # a library ref (standard:openai), or a full path.
 default_infra: __INFRA_NAME__
 
+# --- Optional sections, all commented out. ---
+
 # Overlay plugins — gdb and checkpoint stores. Off unless listed.
 # Uncomment the key and any line to enable.
 # Labs may enable the same URNs under lab.enable_plugins.
@@ -29,3 +67,33 @@ default_infra: __INFRA_NAME__
 #   - mas.checkpoint_store.disk            # JSON files
 #   - mas.checkpoint_store.memory          # in-process map
 #   - mas.control_protocol.rpc             # JSON-lines ControlContract wire
+
+# Runtime engine manifests, merged left to right. Omit for package defaults.
+# runtime_refs:
+#   - standard:runtime-default
+
+# Middleware bundles, merged after the infra bundles.
+# middleware:
+#   - standard:my-middleware
+
+# Extra library search folders (a library root, or a parent of sibling libraries).
+# manifest_libraries:
+#   - ../my-library
+
+# Plugin aliases: friendly name -> canonical plugin URN.
+# aliases:
+#   react: mas.dp.react
+
+# Overrides merged over the runtime's built-in defaults (values shown are those defaults).
+# defaults:
+#   model: gpt-4o-mini
+#   design_pattern: react@v1
+#   context_manager: summarising
+#   assembler: assembler
+
+# Where output goes. Otherwise XDG folders or MAS_* variables apply.
+# paths:
+#   labs_dir: labs                  # benchmark run output
+#   cache_dir: .cache               # cache root
+#   runs_dir: runs                  # agent session run folders
+#   archive_dir: traces/archive     # used only when mas_ctl.archive.enabled is true
