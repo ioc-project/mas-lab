@@ -217,7 +217,7 @@ It drops the oldest tool-call groups in history first.
 It trims working memory by group only after history is exhausted.
 This keeps the live tool round intact for the provider.
 
-The trim implementation lives in **mas-library-standard** (`trim_messages_to_budget`).
+The trim implementation lives in **library-standard** (`trim_messages_to_budget`).
 Pairing repair, history slicing, working-memory caps, and compile defaults live under `lib/context/`.
 The assembler plugin uses those helpers, and `mas-ctl compile` uses the same defaults.
 The kernel does not.

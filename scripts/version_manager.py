@@ -7,13 +7,9 @@ Multi-package versioning script for the MAS Lab monorepo.
 Each package has its own version tracked in its pyproject.toml.
 The root VERSION file is the source of truth for coordinated releases.
 
-Packages:
-  runtime   → runtime/pyproject.toml           (mas-runtime)
-  ctl       → ctl/pyproject.toml               (mas-ctl)
-  library   → ctl/library/pyproject.toml        (mas-library-standard)
-  lab       → lab/pyproject.toml                (mas-lab)
-  core      → lab/components/core/pyproject.toml (mas-lab-core)
-  bench     → lab/components/bench/pyproject.toml (mas-lab-bench)
+Packages: short key → pyproject.toml (wheel name is [project].name there).
+  runtime, ctl, library, samples, skills, eval, lab-library, ioa, kg,
+  telemetry, lab, core, bench, controller
 
 Usage:
   python scripts/version_manager.py get [package]         # Get version
@@ -24,9 +20,10 @@ Usage:
   python scripts/version_manager.py set <version> [package] # Set version
 
     package: runtime | ctl | library | samples | skills | eval | lab-library |
-                     ioa | lab | core | bench | controller | all
+                     ioa | kg | telemetry | lab | core | bench | controller | all
   type:    rc | patch | minor | major
 """
+
 from __future__ import annotations
 
 import re
@@ -40,16 +37,18 @@ VERSION_FILE = ROOT / "VERSION"
 # Package name → pyproject.toml path
 PACKAGES: dict[str, Path] = {
     "runtime": ROOT / "runtime" / "pyproject.toml",
-    "ctl":     ROOT / "ctl" / "pyproject.toml",
+    "ctl": ROOT / "ctl" / "pyproject.toml",
     "library": ROOT / "library-standard" / "pyproject.toml",
     "samples": ROOT / "library-samples" / "pyproject.toml",
-    "skills":  ROOT / "library-skills" / "pyproject.toml",
-    "eval":    ROOT / "library-eval" / "pyproject.toml",
+    "skills": ROOT / "library-skills" / "pyproject.toml",
+    "eval": ROOT / "library-eval" / "pyproject.toml",
     "lab-library": ROOT / "library-lab" / "pyproject.toml",
-    "ioa":     ROOT / "library-ioa" / "pyproject.toml",
-    "lab":     ROOT / "lab" / "pyproject.toml",
-    "core":    ROOT / "lab" / "components" / "core" / "pyproject.toml",
-    "bench":   ROOT / "lab" / "components" / "bench" / "pyproject.toml",
+    "ioa": ROOT / "library-ioa" / "pyproject.toml",
+    "kg": ROOT / "library-kg" / "pyproject.toml",
+    "telemetry": ROOT / "library-telemetry" / "pyproject.toml",
+    "lab": ROOT / "pyproject.toml",
+    "core": ROOT / "lab" / "components" / "core" / "pyproject.toml",
+    "bench": ROOT / "lab" / "components" / "bench" / "pyproject.toml",
     "controller": ROOT / "lab" / "components" / "controller" / "pyproject.toml",
 }
 
@@ -179,9 +178,7 @@ def check_versions() -> None:
         if pv != root:
             mismatches.append(f"{pkg}={pv}")
     if mismatches:
-        raise ValueError(
-            f"Version mismatch with VERSION={root}: " + ", ".join(mismatches)
-        )
+        raise ValueError(f"Version mismatch with VERSION={root}: " + ", ".join(mismatches))
     print(f"All package versions match VERSION={root}")
 
 
@@ -208,20 +205,24 @@ def main() -> None:
             check_versions()
         elif cmd == "bump":
             if len(args) < 2:
-                print("Error: bump requires type", file=sys.stderr); sys.exit(1)
+                print("Error: bump requires type", file=sys.stderr)
+                sys.exit(1)
             bump_type = args[1]
             pkg = args[2] if len(args) > 2 else "all"
             bump_version(bump_type, pkg)
         elif cmd == "set":
             if len(args) < 2:
-                print("Error: set requires version", file=sys.stderr); sys.exit(1)
+                print("Error: set requires version", file=sys.stderr)
+                sys.exit(1)
             version = args[1]
             pkg = args[2] if len(args) > 2 else "all"
             set_version(version, pkg)
         else:
-            print(f"Error: Unknown command {cmd!r}", file=sys.stderr); sys.exit(1)
+            print(f"Error: Unknown command {cmd!r}", file=sys.stderr)
+            sys.exit(1)
     except (ValueError, FileNotFoundError) as e:
-        print(f"Error: {e}", file=sys.stderr); sys.exit(1)
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

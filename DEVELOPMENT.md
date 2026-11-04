@@ -93,17 +93,11 @@ Before you push, run `task verify-lint` (`task install-hooks` installs that as a
 
 ## Package layout
 
-| Directory | Package |
-| --- | --- |
-| `runtime/` | `mas-runtime` |
-| `ctl/` | `mas-ctl` |
-| `lab/` | `mas-lab` (meta-package) |
-| `lab/components/{core,bench,controller}/` | `mas-lab-core`, `mas-lab-bench`, `mas-lab-controller` |
-| `library-standard/` | `mas-library-standard` |
-| `library-samples/`, `library-lab/`, `library-eval/` | `mas-library-samples`, `mas-library-lab`, `mas-library-eval` |
-| `library-skills/`, `library-ioa/`, `library-kg/`, `library-telemetry/` | `mas-library-skills`, `mas-library-ioa`, `mas-library-kg`, `mas-library-telemetry` |
-
-The generated [packages reference](docs/packages-reference.md) lists every package with its dependencies and extras.
+Each installable directory has a `pyproject.toml`. The `[project].name` there
+is the PyPI wheel name. Do not copy those names into docs or application
+code — read them from pyproject (docs: `task docs-gen`; code: `mas._dist`).
+The generated [packages reference](docs/packages-reference.md) lists every
+package with its dependencies and extras.
 
 ## Secrets and credentials
 

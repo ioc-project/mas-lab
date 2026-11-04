@@ -2,12 +2,17 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-lab
+# Lab components
 
 > Batch experiments and figures for multi-agent systems.
 
 **Start:** [docs/index.md](docs/index.md) · [labs-quickstart.md](docs/labs-quickstart.md) ·
 [glossary.md](../docs/glossary.md) · [cli/observability.md](../docs/cli/observability.md).
+
+This directory is the lab: three component wheels that share the `mas.lab`
+namespace. The published `mas-lab` name on PyPI is the **repo-root meta-package**
+that installs these components plus the runtime, control plane, and libraries.
+The `mas-lab` command is provided by `lab/components/core/`.
 
 `mas-lab` runs **benchmark** **experiments** via `mas-ctl`, writes **`events.jsonl`**
 per **run**, and runs level hooks (`run` / `item` / `scenario` / `post`) to produce CSV/PNG results.
@@ -15,22 +20,24 @@ per **run**, and runs level hooks (`run` / `item` / `scenario` / `post`) to prod
 Stack position:
 
 ```text
-mas-runtime  →  single-agent execution
-mas-ctl      →  multi-agent orchestration
-mas-lab      →  evaluation / benchmarks / pipelines
+runtime/                 →  single-agent execution
+ctl/                     →  multi-agent orchestration
+lab/components/core/     →  mas-lab CLI, contracts, telemetry
+lab/components/bench/    →  benchmarks / pipelines / plots
+. (repo root)            →  meta-package installing the full stack
 ```
 
-Dependencies: [`mas-runtime`](../runtime/) and [`mas-ctl`](../ctl/).
+Dependencies: [`runtime/`](../runtime/) and [`ctl/`](../ctl/).
 
 ---
 
 ## Components
 
-| Component | Package | What it provides |
-| --------- | ------- | ---------------- |
-| [core](components/core/README.md) | `mas-lab-core` | Validation, config hygiene, export, telemetry |
-| [bench](components/bench/README.md) | `mas-lab-bench` | Benchmarks, pipelines, plots |
-| [controller](components/controller/README.md) | `mas-lab-controller` | HTTP API and UI backend |
+| Component | Directory | What it provides |
+| --------- | --------- | ---------------- |
+| [core](components/core/README.md) | `lab/components/core/` | Validation, config hygiene, export, telemetry |
+| [bench](components/bench/README.md) | `lab/components/bench/` | Benchmarks, pipelines, plots |
+| [controller](components/controller/README.md) | `lab/components/controller/` | HTTP API and UI backend |
 
 ---
 

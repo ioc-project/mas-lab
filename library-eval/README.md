@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-eval
+# library-eval
 
 Scores MAS runs with quality metrics and LLM-as-judge prompts. It wraps the Metrics Computation Engine (MCE), an open-source set of LLM-as-judge metrics from the AGNTCY `telemetry-hub` project, for MAS traces.
 
@@ -34,7 +34,7 @@ mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
 | `--list-metrics` | List available metrics and exit; `SOURCE` is then optional. |
 | `--recursive` | Score every trace under the `SOURCE` directory. |
 
-The package depends on `mas-lab-core`, `mas-lab-bench` and `mas-runtime` from this repository, plus the public MCE packages:
+The package depends on `lab/components/core`, `lab/components/bench` and `mas-runtime` from this repository, plus the public MCE packages:
 
 - `metrics-computation-engine`: MCE core.
 - `mce-metrics-plugin`: quality metrics (GoalSuccessRate, Groundedness, ResponseCompleteness, ...).
@@ -50,7 +50,7 @@ The package depends on `mas-lab-core`, `mas-lab-bench` and `mas-runtime` from th
 eval = "mas.library.eval.cli:EvalCliComponent"
 ```
 
-The `eval_mce` pipeline step, which scores a run into `metrics.json`, ships in `mas-library-lab` (`mas.library.lab.steps.eval.mce`) and calls into this library. `mas.library.eval.steps` holds an older CamelCase-metric step class that is not registered.
+The `eval_mce` pipeline step, which scores a run into `metrics.json`, ships in `library-lab` (`mas.library.lab.steps.eval.mce`) and calls into this library. `mas.library.eval.steps` holds an older CamelCase-metric step class that is not registered.
 
 ```
 src/mas/library/eval/

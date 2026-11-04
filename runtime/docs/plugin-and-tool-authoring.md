@@ -203,8 +203,6 @@ Register it in a library manifest as a `type: governance` entry (see the `mas.go
 Install from a repository checkout:
 
 ```bash
-uv sync --package mas-runtime      # kernel library
-uv sync --package mas-ctl          # CLIs (chat, run-mas, ...)
 uv sync --all-packages             # everything, including the libraries
 ```
 

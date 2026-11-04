@@ -84,7 +84,7 @@ def run_normalize_otel(
         except ImportError as exc:
             logger.warning(
                 "normalize_otel: norm is not installed (%s) — producing an empty "
-                "KG artifact. Install mas-library-kg[norm].",
+                "KG artifact. Install extra 'norm'.",
                 exc,
             )
             nodes, edges = [], []

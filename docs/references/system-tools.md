@@ -8,16 +8,16 @@ This page lists every system tool implemented in MAS-Lab. A *system tool* is a t
 
 | Tool | Package | Enablement | Declaration aliases |
 | --- | --- | --- | --- |
-| [`activate_skill`](#activate_skill) | `mas-library-skills` | implicit (`spec.skills`) or declared | `skill-access`, `skill_access` |
-| [`list_skill_files`](#list_skill_files) | `mas-library-skills` | with `activate_skill` | — |
-| [`read_skill_file`](#read_skill_file) | `mas-library-skills` | with `activate_skill` | — |
-| [`run_skill_script`](#run_skill_script) | `mas-library-skills` | implicit (skill `scripts/`, `auto_inject`) or declared | `run-skill-script` |
-| [`request_human_input`](#request_human_input) | `mas-library-standard` | declared only | — |
-| [`inform_user`](#inform_user) | `mas-library-standard` | declared only | — |
-| [`send`](#send) | `mas-library-standard` | declared only (`default_enabled: false`) | — |
-| [`create_subagent`](#create_subagent) | `mas-library-standard` | declared only | `spawn_subagent` |
+| [`activate_skill`](#activate_skill) | `library-skills` | implicit (`spec.skills`) or declared | `skill-access`, `skill_access` |
+| [`list_skill_files`](#list_skill_files) | `library-skills` | with `activate_skill` | — |
+| [`read_skill_file`](#read_skill_file) | `library-skills` | with `activate_skill` | — |
+| [`run_skill_script`](#run_skill_script) | `library-skills` | implicit (skill `scripts/`, `auto_inject`) or declared | `run-skill-script` |
+| [`request_human_input`](#request_human_input) | `library-standard` | declared only | — |
+| [`inform_user`](#inform_user) | `library-standard` | declared only | — |
+| [`send`](#send) | `library-standard` | declared only (`default_enabled: false`) | — |
+| [`create_subagent`](#create_subagent) | `library-standard` | declared only | `spawn_subagent` |
 
-The skill tools require `mas-library-skills`. Without it, declaring one fails with an unknown system tool error.
+The skill tools require `library-skills`. Without it, declaring one fails with an unknown system tool error.
 
 Example: declare a system tool on an agent.
 

@@ -11,6 +11,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Set
 
+from mas.library.kg._dist import extra_hint
+
 StrictnessMode = Literal["required", "recommended", "complete"]
 
 try:
@@ -323,7 +325,7 @@ def validate_event_json_schema(
         import jsonschema
     except ImportError as exc:
         raise JsonSchemaUnavailable(
-            "jsonschema not installed (pip install 'mas-library-kg[verify]')"
+            f"jsonschema not installed ({extra_hint('verify')})"
         ) from exc
 
     if schema is None:

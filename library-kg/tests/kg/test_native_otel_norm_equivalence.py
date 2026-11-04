@@ -17,22 +17,20 @@ _FIXTURE = _ROOT / "tests" / "fixtures" / "path_equivalence" / "events.jsonl"
 # above (see the regression this plan's research flagged from a prior debug
 # session) — not committed to the repo; set to run this check locally.
 _T02 = Path(os.environ.get("MAS_OTEL_T02_FIXTURE", "/tmp/mas-otel-baseline-t02/events.jsonl"))
-# library-kg has no runtime dependency on mas-library-telemetry (the emitter
+# library-kg has no runtime dependency on the telemetry library (the emitter
 # side; this is the consumer side) -- this test-only cross-package import
-# needs its source on sys.path. Default assumes the sibling worktree layout
-# this workspace uses; override via env var elsewhere (CI, another checkout
-# layout, a published mas-library-telemetry install that doesn't need this
-# sys.path hack at all).
+# needs its source on sys.path. Default is the sibling directory in this
+# checkout; override via env var elsewhere.
 _TELEMETRY_SRC = Path(
     os.environ.get(
         "MAS_LIBRARY_TELEMETRY_SRC",
-        "/Users/augjorda/repos/worktrees/mas-lab-library-telemetry/library-telemetry/src",
+        str(_ROOT.parent / "library-telemetry" / "src"),
     )
 )
 
 
 def _load_events(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]  # noqa: E501
 
 
 def _import_compare():

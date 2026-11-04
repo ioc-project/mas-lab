@@ -1,6 +1,6 @@
 # Controller Tests
 
-Tests for the `mas-lab-controller` package — the daemon, HTTP API, IPC,
+Tests for the `lab/components/controller` package — the daemon, HTTP API, IPC,
 manifest discovery, session management, and worker infrastructure.
 
 ## Running

@@ -52,7 +52,7 @@ experiment:
     # limit: 5                 # optional: first N items (smoke / CI)
 ```
 
-Install `mas-library-samples` (or `uv pip install -e library-samples`) so the
+Install `library-samples` (or `uv pip install -e library-samples`) so the
 `samples` locator resolves via its entry point.
 
 Labs may also declare `libraries: [samples]` under `lab:` in `lab-config.yaml` to

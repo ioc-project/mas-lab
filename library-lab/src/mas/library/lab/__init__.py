@@ -2,8 +2,9 @@
 #  SPDX-License-Identifier: Apache-2.0
 """mas.library.lab package."""
 
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+from mas._dist import installed_version
 
 
 def package_root() -> Path:
@@ -14,11 +15,9 @@ def package_root() -> Path:
             return parent
     return here
 
-try:
-    __version__ = version("mas-library-lab")
-except PackageNotFoundError:
-    __version__ = "0.1.0"
 
-from mas.library.lab.plots import execution_chain_graph
+__version__ = installed_version(file=__file__)
+
+from mas.library.lab.plots import execution_chain_graph  # noqa: E402
 
 __all__ = ["execution_chain_graph"]

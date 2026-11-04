@@ -16,7 +16,6 @@ import pytest
 
 from tests.conftest import requires_otel
 
-
 # ── tool_name ────────────────────────────────────────────────────────────────
 
 
@@ -50,6 +49,7 @@ def test_exception_hierarchy_and_messages():
     assert "spec" in str(ex.SpecNotFoundError("/nope/spec.yaml")).lower()
     assert "4318" in str(ex.CollectorPushError("http://x:4318", "boom"))
     assert "clickhouse-connect" in str(ex.ClickHouseUnavailableError())
+    assert "convert" in str(ex.OtelSdkUnavailableError())
 
 
 # ── pipeline ─────────────────────────────────────────────────────────────────
@@ -519,7 +519,6 @@ def test_rekey_otlp_session_id_stamps_app_prefixed_uuid():
 
 def test_spanspec_custom_rules(tmp_path):
     import yaml
-
     from mas.library.telemetry.verification import SpanValidator
 
     spec = {
@@ -577,7 +576,6 @@ def test_spanspec_custom_rules(tmp_path):
 
 def test_spanspec_suffix_ancestor_and_complete(tmp_path):
     import yaml
-
     from mas.library.telemetry.verification import SpanValidator
 
     spec = {

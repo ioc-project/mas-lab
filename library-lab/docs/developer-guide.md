@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-lab Developer Guide
+# library-lab Developer Guide
 
 This guide covers extending public lab-oriented providers and utilities.
 

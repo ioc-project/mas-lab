@@ -108,4 +108,4 @@ Reference: [infra.md, ToolServerRegistry](../manifests/infra.md#toolserverregist
 - [agent.md](../manifests/agent.md)
 - [tool-server-registry.md](tool-server-registry.md)
 - [Tutorial 4: MCP tools](../tutorials/04-mcp-tools/README.md)
-- MCP mapping: `library_ioa.plugins.mcp.contract` (package `mas-library-ioa`)
+- MCP mapping: `library_ioa.plugins.mcp.contract` (package `library-ioa`)

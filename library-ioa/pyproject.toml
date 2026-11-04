@@ -5,7 +5,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-ioa"
+name = "mas-lab-library-ioa"
 version = "0.2.0"
 description = "MCP client/server bridge and A2A agent_comm / agent_expose plugins."
 readme = "README.md"
@@ -13,7 +13,7 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
     "mcp>=2.2",
-    "mas-runtime",
+    "mas-lab-runtime",
     "a2a-sdk[http-server,sqlite]>=1.1.5",
     "uvicorn>=0.30",
 ]
@@ -38,4 +38,4 @@ packages = ["src/library_ioa"]
 "library.yaml" = "src/library_ioa/library.yaml"
 
 [tool.uv.sources]
-mas-runtime = { workspace = true }
+mas-lab-runtime = { workspace = true }

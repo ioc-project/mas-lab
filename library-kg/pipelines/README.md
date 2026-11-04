@@ -1,12 +1,12 @@
 # KG pipeline library
 
-Reusable `kind: Pipeline` manifests shipped with **mas-library-kg**. Steps delegate
+Reusable `kind: Pipeline` manifests shipped with **library-kg**. Steps delegate
 to `mas-lab-graph` (`normalize_events`, `validate_kg`, `compare_kg`, …) and
 **library-kg** algorithms.
 
 ## Referencing pipelines
 
-Install `mas-library-kg` in the workspace venv (scope-integration `task init` does
+Install `library-kg` in the workspace venv (scope-integration `task init` does
 this). The package registers scheme **`library-kg`** via
 `mas.runtime.manifest_libraries` — no `config.yaml` entry required.
 

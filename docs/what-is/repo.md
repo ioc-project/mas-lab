@@ -11,9 +11,9 @@ piece, or the docs, tests, and labs that sit beside them.
 
 ```text
 mas-lab/
-├── runtime/               mas-runtime
-├── ctl/                   mas-ctl
-├── lab/                   mas-lab-core, mas-lab-bench, mas-lab-controller
+├── runtime/               kernel
+├── ctl/                   control plane
+├── lab/                   lab CLI, benchmarks, controller
 ├── library-standard/      flavours, overlays, infra bundles
 ├── library-samples/       reference apps and tutorial fixtures
 ├── library-eval/          evaluation metrics
@@ -54,11 +54,11 @@ vocabulary:
 
 | Name | What it is |
 | --- | --- |
-| **package** | A published wheel (`mas-lab`, `mas-lab-core`, and so on). |
-| **component** | One of the three sub-wheels under `lab/components/` (`mas-lab-core`, `mas-lab-bench`, `mas-lab-controller`). |
+| **package** | A published wheel. Names are listed in the [packages reference](../packages-reference.md). |
+| **component** | One of the three sub-wheels under `lab/components/`. |
 | **lab (definition)** | A `*.lab` folder under `labs/` that describes a paper experiment. |
-| **runtime modules** | Code under `mas.lab.components` that the `mas-lab` package ships. Unrelated to the build components above. |
-| **library** | A folder with `library.yaml` (`library-lab/` is `mas-library-lab`, a plugin library). |
+| **runtime modules** | Code under `mas.lab.components` that the core component ships. Unrelated to the build components above. |
+| **library** | A folder with `library.yaml` (the scheme in `samples:apps/…` refs). |
 
 Python namespaces keep `lab/components/*/src/mas/lab/...` (installed into
 `mas.lab`) distinct from the `mas.lab.components` subpackage. The

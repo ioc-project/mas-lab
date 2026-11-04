@@ -155,7 +155,7 @@ def load_experiment(
             _fpath = resolve_flavour_path(flavour_name)
             _flavour = _load_flavour(_fpath)
             logger.info(
-                "Flavour: %s (mas-library-standard: %s)",
+                "Flavour: %s (mas.library.standard: %s)",
                 _flavour.get("metadata", {}).get("name", flavour_name),
                 _fpath,
             )

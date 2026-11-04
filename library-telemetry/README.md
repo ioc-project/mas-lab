@@ -1,4 +1,4 @@
-# mas-library-telemetry
+# library-telemetry
 
 Converts native MAS execution events (`events.jsonl`) into OpenTelemetry (OTel) spans, verifies the spans against the MAS SpanSpec, and sends them to an OTLP collector.
 
@@ -80,7 +80,7 @@ uv pip install -e "library-telemetry[convert,verify,clickhouse,dev]"   # everyth
 | `verify` | `SpanValidator` (L1-L4) and JSON-schema envelope (`pyyaml`, `jsonschema`) | validators raise or degrade to best-effort |
 | `clickhouse` | `dump_spans` / `list_apps` read-back | raises `ClickHouseUnavailableError` |
 
-The inverse direction (OTel to KG) needs `uv pip install -e library-kg`. The `mas-lab telemetry` commands and the pipeline steps also need the `[bench]` extra (`mas-lab-bench`, `click`); the repository workspace install provides it.
+The inverse direction (OTel to KG) needs `uv pip install -e library-kg`. The `mas-lab telemetry` commands and the pipeline steps also need the `[bench]` extra (`lab/components/bench`, `click`); the repository workspace install provides it.
 
 ## Recipes
 
@@ -350,7 +350,7 @@ mas/library/telemetry/
 | `library-telemetry` (`mas.library.telemetry`) | native events to OTel spans, span verification, OTLP serialization |
 | `library-kg` (`mas.library.kg`) | OTel spans to events to KG, plus KG verification (the inverse direction) |
 | `mas-lab` (`mas.lab`) | benchmarks and pipelines; `bench.py` adapts this library's functions to `PipelineStep`s |
-| `mas-library-standard` (`mas.library.standard`) | ships the native observability plugin that writes the `events.jsonl` this library converts |
+| `library-standard` (`mas.library.standard`) | ships the native observability plugin that writes the `events.jsonl` this library converts |
 
 ## Extending
 

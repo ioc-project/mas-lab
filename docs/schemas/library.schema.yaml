@@ -31,14 +31,16 @@ properties:
 
   name:
     type: string
-    pattern: "^[a-z0-9][a-z0-9-]*$"
-    description: "Library package name, e.g. mas-library-lab."
+    pattern: "^[a-z0-9][a-z0-9_-]*$"
+    description: >
+      Library scheme used in `name:path` refs (the entry-point name, e.g.
+      `samples`, `standard`). Not the PyPI wheel name.
 
   schemes:
     type: array
     items:
       type: string
-      pattern: "^[a-z0-9][a-z0-9-]*$"
+      pattern: "^[a-z0-9][a-z0-9_-]*$"
     description: >
       Alternate library identifiers (rarely needed). Prefer one name: the
       directory stem and the install entry point. Do not add aliases.
@@ -152,8 +154,10 @@ properties:
         extra:
           type: string
           description: >
-            pip/uv extra that installs requires:, e.g.
-            "mas-library-telemetry[convert]". Used by `mas-ctl plugin enable <urn>`.
+            Bare extra name that installs requires: (e.g. `convert`). The
+            runtime prefixes the wheel name from that library's pyproject.toml.
+            Used by `mas-ctl plugin enable <urn>`. A full pip spec is still
+            accepted for third-party libraries.
         factory:
           type: string
           description: >

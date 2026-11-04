@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-ctl
+# ctl
 
 > Multi-agent orchestration — compile, compose, chat, validate, run.
 
@@ -28,8 +28,6 @@ Benchmarking is **`mas-lab`**, not `mas-ctl`.
 ## Install
 
 ```bash
-uv sync --package mas-ctl
-# or full workspace
 uv sync --all-packages
 ```
 

@@ -1,33 +1,42 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 [project]
-name = "mas-lab-workspace"
+name = "mas-lab"
 version = "0.2.0"
-description = "MAS Lab workspace — v2 cutover (runtime, ctl, libraries)"
+description = "MAS Lab — meta-package installing the runtime, control plane, lab components, and libraries."
+readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 dependencies = [
-    "mas-runtime",
-    "mas-lab",
-    "mas-lab-controller",
-    "mas-ctl",
-    "mas-library-standard",
-    "mas-library-skills",
-    "mas-library-samples",
-    "mas-library-lab",
-    "mas-library-eval",
-    "mas-library-ioa[cli]",
-    "mas-library-telemetry",
-    "mas-library-kg",
-    "pika>=1.4.1",
+    "mas-lab-runtime",
+    "mas-lab-ctl",
+    "mas-lab-component-core",
+    "mas-lab-component-bench",
+    "mas-lab-component-controller",
+    "mas-lab-library-standard",
+    "mas-lab-library-skills",
+    "mas-lab-library-samples",
+    "mas-lab-library-lab",
+    "mas-lab-library-eval",
+    "mas-lab-library-ioa[cli]",
+    "mas-lab-library-telemetry",
+    "mas-lab-library-kg",
 ]
+
+[project.urls]
+Homepage = "https://github.com/outshift-open/mas-lab"
+Documentation = "https://github.com/outshift-open/mas-lab/tree/main/docs"
+Issues = "https://github.com/outshift-open/mas-lab/issues"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mas_lab_workspace"]
+bypass-selection = true
+
+[tool.hatch.build.targets.sdist]
+only-include = ["README.md", "LICENSE", "pyproject.toml"]
 
 [dependency-groups]
 dev = [
@@ -55,27 +64,26 @@ members = [
     "library-ioa",
     "library-telemetry",
     "library-kg",
-    "lab",
     "lab/components/core",
     "lab/components/bench",
     "lab/components/controller",
 ]
 
 [tool.uv.sources]
-mas-runtime = { workspace = true }
-mas-ctl         = { workspace = true }
-mas-library-standard = { workspace = true }
-mas-library-skills   = { workspace = true }
-mas-library-samples  = { workspace = true }
-mas-library-lab      = { workspace = true }
-mas-library-eval     = { workspace = true }
-mas-library-ioa = { workspace = true }
-mas-library-telemetry = { workspace = true }
-mas-library-kg = { workspace = true }
-mas-lab         = { workspace = true }
-mas-lab-core    = { workspace = true }
-mas-lab-bench   = { workspace = true }
-mas-lab-controller = { workspace = true }
+mas-lab-runtime = { workspace = true }
+mas-lab-ctl         = { workspace = true }
+mas-lab-library-standard = { workspace = true }
+mas-lab-library-skills   = { workspace = true }
+mas-lab-library-samples  = { workspace = true }
+mas-lab-library-lab      = { workspace = true }
+mas-lab-library-eval     = { workspace = true }
+mas-lab-library-ioa = { workspace = true }
+mas-lab-library-telemetry = { workspace = true }
+mas-lab-library-kg = { workspace = true }
+mas-lab-component-core    = { workspace = true }
+mas-lab-component-bench   = { workspace = true }
+mas-lab-component-controller = { workspace = true }
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"

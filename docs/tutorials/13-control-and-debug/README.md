@@ -4,7 +4,7 @@
 -->
 # Tutorial 13 — Control attach and debug scripts
 
-> **Packages:** `mas-runtime`, `mas-ctl`, `mas-library-standard`
+> **Packages:** `runtime/`, `ctl/`, `library-standard/`
 > **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md),
 > [Tutorial 11](../11-sessions-and-recovery/README.md) (checkpoint, fork,
 > `--load-checkpoint`) and a configured model. Offline, you can only run

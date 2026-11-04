@@ -21,7 +21,7 @@ from tests.conftest import requires_otel
 
 _HERE = Path(__file__).resolve()
 PACKAGE_ROOT = _HERE.parents[3]  # library-telemetry/
-REPO_ROOT = _HERE.parents[4]  # mas-lab-library-telemetry/
+REPO_ROOT = _HERE.parents[4]  # repository root
 TRIP_PLANNER_TRACE = (
     REPO_ROOT / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
 )

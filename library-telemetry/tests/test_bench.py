@@ -22,7 +22,7 @@ def _has_bench() -> bool:
 
 _HAS_BENCH = _has_bench()
 requires_bench = pytest.mark.skipif(
-    not _HAS_BENCH, reason="mas-lab-bench not installed"
+    not _HAS_BENCH, reason="bench extra not installed"
 )
 
 
@@ -37,7 +37,6 @@ def test_core_library_does_not_require_bench():
 @requires_bench
 def test_adapters_register_and_wrap():
     from mas.lab.benchmark.pipeline import PipelineStep
-
     from mas.library.telemetry.bench import EventsToOtelStep, VerifyOtelStep
 
     assert issubclass(EventsToOtelStep, PipelineStep)

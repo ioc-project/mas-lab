@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# Lab manifests (`mas-lab-bench`)
+# Lab manifests (`lab/components/bench`)
 
 A **lab** is a `*.lab/` folder that holds experiment YAML files, an optional `lab-config.yaml`, **datasets** (the inputs a run uses), and **overlays** (small patches that define scenario variants).
 Create one when you want a self-contained, runnable study.

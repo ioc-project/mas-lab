@@ -9,7 +9,7 @@ a given session (or trace) so they can be re-verified or folded into a KG.
 
 Requires the ``clickhouse`` extra::
 
-    uv pip install -e "mas-library-telemetry[clickhouse]"
+    this library's ``clickhouse`` extra
 """
 
 from __future__ import annotations
@@ -86,14 +86,9 @@ def dump_spans(
     if app_name:
         where += f" AND ServiceName = {{{app_name!r}}}"
 
-    query = (
-        f"SELECT * FROM {_database}.{table} WHERE {where} "
-        f"ORDER BY Timestamp ASC FORMAT JSONEachRow"
-    )
+    query = f"SELECT * FROM {_database}.{table} WHERE {where} ORDER BY Timestamp ASC FORMAT JSONEachRow"
 
-    client = _get_client(
-        host=host, port=port, user=user, database=database, password_env=password_env
-    )
+    client = _get_client(host=host, port=port, user=user, database=database, password_env=password_env)
     rows = client.query(query)
 
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -101,7 +96,7 @@ def dump_spans(
     span_count = 0
     with out.open("w", encoding="utf-8") as fh:
         for row in rows.result_rows:
-            fh.write(json.dumps(dict(zip(col_names, row)), default=str) + "\n")
+            fh.write(json.dumps(dict(zip(col_names, row, strict=True)), default=str) + "\n")
             span_count += 1
 
     return {
@@ -129,12 +124,10 @@ def list_apps(
         f"FROM {_database}.{table} "
         f"GROUP BY ServiceName ORDER BY spans DESC FORMAT JSONEachRow"
     )
-    client = _get_client(
-        host=host, port=port, user=user, database=database, password_env=password_env
-    )
+    client = _get_client(host=host, port=port, user=user, database=database, password_env=password_env)
     rows = client.query(query)
     col_names = rows.column_names
-    return [dict(zip(col_names, r)) for r in rows.result_rows]
+    return [dict(zip(col_names, r, strict=True)) for r in rows.result_rows]
 
 
 __all__ = ["dump_spans", "list_apps"]

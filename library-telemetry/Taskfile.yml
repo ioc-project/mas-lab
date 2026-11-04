@@ -1,4 +1,4 @@
-# Taskfile for mas-library-telemetry — CI parity with dedicated verification subtasks.
+# Taskfile for library-telemetry — CI parity with dedicated verification subtasks.
 #
 #   task --list                 # show all verification subtasks
 #   task ci                     # run the full gate (what CI runs)
@@ -32,7 +32,7 @@ tasks:
       collector/clickhouse.py lazy-imports it per-call (like neo4j/
       push.py), and its tests inject a fake module into sys.modules
       instead of using the real package; it's in [all] purely so a full
-      CI run doesn't have an untested import path. mas-lab-bench resolves
+      CI run doesn't have an untested import path. lab/components/bench resolves
       via this repo's own [tool.uv.sources] workspace mapping to
       thirdparty/mas-lab/ (not needed at all when NO_OPTIONAL=true).
     cmds:

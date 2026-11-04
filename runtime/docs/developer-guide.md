@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-runtime Developer Guide
+# Runtime developer guide
 
 This guide is for developers who extend `mas-runtime` with plugins, tools and overlays without breaking contract and hook semantics.
 

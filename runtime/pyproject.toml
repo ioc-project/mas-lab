@@ -5,7 +5,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-runtime"
+name = "mas-lab-runtime"
 version = "0.2.0"
 description = "MAS Runtime V2 — Mealy kernel (embeddable library)"
 readme = "README.md"

@@ -7,25 +7,25 @@ Pipeline step base classes and YAML pipeline loader.
 """
 
 
-import asyncio
-import importlib
-import importlib.util
-import inspect
-import sys
-import warnings as _warnings_module
-from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union
+import asyncio  # noqa: E402
+import importlib  # noqa: E402
+import importlib.util  # noqa: E402
+import inspect  # noqa: E402
+import sys  # noqa: E402
+import warnings as _warnings_module  # noqa: E402
+from abc import ABC, abstractmethod  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union  # noqa: E402
 
-import yaml
-from mas.lab.benchmark.pipeline.models import (
+import yaml  # noqa: E402
+from mas.lab.benchmark.pipeline.models import (  # noqa: E402
     _STEP_KNOWN_KEYS,
     ConfigParam,
     PipelineConfig,
     StepManifest,
     StepOutput,
 )
-from mas.runtime.registry import get_registry, register_plugin
+from mas.runtime.registry import get_registry, register_plugin  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Step type resolution
@@ -158,8 +158,8 @@ def resolve_step_class(name: str, *, base_dir: Optional[Path] = None, required_b
             hint = ""
             if not known:
                 hint = (
-                    " No pipeline steps are registered. Install mas-library-lab "
-                    "(workspace member) so extract_trace_stats and other library-lab "
+                    " No pipeline steps are registered. Install the lab library "
+                    "(workspace member library-lab) so extract_trace_stats and other "
                     "steps are on the plugin registry."
                 )
             raise ValueError(
@@ -212,17 +212,17 @@ class PipelineStep(ABC):
             return bool(cfg_val)
         return bool(type(self).persistent)
 
-    def on_batch(self, batch: List[Dict[str, Any]], ctx: "ExecutionContext") -> None:
+    def on_batch(self, batch: List[Dict[str, Any]], ctx: "ExecutionContext") -> None:  # noqa: F821
         """Fold a batch of records. Default is a no-op; override to consume streams."""
         del batch, ctx
         return None
 
-    async def finish(self, ctx: "ExecutionContext") -> StepOutput:
+    async def finish(self, ctx: "ExecutionContext") -> StepOutput:  # noqa: F821
         """Seal-side persist. Default delegates to :meth:`execute`."""
         return await self.execute(ctx)
 
     @abstractmethod
-    async def execute(self, ctx: "ExecutionContext") -> StepOutput:
+    async def execute(self, ctx: "ExecutionContext") -> StepOutput:  # noqa: F821
         pass
 
     def outputs_exist(self, output_dir: Path) -> bool:
@@ -296,11 +296,11 @@ class BatchPipelineStep(PipelineStep, ABC):
     async def process_one(
         self,
         item: Any,
-        ctx: "ExecutionContext",
+        ctx: "ExecutionContext",  # noqa: F821
     ) -> StepOutput:
         pass
 
-    def _get_items(self, ctx: "ExecutionContext") -> List[Any]:
+    def _get_items(self, ctx: "ExecutionContext") -> List[Any]:  # noqa: F821
         items = self.config.get("items", [])
         if not items:
             raise ValueError(
@@ -312,7 +312,7 @@ class BatchPipelineStep(PipelineStep, ABC):
         self,
         items: List[Any],
         results: List[StepOutput],
-        ctx: "ExecutionContext",
+        ctx: "ExecutionContext",  # noqa: F821
     ) -> StepOutput:
         all_files: List[Path] = []
         all_data: List[Dict[str, Any]] = []
@@ -327,7 +327,7 @@ class BatchPipelineStep(PipelineStep, ABC):
             metadata={"item_count": len(items), "results": all_meta},
         )
 
-    async def execute(self, ctx: "ExecutionContext") -> StepOutput:
+    async def execute(self, ctx: "ExecutionContext") -> StepOutput:  # noqa: F821
         items = self._get_items(ctx)
         concurrency = int(self.config.get("concurrency", 1))
 

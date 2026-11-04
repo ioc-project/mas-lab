@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-lab-core
+# lab/components/core
 
-`mas-lab-core` is the foundation component of mas-lab. It validates multi-agent system (MAS) specifications, checks manifests for configuration hygiene, verifies contracts against traces, exports agent manifests, and pushes traces to an OpenTelemetry (OTel) collector.
+`lab/components/core` is the foundation component of mas-lab. It validates multi-agent system (MAS) specifications, checks manifests for configuration hygiene, verifies contracts against traces, exports agent manifests, and pushes traces to an OpenTelemetry (OTel) collector.
 
 Use it when you author a `mas.yaml` and want to check it, or when you extend the benchmark pipeline with custom steps.
 
@@ -24,11 +24,11 @@ What it provides:
 ## Installation
 
 ```bash
-# As a satellite of mas-lab
-uv pip install -e "mas-lab[all]"
+# Full stack (meta-package)
+uv pip install mas-lab
 
-# Standalone
-uv pip install -e mas-lab/components/core
+# This component alone (provides the mas-lab command)
+uv pip install -e lab/components/core
 ```
 
 ---
@@ -136,7 +136,7 @@ mas-lab config --json
 
 ## Contract verification framework
 
-`mas-lab-core` includes a contract verification engine derived from the MaskAT paper. It supports three contract types:
+`lab/components/core` includes a contract verification engine derived from the MaskAT paper. It supports three contract types:
 
 | Contract | What it checks |
 |----------|----------------|

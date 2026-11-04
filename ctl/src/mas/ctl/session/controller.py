@@ -280,7 +280,7 @@ class SessionController:
         try:
             from mas.library.skills.plugins.sk_tools import SkillToolsPlugin
         except ImportError:
-            self.display.on_system("mas-library-skills not installed.")
+            self.display.on_system("skills library not installed.")
             return TurnResult(trace=None, responses=[])
 
         plugin = SkillToolsPlugin()

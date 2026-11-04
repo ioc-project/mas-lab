@@ -110,7 +110,6 @@ def get_controller(name: str) -> ControllerContract:
     if name not in plugins:
         installed = list(plugins.keys()) or ["(none)"]
         raise KeyError(
-            f"Controller plugin {name!r} not found. Installed: {installed}. "
-            f"Install for example 'mas-lab-controller-{name}'."
+            f"Controller plugin {name!r} not found. Installed: {installed}."
         )
     return plugins[name]()

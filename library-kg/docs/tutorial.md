@@ -19,10 +19,10 @@ mas-lab kg validate /tmp/tutorial-kg.jsonld
 [ioc-project/scope](https://github.com/ioc-project/scope))
 is the observability platform.
 This tutorial uses two SCOPE pieces: `oxp-ontology` (the ontology, the SHACL shapes and the
-generated models; a hard dependency of `mas-library-kg`) and, for the OpenTelemetry (OTel)
+generated models; a hard dependency of `library-kg`) and, for the OpenTelemetry (OTel)
 path only, `norm` (the SCOPE OTel normalizer; optional extra `[norm]`, installed from git
 until it is published). The native-to-KG normalizer, validation, Neo4j push and dump, the
-`mas-lab kg` commands and the pipeline steps belong to `mas-library-kg`.
+`mas-lab kg` commands and the pipeline steps belong to `library-kg`.
 
 **Requirements**
 
@@ -291,7 +291,7 @@ The command prints a JSON report and exits with status 1 if `error_count` is not
     {"check": "block_vocabulary", "status": "pass", "detail": ""},
     {"check": "layer_vocabulary", "status": "pass", "detail": ""},
     {"check": "orphaned_edges", "status": "pass", "detail": ""},
-    {"check": "shacl", "status": "skipped", "detail": "shacl check requires pyshacl and rdflib (pip install 'mas-library-kg[validation]')"}
+    {"check": "shacl", "status": "skipped", "detail": "shacl check requires pyshacl and rdflib (pip install 'library-kg[validation]')"}
   ]
 }
 ```

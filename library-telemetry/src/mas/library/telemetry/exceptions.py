@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.library.telemetry._dist import extra_hint as _extra_hint
+
 
 class TelemetryError(Exception):
-    """Base for all mas-library-telemetry errors."""
+    """Base for telemetry-library errors."""
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +33,7 @@ class OtelSdkUnavailableError(ConversionError):
     def __init__(self, detail: str = "") -> None:
         super().__init__(
             "opentelemetry-sdk is not installed. Install the conversion extra: "
-            'uv pip install -e "mas-library-telemetry[convert]"'
+            f"{_extra_hint('convert')}"
             + (f" ({detail})" if detail else "")
         )
 
@@ -102,7 +104,7 @@ class ClickHouseUnavailableError(SerializationError):
     def __init__(self) -> None:
         super().__init__(
             "clickhouse-connect is not installed. Install the clickhouse extra: "
-            'uv pip install -e "mas-library-telemetry[clickhouse]"'
+            f"{_extra_hint('clickhouse')}"
         )
 
 

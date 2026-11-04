@@ -26,5 +26,5 @@ Conformance levels (ascending strictness):
 **KG (downstream):** `library-kg/.../core/verifier.py` + SHACL
 
 These files are shipped inside the wheel at
-`mas/library/telemetry/schemas/` (see `pyproject.toml` `force-include`), so the
+`mas/library/telemetry/schemas/` (copied under `src/`), so the
 validators resolve them without any repo checkout.

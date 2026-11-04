@@ -1,4 +1,4 @@
-name: mas-library-kg
+name: kg
 description: Trace-to-KG normalization, validation, and KG benchmark pipelines.
 version: "0.1.0"
 

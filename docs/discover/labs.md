@@ -274,8 +274,8 @@ The experiment compares four scenarios on the trip planner:
 
 The claim under test is that context sources are typed contracts.
 
-The Letta scenarios need the `letta` package. It conflicts with the dependencies of
-`mas-library-skills[all]`, so it gets its own virtual environment:
+The Letta scenarios need the `letta` package. It conflicts with the skills
+library's `all` extra, so it gets its own virtual environment:
 
 ```bash
 task install-lab LAB=labs/extensions.lab

@@ -3,7 +3,7 @@
 """Layer-1 protocol check: tool-call / tool-result pairing.
 
 The kernel asserts this after the assembler plugin returns. Repair and
-history slicing live in mas-library-standard (``lib.context.payload``).
+history slicing live in ``library-standard/`` (``lib.context.payload``).
 """
 
 from __future__ import annotations

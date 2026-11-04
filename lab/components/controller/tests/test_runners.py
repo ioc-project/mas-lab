@@ -1,12 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tests for mas-lab-core ApplicationRunner types."""
+"""Tests for lab core ApplicationRunner types."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 from mas.lab.runners.protocol import RunResult
 from mas.lab.runners.registry import ApplicationRunnerRegistry
 

@@ -48,7 +48,7 @@ specification. It provides:
 ```bash
 # 1 — Install the packages (once published; until then see the paths below)
 uv venv
-uv pip install mas-lab mas-library-standard mas-library-samples
+uv pip install mas-lab
 export PATH="$PWD/.venv/bin:$PATH"
 
 # 2 — Configure LLM access (interactive, writes ~/.config/mas/config.yaml)
@@ -58,7 +58,7 @@ mas-lab init
 export OPENAI_API_KEY=<your-key>
 
 # 4 — Run the trip-planner sample
-#    (`samples:` resolves the app shipped in mas-library-samples; from a source
+#    (`samples:` resolves the app shipped in library-samples/; from a source
 #    checkout you can pass library-samples/apps/trip-planner/mas.yaml instead)
 mas-ctl run-mas samples:apps/trip-planner/mas.yaml \
   --infra-ref standard:openai \
@@ -125,18 +125,19 @@ Details:
 
 ## Packages
 
-| Package                | Role                                                           |
-| ---------------------- | -------------------------------------------------------------- |
-| `mas-runtime`          | Agent runtime — contracts, plugins, design patterns            |
-| `mas-ctl`              | Orchestration — `chat`, `run-mas`, `validate` ([flags](docs/cli/mas-ctl.md)) |
-| `mas-lab`              | Meta-package — benchmarks, pipelines, telemetry, UI controller |
-| `mas-library-standard` | Flavours, overlays, infra bundles                              |
+| Directory | Role |
+| --------- | ---- |
+| `runtime/` | Agent runtime — contracts, plugins, design patterns |
+| `ctl/` | Orchestration — `chat`, `run-mas`, `validate` ([flags](docs/cli/mas-ctl.md)) |
+| `.` (repo root) | Meta-package — installs the runtime, control plane, lab components, and libraries |
+| `lab/components/core/` | Lab CLI (`mas-lab`) plus contracts, telemetry, and shared utilities |
+| `library-standard/` | Flavours, overlays, infra bundles |
 
-`mas-lab` installs three lab components (`mas-lab-core`, `mas-lab-bench`,
-`mas-lab-controller`) plus `mas-runtime`, `mas-ctl`, and `mas-library-eval`.
-Add other libraries as separate packages: `mas-library-samples`,
-`mas-library-lab`, `mas-library-ioa`, `mas-library-kg`, `mas-library-skills`,
-`mas-library-telemetry`.
+`mas-lab` is an empty meta-package. The `mas-lab` command ships in
+`lab/components/core/`. Installing the meta-package pulls core, bench, controller,
+runtime, ctl, and the published libraries. The lab itself is the three
+components under `lab/components/`. Wheel names are generated into the
+[packages reference](docs/packages-reference.md).
 
 A **lab** (`*.lab/` plus `lab-config.yaml`) is where you run experiments. A
 **library** is a folder with `library.yaml` holding reusable apps, tools, and

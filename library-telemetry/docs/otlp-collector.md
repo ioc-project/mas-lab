@@ -63,7 +63,7 @@ convert_file_to_otlp_jsonl("events.jsonl", "otlp.jsonl", app_name="my-app")
 
 Collectors commonly persist to ClickHouse (`otel_traces`). Fetch a session's
 spans back out — requires the `clickhouse` extra
-(`uv pip install -e "mas-library-telemetry[clickhouse]"`) and a reachable
+(`uv pip install -e "library-telemetry[clickhouse]"`) and a reachable
 ClickHouse (port-forward the service first):
 
 ```python

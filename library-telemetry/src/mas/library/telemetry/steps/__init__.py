@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Standalone pipeline step functions for ``mas-library-telemetry``.
+"""Standalone pipeline step functions for the telemetry library.
 
 Pure Python functions — no dependency on ``mas.lab.benchmark.pipeline``.  The
 ``mas-lab`` CLI / ``mas-lab-graph`` wrap these in adapters so the lab commands are

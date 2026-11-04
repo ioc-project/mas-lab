@@ -12,9 +12,9 @@ of ``type: step``); the runtime plugin registry resolves each step lazily at
 startup, and this module — like every step module — does all its imports at top
 so any import problem surfaces at startup, never mid-execution.
 
-Requires the bench framework (``mas-lab-bench``); optional extra::
+Requires the bench framework (``lab/components/bench``); optional extra::
 
-    uv pip install -e "mas-library-kg[bench]"
+    this library's ``bench`` extra
 """
 
 from __future__ import annotations

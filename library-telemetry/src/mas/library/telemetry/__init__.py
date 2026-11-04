@@ -1,8 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""mas-library-telemetry — native-events → OTel conversion, verification, serialization.
+"""Telemetry library — native-events → OTel conversion, verification, serialization.
 
-The telemetry counterpart of ``mas-library-kg``.  Where ``library-kg`` turns
+The telemetry counterpart of ``library-kg/``.  Where that library turns
 *OTel spans → KG*, this library turns *native events → OTel spans*, verifies
 them against the MAS SpanSpec, and serializes them to an OTLP collector.
 

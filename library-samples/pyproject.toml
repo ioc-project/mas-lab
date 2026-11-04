@@ -5,7 +5,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-samples"
+name = "mas-lab-library-samples"
 version = "0.2.0"
 description = "Community-contributed MAS sample apps, datasets, and tools."
 readme = "README.md"

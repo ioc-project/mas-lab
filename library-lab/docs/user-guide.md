@@ -2,9 +2,9 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-lab User Guide
+# library-lab User Guide
 
-`mas-library-lab` ships public extensions for `mas-lab`, including eval providers and plotting helpers.
+`library-lab` ships public extensions for `mas-lab`, including eval providers and plotting helpers.
 
 ## Install
 

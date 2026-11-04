@@ -29,5 +29,5 @@ UI; it is not needed for the tutorial pipelines:
 
 https://github.com/ioc-project/scope/blob/main/deploy/docker-compose/README.md
 
-The ClickHouse instance SCOPE can ingest from belongs to `mas-library-telemetry`
+The ClickHouse instance SCOPE can ingest from belongs to `library-telemetry`
 (`library-telemetry/docker/compose.yaml`).

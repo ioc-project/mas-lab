@@ -12,8 +12,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.models import ConfigParam
 from mas.lab.benchmark.pipeline.run_artifacts import missing_run_events_message, resolve_run_events, run_dir_from_ctx
@@ -102,9 +102,9 @@ def _canonical(obj: Any) -> str:
 
 def _metric_impl_version() -> str:
     try:
-        from importlib.metadata import version
+        from mas._dist import installed_version
 
-        return version("mas-library-eval")
+        return installed_version(module="mas.library.eval", missing="")
     except Exception:
         return ""
 

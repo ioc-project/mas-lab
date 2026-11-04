@@ -7,7 +7,7 @@
 > Web studio for designing MAS manifests, experiments, pipelines, and overlays.
 
 Lives in **`mas-lab/ui/`** alongside the controller and runtime packages. The UI talks to
-**mas-lab-controller** over HTTP for library CRUD, validation, job submit/poll, and manifest
+**lab/components/controller** over HTTP for library CRUD, validation, job submit/poll, and manifest
 schemas. **It does not read schema files from the repo filesystem.**
 
 ---
@@ -63,9 +63,9 @@ fallback.
 mas-lab-ui (browser)
     │  /api/info, /api/scopes, /api/scopes/{id}/items, /api/choices, /api/runs, /api/artifacts
     ▼
-mas-lab-controller :8090  (mas-lab serve; daemon-only default is :9000)
+lab/components/controller :8090  (mas-lab serve; daemon-only default is :9000)
     ▼
-mas-runtime + mas-ctl + mas-lab-bench
+mas-runtime + mas-ctl + lab/components/bench
 ```
 
 The UI never reads the server filesystem. Run locally (`yarn dev` + `mas-lab serve`),

@@ -29,7 +29,7 @@ A trimmed example:
 ```yaml
 apiVersion: mas/v1
 kind: Library
-name: mas-library-telemetry
+name: telemetry
 version: "0.1.0"
 module_base: mas.library.telemetry   # optional; only for code plugins
 
@@ -43,7 +43,7 @@ plugins:
     module: mas.library.telemetry.plugins.otel_plugin
     class: OtelObservabilityPlugin
     requires: [opentelemetry.sdk.trace]       # import names; omitted = always available
-    extra: "mas-library-telemetry[convert]"   # what `mas-ctl plugin enable` installs
+    extra: convert   # extra name; plugin enable prefixes the wheel name
 ```
 
 Other top-level keys: `schemes`, `description`, `dependencies`, `apps`, `datasets`, `tools`, `plugin_manifests`, `aliases`, `defaults`.

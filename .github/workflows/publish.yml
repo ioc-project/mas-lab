@@ -19,6 +19,8 @@ on:
           - eval
           - lab-library
           - ioa
+          - kg
+          - telemetry
           - lab
           - core
           - bench
@@ -104,7 +106,8 @@ jobs:
     strategy:
       matrix:
         include:
-          # Order matters: dependencies must be built first
+          # Order matters: dependencies must be built first. mas-lab is the
+          # empty meta-package and must be last.
           - name: runtime
             path: runtime
           - name: skills
@@ -113,22 +116,26 @@ jobs:
             path: library-standard
           - name: samples
             path: library-samples
-          - name: eval
-            path: library-eval
-          - name: lab-library
-            path: library-lab
           - name: ioa
             path: library-ioa
+          - name: telemetry
+            path: library-telemetry
+          - name: kg
+            path: library-kg
           - name: ctl
             path: ctl
           - name: core
             path: lab/components/core
-          - name: controller
-            path: lab/components/controller
-          - name: lab
-            path: lab
           - name: bench
             path: lab/components/bench
+          - name: eval
+            path: library-eval
+          - name: controller
+            path: lab/components/controller
+          - name: lab-library
+            path: library-lab
+          - name: lab
+            path: .
 
     steps:
       - uses: actions/checkout@v4

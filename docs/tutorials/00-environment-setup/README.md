@@ -4,7 +4,7 @@
 -->
 # Tutorial 0 — Environment Setup
 
-> **Packages:** `mas-runtime`, `mas-ctl`, `mas-lab` (Docker or source checkout; PyPI upload pending)
+> **Packages:** `runtime/`, `ctl/`, meta-package (Docker or source checkout; PyPI upload pending)
 > **Time:** ~10 min (Docker) · ~20 min (developer)
 
 You install MAS Lab, give it access to an LLM, and run your first `mas-ctl` commands.
@@ -31,13 +31,15 @@ The packages are not uploaded yet. Use Docker or the developer path until the fi
 
 ```bash
 uv venv .venv
-uv pip install mas-lab mas-library-standard mas-library-samples
+uv pip install mas-lab
 export PATH="$PWD/.venv/bin:$PATH"
 mas-lab init
 export OPENAI_API_KEY=<your-key>
 ```
 
-`mas-lab` installs `mas-runtime` and `mas-ctl`. To pin a release, use `mas-lab==0.2.0`.
+`mas-lab` is the meta-package: it installs the runtime, control plane, lab
+components, and libraries. The `mas-lab` command comes from
+`lab/components/core/`. To pin a release, pin the meta-package version.
 The tutorial manifests live in the repository, not in the packages. Clone it to follow Tutorial 1.
 
 ## Path 1 — Docker

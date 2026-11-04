@@ -24,7 +24,6 @@ COPY library-eval/pyproject.toml library-eval/
 COPY library-ioa/pyproject.toml library-ioa/
 COPY library-telemetry/pyproject.toml library-telemetry/
 COPY library-kg/pyproject.toml library-kg/
-COPY lab/pyproject.toml lab/
 COPY lab/components/core/pyproject.toml lab/components/core/
 COPY lab/components/bench/pyproject.toml lab/components/bench/
 COPY lab/components/controller/pyproject.toml lab/components/controller/

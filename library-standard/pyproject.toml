@@ -5,14 +5,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-standard"
+name = "mas-lab-library-standard"
 version = "0.2.0"
 description = "Standard library for MAS — infra bundles, tools, and pattern aliases."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
-    "mas-runtime",
+    "mas-lab-runtime",
     "ddgs>=9.14.0",
     "httpx>=0.27",
 ]
@@ -36,4 +36,4 @@ exclude = ["src/mas/library/standard/testing"]
 "library.yaml" = "src/mas/library/standard/library.yaml"
 
 [tool.uv.sources]
-mas-runtime = { workspace = true }
+mas-lab-runtime = { workspace = true }

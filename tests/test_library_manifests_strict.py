@@ -96,6 +96,20 @@ def test_packaged_library_plugin_classes_import(path: Path, monkeypatch) -> None
         )
 
 
+def test_plugin_extras_are_bare_extra_names() -> None:
+    """``extra:`` is the extra name only; the wheel name is resolved at load."""
+    for path in _library_yaml_paths():
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for index, entry in enumerate(doc.get("plugins") or []):
+            extra = entry.get("extra")
+            if not extra:
+                continue
+            assert "[" not in str(extra), (
+                f"{path}: plugins[{index}].extra must be a bare extra name, "
+                f"not a pip spec ({extra!r})"
+            )
+
+
 def test_library_packages_are_unique() -> None:
     """Library dirs that are their own plugin package share one sys.path namespace."""
     owners: dict[str, Path] = {}

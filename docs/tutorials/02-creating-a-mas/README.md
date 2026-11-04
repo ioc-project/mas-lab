@@ -4,7 +4,7 @@
 -->
 # Tutorial 2 — Creating a Multi-Agent System
 
-> **Packages:** `mas-ctl` (run-mas, validate), `mas-lab` (telemetry/plots)
+> **Packages:** `ctl/` (run-mas, validate), lab CLI (telemetry/plots)
 > **Deployment:** `deployments/local-inproc.yaml` with `runtime_id: mas-runtime-py`
 > **Time:** ~30 min
 
@@ -145,7 +145,7 @@ scenarios:
 ## Step 4 — Check the flavour
 
 A flavour is a named runtime environment (Tutorial 1). This tutorial uses the bundled `local` flavour
-from `mas-library-standard` (`mas-ctl flavour list`). It runs all agents in-process (`agent_comm.protocol: agent-local`).
+from `library-standard` (`mas-ctl flavour list`). It runs all agents in-process (`agent_comm.protocol: agent-local`).
 
 `config.yaml` here selects it (`mas_ctl.flavour: local`) and sets `mas_ctl.trace: summary`,
 so `run-mas` prints each delegation on stderr. The LLM endpoint comes from your Tutorial 0 infra.

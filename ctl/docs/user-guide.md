@@ -11,7 +11,7 @@
 From a checkout of the repository (the PyPI upload is still pending):
 
 ```bash
-uv sync --package mas-ctl     # or: uv sync --all-packages
+uv sync --all-packages
 ```
 
 `mas-ctl` is then available through `uv run mas-ctl ...` (or activate the virtual environment).

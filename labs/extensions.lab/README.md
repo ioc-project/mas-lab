@@ -24,7 +24,7 @@ Context sources are typed contracts. Adding memory is an **overlay** change, not
 
 Vector-memory scenarios use the in-tree `SemanticMemoryPlugin`. They need no extra install.
 
-The Letta scenarios (`with-letta-memory`, `with-letta-factrecall`) need the upstream [`letta`](https://pypi.org/project/letta/) package, declared in [`requirements.txt`](requirements.txt). It is not a `mas-lab` extra. Letta pins `opentelemetry-sdk==1.30.0`, which conflicts with `google-adk` used by `mas-library-skills[all]`. So Letta gets its own venv:
+The Letta scenarios (`with-letta-memory`, `with-letta-factrecall`) need the upstream [`letta`](https://pypi.org/project/letta/) package, declared in [`requirements.txt`](requirements.txt). It is not a `mas-lab` extra. Letta pins `opentelemetry-sdk==1.30.0`, which conflicts with `google-adk` used by `library-skills[all]`. So Letta gets its own venv:
 
 ```bash
 # from the repo root

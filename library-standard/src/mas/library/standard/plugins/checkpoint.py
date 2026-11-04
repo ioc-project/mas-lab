@@ -4,7 +4,7 @@
 
 Storage is a library plugin type, not a boundary slot and not a kernel op.
 The kernel already has ``snapshot`` (in-process tree) and ``persist`` (write
-through this contract). Implementations live in mas-library-standard.
+through this contract). Implementations live in ``mas.library.standard``.
 """
 
 from __future__ import annotations

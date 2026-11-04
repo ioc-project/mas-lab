@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from mas.library.kg._dist import extra_hint
 from mas.library.kg.neo4j.denormalize import _infer_app_name
 from mas.library.kg.neo4j.push import _deserialize_neo4j_props as _deserialize_props
 
@@ -177,7 +178,7 @@ def fetch_kg_from_neo4j(
         from neo4j import GraphDatabase  # type: ignore[import]
     except ImportError as exc:
         raise ImportError(
-            'neo4j driver not installed. Install with: uv pip install "mas-library-kg[neo4j]"'
+            f"neo4j driver not installed. Install with: {extra_hint('neo4j')}"
         ) from exc
 
     if not session_id and not run_id:

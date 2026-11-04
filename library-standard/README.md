@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-library-standard
+# library-standard
 
 Reusable multi-agent system (MAS) artifacts: plugins, tools, skills, prompts, flavours and overlays.
 

@@ -20,12 +20,12 @@ first-party ``otel`` plugin. Explicit ``OTEL_INSTRUMENTATION_A2A_SDK_ENABLED=tru
 in the process environment is left alone (``setdefault``).
 
 Same reasoning, same mechanism, for ``OBSERVE_REALTIME_OBSERVABILITY_ENABLED``:
-the ``ioa-observe-sdk`` dependency (see ``mas-library-telemetry``) defaults
+the ``ioa-observe-sdk`` dependency (see the telemetry library) defaults
 this to ``"true"`` when unset upstream. MAS Lab pins it off by default too —
 real-time span emission is opt-in, not implied by installing the SDK.
 
-``mas-library-telemetry`` itself declares zero required dependencies (not
-even on ``mas-runtime``, where this module lives), so it cannot import this
+The telemetry library itself declares zero required dependencies (not
+even on the runtime, where this module lives), so it cannot import this
 module — its own ``src/mas/library/telemetry/__init__.py`` carries an
 independent copy of just the ``OBSERVE_REALTIME_OBSERVABILITY_ENABLED``
 ``setdefault`` line for the case where that package is used standalone,

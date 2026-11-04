@@ -14,7 +14,7 @@ load only when the agent picks the skill.
 
 ## How MAS-Lab implements it
 
-`mas-library-skills` ships a ContextContract plugin and skill-access tools.
+`library-skills` ships a ContextContract plugin and skill-access tools.
 The default engine is a bundled `agentskills` parser and sandbox
 (`src/agentskills` in that package). Optional extras wrap Google ADK and
 Deep Agents / LangChain; they are opt-in because those frameworks pin their
@@ -42,7 +42,7 @@ spec:
 
 | Piece | Package |
 | --- | --- |
-| Plugin, parser, sandbox | `mas-library-skills` |
+| Plugin, parser, sandbox | `library-skills` |
 | Specification | [agentskills.io](https://agentskills.io/) |
 | Optional engines | extras `adk` (`google-adk`) and `langchain` (`deepagents`) |
 

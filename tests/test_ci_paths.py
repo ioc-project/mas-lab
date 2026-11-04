@@ -217,7 +217,7 @@ def test_ctl_and_golden_libraries_run_golden(paths):
         "library-standard/src/mas/library/standard/plugins/context/assembler.py",
         "library-skills/src/mas/library/skills/plugins/sk_tools.py",
         "library-lab/src/mas/library/lab/__init__.py",
-        "lab/src/mas/lab/cli/commands/serve.py",
+        "lab/components/core/src/mas/lab/cli/commands/serve.py",
     ):
         assert paths.classify([path], event="pull_request")["golden"] is True, path
 

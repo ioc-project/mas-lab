@@ -4,7 +4,7 @@
 -->
 # Tutorial 01 — Building an Agent
 
-> **Packages:** `mas-ctl` (chat/validate), `mas-runtime` (contracts/plugins), `mas-lab` (plots/benchmarks)
+> **Packages:** `ctl/` (chat/validate), `runtime/` (contracts/plugins), lab CLI (plots/benchmarks)
 > **Time:** ~30 min
 > **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) (install, infra bundles, API key).
 > Run all commands from `docs/tutorials/01-building-an-agent`. Validation runs offline; live runs need `OPENAI_API_KEY` in `.env`.
@@ -34,7 +34,7 @@ mas-ctl tui agent.yaml -o overlays/tools.yaml -o overlays/skills.yaml
 
 A manifest is a YAML file that declares a MAS Lab object. An overlay is a small YAML file that changes a manifest
 at run time. The base `agent.yaml` never changes; each step adds an overlay with `-o`.
-Overlays write tool references as `<library>:<path>`. These use the `samples` library from `mas-library-samples`.
+Overlays write tool references as `<library>:<path>`. These use the `samples` library from `library-samples`.
 A lab can ship its own library: see [labs-and-libraries.md](../../labs-and-libraries.md).
 
 > **Exchange log.** This directory's `config.yaml` sets `mas_ctl.trace: summary`, so every `mas-ctl` command prints
@@ -106,7 +106,7 @@ Everything else has a default. Run `mas-ctl compile agent.yaml` to print the exp
 The manifest model name (`gpt-4o`) is canonical. Infra can map it to the provider's name, such as `azure/gpt-4o`.
 The runtime finds tools and skills next to the manifest first, then in the standard library.
 
-A flavour is a named runtime environment (`kind: Flavour`, bundled in `mas-library-standard`).
+A flavour is a named runtime environment (`kind: Flavour`, bundled in `library-standard`).
 `mas-ctl flavour list` shows `standard:local` (default), `standard:local-benchmark`, and `standard:mcp`.
 Select one with `--flavour`. Today `chat` and `tui` wire only `local` and `mcp`.
 `local` runs agents in-process, resolves tools without servers, and writes file-based traces and native `events.jsonl`.

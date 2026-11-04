@@ -38,7 +38,7 @@ async def test_control_rpc_unix_socket_list_and_navigate() -> None:
     origin = session.take_snapshot(label="n0")
     session.take_snapshot(label="n1")
     control = manager.control(capability=ControlCapability(actor="rpc", surface="admin"))
-    sock = Path(f"/tmp/mas-lab-ctl-{os.getpid()}.sock")
+    sock = Path(f"/tmp/mas-ctl-{os.getpid()}.sock")
     server = ControlRpcServer(control, sock)
     await server.start()
     client = ControlRpcClient(sock)

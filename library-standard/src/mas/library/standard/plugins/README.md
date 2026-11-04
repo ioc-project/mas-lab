@@ -91,7 +91,7 @@ Thinking depth, thinking-token budget, and hiding chain-of-thought live on
 
 ## Tools (library-samples)
 
-Tutorial and benchmark tools live in **`mas-library-samples`** as `kind: Tool` manifests
+Tutorial and benchmark tools live in **`library-samples`** as `kind: Tool` manifests
 (e.g. `samples:tools/calc.tool.yaml`, `samples:tools/memory-search.tool.yaml`).
 Agents reference them via ``spec.tools[].ref``; the runtime loads implementations
 from the manifest, not from `mas.runtime`.

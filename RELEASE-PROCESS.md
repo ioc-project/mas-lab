@@ -57,24 +57,11 @@ upload. No long-lived PyPI API token is required, and no GPG signing key is
 required for the upload. PyPI's attestations/provenance features can be enabled
 separately if required by the release policy.
 
-The current public distribution set is:
-
-- `mas-runtime`
-- `mas-ctl`
-- `mas-lab`
-- `mas-lab-core`
-- `mas-lab-bench`
-- `mas-lab-controller`
-- `mas-library-standard`
-- `mas-library-skills`
-- `mas-library-samples`
-- `mas-library-lab`
-- `mas-library-eval`
-- `mas-library-ioa`
-
-The workspace metapackage is not part of the publication matrix. The MCP and
-A2A compliance directories under `library-ioa/compliance/` are CI/test assets,
-not user-facing distributions, and are never uploaded to PyPI.
+The public distribution set is every `[project].name` in the workspace
+(see `.github/workflows/publish.yml` and [packages-reference.md](docs/packages-reference.md)).
+The root wheel is the empty meta-package that depends on the rest.
+The MCP and A2A compliance directories under `library-ioa/compliance/` are
+CI/test assets, not user-facing distributions, and are never uploaded to PyPI.
 
 ## Repeated pre-release checks
 
@@ -93,8 +80,9 @@ wheel configuration depends on files that are absent from the source archive:
 ```bash
 for package_path in runtime ctl library-standard library-skills \
   library-samples library-lab library-eval library-ioa \
+  library-telemetry library-kg \
   lab/components/core lab/components/bench lab/components/controller \
-  lab; do
+  .; do
   uv build "$package_path" || exit 1
 done
 ```

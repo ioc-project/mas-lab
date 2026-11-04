@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Standalone pipeline step functions for ``mas-library-kg``.
+"""Standalone pipeline step functions for the knowledge-graph library.
 
 These are pure Python functions — no dependency on ``mas.lab.benchmark.pipeline``
 or any other internal package.  The ``[bench]`` extra wraps them in ``PipelineStep``
@@ -20,7 +20,7 @@ run_verify_events     events.jsonl schema + spec validation → dict
 run_annotate          generic KG node annotation → KGArtifact
 run_compare_kg        compare two KGs for structural parity → dict
 
-Neo4j steps (require ``neo4j`` extra: pip install "mas-library-kg[neo4j]")
+Neo4j steps (require this library's ``neo4j`` extra)
 ---------------------------------------------------------------------------
 run_neo4j_push        KGArtifact → Neo4j (MERGE semantics, idempotent) → dict
 run_neo4j_dump        Neo4j → KGArtifact (fetch by session_id or run_id)

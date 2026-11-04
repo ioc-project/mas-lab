@@ -1,14 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Integration tests for mas-library-eval."""
-import pytest
+"""Integration tests for the eval library."""
 
 
 def test_import_mce():
     from mas.library.eval.mce import (
         METRIC_REGISTRY,
-        build_session_from_trace,
-        compute_session_metrics,
     )
 
     assert len(METRIC_REGISTRY) > 0

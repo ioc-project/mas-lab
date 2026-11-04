@@ -26,7 +26,7 @@ curl -s http://localhost:8090/api/pipeline-step-types   # when the controller ru
 
 The tables below list the steps shipped in this repository. A library's steps appear only when that library is installed.
 
-## Core steps (`mas-library-lab`)
+## Core steps (`library-lab`)
 
 ### extract/ — trace → tables
 
@@ -101,10 +101,10 @@ absolute paths and `..` are rejected. See [Output locations](../../docs/manifest
 
 | Library | Step types |
 |---------|------------|
-| `mas-library-telemetry` | `events_to_otel`, `verify_otel`, `compare_otel_spans`, `export_otel`, `clickhouse_dump`, `list_clickhouse_sessions` |
-| `mas-library-kg` | `normalize_events`, `normalize_otel`, `validate_kg`, `verify_events`, `compare_kg`, `neo4j_push`, `neo4j_dump`, `plot_multilevel_trajectory_kg`, `embed_states` |
+| `library-telemetry/` | `events_to_otel`, `verify_otel`, `compare_otel_spans`, `export_otel`, `clickhouse_dump`, `list_clickhouse_sessions` |
+| `library-kg/` | `normalize_events`, `normalize_otel`, `validate_kg`, `verify_events`, `compare_kg`, `neo4j_push`, `neo4j_dump`, `plot_multilevel_trajectory_kg`, `embed_states` |
 
-`mas-library-telemetry` registers `events_to_otel` and `export_otel` under the same names as the core steps. Its configuration keys differ (converter profile, export layers, realtime). Run `mas-lab benchmark step-info events_to_otel` for the keys in your installation. See the
+`library-telemetry/` registers `events_to_otel` and `export_otel` under the same names as the core steps. Its configuration keys differ (converter profile, export layers, realtime). Run `mas-lab benchmark step-info events_to_otel` for the keys in your installation. See the
 [library-telemetry README](../../library-telemetry/README.md) and the
 [library-kg README](../../library-kg/README.md).
 

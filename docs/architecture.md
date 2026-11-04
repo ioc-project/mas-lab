@@ -30,9 +30,9 @@ events, run artifacts, results. **Nothing is passed implicitly.**
 |---|---|---|
 | **1. Specify** | YAML manifests | Declarations → a complete specification |
 | **2. Compose** | `mas-ctl` | Specification → a runnable configuration (compose, session, placement) |
-| **3. Execute** | `mas-runtime` | Configuration → a running MAS, with contracts enforced at boundaries |
+| **3. Execute** | `runtime/` | Configuration → a running MAS, with contracts enforced at boundaries |
 | **4. Observe** | Contract boundaries | Execution → `traces/events.jsonl` |
-| **5. Analyse** | `mas-lab-bench` | Events → results, via a pipeline DAG |
+| **5. Analyse** | `lab/components/bench/` | Events → results, via a pipeline DAG |
 
 ### Stage 1 — Specify
 
@@ -101,7 +101,7 @@ See the [`mas-ctl` reference](cli/mas-ctl.md) and [`compile`](cli/compile.md).
 
 ### Stage 3 — Execute
 
-`mas-runtime` runs the agents. Its core is a small state machine (a **Mealy
+The runtime runs the agents. Its core is a small state machine (a **Mealy
 kernel**) that checks a **contract** each time an agent calls a tool, delegates
 to another agent or sends a request to a model. Plugins extend it in three
 categories:
@@ -141,7 +141,7 @@ See the [observability reference](cli/observability.md) and
 
 ### Stage 5 — Analyse
 
-`mas-lab-bench` reads the events and builds the results. You declare the analysis in
+The bench component reads the events and builds the results. You declare the analysis in
 the same experiment manifest, as a list of **pipeline steps**. Steps extract trace
 statistics, score answers with an evaluation metric, compute confidence intervals
 or draw plots. The output is CSV files and figures in the experiment's `results/`

@@ -4,22 +4,22 @@
 > **Auto-generated** from `pyproject.toml` files and `library.yaml` manifests.  Run `task docs-gen` to refresh after adding or modifying packages.
 
 ## Summary
-| Package                 | Layer         | Description                                                                                             | CLI                  |
-| ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------- | -------------------- |
-| `mas-runtime`           | Runtime core  | MAS Runtime V2 — Mealy kernel (embeddable library)                                                      | `mas-runtime`        |
-| `mas-ctl`               | Orchestration | MAS control plane V2 — compile, compose, session, placement                                             | `mas-ctl`            |
-| `mas-lab`               | Lab framework | MAS Lab — Multi-Agent System experimentation, benchmarking, and analysis toolkit.                       | `mas-lab`, `mas-ctl` |
-| `mas-lab-core`          | Lab framework | Core contracts, telemetry, schemas and utilities shared across MAS Lab components.                      | —                    |
-| `mas-lab-bench`         | Lab framework | Benchmark engine, pipeline execution, plots and validation for MAS Lab.                                 | —                    |
-| `mas-lab-controller`    | Lab framework | MAS Lab controller daemon — workers, IPC, HTTP API for CLI and UI.                                      | —                    |
-| `mas-library-standard`  | Libraries     | Standard library for MAS — infra bundles, tools, and pattern aliases.                                   | —                    |
-| `mas-library-skills`    | Libraries     | Skills library for MAS — ContextContract catalog plugin + ToolContract skill-access tools.              | —                    |
-| `mas-library-eval`      | Libraries     | Evaluation and quality metrics library for MAS Lab — MCE integration.                                   | —                    |
-| `mas-library-lab`       | Libraries     | MAS Lab provider library with public eval plugins.                                                      | —                    |
-| `mas-library-samples`   | Libraries     | Community-contributed MAS sample apps, datasets, and tools.                                             | —                    |
-| `mas-library-ioa`       | Libraries     | MCP client/server bridge and A2A agent_comm / agent_expose plugins.                                     | `mas-mcp`            |
-| `mas-library-telemetry` | Libraries     | MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization. | —                    |
-| `mas-library-kg`        | Libraries     | MAS Lab trace normalization and knowledge-graph validation algorithms.                                  | —                    |
+| Package                        | Layer         | Description                                                                                             | CLI           |
+| ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------- | ------------- |
+| `mas-lab`                      | Meta          | MAS Lab — meta-package installing the runtime, control plane, lab components, and libraries.            | —             |
+| `mas-lab-runtime`              | Runtime core  | MAS Runtime V2 — Mealy kernel (embeddable library)                                                      | `mas-runtime` |
+| `mas-lab-ctl`                  | Orchestration | MAS control plane V2 — compile, compose, session, placement                                             | `mas-ctl`     |
+| `mas-lab-component-core`       | Lab framework | MAS Lab core — CLI, contracts, telemetry, schemas, and shared utilities.                                | `mas-lab`     |
+| `mas-lab-component-bench`      | Lab framework | Benchmark engine, pipeline execution, plots and validation for MAS Lab.                                 | —             |
+| `mas-lab-component-controller` | Lab framework | MAS Lab controller daemon — workers, IPC, HTTP API for CLI and UI.                                      | —             |
+| `mas-lab-library-standard`     | Libraries     | Standard library for MAS — infra bundles, tools, and pattern aliases.                                   | —             |
+| `mas-lab-library-skills`       | Libraries     | Skills library for MAS — ContextContract catalog plugin + ToolContract skill-access tools.              | —             |
+| `mas-lab-library-eval`         | Libraries     | Evaluation and quality metrics library for MAS Lab — MCE integration.                                   | —             |
+| `mas-lab-library-lab`          | Libraries     | MAS Lab provider library with public eval plugins.                                                      | —             |
+| `mas-lab-library-samples`      | Libraries     | Community-contributed MAS sample apps, datasets, and tools.                                             | —             |
+| `mas-lab-library-ioa`          | Libraries     | MCP client/server bridge and A2A agent_comm / agent_expose plugins.                                     | `mas-mcp`     |
+| `mas-lab-library-telemetry`    | Libraries     | MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization. | —             |
+| `mas-lab-library-kg`           | Libraries     | MAS Lab trace normalization and knowledge-graph validation algorithms.                                  | —             |
 ---
 
 ## Installation
@@ -33,7 +33,7 @@ execute benchmarks, and call `mas-lab`.
 # From the repository root (uses UV_PROJECT_ENVIRONMENT if set):
 task install
 # Equivalent to:
-uv pip install -e runtime -e ctl -e library-standard -e lab
+uv pip install -e runtime -e ctl -e library-standard -e lab/components/core
 ```
 
 ### Full install (all packages + optional extras)
@@ -48,7 +48,10 @@ uv pip install \
   -e runtime \
   -e ctl \
   -e library-standard \
-  -e lab \
+  -e lab/components/core \
+  -e lab/components/bench \
+  -e lab/components/controller \
+  -e . \
   -e library-eval \
   -e library-lab \
   -e library-samples
@@ -68,20 +71,36 @@ them conflict with core workspace dependencies.  They are declared in
 task install-lab LAB=labs/extensions.lab
 ```
 
-OpenTelemetry export and knowledge-graph normalisation ship as separate libraries (`mas-library-telemetry`, `mas-library-kg`), not as extras of this package.
+OpenTelemetry export and knowledge-graph normalisation ship as
+separate libraries (see the tables below), not as extras of this
+package.
 
 ---
 
 ## Package Details
 
-### `mas-runtime`
+### `mas-lab`
+**Install path:** `.`  
+**Layer:** Meta  
+MAS Lab — meta-package installing the runtime, control plane, lab components, and libraries.
+
+```bash
+uv pip install -e .  # source
+uv pip install mas-lab  # PyPI
+```
+
+**Depends on:** `mas-lab-runtime`, `mas-lab-ctl`, `mas-lab-component-core`, `mas-lab-component-bench`, `mas-lab-component-controller`, `mas-lab-library-standard`, `mas-lab-library-skills`, `mas-lab-library-samples`, `mas-lab-library-lab`, `mas-lab-library-eval`, `mas-lab-library-ioa`, `mas-lab-library-telemetry`, `mas-lab-library-kg`  
+
+---
+
+### `mas-lab-runtime`
 **Install path:** `runtime`  
 **Layer:** Runtime core  
 MAS Runtime V2 — Mealy kernel (embeddable library)
 
 ```bash
 uv pip install -e runtime  # source
-uv pip install "mas-runtime[grpc,dev]"  # PyPI, all extras
+uv pip install "mas-lab-runtime[grpc,dev]"  # PyPI, all extras
 ```
 
 **Optional extras:**
@@ -99,17 +118,17 @@ uv pip install "mas-runtime[grpc,dev]"  # PyPI, all extras
 
 ---
 
-### `mas-ctl`
+### `mas-lab-ctl`
 **Install path:** `ctl`  
 **Layer:** Orchestration  
 MAS control plane V2 — compile, compose, session, placement
 
 ```bash
 uv pip install -e ctl  # source
-uv pip install "mas-ctl[curses,dev]"  # PyPI, all extras
+uv pip install "mas-lab-ctl[curses,dev]"  # PyPI, all extras
 ```
 
-**Depends on:** `mas-runtime`, `mas-library-standard`, `mas-library-skills`  
+**Depends on:** `mas-lab-runtime`, `mas-lab-library-standard`, `mas-lab-library-skills`  
 
 **Optional extras:**
 
@@ -126,70 +145,55 @@ uv pip install "mas-ctl[curses,dev]"  # PyPI, all extras
 
 ---
 
-### `mas-lab`
-**Install path:** `lab`  
-**Layer:** Lab framework  
-MAS Lab — Multi-Agent System experimentation, benchmarking, and analysis toolkit.
-
-```bash
-uv pip install -e lab  # source
-uv pip install mas-lab  # PyPI
-```
-
-**Depends on:** `mas-runtime`, `mas-ctl`, `mas-lab-core`, `mas-lab-bench`, `mas-lab-controller`, `mas-library-eval`  
-
-**CLI commands:**
-
-| Command   | Entry point             |
-| --------- | ----------------------- |
-| `mas-lab` | `mas.lab.cli:app`       |
-| `mas-ctl` | `mas.ctl.cli.main:main` |
-
----
-
-### `mas-lab-core`
+### `mas-lab-component-core`
 **Install path:** `lab/components/core`  
 **Layer:** Lab framework  
-Core contracts, telemetry, schemas and utilities shared across MAS Lab components.
+MAS Lab core — CLI, contracts, telemetry, schemas, and shared utilities.
 
 ```bash
 uv pip install -e lab/components/core  # source
-uv pip install mas-lab-core  # PyPI
+uv pip install mas-lab-component-core  # PyPI
 ```
 
-**Depends on:** `mas-runtime`  
+**Depends on:** `mas-lab-runtime`, `mas-lab-ctl`  
+
+**CLI commands:**
+
+| Command   | Entry point       |
+| --------- | ----------------- |
+| `mas-lab` | `mas.lab.cli:app` |
 
 **Python entry point `mas.lab.controller.plugins`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.controller.plugins` without a hard-coded path.
 
 ---
 
-### `mas-lab-bench`
+### `mas-lab-component-bench`
 **Install path:** `lab/components/bench`  
 **Layer:** Lab framework  
 Benchmark engine, pipeline execution, plots and validation for MAS Lab.
 
 ```bash
 uv pip install -e lab/components/bench  # source
-uv pip install mas-lab-bench  # PyPI
+uv pip install mas-lab-component-bench  # PyPI
 ```
 
-**Depends on:** `mas-lab-core`, `mas-library-eval`, `mas-runtime`, `mas-ctl`  
+**Depends on:** `mas-lab-component-core`, `mas-lab-library-eval`, `mas-lab-runtime`, `mas-lab-ctl`  
 
 **Python entry point `mas.lab.runners`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.runners` without a hard-coded path.
 
 ---
 
-### `mas-lab-controller`
+### `mas-lab-component-controller`
 **Install path:** `lab/components/controller`  
 **Layer:** Lab framework  
 MAS Lab controller daemon — workers, IPC, HTTP API for CLI and UI.
 
 ```bash
 uv pip install -e lab/components/controller  # source
-uv pip install "mas-lab-controller[dev]"  # PyPI, all extras
+uv pip install "mas-lab-component-controller[dev]"  # PyPI, all extras
 ```
 
-**Depends on:** `mas-lab-core`, `mas-lab-bench`, `mas-runtime`, `mas-ctl`  
+**Depends on:** `mas-lab-component-core`, `mas-lab-component-bench`, `mas-lab-runtime`, `mas-lab-ctl`  
 
 **Optional extras:**
 
@@ -201,33 +205,33 @@ uv pip install "mas-lab-controller[dev]"  # PyPI, all extras
 
 ---
 
-### `mas-library-standard`
+### `mas-lab-library-standard`
 **Install path:** `library-standard`  
 **Layer:** Libraries  
 Standard library for MAS — infra bundles, tools, and pattern aliases.
 
 ```bash
 uv pip install -e library-standard  # source
-uv pip install mas-library-standard  # PyPI
+uv pip install mas-lab-library-standard  # PyPI
 ```
 
-**Depends on:** `mas-runtime`  
+**Depends on:** `mas-lab-runtime`  
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 
 ---
 
-### `mas-library-skills`
+### `mas-lab-library-skills`
 **Install path:** `library-skills`  
 **Layer:** Libraries  
 Skills library for MAS — ContextContract catalog plugin + ToolContract skill-access tools.
 
 ```bash
 uv pip install -e library-skills  # source
-uv pip install "mas-library-skills[all]"  # PyPI, all extras
+uv pip install "mas-lab-library-skills[all]"  # PyPI, all extras
 ```
 
-**Depends on:** `mas-runtime`  
+**Depends on:** `mas-lab-runtime`  
 
 **Optional extras:**
 
@@ -241,17 +245,17 @@ uv pip install "mas-library-skills[all]"  # PyPI, all extras
 
 ---
 
-### `mas-library-eval`
+### `mas-lab-library-eval`
 **Install path:** `library-eval`  
 **Layer:** Libraries  
 Evaluation and quality metrics library for MAS Lab — MCE integration.
 
 ```bash
 uv pip install -e library-eval  # source
-uv pip install "mas-library-eval[dev]"  # PyPI, all extras
+uv pip install "mas-lab-library-eval[dev]"  # PyPI, all extras
 ```
 
-**Depends on:** `mas-lab-core`, `mas-lab-bench`, `mas-runtime`  
+**Depends on:** `mas-lab-component-core`, `mas-lab-component-bench`, `mas-lab-runtime`  
 
 **Optional extras:**
 
@@ -265,17 +269,17 @@ uv pip install "mas-library-eval[dev]"  # PyPI, all extras
 
 ---
 
-### `mas-library-lab`
+### `mas-lab-library-lab`
 **Install path:** `library-lab`  
 **Layer:** Libraries  
 MAS Lab provider library with public eval plugins.
 
 ```bash
 uv pip install -e library-lab  # source
-uv pip install mas-library-lab  # PyPI
+uv pip install mas-lab-library-lab  # PyPI
 ```
 
-**Depends on:** `mas-lab`  
+**Depends on:** `mas-lab-component-core`, `mas-lab-component-bench`  
 
 **Python entry point `mas.lab.eval.plugins`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.eval.plugins` without a hard-coded path.
 
@@ -285,31 +289,31 @@ uv pip install mas-library-lab  # PyPI
 
 ---
 
-### `mas-library-samples`
+### `mas-lab-library-samples`
 **Install path:** `library-samples`  
 **Layer:** Libraries  
 Community-contributed MAS sample apps, datasets, and tools.
 
 ```bash
 uv pip install -e library-samples  # source
-uv pip install mas-library-samples  # PyPI
+uv pip install mas-lab-library-samples  # PyPI
 ```
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 
 ---
 
-### `mas-library-ioa`
+### `mas-lab-library-ioa`
 **Install path:** `library-ioa`  
 **Layer:** Libraries  
 MCP client/server bridge and A2A agent_comm / agent_expose plugins.
 
 ```bash
 uv pip install -e library-ioa  # source
-uv pip install "mas-library-ioa[all]"  # PyPI, all extras
+uv pip install "mas-lab-library-ioa[all]"  # PyPI, all extras
 ```
 
-**Depends on:** `mas-runtime`  
+**Depends on:** `mas-lab-runtime`  
 
 **Optional extras:**
 
@@ -328,14 +332,14 @@ uv pip install "mas-library-ioa[all]"  # PyPI, all extras
 
 ---
 
-### `mas-library-telemetry`
+### `mas-lab-library-telemetry`
 **Install path:** `library-telemetry`  
 **Layer:** Libraries  
 MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization.
 
 ```bash
 uv pip install -e library-telemetry  # source
-uv pip install "mas-library-telemetry[all]"  # PyPI, all extras
+uv pip install "mas-lab-library-telemetry[all]"  # PyPI, all extras
 ```
 
 **Optional extras:**
@@ -346,9 +350,9 @@ uv pip install "mas-library-telemetry[all]"  # PyPI, all extras
 | `observe`    | `ioa-observe-sdk>=1.0.49`                                                                                                                  |
 | `verify`     | `pyyaml>=6.0.0`, `jsonschema>=4.0.0`                                                                                                       |
 | `clickhouse` | `clickhouse-connect>=0.7`                                                                                                                  |
-| `bench`      | `mas-lab-bench`, `click>=8.0`                                                                                                              |
+| `bench`      | `mas-lab-component-bench`, `click>=8.0`                                                                                                    |
 | `dev`        | `pytest>=7.0`, `pytest-cov>=4.0`, `opentelemetry-sdk>=1.20`, `ioa-observe-sdk>=1.0.49`, `pyyaml>=6.0.0`, `jsonschema>=4.0.0`, `click>=8.0` |
-| `all`        | `mas-library-telemetry[dev,bench,clickhouse]`                                                                                              |
+| `all`        | `mas-lab-library-telemetry[dev,bench,clickhouse]`                                                                                          |
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 
@@ -356,14 +360,14 @@ uv pip install "mas-library-telemetry[all]"  # PyPI, all extras
 
 ---
 
-### `mas-library-kg`
+### `mas-lab-library-kg`
 **Install path:** `library-kg`  
 **Layer:** Libraries  
 MAS Lab trace normalization and knowledge-graph validation algorithms.
 
 ```bash
 uv pip install -e library-kg  # source
-uv pip install "mas-library-kg[all]"  # PyPI, all extras
+uv pip install "mas-lab-library-kg[all]"  # PyPI, all extras
 ```
 
 **Optional extras:**
@@ -375,12 +379,12 @@ uv pip install "mas-library-kg[all]"  # PyPI, all extras
 | `validation`          | `oxp-ontology[models]>=1.0.1`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                |
 | `verify`              | `jsonschema>=4.0.0`, `pyyaml>=6.0.0`                                                                                                                                                             |
 | `neo4j`               | `neo4j>=5.0`                                                                                                                                                                                     |
-| `bench`               | `mas-lab-bench`, `click>=8.0`                                                                                                                                                                    |
-| `plot`                | `mas-lab-bench`, `mas-lab`                                                                                                                                                                       |
+| `bench`               | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                          |
+| `plot`                | `mas-lab-component-bench`                                                                                                                                                                        |
 | `norm`                | `norm @ git+https://github.com/outshift-open/observe-and-explain-platform.git@main#subdirectory=backend/norm`                                                                                    |
-| `compare-native-otel` | `mas-library-telemetry`                                                                                                                                                                          |
+| `compare-native-otel` | `mas-lab-library-telemetry`                                                                                                                                                                      |
 | `dev`                 | `pytest>=7.0`, `pytest-cov>=4.0`, `pytest-asyncio>=0.21`, `click>=8.0`, `ruff>=0.12.10`, `oxp-ontology[models]>=1.0.1`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`, `jsonschema>=4.0.0`, `pyyaml>=6.0.0` |
-| `all`                 | `mas-library-kg[dev,neo4j,norm]`                                                                                                                                                                 |
+| `all`                 | `mas-lab-library-kg[dev,neo4j,norm]`                                                                                                                                                             |
 
 **Python entry point `mas.lab.cli.components`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.cli.components` without a hard-coded path.
 

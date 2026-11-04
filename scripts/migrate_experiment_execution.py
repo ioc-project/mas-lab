@@ -156,7 +156,7 @@ def _discover(root: Path) -> list[Path]:
         "docs/tutorials/**/experiment*.yaml",
         "tests/fixtures/**/*.yaml",
         "lab/components/controller/tests/fixtures/**/*.yaml",
-        "lab/src/mas/lab/templates/**/*.yaml",
+        "lab/components/core/src/mas/lab/templates/**/*.yaml",
         "docs/schemas/examples/experiments/**/*.yaml",
     ):
         paths.extend(root.glob(pattern))

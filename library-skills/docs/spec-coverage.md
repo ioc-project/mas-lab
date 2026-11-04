@@ -4,7 +4,7 @@
 -->
 # agentskills.io Specification Coverage
 
-This page lists which parts of the agentskills.io specification `mas-library-skills` implements. It is for contributors and for users who port skills from other clients. It follows the
+This page lists which parts of the agentskills.io specification `library-skills` implements. It is for contributors and for users who port skills from other clients. It follows the
 [agentskills.io client implementation guide](https://agentskills.io/client-implementation/adding-skills-support)
 and [specification](https://agentskills.io/specification).
 

@@ -5,22 +5,29 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-lab-core"
+name = "mas-lab-component-core"
 version = "0.2.0"
-description = "Core contracts, telemetry, schemas and utilities shared across MAS Lab components."
+description = "MAS Lab core — CLI, contracts, telemetry, schemas, and shared utilities."
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 
 dependencies = [
-    "mas-runtime",
+    "mas-lab-runtime",
+    "mas-lab-ctl",
+    "click>=8.0",
+    "python-dotenv>=1.0",
+    "jsonschema>=4.26.0",
     "pyyaml>=6.0",
 ]
+
+[project.scripts]
+mas-lab = "mas.lab.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mas"]
 
 # Package a copy of the lab manifest schemas inside mas.lab.schemas so
-# mas-lab-core still works when installed from PyPI, where there is no repo
+# mas-lab-component-core still works when installed from PyPI, where there is no repo
 # checkout to read docs/schemas/lab from. See mas.lab.schemas.paths.lab_schema_dir().
 [tool.hatch.build.targets.sdist.force-include]
 "../../../docs/schemas/lab" = "src/mas/lab/schemas/_schemas"

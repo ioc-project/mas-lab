@@ -5,8 +5,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-kg"
-version = "0.1.1"
+name = "mas-lab-library-kg"
+version = "0.2.0"
 description = "MAS Lab trace normalization and knowledge-graph validation algorithms."
 requires-python = ">=3.10"
 # Ontology TTL + generated KG models come from PyPI oxp-ontology.
@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Canonical ontology package (PyPI). Also a required dependency above; kept as
-# an extra so existing `mas-library-kg[ontology]` installs keep working.
+# an extra so existing `mas-lab-library-kg[ontology]` installs keep working.
 ontology = [
   "oxp-ontology[models]>=1.0.1",
 ]
@@ -48,14 +48,13 @@ neo4j = [
 # + the `mas-lab kg` CLI component (mas.library.kg.lab_cli).
 # Discovered via the entry-point groups below.
 bench = [
-  "mas-lab-bench",
+  "mas-lab-component-bench",
   "click>=8.0",
 ]
 # KG-driven plotting (multilevel trajectory swim-lanes) — needs the bench
 # framework + the mas-lab plotting renderer (mas.lab.plots).
 plot = [
-  "mas-lab-bench",
-  "mas-lab",
+  "mas-lab-component-bench",
 ]
 # Temporary until oxp-norm / norm is published to PyPI.
 # The PyPI name `norm` is already taken (unrelated SQL package, currently 1.6.0),
@@ -68,12 +67,12 @@ norm = [
 # lazily imports mas.library.telemetry (the emitter side) to synthesize the
 # OTel leg of the comparison from the same native events -- not a runtime
 # dependency of library-kg itself, only of this one dev/CI tool. Resolves
-# as a plain workspace member once mas-library-telemetry has landed in this
+# as a plain workspace member once mas-lab-library-telemetry has landed in this
 # same mas-lab workspace (see feat/library-telemetry); until both branches
 # are merged together, installing this extra from either branch alone will
 # fail to resolve.
 compare-native-otel = [
-  "mas-library-telemetry",
+  "mas-lab-library-telemetry",
 ]
 # Everything, for development / CI
 dev = [
@@ -91,7 +90,7 @@ dev = [
 # Complete CI run. Includes the [norm] git stopgap so OTel→KG tests can run
 # when network is available; local loops can use [dev] only.
 all = [
-  "mas-library-kg[dev,neo4j,norm]",
+  "mas-lab-library-kg[dev,neo4j,norm]",
 ]
 
 [tool.ruff]

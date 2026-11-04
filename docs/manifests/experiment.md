@@ -4,7 +4,7 @@
 -->
 # Experiment manifest (`experiment:`)
 
-**Package:** `mas-lab-bench` · **Schema:** `experiment.schema.yaml`
+**Package:** `lab/components/bench` · **Schema:** `experiment.schema.yaml`
 
 An **experiment** manifest tells `mas-lab benchmark run` what to execute.
 It compares variants of one application on a fixed set of inputs. It names:

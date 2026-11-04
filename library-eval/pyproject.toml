@@ -5,7 +5,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-library-eval"
+name = "mas-lab-library-eval"
 version = "0.2.0"
 description = "Evaluation and quality metrics library for MAS Lab — MCE integration."
 readme = "README.md"
@@ -13,9 +13,9 @@ requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 
 dependencies = [
-    "mas-lab-core",
-    "mas-lab-bench",
-    "mas-runtime",
+    "mas-lab-component-core",
+    "mas-lab-component-bench",
+    "mas-lab-runtime",
     # MCE v1 — public packages from agntcy/telemetry-hub
     "metrics-computation-engine>=0.1.0",
     "mce-metrics-plugin>=0.1.0",

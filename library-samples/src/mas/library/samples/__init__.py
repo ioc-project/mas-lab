@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""mas-library-samples — manifest library root for sample apps, datasets, and tools."""
+"""Samples library — manifest root for sample apps, datasets, and tools."""
 
 from __future__ import annotations
 

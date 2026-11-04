@@ -1,4 +1,4 @@
-name: mas-library-telemetry
+name: telemetry
 description: Native-events-to-OTel conversion, span verification, and OTLP collector serialization.
 version: "0.1.0"
 
@@ -13,7 +13,7 @@ plugins:
     module: mas.library.telemetry.plugins.otel_plugin
     class: OtelObservabilityPlugin
     requires: [opentelemetry.sdk.trace]
-    extra: "mas-library-telemetry[convert]"
+    extra: convert
   - type: step
     name: events_to_otel
     module: mas.library.telemetry.bench

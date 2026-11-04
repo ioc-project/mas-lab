@@ -1,11 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Flavours resolve only from mas-library-standard."""
+"""Flavours resolve only from ``mas.library.standard``."""
 
 from __future__ import annotations
 
 import pytest
-
 from mas.lab.flavour.resolve import bundled_flavour_path, resolve_flavour_path
 
 

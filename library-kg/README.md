@@ -1,4 +1,4 @@
-# mas-library-kg
+# library-kg
 
 Converts agent traces (native `events.jsonl` or OpenTelemetry spans) into a knowledge graph
 (KG) document, `kg.jsonld`, that conforms to the MAS ontology, and validates, queries,
@@ -78,7 +78,7 @@ Two OTel wire formats exist:
 | Format | Key signals | Source |
 |--------|-------------|--------|
 | ClickHouse export | `SpanName` / `SpanAttributes` top-level keys | Collector / ClickHouse `otel_traces` |
-| MAS SDK (`ioa_observe`) | `name` / `attributes` / `context` top-level keys | JSON span export of the Python `ioa_observe` SDK (from `mas-library-telemetry`) |
+| MAS SDK (`ioa_observe`) | `name` / `attributes` / `context` top-level keys | JSON span export of the Python `ioa_observe` SDK (from `library-telemetry`) |
 
 SDK spans are reshaped mechanically onto the ClickHouse keys that `norm` expects. This
 library has no OTel handler or dispatch of its own.
@@ -622,7 +622,7 @@ not need the TTL (`KIND_TO_CLASS` is the map). TTL enrichment and SHACL validati
 | `library-kg` (`mas.library.kg`) | Normalisation, KG extraction, KG verification, Neo4j serialisation |
 | `oxp-ontology` (SCOPE) | Ontology TTL, SHACL shapes and generated models. Required by `library-kg` |
 | `norm` (SCOPE) | OTel-to-KG normaliser for the OTel path. Optional extra `[norm]` |
-| `mas-lab-bench` | Benchmark pipeline framework that runs the steps in `mas.library.kg.bench` (extra `[bench]`) |
+| `lab/components/bench` | Benchmark pipeline framework that runs the steps in `mas.library.kg.bench` (extra `[bench]`) |
 
 ---
 

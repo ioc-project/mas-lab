@@ -108,7 +108,7 @@ Preempt needs a cancellable decode. `ainvoke` uses `achat_completion_stream` whe
 
 ## Debug scripts
 
-Gdb-like debug scripts are a `runtime`-type plugin (`debug_script`, shortcut `gdb`, in `mas-library-standard`). They observe tool calls and tool results so the process acts as a debugger. `evaluate_egress` always returns ALLOW.
+Gdb-like debug scripts are a `runtime`-type plugin (`debug_script`, shortcut `gdb`, in `library-standard`). They observe tool calls and tool results so the process acts as a debugger. `evaluate_egress` always returns ALLOW.
 
 Enable the plugin from the workspace `config.yaml` `plugins:` or `lab.enable_plugins`. It is off unless listed. `spec.debug` holds `script_file` or an inline `script`. You can also load one with `mas-ctl chat --debug-script @file`.
 

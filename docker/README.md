@@ -176,11 +176,11 @@ A pure-YAML library needs no image wiring. Pure YAML means apps, agents, overlay
 
 Edit three files, then rebuild:
 
-1. **`pyproject.toml`** (repo root), 3 entries:
-   - `[project].dependencies`: `"mas-library-<name>",`
+1. **`pyproject.toml`** (repo root), 3 entries, using the library's own
+   `[project].name` (do not invent a second name):
+   - `[project].dependencies`: that name
    - `[tool.uv.workspace].members`: `"library-<name>",`
-   - `[tool.uv.sources]`: `mas-library-<name> = { workspace = true }`
-   (`mas-library-<name>` is the package name from the library's own `pyproject.toml`.)
+   - `[tool.uv.sources]`: `<that-name> = { workspace = true }`
 2. **`docker/backend/Dockerfile`**: 2 `COPY` lines, next to the other libraries:
    ```dockerfile
    # with the per-package pyproject copies (layer-cache stage):

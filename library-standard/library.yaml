@@ -6,13 +6,12 @@
 apiVersion: mas/v1
 kind: Library
 
-name: mas-library-standard
+name: standard
 description: >
   Standard library for MAS — infra bundles (OpenAI, production),
   tutorial tools (web-search, calculator), and design-pattern aliases.
 version: "0.0.1"
 dependencies:
-  - mas-runtime
   - ddgs>=9.14.0
 
 module_base: mas.library.standard
@@ -194,7 +193,7 @@ plugins:
     urn: mas.observability.native
     module: mas.library.standard.plugins.observability.native_plugin
     class: NativeObservabilityPlugin
-  # mas.observability.otel is registered by mas-library-telemetry.
+  # mas.observability.otel is registered by library-telemetry/.
 
   # Deterministic design patterns (OSS only)
   - type: design_pattern

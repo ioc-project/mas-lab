@@ -4,7 +4,7 @@
 # Optional backends for the Letta scenarios (with-letta-memory,
 # with-letta-factrecall). Not part of any mas-lab package: letta pins
 # opentelemetry-sdk==1.30.0, which is incompatible with google-adk
-# (mas-library-skills[all]). Install into a dedicated venv:
+# (mas-lab-library-skills[all]). Install into a dedicated venv:
 #
 #   task install-lab LAB=labs/extensions.lab
 letta==0.16.8

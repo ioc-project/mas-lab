@@ -60,7 +60,7 @@ write in YAML):
 | `library-kg/` | `kg` |
 | `library-telemetry/` | `telemetry` |
 
-The scheme is not the Python package name (`mas-library-samples`). An installed
+The scheme is not the Python package name (`library-samples`). An installed
 library registers its scheme on the `mas.runtime.manifest_libraries` entry point.
 A library found on a search path uses its directory name. `library.yaml` may
 list extra names under `schemes:`, but use one name per library (see

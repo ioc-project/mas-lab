@@ -32,7 +32,7 @@ Canonical samples:
 
 - [`library-samples/sample-workspace/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/sample-workspace/config.yaml)
 - Tutorials 1–3 under `docs/tutorials/*/config.yaml` (Tutorial 0 ships `config.*example.yaml` user-file samples)
-- Init template: [`lab/src/mas/lab/templates/init/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml)
+- Init template: [`lab/components/core/src/mas/lab/templates/init/config.yaml`](https://github.com/ioc-project/mas-lab/blob/main/lab/components/core/src/mas/lab/templates/init/config.yaml)
 
 ### `mas_ctl` merge (exchange log and friends)
 
@@ -141,7 +141,7 @@ Env overrides: [user-config.md](../user-config.md). Relative paths resolve from 
 
 Agent YAML still chooses `design_pattern`, tools, models, `spec.observability`, `spec.governance`, and checkpoint cadence. This list turns on gdb, checkpoint stores, and the control wire from the workspace. A *plugin* is a unit of behaviour selected by name.
 
-Omitted, `[]`, or a commented catalog means **nothing extra is on**. To enable a plugin, uncomment `plugins:` and any line in the [init template](https://github.com/ioc-project/mas-lab/blob/main/lab/src/mas/lab/templates/init/config.yaml). Specs that already name the same plugin keep their own config.
+Omitted, `[]`, or a commented catalog means **nothing extra is on**. To enable a plugin, uncomment `plugins:` and any line in the [init template](https://github.com/ioc-project/mas-lab/blob/main/lab/components/core/src/mas/lab/templates/init/config.yaml). Specs that already name the same plugin keep their own config.
 
 Labs enable the same URNs under `lab.enable_plugins` in `lab-config.yaml`.
 

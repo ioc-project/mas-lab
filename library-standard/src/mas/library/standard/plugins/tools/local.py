@@ -458,7 +458,7 @@ def _inject_skill_system_tools(
     skills_dir: Path,
     auto_inject_scripts: bool,
 ) -> None:
-    """Optional skill system tools — no-op when mas-library-skills is absent."""
+    """Optional skill system tools — no-op when the skills library is absent."""
     try:
         from mas.library.skills.plugins.system_tools import inject_skill_system_tools
     except ImportError:

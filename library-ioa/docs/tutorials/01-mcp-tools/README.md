@@ -143,7 +143,7 @@ spec:
 ```bash
 # from the mas-lab root
 uv sync
-uv sync --extra cli   # SDK CLI (`mcp version`, `mcp dev`); or install mas-library-ioa[all]
+uv sync --extra cli   # SDK CLI (`mcp version`, `mcp dev`); or install library-ioa[all]
 ```
 
 Official protocol conformance runs on Node, not a Python clone. To reproduce the MAS Lab fixture, install dependencies and run both pinned requirement sets with the [MCP compliance workflow](../../README.md):

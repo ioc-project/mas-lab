@@ -2,7 +2,7 @@
   Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
   SPDX-License-Identifier: Apache-2.0
 -->
-# mas-runtime API Reference
+# Runtime API reference
 
 Library API for the Mealy kernel, contracts and embeddable runtime instances. This page is for developers who embed the kernel in tests, benchmarks or custom hosts; to run agents, use `mas-ctl chat` or `mas-ctl run-mas`.
 

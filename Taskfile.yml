@@ -17,14 +17,14 @@ tasks:
     run: once
     summary: |
       Installs runtime, ctl, library-standard, library-ioa, library-telemetry,
-      library-kg, library-lab, and mas-lab (pulls mas-lab-controller,
-      mas-lab-bench, mas-lab-core as transitive editable deps).
+      library-kg, library-lab, and the meta-package (pulls lab/components
+      as transitive editable deps).
       Uses .envrc UV_PROJECT_ENVIRONMENT (this repo's .venv). Re-run after pulling
       new dependencies. For all libraries + extras use: task install-all
     cmds:
       - test -d .venv || uv venv .venv
-      - uv pip install -e runtime -e ctl -e library-standard -e library-ioa -e library-skills -e library-eval -e library-lab -e library-telemetry -e library-kg -e lab/components/core -e lab/components/bench -e lab/components/controller -e lab
-      - .venv/bin/python -c "import mas.lab.controller; print('mas-lab-controller OK')"
+      - uv pip install -e runtime -e ctl -e library-standard -e library-ioa -e library-skills -e library-eval -e library-lab -e library-telemetry -e library-kg -e lab/components/core -e lab/components/bench -e lab/components/controller -e .
+      - .venv/bin/python -c "import mas.lab.controller; print('lab controller OK')"
 
   install-dev:
     desc: "Editable runtime+ctl+lab install with dev test dependencies."
@@ -58,7 +58,7 @@ tasks:
     cmds:
       - test -f {{.LAB}}/requirements.txt || { echo "No {{.LAB}}/requirements.txt — this lab needs no extra deps, use the repo .venv" >&2; exit 1; }
       - uv venv {{.LAB_VENV}}
-      - VIRTUAL_ENV={{.LAB_VENV}} uv pip install -e runtime -e ctl -e library-standard -e library-skills -e library-eval -e library-lab -e library-samples -e lab/components/core -e lab/components/bench -e lab/components/controller -e lab
+      - VIRTUAL_ENV={{.LAB_VENV}} uv pip install -e runtime -e ctl -e library-standard -e library-skills -e library-eval -e library-lab -e library-samples -e lab/components/core -e lab/components/bench -e lab/components/controller -e .
       - VIRTUAL_ENV={{.LAB_VENV}} uv pip install -r {{.LAB}}/requirements.txt
       - echo "Lab env ready — run with {{.LAB_VENV}}/bin/mas-lab"
 
@@ -442,11 +442,12 @@ tasks:
   install-all:
     desc: "Install ALL MAS packages including optional extras (non-minimal). Run from repo root."
     summary: |
-      Full install: runtime, ctl, library-standard, library-ioa, lab,
-      library-eval, library-lab, library-samples, library-telemetry, library-kg.
+      Full install: runtime, ctl, library-standard, library-ioa, lab components,
+      library-eval, library-lab, library-samples, library-telemetry, library-kg,
+      and the mas-lab meta-package.
       This is not a minimal setup — see docs/packages-reference.md for details.
     cmds:
-      - uv pip install -e runtime -e ctl -e library-standard -e library-ioa -e lab -e library-eval -e library-lab -e library-samples -e library-telemetry -e library-kg
+      - uv pip install -e runtime -e ctl -e library-standard -e library-ioa -e lab/components/core -e lab/components/bench -e lab/components/controller -e . -e library-eval -e library-lab -e library-samples -e library-telemetry -e library-kg
 
   docs-gen:
     desc: "Regenerate docs/packages-reference.md, docs/plugins-reference.md, and path snippets."
@@ -548,7 +549,7 @@ tasks:
       - |
         VERSION=$(python3 scripts/version_manager.py get lab)
         git add VERSION
-        git add */pyproject.toml lab/components/*/pyproject.toml
+        git add pyproject.toml */pyproject.toml lab/components/*/pyproject.toml
         if git diff --cached --quiet; then
           echo "No version files changed"
           exit 1
@@ -761,7 +762,7 @@ tasks:
       - |
         VERSION=$(python3 scripts/version_manager.py get lab)
         git add VERSION
-        git add */pyproject.toml lab/components/*/pyproject.toml
+        git add pyproject.toml */pyproject.toml lab/components/*/pyproject.toml
         if git diff --cached --quiet; then
           echo "No version files changed"
           exit 1

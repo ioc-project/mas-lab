@@ -40,14 +40,20 @@ class _ManifestPluginCandidate:
     provides_types: set[str] = field(default_factory=set)
 
 
-def _variant_info_from_data(vdata: dict[str, Any]) -> VariantInfo:
+def _variant_info_from_data(
+    vdata: dict[str, Any], *, source: Path | None = None
+) -> VariantInfo:
+    from mas._dist import expand_extra
+
+    module = str(vdata.get("module") or "")
+    extra = expand_extra(str(vdata.get("extra") or ""), module=module or None, file=source)
     return VariantInfo(
-        module=str(vdata.get("module") or ""),
+        module=module,
         class_name=str(vdata.get("class") or vdata.get("class_name") or ""),
         version=str(vdata.get("version") or ""),
         description=str(vdata.get("description") or ""),
         requires=[str(r) for r in (vdata.get("requires") or [])],
-        extra=str(vdata.get("extra") or ""),
+        extra=extra,
     )
 
 
@@ -58,6 +64,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
 
 def _parse_generic_manifest(
     data: dict[str, Any],
+    *,
+    source: Path | None = None,
 ) -> tuple[
     set[str],
     list[_ManifestPluginCandidate],
@@ -86,7 +94,7 @@ def _parse_generic_manifest(
     for item in raw_plugins:
         if not isinstance(item, dict):
             continue
-        candidate = _candidate_from_manifest_item(item)
+        candidate = _candidate_from_manifest_item(item, source=source)
         if candidate is not None:
             # NOTE: deliberately NOT adding candidate.plugin_type to
             # known_types here. A candidate's own declared `type:` must be
@@ -117,7 +125,9 @@ def _parse_generic_manifest(
 
 
 
-def _candidate_from_manifest_item(item: dict[str, Any]) -> _ManifestPluginCandidate | None:
+def _candidate_from_manifest_item(
+    item: dict[str, Any], *, source: Path | None = None
+) -> _ManifestPluginCandidate | None:
     plugin_type = str(item.get("type") or "").strip()
     if not plugin_type:
         return None
@@ -138,23 +148,31 @@ def _candidate_from_manifest_item(item: dict[str, Any]) -> _ManifestPluginCandid
     if isinstance(raw_variants, dict) and raw_variants:
         for variant_name, variant_data in raw_variants.items():
             if isinstance(variant_data, dict):
-                variants[str(variant_name)] = _variant_info_from_data(variant_data)
+                variants[str(variant_name)] = _variant_info_from_data(
+                    variant_data, source=source
+                )
     else:
         module = item.get("module")
         class_name = item.get("class") or item.get("class_name")
         if module and class_name:
-            variants["builtin"] = _variant_info_from_data(item)
+            variants["builtin"] = _variant_info_from_data(item, source=source)
         elif factory:
             if ":" in factory:
                 factory_module, factory_attr = factory.rsplit(":", 1)
             else:
                 factory_module, factory_attr = factory, "build_metrics"
+            from mas._dist import expand_extra
+
             variants["builtin"] = VariantInfo(
                 module=factory_module,
                 class_name=factory_attr,
                 description=str(item.get("description") or ""),
                 requires=[str(r) for r in (item.get("requires") or [])],
-                extra=str(item.get("extra") or ""),
+                extra=expand_extra(
+                    str(item.get("extra") or ""),
+                    module=factory_module or None,
+                    file=source,
+                ),
             )
     if not variants:
         return None
@@ -273,7 +291,7 @@ def _register_library_plugins(reg: PluginRegistry) -> None:
         try:
             data = _load_yaml(manifest_path)
             _claim_library_package(manifest_path.parent, data, claimed)
-            register_manifest_data(reg, data)
+            register_manifest_data(reg, data, source=manifest_path)
         except Exception as exc:
             raise ValueError(
                 f"Failed to register plugin manifest {manifest_path}: {exc}"
@@ -348,8 +366,15 @@ def register_plugin(
             reg.register_alias(shortcut, urn)
 
 
-def register_manifest_data(reg: PluginRegistry, manifest_data: dict[str, Any]) -> None:
-    known_types, candidates, role_aliases, defaults, runtime_spec_keys = _parse_generic_manifest(manifest_data)
+def register_manifest_data(
+    reg: PluginRegistry,
+    manifest_data: dict[str, Any],
+    *,
+    source: Path | None = None,
+) -> None:
+    known_types, candidates, role_aliases, defaults, runtime_spec_keys = (
+        _parse_generic_manifest(manifest_data, source=source)
+    )
     merged_known_types = set(reg._known_types)
     merged_known_types.update(known_types)
     reg.register_types(known_types)
@@ -362,4 +387,5 @@ def register_manifest_data(reg: PluginRegistry, manifest_data: dict[str, Any]) -
 
 
 def register_manifest_file(reg: PluginRegistry, path: str | Path) -> None:
-    register_manifest_data(reg, _load_yaml(Path(path)))
+    path = Path(path)
+    register_manifest_data(reg, _load_yaml(path), source=path)

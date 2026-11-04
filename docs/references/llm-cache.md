@@ -4,7 +4,7 @@
 -->
 # LLM cache reference
 
-**Packages:** `mas-runtime` (pipeline, cache file format), `mas-ctl` (ref merge, engine wiring), `mas-library-standard` (`LlmCacheMiddleware` plugin, `type: infra_middleware`) · **Schema:** [`infra-llm-cache-params.schema.yaml`](../schemas/runtime/fragments/infra-llm-cache-params.schema.yaml) · **Middleware id:** `llm_cache`
+**Packages:** `runtime/` (pipeline, cache file format), `ctl/` (ref merge, engine wiring), `library-standard/` (`LlmCacheMiddleware` plugin, `type: infra_middleware`) · **Schema:** [`infra-llm-cache-params.schema.yaml`](../schemas/runtime/fragments/infra-llm-cache-params.schema.yaml) · **Middleware id:** `llm_cache`
 
 This page is the full reference for the `llm_cache` infra middleware. It stores model responses on disk, so a repeated request skips the LLM call. Read it to record a run, replay it offline, or share a cache across a deployment. For a walkthrough, see the [hands-on guide](../manifests/llm-cache.md).
 

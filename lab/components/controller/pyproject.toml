@@ -5,17 +5,17 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mas-lab-controller"
+name = "mas-lab-component-controller"
 version = "0.2.0"
 description = "MAS Lab controller daemon — workers, IPC, HTTP API for CLI and UI."
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 
 dependencies = [
-    "mas-lab-core",
-    "mas-lab-bench",
-    "mas-runtime",
-    "mas-ctl",
+    "mas-lab-component-core",
+    "mas-lab-component-bench",
+    "mas-lab-runtime",
+    "mas-lab-ctl",
     "click>=8.0",
     "pyyaml>=6.0",
     "fastapi>=0.110",

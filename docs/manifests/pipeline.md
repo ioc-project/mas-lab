@@ -4,7 +4,7 @@
 -->
 # Pipeline manifests
 
-**Package:** `mas-lab-bench`.
+**Package:** `lab/components/bench`.
 
 A **pipeline** is an ordered list of **pipeline steps** that read **run** artifacts and write CSV and PNG files under `results/`.
 A pipeline step is one processor, for example `extract_trace_stats` or `plotnine`.

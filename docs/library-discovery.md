@@ -22,7 +22,7 @@ A **manifest library** is a folder with `library.yaml` at its root.
 - An unknown name raises `LookupError`. It is never read as a filesystem path.
 - The lab validator rejects unknown library names.
 - Do not put `library.yaml` on the lab root.
-- `mas-ctl` must not depend on `mas-library-samples`.
+- `mas-ctl` must not depend on the samples library.
 
 ---
 
@@ -84,7 +84,7 @@ Kind `Library`, `apiVersion: mas/v1`, flat (no `metadata:` / `spec:`).
 
 | Field | Role |
 | --- | --- |
-| `name` | Package-style identity (`mas-library-samples`, `lifecycle-control-lib`) |
+| `name` | Library scheme (`samples`, `lifecycle-control-lib`). Not the PyPI wheel name. |
 | `schemes` | Optional extra identifiers. Prefer one name: the directory stem and the install entry point. Do not add aliases. |
 | `apps` / `datasets` / `tools` | Catalogs for `library:app`, `name:path`, and `app:` lookup. App keys are `name` or `name@version`; a value may be a family dir (`apps/my-app`) or one version dir. |
 | `types` / `plugins` | Plugin manifest payload (same shape as `*.plugins.yaml`) |
@@ -102,10 +102,10 @@ manifest catalogs them so discovery and `name:path` see the library.
 
 ## Scheme vs package name
 
-The prefix in `samples:tools/calc.tool.yaml` is the **library name**
-(`samples`), not the package name (`mas-library-samples`). Installed names in
-this repository: `samples`, `standard`, `lab`, `eval`, `skills`, `ioa`, `kg`,
-`telemetry`.
+The prefix in `samples:tools/calc.tool.yaml` is the **library scheme**
+(`samples`), not the PyPI wheel name. Installed schemes in this repository:
+`samples`, `standard`, `lab`, `eval`, `skills`, `ioa`, `kg`, `telemetry`.
+Wheel names live in each library's `pyproject.toml`.
 
 The basename of a lab-local directory (`lifecycle_control_lab/`) is its scheme.
 It is also a Python package name, so it must not collide with another loaded

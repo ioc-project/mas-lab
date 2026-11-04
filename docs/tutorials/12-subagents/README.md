@@ -4,7 +4,7 @@
 -->
 # Tutorial 12 — Spawned subagents
 
-> **Packages:** `mas-runtime`, `mas-ctl`
+> **Packages:** `runtime/`, `ctl/`
 > **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) and
 > [Tutorial 1](../01-building-an-agent/README.md). Run all commands from the
 > repository root.
@@ -57,7 +57,7 @@ exchange. The reviewer runs as its own instance for this one call.
 
 ## Step 3 — How dispatch works
 
-- `SpawnSubagentTool` (`mas-library-standard`) only advertises
+- `SpawnSubagentTool` (`library-standard`) only advertises
   `spawn_subagent`, with a schema built from the template ids. It fails
   closed if executed.
 - `SubagentSpawner` (`engine_tools/subagent_spawner.py`) builds the child

@@ -12,10 +12,10 @@ Discovery is via this library's ``library.yaml`` manifest (``plugins:`` entries
 of ``type: step``), so the bench framework finds these steps without importing
 the library eagerly — and the library never imports ``mas.runtime``.
 
-Importing this module requires the bench framework (``mas-lab-bench``); it is an
+Importing this module requires the bench framework (``lab/components/bench``); it is an
 optional extra::
 
-    uv pip install -e "mas-library-telemetry[bench]"
+    this library's ``bench`` extra
 """
 
 from __future__ import annotations
@@ -31,7 +31,6 @@ from typing import TYPE_CHECKING, Optional
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.lab.benchmark.pipeline.run_artifacts import run_dir_from_ctx
-
 from mas.library.telemetry.artifact import OtelSpanSet
 from mas.library.telemetry.conversion.layers import parse_export_layers
 from mas.library.telemetry.steps.compare_spans import run_compare_spans
