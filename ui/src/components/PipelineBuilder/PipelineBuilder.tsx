@@ -37,7 +37,7 @@ function generateNodeId(): string {
 function serializeGraphToYaml(
   nodes: Node[],
   _edges: Edge[],
-  experimentName: string,
+  _experimentName: string,
   metadata?: Record<string, unknown>,
 ): string {
   const stepNodes = nodes
