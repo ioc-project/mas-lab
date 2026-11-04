@@ -3,9 +3,12 @@
 import "@open-ui-kit/core/typography.css";
 import "@xyflow/react/dist/style.css";
 import { ThemeMode, ThemeProvider } from "@open-ui-kit/core";
-import { BrowserRouter as Router, useLocation, useNavigate } from "react-router";
+import {
+  BrowserRouter as Router,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { Box, CssBaseline } from "@mui/material";
-import { TopBar } from "@/components";
 import AppRoutes from "@/routes/routes.tsx";
 import { useEffect } from "react";
 
@@ -15,7 +18,6 @@ import { fetchApiInfo } from "@/api/info";
 function ThemedApp() {
   const location = useLocation();
   const navigate = useNavigate();
-  const hideChrome = location.pathname === "/connect";
 
   useEffect(() => {
     const goConnect = () => {
@@ -51,10 +53,7 @@ function ThemedApp() {
           flexDirection: "column",
         }}
       >
-        {!hideChrome && <TopBar />}
-        <Box sx={{ flex: 1 }}>
-          <AppRoutes />
-        </Box>
+        <AppRoutes />
       </Box>
     </>
   );
