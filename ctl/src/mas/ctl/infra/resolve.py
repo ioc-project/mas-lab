@@ -17,6 +17,7 @@ from mas.ctl.libraries.bundles import list_manifest_libraries
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 from mas.runtime.engine.call_kinds import as_str_list, read_aliased_field
 from mas.runtime.engine.infra_pipeline import stamp_middleware_step
+from mas.runtime.spec.endpoint_usage import CONNECT, LISTEN, usage_modes
 from mas.runtime.spec.schema_bindings_generated import INFRA_MIDDLEWARE_PATH_PARAM_KEYS
 from mas.runtime.spec.source import load_yaml_file, resolve_ref_with_search
 from mas.runtime.xdg import mas_infra_dir, mas_runtime_dir
@@ -50,27 +51,30 @@ _LEAF_KINDS = {
 }
 _VALID_KINDS = _LEAF_KINDS | {"InfraBundle"}
 
-_APPLICATION_USAGES = {"use", "deploy", "use-and-deploy"}
 _PROVIDER_KINDS = frozenset({"LLMProxy", "LLMLocal", "Infrastructure"})
 
 
-def application_endpoint_usage(endpoint: dict[str, Any]) -> str:
-    """Return the endpoint's explicit usage, preserving legacy expose behavior."""
+def application_endpoint_usage(endpoint: dict[str, Any]) -> frozenset[str]:
+    """The endpoint's usage modes (``connect``, ``listen``), preserving legacy ``expose``.
+
+    Deprecated values (``use``, ``deploy``, ``use-and-deploy``) are read as
+    their replacements; ``mas-ctl validate`` and compose warn about them.
+    """
     usage = endpoint.get("usage")
     if usage is None:
-        return "use-and-deploy" if endpoint.get("expose") is True else "use"
-    value = str(usage)
-    if value not in _APPLICATION_USAGES:
-        raise ValueError("Application endpoint usage must be 'use', 'deploy', or 'use-and-deploy'")
-    return value
+        return frozenset((CONNECT, LISTEN)) if endpoint.get("expose") is True else frozenset((CONNECT,))
+    try:
+        return usage_modes(usage)
+    except ValueError as exc:
+        raise ValueError(f"Application endpoint {exc}") from None
 
 
 def application_endpoint_is_used(endpoint: dict[str, Any]) -> bool:
-    return application_endpoint_usage(endpoint) in {"use", "use-and-deploy"}
+    return CONNECT in application_endpoint_usage(endpoint)
 
 
 def application_endpoint_is_deployed(endpoint: dict[str, Any]) -> bool:
-    return application_endpoint_usage(endpoint) in {"deploy", "use-and-deploy"}
+    return LISTEN in application_endpoint_usage(endpoint)
 
 
 def resolve_infra_refs(

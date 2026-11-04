@@ -224,7 +224,7 @@ Selects the agent's reasoning strategy. It defaults to `react` when absent. The 
 
 | Field | Type | Required | Description |
 | ------- | ------ | ---------- | ------------- |
-| `type` | `string` | mutually exclusive with `ref` | Registered plugin name. Shipped: `react`, `cot`, `single_pass`, `introspection`, `plan_execute`, `tree_of_thoughts`, `deterministic_single`, `deterministic_linear`, `deterministic_parallel`, plus aliases (`analyst`, `planner`, `linear`, `reflection`, `tot`, `plan-execute`). |
+| `type` | `string` | mutually exclusive with `ref` | Registered plugin name. Shipped: `react`, `cot`, `single_pass`, `introspection`, `plan_execute`, `tree_of_thoughts`, `deterministic_single`, `deterministic_linear`, `deterministic_parallel`, `state_machine` ([below](#state_machine)), `moderated_rounds` ([below](#moderated_rounds)), plus aliases (`analyst`, `planner`, `linear`, `reflection`, `tot`, `plan-execute`). |
 | `ref` | `string` | mutually exclusive with `type` | Same lookup as `type` (name, alias, or plugin URN such as `mas.dp.react`). File paths and `module://` / `oci://` locators are not resolved in this release. |
 | `params` | `object` | no | Plugin parameters. Common keys: `max_steps` (dispatch-loop cap, default none), `max_cot_pass` (default `1`), `parallel` (parallel tool calls, default `true`). See [plugin-bindings.md](plugin-bindings.md#design_pattern-default-react). |
 | `config` | `object` | no | Alias for `params` (overlay compatibility); `params` wins when both are set. |
@@ -242,6 +242,269 @@ design_pattern:
   type: my_cot
   params:
     max_steps: 10
+```
+
+#### state_machine
+
+A design pattern written as data: a table of named states. Each state runs one
+child and ends with an outcome; the first matching transition picks the next
+state. The entry agent's code decides the order, so a negotiation, a router or
+a plan-then-check flow is a table, not a plugin. Nothing in the engine knows an
+agent name or a protocol.
+
+```yaml
+design_pattern:
+  type: state_machine
+  params:
+    start: classify
+    max_steps: 20                       # state entries per turn (default 50)
+    vars: {style: terse}                # initial variables
+    states:
+      classify:
+        run: delegate
+        agents: [classifier]
+        input: "Which team should handle this?\nCustomer: {task}"
+        read: {json: {fields: {team: {enum: [billing, outage]}}}}
+        retry: 1
+        on:
+          - {when: {out.ok: false}, goto: failed}
+          - {when: {out.team: billing}, goto: billing}
+          - {when: {out.team: outage}, goto: outage}
+      billing:
+        run: delegate
+        agents: [billing]
+        input: "{task}"
+        on: [{goto: summarise}]
+      outage:
+        run: delegate
+        agents: [outage]
+        input: "{task}"
+        on: [{goto: summarise}]
+      summarise:                        # the entry agent's own ReAct loop
+        run: react
+        instructions: "Be {style}."
+        input: "Write the answer for the customer from: {last.text}"
+        on: [{goto: done}]
+      failed: {run: end, result: "Could not route the request."}
+      done: {run: end, result: "{last.text}"}
+```
+
+**Children (`run`).**
+
+| `run` | What it does | Fields |
+| --- | --- | --- |
+| `delegate` | Sends `input` to each agent of `agents`, one at a time, and reads each reply. The agent can run any design pattern, ReAct included. | `agents`, `input`, `read`, `instruct`, `retry`, `error_detail`, `log`, `log_from`, `log_body`, `log_reply` |
+| `pattern` | Any registered design pattern as the child: `plan_execute`, `react`, `cot`, `deterministic_linear`, `moderated_rounds`, another `state_machine`. It runs inside the state with `input` as its task and `agents` (default: all the entry can delegate to) as the agents it may call. Its final answer is the outcome; `read` parses it like a delegate reply (no `retry`). `instructions` and `input` are added to the system prompt while it runs, followed by the child's own prompt lines. | `pattern`, `params`, `with`, `input`, `instructions`, `agents`, `read` |
+| `react` | Short for `run: pattern` with `pattern: react`. | `input`, `instructions` |
+| `parallel` | Regions that advance together, then join. See below. | `regions`, `join` |
+| `tool` | Calls one tool. | `tool`, `args` |
+| `end` | Ends the turn; `result` is the reply (a mapping is returned as JSON). | `result` |
+
+Every other state has `on`: a list of transitions, tried in order.
+
+**Outcome (`out`).** What a state produced, visible in its own `on`:
+`ok` (false when the call failed, the reply could not be read after `retry`
+attempts, or the model call errored), `text` (the last reply), `detail` (why it
+failed), `replies` (one row per agent, with its `agent` and `text` and what
+`read` extracted), and the fields of the last reply that `read` extracted.
+In the next state the same outcome is `last`.
+
+**Reading replies (`read`).** The only channel back from an agent is its reply
+text, so `read` says how to read it, and the state tells the agent how to
+answer.
+- `read: {json: {fields: {name: rule}}}` takes the first JSON object in the
+  reply (bare, or in a code fence) and checks it with a pydantic model built
+  from the rules. A field is required unless it has `optional: true` or
+  `required_if: {other_field: value}` (required when `other_field` has that
+  value). A rule can have `type` (`string`, `integer`, `number`, `boolean`,
+  `object`, `array`, `any`), `enum: [...]`, and `description`. Other fields in
+  the reply are kept. A field that is absent or null is left out of `out`.
+- `read: {word: [confirm, reject]}` needs a reply that starts with one of the
+  words, standing alone (`Confirmation denied` does not start with `confirm`).
+  It gives `word`, `reason` and `counts` (`out.counts.reject`).
+- Types are strict: `"3"` is not an integer, `true` is not `1`. A field cannot be
+  named like an outcome field the engine fills in (`agent`, `text`, `ok`,
+  `replies`, `counts`, `detail`), start with an underscore, or be a name that
+  pydantic models already have (`schema`, `copy`, `model_config`...). A reply
+  longer than 200,000 characters is not read. An empty reply is a failed call
+  (`out.ok` false), never a guess.
+- The engine adds the format to the agent's task from the same `read`: the JSON
+  Schema (with the `required_if` rules in words) or the list of words. Set
+  `instruct: false` to write it yourself. The public transcript records the
+  task without it.
+- A reply that cannot be read is asked again, `retry` times. The new request
+  starts with what was wrong ("Your last reply could not be used (plan is
+  required when action is 'propose')"), then the same task and format. After
+  that `out.ok` is false and `out.detail` is `error_detail`, which can use
+  `{agent}` and `{error}`.
+- On a `pattern` state `read` parses the child's final answer in the same way,
+  without retry and without adding a format: the child's output is its own.
+
+**YAML notes.** `yaml.safe_load` reads YAML 1.1, where an unquoted `on`, `yes`,
+`no`, `off` is a boolean. The engine accepts the key `on` either way, but a word
+list needs quotes: `read: {word: ["yes", "no"]}`. The table check says so.
+
+**Transitions.** `{when: {...}, set: {...}, goto: state}`. `when` maps a path
+(`out.action`, `round`) to a value, or to operators: `eq`, `ne`, `in`,
+`not_in`, `gt`, `gte`, `lt`, `lte`, `exists`. All entries must hold. A
+path that is not defined reads as null, and null is not greater or smaller than
+anything (`gt`, `gte`, `lt`, `lte` are false). `in` and `not_in` take a list.
+`set` updates variables in order: a value, `{literal: text}` (kept as written,
+braces and all), `{add: n}`, `{append: x}`, or `{extend: list, as: item_template}`.
+Variable names the engine fills in (`task`, `out`, `last`, `steps`, `state`,
+`elapsed`, `transcript`, `transcript_rows`, `signal`, `item`, `agent`, `error`,
+`regions`) cannot be used in `vars`.
+
+**Templates.** `{name}` fills in a variable, `{out.text}` a path. A string that
+is exactly one placeholder keeps the value's type (a list stays a list); inside
+longer text it is inserted as text. Only `{identifier}` forms are placeholders,
+so JSON braces in prompts stay as they are, and an inserted value is never
+filled in again. Built in: `task` (the user's text), `transcript` (the public
+transcript), `transcript_rows` (the same as rows), `steps`, `state` (the current
+state), `elapsed` (seconds since the turn started), `out`, `last`, `signal`
+(after a steer, with `signals`), and in a delegate state `agent`, plus `item` in `log_reply` and `set: extend ... as`, and
+`error` in `error_detail`. Filters chain with `|`: `json`, `without:var` (drops the keys
+listed in variable `var`, at any depth), `with_transcript` (prefixes the public
+transcript when there is one), `or:var` (use `var` when the value is absent or
+empty).
+
+**Public transcript.** `log: each` records each request and reply as it
+happens, so later speakers see them. `log: after_all` records the request and
+every reply only once all agents have answered, so nobody sees another's
+answer. `log_from` names the sender, `log_body` and `log_reply` the texts.
+Lines read `[seq] from -> to: body`.
+
+**Fails closed.** An unreadable reply is asked again `retry` times, then
+`out.ok` is false. A state with no matching transition, an undefined variable,
+an agent the entry cannot delegate to, a malformed table, and more than
+`max_steps` state entries all end the turn with a `state_machine: ...` message.
+Nothing is guessed. The table is checked when the turn starts, so a typo in a
+key or a `goto` is reported at once.
+
+**A pattern as the child.** `params` are the child's params, and templates in
+them are filled from the machine's variables, so `params: {decider: "{judge}"}`
+works. For a child `state_machine` the params are its table: its templates
+are its own, and the outer variables it needs are passed with `with:
+{who: "{target}"}`. Only the child's replies after the state started are
+visible to it, never those of earlier states. A child that fails, or whose
+answer `read` cannot parse, gives `out.ok: false`. Machines nest to depth 4.
+
+```yaml
+      negotiate:
+        run: pattern
+        pattern: moderated_rounds
+        agents: [planner, finance, ops]
+        params: {decider: planner, max_rounds: 3}
+        input: "{task}"
+        read: {json: {fields: {status: {enum: [committed, withheld, escalated]}}}}
+        on:
+          - {when: {out.status: committed}, goto: announce}
+          - {goto: escalate}
+```
+
+**Parallel regions.** A `parallel` state holds `regions`: each a state table of
+its own (`start`, `states`, optional `vars`) that can run `delegate`, `tool`
+and `end` states. The regions advance together: their next calls go out as one
+parallel batch, each region takes its reply and moves on, and so on until the
+`join`: `all` (default) waits for every region to end, `any` stops at the first.
+With `parallel_tool_calls` off the regions take turns, one call at a time. A
+region reads the machine's variables as they were when the state started and
+keeps its own changes and public transcript. The outcome `out` has `ok` (every
+finished region ended well), `finished`, `unfinished` and `regions`: for each
+finished region `ok`, `text`, `data` (its result, when it is JSON), `vars` and
+`detail` when it failed. A region that fails ends with `ok: false`; the others
+carry on.
+
+```yaml
+      check:
+        run: parallel
+        join: all
+        regions:
+          price:
+            start: ask
+            states:
+              ask: {run: delegate, agents: [finance], input: "Price for: {task}", on: [{goto: end}]}
+              end: {run: end, result: {quote: "{last.text}"}}
+          stock:
+            start: ask
+            states:
+              ask: {run: delegate, agents: [ops], input: "Stock for: {task}", on: [{goto: end}]}
+              end: {run: end, result: {stock: "{last.text}"}}
+        on: [{set: {quote: "{out.regions.price.data.quote}"}, goto: answer}]
+```
+
+**Signals.** `signals` is a top-level list of transitions (`when`, `set`,
+`goto`) that can fire from any state. They are tried at every state boundary
+before the state's own `on` rows, and after every round of a `parallel` state
+(there `regions.<name>.state` and `.done` are visible). They see the variables,
+`steps`, `state` (the state that just ended), `elapsed` (seconds since the turn
+started), `out` at a boundary, and `signal` after a steer (`signal.text`,
+`signal.sender`, `signal.source`, `signal.intent`).
+
+```yaml
+    signals:
+      - {when: {elapsed: {gte: 120}}, set: {why: "out of time"}, goto: wrap_up}
+      - {when: {signal.intent: steer}, set: {why: "{signal.text}"}, goto: wrap_up}
+```
+
+A signal takes effect when the running call returns; it does not cancel a call
+in flight.
+
+**Steer.** The runtime delivers a steer, as for every pattern: `after` queues
+it for the end of the run, `preempt` and `replace` act on a model call that is in
+flight (a `react` state, or a child pattern that calls the model), and a steer
+that finds no model call in flight is queued by the runtime. The pattern decides
+what a steer means. With `signals`, a steer that arrives during a run is the
+variable `signal` and the run goes on: the first signal that matches moves the
+machine, and if none matches the interrupted state starts again. Without
+`signals`, or when no run is going on, a steer restarts the machine on the
+steer text, like the other deterministic patterns. `replace` always starts a new
+run on its text.
+
+**A call that did not run.** When the kernel skips or blocks a call (an operator
+HITL skip, a governance block, a blacklisted tool), the state's outcome has
+`ok: false`, `skipped: true` and `detail`; the note written for the model is not
+taken as the agent's reply.
+
+#### moderated_rounds
+
+A preset of `state_machine` for a group that must agree on one plan. Its params
+fill in a fixed table, so the entry agent calls no model: code decides who
+speaks, in which order, and when the group confirms. Each round sends the
+request to every agent of `order`, one at a time, with the public transcript so
+far (`[seq] from -> to: body`). Then the `decider` answers with one JSON action:
+`continue` (with `message`, the next round's request), `propose` (with `plan`),
+`withhold` or `escalate` (with `reason`). A proposed plan goes to every agent of
+`confirmers`; each sees the transcript as it stood when the plan was proposed,
+not the others' answers, and replies starting with `confirm` or `reject`. All
+confirm: committed. A rejection starts a new round, and the next plan is a new
+version. An unreadable decision or confirmation is asked once more, then ends
+the run with reason `protocol_error`. For another protocol (a vote, an extra
+check, a ReAct step), write the table with `state_machine`.
+
+| Param | Default | Description |
+| ------- | --------- | ------------- |
+| `decider` | required | Agent that chooses the action after each round. |
+| `order` | the entry's delegates minus `decider` | Speakers of each round, in order. |
+| `confirmers` | `decider` then `order` | Agents asked to confirm a proposed plan. |
+| `max_rounds` | `6` (0 also means 6) | A run that reaches it without a committed plan is withheld with reason `round_limit`. |
+| `opening_from` | `decider` | Sender shown for the first request (the user's text). |
+| `decision_instructions` | four-action text | What the decider is told before the JSON Schema of its answer, which the engine adds. |
+| `confirm_question` | `Do you confirm this plan version?` | Asked after the plan. |
+| `hide_from_confirmers` | `[]` | Plan keys (at any depth) left out of what confirmers see. |
+| `rejected_request` | asks the group to respond to the objections | Next request after a rejection; `{version}` is the rejected plan version, and the only placeholder allowed. |
+| `record_tool` | none | Tool the moderator calls once at the end with `status`, `reason`, `detail`, `plan_version`, `plan`, `confirmations`, `rounds`, `rejected_replies`. |
+
+The reply to the user is the outcome as JSON, with the transcript.
+
+```yaml
+design_pattern:
+  type: moderated_rounds
+  params:
+    decider: buyer
+    order: [supplier_a, supplier_b, logistics]
+    max_rounds: 6
+    record_tool: write_commitment
 ```
 
 ---

@@ -25,7 +25,7 @@ The model:
 - Logical tool contract: `kind: Tool` plus `call_tool(name, arguments)`.
 - Local tools: materialized by default from the implicit `tools/` and `skills/` locations of `standard:local-tools` (`protocol: local`).
 - Remote tools: an infra `ToolServerRegistry` entry with `protocol: mcp`.
-- An MCP `usage: use` dependency replaces the implicit local provider. An explicit local infra claim re-adds local tools beside MCP.
+- An MCP `usage: connect` dependency replaces the implicit local provider. An explicit local infra claim re-adds local tools beside MCP.
 - Flavours control how tools are exposed, not which third-party endpoints are consumed.
 
 The Tutorial 1 overlays stay unchanged. `overlays/tools.yaml` adds the tool contracts and `overlays/skills.yaml` adds the skill:
@@ -79,11 +79,11 @@ spec:
   tool_servers:
     - id: localhost-mcp-tools
       protocol: mcp
-      usage: use
+      usage: connect
       url: http://127.0.0.1:9001/mcp
 ```
 
-The runtime reads this entry and initializes its MCP provider from it. `protocol` and `id` are required. `usage: use` (the consumer default) means the runtime consumes the endpoint. `url` is the HTTP endpoint; `transport` defaults to `streamable-http`. Leave `tools` unset to discover names from MCP `tools/list`, or set an explicit list.
+The runtime reads this entry and initializes its MCP provider from it. `protocol` and `id` are required. `usage: connect` (the consumer default) means the runtime consumes the endpoint. `url` is the HTTP endpoint; `transport` defaults to `streamable-http`. Leave `tools` unset to discover names from MCP `tools/list`, or set an explicit list.
 
 The implicit local entry has no `tools` claim. To keep local tools when MCP is also configured, add this infra dependency; id-based merge keeps the implicit directory paths and adds the claim:
 
@@ -116,7 +116,7 @@ spec:
       skills_dir: skills
 ```
 
-For the server side, use a separate `usage: deploy` entry. Its `host`, `port`, `tools_dir` and optional `tools` list configure what `mas-mcp serve` exposes:
+For the server side, use a separate `usage: listen` entry. Its `host`, `port`, `tools_dir` and optional `tools` list configure what `mas-mcp serve` exposes:
 
 ```yaml
 # library-samples/infra/mcp-localhost-deploy.yaml
@@ -128,7 +128,7 @@ spec:
   tool_servers:
     - id: mcp-localhost-deploy
       protocol: mcp
-      usage: deploy
+      usage: listen
       transport: streamable-http
       host: 127.0.0.1
       port: 9001

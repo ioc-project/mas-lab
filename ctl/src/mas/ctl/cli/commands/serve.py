@@ -112,8 +112,8 @@ def serve_agent_cmd(
         endpoint = infra.applications.get(agent_id)
         if endpoint is None or not application_endpoint_is_deployed(endpoint):
             raise click.ClickException(
-                f"No deployed infra Application endpoint named {agent_id!r}; set usage: deploy "
-                "or usage: use-and-deploy "
+                f"No listening infra Application endpoint named {agent_id!r}; set usage: listen "
+                "or usage: [connect, listen] "
                 "in workspace infra_refs or pass --infra-ref"
             )
 

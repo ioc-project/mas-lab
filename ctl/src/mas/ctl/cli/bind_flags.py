@@ -28,7 +28,7 @@ connect_option = click.option(
     multiple=True,
     metavar="NAME=URI",
     help=(
-        "Connect to a remote peer or tool (infra usage: use): "
+        "Connect to a remote peer or tool (infra usage: connect): "
         "agent=a2a://host:port/path or tool=mcp://host:port/mcp#name. "
         "Expands to --override infra:…; same merge path as --infra-ref YAML."
     ),
@@ -61,8 +61,8 @@ listen_option = click.option(
     multiple=True,
     metavar="NAME=URI",
     help=(
-        "Listen on a well-known name (infra usage: deploy): serve the agent "
-        "NAME at a2a://host:port/path. The mirror of --connect (which uses a "
+        "Listen on a well-known name (infra usage: listen): serve the agent "
+        "NAME at a2a://host:port/path. The mirror of --connect (which connects to a "
         "remote peer). Expands to --override infra:…; same merge path as "
         "--infra-ref YAML."
     ),

@@ -14,11 +14,13 @@ from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.design_patterns.cot import CotPlugin
 from mas.library.standard.plugins.design_patterns.introspection import IntrospectionPlugin
 from mas.library.standard.plugins.design_patterns.linear import DeterministicLinearPlugin
+from mas.library.standard.plugins.design_patterns.moderated_rounds import ModeratedRoundsPlugin
 from mas.library.standard.plugins.design_patterns.parallel import DeterministicParallelPlugin
 from mas.library.standard.plugins.design_patterns.plan_execute import PlanExecutePlugin
 from mas.library.standard.plugins.design_patterns.react import ReactPlugin
 from mas.library.standard.plugins.design_patterns.single import DeterministicSingleAgentPlugin
 from mas.library.standard.plugins.design_patterns.single_pass import SinglePassPlugin
+from mas.library.standard.plugins.design_patterns.state_machine import StateMachinePlugin
 from mas.library.standard.plugins.design_patterns.tree_of_thoughts import TreeOfThoughtsPlugin
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 from mas.runtime.boundary.control.contract import ControlCapability
@@ -42,7 +44,12 @@ DETERMINISTIC_PATTERNS = (
     "deterministic_parallel@v1",
     "deterministic_single@v1",
 )
-ALL_PATTERNS = LLM_PATTERNS + DETERMINISTIC_PATTERNS
+# These declare every steer mode: the runtime delivers, the pattern says what a steer means.
+STEERABLE_PATTERNS = (
+    "state_machine@v1",
+    "moderated_rounds@v1",
+)
+ALL_PATTERNS = LLM_PATTERNS + DETERMINISTIC_PATTERNS + STEERABLE_PATTERNS
 _PATTERN_PLUGINS = {
     "react@v1": ReactPlugin,
     "single_pass@v1": SinglePassPlugin,
@@ -53,6 +60,8 @@ _PATTERN_PLUGINS = {
     "deterministic_linear@v1": DeterministicLinearPlugin,
     "deterministic_parallel@v1": DeterministicParallelPlugin,
     "deterministic_single@v1": DeterministicSingleAgentPlugin,
+    "state_machine@v1": StateMachinePlugin,
+    "moderated_rounds@v1": ModeratedRoundsPlugin,
 }
 
 
@@ -73,14 +82,18 @@ class _Display:
         return None
 
 
-def _live_session(pattern: str, session_id: str, *, engine: object | None = None):
+def _live_session(
+    pattern: str, session_id: str, *, engine: object | None = None, config: KernelConfig | None = None
+):
     instance = RuntimeInstance.from_parts(
-        config=KernelConfig(),
+        config=config or KernelConfig(),
         engine=engine or SimulatedEngine(llm_next_step=lambda _cid: "STOP", stop_text="ok"),
         enable_observability=False,
         enable_coordination=False,
     )
     instance.kernel.plugin = _PATTERN_PLUGINS[pattern]()
+    if pattern in STEERABLE_PATTERNS:
+        instance.driver.ctx.pattern_plugin_id = pattern.removesuffix("@v1")
     instance.driver.session_id = session_id
     controller = SessionController(instance=instance, display=_Display())
     manager = SessionManager()
@@ -146,7 +159,7 @@ def test_deterministic_preempt_is_refused_not_dropped(pattern: str) -> None:
     assert session.controller.turn_queue.peek(session.session_id) == []
 
 
-@pytest.mark.parametrize("pattern", LLM_PATTERNS)
+@pytest.mark.parametrize("pattern", LLM_PATTERNS + STEERABLE_PATTERNS)
 def test_llm_pattern_supports_preempt_replace_and_after(pattern: str) -> None:
     _manager, session, admin, _comm = _live_session(pattern, f"m-{pattern}")
     modes = admin.steer_modes(session.session_id)
@@ -226,3 +239,87 @@ async def test_peer_preempt_keeps_partials_and_applies_steer() -> None:
     assert events[-1].actor == "planner"
     assert events[-1].surface == "peer"
     assert engine.calls >= 1
+
+
+def _machine_config(table: dict) -> KernelConfig:
+    spec = {
+        "design_pattern": {"type": "state_machine", "params": table},
+        "workflow": {
+            "entry": "desk",
+            "nodes": [{"id": "desk", "delegates_to": ["helper"]}, {"id": "helper"}],
+        },
+    }
+    return KernelConfig(agent_spec=spec)
+
+
+class _HangThenAnswerEngine:
+    """The first model call streams a partial and hangs until the runtime cuts it; later calls answer."""
+
+    def __init__(self, session_id: str, answer: str = "steered") -> None:
+        self.session_id = session_id
+        self.answer = answer
+        self.calls = 0
+
+    async def ainvoke(self, io):
+        from mas.runtime.engine.inflight_llm import append_partial
+
+        self.calls += 1
+        if self.calls == 1:
+            append_partial(self.session_id, "Let me thi")
+            await asyncio.sleep(30)
+            raise AssertionError("should have been cut by the runtime")
+        return EngineIoReturn(
+            correlation_id=io.correlation_id, response_kind="MODEL_TEXT", next_step="STOP", text=self.answer
+        )
+
+
+_THINK = {
+    "start": "think",
+    "vars": {"why": ""},
+    "states": {
+        "think": {"run": "react", "input": "Think about {task}", "on": [{"goto": "done"}]},
+        "done": {"run": "end", "result": "{last.text}"},
+        "wrap": {"run": "end", "result": "wrapped: {why}"},
+    },
+}
+
+
+async def _steer_during_model_call(table: dict, mode: str) -> tuple[str, _HangThenAnswerEngine]:
+    engine = _HangThenAnswerEngine("machine-steer")
+    _manager, session, _admin, comm = _live_session(
+        "state_machine@v1", "machine-steer", engine=engine, config=_machine_config(table)
+    )
+    task = asyncio.create_task(session.controller.arun_turn("the move", auto_hitl=False))
+    for _ in range(80):
+        await asyncio.sleep(0.02)
+        if has_inflight("machine-steer"):
+            break
+    assert has_inflight("machine-steer")
+    assert comm.send("worker", "now wrap up", context=SendContext(intent="steer", mode=mode)) == "delivered"
+    result = await asyncio.wait_for(task, timeout=5)
+    return result.responses[-1].content, engine
+
+
+@pytest.mark.asyncio
+async def test_a_preempting_steer_is_a_signal_that_moves_the_machine() -> None:
+    table = {
+        **_THINK,
+        "signals": [{"when": {"signal.intent": "steer"}, "set": {"why": "{signal.text}"}, "goto": "wrap"}],
+    }
+    text, engine = await _steer_during_model_call(table, "preempt")
+    assert text.startswith("wrapped: ") and "now wrap up" in text
+    assert engine.calls == 1  # the cut model call was not repeated
+
+
+@pytest.mark.asyncio
+async def test_a_preempting_steer_that_matches_no_signal_starts_the_state_again() -> None:
+    table = {**_THINK, "signals": [{"when": {"signal.intent": "never"}, "goto": "wrap"}]}
+    text, engine = await _steer_during_model_call(table, "preempt")
+    assert text == "steered" and engine.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_a_replacing_steer_starts_a_new_run_on_its_text() -> None:
+    table = {**_THINK, "signals": [{"when": {"signal.intent": "steer"}, "goto": "wrap"}]}
+    text, engine = await _steer_during_model_call(table, "replace")
+    assert text == "steered" and engine.calls == 2  # a new run, whatever the signals say

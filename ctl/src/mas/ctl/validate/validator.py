@@ -286,6 +286,12 @@ def validate_data(
         for path, msg in collect_delegates_to_deprecation(data):
             result.issues.append(ValidationIssue("warning", msg, path=path))
 
+    if resolved_kind == "infra":
+        from mas.ctl.validate.deprecations import collect_endpoint_usage_deprecation
+
+        for path, msg in collect_endpoint_usage_deprecation(data):
+            result.issues.append(ValidationIssue("warning", msg, path=path))
+
     if any(i.level == "error" for i in result.issues):
         result.ok = False
 

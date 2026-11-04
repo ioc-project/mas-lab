@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from mas.runtime.boundary.context.conversation_chunks import ConversationChunkStore
-from mas.runtime.boundary.context.dp_inject import inject_dp_protocol
 from mas.runtime.boundary.context.plugin_collection import PluginCollection
 from mas.runtime.boundary.context.working_memory import WorkingMemoryStore
 from mas.runtime.schema.egress import RequestCtxAssembly
@@ -203,13 +202,8 @@ class AutoCtxAssembler:
         self.working_memory.record_assistant_message(content)
 
     def complete(self, request: RequestCtxAssembly) -> CtxAssemblyComplete:
+        # Memory seeds and the pattern's protocol lines are added by the
+        # assembler on every LLM call (``system_context_lines``), not stored here.
         if request.operator_context:
             self.injected_context.append(request.operator_context)
-        for key, content in self.memory_seeds:
-            self.injected_context.append(f"[memory:{key}] {content}")
-        self.injected_context = inject_dp_protocol(
-            self.injected_context,
-            pattern_plugin_id=self.pattern_plugin_id,
-            q=self.q_product,
-        )
         return CtxAssemblyComplete(collect_id=request.collect_id)

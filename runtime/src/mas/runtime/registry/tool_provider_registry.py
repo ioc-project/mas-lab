@@ -29,6 +29,7 @@ from mas.runtime.engine.tool_routing import (
     is_star_claim,
 )
 from mas.runtime.registry.provider_protocol import ToolProvider
+from mas.runtime.spec.endpoint_usage import usage_connects
 
 logger = logging.getLogger(__name__)
 
@@ -373,9 +374,6 @@ def tool_provider_class(kind: str) -> type:
     return info.load_class()
 
 
-_CLIENT_SERVER_USAGE = frozenset({"use", "use-and-deploy"})
-
-
 def providers_from_manifest(
     manifest_content: dict[str, Any] | None,
     *,
@@ -429,7 +427,7 @@ def providers_from_manifest(
     for server in server_items:
         if not isinstance(server, dict):
             continue
-        if server.get("usage", "use") not in _CLIENT_SERVER_USAGE:
+        if not usage_connects(server.get("usage")):
             continue
         protocol = str(server.get("protocol") or "").lower()
         if protocol and protocol not in kinds:

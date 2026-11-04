@@ -67,7 +67,7 @@ def _overlay_providers_from_manifest(
 ) -> list[Any]:
     """Instantiate providers from infra dependencies.
 
-    MCP ``usage: use`` servers are client providers; ``usage: deploy`` entries
+    MCP ``usage: connect`` servers are client providers; ``usage: listen`` entries
     are endpoints for the server command and are not connected here. An
     explicit local ToolServerRegistry claim re-adds the local provider beside MCP.
     """

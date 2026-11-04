@@ -24,10 +24,22 @@ properties:
     enum: [mcp, local]
     description: MCP remote server or local in-process tool source.
   usage:
-    type: string
-    enum: [use, deploy, use-and-deploy]
-    default: use
-    description: Consume the MCP endpoint, deploy it, or do both.
+    default: connect
+    description: >-
+      connect (this process is a client of the MCP endpoint), listen (this
+      process serves it), or [connect, listen]. use, deploy and use-and-deploy
+      are deprecated aliases, still read.
+    oneOf:
+      - type: string
+        enum: [connect, listen]
+      - type: array
+        items: {type: string, enum: [connect, listen]}
+        minItems: 1
+        uniqueItems: true
+      - type: string
+        enum: [use, deploy, use-and-deploy]
+        deprecated: true
+        x-replaced-by: "connect, listen, or [connect, listen]"
   transport:
     type: string
     description: "stdio | streamable-http | sse | http"

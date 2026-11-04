@@ -102,6 +102,7 @@ from mas.library.standard.plugins.context.token_budget import (
 )
 from mas.runtime.boundary.context.assembly_cache import cached_context_manager
 from mas.runtime.boundary.context.chunk_meta import PIN_EPHEMERAL, PIN_NEVER
+from mas.runtime.boundary.context.dp_inject import system_context_lines
 from mas.runtime.boundary.context.working_memory import WorkingMemoryStore
 from mas.runtime.contracts.base import BasePlugin
 from mas.runtime.contracts.cm_factory import CMFactory
@@ -335,7 +336,7 @@ class ContextAssemblerPlugin(BasePlugin):
             ctx.context_usage_parts = part_usage
         except (AttributeError, TypeError):
             pass
-        for line in getattr(ctx, "injected_context", []) or []:
+        for line in system_context_lines(ctx):
             if str(line).strip():
                 system_parts.append(str(line).strip())
         for key, content in getattr(ctx, "memory_seeds", []) or []:
