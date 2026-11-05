@@ -27,6 +27,7 @@ types:
   - tool_provider
   - llm_provider
   - agent_comm
+  - stack_layer
   - system_tool
   - hitl_contract
   - user_io_contract

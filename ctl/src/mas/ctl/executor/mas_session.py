@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import yaml
@@ -16,58 +16,101 @@ from mas.ctl.compose.models import EffectiveBindManifest, ResolvedInfra
 from mas.ctl.compose.pattern_registry import resolve_design_pattern_registry_id
 from mas.ctl.compose.placement_registry import get_placement_backend
 from mas.ctl.compose.runner import ComposeResult
+from mas.ctl.executor.stacks import ChainHandles, chain_links
+from mas.ctl.infra.identities import agency_ids, has_chain, peers_of
+from mas.ctl.infra.identities import entry_agent_id as entry_agent_id
 from mas.ctl.infra.resolve import application_endpoint_is_used
 from mas.ctl.manifest.mas_agent_merge import enrich_entry_agent_for_delegation, wire_entry_engine_delegation
 from mas.ctl.session.controller import ConversationConfig, SessionController
 from mas.ctl.ui.turn_result import turn_failed
+from mas.library.standard.lib.stack.handle import RunTurnFn as RunTurnFn
+from mas.library.standard.lib.stack.handle import SessionTurn
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute, build_agent_comm_routes
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
+from mas.runtime.boundary.delegation.policy import delegation_targets
 
 logger = logging.getLogger(__name__)
 
-RunTurnFn = Callable[[str, str, int, str, str], str]
+
+@dataclass(frozen=True)
+class _SessionComm:
+    """The links a session's agents send with: the default in-process one, and each agent's chain link."""
+
+    local: Any
+    handlers: dict[str, Any]
+    chain_routes: dict[str, dict[str, AgentCommRoute]]
+
+    def comm_for(self, agent_id: str) -> Any:
+        return self.handlers.get(agent_id, self.local)
 
 
-def _agent_comm_binding(mas_config: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Translate ``spec.agent_comm`` into a registry binding.
-
-    Flavour YAML uses ``protocol``; ``registry.create`` expects ``type``.
-    An omitted slot returns ``None`` so the registry default applies
-    (``library.yaml`` ``defaults.agent_comm``). Extra flavour keys such as
-    ``mode`` / ``emulation`` are not constructor params.
-    """
-    root = mas_config or {}
-    spec = root.get("spec") if isinstance(root.get("spec"), dict) else root
-    if not isinstance(spec, dict):
-        return None
-    raw = spec.get("agent_comm")
-    if raw is None:
-        return None
-    if isinstance(raw, str):
-        name = raw.strip()
-        return {"type": name} if name else None
-    if not isinstance(raw, dict):
-        return None
-    variant = str(raw.get("type") or raw.get("protocol") or raw.get("kind") or "").strip()
-    params = dict(raw.get("params") or {}) if isinstance(raw.get("params"), dict) else {}
-    binding: dict[str, Any] = {}
-    if variant:
-        binding["type"] = variant
-    if params:
-        binding["params"] = params
-    return binding or None
-
-
-def _create_agent_comm(registry: Any, mas_config: dict[str, Any] | None, **params: Any) -> Any:
-    return registry.create(
-        "agent_comm",
-        binding=_agent_comm_binding(mas_config),
-        **params,
+def _session_comm(
+    materialized: MaterializedMas, registry: Any, *, run_turn: RunTurnFn, local_ids: list[str]
+) -> _SessionComm:
+    """The library default ``agent_comm`` link, plus each agent's links on the Flavour's chains."""
+    compose = materialized.compose
+    return open_session_comm(
+        registry,
+        compose.resolved_infra or ResolvedInfra(),
+        compose.mas_config,
+        run_turn=run_turn,
+        local_ids=local_ids,
+        handles=materialized.stack_handles,
     )
 
-# Max length for a single-line context value probed as a relative file path.
-_MAX_PROBE_PATH_LEN = 512
+
+def open_session_comm(
+    registry: Any,
+    resolved: ResolvedInfra,
+    mas_config: dict[str, Any] | None,
+    *,
+    run_turn: RunTurnFn,
+    local_ids: list[str],
+    handles: ChainHandles,
+) -> _SessionComm:
+    """The links every entry point (run-mas, chat, tui, benchmark runs) gives its local agents.
+
+    The chains opened for them go into ``handles``; the caller closes it when the session ends.
+    """
+    local = registry.create("agent_comm", binding=None, run_turn=run_turn)
+    if not has_chain(resolved):
+        return _SessionComm(local, {}, {})
+    agent_ids = list(dict.fromkeys([*local_ids, *agency_ids(mas_config)]))
+    handlers, routes = chain_links(
+        registry,
+        resolved,
+        run_turn=run_turn,
+        local_ids=local_ids,
+        handles=handles,
+        peers=peers_of(mas_config, agent_ids),
+    )
+    return _SessionComm(local, handlers, routes)
+
+
+def open_single_agent_chains(
+    instance: Any, agent_id: str, resolved: ResolvedInfra | None, *, display: Any = None, verbose: int = 0
+) -> ChainHandles:
+    """Link a one-agent session on the Flavour's chains, as run-mas links each of its agents.
+
+    The agent delegates to no one, so it joins a chain only when its
+    Application row serves it (``listen``); requests that arrive run a turn on
+    ``instance``. With no chain bound this opens nothing.
+    """
+    from mas.runtime.registry import get_registry
+
+    handles = ChainHandles()
+    if not has_chain(resolved):
+        return handles
+    run_turn = make_workflow_send(
+        SimpleNamespace(instances={agent_id: instance}, bus=None), display=display, verbose=verbose
+    )
+    try:
+        open_session_comm(get_registry(), resolved, None, run_turn=run_turn, local_ids=[agent_id], handles=handles)
+    except Exception:
+        handles.close()
+        raise
+    return handles
 
 
 @dataclass(frozen=True)
@@ -77,6 +120,8 @@ class MaterializedMas:
     compose: ComposeResult
     materialized: Any
     mas_base_dir: Path
+    # The Flavour chains the session opened; the run closes them when it ends.
+    stack_handles: ChainHandles = field(default_factory=ChainHandles)
 
 
 @dataclass(frozen=True)
@@ -94,21 +139,6 @@ class PreparedEntrySession:
     # for wire_peer_delegation, so every agent in the run shares it.
     session_id: str = ""
     working_memory_registry: WorkingMemoryRegistry | None = None
-
-
-def entry_agent_id(mas_config: dict[str, Any]) -> str:
-    """Resolve the MAS entry agent id from mas config."""
-    spec = mas_config.get("spec") or mas_config
-    if isinstance(spec.get("entry_agent"), str) and spec["entry_agent"].strip():
-        return spec["entry_agent"].strip()
-    wf = spec.get("workflow") or {}
-    if isinstance(wf, dict) and wf.get("entry"):
-        return str(wf["entry"])
-    agency = spec.get("agency") or {}
-    agents = agency.get("agents") or spec.get("agents") or []
-    if agents and isinstance(agents[0], dict):
-        return str(agents[0].get("id") or agents[0].get("name") or "agent")
-    return "agent"
 
 
 def agent_manifest_label(manifest: dict[str, Any], manifest_path: Path) -> str:
@@ -246,6 +276,7 @@ def prepare_delegation_entry_session(
     )
     from mas.runtime.registry import get_registry
 
+    registry = get_registry()
     run_turn = make_workflow_send(
         materialized.materialized,
         display=display,
@@ -259,14 +290,18 @@ def prepare_delegation_entry_session(
         trace_summary=trace_summary,
         trace_color=trace_color,
     )
+    comms = _session_comm(materialized, registry, run_turn=run_turn, local_ids=[entry_id])
+    peers = delegation_targets(enriched, agent_id=entry_id)
     wire_entry_engine_delegation(
         getattr(getattr(instance, "driver", None), "engine", None),
         enriched,
         entry_manifest_dir,
-        comm=_create_agent_comm(get_registry(), compose.mas_config, run_turn=run_turn),
+        comm=comms.comm_for(entry_id),
         entry_agent_id=entry_id,
         mas_config=compose.mas_config,
         mas_base_dir=materialized.mas_base_dir,
+        routes=comms.chain_routes.get(entry_id),
+        peers=peers or None,
     )
     from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
 
@@ -348,39 +383,31 @@ def wire_peer_delegation(
         trace_color=trace_color,
     )
     spec = compose.mas_config.get("spec") or compose.mas_config
-    agency_agents = ((spec.get("agency") or {}).get("agents") or [])
-    registry = None
+    agency_agents = (spec.get("agency") or {}).get("agents") or []
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    resolved = compose.resolved_infra or ResolvedInfra()
+    local_ids = list(materialized.materialized.instances)
+    comms = _session_comm(materialized, registry, run_turn=run_turn, local_ids=local_ids)
     peer_routes: dict[str, AgentCommRoute] = {}
-    if agency_agents:
-        from mas.runtime.registry import get_registry
+    for peer in agency_agents:
+        if not isinstance(peer, dict):
+            continue
+        name = str(peer.get("name") or peer.get("id") or "").strip()
+        if not name:
+            raise ValueError("spec.agency.agents entries require id")
+        binding = resolved.applications.get(name)
+        if not isinstance(binding, dict) or not application_endpoint_is_used(binding):
+            continue
+        kind = str(binding.get("protocol") or binding.get("kind") or "").strip()
+        params = {key: binding[key] for key in ("url", "headers", "timeout") if key in binding}
+        if "url" not in params:
+            raise ValueError(f"infra Application endpoint for agent {name!r} requires url")
+        handler = registry.create("agent_comm", binding={"type": kind, "params": params})
+        peer_routes[name] = AgentCommRoute(name, kind, handler)
 
-        registry = get_registry()
-        for peer in agency_agents:
-            if not isinstance(peer, dict):
-                continue
-            name = str(peer.get("name") or peer.get("id") or "")
-            if not name:
-                raise ValueError("spec.agency.agents entries require id")
-            application_endpoints = (materialized.compose.resolved_infra or ResolvedInfra()).applications
-            binding = application_endpoints.get(name)
-            if not isinstance(binding, dict) or not application_endpoint_is_used(binding):
-                continue
-            kind = str(binding.get("protocol") or binding.get("kind") or "").strip()
-            if not kind:
-                continue
-            params = {
-                key: binding[key]
-                for key in ("url", "headers", "timeout")
-                if key in binding
-            }
-            if "url" not in params:
-                raise ValueError(f"infra Application endpoint for agent {name!r} requires url")
-            handler = registry.create(
-                "agent_comm",
-                binding={"type": kind, "params": params},
-            )
-            peer_routes[name] = AgentCommRoute(name, kind, handler)
-
+    chained = {name for routes in comms.chain_routes.values() for name in routes}
     delegated_names = {
         str(target)
         for node in ((spec.get("workflow") or {}).get("nodes") or [])
@@ -388,17 +415,18 @@ def wire_peer_delegation(
         for target in (node.get("delegates_to") or [])
         if str(target).strip()
     }
-    if registry is None:
-        from mas.runtime.registry import get_registry
-
-        registry = get_registry()
-    local_handler = _create_agent_comm(registry, compose.mas_config, run_turn=run_turn)
-    routes = build_agent_comm_routes(
-        local_agent_ids=list(materialized.materialized.instances),
-        local_handler=local_handler,
+    # Every agent can reach the in-process agents and the peers it names; a chain route replaces the
+    # local one for an agent on the chain.
+    base_routes = build_agent_comm_routes(
+        local_agent_ids=local_ids,
+        local_handler=comms.local,
         peer_routes=peer_routes,
-        delegated_names=delegated_names,
+        delegated_names=delegated_names - chained,
     )
+
+    def routes_for(agent_id: str) -> dict[str, AgentCommRoute]:
+        return {**base_routes, **(comms.chain_routes.get(agent_id) or {})}
+
     newly_wired: list[str] = []
     for agent in compose.bind.agents:
         agent_id = agent.agent_id
@@ -411,10 +439,10 @@ def wire_peer_delegation(
                 leaf = leaf_engine(engine)
                 delegation = getattr(leaf, "delegation", None)
                 if hasattr(delegation, "set_routes"):
-                    delegation.set_routes(routes)
-                manifest = getattr(leaf, "manifest", None) or load_agent_manifest_from_bind(
-                    compose.bind, agent_id
-                ) or {}
+                    delegation.set_routes(routes_for(agent_id))
+                manifest = (
+                    getattr(leaf, "manifest", None) or load_agent_manifest_from_bind(compose.bind, agent_id) or {}
+                )
                 manifest_path = agent_manifest_path(compose.bind, agent_id)
                 from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
 
@@ -454,17 +482,19 @@ def wire_peer_delegation(
             display=display,
             verbose=verbose,
         )
-        if not delegation_targets(enriched, agent_id=agent_id):
+        peers = delegation_targets(enriched, agent_id=agent_id)
+        if not peers:
             continue
         wire_entry_engine_delegation(
             getattr(getattr(instance, "driver", None), "engine", None),
             enriched,
             manifest_dir,
-            comm=local_handler,
+            comm=comms.comm_for(agent_id),
             entry_agent_id=agent_id,
             mas_config=compose.mas_config,
             mas_base_dir=materialized.mas_base_dir,
-            routes=routes,
+            routes=routes_for(agent_id),
+            peers=peers,
         )
         wired.add(agent_id)
         newly_wired.append(agent_id)
@@ -484,11 +514,11 @@ def make_workflow_send(
     trace_engine: bool = False,
     trace_summary: bool = False,
     trace_color: bool = False,
-) -> RunTurnFn:
+) -> SessionTurn:
     """Run one agent turn inside a multi-agent workflow (sequential or delegation).
 
-    The returned ``send`` closure holds mutable routing state and is **not reentrant**;
-    use one closure per workflow run on a single thread.
+    The returned ``SessionTurn`` (``send``, and ``asend`` to await it) holds mutable routing
+    state and is **not reentrant**; use one per workflow run on a single thread.
 
     ``session_id`` (empty means mint a fresh one — the caller has none yet)
     is captured once here and reused for every ``send()`` call this closure
@@ -561,7 +591,9 @@ def make_workflow_send(
         # session uses), so this closure doesn't sync it a second time.
         memory_key = context_id or state["session_id"]
         sub_display = display
-        if from_agent and agent_id != from_agent:
+        # A turn another agent asked for (a delegation, or a request that arrived over a chain, which
+        # carries the caller's call id) is not the user's: show it under the agent's label, not "You:".
+        if from_agent and (agent_id != from_agent or parent_call_id):
             import sys
 
             from mas.ctl.ui.stdout import StdoutConversationDisplay
@@ -659,7 +691,9 @@ def make_workflow_send(
             instance.driver.agent_id = agent_id
         memory_key = context_id or state["session_id"]
         sub_display = display
-        if from_agent and agent_id != from_agent:
+        # A turn another agent asked for (a delegation, or a request that arrived over a chain, which
+        # carries the caller's call id) is not the user's: show it under the agent's label, not "You:".
+        if from_agent and (agent_id != from_agent or parent_call_id):
             import sys
 
             from mas.ctl.ui.stdout import StdoutConversationDisplay
@@ -717,35 +751,4 @@ def make_workflow_send(
 
         return result.text
 
-    send.asend = asend  # type: ignore[attr-defined]
-    return send
-
-
-async def fanout_workflow_delegates(
-    send: RunTurnFn,
-    manifest: dict[str, Any],
-    *,
-    agent_id: str,
-    task: str,
-    caller_call_id: str = "",
-) -> list[str]:
-    """Run every ``delegates_to`` peer concurrently when ``dispatch: parallel``.
-
-    Fail-fast: the first sibling exception cancels the rest
-    (``asyncio.gather(..., return_exceptions=False)``).
-    """
-    import asyncio
-
-    from mas.runtime.boundary.delegation.policy import delegation_targets, uses_parallel_dispatch
-
-    if not uses_parallel_dispatch(manifest, agent_id=agent_id):
-        raise ValueError(f"agent {agent_id!r} does not declare dispatch: parallel")
-    targets = delegation_targets(manifest, agent_id=agent_id)
-    asend = getattr(send, "asend", None)
-    if not callable(asend):
-        raise TypeError("workflow send closure is missing asend")
-    return list(
-        await asyncio.gather(
-            *(asend(peer, task, 0, caller_call_id, "") for peer in targets)
-        )
-    )
+    return SessionTurn(send, asend)

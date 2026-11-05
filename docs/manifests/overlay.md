@@ -155,7 +155,7 @@ The overlay fails, rather than being ignored, when it has an unsupported kind, a
 | `Agent` | [`overlay-agent-patch.schema.yaml`](../schemas/runtime/fragments/overlay-agent-patch.schema.yaml) | Agent fields, `$op`, and `x-merge` metadata |
 | `MAS` | [`overlay-mas-patch.schema.yaml`](../schemas/runtime/fragments/overlay-mas-patch.schema.yaml) | `agency`, `workflow`, `agents`, `telemetry`, `params`, `capabilities`, `intent` |
 | `Infra` | [`overlay-infra-patch.schema.yaml`](../schemas/runtime/fragments/overlay-infra-patch.schema.yaml) | RFC 7396 merge of the Infra `spec` |
-| `Flavour` | [`overlay-flavour-patch.schema.yaml`](../schemas/runtime/fragments/overlay-flavour-patch.schema.yaml) | Deployment posture (`agent_comm`, `telemetry`, `observability`, `control`, `tools`, ...) and plugin collection operators |
+| `Flavour` | [`overlay-flavour-patch.schema.yaml`](../schemas/runtime/fragments/overlay-flavour-patch.schema.yaml) | `bind`, leftover keys (`agent_comm`, `telemetry`, `observability`, `control`, `tools`, unread except the `observability` fallback), and plugin collection operators |
 | `Experiment`, `Workspace` | none in the overlay schema (any mapping) | In-memory RFC 7396 merge |
 
 A plain value follows the field's declared merge strategy. Use an explicit `$op` mapping for collection operations: `replace`, `add`, `remove`, `clear`, or `merge`.
@@ -167,7 +167,7 @@ Merging follows RFC 7396 (JSON Merge Patch). A mapping merges key by key, any ot
 
 What each target can patch:
 
-- **Flavour** overlays cannot select models or API keys. They change deployment posture only.
+- **Flavour** overlays cannot select models or API keys. They change the Flavour's `bind` and leftover keys only.
 - **Agent** overlays can patch every Agent `spec` field except `debug`. That includes `models[]` rows (sampling, `reasoning`, `extra`), `description`, `behavior`, and `tools_ref`.
 - `spec.models[]` deep-merges by `id`, then `model`, then `main`.
 - Access fields (`api_base`, `api_key_env`) stay on infra.

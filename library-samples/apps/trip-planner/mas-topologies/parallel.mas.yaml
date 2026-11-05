@@ -5,8 +5,11 @@ kind: MAS
 metadata:
   name: trip-planner-parallel
   description: >
-    Trip Planner MAS with parallel topology. Moderator dispatches specialists
-    concurrently, then aggregates responses.
+    Trip Planner MAS for the parallel topology id. Its graph is the same as
+    moderator-broker: the moderator's model may call several specialists in
+    one batch of parallel tool calls. A fixed fan-out to every specialist is
+    the moderator's deterministic_parallel design pattern (see the
+    topo-parallel overlay in labs/design-space.lab/02-topologies).
 spec:
   agency:
     agents:
@@ -22,7 +25,6 @@ spec:
     entry: moderator
     nodes:
       - id: moderator
-        dispatch: parallel
         delegates_to:
           - schedule_agent
           - itinerary_agent

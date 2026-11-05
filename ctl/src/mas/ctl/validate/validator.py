@@ -281,9 +281,15 @@ def validate_data(
             result.issues.append(ValidationIssue("warning", msg, path="experiment"))
 
     if resolved_kind in {"mas", "workflow", "overlay"}:
-        from mas.ctl.validate.deprecations import collect_delegates_to_deprecation
+        from mas.ctl.validate.deprecations import collect_workflow_deprecations
 
-        for path, msg in collect_delegates_to_deprecation(data):
+        for path, msg in collect_workflow_deprecations(data):
+            result.issues.append(ValidationIssue("warning", msg, path=path))
+
+    if resolved_kind in {"flavour", "overlay"}:
+        from mas.ctl.validate.deprecations import collect_flavour_key_deprecation
+
+        for path, msg in collect_flavour_key_deprecation(data):
             result.issues.append(ValidationIssue("warning", msg, path=path))
 
     if resolved_kind == "infra":

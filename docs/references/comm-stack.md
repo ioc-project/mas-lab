@@ -19,10 +19,10 @@ never goes out as an `inform`. The table below is the whole map.
 
 | Action | Plane | What it does | Status |
 | --- | --- | --- | --- |
-| `task` | Peer send | Run a turn on the peer. Return the reply. | **Yes.** `delegate_to_*` is always this. |
-| `ask` | Peer send | Same as `task`, with the peer text marked as coming from another agent. The caller waits for the reply. | **Yes**, on `local` and `local-group`. **No** on A2A (refused). |
-| `inform` | Peer send | Same as `ask`, then drop the reply and return `delivered`. The caller still waits. A peer error still raises. | **Yes**, on `local` and `local-group`. **No** on A2A (refused). |
-| Channel `publish` | Peer send | Fan-out to a room. Intent is `publish`, not `task`. Labelled untrusted. | **Yes** on `local-group`. |
+| `task` | Peer send | Run a turn on the peer. Return the reply. | **Yes.** `delegate_to_*` is always this. Also on `slim`, and through the `a2a-framing` layer over `slim` or `http`. |
+| `ask` | Peer send | Same as `task`, with the peer text marked as coming from another agent. The caller waits for the reply. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-framing` layer refuse it. |
+| `inform` | Peer send | Same as `ask`, then drop the reply and return `delivered`. The caller still waits. A peer error still raises. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-framing` layer refuse it. |
+| Channel `publish` | Peer send | Fan-out to a room. Intent is `publish`, not `task`. Labelled untrusted. | **Yes** on `local-group` and `slim`. |
 | `send(..., intent="steer")` | Peer send → control | Call `ControlContract.scoped` then `steer` on the session the link maps for that target. The new handle cannot do more than the control you passed. Default mode is `after` at the tail. `preempt` and `replace` must be set. Peer entries always queue at the tail. `after` on a paused session waits in the queue; `preempt` and `replace` are refused. The target must be on `steer_peers` (empty list means nobody) and on SendTool `allowed_peers`. | **Yes** on `local` and `local-group` when `control=` is passed at construction. **No** on A2A. Session wiring does not inject `control` yet. |
 | Pause / resume | Control | Block or continue the next user turn. | **Yes.** `mas-ctl control`. |
 | Steer `after` | Control | Do not interrupt. Queue text at the front for an operator, at the tail for a peer. The current decode finishes, then the text runs. | **Yes.** Control protocol only. Not A2A. Not a peer send. |
@@ -111,15 +111,166 @@ denied call is an `AgentCommError`. The session does not pass
 
 ## Stack
 
-A stack is an `agent_comm` plugin that wraps a link with decorator layers.
-The link sits at the bottom. Each layer above it binds the one below. Calls
-enter at the top.
+A stack is a list of layers, bottom to top. A call enters at the top and
+each layer hands it to the one below. Every layer, whatever it carries,
+has one contract (`mas.library.standard.lib.stack.Layer`):
 
-`BoundLayer` is the shared bind/forward helper. `TraceContextLayer` is a
-`BoundLayer`. Starting the stack starts every layer, bottom first, and
-stopping it stops them top first. Each layer's `start` / `stop` is called
-once. A failed start can be retried. `BoundLayer` does not forward `start`
-or `stop`; a decorator used alone does not start the link.
+| Method | Meaning |
+| --- | --- |
+| `bind(lower)` | Remember the layer below. The stack calls it once, bottom up. |
+| `send(envelope)` / `asend(envelope)` | Handle one call. A layer above the bottom forwards to `lower`; a transport answers it. |
+| `serve(handler)` | The inbound side. Take the handler of the layers above, return the handler the layer below calls with what it received. The default returns `handler` unchanged. A transport keeps the handler it gets. |
+| `start()` / `stop()` | Run at most once each, and never forward. The stack starts every layer itself. |
+| `capabilities()` | This layer's flags OR-merged with the ones below. A layer cannot turn a flag off. |
+
+What travels down is an `Envelope`: `payload` (the task text for an agent
+call), `headers` (wire headers) and `meta` (`target`, `sender`, `intent`,
+`correlation_id`, `caller_call_id`, `context_id`). A layer never edits an
+envelope; it builds a new one with `with_`:
+
+| `with_` argument | Effect on the copy |
+| --- | --- |
+| `payload` | Replaces the payload. |
+| `headers` | Merged over the old headers: a key given here replaces that key, the other old keys stay. |
+| `drop_headers` | Header names removed after the merge, compared without case (a redaction layer drops `authorization` this way). A name that is both set and dropped is gone. |
+| `meta` | Merged over the old meta: keys are added or replaced, never removed. |
+
+The other objects that carry headers treat them like this:
+
+| Where | Rule |
+| --- | --- |
+| `Stack.send` | Sets `traceparent` (a child of the incoming one) with `with_`, so only that key changes. |
+| `agent_comm/stack` `send(..., headers=, context=)` | Explicit `headers` replace `context.headers` whole; with `headers` omitted, `context.headers` is used. The bottom link's `agent_id` replaces any `sender`. |
+| A link (`local-group`, `slim`) on send | The hop-safe ambient headers of the turn that is sending (`traceparent`, `tracestate`, `baggage`), then the send's headers; a send header wins on a clash. `mas.*` and other keys never hop to a later send. |
+| A link on receive | The received headers become the ambient headers while the handler runs. |
+
+A layer plays one of two roles:
+
+| Role | `needs_lower` | Examples |
+| --- | --- | --- |
+| Transport | `False`: sits at the bottom and answers the send | `slim`, `local-group`, `http`, any `agent_comm` link with `send(target, task, ...)` |
+| Protocol | `True`: changes what is sent or how it is framed | `a2a-framing`, `trace_context` (deprecated), a `BoundLayer` decorator (deprecated) |
+
+`Stack.serve(handler)` builds the inbound chain: each layer, top first,
+wraps the handler of the layers above it, and the bottom layer gets the
+outermost one. On a chain a Flavour binds, the handle does this for each agent
+when a layer above the transport overrides `serve` (a protocol layer such
+as `a2a-framing`); the agent's turn is the top handler. With no such layer nothing
+changes: the transport calls the turn itself. `slim` passes each request's
+payload through the chain; `local-group` has no `serve`, so a protocol layer
+above it is refused when the agent's stack is built. `http` keeps the chain
+but never receives anything.
+
+`a2a-framing` turns a send into an A2A 1.0 `SendMessage` JSON-RPC request, the
+one the A2A SDK client sends and the `a2a` exposure accepts: the text is one
+text part, `context_id` is the message `contextId`, and `correlation_id` /
+`caller_call_id` ride the message metadata as `mas.correlation_id` /
+`mas.caller_call_id`. It adds the header `a2a-version: 1.0`. It honours
+only the `task` intent; any other raises `AgentCommError` before the
+request leaves. The response's message text is the reply; a JSON-RPC error
+or a `failed`, `rejected` or `canceled` task raises `AgentCommError`. On
+the inbound side it answers a `SendMessage` request: the turn gets the
+text, the call ids and the context id (a new one when the request has
+none), and the reply goes back as an agent message in that context. A turn
+that raises is a `failed` task with the text `Agent execution failed`; the
+error itself stays in the serving process's log. Over `slim` this is MAS Lab's
+own JSON-RPC inside a SLIM frame, with both ends MAS Lab sessions; it is not the
+A2A SDK riding SLIM. Only `a2a-framing` over `http` talks to a third-party A2A
+server.
+
+`http` posts each send's payload to its `url` (`headers`, `timeout`, `dev`,
+`content_type` are its other params) with the envelope's headers, and
+returns the response body. A row or send that sets a framing header (`host`,
+`content-length`, `transfer-encoding`, ...) is refused. Plain `http` is only allowed on `127.0.0.1`,
+`localhost` and `::1`; elsewhere use `https`. `dev` skips TLS verification
+on a loopback `https` url. A connection error, a timeout or a status of 400
+or more raises `AgentCommError`. It only connects: `LISTEN_REFUSAL` says
+why, and ctl refuses `usage: listen` on a chain whose bottom layer is
+`http`.
+
+The `Stack` has the view no single layer has. It starts the layers bottom
+first and stops them top first, OR-merges their capabilities, and stamps
+every send with a child W3C `traceparent`: the same trace id as a valid
+parent with a new span id, or a new root when there is no valid parent.
+The span id is a correlation id for this send, not an OpenTelemetry span.
+The `trace_context` layer did the same stamping; it still works and is
+deprecated.
+
+`agent_comm/stack` (`StackAgentComm`) is the agent-call adapter over a
+`Stack`: `send(target, task, ...)` becomes an `Envelope` at the top. Its
+`layers` are generic `Layer` objects, links, `BoundLayer` decorators
+(deprecated), or `{type, params}` bindings. A link or decorator written
+before layers becomes a `Layer` through one adapter
+(`mas.library.standard.lib.stack.legacy.adapt_legacy`); the rest of the stack
+calls each layer's declared methods. A stack says who it is from its bottom
+link (`agent_id`, `plugin_id`, `endpoint`) and its `fabric_id`; it forwards no
+other attribute.
+
+A layer id resolves in one order (`resolve_layer_class` in
+`mas.library.standard.lib.comm.compose`): an `agent_comm` link first, then a
+`stack_layer`. The ids are distinct: `a2a` is the A2A SDK client reaching a url,
+a transport that can only be first, and `a2a-framing` is the A2A framing layer,
+which needs a layer below it. A chain that starts with `a2a-framing`, or that
+puts `a2a` above another transport, is refused. Above the bottom only a layer
+that needs one below it is allowed. A chain of one row whose link reaches one agent at its
+own url (`is_direct_link`: an `agent_comm` transport that is not a
+`ChainMember`, which the SDK client is) is the released direct path, the
+same as an agent-keyed row.
+
+The bottom link supplies
+`SendContext.sender` from its `agent_id`. A send intent is honoured when
+the bottom link and every layer that declares intents honour it.
+
+`send` and `asend` raise `AgentCommError` for every failure. A layer's
+`StackError` comes out as `StackSendError`, an `AgentCommError` subclass,
+and the layer's error is the `__cause__`. So the send tool reports a
+failed send like any other: the
+`delegate_to_<id>` tool returns
+`[send] agent '<id>' via <transport> failed: <message>` to the model.
+
+`mas.library.standard.testing.layer_conformance` holds the checks every
+layer must pass. `check_layer` is for a layer above the bottom: unbound
+send fails, lifecycle is idempotent, capabilities only grow, a send reaches
+the layer below, sync and async agree (a protocol layer passes the framed
+answer its decoder reads). `check_transport` is for a bottom layer: it needs
+no layer below, start and stop are idempotent, its capability flags are the
+known set of booleans, a send reaches the peer once and returns its reply,
+and `asend` agrees. The SLIM link, `local-group` and `http` run it.
+`FailingLayer` is a layer above the bottom that fails sends to the targets
+it names, for tests of the error path. These helpers are test support and
+are not in the installed wheel.
+
+### Chains from a Flavour
+
+A Flavour's `spec.bind.agent_comm` names infra endpoint rows, bottom first,
+and `spec.bind.agents.<id>` gives one agent its own `agent_comm` chain and its
+`usage` (`connect`, `listen`) in this deployment
+([flavour.md](../manifests/flavour.md#bind),
+[infra.md](../manifests/infra.md#rows-a-flavour-binds)). Each row's
+`protocol` is the layer plugin and its other fields are the layer's params.
+ctl builds one `StackHandle` per distinct chain per session. An agent served
+here (`listen`) is linked on its own chain; an agent that delegates is linked
+on the chain of each target this deployment dials (`connect`), and routes that
+target through that link. `link(agent_id)`
+gives that agent its own started `StackAgentComm`: its own layer instances,
+its own name on the transport, its own receive. The handle knows no naming
+scheme. It asks each layer class through `ChainMember`
+(`mas.library.standard.lib.stack.layer`), whose hooks all have a default. Every
+`Layer` is a `ChainMember`; the `slim` and `local-group` links subclass it to
+take part; any other link class gets the defaults. `ChainMember` extends
+`LinkIdentity`, the `plugin_id`, `endpoint`, `fabric_id` and `agent_id` a link
+or layer reports (empty by default); the A2A SDK client is a `LinkIdentity`
+and no `ChainMember`.
+
+| Hook | Called | Default | Use |
+| --- | --- | --- | --- |
+| `shared_service(params)` | once per layer, at start | `None` | State every agent's layer shares (the SLIM node connection, the local-group fabric). Passed to each agent's layer as `service=`, closed after the last agent's layers stop. |
+| `agent_name(params, agent_id)` | once per agent | the agent id | The agent's address on that layer, passed as `name=`. `slim` and `local-group` return `<identity>/<agent_id>` from the row's three-part `identity`. |
+| `check_agent_id(params, agent_id)` | at bind time, with `agent_name`, for every agent on the chain | accepts any id | Raises `AgentCommError` when the layer's grammar refuses the agent id or the row's `identity`. `slim` refuses a `.` in the service or the agent id. `agent_id_refusal` runs both hooks; ctl reports the first refusal with the agent, row and layer, before anything connects. |
+| `LISTEN_REFUSAL` | when ctl checks the chain | `""` | Why the transport cannot serve an agent from this process (`http`). |
+
+`close()` is safe to call twice. Agents on one handle share a `fabric_id`,
+so a send between two of them leaves on the caller's own link.
 
 ## Capabilities
 
@@ -132,12 +283,14 @@ the map that rides a send. Send intents are a separate declaration
 
 ## Send context
 
-`SendContext` is the per-send envelope. It is immutable. The caller may set
-headers and intent. Only the link sets `sender`, from its `agent_id`. A
-caller-supplied sender is ignored. When a layer passes `headers`, that map
-replaces `context.headers` (a redaction layer can drop a key). The maps
-merge only when `headers` is omitted. A layer that adds keys copies the
-map first so `headers` and `context.headers` stay in sync.
+`SendContext` is the per-send envelope of the `send(target, task, ...)`
+call. It is immutable. The caller may set headers and intent. Only the link
+sets `sender`, from its `agent_id`. A caller-supplied sender is ignored.
+When a `BoundLayer` decorator passes `headers`, that map replaces
+`context.headers` whole (so it can drop a key); when it omits `headers`,
+`context.headers` is used as it is. A decorator that adds keys copies the
+map first so `headers` and `context.headers` stay in sync. A generic layer
+works on the `Envelope` instead, with `with_` as above.
 
 ## Shared checks
 
@@ -149,12 +302,14 @@ wheel. Pass `on_request` to install a handler. The expected reply is
 ## Local group
 
 `local-group` is a link, so it sits at the bottom of a stack. Each agent
-has its own link and a four-part name `org/ns/service/instance`. This is
-the Python API: you construct one `LocalGroupFabric` and pass it into
-every link. The session does not inject that fabric yet, and it cannot
-come from YAML. A binding with only `params.name` gets a private fabric,
-so two such links cannot see each other. There is no process-wide named
-registry: a string fabric name is an error.
+has its own link and a four-part name `org/ns/service/instance`. A chain
+whose bottom row is `local-group` creates one `LocalGroupFabric` (its
+shared service, with the layer's `inbox_limit`, `history_limit`,
+`overflow`, `max_message_size`, `seed` and `deterministic`) and passes it
+to every agent. From Python you can construct one fabric and pass it into
+every link yourself. A binding with only `params.name` gets a private
+fabric, so two such links cannot see each other. There is no process-wide
+named registry: a string fabric name is an error.
 
 `run_turn` (or `on_request`) is the inbound handler. `send` forwards
 `correlation_id`, `caller_call_id`, and `context_id`. `asend` uses
@@ -193,6 +348,9 @@ stays that tool.
 Cards: [local-group](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/local-group.md),
 [stack](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/stack.md),
 [trace_context](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/trace-context.md),
+[a2a-framing layer](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/a2a/a2a-framing.md),
+[http](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/http_layer/http.md),
+[slim](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/slim/slim.md),
 [send](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/system_tools/send.md).
 
 The target of `delegate_to_b` comes from the tool name; an extra `target`

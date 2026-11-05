@@ -144,8 +144,9 @@ scenarios:
 
 ## Step 4 — Check the flavour
 
-A flavour is a named runtime environment (Tutorial 1). This tutorial uses the bundled `local` flavour
-from `library-standard` (`mas-ctl flavour list`). It runs all agents in-process (`agent_comm.protocol: agent-local`).
+A flavour is the glue between the MAS and the infra: its `bind` section says which infra rows each
+agent's calls ride (Tutorial 1). This tutorial uses the bundled `local` flavour from `library-standard`,
+which binds nothing, so all agents keep the in-process link.
 
 `config.yaml` here selects it (`mas_ctl.flavour: local`) and sets `mas_ctl.trace: summary`,
 so `run-mas` prints each delegation on stderr. The LLM endpoint comes from your Tutorial 0 infra.

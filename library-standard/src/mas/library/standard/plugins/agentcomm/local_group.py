@@ -4,8 +4,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import logging
 import random
+import threading
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -14,7 +17,7 @@ from typing import Any, ClassVar
 from mas.library.standard.lib.comm.capabilities import capability_set
 from mas.library.standard.lib.comm.headers import bound_headers, merge_headers
 from mas.library.standard.lib.comm.local_link import LocalLinkBase
-from mas.library.standard.lib.comm.names import namespace_of, parse_name, require_instance_name
+from mas.library.standard.lib.comm.names import instance_name, namespace_of, parse_name, require_instance_name
 from mas.library.standard.lib.comm.payload import (
     MAX_MESSAGE_SIZE,
     PUBLISH_INTENT,
@@ -28,6 +31,7 @@ from mas.library.standard.lib.comm.payload import (
     send_result,
 )
 from mas.library.standard.lib.comm.send_context import align_send
+from mas.library.standard.lib.stack.layer import ChainMember
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 from mas.runtime.boundary.control.contract import ControlContract
 
@@ -56,9 +60,9 @@ class _Channel:
 class LocalGroupFabric:
     """Shared in-process fabric. A session injects one; there is no process registry.
 
-    This PR is the Python API. Session wiring that creates one fabric and
-    passes it into every agent is a later step. A YAML binding with only
-    ``params.name`` builds a private fabric, so two such links cannot talk.
+    A stack whose bottom layer is ``local-group`` creates one fabric and
+    passes it to every agent. A binding with only ``params.name`` builds a
+    private fabric, so two such links cannot talk.
     """
 
     def __init__(
@@ -83,6 +87,14 @@ class LocalGroupFabric:
         self._seq = 0
         self._rng = random.Random(seed if deterministic else None)
 
+    def start(self) -> None:
+        """Nothing to open: the fabric is in-process. Present so a stack can own it as a shared service."""
+
+    def close(self) -> None:
+        """Forget every link and channel still registered."""
+        self.nodes.clear()
+        self.channels.clear()
+
     def register(self, link: LocalGroupAgentComm) -> None:
         if link.name in self.nodes:
             raise AgentCommError(f"duplicate name {link.name!r}")
@@ -105,10 +117,12 @@ class LocalGroupFabric:
         return ordered[self._rng.randrange(len(ordered))]
 
 
-class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
+class LocalGroupAgentComm(LocalLinkBase, ChainMember, AgentCommContract):
     """L7 local-group link: unicast, seedable anycast, moderator channels.
 
-    Pass a shared ``LocalGroupFabric`` from Python. ``stop`` unregisters this
+    Pass a shared ``LocalGroupFabric`` from Python, or put ``local-group`` at
+    the bottom of a stack: the stack creates one fabric (``shared_service``)
+    and hands it to every agent, named ``<identity>/<agent_id>``. ``stop`` unregisters this
     link, removes channels it moderated, drains its inbox, and rejects later
     sends. Unicast with no handler raises. Capabilities do not claim
     ``reliable``: inboxes are bounded and can drop or reject.
@@ -117,6 +131,24 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
     CAPABILITIES: ClassVar[dict[str, bool]] = capability_set(
         unicast=True, anycast=True, group=True, ordered=True, isolation=True
     )
+    _FABRIC_PARAMS: ClassVar[tuple[str, ...]] = (
+        "inbox_limit",
+        "history_limit",
+        "overflow",
+        "max_message_size",
+        "seed",
+        "deterministic",
+    )
+
+    @classmethod
+    def shared_service(cls, params: Mapping[str, Any]) -> LocalGroupFabric:
+        """One fabric for every agent on a stack. A stack passes it back as ``service=``."""
+        return LocalGroupFabric(**{key: params[key] for key in cls._FABRIC_PARAMS if key in params})
+
+    @classmethod
+    def agent_name(cls, params: Mapping[str, Any], agent_id: str) -> str:
+        """An agent's name on a stack: ``<identity>/<agent_id>``, from the row's three-part ``identity``."""
+        return instance_name(str(params.get("identity") or ""), agent_id)
 
     def __init__(
         self,
@@ -124,6 +156,7 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
         *,
         name: str,
         fabric: LocalGroupFabric | None = None,
+        service: LocalGroupFabric | None = None,
         on_request: OnRequestFn | None = None,
         seed: int | None = 0,
         inbox_limit: int = 64,
@@ -131,6 +164,7 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
         overflow: str = "reject",
         max_message_size: int = MAX_MESSAGE_SIZE,
         deterministic: bool = True,
+        reply_timeout_s: float = 120.0,
         control: ControlContract | None = None,
         session_id: str = "",
         steer_peers: Mapping[str, str] | Sequence[str] | None = None,
@@ -143,6 +177,8 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
         super().__init__(agent_id=self.name, control=control, steer_peers=steer_peers)
         self._run_turn = None if on_request is not None else run_turn
         self._on_request = on_request
+        if fabric is None:
+            fabric = service
         if fabric is None:
             self.fabric = LocalGroupFabric(
                 seed=seed,
@@ -161,6 +197,7 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
         self._sticky: dict[str, str] = {}
         self._started = False
         self._stopped = False
+        self.reply_timeout_s = float(reply_timeout_s)
         self.session_id = str(session_id or "").strip()
         self.fabric.register(self)
 
@@ -243,7 +280,7 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
             headers=headers,
             context=context,
         )
-        result = peer._receive_request(envelope)
+        result = self._wait_reply(lambda: peer._receive_request(envelope))
         return send_result(str(envelope["intent"]), result)
 
     async def asend(
@@ -269,8 +306,27 @@ class LocalGroupAgentComm(LocalLinkBase, AgentCommContract):
             headers=headers,
             context=context,
         )
-        result = await peer._areceive_request(envelope)
+        try:
+            result = await asyncio.wait_for(peer._areceive_request(envelope), timeout=self.reply_timeout_s)
+        except TimeoutError:
+            raise AgentCommError("reply timed out") from None
         return send_result(str(envelope["intent"]), result)
+
+    def _wait_reply(self, fn: Callable[[], str]) -> str:
+        """Run the peer's turn, and fail if it has not replied in ``reply_timeout_s``."""
+        done: concurrent.futures.Future[str] = concurrent.futures.Future()
+
+        def run() -> None:
+            try:
+                done.set_result(fn())
+            except BaseException as exc:
+                done.set_exception(exc)
+
+        threading.Thread(target=run, daemon=True, name="local-group-reply").start()
+        try:
+            return done.result(timeout=self.reply_timeout_s)
+        except concurrent.futures.TimeoutError:
+            raise AgentCommError("reply timed out") from None
 
     def _steer_if_requested(
         self,

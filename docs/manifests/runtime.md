@@ -129,7 +129,7 @@ Manifests declare agent and MAS behaviour through these fields:
 
 - `spec.design_pattern`: how the agent picks its next step each turn. A `DesignPatternPlugin` from the plugin registry implements it, and the kernel runs it as a Mealy machine (a state machine whose output depends on state and input). Peer delegation (`delegate_to_*` tool calls) runs through this same contract. The agent has no separate delegation-transport plugin binding.
 - `spec.governance[]`, `spec.observability[]`, `spec.control`, and `spec.context_sources`: schema-declared governance, observation, control, and context-source bindings. See [governance.md](governance.md), [reliability.md](../references/reliability.md), and [plugin-bindings.md](plugin-bindings.md).
-- `MAS.spec.workflow`: topology (`entry`, `nodes`, `delegates_to`, `dispatch`). A standalone `kind: Workflow` has a separate `workflow/v1` schema with `edges`.
+- `MAS.spec.workflow`: topology (`entry`, `nodes`, `delegates_to`). A standalone `kind: Workflow` has a separate `workflow/v1` schema with `edges`.
 
 The current Agent and MAS schemas have no `spec.plugins[]`, `spec.workflow.type`, or `spec.workflow.plugin` field.
 See the topology, workflow, and routing section in [mas.md](mas.md#topology-workflow-and-routing).

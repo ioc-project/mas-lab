@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
 from library_ioa.plugins.a2a.client import A2AClient
 
 
-class A2AAgentComm(AgentCommContract):
+class A2AAgentComm(LinkIdentity, AgentCommContract):
     """Reach a remote peer using the A2A protocol and official SDK client.
 
     A2A has no inform/ask wire. Only ``task`` is honoured. Other intents
@@ -15,6 +16,7 @@ class A2AAgentComm(AgentCommContract):
     """
 
     HONOURED_SEND_INTENTS = frozenset({"task"})
+    plugin_id = "a2a"
 
     def __init__(
         self,
@@ -23,6 +25,7 @@ class A2AAgentComm(AgentCommContract):
         headers: dict[str, str] | None = None,
         timeout: float | None = None,
     ) -> None:
+        self.endpoint = url
         self._client = A2AClient(url=url, headers=headers, timeout=timeout)
 
     def honoured_send_intents(self) -> frozenset[str]:

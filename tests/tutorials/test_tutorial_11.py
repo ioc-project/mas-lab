@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
-from conftest import T01, load_yaml, run_cli
+from tutorial_support import T01, load_yaml, run_cli
 
 
 class TestManifestValidation:
@@ -43,9 +43,7 @@ def _v2_payload(*, session_id: str, turn: int, label: str, parent_session_id: st
             {
                 "agent_id": manifest["metadata"]["name"],
                 "turn_history": [["What is the capital of France?", "Paris."]],
-                "committed_messages": [
-                    {"role": "user", "content": "What is the capital of France?"}
-                ],
+                "committed_messages": [{"role": "user", "content": "What is the capital of France?"}],
                 "conversation_chunks": None,
             }
         ],
@@ -80,9 +78,7 @@ class TestCaptureAndResume:
         assert listed.exit_code == 0, listed.output
         assert "turn-0001" in listed.output
 
-        shown = CliRunner().invoke(
-            checkpoint_group, ["show", str(tmp_path / "turn-0001.checkpoint.json")]
-        )
+        shown = CliRunner().invoke(checkpoint_group, ["show", str(tmp_path / "turn-0001.checkpoint.json")])
         assert shown.exit_code == 0, shown.output
         assert "session-1" in shown.output
 
@@ -95,13 +91,9 @@ class TestForkAndResume:
         from mas.ctl.cli.commands.checkpoint import checkpoint_group
 
         store = JsonCheckpointStore(tmp_path)
-        source = store.save(
-            _v2_payload(session_id="session-1", turn=2, label="turn-0002"), label="turn-0002"
-        )
+        source = store.save(_v2_payload(session_id="session-1", turn=2, label="turn-0002"), label="turn-0002")
 
-        result = CliRunner().invoke(
-            checkpoint_group, ["fork", str(source), "--session-id", "experiment-a"]
-        )
+        result = CliRunner().invoke(checkpoint_group, ["fork", str(source), "--session-id", "experiment-a"])
         assert result.exit_code == 0, result.output
         fork_path = Path(result.output.strip())
 
@@ -120,16 +112,10 @@ class TestForkAndResume:
         from mas.ctl.cli.commands.checkpoint import checkpoint_group
 
         store = JsonCheckpointStore(tmp_path)
-        source = store.save(
-            _v2_payload(session_id="session-1", turn=3, label="turn-0003"), label="turn-0003"
-        )
+        source = store.save(_v2_payload(session_id="session-1", turn=3, label="turn-0003"), label="turn-0003")
 
-        fork_a = CliRunner().invoke(
-            checkpoint_group, ["fork", str(source), "--session-id", "branch-a"]
-        )
-        fork_b = CliRunner().invoke(
-            checkpoint_group, ["fork", str(source), "--session-id", "branch-b"]
-        )
+        fork_a = CliRunner().invoke(checkpoint_group, ["fork", str(source), "--session-id", "branch-a"])
+        fork_b = CliRunner().invoke(checkpoint_group, ["fork", str(source), "--session-id", "branch-b"])
         assert fork_a.exit_code == fork_b.exit_code == 0
 
         branch_a_payload = _v2_payload(

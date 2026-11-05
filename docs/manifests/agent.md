@@ -873,7 +873,7 @@ Delegation means one agent hands a task to a peer through a tool call. In a MAS,
 - The peer's `spec.description` is the tool description the delegating model sees. Write it from the delegator's point of view.
 - `spec.working_memory` decides whether the peer remembers earlier delegations.
 
-Topology and dispatch modes: [mas.md](mas.md#workflow).
+Topology and workflow modes: [mas.md](mas.md#workflow).
 
 ---
 

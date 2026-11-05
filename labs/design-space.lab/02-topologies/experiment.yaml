@@ -49,7 +49,7 @@ experiment:
 
   scenarios:
     - id: topo-parallel
-      description: "Parallel — moderator fans out to all specialists concurrently"
+      description: "Parallel — moderator sends every specialist the task in one batch (deterministic_parallel)"
       overlays:
         logic: [topo-parallel]
         control: []

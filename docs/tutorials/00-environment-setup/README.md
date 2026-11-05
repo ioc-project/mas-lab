@@ -52,7 +52,7 @@ LLM access has three parts. Keep secrets out of YAML.
 | ----- | ---------- | -------------- |
 | **Infra manifest** | Endpoint settings: API base URL, allowed models, `api_key_env` name (no secret) | `infra_refs` in `config.yaml`, or `--infra-ref` |
 | **Credential** | API key or token | `docker/.env` (Docker) or a gitignored `.env` (developers) |
-| **Flavour** | Named runtime environment; `local` is the default | `mas_ctl.flavour` / `mas_lab.flavour`, or the manifest |
+| **Flavour** | Glue between the logic spec and the infra (`spec.bind`); `local` is the default and binds nothing | `mas_ctl.flavour` / `mas_lab.flavour`, or the manifest |
 
 The bundled `standard:openai` and `standard:ollama` infra need no `mas-lab init`. Set the key:
 
@@ -290,7 +290,7 @@ TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-00
 
 ## What you learned
 
-- MAS Lab needs an infra manifest (where to call), a credential (the key), and a flavour (environment).
+- MAS Lab needs an infra manifest (where to call), a credential (the key), and a flavour (the glue that binds agents to infra; the default `local` binds nothing).
 - `mas-ctl validate` works offline; `chat` and `run-mas` need a provider or a cache replay.
 - `mas-lab config` shows where traces, cache, and results go.
 

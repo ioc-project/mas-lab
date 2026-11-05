@@ -86,7 +86,7 @@ def collect_deprecated_uses(
     return msgs
 
 
-def _delegates_to_nodes(data: dict[str, Any]) -> tuple[list[Any] | None, str]:
+def _workflow_nodes(data: dict[str, Any]) -> tuple[list[Any] | None, str]:
     spec = data.get("spec") if isinstance(data, dict) else None
     if not isinstance(spec, dict):
         return None, ""
@@ -103,29 +103,30 @@ def _delegates_to_nodes(data: dict[str, Any]) -> tuple[list[Any] | None, str]:
     return None, ""
 
 
-def _nonempty_delegates_to(raw: object) -> bool:
+def _nonempty(raw: object) -> bool:
     if isinstance(raw, list):
         return any(str(item).strip() for item in raw)
     return bool(raw)
 
 
-def collect_delegates_to_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
-    """One warning per validation, listing nodes with a non-empty ``delegates_to``."""
-    nodes, path = _delegates_to_nodes(data)
+def _nodes_setting(data: dict[str, Any], key: str) -> tuple[str, list[str]]:
+    """The workflow nodes path and the ids (in order, once each) of nodes with a non-empty ``key``."""
+    nodes, path = _workflow_nodes(data)
     if not isinstance(nodes, list) or not path:
-        return []
+        return "", []
     labels: list[str] = []
-    seen: set[str] = set()
     for index, node in enumerate(nodes):
-        if not isinstance(node, dict) or "delegates_to" not in node:
-            continue
-        if not _nonempty_delegates_to(node.get("delegates_to")):
+        if not isinstance(node, dict) or not _nonempty(node.get(key)):
             continue
         label = str(node.get("id") or "").strip() or f"nodes[{index}]"
-        if label in seen:
-            continue
-        seen.add(label)
-        labels.append(label)
+        if label not in labels:
+            labels.append(label)
+    return path, labels
+
+
+def collect_delegates_to_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """One warning per validation, listing nodes with a non-empty ``delegates_to``."""
+    path, labels = _nodes_setting(data, "delegates_to")
     if not labels:
         return []
     listed = ", ".join(labels)
@@ -135,6 +136,76 @@ def collect_delegates_to_deprecation(data: dict[str, Any]) -> list[tuple[str, st
             f"delegates_to is deprecated, still supported, no removal date; used by nodes: {listed}",
         )
     ]
+
+
+def collect_dispatch_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """One warning per validation, listing nodes that set ``dispatch``. The key is ignored."""
+    path, labels = _nodes_setting(data, "dispatch")
+    if not labels:
+        return []
+    listed = ", ".join(labels)
+    return [
+        (
+            path,
+            f"dispatch is deprecated and ignored; the model chooses parallel tool calls; set by nodes: {listed}",
+        )
+    ]
+
+
+def collect_workflow_deprecations(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """The workflow node deprecations, one warning per deprecated key."""
+    return collect_delegates_to_deprecation(data) + collect_dispatch_deprecation(data)
+
+
+_FLAVOUR_IGNORED_KEYS = ("agent_comm", "tools", "control", "telemetry")
+_FLAVOUR_FALLBACK_KEY = "observability"
+
+
+def _flavour_block_for_deprecation(data: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+    """The Flavour ``spec`` (or a Flavour overlay's ``spec.patch``) and its path."""
+    if not isinstance(data, dict):
+        return None, ""
+    kind = str(data.get("kind") or "").strip().lower()
+    spec = data.get("spec")
+    if not isinstance(spec, dict):
+        return None, ""
+    if kind == "flavour":
+        return spec, "spec"
+    if kind == "overlay":
+        target = spec.get("target")
+        patch = spec.get("patch")
+        if (
+            isinstance(target, dict)
+            and str(target.get("kind") or "").strip().lower() == "flavour"
+            and isinstance(patch, dict)
+        ):
+            return patch, "spec.patch"
+    return None, ""
+
+
+def collect_flavour_key_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """One warning per validation, listing leftover Flavour keys that are set.
+
+    ``agent_comm``, ``tools``, ``control`` and ``telemetry`` are accepted and
+    read by nothing. ``observability`` is still the fallback when the agent
+    declares none.
+    """
+    spec, path = _flavour_block_for_deprecation(data)
+    if spec is None:
+        return []
+    ignored = [key for key in _FLAVOUR_IGNORED_KEYS if key in spec]
+    fallback = _FLAVOUR_FALLBACK_KEY in spec
+    if not ignored and not fallback:
+        return []
+    parts: list[str] = []
+    if ignored:
+        listed = ", ".join(ignored)
+        verb = "is" if len(ignored) == 1 else "are"
+        whom = "it" if len(ignored) == 1 else "them"
+        parts.append(f"{listed} {verb} deprecated and ignored; nothing reads {whom}")
+    if fallback:
+        parts.append("observability is deprecated, still used as a fallback when the agent declares none")
+    return [(path, "; ".join(parts))]
 
 
 def _usage_rows(node: Any, path: str) -> list[tuple[str, dict[str, Any]]]:

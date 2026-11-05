@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from conftest import T06, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from tutorial_support import T06, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 
 class TestManifestValidation:
@@ -89,10 +89,7 @@ class TestOverlayMerging:
 # ═══════════════════════════════════════════════════════════════════════════
 
 _LIVE = live_tutorial_chat
-_LIVE_QUERY = (
-    "What is the speed of light in kilometres and miles per second? "
-    "Use the answer-expert skill."
-)
+_LIVE_QUERY = "What is the speed of light in kilometres and miles per second? Use the answer-expert skill."
 
 
 @_LIVE

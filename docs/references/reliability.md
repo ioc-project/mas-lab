@@ -14,7 +14,7 @@ Example: the infra layer retries a dropped socket. A tool `ValueError` goes back
 
 This is a runtime topic, not a YAML kind. Agent field lists are in [agent.md](../manifests/agent.md). The governance chain and its plugins are in [governance.md](../manifests/governance.md). Infra proxy retry is in [infra.md](../manifests/infra.md).
 
-Terms: *infra* is the layer that says where things are and how to reach them (LLM endpoint, tool servers). *Governance* is the policy layer that approves, blocks, or retries calls. A *plugin* is a unit of behaviour that a manifest selects by name. A *flavour* is a deployment preset. A *run* is one execution of an agent or MAS.
+Terms: *infra* is the layer that says where things are and how to reach them (LLM endpoint, tool servers). *Governance* is the policy layer that approves, blocks, or retries calls. A *plugin* is a unit of behaviour that a manifest selects by name. A *flavour* is the glue that links the logic spec to the infra (its `bind`). A *run* is one execution of an agent or MAS.
 
 ## Layers
 
@@ -173,16 +173,16 @@ Native `events.jsonl` `governance_decision` rows for ingress include `failure_cl
 
 ---
 
-## Composing a flavour (OpenClaw-style)
+## Where reliability behaviour goes
 
-A flavour is a **deployment preset**. It is not a dump of every agent plugin. Behaviour that changes the trajectory belongs on Agent `governance[]` and `control`, usually through stacked overlays. See [governance.md](../manifests/governance.md) and [flavour.md](../manifests/flavour.md).
+A flavour is the glue between the logic spec and the infra (`bind`). It is not a dump of every agent plugin. Behaviour that changes the trajectory belongs on Agent `governance[]` and `control`, usually through stacked overlays. See [governance.md](../manifests/governance.md) and [flavour.md](../manifests/flavour.md).
 
 | Concern | Overlay / plugin | Notes |
 |---------|------------------|--------|
 | Undeclared tools | `with-hardened` → `gov_no_undeclared_tool` | Egress chain BLOCK |
 | Typed retry / breaker | `with-hardened` → `retry_on_error` + `control.retry` + `circuit_breaker` | Infra then ingress |
 | Native traces | `observability-native` | Sequence, not chain |
-| Checkpoints / resume | separate overlay | Compose it. Do not fold it into the flavour YAML. |
+| Checkpoints / resume | separate overlay | Compose it. The flavour does not carry it. |
 | Backtrack on application errors | `error_policy.application` or a dedicated plugin | The default is `allow` (stored in working memory). |
 | HITL | `sample_governance` stanza on the chain | The flavour should not own HITL (human in the loop) |
 

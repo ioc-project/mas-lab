@@ -187,7 +187,9 @@ export interface WorkflowNode {
    */
   delegates_to?: string[];
   /**
-   * Parallel topology dispatch mode (e.g. all).
+   * @deprecated
+   * Deprecated, still accepted, ignored. The model chooses parallel tool calls; a node does not fan out to its peers.
+   *
    */
   dispatch?: string;
   /**

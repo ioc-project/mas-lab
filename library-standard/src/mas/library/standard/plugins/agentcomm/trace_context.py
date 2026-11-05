@@ -1,6 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Decorator: mint a child W3C ``traceparent`` on each send."""
+"""Decorator: mint a child W3C ``traceparent`` on each send.
+
+Deprecated: the generic ``Stack`` stamps a child ``traceparent`` on every
+send, so this layer is no longer needed in a stack. It still works.
+"""
 
 from __future__ import annotations
 
@@ -46,7 +50,7 @@ def _with_trace(headers: Mapping[str, str] | None) -> dict[str, str]:
 
 
 class TraceContextLayer(BoundLayer):
-    """Wraps a lower link and injects a child correlation id."""
+    """Wraps a lower link and injects a child correlation id. Deprecated: the stack does this."""
 
     def __init__(self, lower: AgentCommContract | None = None, **params: Any) -> None:
         super().__init__(**params)

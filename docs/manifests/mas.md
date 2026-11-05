@@ -99,7 +99,7 @@ No fields are required; an empty `spec: {}` is valid.
 - `memory_stores`: the lab validator checks the paths. The runtime does not load them.
 - `telemetry`: `mas-ctl run-mas` does not read it.
 
-At run time, the flavour's `agent_comm` block selects agent-to-agent transport ([flavour.md](flavour.md)). `spec.transport` does not.
+At run time, the Flavour selects agent-to-agent transport: its `spec.bind.agent_comm` names the infra rows calls ride ([flavour.md](flavour.md#bind)). With no chain, calls use the library default `agent_comm` plugin (`local`, in-process). `spec.transport` does not select it, and the MAS has no `agent_comm` field.
 
 ---
 
@@ -249,7 +249,7 @@ _Used by:_ `spec.workflow.nodes[]`
 | `delegates_to` | `string[]` | no | `[]` | IDs of agents this node may delegate to. Sets the `delegate_to_<id>` tools that the entry agent's LLM sees. Deprecated, still supported, no removal date. An empty list does not warn. |
 | `role` | `string` | no | — | Role label, informational. |
 | `agent` | `string` | no | — | Agent id override, for when the node id differs from the agent id. |
-| `dispatch` | `string` | no | — | Fan-out mode. `parallel` (or `all`) runs this node's `delegates_to` peers concurrently. Any other value, or none, leaves delegation to the LLM. |
+| `dispatch` | `string` | no | — | Deprecated, still accepted, ignored. Validation warns once and lists the nodes that set it. A node does not fan out to its peers; the model chooses parallel tool calls. |
 | `config` | `object` | no | `{}` | Plugin-specific parameters. Keys depend on the pattern. |
 | `description` | `string` | no | `""` | Node description, informational. |
 
@@ -261,7 +261,7 @@ _Used by:_ `spec.workflow.nodes[]`
 
 _Used by:_ `spec.transport`
 
-Declares how agents communicate within the MAS. The schema accepts this block. `mas-ctl run-mas` does not read it in this release. Delegation runs over the agent-to-agent plugin that the flavour's `agent_comm` selects (in-process by default).
+Declares how agents communicate within the MAS. The schema accepts this block. `mas-ctl run-mas` does not read it in this release. Delegation runs in-process by default (the library default `agent_comm` plugin). A Flavour's `bind` links agents to infra rows. The Flavour's leftover `agent_comm` block is accepted and read by nothing.
 
 | Field | Type | Default | Description |
 | ------- | ------ | --------- | ------------- |
@@ -313,7 +313,7 @@ _Used by:_ `spec.telemetry`
 |-------|------|---------|-------------|
 | `path` | `string` | `""` | Path to the event log file (JSONL), relative to `mas.yaml`. |
 
-`mas-ctl run-mas` does not read this block in this release. Set where events go with the agents' `spec.observability` (the `native` sink's `path` and `events_file`) or the flavour's `telemetry` block.
+`mas-ctl run-mas` does not read this block in this release. Set where events go with the agents' `spec.observability` (the `native` sink's `path` and `events_file`) or the released `telemetry` block of the flavour (kept for compatibility).
 
 **Example:**
 
@@ -331,19 +331,19 @@ Three related ideas are often confused:
 | Term | What it is | Where it lives | Example |
 |------|------------|----------------|---------|
 | **Topology** | Which agents exist and how they relate (team shape). | `spec.agency.agents`, overlay patches | design-space Exp 1.2 sweeps five overlays (`topo-linear-pipeline`, `topo-moderator-broker`, `topo-parallel`, `topo-supervised`, `topo-verifier`) |
-| **Workflow** | Entry agent, nodes, allowed delegation targets, and optional dispatch. | `spec.workflow` | Declares the delegation graph. It defines no `workflow.type` strategy. |
+| **Workflow** | Entry agent, nodes, and allowed delegation targets. | `spec.workflow` | Declares the delegation graph. It defines no `workflow.type` strategy. |
 | **Routing logic** | Per-message decisions inside a turn: which tool or delegate comes next. | LLM, delegation tools, agent prompts | The moderator reads the user message and chooses `schedule_agent` or `itinerary_agent`. |
 
 The workflow declares the entry agent and the delegation tools available. Three modes exist in one user turn:
 
 - **LLM-directed:** the entry agent chooses among its declared `delegates_to` peers.
 - **Deterministic linear:** the entry agent uses `design_pattern: deterministic_linear`. It calls its peers one after another with no LLM routing decision. Each peer receives the previous peer's output.
-- **Parallel:** a node with `dispatch: parallel` fans out to its declared peers.
+- **Parallel:** the entry agent's model calls several `delegate_to_<id>` tools in one batch of parallel tool calls, or the entry agent uses `design_pattern: deterministic_parallel` to send every peer the same task in one batch.
 
 Routing logic is what happens inside the moderator's turn when it picks the next move, such as "a transport question, so delegate to `schedule_agent`". Routing is per message and per LLM step.
-The embedded MAS workflow declares `entry`, `nodes`, `delegates_to`, and `dispatch`. Explicit sequential `edges` exist only in the standalone `Workflow` manifest below.
+The embedded MAS workflow declares `entry`, `nodes`, and `delegates_to`. A node's `dispatch` is deprecated and ignored. Explicit sequential `edges` exist only in the standalone `Workflow` manifest below.
 
-Overlays change the graph, the dispatch mode, or the entry agent's design pattern without editing the base agent manifests.
+Overlays change the graph or the entry agent's design pattern without editing the base agent manifests.
 
 ### Topology in paper labs
 
@@ -375,14 +375,14 @@ spec:
 | Pattern | ctl behaviour |
 | --------- | --------------- |
 | Dynamic delegation | Default multi-agent mode. The entry agent runs the session, and the LLM uses delegation tools. |
-| `dispatch: parallel` | A node with `dispatch: parallel` (or `all`) fans out to its `delegates_to` peers in one act. Parallel tool-call batches run concurrently on the async engine path (`ainvoke` / `afeed`). The sync path drains the same batch sequentially. |
+| Parallel fan-out | The entry agent's model chooses parallel tool calls, or the entry agent uses `design_pattern: deterministic_parallel`. Parallel tool-call batches run concurrently on the async engine path (`ainvoke` / `afeed`). The sync path drains the same batch sequentially. |
 | Fixed sequence | The entry agent uses `design_pattern: deterministic_linear` (or `deterministic_parallel` / `deterministic_single`, `state_machine` for a table of states, or `moderated_rounds` for rounds a decider closes and a group confirms). The embedded MAS workflow has no `edges`. |
 | Single agent | The `topo-single-agent` overlay gives one generalist and no inter-agent workflow. |
 
 ### Concurrency model
 
 The runtime is synchronous by default. Single-agent CLI chat, unit tests, and the benchmark harness call `invoke`, `feed`, and `run_turn`.
-Concurrent fan-out uses async twins of those calls (`ainvoke`, `afeed`, `arun_turn`, `adelegate`, `aspawn`) on one cooperative event loop. Fan-out means parallel tool calls, `dispatch: parallel` peers, and concurrent `spawn_subagent`.
+Concurrent fan-out uses async twins of those calls (`ainvoke`, `afeed`, `arun_turn`, `adelegate`, `aspawn`) on one cooperative event loop. Fan-out means parallel tool calls and concurrent `spawn_subagent`.
 
 LLM providers must implement `achat_completion` as the async twin of `chat_completion`. A missing implementation fails at plugin load. The runtime does not run it on a worker thread, because OS-thread parallelism would break the lock-free run state (`SpawnLedger`, `InProcessCommBus`, `WorkingMemoryRegistry`).
 

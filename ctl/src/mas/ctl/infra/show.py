@@ -106,81 +106,67 @@ def infra_show_payload(
     }
 
 
-def agents_from_manifest(document: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Bounded comm-stack rows from a MAS or Agent YAML document.
-
-    MAS files declare the stack once as ``spec.agent_comm`` (``type``,
-    ``protocol``, or ``kind``). That binding applies to every agent row.
-    """
+def document_agent_ids(document: dict[str, Any] | None) -> list[str]:
+    """The agent ids of a MAS document (its agency), or the one id of an Agent document."""
     if not isinstance(document, dict):
         return []
-    kind = str(document.get("kind") or "")
-    spec = document.get("spec") or {}
-    mas_comm = _comm_layers(spec.get("agent_comm"))
-    if kind == "MAS":
-        agency = spec.get("agency") or {}
-        rows = agency.get("agents") or []
-        out: list[dict[str, Any]] = []
-        for row in rows:
-            if isinstance(row, dict):
-                row_comm = _comm_layers(
-                    row.get("communication") or row.get("agent_comm") or row.get("comm")
-                )
-                out.append(
-                    {
-                        "id": _clip(str(row.get("id") or row.get("name") or ""), limit=64),
-                        "comm": row_comm or mas_comm,
-                    }
-                )
-            elif row:
-                out.append({"id": _clip(str(row), limit=64), "comm": mas_comm})
-            if len(out) >= _MAX_AGENTS:
-                break
-        return out
-    name = str((document.get("metadata") or {}).get("name") or "")
-    if name or spec:
-        return [
-            {
-                "id": _clip(name or "agent", limit=64),
-                "comm": _comm_layers(
-                    spec.get("communication") or spec.get("agent_comm") or spec.get("comm")
-                )
-                or mas_comm,
-            }
-        ]
-    return []
+    spec = document.get("spec") if isinstance(document.get("spec"), dict) else {}
+    if str(document.get("kind") or "") == "MAS":
+        agency = spec.get("agency") if isinstance(spec.get("agency"), dict) else {}
+        ids: list[str] = []
+        for row in agency.get("agents") or []:
+            agent_id = str((row.get("id") or row.get("name")) if isinstance(row, dict) else row or "").strip()
+            if agent_id:
+                ids.append(agent_id)
+        return ids
+    name = str((document.get("metadata") or {}).get("name") or "").strip()
+    return [name or "agent"] if (name or spec) else []
 
 
-def _comm_layers(raw: Any) -> list[str]:
-    if raw is None or raw == "":
+def agents_from_manifest(
+    document: dict[str, Any] | None,
+    *,
+    infra: ResolvedInfra | None = None,
+) -> list[dict[str, Any]]:
+    """Bounded comm rows from a MAS or Agent YAML document.
+
+    The comm column is how the agent is reached: the layers of its Flavour
+    chain (``bind.agents.<id>.agent_comm``, else ``bind.agent_comm``), bottom
+    first, for an agent on a chain; the Application ``protocol`` for an agent
+    reached at its own url; else the library default ``agent_comm`` plugin.
+    ``identity`` is the agent's name on the bottom layer of each chain it joins.
+    """
+    from mas.ctl.infra.identities import agent_chains, chain_for, chain_identities, peers_of
+    from mas.runtime.registry import get_registry
+
+    agent_ids = document_agent_ids(document)[:_MAX_AGENTS]
+    if not agent_ids:
         return []
-    if isinstance(raw, str):
-        name = raw.strip()
-        return [_clip(name, limit=64)] if name else []
-    if isinstance(raw, dict):
-        variant = str(
-            raw.get("type") or raw.get("protocol") or raw.get("kind") or raw.get("plugin") or raw.get("id") or ""
-        ).strip()
-        return [_clip(variant, limit=64)] if variant else []
-    if isinstance(raw, list):
-        layers: list[str] = []
-        for item in raw:
-            if isinstance(item, dict):
-                name = str(
-                    item.get("type")
-                    or item.get("protocol")
-                    or item.get("kind")
-                    or item.get("plugin")
-                    or item.get("id")
-                    or item.get("name")
-                    or ""
-                ).strip()
-            else:
-                name = str(item).strip()
-            if name:
-                layers.append(_clip(name, limit=64))
-        return layers[:_MAX_STEPS]
-    return []
+    peers = peers_of(document, agent_ids) if str(document.get("kind") or "") == "MAS" else {}
+    apps = dict(infra.applications or {}) if infra is not None else {}
+    names = chain_identities(agent_ids, peers=peers, infra=infra)
+    default = get_registry().default_for("agent_comm")
+    out: list[dict[str, Any]] = []
+    for agent_id in agent_ids:
+        row = apps.get(agent_id)
+        joined = agent_chains(agent_id, peers=peers, infra=infra)
+        own = chain_for(infra, agent_id)
+        if own:
+            comm = [str(layer.get("type") or "") for layer in own]
+        elif joined:
+            comm = [str(layer.get("type") or "") for layer in joined[0]]
+        elif isinstance(row, dict) and str(row.get("protocol") or row.get("kind") or "").strip():
+            comm = [str(row.get("protocol") or row.get("kind")).strip()]
+        else:
+            comm = [default] if default else []
+        out.append(
+            {
+                "id": _clip(agent_id, limit=64),
+                "comm": [_clip(layer, limit=64) for layer in comm],
+                "identity": _clip(names.get(agent_id, ""), limit=96) if names.get(agent_id) else "",
+            }
+        )
+    return out
 
 
 def render_infra_show(payload: dict[str, Any]) -> str:
@@ -204,8 +190,11 @@ def render_infra_show(payload: dict[str, Any]) -> str:
     if agents:
         lines.append("agents")
         for agent in agents:
-            comm = ", ".join(agent.get("comm") or []) or "(none)"
-            lines.append(f"  {agent.get('id') or '?'}  {comm}")
+            parts = [", ".join(agent.get("comm") or []) or "(none)"]
+            identity = str(agent.get("identity") or "").strip()
+            if identity:
+                parts.append(identity)
+            lines.append(f"  {agent.get('id') or '?'}  {'  '.join(parts)}")
     if not lines:
         lines.append("(no llm, tool, or agent destinations)")
     return "\n".join(lines) + "\n"

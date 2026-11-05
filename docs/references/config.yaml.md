@@ -68,7 +68,7 @@ The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and ru
 
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
-| `flavour` | string | `local` | Flavour name. A *flavour* is a deployment preset. Found in `library-standard` or the workspace `flavours/` folder. |
+| `flavour` | string | `local` | Flavour name. A *flavour* is the glue that links the logic spec to the infra (its `bind`). Found in `library-standard` or the workspace `flavours/` folder. |
 | `env` | string | `.env` | Gitignored secrets **filename** relative to the workspace |
 | `deployment` | string | none | Deployment manifest path, relative to the workspace |
 | `runtime_id` | string | none | Kernel or runtime id override |

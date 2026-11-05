@@ -1,0 +1,30 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: MAS
+
+metadata:
+  name: support-desk
+  version: "0.1.0"
+
+intent:
+  summary: >
+    I route support requests to a billing or an outage specialist.
+
+spec:
+  agency:
+    agents:
+      - id: triage
+        ref: agents/triage/agent.yaml
+      - id: billing
+        ref: agents/billing/agent.yaml
+      - id: outage
+        ref: agents/outage/agent.yaml
+
+  workflow:
+    entry: triage
+    nodes:
+      - id: triage
+        delegates_to: [billing, outage]
+      - id: billing
+      - id: outage

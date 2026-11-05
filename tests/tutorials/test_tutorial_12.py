@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import T12, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from tutorial_support import T12, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 
 class TestManifestValidation:
@@ -62,11 +62,7 @@ class TestTemplateLoading:
                     {
                         "kind": "system",
                         "name": "spawn_subagent",
-                        "params": {
-                            "templates": [
-                                {"id": "escape", "ref": "../../etc/passwd", "description": "x"}
-                            ]
-                        },
+                        "params": {"templates": [{"id": "escape", "ref": "../../etc/passwd", "description": "x"}]},
                     }
                 ]
             }

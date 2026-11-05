@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 # Pin before any a2a import. library_ioa.plugins.a2a is not enough: other
 # packages (and GLS) import a2a-sdk first, and the SDK bakes the flag in at
 # a2a.utils.telemetry import time. Full rationale: mas.third_party_otel.
 import mas.third_party_otel  # noqa: F401
-
-from pathlib import Path
 
 
 def package_root() -> Path:

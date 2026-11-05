@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import get_type_hints
 
 import pytest
+from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.system_tools.send import SendTool, SendToolContext
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
@@ -171,9 +172,7 @@ def test_send_checks_allowed_peers_not_routes() -> None:
     assert "not an allowed peer" in tool.send("stranger", "no")
     assert stranger.calls == []
     assert tool.send("worker", "yes") == "ok:worker:yes"
-    assert "not an allowed peer" in tool.call_send_tool(
-        "send", {"target": "evil", "message": "no"}
-    )
+    assert "not an allowed peer" in tool.call_send_tool("send", {"target": "evil", "message": "no"})
 
 
 def test_unknown_intent_is_an_error() -> None:
@@ -207,14 +206,14 @@ def test_send_errors_and_claims() -> None:
         def send(self, *args, **kwargs):
             raise RuntimeError("boom")
 
-    assert "via local-bus failed" in SendTool(
-        comm=Boom(lambda *_: ""), allowed_peers=["w"]
-    ).send("w", "t")
+    assert "via local-bus failed" in SendTool(comm=Boom(lambda *_: ""), allowed_peers=["w"]).send("w", "t")
     assert "not available on bus" in SendTool(
-        comm=Missing(), allowed_peers=["w"]  # type: ignore[arg-type]
+        comm=Missing(),
+        allowed_peers=["w"],  # type: ignore[arg-type]
     ).send("w", "t")
     assert "failed: boom" in SendTool(
-        comm=Crash(), allowed_peers=["w"]  # type: ignore[arg-type]
+        comm=Crash(),
+        allowed_peers=["w"],  # type: ignore[arg-type]
     ).send("w", "t")
     bare = SendTool(allowed_peers=["w"])
     with pytest.raises(AgentCommError, match="no communication plugin"):
@@ -241,6 +240,10 @@ async def test_asend_uses_same_prepare_including_routes() -> None:
     remote_calls: list[tuple[str, str]] = []
 
     class Remote:
+        plugin_id = "a2a"
+        fabric_id = None
+        endpoint = ""
+
         def send(self, target_agent_id: str, task: str, **_: object) -> str:
             raise AssertionError("sync send must not run when asend exists")
 
@@ -263,9 +266,7 @@ async def test_asend_uses_same_prepare_including_routes() -> None:
     assert await tool.asend("worker", "x", intent="nope") == "[send] unknown intent 'nope'"
     assert await tool.acall_send_tool("nope", {}) == "[send] not a send tool: 'nope'"
     assert (await tool.acall("delegate_to_worker", {"task": "go"})).startswith("async:")
-    smuggled = await tool.acall_send_tool(
-        "delegate_to_worker", {"task": "go", "target": "evil"}
-    )
+    smuggled = await tool.acall_send_tool("delegate_to_worker", {"task": "go", "target": "evil"})
     assert "extra arguments" in smuggled
 
     class SyncOnly:
@@ -298,19 +299,19 @@ async def test_asend_uses_same_prepare_including_routes() -> None:
 
     assert "failed" in await SendTool(comm=Boom(), allowed_peers=["w"]).asend("w", "t")  # type: ignore[arg-type]
     assert "not available" in await SendTool(
-        comm=Missing(), allowed_peers=["w"]  # type: ignore[arg-type]
+        comm=Missing(),
+        allowed_peers=["w"],  # type: ignore[arg-type]
     ).asend("w", "t")
     assert "failed: boom" in await SendTool(
-        comm=Crash(), allowed_peers=["w"]  # type: ignore[arg-type]
+        comm=Crash(),
+        allowed_peers=["w"],  # type: ignore[arg-type]
     ).asend("w", "t")
     ctx = _ctx(agent_comm=LocalAgentComm(local))
     unbound = SendTool(allowed_peers=["worker"])
     assert (await unbound.acall("delegate_to_worker", {"task": "z"}, ctx=ctx)).startswith("async:")
     tool.reset_session()
     tool.set_routes({})
-    collected = tool.on_collect_tools(
-        ctx=_ctx(agent_id="moderator", manifest=_legacy_manifest())
-    )
+    collected = tool.on_collect_tools(ctx=_ctx(agent_id="moderator", manifest=_legacy_manifest()))
     assert [spec["name"] for spec in collected] == ["delegate_to_worker"]
 
 
@@ -330,9 +331,7 @@ def test_non_string_message_is_rejected() -> None:
     run = _RunTurn()
     tool = SendTool(comm=LocalAgentComm(run), allowed_peers=["worker"])
     assert tool.send("worker", {"a": 1}) == "[send] message must be a string"  # type: ignore[arg-type]
-    assert tool.call_send_tool("delegate_to_worker", {"task": {"a": 1}}) == (
-        "[send] message must be a string"
-    )
+    assert tool.call_send_tool("delegate_to_worker", {"task": {"a": 1}}) == ("[send] message must be a string")
     assert run.calls == []
 
 
@@ -389,6 +388,127 @@ def test_headers_and_context_reach_a_plugin_that_takes_them() -> None:
     context = seen[0]["context"]
     assert isinstance(context, SendContext)
     assert context.intent == "inform"
+
+
+def test_same_fabric_send_uses_this_identity_not_the_target_handler() -> None:
+    class Sender(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = None
+        endpoint = ""
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            return f"from-sender:{target_agent_id}:{task}"
+
+    class Target(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = None
+        endpoint = ""
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            raise AssertionError("target handler must not send")
+
+    tool = SendTool(
+        comm=Sender(),  # type: ignore[arg-type]
+        routes={"worker": AgentCommRoute("worker", "meshx", Target())},  # type: ignore[arg-type]
+        allowed_peers=["worker"],
+    )
+    assert tool.send("worker", "x") == "from-sender:worker:x"
+
+
+def test_same_kind_on_different_endpoints_uses_the_peer_handler() -> None:
+    class Sender(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = None
+        endpoint = "http://127.0.0.1:46357"
+
+        def send(self, *_: object, **__: object) -> str:
+            raise AssertionError("must not use sender for another stack")
+
+    class Peer(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = None
+        endpoint = "http://127.0.0.1:46358"
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            return f"other-plane:{target_agent_id}:{task}"
+
+    tool = SendTool(
+        comm=Sender(),  # type: ignore[arg-type]
+        routes={"worker": AgentCommRoute("worker", "meshx", Peer())},  # type: ignore[arg-type]
+        allowed_peers=["worker"],
+    )
+    assert tool.send("worker", "x") == "other-plane:worker:x"
+
+
+def test_same_fabric_id_uses_caller_send() -> None:
+    class Sender(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = 7
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            return f"from-sender:{target_agent_id}:{task}"
+
+    class Target(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = 7
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            raise AssertionError("target handler must not send")
+
+    tool = SendTool(
+        comm=Sender(),  # type: ignore[arg-type]
+        routes={"worker": AgentCommRoute("worker", "meshx", Target())},  # type: ignore[arg-type]
+        allowed_peers=["worker"],
+    )
+    assert tool.send("worker", "x") == "from-sender:worker:x"
+
+
+def test_different_fabric_id_uses_the_peer_handler() -> None:
+    class Sender(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = 1
+
+        def send(self, *_: object, **__: object) -> str:
+            raise AssertionError("must not use sender for another stack")
+
+    class Peer(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = 2
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            return f"other-plane:{target_agent_id}:{task}"
+
+    tool = SendTool(
+        comm=Sender(),  # type: ignore[arg-type]
+        routes={"worker": AgentCommRoute("worker", "meshx", Peer())},  # type: ignore[arg-type]
+        allowed_peers=["worker"],
+    )
+    assert tool.send("worker", "x") == "other-plane:worker:x"
+
+
+def test_a2a_route_still_uses_the_peer_handler() -> None:
+    class Sender(LinkIdentity):
+        plugin_id = "meshx"
+        fabric_id = None
+        endpoint = ""
+
+        def send(self, *_: object, **__: object) -> str:
+            raise AssertionError("must not use sender for a2a")
+
+    class Peer:
+        plugin_id = "a2a"
+        fabric_id = None
+        endpoint = ""
+
+        def send(self, target_agent_id: str, task: str, **_: object) -> str:
+            return f"a2a:{target_agent_id}:{task}"
+
+    tool = SendTool(
+        comm=Sender(),  # type: ignore[arg-type]
+        routes={"worker": AgentCommRoute("worker", "a2a", Peer())},  # type: ignore[arg-type]
+        allowed_peers=["worker"],
+    )
+    assert tool.send("worker", "x") == "a2a:worker:x"
 
 
 def test_session_comm_and_routes_replace_configured() -> None:

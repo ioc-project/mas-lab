@@ -121,3 +121,51 @@ def test_mas_overlay_rejects_legacy_transport_fields() -> None:
 
     with pytest.raises(OverlayTargetError, match="infra Application endpoint"):
         merge_mas_overlay(mas, overlay)
+
+
+def test_application_kind_has_a_schema_and_rejects_an_inline_secret(tmp_path: Path) -> None:
+    def write(name: str, endpoint: dict) -> Path:
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(
+            yaml.safe_dump(
+                {
+                    "apiVersion": "infra/v1",
+                    "kind": "Application",
+                    "metadata": {"name": name},
+                    "spec": {"endpoints": {"buyer": endpoint}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    good = write("good", {"protocol": "a2a", "url": "http://127.0.0.1:9000", "usage": ["connect", "listen"]})
+    as_application = validate_file(good, kind="application", strict=True)
+    assert as_application.ok, as_application.issues
+    assert as_application.kind == "application"
+    as_infra = validate_file(good, kind="infra", strict=True)
+    assert as_infra.ok, as_infra.issues
+
+    bad = write("bad", {"protocol": "slim", "secret": "leaked-inline-secret-value-32bytesx"})
+    failed = validate_file(bad, kind="application", strict=True)
+    assert not failed.ok
+    assert not validate_file(write("agent-only", {"usage": "connect"}), kind="application", strict=True).ok
+    text = " ".join(issue.message for issue in failed.issues)
+    assert "secret" in text or "additional" in text.lower()
+
+
+def test_an_endpoint_row_may_carry_keys_the_schema_does_not_name(tmp_path: Path) -> None:
+    """The schema names the keys it knows and refuses a secret; other keys were accepted before and still are."""
+    path = tmp_path / "extra.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "apiVersion": "infra/v1",
+                "kind": "Application",
+                "metadata": {"name": "extra"},
+                "spec": {"endpoints": {"buyer": {"protocol": "a2a", "url": "http://127.0.0.1:9000", "weight": 3}}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert validate_file(path, kind="application", strict=True).ok

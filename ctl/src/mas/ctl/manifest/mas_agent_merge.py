@@ -126,16 +126,6 @@ def _entry_val(entry: dict[str, Any], entry_spec: dict[str, Any], field: str) ->
     return val if val is not None else entry_spec.get(field)
 
 
-def _apply_description_overlay(
-    spec: dict[str, Any],
-    agency_entry: dict[str, Any],
-    entry_spec: dict[str, Any],
-) -> None:
-    description = _entry_val(agency_entry, entry_spec, "description")
-    if isinstance(description, str) and description.strip():
-        spec["description"] = description.strip()
-
-
 def _plugin_list_as_add(value: Any) -> Any:
     """Union a plain plugin list onto the agent YAML list (upsert by plugin id).
 
@@ -318,6 +308,7 @@ def wire_entry_engine_delegation(
     mas_config: dict[str, Any] | None = None,
     mas_base_dir: Path | None = None,
     routes: dict[str, AgentCommRoute] | None = None,
+    peers: list[str] | None = None,
 ) -> None:
     """Set enriched manifest on the entry engine and bind the delegation plugin when peers exist.
 
@@ -331,7 +322,8 @@ def wire_entry_engine_delegation(
     leaf.manifest = manifest
     if isinstance(leaf, LiveLlmEngine):
         leaf.manifest_dir = manifest_dir
-    peers = delegation_targets(manifest, agent_id=entry_agent_id)
+    if peers is None:
+        peers = delegation_targets(manifest, agent_id=entry_agent_id)
     peer_manifests: dict[str, dict[str, Any]] = {}
     if isinstance(leaf, LiveLlmEngine) and peers and mas_config is not None and mas_base_dir is not None:
         peer_manifests = _peer_manifests_for_ids(mas_config, mas_base_dir=mas_base_dir, peer_ids=peers)

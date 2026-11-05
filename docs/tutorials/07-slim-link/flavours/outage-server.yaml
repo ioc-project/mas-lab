@@ -1,0 +1,13 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: flavour/v1
+kind: Flavour
+metadata:
+  name: desk-outage-server
+  description: Serves outage at the A2A server row.
+spec:
+  bind:
+    agents:
+      outage:
+        agent_comm: [outage-server]
+        usage: listen

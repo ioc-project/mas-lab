@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import REPO_ROOT, T09, run_cli
+from tutorial_support import REPO_ROOT, T09, run_cli
 
 QA = REPO_ROOT / "library-kg" / "examples" / "qa-agent"
 
@@ -71,8 +71,10 @@ class TestOxpValidation:
         assert "shacl" in checks
         assert checks["shacl"] != "skipped"
         structural = [
-            row for row in report["results"]
-            if row["check"] in {
+            row
+            for row in report["results"]
+            if row["check"]
+            in {
                 "unknown_node_types",
                 "unknown_edge_types",
                 "block_vocabulary",
@@ -95,6 +97,7 @@ class TestOxpValidation:
         statuses = [row["status"] for row in report["results"] if row["check"] == "shacl"]
         assert statuses
         assert "skipped" not in statuses
+
     def test_neo4j_push_dry_run(self):
         pytest.importorskip("mas.library.kg")
         r = run_cli(

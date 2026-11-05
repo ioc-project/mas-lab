@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 from ci_llm import stop_engine
-from conftest import T01, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from tutorial_support import T01, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Manifest & overlay validation (CLI)
@@ -169,11 +169,7 @@ class TestSkillsContract:
         instance, _ = _instantiate()
         leaf = leaf_engine(instance.driver.engine)
         provider = getattr(leaf, "tool_provider", None)
-        names = (
-            {t["name"] for t in provider.list_tools(ctx=instance.driver.ctx)}
-            if provider is not None
-            else set()
-        )
+        names = {t["name"] for t in provider.list_tools(ctx=instance.driver.ctx)} if provider is not None else set()
         assert "activate_skill" not in names
         assert "run_skill_script" not in names
         assert "list_skill_files" not in names
@@ -432,9 +428,7 @@ class TestPersistentMemory:
         from memory_search import MemorySearchTool
 
         ctx = SimpleNamespace(agent_id="qa-agent")
-        MemorySearchTool().on_execute_tool(
-            "memory_store", {"content": "User prefers Apple the fruit"}, ctx=ctx
-        )
+        MemorySearchTool().on_execute_tool("memory_store", {"content": "User prefers Apple the fruit"}, ctx=ctx)
         db = tmp_path / "mas" / "memory" / "semantic" / "qa-agent.sqlite"
         assert db.is_file()
         found = MemorySearchTool().on_execute_tool("memory-search", {"query": "Apple"}, ctx=ctx)

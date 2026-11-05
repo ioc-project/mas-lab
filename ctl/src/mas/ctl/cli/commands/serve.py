@@ -13,15 +13,12 @@ from mas.ctl.env import load_dotenv
 from mas.ctl.infra.resolve import application_endpoint_is_deployed
 from mas.ctl.runtime_cli import load_merged_agent_manifest
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
-from mas.ctl.session.exposure import expose_agent, make_runtime_handler
+from mas.ctl.session.exposure import expose_agent
 from mas.ctl.session.flavour import FlavourError, resolve_flavour
 from mas.ctl.session.infra_resolve import resolve_session_infra
 from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.observability import setup_observability
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
-
-# Re-export for tests that imported the handler from this command module.
-_make_runtime_handler = make_runtime_handler
 
 
 @click.command(name="serve")
@@ -49,7 +46,12 @@ _make_runtime_handler = make_runtime_handler
     help="Answer only from the recorded answers: never call the LLM, never write the cache, "
     "fail at once on an unrecorded prompt. Needs no API key.",
 )
-@click.option("--flavour", default="local", show_default=True)
+@click.option(
+    "--flavour",
+    default="local",
+    show_default=True,
+    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
+)
 @click.option(
     "--control-dir",
     default=None,
@@ -74,10 +76,11 @@ def serve_agent_cmd(
     """Serve an agent through the agent_expose plugin selected by its infra endpoint."""
     from mas.ctl.paths import manifest_cwd
 
-    overrides = with_connects(
-        connects=connects, binds=binds, overrides=overrides, listens=listens
-    )
+    overrides = with_connects(connects=connects, binds=binds, overrides=overrides, listens=listens)
 
+    from mas.ctl.session.flavour import flavour_argument
+
+    flavour = flavour_argument(flavour)
     with manifest_cwd(agent, overlay_paths=overlays) as session:
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)
         workspace = WorkspaceConfig.load(session.manifest_dir or session.original_cwd)
@@ -109,6 +112,17 @@ def serve_agent_cmd(
             with_interceptors=True,
         )
         agent_id = require_agent_id_from_manifest(manifest)
+        from mas.ctl.infra.bind import BindError, bind_session
+
+        try:
+            infra = bind_session(infra, flavour_spec, agent_ids=[agent_id])
+        except BindError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if agent_id in infra.agent_chains:
+            raise click.ClickException(
+                f"Agent {agent_id!r} rides the Flavour chain {infra.agent_chains[agent_id][0]['row']!r}; "
+                "serve hosts an agent behind its own listener, so run it with run-mas instead"
+            )
         endpoint = infra.applications.get(agent_id)
         if endpoint is None or not application_endpoint_is_deployed(endpoint):
             raise click.ClickException(

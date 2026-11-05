@@ -1,0 +1,10 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Broken on purpose: upside down. The a2a-framing row frames sends for the row below it, so it
+# cannot be the bottom of a chain; the transport goes first.
+apiVersion: flavour/v1
+kind: Flavour
+metadata: {name: desk-upside-down}
+spec:
+  bind:
+    agent_comm: [desk-a2a, desk-node]

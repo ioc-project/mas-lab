@@ -93,7 +93,7 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 
 | Field | Meaning |
 | --- | --- |
-| `protocol` | `a2a` selects the A2A `agent_comm` / `agent_expose` plugins. |
+| `protocol` | `a2a` on a server row selects the A2A `agent_comm` / `agent_expose` plugins. `a2a-framing` is the framing layer above a transport, not those plugins. |
 | `usage` | `connect` (client route only), `listen` (listen only), or `[connect, listen]`. Omitted means `connect`. `use`, `deploy`, `use-and-deploy` are deprecated aliases. The legacy `expose: true` reads as `[connect, listen]` when `usage` is absent. |
 | `url` | Advertised absolute `http(s)://host:port` URL. It cannot carry a path prefix. |
 | `headers`, `timeout` | Client-side options passed to the outbound A2A client (`usage: connect`). |

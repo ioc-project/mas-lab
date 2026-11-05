@@ -16,6 +16,7 @@ from mas.ctl.executor.mas_session import (
     prepare_delegation_entry_session,
     wire_peer_delegation,
 )
+from mas.ctl.executor.stacks import ChainStartError
 
 if TYPE_CHECKING:
     from mas.runtime.boundary.obs.plugins import ObsPluginSet
@@ -60,8 +61,13 @@ def execute_run_mas(
     trace_engine: bool = False,
     trace_summary: bool = False,
     trace_color: bool = False,
+    flavour_spec: dict | None = None,
 ) -> int:
-    """Compose → materialize → SessionController on entry agent."""
+    """Compose → materialize → SessionController on entry agent.
+
+    ``flavour_spec`` is the resolved Flavour ``spec``; its ``bind.agent_comm``
+    names the infra rows agent-to-agent calls ride.
+    """
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability, run_session_loop
     from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
     from mas.ctl.ui.stdout import StdoutConversationDisplay
@@ -82,6 +88,16 @@ def execute_run_mas(
         validate=validate,
     )
     result = compose_run(req)
+    from mas.ctl.infra.bind import BindError, bind_session
+    from mas.ctl.infra.identities import agency_ids
+
+    try:
+        result.resolved_infra = bind_session(
+            result.resolved_infra, flavour_spec, agent_ids=agency_ids(result.mas_config)
+        )
+    except BindError as exc:
+        logger.error("%s", exc)
+        return 1
     result.bind.hitl_mode = "auto" if (auto_hitl and not interactive) else "block"
     from mas.ctl.session.params_sidecar import (
         apply_runtime_params_to_instance,
@@ -110,80 +126,91 @@ def execute_run_mas(
         trace=trace,
     )
 
+    # The chains open while the session is prepared. Whatever fails before the run loop starts closes them.
     try:
-        prepared = prepare_delegation_entry_session(
+        try:
+            prepared = prepare_delegation_entry_session(
+                materialized,
+                entry_id=entry,
+                display=display,
+                verbose=verbose,
+                trace=trace,
+                trace_timestamps=trace_timestamps,
+                trace_engine=trace_engine,
+                trace_summary=trace_summary,
+                trace_color=trace_color,
+            )
+        except (KeyError, ChainStartError) as exc:
+            logger.error("%s", exc)
+            materialized.stack_handles.close()
+            return 1
+
+        instance = prepared.instance
+        enriched_manifest = prepared.enriched_manifest
+
+        # Wire delegation onto every OTHER agent that declares its own peers too
+        # (not just the entry) — see wire_peer_delegation's docstring: without
+        # this, an agent that is itself a delegate can never further delegate.
+        # Reuses prepared.session_id (minted once, above) so every delegate's
+        # own SessionController joins the SAME MAS session instead of each
+        # independently starting its own.
+        wire_peer_delegation(
             materialized,
             entry_id=entry,
             display=display,
             verbose=verbose,
+            already_wired={entry},
+            session_id=prepared.session_id,
+            working_memory_registry=getattr(prepared, "working_memory_registry", None),
             trace=trace,
             trace_timestamps=trace_timestamps,
             trace_engine=trace_engine,
             trace_summary=trace_summary,
             trace_color=trace_color,
         )
-    except KeyError as exc:
+
+        for agent_instance in materialized.materialized.instances.values():
+            apply_runtime_params_to_instance(runtime_params, agent_instance)
+        hitl_responder, _ = resolve_hitl_from_manifest(
+            enriched_manifest,
+            session_interactive=interactive or not auto_hitl,
+        )
+        if hitl_responder is not None:
+            instance.driver.hitl = hitl_responder
+
+        from mas.ctl.session.observability import setup_run_observability
+
+        instances = dict(materialized.materialized.instances)
+        # Subscribe materialized agents that didn't declare their own
+        # spec.observability (see partition_instances_by_observability, FT8) to
+        # one shared events.jsonl, not just the entry agent.  Delegated sub-agent
+        # turns run through their own SessionController (see make_workflow_send);
+        # without a shared plugin set their executions — LLM calls, tools, the
+        # whole sub-turn — are never emitted, so delegate_to_* tool calls are
+        # opaque black boxes and the multilevel trajectory shows only the
+        # moderator.  This mirrors the sequential-workflow path.
+        plugin_set, scoped_recorders = setup_run_observability(
+            instances,
+            obs_config,
+            base_dir=base,
+            entry_agent_id=str(entry),
+        )
+
+        from mas.ctl.session.exposure import close_exposures, start_materialized_exposures
+
+        a2a_handles = start_materialized_exposures(
+            materialized,
+            entry_id=entry,
+            manifests={str(entry): enriched_manifest},
+        )
+    except ChainStartError as exc:
         logger.error("%s", exc)
+        materialized.stack_handles.close()
         return 1
+    except BaseException:
+        materialized.stack_handles.close()
+        raise
 
-    instance = prepared.instance
-    enriched_manifest = prepared.enriched_manifest
-
-    # Wire delegation onto every OTHER agent that declares its own peers too
-    # (not just the entry) — see wire_peer_delegation's docstring: without
-    # this, an agent that is itself a delegate can never further delegate.
-    # Reuses prepared.session_id (minted once, above) so every delegate's
-    # own SessionController joins the SAME MAS session instead of each
-    # independently starting its own.
-    wire_peer_delegation(
-        materialized,
-        entry_id=entry,
-        display=display,
-        verbose=verbose,
-        already_wired={entry},
-        session_id=prepared.session_id,
-        working_memory_registry=getattr(prepared, "working_memory_registry", None),
-        trace=trace,
-        trace_timestamps=trace_timestamps,
-        trace_engine=trace_engine,
-        trace_summary=trace_summary,
-        trace_color=trace_color,
-    )
-
-    for agent_instance in materialized.materialized.instances.values():
-        apply_runtime_params_to_instance(runtime_params, agent_instance)
-    hitl_responder, _ = resolve_hitl_from_manifest(
-        enriched_manifest,
-        session_interactive=interactive or not auto_hitl,
-    )
-    if hitl_responder is not None:
-        instance.driver.hitl = hitl_responder
-
-    from mas.ctl.session.observability import setup_run_observability
-
-    instances = dict(materialized.materialized.instances)
-    # Subscribe materialized agents that didn't declare their own
-    # spec.observability (see partition_instances_by_observability, FT8) to
-    # one shared events.jsonl, not just the entry agent.  Delegated sub-agent
-    # turns run through their own SessionController (see make_workflow_send);
-    # without a shared plugin set their executions — LLM calls, tools, the
-    # whole sub-turn — are never emitted, so delegate_to_* tool calls are
-    # opaque black boxes and the multilevel trajectory shows only the
-    # moderator.  This mirrors the sequential-workflow path.
-    plugin_set, scoped_recorders = setup_run_observability(
-        instances,
-        obs_config,
-        base_dir=base,
-        entry_agent_id=str(entry),
-    )
-
-    from mas.ctl.session.exposure import close_exposures, start_materialized_exposures
-
-    a2a_handles = start_materialized_exposures(
-        materialized,
-        entry_id=entry,
-        manifests={str(entry): enriched_manifest},
-    )
     try:
         controller = SessionController(
             instance=instance,
@@ -200,6 +227,7 @@ def execute_run_mas(
             ),
             session_id=prepared.session_id,
             working_memory_registry=getattr(prepared, "working_memory_registry", None),
+            turn_guard=materialized.stack_handles.turn_lock(str(entry)),
         )
         exit_code = run_session_loop(
             controller,
@@ -214,3 +242,4 @@ def execute_run_mas(
         return exit_code
     finally:
         close_exposures(a2a_handles)
+        materialized.stack_handles.close()

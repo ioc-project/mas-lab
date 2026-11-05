@@ -12,6 +12,17 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- The bundled `mcp` flavour is removed. It set only `tools.exposure_protocol`,
+  a key nothing reads, so `--flavour mcp` never exposed tools; it now fails as
+  an unknown flavour. There is no replacement: tool exposure is configured
+  through infra.
+- Every entry point refuses, before it runs, an agent-keyed Application row
+  with no `protocol` or no `url`; such a row was ignored or failed when the
+  session wired it.
+- `agent_comm/stack` no longer forwards unknown attribute names to its
+  layers. It reports `agent_id`, `plugin_id` and `endpoint` from its bottom
+  link, and `fabric_id`; a `BoundLayer` above it sees `send`, `asend`,
+  `capabilities` and that identity of the layer below.
 - Infra middleware writes `for` (`llm` / `tool`) and `per` (`all` /
   `destination`). Bundle entries write `wraps` for the slots they cover.
   `applies_to`, `interceptors`, `pipeline` (on a bundle list), and
@@ -71,8 +82,8 @@ reconciling the release notes with the code and docs currently on that branch.
   two models on one connection get separate pacing buckets.
 - A middleware step with no `for` wraps llm calls only, same as before
   this branch. An empty `for` list is llm, not every kind.
-- `mas-ctl infra show` reads MAS `spec.agent_comm` for each agent row
-  and prints `api_base` / tool `url` without userinfo or query.
+- `mas-ctl infra show` prints `api_base` / tool `url` without userinfo or
+  query.
 - Destination tool steps wrap the server that claims the tool name,
   with the same explicit-over-star rules as tool routing. A star
   destination does not wrap runtime system tools. Once advertised
@@ -92,6 +103,14 @@ reconciling the release notes with the code and docs currently on that branch.
   `pyproject.toml`; code, install hints, and human docs use directories
   and `mas._dist` instead of copying those strings. Schema registry
   `source` is a directory key (`runtime`, `bench`, `core`, `controller`).
+- library-ioa adds a SLIM layer.
+- Communication is a stack of layers.
+- A2A framing runs over SLIM through that stack.
+- Flavour bind names the infra rows of each agent's chain; usage defaults
+  to connect.
+- [Tutorial 7](docs/tutorials/07-slim-link/README.md) moves a desk onto a
+  SLIM node with a Flavour, splits it across two processes, and mixes in
+  an A2A server.
 - `design_pattern: state_machine`: the entry agent's behaviour as a table of
   named states. Each state delegates to agents, runs any registered design
   pattern as its child (ReAct, plan-execute, another state machine...), runs
@@ -239,6 +258,25 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- Bind is one path for every entry point; it refuses secrets and ids a
+  layer cannot name.
+- A SLIM link reconnects after five read failures.
+- A local-group send waits at most `reply_timeout_s`.
+- A2A REST uses `application/a2a+json`; an unsupported type is 400.
+- `mas-ctl infra show` prints each agent's comm column from its Flavour
+  chain, the `protocol` of the row that reaches it, or the library default
+  `agent_comm` plugin.
+- Application rows: the schema requires `protocol` but no longer `url`,
+  because an endpoint row with no address (A2A framing above a transport,
+  an in-process channel) is valid; ctl still requires `url` on an
+  agent-keyed row.
+- `agent_comm/stack` runs on the generic `Stack`: every send carries a
+  child W3C `traceparent`, and a layer error is an `AgentCommError`
+  (`StackSendError`).
+- The lab run hash leaves a Flavour's `bind` out.
+- The interactive prompt (`You: `) is written only to a terminal, so piped
+  input no longer prints `You: You: ...`. A request another agent sends to
+  the entry agent is shown under the agent's label, not as the user's.
 - load_yaml_file reuses a parse when the content hash matches; a
   same-size rewrite with a frozen mtime still reloads. ctl inlines
   overlay schema fragments once. validate_data on a sample mas.yaml
@@ -282,22 +320,52 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Deprecated
 
+- The `trace_context` agent_comm layer: every stack now stamps the
+  `traceparent`. It still works.
+- `BoundLayer` decorators: write a `Layer` instead. A `BoundLayer` still
+  works in `agent_comm/stack`: `adapt_legacy` makes it a `Layer`, as it does
+  for an `agent_comm` link.
 - `workflow.nodes[].delegates_to` is deprecated, still supported, no removal
   date. `mas-ctl validate`, `compose`, and `run-mas` print the warning once
   per compose. A second compose prints it again. `--no-validate` is silent.
   Empty lists do not warn. Overlay patches that set a non-empty list warn
   too.
+- `workflow.nodes[].dispatch` (`parallel`, `all`) is deprecated, still
+  accepted, and ignored: it never fanned out to a node's peers. Fan-out is
+  the model's own choice of parallel tool calls. Validation and compose warn
+  once, listing the nodes that set it. The two samples that set it no longer
+  do.
 - Infra `usage` on Application endpoints and ToolServerRegistry servers is
   now `connect`, `listen`, or `[connect, listen]`, the same words as the
   `--connect` and `--listen` flags. `use`, `deploy`, and `use-and-deploy` are
   deprecated aliases: still read, no removal date. `mas-ctl validate` warns
   per row and compose prints the warning on stderr. `--connect` and
   `--listen` now write the new values.
+- Flavour leftover keys `agent_comm`, `tools`, `control` and `telemetry` are
+  deprecated and ignored: the schema still accepts them and nothing reads
+  them. `observability` is deprecated and still the fallback when the agent
+  declares none. Validation warns once, listing the keys that are set, for a
+  Flavour file passed with `--flavour PATH` (`mas-ctl` and `mas-lab`), and in
+  `mas-ctl validate` for a Flavour file or overlay; the bundled flavours stay
+  quiet. `--no-validate` is silent.
+- `mas-ctl flavour list` is deprecated: it still lists the bundled files and prints a
+  warning on stderr. Pass `--flavour PATH` to a Flavour file, or a bundled name
+  (`local`). The unknown-flavour error names those two routes.
 - `--bind NAME=URI` is a hidden alias of `--connect`. It still works and prints
   a warning. It remains for one release.
 - `/api/libraries/**`, `/api/jobs/**`, and `/api/experiments/**` (results tree).
   They remain for one release as adapters. `__MAS_LAB_DEFAULT_LIBRARY__` is an
   alias of `__MAS_LAB_DEFAULT_SCOPE__`.
+
+### Removed
+
+- `node_dispatch` and `uses_parallel_dispatch` in
+  `mas.runtime.boundary.delegation.policy`, and ctl's
+  `fanout_workflow_delegates`: they read `workflow.nodes[].dispatch` and
+  nothing outside their own tests called them. `dispatch` is deprecated and
+  ignored.
+- The `_make_runtime_handler` alias in `mas.ctl.cli.commands.serve`; use
+  `mas.ctl.session.exposure.make_runtime_handler`.
 
 ### Breaking
 

@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from weakref import WeakKeyDictionary
 
 from mas.library.standard.lib.comm.payload import intents_honoured_by
+from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
 from mas.runtime.boundary.delegation.policy import (
@@ -84,6 +85,28 @@ class _SendCtx:
             routes=routes if isinstance(routes, dict) else None,
             peer_descriptions=descriptions if isinstance(descriptions, dict) else None,
         )
+
+
+def _same_fabric(comm: Any, route: AgentCommRoute) -> bool:
+    """True when *comm* and the route ride the same stack.
+
+    ``fabric_id`` is set by the session's stack handle. Kind alone is not
+    enough: two links on different stacks are different fabrics. A handler
+    that is not a ``LinkIdentity`` (the in-process default link) says nothing about its fabric.
+    """
+    if comm is None:
+        return False
+    if comm is route.handler:
+        return True
+    if not isinstance(comm, LinkIdentity) or not isinstance(route.handler, LinkIdentity):
+        return False
+    if comm.fabric_id is not None or route.handler.fabric_id is not None:
+        return comm.fabric_id == route.handler.fabric_id
+    if not comm.plugin_id or comm.plugin_id != str(route.kind):
+        return False
+    if comm.endpoint and route.handler.endpoint:
+        return comm.endpoint == route.handler.endpoint
+    return True
 
 
 def _accepted_kwargs(fn: Any) -> frozenset[str]:
@@ -195,6 +218,9 @@ class SendTool:
         comm = view.comm if view.comm is not None else self._comm
         route = routes.get(target_agent_id)
         if route is not None:
+            if _same_fabric(comm, route):
+                self._inspect(comm)
+                return comm, route.kind
             self._inspect(route.handler)
             return route.handler, route.kind
         if comm is None:

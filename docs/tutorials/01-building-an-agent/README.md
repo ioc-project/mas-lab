@@ -99,16 +99,15 @@ Everything else has a default. Run `mas-ctl compile agent.yaml` to print the exp
 | Layer | Answers | Holds |
 |-------|---------|-------|
 | `agent.yaml` | What | Model, context, tools, plugins |
-| Flavour | How | Protocol and plugins (local in-process, remote). Not the LLM. |
+| Flavour | Glue | Which infra each agent uses (`bind`). Not the LLM. Flavour `observability` is a deprecated fallback. |
 | `infra/` | Where | Model endpoint, tool providers, OpenTelemetry (OTel) collector |
 | `.env` | Secret | API key, never committed |
 
 The manifest model name (`gpt-4o`) is canonical. Infra can map it to the provider's name, such as `azure/gpt-4o`.
 The runtime finds tools and skills next to the manifest first, then in the standard library.
 
-A flavour is a named runtime environment (`kind: Flavour`, bundled in `library-standard`).
-`mas-ctl flavour list` shows `standard:local` (default), `standard:local-benchmark`, and `standard:mcp`.
-Select one with `--flavour`. Today `chat` and `tui` wire only `local` and `mcp`.
+A flavour (`kind: Flavour`) links the agents to the infra; the shipped ones live in `library-standard`.
+Select one with `--flavour NAME` or `--flavour PATH`. `local` is the bundled name and the default.
 `local` runs agents in-process, resolves tools without servers, and writes file-based traces and native `events.jsonl`.
 
 The `llm_cache` middleware records and replays LLM answers without calling the provider ([llm-cache.md](../../manifests/llm-cache.md)).
@@ -308,7 +307,7 @@ mas-ctl chat agent.yaml -i --infra-ref standard:openai \
   --infra-ref ../../../library-samples/infra/llm-cache-replay.yaml
 ```
 
-Any `--flavour` other than `local` or `mcp` exits with an error that lists the supported names. The manifest never changes.
+Any `--flavour` other than `local` or a file path exits with an error that names the bundled flavour. The manifest never changes.
 
 For quick experiments, add capabilities from flags instead of YAML. This matches the tools, skills, and memory overlays of Steps 2 to 4:
 
@@ -368,8 +367,8 @@ See [Open standards → A2A](../../standards/a2a.md) for the full walkthrough.
 ## Step 7 — Inspecting the trace
 
 `events.jsonl` is the machine-readable trace: one JSON event per line. `--events` records it;
-`--events-file` sets the path (default `traces/events.jsonl`). A flavour with an observability plugin does the same
-declaratively for a whole MAS (Tutorial 3).
+`--events-file` sets the path (default `traces/events.jsonl`). The released `observability` key of a flavour (kept for
+compatibility) does the same declaratively for a whole MAS (Tutorial 3).
 
 ### Which log do I need?
 

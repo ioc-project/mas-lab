@@ -5,9 +5,9 @@ kind: Overlay
 metadata:
   id: topo-parallel
   description: >
-    Parallel topology — deterministic fan-out to all specialists simultaneously.
-    Entry agent receives task and dispatches to all participants in parallel,
-    then aggregates results.
+    Parallel topology. The moderator's deterministic_parallel design pattern
+    sends the task to every specialist in one batch of tool calls, then
+    aggregates the results.
   tags: [topology, exp-1.2]
 
 spec:
@@ -18,7 +18,6 @@ spec:
       entry: moderator
       nodes:
         - id: moderator
-          dispatch: parallel
           delegates_to: [schedule_agent, itinerary_agent, concierge_agent]
         - id: schedule_agent
         - id: itinerary_agent

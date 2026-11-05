@@ -1,7 +1,8 @@
 import pytest
-from mas.lab.plots.multilevel_trajectory.models import StateNode, TransNode, LaneDef
-from mas.lab.plots.multilevel_trajectory.dag import _build_dag
 from mas.lab.plots._trajectory_validator import validate_trajectory_dag
+from mas.lab.plots.multilevel_trajectory.dag import _build_dag
+from mas.lab.plots.multilevel_trajectory.models import TransNode
+
 
 def test_regression_tool_name_leak():
     """
@@ -79,6 +80,7 @@ def test_regression_tool_name_leak():
     assert found_tool_a, "tool_a not found in lanes"
     assert found_tool_b, "tool_b not found in lanes"
 
+
 def test_regression_prompt_leak():
     """
     Verifies Phase 1 fix: correlation_id/prompt leak.
@@ -89,14 +91,18 @@ def test_regression_prompt_leak():
     # In Phase 1, we fixed how records are parsed to avoid correlation_id collisions.
     pass
 
+
 def test_regression_join_nodes():
     """
     Verifies Phase 4b: JoinStateNodes are correctly synthesized and serialized.
     """
-    # Setup a structural delegation fork:
+    # Setup a native parallel fork:
     # Agent a1 delegates twice via ToolCall records (d1, d2), spawning
-    # agents a2 and a3. The last branch end should be marked as a join.
-    
+    # agents a2 and a3, and the runtime wraps both calls in one
+    # ``parallel_group`` ProcessingCall. The last branch end is the join.
+    # (Two delegations that merely share a parent, without that native
+    # record, are sequential and get no join badge.)
+
     events = [
         {"timestamp": 0.0, "type": "execution_start", "call_id": "a1"},
         {"timestamp": 10.0, "type": "execution_end", "call_id": "a1"},
@@ -108,6 +114,18 @@ def test_regression_join_nodes():
     
     records = [
         {"call_id": "a1", "level": "agent", "start_ts": 0.0, "end_ts": 10.0, "agent_id": "a1"},
+        {
+            "call_id": "pg1",
+            "parent_call_id": "a1",
+            "level": "call",
+            "call_type": "ProcessingCall",
+            "processing_type": "parallel_group",
+            "group_id": "g1",
+            "tools": [{"call_id": "d1"}, {"call_id": "d2"}],
+            "start_ts": 1.0,
+            "end_ts": 8.0,
+            "agent_id": "a1",
+        },
         {
             "call_id": "d1",
             "parent_call_id": "a1",
@@ -144,6 +162,7 @@ def test_regression_join_nodes():
                 break
     
     assert found_join, "No JoinStateNode found in lanes"
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

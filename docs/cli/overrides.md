@@ -141,7 +141,7 @@ The quoted key keeps dots and brackets inside one map key.
 mas-ctl chat agent.yaml --override '.flavour.spec.observability=[native]'
 ```
 
-A *flavour* is a deployment preset. This override changes observability and tool exposure. It does not switch internal agents to A2A. That needs an infra Application row with `usage: connect`, which `--connect` writes for you.
+A *flavour* is the glue that links the logic spec to the infra (its `bind`). This override patches the deprecated Flavour `observability` fallback. It does not switch internal agents to A2A: the Flavour's `bind` does, or an agent-keyed Application row with `usage: connect`, which `--connect` writes for you.
 
 ## Connect
 
@@ -187,7 +187,7 @@ mas-ctl run-mas mas.yaml \
 - `a2a://` and `mcp://` are scheme tags. The stored URL is `http://` or `https://` (`a2as://` and `mcps://` give `https://`).
 - Two MCP tools on the same origin collapse to one server.
 - The MAS still names the agency peer, and the agent still lists the tool. `--connect` only fills in the location on the infra document.
-- The flavour stays `local` (`agent_comm.protocol: agent-local`). The Application `usage: connect` row routes that peer over A2A.
+- The flavour stays `local`, which binds nothing. The Application `usage: connect` row routes that peer over A2A.
 
 ## Session tree
 

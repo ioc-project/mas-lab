@@ -1,10 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Registry edge cases."""
+
 from __future__ import annotations
 
 import pytest
-
 from mas.lab.runners.registry import ApplicationRunnerRegistry
 
 
@@ -34,7 +34,7 @@ def test_registry_register_override():
 def test_run_result_artifact_helpers():
     from pathlib import Path
 
-    from mas.lab.runners.protocol import RunResult, RunArtifact
+    from mas.lab.runners.protocol import RunArtifact, RunResult
 
     events = RunArtifact(kind="events", path=Path("/tmp/events.jsonl"))
     stats = RunArtifact(kind="sys_stats", path=Path("/tmp/stats.json"))

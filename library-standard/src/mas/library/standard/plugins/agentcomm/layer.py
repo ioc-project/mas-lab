@@ -17,6 +17,9 @@ class BoundLayer:
 
     ``start`` / ``stop`` run at most once and do not forward. The stack
     starts and stops every layer itself, so the link is not started twice.
+
+    Deprecated: write a ``mas.library.standard.lib.stack.Layer`` instead. A
+    ``BoundLayer`` still works in ``agent_comm/stack``: ``adapt_legacy`` makes it a layer.
     """
 
     CAPABILITIES: ClassVar[dict[str, bool]] = capability_set()
