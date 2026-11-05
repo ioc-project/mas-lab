@@ -1,7 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import ShikiHighlighter from "react-shiki";
-import { Box, useTheme } from "@mui/material";
+import { Box, useTheme } from "@open-ui-kit/core";
 
 interface CodeBlockProps {
   code: string;

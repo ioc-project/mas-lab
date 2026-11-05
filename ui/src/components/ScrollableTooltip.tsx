@@ -1,6 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { Tooltip } from "@mui/material";
+import { Tooltip } from "@open-ui-kit/core";
 import type { ReactElement, ReactNode } from "react";
 
 export function ScrollableTooltip({

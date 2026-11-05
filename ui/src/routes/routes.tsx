@@ -13,7 +13,8 @@ import Application from "@/pages/Application";
 import type { AppRoute } from "@/routes/types.ts";
 import Playground from "@/pages/Playground";
 import { Transport as PlaygroundIcon } from "@/assets/icons";
-import { Flaky as ExperimentsIcon, AccountTree as PipelinesIcon, Storage as DatasetsIcon, Settings as ControlPanelIcon, Layers as OverlaysIcon, Science as LabsIcon } from "@mui/icons-material";
+import { Icons } from "@open-ui-kit/core";
+import { Flaky as ExperimentsIcon, AccountTree as PipelinesIcon, Storage as DatasetsIcon, Layers as OverlaysIcon, Science as LabsIcon } from "@mui/icons-material";
 import Labs from "@/pages/Labs";
 import Experiments from "@/pages/Experiments";
 import Experiment from "@/pages/Experiment";
@@ -38,7 +39,9 @@ export const PATHS = {
   playgroundTab: "/:scopeType/:scope/playground/:playgroundTab",
   experiments: "/:scopeType/:scope/experiments",
   createExperiment: "/:scopeType/:scope/experiments/new",
+  createExperimentTab: "/:scopeType/:scope/experiments/new/:experimentTab",
   editExperiment: "/:scopeType/:scope/experiments/:id/edit",
+  editExperimentTab: "/:scopeType/:scope/experiments/:id/edit/:experimentTab",
   experiment: "/:scopeType/:scope/experiments/:id",
   pipelines: "/:scopeType/:scope/pipelines",
   createPipeline: "/:scopeType/:scope/pipelines/new",
@@ -121,8 +124,18 @@ export const routes: {
       element: <CreateExperiment />,
     },
     {
+      name: "CreateExperimentTab",
+      path: PATHS.createExperimentTab,
+      element: <CreateExperiment />,
+    },
+    {
       name: "EditExperiment",
       path: PATHS.editExperiment,
+      element: <CreateExperiment />,
+    },
+    {
+      name: "EditExperimentTab",
+      path: PATHS.editExperimentTab,
       element: <CreateExperiment />,
     },
     {
@@ -213,7 +226,7 @@ export const routes: {
       element: <ControlPanel />,
       sideBarProps: {
         title: "Control Panel",
-        icon: ControlPanelIcon,
+        icon: Icons.Settings,
       },
     },
   ],

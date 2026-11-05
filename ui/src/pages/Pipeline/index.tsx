@@ -6,14 +6,7 @@ import {
   TabPanel,
   PipelineBuilder,
 } from "@/components";
-import {
-  Box,
-  CircularProgress,
-  Stack,
-  Typography,
-  useTheme,
-  Alert,
-} from "@mui/material";
+import { Alert } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { toTitleCase } from "@/utils/string";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,14 +21,19 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { scopeHref, useScopeId } from "@/api/scope";
 import {
+  Box,
   Button,
   InputField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Spinner,
+  Stack,
   Tab,
   Tabs,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
 
 const TAB_KEYS = ["graph", "yaml"] as const;
@@ -67,7 +65,6 @@ const Pipeline = () => {
   const validateMutation = useValidatePipeline();
 
   const selectedTab = Math.max(0, TAB_KEYS.indexOf(pipelineTab as PipelineTab));
-
   const handleTabChange = useCallback(
     (_event: React.SyntheticEvent, newValue: number) => {
       const newTab = TAB_KEYS[newValue];
@@ -274,7 +271,7 @@ const Pipeline = () => {
           height: "100%",
         }}
       >
-        <CircularProgress />
+        <Spinner />
       </Box>
     );
   }
@@ -296,7 +293,7 @@ const Pipeline = () => {
           The pipeline &quot;{id}&quot; does not exist or has been deleted.
         </Typography>
         <Button
-          variant="primary"
+          variant="gradient"
           onClick={() => navigate(scopeHref(library, "/pipelines"))}
         >
           Back to Pipelines
@@ -307,7 +304,6 @@ const Pipeline = () => {
 
   return (
     <PageWithTitle
-      sx={{ overflow: "hidden" }}
       title={
         <Stack
           direction="row"
@@ -325,14 +321,14 @@ const Pipeline = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleOpenSaveDialog}
               disabled={!pipelineYaml && !initialYaml}
             >
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={
                 (!pipelineYaml && !initialYaml) ||
@@ -342,17 +338,14 @@ const Pipeline = () => {
             >
               {validateMutation.isPending ? "Validating..." : "Validate"}
             </Button>
-            <Button variant="primary" onClick={handleRun} disabled={isRunning}>
+            <Button variant="gradient" onClick={handleRun} disabled={isRunning}>
               {isRunning ? "Running..." : "Run"}
             </Button>
           </Stack>
         </Stack>
       }
     >
-      <Stack
-        direction="column"
-        sx={{ width: "100%", height: "100%", minHeight: 0, overflow: "hidden" }}
-      >
+      <Stack direction="column" sx={{ width: "100%", height: "100%" }}>
         {validateMutation.isSuccess && (
           <Alert
             severity={
@@ -407,19 +400,8 @@ const Pipeline = () => {
           </Tabs>
         </Box>
 
-        <TabPanel
-          value={selectedTab}
-          index={0}
-          sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}
-        >
-          <Box
-            sx={{
-              height: "100%",
-              minHeight: 0,
-              overflow: "hidden",
-              paddingTop: "8px",
-            }}
-          >
+        <TabPanel value={selectedTab} index={0} sx={{ flex: 1 }}>
+          <Box sx={{ height: "100%", paddingTop: "8px" }}>
             <PipelineBuilder
               initialYaml={initialYaml}
               experimentName={initialExperiment}
@@ -498,7 +480,9 @@ const Pipeline = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseSaveDialog}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCloseSaveDialog}>
+            Cancel
+          </Button>
           <Button variant="gradient" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>

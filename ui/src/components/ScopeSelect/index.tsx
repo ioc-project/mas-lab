@@ -1,7 +1,12 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { ListSubheader, MenuItem, Select, TextField } from "@mui/material";
-import type { SelectChangeEvent } from "@mui/material";
+import {
+  InputField,
+  MenuItem,
+  MenuSubheader,
+  Select,
+  type SelectChangeEvent,
+} from "@open-ui-kit/core";
 import type { ReactNode } from "react";
 
 import { groupScopes, LABS_CATALOG_ID, type Scope } from "@/api/scopes";
@@ -18,7 +23,11 @@ type Props = {
   allowCatalog?: boolean;
 };
 
-function allowScope(scope: Scope, writableOnly?: boolean, kind?: string): boolean {
+function allowScope(
+  scope: Scope,
+  writableOnly?: boolean,
+  kind?: string,
+): boolean {
   if (kind && !scope.kinds.includes(kind)) return false;
   if (writableOnly && !scope.writable) return false;
   return true;
@@ -45,7 +54,11 @@ export function ScopeSelect({
   const items: ReactNode[] = [];
   if (allowCatalog) {
     items.push(
-      <MenuItem key={LABS_CATALOG_ID} value={LABS_CATALOG_ID} sx={{ fontSize: "13px" }}>
+      <MenuItem
+        key={LABS_CATALOG_ID}
+        value={LABS_CATALOG_ID}
+        sx={{ fontSize: "13px" }}
+      >
         All labs
       </MenuItem>,
     );
@@ -60,19 +73,31 @@ export function ScopeSelect({
       if (!labOk && children.length === 0) return null;
       return { lab, labOk, children };
     })
-    .filter((node): node is { lab: Scope; labOk: boolean; children: Scope[] } => node !== null);
+    .filter(
+      (node): node is { lab: Scope; labOk: boolean; children: Scope[] } =>
+        node !== null,
+    );
 
   if (labNodes.length > 0) {
-    items.push(<ListSubheader key="labs">Labs</ListSubheader>);
+    items.push(<MenuSubheader key="labs">Labs</MenuSubheader>);
     for (const { lab, labOk, children } of labNodes) {
       items.push(
-        <MenuItem key={lab.id} value={lab.id} disabled={!labOk} sx={{ fontSize: "13px" }}>
+        <MenuItem
+          key={lab.id}
+          value={lab.id}
+          disabled={!labOk}
+          sx={{ fontSize: "13px" }}
+        >
           {menuLabel(lab)}
         </MenuItem>,
       );
       for (const child of children) {
         items.push(
-          <MenuItem key={child.id} value={child.id} sx={{ fontSize: "13px", pl: 4 }}>
+          <MenuItem
+            key={child.id}
+            value={child.id}
+            sx={{ fontSize: "13px", pl: 4 }}
+          >
             {menuLabel(child)}
           </MenuItem>,
         );
@@ -82,7 +107,7 @@ export function ScopeSelect({
 
   const workspaceItems = workspace.filter(allow);
   if (workspaceItems.length > 0) {
-    items.push(<ListSubheader key="workspace">Workspace</ListSubheader>);
+    items.push(<MenuSubheader key="workspace">Workspace</MenuSubheader>);
     for (const scope of workspaceItems) {
       items.push(
         <MenuItem key={scope.id} value={scope.id} sx={{ fontSize: "13px" }}>
@@ -94,7 +119,7 @@ export function ScopeSelect({
 
   const localItems = local.filter(allow);
   if (localItems.length > 0) {
-    items.push(<ListSubheader key="local">Local libraries</ListSubheader>);
+    items.push(<MenuSubheader key="local">Local libraries</MenuSubheader>);
     for (const scope of localItems) {
       items.push(
         <MenuItem key={scope.id} value={scope.id} sx={{ fontSize: "13px" }}>
@@ -106,7 +131,9 @@ export function ScopeSelect({
 
   const packagedItems = writableOnly ? [] : packaged.filter(allow);
   if (packagedItems.length > 0) {
-    items.push(<ListSubheader key="packaged">Packaged (read-only)</ListSubheader>);
+    items.push(
+      <MenuSubheader key="packaged">Packaged (read-only)</MenuSubheader>,
+    );
     for (const scope of packagedItems) {
       items.push(
         <MenuItem key={scope.id} value={scope.id} sx={{ fontSize: "13px" }}>
@@ -124,10 +151,17 @@ export function ScopeSelect({
   for (const scope of workspaceItems) allowedIds.push(scope.id);
   for (const scope of localItems) allowedIds.push(scope.id);
   for (const scope of packagedItems) allowedIds.push(scope.id);
-  const safeValue = allowedIds.includes(value) ? value : (allowedIds[0] ?? value ?? "");
+  const safeValue = allowedIds.includes(value)
+    ? value
+    : (allowedIds[0] ?? value ?? "");
   if (allowedIds.length === 0) {
     items.push(
-      <MenuItem key="_none" value={safeValue} disabled sx={{ fontSize: "13px" }}>
+      <MenuItem
+        key="_none"
+        value={safeValue}
+        disabled
+        sx={{ fontSize: "13px" }}
+      >
         {scopes.length === 0 ? "Loading…" : "No writable scopes for this kind"}
       </MenuItem>,
     );
@@ -139,7 +173,7 @@ export function ScopeSelect({
 
   if (label) {
     return (
-      <TextField
+      <InputField
         select
         label={label}
         size={size}
@@ -148,7 +182,7 @@ export function ScopeSelect({
         fullWidth
       >
         {items}
-      </TextField>
+      </InputField>
     );
   }
 
@@ -158,6 +192,7 @@ export function ScopeSelect({
       value={safeValue}
       onChange={handleChange}
       variant="outlined"
+      clearable={false}
       sx={{
         minWidth,
         fontSize: "13px",

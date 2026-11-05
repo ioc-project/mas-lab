@@ -1,28 +1,29 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle } from "@/components";
-import {
-  MaterialReactTable,
-  type MRT_ColumnDef,
-  type MRT_RowSelectionState,
-  type MRT_SortingState,
-} from "material-react-table";
-import { CreateTableInstance, EmptyState } from "@open-ui-kit/core";
-import { Delete as DeleteIcon, Edit as EditIcon } from "@mui/icons-material";
+import type {
+  TableColumnDef,
+  TableRowSelectionState,
+  TableSortingState,
+} from "@open-ui-kit/core";
 import {
   Box,
   Button,
-  Stack,
-  Typography,
-  useTheme,
-  ListItemIcon,
-  MenuItem,
   Dialog,
-  DialogTitle,
+  DialogActions,
   DialogContent,
   DialogContentText,
-  DialogActions,
-} from "@mui/material";
+  DialogTitle,
+  EmptyState,
+  Icons,
+  ListItemIcon,
+  MenuItem,
+  Stack,
+  Table,
+  type TableProps,
+  Typography,
+  useTheme,
+} from "@open-ui-kit/core";
 import { useNavigate } from "react-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -56,8 +57,8 @@ const Overlays = () => {
   );
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [sorting, setSorting] = useState<MRT_SortingState>([]);
-  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
+  const [sorting, setSorting] = useState<TableSortingState>([]);
+  const [rowSelection, setRowSelection] = useState<TableRowSelectionState>({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteNames, setPendingDeleteNames] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
@@ -87,7 +88,7 @@ const Overlays = () => {
     setPendingDeleteNames([]);
   }, []);
 
-  const columns = useMemo<MRT_ColumnDef<OverlayRow>[]>(
+  const columns = useMemo<TableColumnDef<OverlayRow>[]>(
     () => [
       {
         accessorKey: "name",
@@ -95,15 +96,8 @@ const Overlays = () => {
         Cell: ({ row }) => (
           <Typography
             sx={{
-              cursor: "pointer",
               color: theme.palette.vars.interactivePrimaryDefaultDefault,
-              "&:hover": { textDecoration: "underline" },
             }}
-            onClick={() =>
-              navigate(
-                scopeHref(library, `/overlays/${encodeURIComponent(row.original.name)}`),
-              )
-            }
           >
             {row.original.name}
           </Typography>
@@ -119,10 +113,10 @@ const Overlays = () => {
         header: "Description",
       },
     ],
-    [library, navigate, theme],
+    [theme],
   );
 
-  const tableRef = CreateTableInstance<OverlayRow>({
+  const tableProps: TableProps<OverlayRow> = {
     data: overlays,
     columns,
     isLoading,
@@ -146,13 +140,16 @@ const Overlays = () => {
         key="edit"
         onClick={() => {
           navigate(
-            scopeHref(library, `/overlays/${encodeURIComponent(row.original.name)}`),
+            scopeHref(
+              library,
+              `/overlays/${encodeURIComponent(row.original.name)}`,
+            ),
           );
           closeMenu();
         }}
       >
         <ListItemIcon>
-          <EditIcon />
+          <Icons.Edit />
         </ListItemIcon>
         Edit
       </MenuItem>,
@@ -164,7 +161,7 @@ const Overlays = () => {
         }}
       >
         <ListItemIcon>
-          <DeleteIcon />
+          <Icons.Delete />
         </ListItemIcon>
         Delete
       </MenuItem>,
@@ -186,7 +183,14 @@ const Overlays = () => {
         </Button>
       );
     },
-    muiTableBodyRowProps: () => ({
+    muiTableBodyRowProps: ({ row }) => ({
+      onClick: () =>
+        navigate(
+          scopeHref(
+            library,
+            `/overlays/${encodeURIComponent(row.original.name)}`,
+          ),
+        ),
       sx: {
         cursor: "pointer",
         backgroundColor: TABLE_BG,
@@ -212,7 +216,7 @@ const Overlays = () => {
         height: "40px",
       },
     },
-  });
+  };
 
   return (
     <Box sx={{ position: "relative" }}>
@@ -234,12 +238,14 @@ const Overlays = () => {
             >
               Overlays
             </Typography>
-            <Button onClick={() => setCreateOpen(true)}>New Overlay</Button>
+            <Button variant="gradient" onClick={() => setCreateOpen(true)}>
+              New Overlay
+            </Button>
           </Stack>
         }
       >
         <Stack direction="column" sx={{ gap: "24px" }}>
-          <MaterialReactTable table={tableRef} />
+          <Table {...tableProps} />
         </Stack>
       </PageWithTitle>
 
@@ -253,7 +259,13 @@ const Overlays = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} disabled={deleting}>Cancel</Button>
+          <Button
+            variant="gradient"
+            onClick={handleCancelDelete}
+            disabled={deleting}
+          >
+            Cancel
+          </Button>
           <Button
             variant="primary"
             color="negative"

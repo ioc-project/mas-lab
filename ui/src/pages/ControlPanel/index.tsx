@@ -4,20 +4,22 @@ import { useState } from "react";
 import { useLocation } from "react-router";
 import { useScopeId } from "@/api/scope";
 import { useDeleteRun, useRun, useRuns } from "@/api/runs";
-import {
-  Box,
-  CircularProgress,
-  MenuItem,
-  Select,
-  Stack,
-  Typography,
-  useTheme,
-} from "@mui/material";
-import type { SelectChangeEvent } from "@mui/material";
 import { PageWithTitle, CodeBlock, TabPanel } from "@/components";
 import { useRuntimeRunners } from "@/api/apiCalls";
 import { useScopeConfig } from "@/api/scopes";
-import { Button, Tab, Tabs } from "@open-ui-kit/core";
+import {
+  Box,
+  Button,
+  MenuItem,
+  Select,
+  type SelectChangeEvent,
+  Spinner,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+  useTheme,
+} from "@open-ui-kit/core";
 
 const TAB_KEYS = ["infra", "flavours", "workspace"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
@@ -76,7 +78,7 @@ const ControlPanel = () => {
             flex: 1,
           }}
         >
-          <CircularProgress />
+          <Spinner />
         </Box>
       </PageWithTitle>
     );
@@ -98,8 +100,7 @@ const ControlPanel = () => {
       >
         {runtimeRunners && runtimeRunners.length > 0 && (
           <Typography variant="body2" sx={{ mb: 1, opacity: 0.85 }}>
-            Runtime runners:{" "}
-            {runtimeRunners.map((r) => r.id).join(", ")}
+            Runtime runners: {runtimeRunners.map((r) => r.id).join(", ")}
           </Typography>
         )}
         <Box sx={{ mb: 2 }}>
@@ -112,12 +113,28 @@ const ControlPanel = () => {
             </Typography>
           ) : (
             runs.map((run) => (
-              <Stack key={run.id} direction="row" spacing={2} sx={{ mb: 0.5 }} alignItems="center">
-                <Button size="small" onClick={() => setSelectedRunId(run.id)}>
+              <Stack
+                key={run.id}
+                direction="row"
+                spacing={2}
+                sx={{ mb: 0.5 }}
+                alignItems="center"
+              >
+                <Button
+                  size="small"
+                  variant="gradient"
+                  onClick={() => setSelectedRunId(run.id)}
+                >
                   {run.item} · {run.status}
-                  {run.request_summary?.source ? ` · ${run.request_summary.source}` : ""}
+                  {run.request_summary?.source
+                    ? ` · ${run.request_summary.source}`
+                    : ""}
                 </Button>
-                <Button size="small" onClick={() => deleteRun.mutate(run.id)}>
+                <Button
+                  size="small"
+                  variant="gradient"
+                  onClick={() => deleteRun.mutate(run.id)}
+                >
                   Delete
                 </Button>
               </Stack>
@@ -128,7 +145,10 @@ const ControlPanel = () => {
               <Typography variant="caption" color="text.secondary">
                 {selectedRun.scope} / {selectedRun.item} · {selectedRun.status}
               </Typography>
-              <CodeBlock code={selectedRun.log || "(no output yet)"} language="text" />
+              <CodeBlock
+                code={selectedRun.log || "(no output yet)"}
+                language="text"
+              />
             </Box>
           )}
         </Box>
@@ -176,6 +196,7 @@ const ControlPanel = () => {
                     value={selected}
                     onChange={(e) => handleFileChange(tabKey, e)}
                     sx={{ maxWidth: 400 }}
+                    clearable={false}
                   >
                     {fileNames.map((name) => (
                       <MenuItem key={name} value={name}>

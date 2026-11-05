@@ -1,12 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
-import { Box, Collapse, ListItemButton, Typography } from "@mui/material";
-import {
-  FolderOpen as FolderIcon,
-  ExpandMore as ExpandMoreIcon,
-  ChevronRight as ChevronRightIcon,
-} from "@mui/icons-material";
+import { Collapse } from "@mui/material";
+import { Box, Icons, ListItemButton, Typography } from "@open-ui-kit/core";
 import { RunRow } from "./RunRow";
 import { TreeNode } from "./TreeNode";
 import { RUNS_PREVIEW_CAP, transparentRowSx } from "../utils";
@@ -47,11 +43,11 @@ export function RunGroupItem({
         }}
       >
         {open ? (
-          <ExpandMoreIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+          <Icons.KeyboardArrowDown sx={{ fontSize: 16, color: "text.secondary" }} />
         ) : (
-          <ChevronRightIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+          <Icons.KeyboardArrowRight sx={{ fontSize: 16, color: "text.secondary" }} />
         )}
-        <FolderIcon sx={{ fontSize: 16, color: "warning.main" }} />
+        <Icons.FolderOpen sx={{ fontSize: 16, color: "warning.main" }} />
         <Typography
           variant="body2"
           title={group.path}

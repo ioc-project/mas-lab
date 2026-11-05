@@ -1,9 +1,18 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useCallback, useMemo, useState } from "react";
-import { Box, Stack, Typography, Chip, Pagination } from "@mui/material";
-import { Delete as DeleteIcon, Add as AddIcon } from "@mui/icons-material";
-import { InputField, Button, IconButton } from "@open-ui-kit/core";
+import {
+  Box,
+  Button,
+  GeneralSize,
+  IconButton,
+  Icons,
+  InputField,
+  Pagination,
+  Stack,
+  Tag,
+  Typography,
+} from "@open-ui-kit/core";
 
 const PAGE_SIZE = 20;
 
@@ -82,13 +91,13 @@ function ArrayChipEditor({
       />
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
         {value.map((item) => (
-          <Chip
+          <Tag
             key={item}
-            label={item}
-            size="small"
+            size={GeneralSize.Small}
             onDelete={() => onChange(value.filter((v) => v !== item))}
-            sx={{ height: 22, fontSize: "11px" }}
-          />
+          >
+            {item}
+          </Tag>
         ))}
       </Box>
     </Box>
@@ -156,7 +165,7 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
         <Button
           size="small"
           variant="gradient"
-          startIcon={<AddIcon />}
+          startIcon={<Icons.Plus />}
           onClick={handleAddRow}
         >
           Add Item
@@ -189,7 +198,7 @@ export function DatasetEditor({ content, onChange }: DatasetEditorProps) {
                 sx={{ position: "absolute", top: 8, right: 8 }}
                 title="Delete item"
               >
-                <DeleteIcon fontSize="small" />
+                <Icons.Delete fontSize="small" />
               </IconButton>
 
               <Stack direction="row" sx={{ gap: 2 }}>

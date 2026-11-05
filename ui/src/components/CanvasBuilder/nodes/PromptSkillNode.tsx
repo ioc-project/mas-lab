@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: Apache-2.0
 import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
 import { useCallback, useState, type ChangeEvent, type KeyboardEvent } from "react";
-import { Tooltip } from "@mui/material";
+import { Tooltip } from "@open-ui-kit/core";
 import type { PromptSkillsNodeType } from "../types";
 import { useSkillChoices } from "@/api/choices";
 import { useScopeId } from "@/api/scope";

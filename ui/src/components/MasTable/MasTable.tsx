@@ -1,38 +1,31 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import {
-  MaterialReactTable,
-  MRT_RowSelectionState,
-  MRT_SortingState,
-  MRT_VisibilityState,
-} from "material-react-table";
-import {
-  CreateTableInstance,
-  EmptyState,
-  TableProps,
-  Tooltip,
-} from "@open-ui-kit/core";
-import {
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  ContentCopy as DuplicateIcon,
-} from "@mui/icons-material";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
   Button,
   Dialog,
-  DialogTitle,
+  DialogActions,
   DialogContent,
   DialogContentText,
-  DialogActions,
+  DialogTitle,
+  EmptyState,
+  Icons,
+  InputField,
   ListItemIcon,
   MenuItem,
   Stack,
-  TextField,
+  Table,
+  TableProps,
+  Tooltip,
   Typography,
-} from "@mui/material";
+} from "@open-ui-kit/core";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert } from "@mui/material";
 import type { MASManifest } from "@/types/mas-types";
+import type {
+  TableRowSelectionState,
+  TableSortingState,
+  TableVisibilityState,
+} from "@open-ui-kit/core";
 import { Tags } from "@/components";
 
 type MRT_ColumnDefList = TableProps<MASManifest>["columns"];
@@ -64,7 +57,7 @@ export const MasTable = ({
   defaultHiddenColumns = [],
   title,
 }: MasTableProps) => {
-  const [columnVisibility, setColumnVisibility] = useState<MRT_VisibilityState>(
+  const [columnVisibility, setColumnVisibility] = useState<TableVisibilityState>(
     {
       id: false,
       ...defaultHiddenColumns.reduce((acc: Record<string, boolean>, column) => {
@@ -73,10 +66,10 @@ export const MasTable = ({
       }, {}),
     },
   );
-  const [sorting, setSorting] = useState<MRT_SortingState>([
+  const [sorting, setSorting] = useState<TableSortingState>([
     { id: "name", desc: true },
   ]);
-  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
+  const [rowSelection, setRowSelection] = useState<TableRowSelectionState>({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteNames, setPendingDeleteNames] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
@@ -274,7 +267,7 @@ export const MasTable = ({
     [],
   );
 
-  const tableRef = CreateTableInstance({
+  const tableProps: TableProps<MASManifest> = {
     data: data,
     columns,
     isLoading: isLoading,
@@ -305,7 +298,7 @@ export const MasTable = ({
     renderRowActionMenuItems: ({ row, closeMenu }) => [
       <MenuItem key="edit" onClick={() => onMasClick?.(row.original)}>
         <ListItemIcon>
-          <EditIcon />
+          <Icons.Edit />
         </ListItemIcon>
         Edit
       </MenuItem>,
@@ -317,7 +310,7 @@ export const MasTable = ({
         }}
       >
         <ListItemIcon>
-          <DuplicateIcon />
+          <Icons.ContentCopy />
         </ListItemIcon>
         Duplicate
       </MenuItem>,
@@ -330,7 +323,7 @@ export const MasTable = ({
         }}
       >
         <ListItemIcon>
-          <DeleteIcon />
+          <Icons.Delete />
         </ListItemIcon>
         Delete
       </MenuItem>,
@@ -364,7 +357,7 @@ export const MasTable = ({
         },
       };
     },
-  });
+  };
 
   return (
     <>
@@ -383,7 +376,7 @@ export const MasTable = ({
           {duplicateSuccess}
         </Alert>
       )}
-      <MaterialReactTable table={tableRef} />
+      <Table {...tableProps} />
       <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
@@ -394,7 +387,11 @@ export const MasTable = ({
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} disabled={deleting}>
+          <Button
+            variant="gradient"
+            onClick={handleCancelDelete}
+            disabled={deleting}
+          >
             Cancel
           </Button>
           <Button
@@ -421,7 +418,7 @@ export const MasTable = ({
               {duplicateError}
             </Alert>
           )}
-          <TextField
+          <InputField
             autoFocus
             margin="dense"
             label="MAS Name"
@@ -435,7 +432,7 @@ export const MasTable = ({
               setDuplicateError("");
             }}
           />
-          <TextField
+          <InputField
             margin="dense"
             label="Description"
             placeholder="Enter a description"
@@ -447,7 +444,7 @@ export const MasTable = ({
             value={duplicateDescription}
             onChange={(e) => setDuplicateDescription(e.target.value)}
           />
-          <TextField
+          <InputField
             margin="dense"
             label="Intent"
             placeholder="Enter the intent summary"
@@ -461,9 +458,11 @@ export const MasTable = ({
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDuplicate}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCloseDuplicate}>
+            Cancel
+          </Button>
           <Button
-            variant="primary"
+            variant="gradient"
             onClick={handleConfirmDuplicate}
             disabled={isDuplicating}
           >

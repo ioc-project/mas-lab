@@ -7,7 +7,7 @@ import {
   TabPanel,
 } from "@/components";
 import type { ExperimentJobStatus } from "@/components/ExperimentsTable/ExperimentsTable";
-import { Alert, Box, Stack, Typography, useTheme } from "@mui/material";
+import { Alert } from "@mui/material";
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { scopeHref, toScopeId, useScopeId } from "@/api/scope";
@@ -21,7 +21,15 @@ import {
 } from "@/api/apiCalls";
 import { fetchRuns, startRun } from "@/api/runs";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button, Tab, Tabs } from "@open-ui-kit/core";
+import {
+  Box,
+  Button,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+  useTheme,
+} from "@open-ui-kit/core";
 
 const POLL_INTERVAL = 2000;
 

@@ -1,18 +1,15 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle } from "@/components";
-import {
-  MRT_RowSelectionState,
-  MRT_SortingState,
-} from "material-react-table";
+import type {
+  TableRowSelectionState,
+  TableSortingState,
+} from "@open-ui-kit/core";
 import {
   Table,
   EmptyState,
   TableProps,
   Tooltip,
-} from "@open-ui-kit/core";
-import { Delete as DeleteIcon } from "@mui/icons-material";
-import {
   Button,
   Box,
   Dialog,
@@ -20,12 +17,13 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Icons,
   ListItemIcon,
   MenuItem,
   Stack,
   Typography,
   useTheme,
-} from "@mui/material";
+} from "@open-ui-kit/core";
 import { useNavigate } from "react-router";
 import { useScopeId, scopeHref } from "@/api/scope";
 import { useCallback, useMemo, useState } from "react";
@@ -49,8 +47,8 @@ const Datasets = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteNames, setPendingDeleteNames] = useState<string[]>([]);
-  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
-  const [sorting, setSorting] = useState<MRT_SortingState>([
+  const [rowSelection, setRowSelection] = useState<TableRowSelectionState>({});
+  const [sorting, setSorting] = useState<TableSortingState>([
     { id: "name", desc: false },
   ]);
 
@@ -87,15 +85,10 @@ const Datasets = () => {
             <Typography
               variant="body2"
               sx={{
-                cursor: "pointer",
-                "&:hover": { textDecoration: "underline" },
                 textOverflow: "ellipsis",
                 overflow: "hidden",
                 whiteSpace: "nowrap",
               }}
-              onClick={() =>
-                navigate(scopeHref(library, `/datasets/${encodeURIComponent(row.name)}`))
-              }
             >
               {row.name}
             </Typography>
@@ -108,7 +101,7 @@ const Datasets = () => {
         size: 400,
       },
     ],
-    [library, navigate],
+    [],
   );
 
   const tableProps: TableProps<DatasetSummary> = {
@@ -132,7 +125,7 @@ const Datasets = () => {
         }}
       >
         <ListItemIcon>
-          <DeleteIcon />
+          <Icons.Delete />
         </ListItemIcon>
         Delete
       </MenuItem>,
@@ -160,7 +153,14 @@ const Datasets = () => {
         description="No datasets found in this library."
       />
     ),
-    muiTableBodyRowProps: () => ({
+    muiTableBodyRowProps: ({ row }) => ({
+      onClick: () =>
+        navigate(
+          scopeHref(
+            library,
+            `/datasets/${encodeURIComponent(row.original.name)}`,
+          ),
+        ),
       sx: {
         cursor: "pointer",
         backgroundColor: TABLE_BG,
@@ -192,7 +192,9 @@ const Datasets = () => {
             >
               Datasets
             </Typography>
-            <Button onClick={() => setCreateOpen(true)}>Add Dataset</Button>
+            <Button variant="gradient" onClick={() => setCreateOpen(true)}>
+              Add Dataset
+            </Button>
           </Stack>
         }
       >
@@ -215,7 +217,9 @@ const Datasets = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCancelDelete}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             color="negative"

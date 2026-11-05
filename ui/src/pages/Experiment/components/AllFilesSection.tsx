@@ -1,11 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
-import { Box, Collapse, ListItemButton, Typography } from "@mui/material";
-import {
-  ExpandMore as ExpandMoreIcon,
-  ChevronRight as ChevronRightIcon,
-} from "@mui/icons-material";
+import { Collapse } from "@mui/material";
+import { Box, Icons, ListItemButton, Typography } from "@open-ui-kit/core";
 import { TreeNode } from "./TreeNode";
 import { transparentRowSx } from "../utils";
 import type { FileTreeEntry } from "@/api/apiCalls";
@@ -39,9 +36,9 @@ export function AllFilesSection({
         sx={{ py: 0.75, px: 1, gap: "4px", ...transparentRowSx }}
       >
         {open ? (
-          <ExpandMoreIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+          <Icons.KeyboardArrowDown sx={{ fontSize: 16, color: "text.secondary" }} />
         ) : (
-          <ChevronRightIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+          <Icons.KeyboardArrowRight sx={{ fontSize: 16, color: "text.secondary" }} />
         )}
         <Typography
           variant="body2"

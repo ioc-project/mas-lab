@@ -1,24 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle, CodeBlock, TabPanel } from "@/components";
-import {
-  Alert,
-  Box,
-  Checkbox,
-  CircularProgress,
-  Collapse,
-  Divider,
-  FormControlLabel,
-  IconButton,
-  Stack,
-  Typography,
-  useTheme,
-} from "@mui/material";
-import {
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  ExpandMore as ExpandMoreIcon,
-} from "@mui/icons-material";
+import { Alert, Collapse } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,13 +30,22 @@ import { scopeHref, useScopeId } from "@/api/scope";
 import { useVisibleLibraries } from "@/api/scopes";
 import { isUiCanvasOverlay } from "@/utils/uiCanvasOverlay";
 import {
+  Box,
   Button,
+  Checkbox,
+  Divider,
   GeneralSize,
+  IconButton,
+  Icons,
   InputField,
   MenuItem,
+  Spinner,
+  Stack,
   Tag,
   Tab,
   Tabs,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
 import { SelectField } from "./SelectField";
 import { pulseRingStyle } from "./styles";
@@ -837,7 +829,11 @@ const CreateExperiment = () => {
             {pageTitle}
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
-            <Button onClick={handleCancel} disabled={saving}>
+            <Button
+              variant="gradient"
+              onClick={handleCancel}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button variant="gradient" onClick={handleSave} disabled={!canSave}>
@@ -874,7 +870,7 @@ const CreateExperiment = () => {
               height: "50vh",
             }}
           >
-            <CircularProgress />
+            <Spinner />
           </Box>
         ) : (
           <>
@@ -940,16 +936,12 @@ const CreateExperiment = () => {
                     >
                       Scenarios
                     </Typography>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={usePatchOverlays}
-                          onChange={(e) =>
-                            handlePatchOverlaysToggle(e.target.checked)
-                          }
-                          size="small"
-                        />
+                    <Checkbox
+                      checked={usePatchOverlays}
+                      onChange={(e) =>
+                        handlePatchOverlaysToggle(e.target.checked)
                       }
+                      size="small"
                       label={
                         <Typography variant="caption" color="text.secondary">
                           Use Patch Overlays
@@ -962,7 +954,7 @@ const CreateExperiment = () => {
                     onClick={addScenario}
                     sx={[pulseRingStyle(theme), { marginRight: "8px" }]}
                   >
-                    <AddIcon fontSize="small" />
+                    <Icons.Plus fontSize="small" />
                   </IconButton>
                 </Stack>
                 {scenarios.map((scenario, index) => (
@@ -1047,7 +1039,7 @@ const CreateExperiment = () => {
                         onClick={() => removeScenario(index)}
                         sx={{ marginTop: "20px !important" }}
                       >
-                        <DeleteIcon fontSize="medium" />
+                        <Icons.Delete fontSize="medium" />
                       </IconButton>
                     )}
                   </Stack>
@@ -1255,7 +1247,7 @@ const CreateExperiment = () => {
                   sx={{ alignSelf: "flex-start" }}
                   variant="gradient"
                   endIcon={
-                    <ExpandMoreIcon
+                    <Icons.KeyboardArrowDown
                       sx={{
                         transition: "transform 0.2s",
                         transform: advancedHooksOpen

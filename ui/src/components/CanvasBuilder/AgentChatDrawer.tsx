@@ -2,14 +2,15 @@
 //  SPDX-License-Identifier: Apache-2.0
 import { useState, useCallback, useRef, useEffect } from "react";
 import { parse, stringify } from "yaml";
+import { Drawer } from "@mui/material";
 import {
-  Drawer,
   Box,
   Typography,
   IconButton,
-  TextField,
+  Icons,
+  InputField,
   Stack,
-  CircularProgress,
+  Spinner,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,13 +18,7 @@ import {
   DialogActions,
   Button,
   Tooltip,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import SendIcon from "@mui/icons-material/Send";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import BookmarkIcon from "@mui/icons-material/Bookmark";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+} from "@open-ui-kit/core";
 import { runAgent, pollJob } from "@/api/apiCalls";
 import { PromptsModal, addPromptToStore } from "./PromptsModal";
 
@@ -242,10 +237,10 @@ export function AgentChatDrawer({
             disabled={messages.length === 0 || isLoading}
             title="Clear chat"
           >
-            <DeleteOutlineIcon fontSize="small" />
+            <Icons.Delete fontSize="small" />
           </IconButton>
           <IconButton size="small" onClick={onClose}>
-            <CloseIcon fontSize="small" />
+            <Icons.Close fontSize="small" />
           </IconButton>
         </Stack>
       </Box>
@@ -311,7 +306,7 @@ export function AgentChatDrawer({
                   }}
                 >
                   <Stack direction="row" spacing={1} alignItems="flex-start">
-                    <ErrorOutlineIcon sx={{ fontSize: 18, mt: 0.25 }} />
+                    <Icons.ErrorCircleOutline sx={{ fontSize: 18, mt: 0.25 }} />
                     <Box sx={{ minWidth: 0 }}>
                       <Typography
                         variant="caption"
@@ -360,7 +355,7 @@ export function AgentChatDrawer({
                 title="Save as prompt"
                 sx={{ opacity: 0, transition: "opacity 0.2s", mt: 0.25 }}
               >
-                <AddCircleOutlineIcon sx={{ fontSize: 16 }} />
+                <Icons.PlusCircleOutline sx={{ fontSize: 16 }} />
               </IconButton>
             )}
           </Box>
@@ -374,7 +369,7 @@ export function AgentChatDrawer({
               alignItems: "center",
             }}
           >
-            <CircularProgress size={16} />
+            <Spinner size={16} />
             <Typography variant="body2" sx={{ color: "text.secondary" }}>
               Agent is thinking...
             </Typography>
@@ -394,7 +389,7 @@ export function AgentChatDrawer({
           justifyContent: "center",
         }}
       >
-        <TextField
+        <InputField
           fullWidth
           multiline
           maxRows={4}
@@ -418,7 +413,7 @@ export function AgentChatDrawer({
           title="Saved prompts"
           color="default"
         >
-          <BookmarkIcon fontSize="small" />
+          <Icons.BookmarkFilled fontSize="small" />
         </IconButton>
         <IconButton
           color="primary"
@@ -426,7 +421,7 @@ export function AgentChatDrawer({
           disabled={!input.trim() || isLoading}
           size="small"
         >
-          <SendIcon fontSize="small" />
+          <Icons.Send fontSize="small" />
         </IconButton>
       </Stack>
 
@@ -461,8 +456,10 @@ export function AgentChatDrawer({
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPendingSaveText("")}>Cancel</Button>
-          <Button variant="primary" onClick={handleConfirmSavePrompt}>
+          <Button variant="gradient" onClick={() => setPendingSaveText("")}>
+            Cancel
+          </Button>
+          <Button variant="gradient" onClick={handleConfirmSavePrompt}>
             Save
           </Button>
         </DialogActions>
