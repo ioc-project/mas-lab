@@ -19,8 +19,10 @@ Usage:
   python scripts/version_manager.py bump <type> [package] # Bump version
   python scripts/version_manager.py set <version> [package] # Set version
 
-    package: runtime | ctl | library | samples | skills | eval | lab-library |
-                     ioa | kg | telemetry | lab | core | bench | controller | all
+    package: mas-lab-runtime | mas-lab-ctl | mas-lab-library-standard | mas-lab-library-samples | 
+             mas-lab-library-skills | mas-lab-library-eval | mas-lab-library-lab | mas-lab-library-ioa | 
+             mas-lab-library-kg | mas-lab-library-telemetry | mas-lab | mas-lab-component-core |
+             mas-lab-component-bench | mas-lab-component-controller | all
   type:    rc | patch | minor | major
 """
 
@@ -36,20 +38,20 @@ VERSION_FILE = ROOT / "VERSION"
 
 # Package name → pyproject.toml path
 PACKAGES: dict[str, Path] = {
-    "runtime": ROOT / "runtime" / "pyproject.toml",
-    "ctl": ROOT / "ctl" / "pyproject.toml",
-    "library": ROOT / "library-standard" / "pyproject.toml",
-    "samples": ROOT / "library-samples" / "pyproject.toml",
-    "skills": ROOT / "library-skills" / "pyproject.toml",
-    "eval": ROOT / "library-eval" / "pyproject.toml",
-    "lab-library": ROOT / "library-lab" / "pyproject.toml",
-    "ioa": ROOT / "library-ioa" / "pyproject.toml",
-    "kg": ROOT / "library-kg" / "pyproject.toml",
-    "telemetry": ROOT / "library-telemetry" / "pyproject.toml",
-    "lab": ROOT / "pyproject.toml",
-    "core": ROOT / "lab" / "components" / "core" / "pyproject.toml",
-    "bench": ROOT / "lab" / "components" / "bench" / "pyproject.toml",
-    "controller": ROOT / "lab" / "components" / "controller" / "pyproject.toml",
+    "mas-lab-runtime": ROOT / "runtime" / "pyproject.toml",
+    "mas-lab-ctl": ROOT / "ctl" / "pyproject.toml",
+    "mas-lab-library-standard": ROOT / "library-standard" / "pyproject.toml",
+    "mas-lab-library-samples": ROOT / "library-samples" / "pyproject.toml",
+    "mas-lab-library-skills": ROOT / "library-skills" / "pyproject.toml",
+    "mas-lab-library-eval": ROOT / "library-eval" / "pyproject.toml",
+    "mas-lab-library-lab": ROOT / "library-lab" / "pyproject.toml",
+    "mas-lab-library-ioa": ROOT / "library-ioa" / "pyproject.toml",
+    "mas-lab-library-kg": ROOT / "library-kg" / "pyproject.toml",
+    "mas-lab-library-telemetry": ROOT / "library-telemetry" / "pyproject.toml",
+    "mas-lab": ROOT / "pyproject.toml",
+    "mas-lab-component-core": ROOT / "lab" / "components" / "core" / "pyproject.toml",
+    "mas-lab-component-bench": ROOT / "lab" / "components" / "bench" / "pyproject.toml",
+    "mas-lab-component-controller": ROOT / "lab" / "components" / "controller" / "pyproject.toml",
 }
 
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(rc\d+))?$")
