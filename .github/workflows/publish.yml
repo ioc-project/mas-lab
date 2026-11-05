@@ -112,20 +112,20 @@ jobs:
           # Order matters: dependencies must be built first. mas-lab is the
           # empty meta-package and must be last.
           packages = [
-              ("runtime", "runtime"),
-              ("skills", "library-skills"),
-              ("library", "library-standard"),
-              ("samples", "library-samples"),
-              ("ioa", "library-ioa"),
-              ("telemetry", "library-telemetry"),
-              ("kg", "library-kg"),
-              ("ctl", "ctl"),
-              ("core", "lab/components/core"),
-              ("bench", "lab/components/bench"),
-              ("eval", "library-eval"),
-              ("controller", "lab/components/controller"),
-              ("lab-library", "library-lab"),
-              ("lab", "."),
+              ("mas-lab-runtime", "runtime"),
+              ("mas-lab-library-skills", "library-skills"),
+              ("mas-lab-library-standard", "library-standard"),
+              ("mas-lab-library-samples", "library-samples"),
+              ("mas-lab-library-ioa", "library-ioa"),
+              ("mas-lab-library-telemetry", "library-telemetry"),
+              ("mas-lab-library-kg", "library-kg"),
+              ("mas-lab-ctl", "ctl"),
+              ("mas-lab-component-core", "lab/components/core"),
+              ("mas-lab-component-bench", "lab/components/bench"),
+              ("mas-lab-library-eval", "library-eval"),
+              ("mas-lab-component-controller", "lab/components/controller"),
+              ("mas-lab-library-lab", "library-lab"),
+              ("mas-lab", "."),
           ]
           sel = os.environ["INPUT"]
           include = [
