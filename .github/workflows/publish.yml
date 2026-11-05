@@ -96,84 +96,83 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-  publish:
+  plan:
+    name: Select packages
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select packages to publish
+        id: select
+        env:
+          INPUT: ${{ github.event.inputs.package || 'all' }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os
+          # Order matters: dependencies must be built first. mas-lab is the
+          # empty meta-package and must be last.
+          packages = [
+              ("runtime", "runtime"),
+              ("skills", "library-skills"),
+              ("library", "library-standard"),
+              ("samples", "library-samples"),
+              ("ioa", "library-ioa"),
+              ("telemetry", "library-telemetry"),
+              ("kg", "library-kg"),
+              ("ctl", "ctl"),
+              ("core", "lab/components/core"),
+              ("bench", "lab/components/bench"),
+              ("eval", "library-eval"),
+              ("controller", "lab/components/controller"),
+              ("lab-library", "library-lab"),
+              ("lab", "."),
+          ]
+          sel = os.environ["INPUT"]
+          include = [
+              {"name": n, "path": p}
+              for n, p in packages
+              if sel == "all" or sel == n
+          ]
+          print("matrix=" + json.dumps({"include": include}))
+          PY
+
+  publish:
+    needs: plan
+    runs-on: ubuntu-latest
+    # One GitHub environment per package (pypi-<name>), so each PyPI project
+    # can have its own trusted publisher and protection rules.
     environment:
-      name: pypi
+      name: pypi-${{ matrix.name }}
     permissions:
       contents: read
       id-token: write
     strategy:
-      matrix:
-        include:
-          # Order matters: dependencies must be built first. mas-lab is the
-          # empty meta-package and must be last.
-          - name: runtime
-            path: runtime
-          - name: skills
-            path: library-skills
-          - name: library
-            path: library-standard
-          - name: samples
-            path: library-samples
-          - name: ioa
-            path: library-ioa
-          - name: telemetry
-            path: library-telemetry
-          - name: kg
-            path: library-kg
-          - name: ctl
-            path: ctl
-          - name: core
-            path: lab/components/core
-          - name: bench
-            path: lab/components/bench
-          - name: eval
-            path: library-eval
-          - name: controller
-            path: lab/components/controller
-          - name: lab-library
-            path: library-lab
-          - name: lab
-            path: .
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check if package should be published
-        id: check
-        run: |
-          PKG="${{ matrix.name }}"
-          INPUT="${{ github.event.inputs.package || 'all' }}"
-          if [[ "$INPUT" == "all" || "$INPUT" == "$PKG" ]]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Setup Python
-        if: steps.check.outputs.should_publish == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install uv
-        if: steps.check.outputs.should_publish == 'true'
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
 
       - name: Install build tools
-        if: steps.check.outputs.should_publish == 'true'
         run: |
           uv tool install build
           uv tool install twine
 
       - name: Bump version (if requested)
         if: >
-          steps.check.outputs.should_publish == 'true' && github.event_name ==
+          github.event_name ==
           'workflow_dispatch' && inputs.publish == true &&
           github.event.inputs.bump_type != 'none'
         run: |
@@ -182,7 +181,6 @@ jobs:
             ${{ matrix.name }}
 
       - name: Get version
-        if: steps.check.outputs.should_publish == 'true'
         id: version
         run: |
           VERSION=$(python3 scripts/version_manager.py get ${{ matrix.name }})
@@ -191,24 +189,20 @@ jobs:
           echo "full=$FULL" >> "$GITHUB_OUTPUT"
 
       - name: Build package
-        if: steps.check.outputs.should_publish == 'true'
         run: pyproject-build "${{ matrix.path }}"
 
       - name: Check package
-        if: steps.check.outputs.should_publish == 'true'
         run: uvx twine check "${{ matrix.path }}/dist/"*
 
       - name: Publish to PyPI
-        if: >
-          steps.check.outputs.should_publish == 'true' &&
-          (github.event_name == 'push' || inputs.publish == true)
+        if: github.event_name == 'push' || inputs.publish == true
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: ${{ matrix.path }}/dist/
           skip-existing: true
 
       - name: Upload artifacts
-        if: always() && steps.check.outputs.should_publish == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.name }}-${{ github.sha }}
