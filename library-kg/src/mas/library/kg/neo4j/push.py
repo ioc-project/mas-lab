@@ -29,9 +29,9 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from mas.library.kg._dist import extra_hint
-from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, OXP_CORE_NODE_TYPES
+from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, SCOPE_CORE_NODE_TYPES
 
-_KNOWN_NODE_TYPES = OXP_CORE_NODE_TYPES | NATIVE_EXTENSION_NODE_TYPES
+_KNOWN_NODE_TYPES = SCOPE_CORE_NODE_TYPES | NATIVE_EXTENSION_NODE_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ def _index_nodes_by_type(
         # Warn, don't block: a push must still succeed for a legitimate new
         # type this check doesn't know about yet.
         logger.warning(
-            "Pushing node_type(s) not in OXP_CORE_NODE_TYPES/NATIVE_EXTENSION_NODE_TYPES: %s",
+            "Pushing node_type(s) not in SCOPE_CORE_NODE_TYPES/NATIVE_EXTENSION_NODE_TYPES: %s",
             sorted(unknown_types),
         )
     return nodes_by_type, id_to_type

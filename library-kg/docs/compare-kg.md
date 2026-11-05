@@ -50,7 +50,9 @@ must exist; otherwise override those keys in the pipeline YAML.
 
 The step writes `kg_compare_report.json` in its step output directory, with
 `{passed, checks, summary, ...}` (see [kg-compare.md](kg-compare.md)).
-Config keys read by the step: `strict`, `fail_on_error`, `reference_artifact`,
+Config keys read by the step: `strict`, `strict_nodes`, `strict_edges`,
+`strict_node_attributes`, `strict_edge_attributes`, `fail_on_error`,
+`reference_artifact`,
 `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`. (The shipped
 pipeline YAMLs also set `report_filename`; the step does not read it.)
 Step module: `library-kg/src/mas/library/kg/bench.py`.

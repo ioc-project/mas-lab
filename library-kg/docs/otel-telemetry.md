@@ -14,7 +14,7 @@ mas-lab kg otel-to-kg SPANS.jsonl --run-id RUN --output-dir OUT   # writes OUT/k
 |------|-------|
 | Span shape detection, SDK-to-ClickHouse reshape, CLI and step wrappers (`mas.library.kg.observability.otel_via_norm`, `steps.normalize_otel`, `mas-lab kg ...`) | this library |
 | Span dispatch, attribute reading, node and edge construction (`norm.normalize()`) | SCOPE `norm` (optional extra `[norm]`) |
-| Ontology classes and generated models | `oxp-ontology` (PyPI, hard dependency) |
+| Ontology classes and generated models | `ioc-scope-ontology` (SCOPE, hard dependency) |
 
 See also: [normalization.md](normalization.md), [native-telemetry.md](native-telemetry.md), [steps.md](steps.md), and [Native events to OTel conversion](../../library-telemetry/docs/conversion.md) (how MAS Lab produces these spans).
 

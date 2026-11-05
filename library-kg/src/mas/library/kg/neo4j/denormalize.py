@@ -44,7 +44,7 @@ _EXPERIMENT_LAYER = "experiment"
 # "Agent"/"LLM"/"Tool"/"Skill" are the real catalog/definition node types
 # (not "CatalogTool"/"CatalogModel"/"CatalogSkill", which don't exist
 # anywhere in the ontology's vocabulary -- see core/oxp_models.py's
-# OXP_CORE_NODE_TYPES / NATIVE_EXTENSION_NODE_TYPES).
+# SCOPE_CORE_NODE_TYPES / NATIVE_EXTENSION_NODE_TYPES).
 _STRUCTURAL_TYPES = frozenset({"Agent", "LLM", "Tool", "Skill"})
 
 # Trajectory types — normalized State/Transition; block="trajectory".

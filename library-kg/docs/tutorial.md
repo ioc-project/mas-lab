@@ -18,7 +18,7 @@ mas-lab kg validate /tmp/tutorial-kg.jsonld
 (System for Cognitive Observability Provenance and Explainability,
 [ioc-project/scope](https://github.com/ioc-project/scope))
 is the observability platform.
-This tutorial uses two SCOPE pieces: `oxp-ontology` (the ontology, the SHACL shapes and the
+This tutorial uses two SCOPE pieces: `ioc-scope-ontology` (the ontology, the SHACL shapes and the
 generated models; a hard dependency of `library-kg`) and, for the OpenTelemetry (OTel)
 path only, `norm` (the SCOPE OTel normalizer; optional extra `[norm]`, installed from git
 until it is published). The native-to-KG normalizer, validation, Neo4j push and dump, the
@@ -298,7 +298,7 @@ The command prints a JSON report and exits with status 1 if `error_count` is not
 
 This output is what you get without the `[validation]` extra (`rdflib`, `pyshacl`): the
 `shacl` row is `"skipped"` and `skipped_count` is 1. A skipped check is never a pass. With
-the extra installed, the command also checks the SHACL shapes from `oxp-ontology`. On
+the extra installed, the command also checks the SHACL shapes from `ioc-scope-ontology`. On
 short captures this can add warnings (for example optional LLM token fields) and some
 cardinality findings; see
 [Tutorial 9, section 5](../../docs/tutorials/09-kg-scope/README.md).

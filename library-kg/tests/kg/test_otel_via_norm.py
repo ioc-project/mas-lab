@@ -21,7 +21,7 @@ def test_wrapper_has_no_handler_logic() -> None:
         "convert_spans_to_events",
         "synthesize_missing_llm",
         "_BOUNDARY_DISPATCH",
-        # This wrapper is a user of norm/oxp-ontology, not a patcher of
+        # This wrapper is a user of norm/ioc-scope-ontology, not a patcher of
         # either: no monkey-patching their models to tolerate a mismatch
         # between them, no matter how well-intentioned or well-documented.
         "model_config",
@@ -96,7 +96,7 @@ def test_clickhouse_shape_passes_through(monkeypatch) -> None:
             "ParentSpanId": "",
         }
     ]
-    nodes, _edges = otel_via_norm.normalize_otel(spans)
+    nodes, _edges = otel_via_norm.normalize_otel(spans, all_attributes=True)
     assert nodes[0]["SpanName"] == "planner.agent"
 
 
@@ -140,7 +140,7 @@ def test_norm_accepts_realistic_converter_output() -> None:
     reaches norm.normalize() without being silently dropped by its
     required-attribute dispatch.
 
-    Uses whatever ``norm``/``oxp-ontology`` are actually installed, as
+    Uses whatever ``norm``/``ioc-scope-ontology`` are actually installed, as
     published -- no patching.
     """
     pytest.importorskip("norm")

@@ -37,28 +37,28 @@ STRUCTURAL_CHECKS = [
     "layer_vocabulary",
 ]
 
-# oxp-ontology 1.0.0 SHACL (mas-shapes.ttl + mas-shapes-custom.ttl) does not
-# include the former custom SPARQL rules these tests encode (Session.appName,
-# processing gate, temporal enclosure, inbound containment, leadsTo range).
+# SCOPE SHACL (mas-shapes.ttl + mas-shapes-custom.ttl) does not include the
+# former custom SPARQL rules these tests encode (Session.appName, processing
+# gate, temporal enclosure, inbound containment, leadsTo range).
 _OXP_SHACL_GAP = pytest.mark.skip(
     reason=(
-        "oxp-ontology 1.0.0 SHACL shapes do not include the custom SPARQL "
-        "rules these assertions encode; they remain documented gaps pending "
-        "upstream shapes."
+        "SCOPE SHACL shapes do not include the custom SPARQL rules these "
+        "assertions encode; they remain documented gaps pending upstream "
+        "shapes."
     )
 )
 
 
-def _oxp_ontology_path() -> str:
+def _scope_ontology_path() -> str:
     # Every caller of this helper is exercising real SHACL/ontology-backed
     # validation, which additionally needs rdflib and pyshacl to actually
     # run (see run_shacl_validation) -- skip cleanly rather than fail if
     # any of the three isn't installed (validation extra).
-    pytest.importorskip("oxp_ontology")
+    pytest.importorskip("scope_ontology")
     pytest.importorskip("rdflib")
     pytest.importorskip("pyshacl")
 
-    from oxp_ontology import get_ontology_path
+    from scope_ontology import get_ontology_path
 
     return str(get_ontology_path("mas"))
 
@@ -77,9 +77,9 @@ def empty_kg_jsonld(tmp_path) -> Path:
         json.dumps(
             {
                 "@context": {
-                    "@vocab": "https://outshift-open.github.io/oxp-ontology/kg-artifact#",
-                    "mas": "https://outshift-open.github.io/oxp-ontology/mas#",
-                    "maskg": "https://outshift-open.github.io/oxp-ontology/kg#",
+                    "@vocab": "https://ioc-project.github.io/scope-ontology/kg-artifact#",
+                    "mas": "https://ioc-project.github.io/scope-ontology/mas#",
+                    "maskg": "https://ioc-project.github.io/scope-ontology/kg#",
                 },
                 "nodes": [],
                 "edges": [],
@@ -141,7 +141,7 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
         with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         result = excinfo.value.report
         assert result["error_count"] >= 1
         assert any("inbound containment or ownership edge" in r["detail"] for r in result["results"])  # noqa: E501
@@ -183,7 +183,7 @@ class TestRunValidateKgStructuralChecks:
             checks=["unknown_node_types", "unknown_edge_types", "shacl"],
         )
         assert len(result["results"]) == 3
-        # SHACL may be skipped if oxp-ontology isn't installed (CI env)
+        # SHACL may be skipped if ioc-scope-ontology isn't installed (CI env)
         # so accept either "pass" or "skipped" for the shacl check
         for r in result["results"]:
             if r["check"] == "shacl":
@@ -246,8 +246,8 @@ class TestRunValidateKgStructuralChecks:
         checks = {row["check"] for row in result["results"]}
         assert "shacl" in checks
 
-    def test_shacl_executes_against_oxp_ontology(self, tmp_path):
-        """SHACL must load oxp-ontology shapes without a PropertyShape crash."""
+    def test_shacl_executes_against_scope_ontology(self, tmp_path):
+        """SHACL must load SCOPE shapes without a PropertyShape crash."""
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
         doc = {
@@ -257,7 +257,7 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
         try:
-            result = run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+            result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         except KGValidationError as exc:
             result = exc.report
         shacl_rows = [r for r in result["results"] if r["check"] == "shacl"]
@@ -291,7 +291,7 @@ class TestRunValidateKgStructuralChecks:
         p.write_text(json.dumps(doc))
 
         with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         result = excinfo.value.report
         assert result["error_count"] == 1
         assert any("maslab:appName" in r["detail"] for r in result["results"])
@@ -327,7 +327,7 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
 
-        result = run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+        result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         assert result["error_count"] == 0
         assert result["results"] == [{"check": "shacl", "status": "pass", "detail": ""}]
 
@@ -362,7 +362,7 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
 
-        result = run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path(), warning_verbosity="full")  # noqa: E501
+        result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full")  # noqa: E501
         session_callid_errors = [
             row
             for row in result["results"]
@@ -404,7 +404,7 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
 
-        result = run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path(), warning_verbosity="full")  # noqa: E501
+        result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full")  # noqa: E501
         forbidden_session_attrs = {"callId", "runId", "executionId", "startTime", "endTime"}
         inherited_rows = [
             row for row in result["results"]
@@ -433,7 +433,7 @@ class TestRunValidateKgStructuralChecks:
             run_validate_kg(
                 p,
                 checks=["shacl"],
-                ontology_path=_oxp_ontology_path(),
+                ontology_path=_scope_ontology_path(),
             )
         result = excinfo.value.report
 
@@ -482,7 +482,7 @@ class TestRunValidateKgStructuralChecks:
         p.write_text(json.dumps(doc))
 
         with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         result = excinfo.value.report
 
         session_state_errors = [
@@ -528,7 +528,7 @@ class TestRunValidateKgStructuralChecks:
             run_validate_kg(
                 p,
                 checks=["shacl"],
-                ontology_path=_oxp_ontology_path(),
+                ontology_path=_scope_ontology_path(),
             )
         result = excinfo.value.report
 
@@ -562,7 +562,7 @@ class TestRunValidateKgStructuralChecks:
         p.write_text(json.dumps(doc))
 
         with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         result = excinfo.value.report
 
         assert result["error_count"] >= 1
@@ -585,7 +585,7 @@ class TestRunValidateKgStructuralChecks:
         p.write_text(json.dumps(doc))
 
         with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_oxp_ontology_path())
+            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         result = excinfo.value.report
 
         assert result["error_count"] >= 1

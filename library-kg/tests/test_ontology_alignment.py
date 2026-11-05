@@ -15,10 +15,10 @@ def test_skill_execution_maps_to_skill_call() -> None:
     assert KIND_TO_CLASS["skill_execution_end"] == "SkillCall"
     if not KNOWN_NODE_TYPES:
         # KNOWN_NODE_TYPES is parsed from the real ontology TTL (see
-        # core/verifier.py's _OntologyIndex) -- empty means oxp_ontology
+        # core/verifier.py's _OntologyIndex) -- empty means scope_ontology
         # or rdflib isn't installed, not that the alignment is actually
         # broken.
-        pytest.importorskip("oxp_ontology")
+        pytest.importorskip("scope_ontology")
         pytest.importorskip("rdflib")
     assert "SkillCall" in KNOWN_NODE_TYPES
 
@@ -108,7 +108,7 @@ def test_session_trajectory_anchors_use_state_transition_chain() -> None:
         },
     ]
 
-    nodes, edges = extract_graph(normalized)
+    nodes, edges = extract_graph(normalized, all_attributes=True)
     transitions = {
         node["transitionId"]: node for node in nodes if node.get("node_type") == "Transition"
     }
@@ -299,7 +299,7 @@ def test_edges_reference_nodes_by_their_final_id_not_a_stale_pre_rewrite_id() ->
         },
     ]
 
-    nodes, edges = extract_graph(normalized)
+    nodes, edges = extract_graph(normalized, all_attributes=True)
 
     # The rewrite actually happened -- a node's final id must differ from
     # its raw callId, otherwise this test would trivially pass either way.

@@ -9,20 +9,18 @@ name = "mas-lab-library-kg"
 version = "0.2.0"
 description = "MAS Lab trace normalization and knowledge-graph validation algorithms."
 requires-python = ">=3.10"
-# Ontology TTL + generated KG models come from PyPI oxp-ontology.
-# OTel→KG dispatch lives in `norm` (optional extra; git stopgap until published).
-# 1.0.0 doesn't declare AgentCall/LLMCall/ToolCall/Session.success, which
-# norm's own handlers construct unconditionally (extra="forbid" makes that a
-# hard failure norm.normalize() can't recover from); fixed in 1.0.1.
+# Ontology TTL + generated KG models come from SCOPE
+# (https://github.com/ioc-project/scope, package ioc-scope-ontology).
+# OTel→KG dispatch lives in `norm` (optional extra; git until published).
 dependencies = [
-  "oxp-ontology[models]>=1.0.1",
+  "ioc-scope-ontology[models]>=1.1.0",
 ]
 
 [project.optional-dependencies]
-# Canonical ontology package (PyPI). Also a required dependency above; kept as
+# Canonical SCOPE ontology. Also a required dependency above; kept as
 # an extra so existing `mas-lab-library-kg[ontology]` installs keep working.
 ontology = [
-  "oxp-ontology[models]>=1.0.1",
+  "ioc-scope-ontology[models]>=1.1.0",
 ]
 # Ontology-driven normalization + KG structural/SHACL validation (parses RDF/TTL).
 graph = [
@@ -31,7 +29,7 @@ graph = [
 ]
 # Full KG validation stack.
 validation = [
-  "oxp-ontology[models]>=1.0.1",
+  "ioc-scope-ontology[models]>=1.1.0",
   "rdflib>=6.0.0",
   "pyshacl>=0.25.0",
 ]
@@ -56,12 +54,11 @@ bench = [
 plot = [
   "mas-lab-component-bench",
 ]
-# Temporary until oxp-norm / norm is published to PyPI.
-# The PyPI name `norm` is already taken (unrelated SQL package, currently 1.6.0),
-# so the published distribution will likely be `oxp-norm`. This extra pulls the
-# observe-and-explain-platform `backend/norm` package from git in the meantime.
+# Temporary until `norm` is published under a SCOPE name. The PyPI name
+# `norm` is already taken (unrelated SQL package). This extra pulls
+# SCOPE `backend/norm` from git.
 norm = [
-  "norm @ git+https://github.com/outshift-open/observe-and-explain-platform.git@main#subdirectory=backend/norm",
+  "norm @ git+https://github.com/ioc-project/scope.git@main#subdirectory=backend/norm",
 ]
 # observability/path_equivalence.py's native-vs-OTel-via-norm comparator
 # lazily imports mas.library.telemetry (the emitter side) to synthesize the
@@ -81,7 +78,7 @@ dev = [
   "pytest-asyncio>=0.21",
   "click>=8.0",
   "ruff>=0.12.10",
-  "oxp-ontology[models]>=1.0.1",
+  "ioc-scope-ontology[models]>=1.1.0",
   "rdflib>=6.0.0",
   "pyshacl>=0.25.0",
   "jsonschema>=4.0.0",
@@ -128,8 +125,8 @@ show_missing = true
 packages = ["src/mas"]
 
 [tool.hatch.metadata]
-# Required so the temporary git+subdirectory `norm` extra can be declared.
-# Remove when oxp-norm is published to PyPI.
+# Required so the git+subdirectory SCOPE extras can be declared.
+# Remove when ioc-scope-ontology and norm are on PyPI.
 allow-direct-references = true
 
 [project.entry-points."mas.runtime.manifest_libraries"]
@@ -142,6 +139,7 @@ kg = "mas.library.kg"
 "schemas/events.spec.yaml" = "mas/library/kg/schemas/events.spec.yaml"
 "ontology/extensions/mas-kg-native-extensions.ttl" = "mas/library/kg/ontology_extensions/mas-kg-native-extensions.ttl"
 
-# Temporary until oxp-norm/norm is published. See [project.optional-dependencies] norm.
+# Temporary until SCOPE packages are on PyPI.
 [tool.uv.sources]
-norm = { git = "https://github.com/outshift-open/observe-and-explain-platform.git", subdirectory = "backend/norm" }
+ioc-scope-ontology = { git = "https://github.com/ioc-project/scope.git", subdirectory = "ontology" }
+norm = { git = "https://github.com/ioc-project/scope.git", subdirectory = "backend/norm" }

@@ -64,7 +64,9 @@ def list_available_checks() -> List[Dict[str, Any]]:
         ),
         "layer_vocabulary": "Only State and Transition nodes may carry a layer value.",
         "orphaned_edges": "All edges must reference existing endpoint node IDs in the current KG.",
-        "experiment_extension": "Validate optional experiment/scenario/testItem/runLabel extension on Session.",
+        "experiment_extension": (
+            "Validate optional experiment/scenario/testItem/runLabel extension on Session."
+        ),
         "shacl": "Run SHACL validation using canonical ontology and SHACL shapes.",
     }
     return [
@@ -101,7 +103,7 @@ def run_validate_kg(
         artifact: The KG to validate.  Accepts a :class:`KGArtifact`, a path
             string, or a :class:`~pathlib.Path` to a ``kg.jsonld`` file.
         ontology_path: Optional path to ``mas-ontology.ttl``.  If omitted,
-            resolved via ``oxp_ontology`` or vendored copy.
+            resolved via ``scope_ontology``.
         strict: Treat recommended-attribute gaps as errors.
         checks: Optional subset of check names to run.  If *None*, all checks
             run. Available: ``unknown_node_types``, ``unknown_edge_types``,
@@ -155,7 +157,7 @@ def run_validate_kg(
         raise ValueError("warning_verbosity must be one of: 'full', 'summary', 'none'")
     # Resolved lazily, inside the per-check try/except below, only when the
     # "shacl" check actually runs -- it's the only check that needs it. A
-    # missing oxp_ontology/rdflib must not crash every OTHER check (and
+    # missing scope_ontology/rdflib must not crash every OTHER check (and
     # must still respect strict), which an eager resolution here would have
     # bypassed entirely.
 
@@ -194,7 +196,7 @@ def run_validate_kg(
                 try:
                     resolved_ontology_path = resolve_mas_ontology_path(ontology_path)
                 except ImportError:
-                    # oxp_ontology not installed. run_shacl_validation
+                    # scope_ontology not installed. run_shacl_validation
                     # already degrades gracefully on its own (its own
                     # pyshacl/rdflib import check) and resolves SHACL shapes
                     # independently of this value -- it's only a fallback

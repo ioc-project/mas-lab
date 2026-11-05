@@ -58,6 +58,12 @@ from mas.library.kg.core.state_transition import synthesize_states_and_transitio
 
 logger = logging.getLogger(__name__)
 
+_SUCCESS_STATUS = frozenset({"ok", "success", "true", "completed"})
+
+
+def _status_is_success(status: Any) -> bool:
+    return str(status or "success").strip().lower() in _SUCCESS_STATUS
+
 
 def _timestamp_sorted(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Causal order for interleaved cached traces (stable on equal timestamps)."""
@@ -88,10 +94,12 @@ class NativeGraphBuilder:
         run_id: str = "",
         *,
         include_infrastructure: bool = False,
-        include_trajectory: bool = True,
+        include_trajectory: bool = False,
         include_provenance: bool = False,
         include_governance: bool = False,
         include_annotation: bool = False,
+        include_native_extensions: bool = False,
+        all_attributes: bool = False,
         strict: bool = False,
         session_id_override: Optional[str] = None,
         split_session_id: bool = True,
@@ -113,6 +121,8 @@ class NativeGraphBuilder:
         self.app_name_override = app_name_override
         self.application_node = application_node
         self.rewrite_tool_delegation = bool(rewrite_tool_delegation)
+        self.include_native_extensions = bool(include_native_extensions)
+        self.all_attributes = bool(all_attributes)
         self._rewritten_delegate_ids: set[str] = set()
         self._delegated_agent_ids: set[str] = set()
         self._resume_pending: Dict[str, str] = {}
@@ -124,6 +134,7 @@ class NativeGraphBuilder:
             include_provenance=include_provenance,
             include_governance=include_governance,
             include_annotation=include_annotation,
+            include_native_extensions=include_native_extensions,
         )
         self._gaps = _GapDedup(run_id)
 
@@ -222,7 +233,9 @@ class NativeGraphBuilder:
             source_ids.append(span_id)
 
         if kind.endswith("_end"):
-            node["status"] = event.get("status", "success")
+            status = event.get("status", "success")
+            node["status"] = status
+            node["success"] = _status_is_success(status)
 
         return node
 
@@ -235,6 +248,8 @@ class NativeGraphBuilder:
             if str(node.get("callId") or "") == current:
                 node["endTime"] = event.get("timestamp")
                 node.setdefault("outputRaw", event.get("tool_name") or "delegate")
+                node.setdefault("status", "success")
+                node["success"] = True
                 break
         self._resume_pending[agent_id] = current
         self._active_exec.pop(agent_id, None)
@@ -590,9 +605,7 @@ class NativeGraphBuilder:
             top_level_transitions = [
                 t
                 for t in session_transitions
-                if not call_node_by_call_id.get(t.get("realizesCallId", ""), {}).get(
-                    "parentCallId"
-                )
+                if not call_node_by_call_id.get(t.get("realizesCallId", ""), {}).get("parentCallId")
             ]
             ordered = sorted(
                 top_level_transitions or session_transitions,
@@ -659,9 +672,10 @@ class NativeGraphBuilder:
             e["canonicalId"] = _edge_canonical_id(e, node_by_local_id)
 
         from mas.library.kg.core.ontology_align import align_graph
-        from mas.library.kg.core.oxp_models import map_graph
+        from mas.library.kg.core.oxp_models import map_graph, restrict_graph
 
-        return map_graph(*align_graph(nodes, edges))
+        mapped_nodes, mapped_edges = map_graph(*align_graph(nodes, edges))
+        return restrict_graph(mapped_nodes, mapped_edges, all_attributes=self.all_attributes)
 
 
 def build_graph_from_normalized(
@@ -671,6 +685,8 @@ def build_graph_from_normalized(
     split_session_id: bool = True,
     app_name_override: Optional[str] = None,
     application_node: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Build (nodes, edges) from an already-``normalize_events``-annotated list.
 
@@ -682,6 +698,8 @@ def build_graph_from_normalized(
         split_session_id=split_session_id,
         app_name_override=app_name_override,
         application_node=application_node,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
     )
     for ev in _timestamp_sorted(normalized):
         builder.process_event(ev)
@@ -694,10 +712,12 @@ def build_graph_batch(
     run_id: str,
     *,
     include_infrastructure: bool = False,
-    include_trajectory: bool = True,
+    include_trajectory: bool = False,
     include_provenance: bool = False,
     include_governance: bool = False,
     include_annotation: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
     strict: bool = False,
     session_id_override: Optional[str] = None,
     split_session_id: bool = True,
@@ -719,6 +739,7 @@ def build_graph_batch(
         include_provenance=include_provenance,
         include_governance=include_governance,
         include_annotation=include_annotation,
+        include_native_extensions=include_native_extensions,
         strict=strict,
     )
     return build_graph_from_normalized(
@@ -727,6 +748,8 @@ def build_graph_batch(
         split_session_id=split_session_id,
         app_name_override=app_name_override,
         application_node=application_node,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
     )
 
 

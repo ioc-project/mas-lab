@@ -278,6 +278,7 @@ class TestRunNormalize:
             run_id="trip-planner/exp-a/baseline/item1/r1",
             output_dir=tmp_path,
             dry_run=True,
+            all_attributes=True,
         )
         session = next(n for n in artifact.nodes if n.get("node_type") == "Session")
         assert session.get("appName") == "trip-planner"

@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Dict, List
 
-_MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
+from mas.library.kg.core.oxp_models import mas_namespace
+
+_MAS_NS = mas_namespace()
 
 if TYPE_CHECKING:
     from mas.library.kg.core.native_graph_builder import NativeGraphBuilder
@@ -179,27 +181,49 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         node.setdefault("temperature", 0.0)
         return new_nodes
 
-    # llm_call_end
+    # llm_call_end — runtime traces put usage/model/finish_reason at the
+    # top level (`tokens_used`, `model`, `finish_reason`); OpenAI-shaped
+    # `response` is also accepted.
     resp: Dict[str, Any] = event.get("response") or {}
+    if not isinstance(resp, dict):
+        resp = {}
     flat_out = str(event.get("content") or event.get("output") or "").strip()
-    if isinstance(resp, dict) and resp:
-        usage: Dict[str, Any] = resp.get("usage") or {}
+    usage: Dict[str, Any] = {}
+    top_usage = event.get("tokens_used")
+    if isinstance(top_usage, dict):
+        usage.update(top_usage)
+    if resp.get("usage") and isinstance(resp["usage"], dict):
+        usage.update({k: v for k, v in resp["usage"].items() if v not in (None, "")})
+    if resp:
         node.setdefault("toolCalls", _extract_tool_calls_structured(resp))
         node.setdefault("completion", _extract_completion(resp))
-        node["promptTokenCount"] = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
-        node["completionTokenCount"] = usage.get("completion_tokens") or usage.get("output_tokens") or 0
-        node["totalTokenCount"] = usage.get("total_tokens") or 0
-        node.setdefault("cacheReadTokenCount", usage.get("cache_read_input_tokens") or 0)
-        node.setdefault("modelName", resp.get("model", ""))
         node.setdefault("responseId", resp.get("id", "") or "")
-        node.setdefault("finishReason", _extract_finish_reason(resp) or "")
         node.setdefault("temperature", event.get("temperature") or 0.0)
     elif flat_out:
         node.setdefault("completion", flat_out)
+    if usage:
+        node["promptTokenCount"] = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+        node["completionTokenCount"] = (
+            usage.get("completion_tokens") or usage.get("output_tokens") or 0
+        )
+        node["totalTokenCount"] = usage.get("total_tokens") or 0
+        node.setdefault("cacheReadTokenCount", usage.get("cache_read_input_tokens") or 0)
+    model = str(event.get("model") or resp.get("model") or node.get("modelName") or "")
+    if model:
+        if "/" in model:
+            provider, name = model.split("/", 1)
+            node["provider"] = provider or node.get("provider") or "unknown"
+            node["modelName"] = name or model
+        else:
+            node.setdefault("provider", node.get("provider") or "unknown")
+            node["modelName"] = model
+    finish = str(event.get("finish_reason") or _extract_finish_reason(resp) or "")
+    if finish:
+        node["finishReason"] = finish
 
     # thinking/reasoning trace is nested under response.thinking
     thinking_text = (event.get("response") or {}).get("thinking") or ""
-    if thinking_text:
+    if thinking_text and getattr(builder, "include_native_extensions", False):
         call_id = node["callId"]
         llm_start = float(node.get("startTime") or 0)
         llm_end = float(event.get("timestamp") or 0)

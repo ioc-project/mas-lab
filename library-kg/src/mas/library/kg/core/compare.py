@@ -7,7 +7,8 @@ Uses only stdlib (collections, logging).
 
 Public API
 ----------
-compare_kg(candidate, reference, *, strict) → KGCompareResult
+compare_kg(candidate, reference, *, strict, strict_nodes, strict_edges,
+           strict_node_attributes, strict_edge_attributes) → KGCompareResult
 Individual check functions are also public for targeted use.
 """
 
@@ -32,6 +33,8 @@ __all__ = [
     "check_tool_coverage",
     "check_delegation_topology",
     "check_element_diff",
+    "check_node_attributes",
+    "check_edge_attributes",
     "_element_level_diff",
 ]
 
@@ -73,6 +76,11 @@ _VOLATILE_FIELDS = frozenset(
         "start_time",
         "end_time",
         "duration_ms",
+        "parentSpanId",
+        "parent_span_id",
+        "canonicalId",
+        "@type",
+        "masUri",
     }
 )
 
@@ -134,7 +142,10 @@ def _edge_target(edge: Dict[str, Any]) -> str:
 def _agent_ids(nodes: List[Dict[str, Any]]) -> Set[str]:
     ids: Set[str] = set()
     for n in nodes:
+        ntype = _node_type(n)
         aid = n.get("agentId") or n.get("agent_id")
+        if not aid and ntype in {"Agent", "AgentCall"}:
+            aid = n.get("name") or n.get("agentName")
         if aid:
             ids.add(str(aid))
     return ids
@@ -143,8 +154,13 @@ def _agent_ids(nodes: List[Dict[str, Any]]) -> Set[str]:
 def _tool_names(nodes: List[Dict[str, Any]]) -> Set[str]:
     names: Set[str] = set()
     for n in nodes:
-        if _node_type(n) == "ToolCall":
-            tn = n.get("toolName") or n.get("tool_name")
+        ntype = _node_type(n)
+        if ntype == "ToolCall":
+            tn = n.get("toolName") or n.get("tool_name") or n.get("name")
+            if tn:
+                names.add(str(tn))
+        elif ntype == "Tool":
+            tn = n.get("name")
             if tn:
                 names.add(str(tn))
     return names
@@ -243,8 +259,14 @@ def check_agent_coverage(
 def check_node_distribution(
     candidate_nodes: List[Dict[str, Any]],
     reference_nodes: List[Dict[str, Any]],
+    *,
+    strict: bool = False,
 ) -> Dict[str, Any]:
-    """Check that candidate has at least as many nodes of each type as reference."""
+    """Check node-type counts.
+
+    Default (``strict=False``): candidate has at least as many of each type
+    as reference. ``strict=True``: counts must be equal (no extras).
+    """
     ref_dist = Counter(_node_type(n) for n in reference_nodes)
     cand_dist = Counter(_node_type(n) for n in candidate_nodes)
     deficits = {
@@ -252,20 +274,34 @@ def check_node_distribution(
         for ntype in ref_dist
         if cand_dist.get(ntype, 0) < ref_dist[ntype]
     }
+    extras = {
+        ntype: (cand_dist[ntype] - ref_dist.get(ntype, 0))
+        for ntype in cand_dist
+        if cand_dist[ntype] > ref_dist.get(ntype, 0)
+    }
+    passed = len(deficits) == 0 and (not strict or len(extras) == 0)
     return {
         "name": "node_distribution",
-        "passed": len(deficits) == 0,
+        "passed": passed,
         "reference": dict(ref_dist),
         "candidate": dict(cand_dist),
         "deficits": deficits,
+        "extras": extras,
+        "strict": strict,
     }
 
 
 def check_edge_distribution(
     candidate_edges: List[Dict[str, Any]],
     reference_edges: List[Dict[str, Any]],
+    *,
+    strict: bool = False,
 ) -> Dict[str, Any]:
-    """Check that candidate has at least as many edges of each type as reference."""
+    """Check edge-type counts.
+
+    Default (``strict=False``): candidate has at least as many of each type
+    as reference. ``strict=True``: counts must be equal (no extras).
+    """
     ref_dist = Counter(_edge_type(e) for e in reference_edges)
     cand_dist = Counter(_edge_type(e) for e in candidate_edges)
     deficits = {
@@ -273,12 +309,20 @@ def check_edge_distribution(
         for etype in ref_dist
         if cand_dist.get(etype, 0) < ref_dist[etype]
     }
+    extras = {
+        etype: (cand_dist[etype] - ref_dist.get(etype, 0))
+        for etype in cand_dist
+        if cand_dist[etype] > ref_dist.get(etype, 0)
+    }
+    passed = len(deficits) == 0 and (not strict or len(extras) == 0)
     return {
         "name": "edge_distribution",
-        "passed": len(deficits) == 0,
+        "passed": passed,
         "reference": dict(ref_dist),
         "candidate": dict(cand_dist),
         "deficits": deficits,
+        "extras": extras,
+        "strict": strict,
     }
 
 
@@ -372,29 +416,126 @@ def check_element_diff(
 # the `mas-lab kg` CLI (was mas.lab.graph.steps.compare_kg._element_level_diff).
 _element_level_diff = check_element_diff
 
+_STRUCTURAL_KEYS = frozenset(
+    {
+        "id",
+        "node_type",
+        "nodeType",
+        "@type",
+        "type",
+        "edge_type",
+        "edgeType",
+        "from_id",
+        "to_id",
+        "source",
+        "target",
+        "from",
+        "to",
+        "source_id",
+        "target_id",
+    }
+)
+
+
+def _attribute_keys(items: List[Dict[str, Any]]) -> Set[str]:
+    skip = _VOLATILE_FIELDS | _STRUCTURAL_KEYS
+    keys: Set[str] = set()
+    for item in items:
+        keys.update(key for key in item if key not in skip)
+    return keys
+
+
+def check_node_attributes(
+    candidate_nodes: List[Dict[str, Any]],
+    reference_nodes: List[Dict[str, Any]],
+    *,
+    strict: bool = False,
+) -> Dict[str, Any]:
+    """Compare non-identity node attribute keys.
+
+    ``strict=True``: candidate and reference must have the same key set.
+    ``strict=False``: candidate may have extra keys; missing keys fail.
+    """
+    ref_keys = _attribute_keys(reference_nodes)
+    cand_keys = _attribute_keys(candidate_nodes)
+    missing = sorted(ref_keys - cand_keys)
+    extra = sorted(cand_keys - ref_keys)
+    passed = not missing and (not strict or not extra)
+    return {
+        "name": "node_attributes",
+        "passed": passed,
+        "reference_keys": sorted(ref_keys),
+        "candidate_keys": sorted(cand_keys),
+        "missing": missing,
+        "extra": extra,
+        "strict": strict,
+    }
+
+
+def check_edge_attributes(
+    candidate_edges: List[Dict[str, Any]],
+    reference_edges: List[Dict[str, Any]],
+    *,
+    strict: bool = False,
+) -> Dict[str, Any]:
+    """Compare non-identity edge attribute keys."""
+    ref_keys = _attribute_keys(reference_edges)
+    cand_keys = _attribute_keys(candidate_edges)
+    missing = sorted(ref_keys - cand_keys)
+    extra = sorted(cand_keys - ref_keys)
+    passed = not missing and (not strict or not extra)
+    return {
+        "name": "edge_attributes",
+        "passed": passed,
+        "reference_keys": sorted(ref_keys),
+        "candidate_keys": sorted(cand_keys),
+        "missing": missing,
+        "extra": extra,
+        "strict": strict,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Top-level comparison function
 # ---------------------------------------------------------------------------
 
 
+def _flag(value: bool | None, default: bool) -> bool:
+    return default if value is None else bool(value)
+
+
 def compare_kg(
     candidate: Dict[str, Any],
     reference: Dict[str, Any],
     *,
-    strict: bool = False,
+    strict: bool = True,
+    strict_nodes: bool | None = None,
+    strict_edges: bool | None = None,
+    strict_node_attributes: bool | None = None,
+    strict_edge_attributes: bool | None = None,
 ) -> KGCompareResult:
     """Compare two kg.jsonld documents structurally.
 
     Args:
         candidate: KG produced by the system under test.
         reference: Ground-truth KG (e.g. from OTel normalization).
-        strict:    When True, element_level_diff failures also count as failures.
-                   Default False (structural checks 1–6 only).
+        strict:    Default True. Sets the four ``strict_*`` knobs when they
+                   are omitted. Extra nodes / edges / attributes on the
+                   candidate fail. ``element_level_diff`` (raw ids) is
+                   always reported and does not count toward ``passed``.
+        strict_nodes: Equal node-type counts. Default follows *strict*.
+        strict_edges: Equal edge-type counts. Default follows *strict*.
+        strict_node_attributes: Equal non-identity node keys. Default follows *strict*.
+        strict_edge_attributes: Equal non-identity edge keys. Default follows *strict*.
 
     Returns:
         :class:`KGCompareResult` with per-check results and overall pass/fail.
     """
+    sn = _flag(strict_nodes, strict)
+    se = _flag(strict_edges, strict)
+    sna = _flag(strict_node_attributes, strict)
+    sea = _flag(strict_edge_attributes, strict)
+
     cand_nodes = candidate.get("nodes") or []
     cand_edges = candidate.get("edges") or []
     ref_nodes = reference.get("nodes") or []
@@ -402,16 +543,27 @@ def compare_kg(
 
     checks: List[Dict[str, Any]] = [
         check_agent_coverage(cand_nodes, ref_nodes),
-        check_node_distribution(cand_nodes, ref_nodes),
-        check_edge_distribution(cand_edges, ref_edges),
+        check_node_distribution(cand_nodes, ref_nodes, strict=sn),
+        check_edge_distribution(cand_edges, ref_edges, strict=se),
         check_call_depth(cand_nodes, cand_edges, ref_nodes, ref_edges),
         check_tool_coverage(cand_nodes, ref_nodes),
         check_delegation_topology(cand_nodes, cand_edges, ref_nodes, ref_edges),
+        check_node_attributes(cand_nodes, ref_nodes, strict=sna),
+        check_edge_attributes(cand_edges, ref_edges, strict=sea),
         check_element_diff(cand_nodes, cand_edges, ref_nodes, ref_edges),
     ]
 
-    structural_checks = [c for c in checks if c["name"] != "element_level_diff"]
-    all_passed = all(c["passed"] for c in (checks if strict else structural_checks))
+    counting = {
+        "agent_coverage",
+        "node_distribution",
+        "edge_distribution",
+        "call_depth",
+        "tool_coverage",
+        "delegation_topology",
+        "node_attributes",
+        "edge_attributes",
+    }
+    all_passed = all(c["passed"] for c in checks if c["name"] in counting)
 
     summary = {
         "total_checks": len(checks),

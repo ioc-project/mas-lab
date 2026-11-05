@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Align a KG dict graph onto oxp-ontology instance contracts.
+"""Align a KG dict graph onto SCOPE instance contracts.
 
 Native builders historically used Neo4j-style edge names (``contains``,
 ``hasCall``, ``realizes``). SCOPE ``norm`` copies class ``:layer`` annotations
@@ -69,6 +69,13 @@ def _agent_id_from_node(node: Dict[str, Any]) -> str:
     name = str(node.get("name") or "")
     match = _AGENT_CALL_NAME.match(name)
     return match.group(1) if match else ""
+
+
+def _span_key(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text.startswith("0x"):
+        text = text[2:]
+    return text
 
 
 def _tool_name_from_node(node: Dict[str, Any]) -> str:
@@ -228,7 +235,14 @@ def align_node_fields(node: Dict[str, Any]) -> Dict[str, Any]:
         "Capability",
     }:
         out.setdefault("declared", False)
-        out.setdefault("description", out.get("name"))
+        if not out.get("description"):
+            out["description"] = out.get("name")
+    if ntype == "Agent":
+        recovered = str(out.get("agentId") or out.get("name") or "")
+        if recovered.startswith("catalog:"):
+            recovered = recovered.rsplit(":", 1)[-1]
+        if recovered:
+            out.setdefault("agentId", recovered)
     if ntype in {"Tool", "LLM", "Skill", "Processing", "MAS", "Capability", "Agent"}:
         name = str(out.get("name") or out.get("agentId") or ntype)
         old = str(out.get("id") or "")
@@ -330,7 +344,6 @@ def ensure_oxp_topology(
     edges: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """Add required Session/MAS/Agent/LLM typing and trajectory inverses."""
-    by_id = _index_nodes(nodes)
     seen = {_edge_tuple(e) for e in edges}
     session = _first_of_type(nodes, "Session")
     mas_call = _first_of_type(nodes, "MASCall")
@@ -341,7 +354,6 @@ def ensure_oxp_topology(
     mas = _first_of_type(nodes, "MAS")
     if mas is None:
         mas = _ensure_catalog(nodes, "MAS", app_name)
-        by_id = _index_nodes(nodes)
 
     if session is not None and mas is not None:
         _add_edge(edges, seen, "executesSession", str(session.get("id")), str(mas.get("id")))
@@ -447,12 +459,6 @@ def ensure_oxp_topology(
 
     # Norm stores AgentCall↔child links as parentSpanId (no hasLLMCall /
     # hasToolCall edges). Project those so SHACL sees the same tree.
-    def _span_key(value: Any) -> str:
-        text = str(value or "").strip().lower()
-        if text.startswith("0x"):
-            text = text[2:]
-        return text
-
     by_span: Dict[str, Dict[str, Any]] = {}
     for node in nodes:
         span = _span_key(node.get("spanId") or node.get("span_id"))

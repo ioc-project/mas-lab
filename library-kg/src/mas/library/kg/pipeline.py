@@ -90,10 +90,12 @@ def build_kg_document(
     run_id: str,
     ontology_path: str | Path | None = None,
     include_infrastructure: bool = False,
-    include_trajectory: bool = True,
+    include_trajectory: bool = False,
     include_provenance: bool = False,
     include_governance: bool = False,
     include_annotation: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
     split_session_id: bool = True,
     app_name: str | None = None,
     application_node: bool = False,
@@ -112,17 +114,23 @@ def build_kg_document(
         Run / session identifier written into every node.
     ontology_path : str | Path | None
         Path to mas-ontology.ttl.  ``None`` → auto-resolved from the
-        ``oxp_ontology`` package.
+        ``scope_ontology`` package.
     include_infrastructure : bool, default False
         Worker / endpoint presence events.
-    include_trajectory : bool, default True
-        Parallel groups, branches, and routing annotations.
+    include_trajectory : bool, default False
+        Parallel groups, branches, and routing annotations (native
+        extensions; off to match SCOPE core).
     include_provenance : bool, default False
         Per-part context contributions (ContextContribution nodes).
     include_governance : bool, default False
         Policy, audit, and budget events.
     include_annotation : bool, default False
         Point CallAnnotation kinds. Off to match observe-sdk.
+    include_native_extensions : bool, default False
+        RAG, memory, and skill call kinds, plus ThinkingCall.
+    all_attributes : bool, default False
+        Keep native-only fields (callId, agentId, …). Default keeps the
+        SCOPE attribute set so native and OTel KGs match.
     strict : bool, default False
         Observability gaps (unmapped event kinds, missing call_id, …) are
         logged as warnings and skipped rather than raised, so a single
@@ -143,7 +151,7 @@ def build_kg_document(
         ttl_path = _resolve_ontology_path(ontology_path)
         ontology = _load_ontology(ttl_path)
     except ImportError as exc:
-        # oxp_ontology (the TTL source) or rdflib (to parse it) isn't
+        # scope_ontology (the TTL source) or rdflib (to parse it) isn't
         # installed -- both are optional extras (validation).
         # mas_class assignment comes entirely from the native KIND_TO_CLASS
         # mapping below, not from the ontology, so the KG's structure is
@@ -169,6 +177,7 @@ def build_kg_document(
         include_provenance=include_provenance,
         include_governance=include_governance,
         include_annotation=include_annotation,
+        include_native_extensions=include_native_extensions,
         strict=strict,
     )
     nodes, edges = extract_graph(
@@ -178,6 +187,8 @@ def build_kg_document(
         application_node=application_node,
         fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
         allow_heuristics=allow_heuristics,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
     )
     metadata: Dict[str, Any] = {
         "events": len(normalized),
@@ -190,7 +201,9 @@ def build_kg_document(
             "provenance": include_provenance,
             "governance": include_governance,
             "annotation": include_annotation,
+            "native_extensions": include_native_extensions,
         },
+        "all_attributes": all_attributes,
         "plot_events": extract_plot_events(events),
     }
     if include_normalization_provenance:
@@ -216,6 +229,7 @@ def build_kg_from_otel_spans(
     run_id: str,
     ontology_path: str | Path | None = None,
     include_normalization_provenance: bool = False,
+    all_attributes: bool = False,
     **_ignored: Any,
 ) -> Dict[str, Any]:
     """Convert OTel spans to a KG document via ``norm.normalize()``.
@@ -232,7 +246,7 @@ def build_kg_from_otel_spans(
 
     try:
         shape = detect_span_shape(spans)
-        nodes, edges = normalize_otel(spans)
+        nodes, edges = normalize_otel(spans, all_attributes=all_attributes)
     except ImportError as exc:
         logger.warning(
             "build_kg_from_otel_spans: norm is not installed (%s). "
@@ -276,10 +290,12 @@ def build_kg_from_events_path(
     run_id: str | None = None,
     ontology_path: str | Path | None = None,
     include_infrastructure: bool = False,
-    include_trajectory: bool = True,
+    include_trajectory: bool = False,
     include_provenance: bool = False,
     include_governance: bool = False,
     include_annotation: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
     split_session_id: bool = True,
     app_name: str | None = None,
     application_node: bool = False,
@@ -306,6 +322,8 @@ def build_kg_from_events_path(
         include_provenance=include_provenance,
         include_governance=include_governance,
         include_annotation=include_annotation,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
         split_session_id=split_session_id,
         app_name=app_name,
         application_node=application_node,

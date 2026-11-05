@@ -1,10 +1,10 @@
 # Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 # SPDX-License-Identifier: Apache-2.0
 #
-# MAS-Lab native-path classes not yet declared in PyPI oxp-ontology 1.0.0.
+# MAS-Lab native-path classes not yet declared in SCOPE (ioc-scope-ontology).
 # Core execution classes (Session, MASCall, AgentCall, LLMCall, ToolCall,
 # ProcessingCall, State, Transition, MAS, Agent, LLM, Tool, Processing) come
-# from oxp-ontology. These extension classes are pending upstream:
+# from SCOPE. These extension classes are pending upstream:
 #   RAGQuery, MemoryCall, SkillCall, Skill,
 #   CallAnnotation, ContextContribution, ParallelGroup, Branch,
 #   GovernanceEvent, Worker, Run, Application, ThinkingCall
@@ -12,82 +12,82 @@
 # They reuse the scope mas: namespace so KIND_TO_CLASS local names resolve
 # against the combined graph. Do not treat this file as a second ontology.
 
-@prefix mas: <https://outshift-open.github.io/oxp-ontology/mas#> .
+@prefix mas: <https://ioc-project.github.io/scope-ontology/mas#> .
 @prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-<https://outshift-open.github.io/oxp-ontology/mas-lab-native-extensions>
+<https://ioc-project.github.io/scope-ontology/mas-lab-native-extensions>
     rdf:type owl:Ontology ;
-    rdfs:label "MAS-Lab native-path KG extensions (pending oxp-ontology upstream)"@en ;
-    rdfs:comment "Temporary declarations for native events.jsonl classes missing from oxp-ontology 1.0.0. Remove each class from this file when it lands upstream."@en ;
+    rdfs:label "MAS-Lab native-path KG extensions (pending SCOPE upstream)"@en ;
+    rdfs:comment "Temporary declarations for native events.jsonl classes missing from SCOPE. Remove each class from this file when it lands upstream."@en ;
     owl:versionInfo "0.1.0" .
 
 mas:RAGQuery rdf:type owl:Class ;
     rdfs:subClassOf mas:CapabilityCall ;
     rdfs:label "RAGQuery"@en ;
-    rdfs:comment "Native-path retrieval-augmented generation call. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path retrieval-augmented generation call. Pending SCOPE upstream."@en .
 
 mas:MemoryCall rdf:type owl:Class ;
     rdfs:subClassOf mas:CapabilityCall ;
     rdfs:label "MemoryCall"@en ;
-    rdfs:comment "Native-path memory store/retrieve call. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path memory store/retrieve call. Pending SCOPE upstream."@en .
 
 mas:SkillCall rdf:type owl:Class ;
     rdfs:subClassOf mas:ProcessingCall ;
     rdfs:label "SkillCall"@en ;
-    rdfs:comment "Native-path skill execution call. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path skill execution call. Pending SCOPE upstream."@en .
 
 mas:Skill rdf:type owl:Class ;
     rdfs:subClassOf mas:Capability ;
     rdfs:label "Skill"@en ;
-    rdfs:comment "Catalog node for a named skill invoked by SkillCall. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Catalog node for a named skill invoked by SkillCall. Pending SCOPE upstream."@en .
 
 mas:CallAnnotation rdf:type owl:Class ;
     rdfs:subClassOf mas:Element ;
     rdfs:label "CallAnnotation"@en ;
-    rdfs:comment "Native-path annotation attached to a call (routing, context, checkpoints). Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path annotation attached to a call (routing, context, checkpoints). Pending SCOPE upstream."@en .
 
 mas:ContextContribution rdf:type owl:Class ;
     rdfs:subClassOf mas:Element ;
     rdfs:label "ContextContribution"@en ;
-    rdfs:comment "Native-path per-part context provenance. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path per-part context provenance. Pending SCOPE upstream."@en .
 
 mas:ParallelGroup rdf:type owl:Class ;
     rdfs:subClassOf mas:TrajectoryElement ;
     rdfs:label "ParallelGroup"@en ;
-    rdfs:comment "Native-path parallel fan-out group. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path parallel fan-out group. Pending SCOPE upstream."@en .
 
 mas:Branch rdf:type owl:Class ;
     rdfs:subClassOf mas:TrajectoryElement ;
     rdfs:label "Branch"@en ;
-    rdfs:comment "Native-path branch inside a parallel group. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path branch inside a parallel group. Pending SCOPE upstream."@en .
 
 mas:GovernanceEvent rdf:type owl:Class ;
     rdfs:subClassOf mas:Element ;
     rdfs:label "GovernanceEvent"@en ;
-    rdfs:comment "Native-path policy, audit, budget, and HITL event. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path policy, audit, budget, and HITL event. Pending SCOPE upstream."@en .
 
 mas:Worker rdf:type owl:Class ;
     rdfs:subClassOf mas:StructuralElement ;
     rdfs:label "Worker"@en ;
-    rdfs:comment "Native-path infrastructure worker/endpoint. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path infrastructure worker/endpoint. Pending SCOPE upstream."@en .
 
 mas:Run rdf:type owl:Class ;
     rdfs:subClassOf mas:StructuralElement ;
     rdfs:label "Run"@en ;
-    rdfs:comment "Native-path experiment run grouping Sessions. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path experiment run grouping Sessions. Pending SCOPE upstream."@en .
 
 mas:Application rdf:type owl:Class ;
     rdfs:subClassOf mas:StructuralElement ;
     rdfs:label "Application"@en ;
-    rdfs:comment "Native-path application grouping Sessions. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path application grouping Sessions. Pending SCOPE upstream."@en .
 
 mas:ThinkingCall rdf:type owl:Class ;
     rdfs:subClassOf mas:ProcessingCall ;
     rdfs:label "ThinkingCall"@en ;
-    rdfs:comment "Native-path model thinking/reasoning span. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path model thinking/reasoning span. Pending SCOPE upstream."@en .
 
 mas:annotates rdf:type owl:ObjectProperty ;
     rdfs:label "annotates"@en ;
@@ -95,16 +95,16 @@ mas:annotates rdf:type owl:ObjectProperty ;
 
 mas:contributesTo rdf:type owl:ObjectProperty ;
     rdfs:label "contributesTo"@en ;
-    rdfs:comment "ContextContribution provenance edge. Pending oxp-ontology upstream."@en .
+    rdfs:comment "ContextContribution provenance edge. Pending SCOPE upstream."@en .
 
 mas:hasMemoryCall rdf:type owl:ObjectProperty ;
     rdfs:label "hasMemoryCall"@en ;
-    rdfs:comment "Containment of a MemoryCall. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Containment of a MemoryCall. Pending SCOPE upstream."@en .
 
 mas:hasSkillCall rdf:type owl:ObjectProperty ;
     rdfs:label "hasSkillCall"@en ;
-    rdfs:comment "Containment of a SkillCall. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Containment of a SkillCall. Pending SCOPE upstream."@en .
 
 mas:callsAgent rdf:type owl:ObjectProperty ;
     rdfs:label "callsAgent"@en ;
-    rdfs:comment "Native-path delegation from a ToolCall to an Agent. Pending oxp-ontology upstream."@en .
+    rdfs:comment "Native-path delegation from a ToolCall to an Agent. Pending SCOPE upstream."@en .

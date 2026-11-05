@@ -424,6 +424,8 @@ def _native_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[s
         include_provenance=complete,
         include_governance=complete,
         include_annotation=complete,
+        include_native_extensions=complete,
+        all_attributes=complete,
         fill_synthesized_processing_defaults=False,
     )
     return list(doc.get("nodes") or []), list(doc.get("edges") or [])
@@ -432,6 +434,7 @@ def _native_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[s
 def _otel_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     from mas.library.telemetry.conversion.layers import ExportLayers
     from mas.library.telemetry.conversion.replay import replay_events_file
+    from mas.library.telemetry.conversion.topology import derive_app_name
     import tempfile
     from pathlib import Path
     import json
@@ -452,6 +455,7 @@ def _otel_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[str
             converter_profile="observe_sdk",
             export_layers=layers,
             extensions=mode == "complete",
+            app_name=derive_app_name(events, fallback="mas"),
         )
         spans = [
             json.loads(line)
@@ -462,7 +466,7 @@ def _otel_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[str
         events_path.unlink(missing_ok=True)
         spans_path.unlink(missing_ok=True)
 
-    nodes, edges = normalize_otel(spans)
+    nodes, edges = normalize_otel(spans, all_attributes=mode == "complete")
     if mode == "complete":
         keep = DEFAULT_COMPARE_TYPES | {"Session", "MAS", "MASCall", "LLM"}
         core = [node for node in nodes if node_type(node) in keep]

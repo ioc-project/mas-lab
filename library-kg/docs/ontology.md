@@ -1,6 +1,6 @@
 # MAS knowledge graph ontology
 
-The ontology defines the node classes, edge types, attributes and constraints of the knowledge graph (KG) that `mas.library.kg` builds from a multi-agent system (MAS) run. It comes from the `oxp-ontology` package plus a MAS Lab extension file. Read it when you write queries, validate a KG, or add event kinds. Pipeline mechanics are in [normalization.md](normalization.md).
+The ontology defines the node classes, edge types, attributes and constraints of the knowledge graph (KG) that `mas.library.kg` builds from a multi-agent system (MAS) run. It comes from the SCOPE `ioc-scope-ontology` package plus a MAS Lab extension file. Read it when you write queries, validate a KG, or add event kinds. Pipeline mechanics are in [normalization.md](normalization.md).
 
 Smallest example: build a KG, then check it against the ontology.
 
@@ -34,12 +34,12 @@ The KG represents a MAS run as a property graph: typed nodes (what ran, what it 
 
 ### Where it lives
 
-There is no ontology module in `mas.library.kg`. The vocabulary comes from two places, both in the `https://outshift-open.github.io/oxp-ontology/mas#` namespace:
+There is no ontology module in `mas.library.kg`. The vocabulary comes from two places, both in the `https://ioc-project.github.io/scope-ontology/mas#` namespace:
 
 | Source | Contents |
 |---|---|
-| `oxp-ontology` (PyPI, a required dependency; part of SCOPE) | `mas-ontology.ttl` (core classes and properties), `mas-shapes.ttl` and `mas-shapes-custom.ttl` (SHACL shapes, the W3C constraint language for RDF graphs), and the generated Python models `oxp_ontology.models.*`. |
-| `library-kg/ontology/extensions/mas-kg-native-extensions.ttl` | Classes and properties the native `events.jsonl` path emits that `oxp-ontology` does not declare yet: `RAGQuery`, `MemoryCall`, `SkillCall`, `Skill`, `ThinkingCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`, `ParallelGroup`, `Branch`, `Worker`, `Run`, `Application`, and the properties `annotates`, `contributesTo`, `callsAgent`, `hasMemoryCall`, `hasSkillCall`. It is not a second ontology; entries are removed once they land in `oxp-ontology`. |
+| `ioc-scope-ontology` (SCOPE, a required dependency; git until PyPI) | `mas-ontology.ttl` (core classes and properties), `mas-shapes.ttl` and `mas-shapes-custom.ttl` (SHACL shapes, the W3C constraint language for RDF graphs), and the generated Python models `scope_ontology.models.*`. |
+| `library-kg/ontology/extensions/mas-kg-native-extensions.ttl` | Classes and properties the native `events.jsonl` path emits that SCOPE does not declare yet: `RAGQuery`, `MemoryCall`, `SkillCall`, `Skill`, `ThinkingCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`, `ParallelGroup`, `Branch`, `Worker`, `Run`, `Application`, and the properties `annotates`, `contributesTo`, `callsAgent`, `hasMemoryCall`, `hasSkillCall`. It is not a second ontology; entries are removed once they land in SCOPE. |
 
 `mas.library.kg.ontology` resolves the TTL paths. The validation step ([section 12](#12-verification)) loads both sources into one RDF graph.
 
@@ -81,14 +81,15 @@ A layer is a group of event kinds that is included or excluded as a unit (flags 
 
 | Layer | Tag | Default | Events | Node classes |
 |---|---|---|---|---|
-| Core | L0 | always on | `tool_call`, `network_call`, `llm_call`, `execution`, `mas_call`, `rag_query`, `memory_*`, `processing_call`, `workflow_transition`, `skill_execution` pairs | `Session`, `MASCall`, `AgentCall`, `TaskCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `SkillCall`, `MemoryCall`, `RAGQuery`, `ThinkingCall`, catalog nodes, `Run`, `Agent` |
+| Core | L0 | always on | `tool_call`, `network_call`, `llm_call`, `execution`, `mas_call`, `processing_call`, `workflow_transition` pairs | `Session`, `MASCall`, `AgentCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, catalog nodes |
 | Infrastructure | L1 | **off** | `infrastructure_info` | `Worker` |
-| Trajectory | L2 | **on** for `ParallelGroup`/`Branch`/routing; `State` and `Transition` are always built | `parallel_group_*`, `branch_*`, `routing`, `routing_result` | `ParallelGroup`, `Branch`, routing `CallAnnotation`s |
+| Trajectory | L2 | **off** for `ParallelGroup`/`Branch`/routing; `State` and `Transition` are always built | `parallel_group_*`, `branch_*`, `routing`, `routing_result` | `ParallelGroup`, `Branch`, routing `CallAnnotation`s |
+| Native extensions | — | **off** | `rag_query_*`, `memory_*`, `skill_execution_*` | `RAGQuery`, `MemoryCall`, `SkillCall`, `ThinkingCall` |
 | Annotation | — | **off** | `context_assembled`, `state_update_*`, `checkpoint_*`, `observability_*_execute_*`, `user_input`, `client_response`, `tool_result_injected`, `wait_state_*`, … | `CallAnnotation` |
 | Provenance | L4 | **off** | `context_part_contributed` | `ContextContribution` |
 | Governance | L5 | **off** | `audit`, `policy_*`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_*`, `governance_*`, `obs_wrap_gov_*` | `GovernanceEvent` |
 
-`State` and `Transition` nodes are not tied to any flag: they are derived from every call that has content, whatever the layers. The `include_trajectory` flag controls only `ParallelGroup`, `Branch` and routing annotations.
+`State` and `Transition` nodes are not tied to any flag: they are derived from every call that has content, whatever the layers. The `include_trajectory` flag controls only `ParallelGroup`, `Branch` and routing annotations. Default KG attributes are the installed SCOPE model fields (`all_attributes=False`). `callsAgent` and `usesTool` are not emitted until A2A / MCP observability lands.
 
 **Defaults.** Provenance adds about one node per context part (often hundreds per session). Governance has content only when a policy engine is connected. Infrastructure currently produces no nodes ([section 8](#8-infrastructure-layer)).
 
@@ -109,7 +110,7 @@ Attribute names are camelCase in the graph. The ontology declares these datatype
 | `LLMCall` | `promptTokenCount`, `completionTokenCount`, `totalTokenCount`, `cacheReadTokenCount`, `finishReason`, `responseId`, `temperature` | | required (warnings) |
 | `State` | `content` | string | required |
 
-The native builder adds identity and linkage attributes to execution nodes: `callId`, `executionId` (`exec-{Class}-{callId}`), `agentId`, `parentCallId` (empty for roots), `runId`, `kindBase`, `masUri`, `spanLevel`, `status` and `sourceRecordIds`. The full per-class list is in [normalization.md](normalization.md#6-node-attributes-reference).
+The native builder adds identity and linkage attributes to execution nodes: `callId`, `executionId` (`exec-{Class}-{callId}`), `agentId`, `parentCallId` (empty for roots), `runId`, `kindBase`, `masUri`, `spanLevel`, `status` and `sourceRecordIds`. Default output (`all_attributes=False`) keeps only SCOPE model fields. The full per-class list is in [normalization.md](normalization.md#6-node-attributes-reference).
 
 ### Fields added at Neo4j push
 
@@ -202,8 +203,8 @@ Edge names are the ontology's. Domain and range are from `mas-ontology.ttl` unle
 | `executesSession` | `Session` -> `MAS` | |
 | `executesMAS`, `executesAgent`, `executesLLM`, `executesTool`, `executesProcessing` | `MASCall` / `AgentCall` / `LLMCall` / `ToolCall` / `ProcessingCall` -> `MAS` / `Agent` / `LLM` / `Tool` / `Processing` | typing link; `executesLLM`, `executesTool`, `executesProcessing` also check the target class |
 | `belongsToMAS` | `Agent` -> `MAS` | agent membership |
-| `usesCapability`, `usesLLM`, `usesTool`, `usesProcessing` | `Agent` -> capability | declared in the ontology; not emitted by the native builder |
-| `callsAgent` (extension) | call -> `Agent` | delegation (`delegate_to_*` tool) |
+| `usesCapability`, `usesLLM`, `usesTool`, `usesProcessing` | `Agent` -> capability | declared in SCOPE; not emitted until MCP observability |
+| `callsAgent` (extension) | call -> `Agent` | not emitted until A2A observability |
 | `annotates` (extension) | `CallAnnotation` / `GovernanceEvent` -> call | |
 
 Containment is derived from the `parentCallId` links and from time enclosure; a call may be contained by any enclosing call, so edges such as `ParallelGroup -> ToolCall` occur ([normalization.md](normalization.md#5-synthesised-nodes-and-edges)).
@@ -457,14 +458,14 @@ There is no separate constraint numbering in the code. Constraints are enforced 
 
 | Check | Rule |
 |---|---|
-| `unknown_node_types` | every `node_type` is a class declared in the ontology graph (`oxp-ontology` plus the extension TTL) |
+| `unknown_node_types` | every `node_type` is a class declared in the ontology graph (`ioc-scope-ontology` plus the extension TTL) |
 | `unknown_edge_types` | every `edge_type` is an object property declared there |
 | `block_vocabulary` | `block`, when present, is one of `structural`, `execution`, `trajectory`, `governance` and matches the node's class (`structural` for `StructuralElement` subclasses, `trajectory` for `TrajectoryElement` subclasses, `execution` otherwise) |
 | `layer_vocabulary` | `layer` appears only on `TrajectoryElement` nodes, with value `normalized` |
 | `orphaned_edges` | every edge endpoint id exists in the node list |
 | `experiment_extension` (optional) | experiment, scenario, test item and run label attributes on `Session`, when `--enable-extension-layer experiment` is set |
 
-**SHACL** (`shacl` check): `mas-ontology.ttl` property shapes plus `mas-shapes.ttl` and `mas-shapes-custom.ttl` from `oxp-ontology`, evaluated with `pyshacl` against the graph serialised as RDF. The constraints are listed in sections 5.4 and 6.4. Severity is violation (error), warning or info per shape; `strict` promotes warnings to errors.
+**SHACL** (`shacl` check): `mas-ontology.ttl` property shapes plus `mas-shapes.ttl` and `mas-shapes-custom.ttl` from `ioc-scope-ontology`, evaluated with `pyshacl` against the graph serialised as RDF. The constraints are listed in sections 5.4 and 6.4. Severity is violation (error), warning or info per shape; `strict` promotes warnings to errors.
 
 **Stable ids.** Id stability is by construction (deterministic id functions; [normalization.md](normalization.md#9-node-id-stability)), not checked at validation time. Two things break it: duplicate point events in the input (each produces a node with the same id) and any pre-processing that changes timestamps, since annotation ids hash the event timestamp.
 
@@ -480,7 +481,7 @@ Every node and edge carries a `canonicalId` URN, assigned in `core/graph_builder
 | global | `urn:mas:global:{type}:{slug}` | catalog nodes (`Agent`, `MAS`, `LLM`, `Tool`, `Processing`, `Skill`): stable across sessions |
 | node | `urn:mas:node:{type}:{slug}` | fallback for nodes with no other identity (for example `ContextContribution`) |
 
-Two sessions with identical state content get different session-scoped URNs but the same `contentHash`. For Neo4j-only use, the short `id` values from [section 4](#4-node-id-construction) are the node keys; URNs matter for RDF export and SHACL validation, which serialise the graph under the `mas:` namespace `https://outshift-open.github.io/oxp-ontology/mas#`.
+Two sessions with identical state content get different session-scoped URNs but the same `contentHash`. For Neo4j-only use, the short `id` values from [section 4](#4-node-id-construction) are the node keys; URNs matter for RDF export and SHACL validation, which serialise the graph under the `mas:` namespace `https://ioc-project.github.io/scope-ontology/mas#`.
 
 ## 12. Verification
 

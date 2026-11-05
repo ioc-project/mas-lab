@@ -13,8 +13,9 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 from mas.library.kg.core.graph_builder import normalize_events
+from mas.library.kg.core.oxp_models import mas_namespace
 
-_MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
+_MAS_NS = mas_namespace()
 
 
 def _make_ontology() -> Any:
@@ -119,14 +120,27 @@ def test_infrastructure_on_includes_worker_events() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_trajectory_on_by_default_includes_routing() -> None:
-    """trajectory layer is on by default — routing annotations are included."""
+def test_trajectory_off_by_default_drops_routing() -> None:
+    """trajectory layer is off by default — ParallelGroup/Branch/routing are native extensions."""
     events = [
         _event("execution_start"),
         _event("routing"),
         _event("parallel_group_start"),
     ]
     result = normalize_events(events, ONTOLOGY, "run-1")
+    kinds = _kinds(result)
+    assert "routing" not in kinds
+    assert "parallel_group_start" not in kinds
+    assert "execution_start" in kinds
+
+
+def test_trajectory_on_includes_routing() -> None:
+    events = [
+        _event("execution_start"),
+        _event("routing"),
+        _event("parallel_group_start"),
+    ]
+    result = normalize_events(events, ONTOLOGY, "run-1", include_trajectory=True)
     kinds = _kinds(result)
     assert "routing" in kinds
     assert "parallel_group_start" in kinds
@@ -254,3 +268,37 @@ def test_structural_events_always_included() -> None:
     assert "execution_end" in kinds
     assert "tool_call_start" in kinds
     assert "llm_call_start" in kinds
+
+
+# ---------------------------------------------------------------------------
+# Native extensions (RAG / memory / skill) — off by default
+# ---------------------------------------------------------------------------
+
+
+def test_native_extensions_off_by_default() -> None:
+    events = [
+        _event("execution_start"),
+        _event("rag_query_start"),
+        _event("memory_call_start"),
+        _event("skill_execution_start"),
+    ]
+    result = normalize_events(events, ONTOLOGY, "run-1")
+    kinds = _kinds(result)
+    assert "rag_query_start" not in kinds
+    assert "memory_call_start" not in kinds
+    assert "skill_execution_start" not in kinds
+    assert "execution_start" in kinds
+
+
+def test_native_extensions_on_includes_rag_memory_skill() -> None:
+    events = [
+        _event("execution_start"),
+        _event("rag_query_start"),
+        _event("memory_store_end"),
+        _event("skill_execution_end"),
+    ]
+    result = normalize_events(events, ONTOLOGY, "run-1", include_native_extensions=True)
+    kinds = _kinds(result)
+    assert "rag_query_start" in kinds
+    assert "memory_store_end" in kinds
+    assert "skill_execution_end" in kinds

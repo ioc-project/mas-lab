@@ -27,8 +27,8 @@ The package builds on two pieces of
 
 | SCOPE piece | Role here | Install |
 |-----------|-----------|---------|
-| `oxp-ontology` | Ontology TTL, SHACL shapes and generated `oxp_ontology.models.*`. SHACL (Shapes Constraint Language) validates graph shapes. | Hard dependency (`>=1.0.1`) |
-| `norm` | SCOPE's OTel normaliser; `norm.normalize()` does the OTel-to-KG step | Optional extra `[norm]`, installed from git until it is published (the PyPI name `norm` belongs to an unrelated package, so the published name will likely be `oxp-norm`) |
+| `ioc-scope-ontology` | Ontology TTL, SHACL shapes and generated `scope_ontology.models.*`. SHACL (Shapes Constraint Language) validates graph shapes. | Hard dependency (`>=1.1.0`, git until PyPI) |
+| `norm` | SCOPE's OTel normaliser; `norm.normalize()` does the OTel-to-KG step | Optional extra `[norm]`, installed from `github.com/ioc-project/scope` `backend/norm` until it is published (the PyPI name `norm` belongs to an unrelated package) |
 
 First-party to this package: the native `events.jsonl`-to-KG normaliser, KG validation,
 Neo4j push and dump, the `mas-lab kg` commands and the pipeline steps.
@@ -68,7 +68,7 @@ This library does not rebuild `events.jsonl` from OTel spans. The OTel path
 OTel spans (ClickHouse rows or SDK JSON)
     |  otel_via_norm.normalize_otel(): reshape SDK keys to ClickHouse keys, then norm.normalize()
     v
-(nodes, edges) targeting oxp_ontology.models.*
+(nodes, edges) targeting scope_ontology.models.*
 ```
 
 The inverse direction (`events.jsonl` to OTel) lives in `library-telemetry`.
@@ -83,9 +83,9 @@ Two OTel wire formats exist:
 SDK spans are reshaped mechanically onto the ClickHouse keys that `norm` expects. This
 library has no OTel handler or dispatch of its own.
 
-**Ontology split.** `oxp-ontology` declares the core classes: Session, MASCall, AgentCall,
+**Ontology split.** `ioc-scope-ontology` declares the core classes: Session, MASCall, AgentCall,
 LLMCall, ToolCall, ProcessingCall, State, Transition, MAS, Agent, LLM, Tool and
-Processing. Native-path classes that `oxp-ontology` does not declare yet (RAGQuery,
+Processing. Native-path classes that SCOPE does not declare yet (RAGQuery,
 MemoryCall, SkillCall, governance and trajectory annotations) are declared in
 `ontology/extensions/`.
 
@@ -97,21 +97,21 @@ MemoryCall, SkillCall, governance and trajectory annotations) are declared in
 uv pip install -e library-kg                    # normalisation, query, compare, spec, annotation
 uv pip install -e "library-kg[neo4j]"           # plus Neo4j push and dump
 uv pip install -e "library-kg[neo4j,dev]"       # development (pytest, ruff, validation + verify stacks)
-uv pip install -e "library-kg[norm]"            # OTel path (temporary git extra until oxp-norm is published)
+uv pip install -e "library-kg[norm]"            # OTel path (temporary git extra until SCOPE publishes it)
 ```
 
 Other extras: `verify` (JSON Schema validation of `events.jsonl`), `validation` (`rdflib`
 and `pyshacl`, required for the SHACL check), `bench` (pipeline steps and the `mas-lab kg`
 CLI), `plot` and `all`. Without `validation`, the `shacl` check is reported as skipped,
-not passed. `oxp-ontology` (`>=1.0.1`) is a hard dependency and resolves automatically.
-The ontology files (`mas-ontology.ttl`, `mas-shapes.ttl`) come from `oxp-ontology`, so
-validation always follows the canonical ontology package.
+not passed. `ioc-scope-ontology` (`>=1.1.0`) is a hard dependency and resolves from git
+until it is on PyPI. The ontology files (`mas-ontology.ttl`, `mas-shapes.ttl`) come from
+that package, so validation always follows the canonical SCOPE ontology.
 
-To validate against an unpublished local ontology version (for example `1.1.1`) without a
-separate virtual environment, load `oxp-ontology` from local sources for one command:
+To validate against an unpublished local ontology version without a separate virtual
+environment, load SCOPE from local sources for one command:
 
 ```bash
-uv run --with-editable /abs/path/to/oxp-ontology pytest tests/test_validate_kg.py -q
+uv run --with-editable /abs/path/to/scope/ontology pytest tests/test_validate_kg.py -q
 ```
 
 For OTel span contracts and SpanSpec definitions, also install the peer library:
@@ -510,7 +510,7 @@ mas/library/kg/
 ├── __init__.py               top-level public API (lazy) + package_root()
 ├── artifact.py               KGArtifact dataclass + stream_artifacts()
 ├── exceptions.py             typed exception hierarchy
-├── ontology.py               TTL path resolution (oxp-ontology + local extensions)
+├── ontology.py               TTL path resolution (ioc-scope-ontology + local extensions)
 ├── pipeline.py               public batch API: build_kg_document, build_kg_from_events_path, ...
 ├── infra.py                  `kind: Infra` manifest -> Neo4j connection target
 ├── bench.py                  PipelineStep adapters (normalize_events, validate_kg, ...)
@@ -521,7 +521,7 @@ mas/library/kg/
 │   ├── event_mappings.py     KIND_TO_CLASS: event kind -> ontology class
 │   ├── graph_builder.py      normalize_events + extract_graph (events -> nodes/edges)
 │   ├── native_graph_builder.py  NativeGraphBuilder (batch / realtime builders)
-│   ├── oxp_models.py         bridge to oxp_ontology.models.*
+│   ├── oxp_models.py         bridge to scope_ontology.models.*
 │   ├── annotate.py           annotate_kg_nodes
 │   ├── query.py              KGIndex, FacetQuery, KGSource, KGView
 │   ├── compare.py            compare_kg, KGCompareResult (7 structural checks)
@@ -605,8 +605,8 @@ ProcessingCall, State, Transition, CallAnnotation, ...) and edge types (`hasAgen
 
 | TTL file | Source |
 |----------|--------|
-| `mas-ontology.ttl` | `oxp-ontology` |
-| `mas-shapes.ttl`, `mas-shapes-custom.ttl` | `oxp-ontology` |
+| `mas-ontology.ttl` | `ioc-scope-ontology` |
+| `mas-shapes.ttl`, `mas-shapes-custom.ttl` | `ioc-scope-ontology` |
 | Native-path extensions (RAGQuery, MemoryCall, SkillCall, governance, ...) | `library-kg/ontology/extensions/` |
 
 Pass `ontology_path` to override the package-provided path. Native graph extraction does
@@ -620,7 +620,7 @@ not need the TTL (`KIND_TO_CLASS` is the map). TTL enrichment and SHACL validati
 |---------|------|
 | `library-telemetry` (`mas.library.telemetry`) | OTel JSON schema, SpanSpec definitions, span verification and comparison, and the native events to OTel export (the inverse direction) |
 | `library-kg` (`mas.library.kg`) | Normalisation, KG extraction, KG verification, Neo4j serialisation |
-| `oxp-ontology` (SCOPE) | Ontology TTL, SHACL shapes and generated models. Required by `library-kg` |
+| `ioc-scope-ontology` (SCOPE) | Ontology TTL, SHACL shapes and generated models. Required by `library-kg` |
 | `norm` (SCOPE) | OTel-to-KG normaliser for the OTel path. Optional extra `[norm]` |
 | `lab/components/bench` | Benchmark pipeline framework that runs the steps in `mas.library.kg.bench` (extra `[bench]`) |
 
@@ -632,7 +632,7 @@ not need the TTL (`KIND_TO_CLASS` is the map). TTL enrichment and SHACL validati
 
 1. Map the kind to a class in `core/event_mappings.py:KIND_TO_CLASS`.
 2. If the node needs custom fields, implement the extraction in `core/graph_builder.py`.
-3. If `oxp-ontology` lacks the class, add it to
+3. If SCOPE lacks the class, add it to
    `ontology/extensions/mas-kg-native-extensions.ttl` and document the gap.
 4. Add a native `events.jsonl` fixture test.
 
@@ -664,7 +664,7 @@ Design rules:
   `mas.ctl.*` or `mas.runtime.*`. Only `lab_cli.py`, `bench.py`, `codecs.py`, `plots.py`
   and `steps/embed_states.py` use the `mas-lab` framework;
   `tests/test_package_decoupling.py` guards lazy imports.
-- **One ontology source.** TTL files resolve from `oxp-ontology`, with no local copies.
+- **One ontology source.** TTL files resolve from `ioc-scope-ontology`, with no local copies.
 - **No hardcoded API keys.** Embedding steps take a caller-supplied function or an API-key
   environment variable name. The library never creates a provider client with an embedded
   key.

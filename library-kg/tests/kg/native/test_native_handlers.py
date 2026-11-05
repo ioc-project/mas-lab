@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from mas.library.kg.pipeline import normalize
+from mas.library.kg.pipeline import build_kg_document, load_events_jsonl, normalize
 
 
 def _write_events(tmp_path: Path, events: list[dict]) -> Path:
@@ -21,10 +21,15 @@ def _write_events(tmp_path: Path, events: list[dict]) -> Path:
     return path
 
 
-def test_delegate_to_tool_call_produces_exactly_one_calls_agent_edge(tmp_path: Path) -> None:
-    """A delegate_to_<agent> tool call fires its callsAgent edge once, on
-    the _start event -- not a second time on the matching _end event for
-    the same call_id (the two events upsert the same ToolCall node)."""
+def _normalize_full(path: Path):
+    events = load_events_jsonl(path)
+    doc = build_kg_document(events, run_id="r1", all_attributes=True)
+    return doc["nodes"], doc["edges"]
+
+
+def test_delegate_to_tool_call_is_rewritten_without_calls_agent(tmp_path: Path) -> None:
+    """A delegate_to_<agent> tool is not a ToolCall. callsAgent stays off
+    until A2A observability lands."""
     events = [
         {
             "kind": "execution_start",
@@ -64,12 +69,10 @@ def test_delegate_to_tool_call_produces_exactly_one_calls_agent_edge(tmp_path: P
     ]
     path = _write_events(tmp_path, events)
     _nodes, edges = normalize(str(path))
-    calls_agent_edges = [e for e in edges if e.get("edge_type") == "callsAgent"]
-    assert len(calls_agent_edges) == 1, calls_agent_edges
-    assert calls_agent_edges[0]["to_id"] == "researcher"
-    assert "c1" in str(calls_agent_edges[0]["from_id"])
+    assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
     assert not any(
-        n.get("node_type") == "ToolCall" and str(n.get("toolName") or "").startswith("delegate_to_")
+        n.get("node_type") == "ToolCall"
+        and str(n.get("toolName") or n.get("name") or "").startswith("delegate_to_")
         for n in _nodes
     )
 
@@ -113,9 +116,7 @@ def test_user_tool_named_send_is_not_a_handoff(tmp_path: Path) -> None:
     ]
     _nodes, edges = normalize(str(_write_events(tmp_path, events)))
     assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
-    assert any(
-        n.get("node_type") == "ToolCall" and n.get("toolName") == "send" for n in _nodes
-    )
+    assert any(n.get("node_type") == "ToolCall" and n.get("name") == "send" for n in _nodes)
 
 
 def test_tool_with_target_argument_is_not_a_handoff(tmp_path: Path) -> None:
@@ -198,9 +199,8 @@ def test_recorded_agent_comm_semantics_are_a_handoff(tmp_path: Path) -> None:
         },
     ]
     _nodes, edges = normalize(str(_write_events(tmp_path, events)))
-    calls_agent_edges = [e for e in edges if e.get("edge_type") == "callsAgent"]
-    assert len(calls_agent_edges) == 1, calls_agent_edges
-    assert calls_agent_edges[0]["to_id"] == "worker"
+    assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
+    assert not any(n.get("node_type") == "ToolCall" and n.get("name") == "send" for n in _nodes)
 
 
 def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) -> None:
@@ -248,7 +248,7 @@ def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) ->
         },
     ]
     path = _write_events(tmp_path, events)
-    nodes, edges = normalize(str(path))
+    nodes, edges = _normalize_full(path)
 
     session_node = next(n for n in nodes if n.get("node_type") == "Session")
 
@@ -323,10 +323,73 @@ def test_context_assembly_processing_output_reads_real_messages(tmp_path: Path) 
         },
     ]
     path = _write_events(tmp_path, events)
-    nodes, _edges = normalize(str(path))
+    nodes, _edges = _normalize_full(path)
 
     processing_call = next(n for n in nodes if n.get("node_type") == "ProcessingCall")
     output = processing_call.get("processingOutput", "")
     assert output != "assembled"
     assert "you are a planner" in output
     assert "plan my trip" in output
+
+
+def test_llm_call_end_reads_top_level_tokens_used(tmp_path: Path) -> None:
+    """Runtime traces put usage on the event, not under response.usage."""
+    events = [
+        {
+            "kind": "execution_start",
+            "timestamp": 1.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+        },
+        {
+            "kind": "llm_call_start",
+            "timestamp": 1.1,
+            "run_id": "r1",
+            "call_id": "llm1",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+        },
+        {
+            "kind": "llm_call_end",
+            "timestamp": 1.2,
+            "run_id": "r1",
+            "call_id": "llm1",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+            "model": "azure/gpt-4o-mini",
+            "finish_reason": "tool_calls",
+            "tokens_used": {
+                "prompt_tokens": 535,
+                "completion_tokens": 27,
+                "total_tokens": 562,
+            },
+            "output": "delegate_to_schedule_agent",
+        },
+        {
+            "kind": "execution_end",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+            "status": "ok",
+            "output": "done",
+        },
+    ]
+    path = _write_events(tmp_path, events)
+    nodes, _edges = normalize(str(path))
+    llm = next(n for n in nodes if n.get("node_type") == "LLMCall")
+    assert llm["promptTokenCount"] == 535
+    assert llm["completionTokenCount"] == 27
+    assert llm["totalTokenCount"] == 562
+    assert llm["finishReason"] == "tool_calls"
+    assert "modelName" not in llm
+    assert "callId" not in llm
+    agent_call = next(n for n in nodes if n.get("node_type") == "AgentCall")
+    assert agent_call.get("success") is True
+
+    full_nodes, _ = _normalize_full(path)
+    full_llm = next(n for n in full_nodes if n.get("node_type") == "LLMCall")
+    assert full_llm["modelName"] == "gpt-4o-mini"
+    assert full_llm["provider"] == "azure"
+    assert full_llm["callId"] == "llm1"

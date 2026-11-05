@@ -36,10 +36,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mas.library.kg._dist import extra_hint
+from mas.library.kg.core.oxp_models import mas_namespace
 
 # ---------------------------------------------------------------------------
 # Ontology index — derives all validation constants from mas-ontology.ttl via
-# the oxp-ontology package.  No intermediate JSON schema file required.
+# the SCOPE scope_ontology package.  No intermediate JSON schema file required.
 # ---------------------------------------------------------------------------
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class _OntologyIndex:
 
     TTL sources loaded in order into one combined rdflib graph:
 
-    1. ``mas-ontology.ttl`` from ``oxp_ontology``
+    1. ``mas-ontology.ttl`` from ``scope_ontology`` (SCOPE)
     2. MAS-Lab native-path extension TTLs (RAGQuery, MemoryCall, SkillCall,
        governance, …) from ``library-kg/ontology/extensions/``
 
@@ -61,13 +62,15 @@ class _OntologyIndex:
 
     Recognised namespaces (used to filter triples to the MAS vocabulary):
 
-    * ``mas:``    ``https://outshift-open.github.io/oxp-ontology/mas#``
-    * ``maslab:`` ``https://outshift-open.github.io/oxp-ontology/mas-lab#``
-    * ``maskg:``  ``https://outshift-open.github.io/oxp-ontology/mas-kg#``
+    * ``mas:``    SCOPE ``https://ioc-project.github.io/scope-ontology/mas#``
+    * prior OXP URI kept so older graphs still index
     """
 
     # Recognised MAS namespaces — triples outside these are ignored.
     _NS: List[str] = [
+        "https://ioc-project.github.io/scope-ontology/mas#",
+        "https://ioc-project.github.io/scope-ontology/mas-lab#",
+        "https://ioc-project.github.io/scope-ontology/mas-kg#",
         "https://outshift-open.github.io/oxp-ontology/mas#",
         "https://outshift-open.github.io/oxp-ontology/mas-lab#",
         "https://outshift-open.github.io/oxp-ontology/mas-kg#",
@@ -94,7 +97,7 @@ class _OntologyIndex:
         except ImportError as exc:  # pragma: no cover
             logger.warning(
                 (
-                    "oxp_ontology not available — _OntologyIndex empty "
+                    "scope_ontology not available — _OntologyIndex empty "
                     "(validation will block ingest): %s"
                 ),
                 exc,
@@ -104,8 +107,8 @@ class _OntologyIndex:
         OWL = rdflib.namespace.OWL
         RDFS = rdflib.namespace.RDFS
         RDF = rdflib.RDF
-        MASLAB_NS = "https://outshift-open.github.io/oxp-ontology/mas-lab#"
-        MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
+        MASLAB_NS = "https://ioc-project.github.io/scope-ontology/mas-lab#"
+        MAS_NS = mas_namespace()
 
         if not ttl_files:
             logger.warning("_OntologyIndex: no ontology TTLs resolved — ingest will be blocked.")
@@ -162,7 +165,7 @@ class _OntologyIndex:
         self.known_attrs_lower = {n.lower(): n for n in dt_names}
 
         # Block vocabulary: instances of maslab:BlockValue when that TTL is
-        # present. PyPI oxp-ontology 1.0.0 does not ship it; keep the documented
+        # present. SCOPE may not ship it; keep the documented
         # instance vocabulary so catalog nodes with block=structural still pass.
         MASLAB = rdflib.Namespace(MASLAB_NS)
         self.valid_block_values = frozenset(
@@ -513,7 +516,7 @@ def run_shacl_validation(
     """Run pyshacl against a JSON-LD representation of the KG.
 
     Uses ``mas-ontology.ttl`` + ``mas-shapes.ttl`` + ``mas-shapes-custom.ttl``
-    from oxp-ontology as the SHACL shapes graph. ``mas-shapes.ttl`` only emits
+    from SCOPE as the SHACL shapes graph. ``mas-shapes.ttl`` only emits
     bare ``sh:property`` references to inline PropertyShapes on the ontology
     TTLs, so those files must be in the same graph.
 
@@ -532,14 +535,14 @@ def run_shacl_validation(
             f"shacl check requires pyshacl and rdflib ({extra_hint('validation')})"
         ) from exc
 
-    MAS = "https://outshift-open.github.io/oxp-ontology/mas#"
-    MASKG = "https://outshift-open.github.io/oxp-ontology/mas-kg#"
-    MASLAB = "https://outshift-open.github.io/oxp-ontology/mas-lab#"
+    MAS = mas_namespace()
+    MASKG = "https://ioc-project.github.io/scope-ontology/mas-kg#"
+    MASLAB = "https://ioc-project.github.io/scope-ontology/mas-lab#"
 
-    # Resolve SHACL shapes from oxp-ontology. mas-shapes.ttl only emits
+    # Resolve SHACL shapes from SCOPE. mas-shapes.ttl only emits
     # bare sh:property references to PropertyShapes declared on the
     # ontology TTLs themselves, so the full ontology set must be in the
-    # same graph (see oxp_ontology.verification._shapes_graph).
+    # same graph (see scope_ontology.verification._shapes_graph).
     from mas.library.kg.ontology import (
         resolve_all_ontology_paths,
         resolve_mas_shapes_custom_path,
@@ -561,7 +564,7 @@ def run_shacl_validation(
     if not shapes_files:
         if ontology_path is None:
             raise KGCheckSkipped(
-                "shacl check requires oxp-ontology to resolve mas-shapes.ttl "
+                "shacl check requires ioc-scope-ontology to resolve mas-shapes.ttl "
                 f"({extra_hint('validation')})"
             )
         sibling_shapes = ontology_path.parent / "mas-shapes.ttl"

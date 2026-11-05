@@ -66,7 +66,11 @@ def run_compare_kg(
     candidate: Union[KGArtifact, str, Path],
     reference: Union[KGArtifact, str, Path],
     *,
-    strict: bool = False,
+    strict: bool = True,
+    strict_nodes: Optional[bool] = None,
+    strict_edges: Optional[bool] = None,
+    strict_node_attributes: Optional[bool] = None,
+    strict_edge_attributes: Optional[bool] = None,
     fail_on_error: bool = False,
     output_path: Optional[Union[str, Path]] = None,
     node_types: Optional[list[str]] = None,
@@ -77,7 +81,13 @@ def run_compare_kg(
         candidate: Candidate KG (system under test). Accepts a KGArtifact, a
             path string, or a Path object.
         reference: Reference KG (ground truth). Same accepted types.
-        strict: When True, element-level diff failures count as failures.
+        strict: Default True. Extra nodes / edges / attributes on the
+            candidate fail. ``element_level_diff`` (raw ids) is reported
+            but does not count toward ``passed``.
+        strict_nodes: Equal node-type counts. Default follows *strict*.
+        strict_edges: Equal edge-type counts. Default follows *strict*.
+        strict_node_attributes: Equal non-identity node keys. Default follows *strict*.
+        strict_edge_attributes: Equal non-identity edge keys. Default follows *strict*.
         fail_on_error: Raise RuntimeError if the comparison fails.
         output_path: Optional path to write the parity report JSON.
         node_types: If set, only these node types (and edges between them)
@@ -122,7 +132,15 @@ def run_compare_kg(
 
     cand_doc = _filter_doc(cand_artifact.to_doc(), node_types)
     ref_doc = _filter_doc(ref_artifact.to_doc(), node_types)
-    result = compare_kg(cand_doc, ref_doc, strict=strict)
+    result = compare_kg(
+        cand_doc,
+        ref_doc,
+        strict=strict,
+        strict_nodes=strict_nodes,
+        strict_edges=strict_edges,
+        strict_node_attributes=strict_node_attributes,
+        strict_edge_attributes=strict_edge_attributes,
+    )
     report = result.to_dict()
     if node_types:
         report["node_types"] = list(node_types)

@@ -20,7 +20,6 @@ def _delegate_target(event: Dict[str, Any]) -> str:
 
 def handle_tool_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> List[Dict[str, Any]]:
     kind = event.get("kind", "")
-    tool_name = str(event.get("tool_name") or "")
     target_agent = _delegate_target(event)
     call_id = str(event.get("call_id") or "")
     rewrite = getattr(builder, "rewrite_tool_delegation", True)
@@ -34,17 +33,6 @@ def handle_tool_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Li
             getattr(builder, "_delegated_agent_ids", set()).add(target_agent)
             if hasattr(builder, "agent_ids"):
                 builder.agent_ids.add(target_agent)
-            from_id = str(event.get("parent_call_id") or event.get("agent_id") or "")
-            builder.edges.append(
-                {
-                    "edge_type": "callsAgent",
-                    "from_id": from_id,
-                    "from_type": "call",
-                    "to_id": target_agent,
-                    "to_type": "agent",
-                    "tool_name": tool_name,
-                }
-            )
         return []
 
     node = builder.upsert_call(event, "ToolCall")
@@ -64,19 +52,8 @@ def handle_tool_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Li
             ),
         )
 
-        # rewrite_tool_delegation=False: keep the ToolCall and still stamp
-        # one callsAgent edge from this tool onto the target agent.
-        if target_agent:
-            builder.edges.append(
-                {
-                    "edge_type": "callsAgent",
-                    "from_id": node["callId"],
-                    "from_type": "call",
-                    "to_id": target_agent,
-                    "to_type": "agent",
-                    "tool_name": tool_name,
-                }
-            )
+        # rewrite_tool_delegation=False: keep the ToolCall. callsAgent is a
+        # native extension and is not emitted until A2A observability lands.
     else:
         node["toolOutput"] = event.get("output") or event.get("result") or ""
 

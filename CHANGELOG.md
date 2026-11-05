@@ -32,9 +32,26 @@ reconciling the release notes with the code and docs currently on that branch.
   `plugin_cls(inner=..., **params)` is gone.
 - `LiveLlmEngine.install_infra_pipeline` only wraps `per: all` steps.
   A destination step (scheduler, fault) passed there is an error.
+- Native→KG default output is the SCOPE set: RAG / memory / skill kinds
+  and `ThinkingCall` sit in `native_extensions` (off);
+  `include_trajectory` defaults off (`ParallelGroup` / `Branch` /
+  routing). `all_attributes=False` keeps only keys the installed SCOPE
+  models emit (`KGNode` / `KGEdge.to_json`). `callsAgent` and `usesTool`
+  are not emitted until A2A / MCP observability lands.
+- KG ontology dependency is SCOPE (`ioc-scope-ontology` from
+  `https://github.com/ioc-project/scope`, import `scope_ontology`). The
+  OTel extra still installs `norm` from `backend/norm` in that repo.
+- `compare_kg` `strict` defaults true: extra node types, edge types, and
+  attribute keys on the candidate fail. `strict_nodes`, `strict_edges`,
+  `strict_node_attributes`, and `strict_edge_attributes` override one
+  axis. `element_level_diff` (raw ids) is reported and does not decide
+  `passed`.
 
 ### Fixed
 
+- Native `llm_call_end` reads top-level `tokens_used`, `model`, and
+  `finish_reason` (the shape the runtime actually writes). Native
+  `AgentCall.success` follows an `ok` / `success` execution status.
 - Native CallAnnotation kinds (`state_update_*`, `context_assembled`,
   `observability_*_execute_*`, `client_response`, …) sit in an
   `annotation` layer, off by default, matching observe-sdk. Parallel
@@ -241,8 +258,8 @@ reconciling the release notes with the code and docs currently on that branch.
   `https://ioc-project.github.io/mas-lab/`). On an existing clone:
   `git remote set-url origin git@github.com:ioc-project/mas-lab.git`.
 - Docs name the former Observe and eXplain Platform as SCOPE
-  (`https://ioc-project.github.io/scope/`). PyPI `oxp-ontology` and the
-  `norm` git extra are unchanged.
+  (`https://ioc-project.github.io/scope/`). The ontology package is
+  `ioc-scope-ontology` (`scope_ontology`); `norm` still comes from git.
 - Schema `$id` values are vocabulary ids (`mas/v1#…`, `mas-lab/…`), not
   hosting URLs.
 - Docs: [Open standards](docs/standards/index.md) covers OpenAI Chat

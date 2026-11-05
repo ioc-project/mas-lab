@@ -1,13 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Native path emits node types that exist on oxp_ontology.models when present."""
+"""Native path emits node types that exist on scope_ontology.models when present."""
 
 from __future__ import annotations
 
 import pytest
 
 from mas.library.kg.core.event_mappings import KIND_TO_CLASS
-from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, OXP_CORE_NODE_TYPES
+from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, SCOPE_CORE_NODE_TYPES
 from mas.library.kg.pipeline import build_kg_document
 
 
@@ -75,19 +75,19 @@ def native_doc():
 
 def test_kind_to_class_core_subset_is_documented() -> None:
     mapped = {cls for cls in KIND_TO_CLASS.values() if cls}
-    missing_from_audit = mapped - OXP_CORE_NODE_TYPES - NATIVE_EXTENSION_NODE_TYPES
+    missing_from_audit = mapped - SCOPE_CORE_NODE_TYPES - NATIVE_EXTENSION_NODE_TYPES
     assert not missing_from_audit, f"KIND_TO_CLASS has undocumented classes: {missing_from_audit}"
 
 
 def test_native_core_types_exist_on_oxp_models(native_doc) -> None:
-    pytest.importorskip("oxp_ontology")
-    from oxp_ontology import models as oxp_models
+    pytest.importorskip("scope_ontology")
+    from scope_ontology import models as scope_models
 
     present = {n.get("node_type") for n in native_doc["nodes"]}
-    core_emitted = present & OXP_CORE_NODE_TYPES
+    core_emitted = present & SCOPE_CORE_NODE_TYPES
     assert {"AgentCall", "LLMCall", "ToolCall", "Session"} <= core_emitted
     for ntype in core_emitted:
-        assert hasattr(oxp_models, ntype), f"oxp_ontology.models missing {ntype}"
+        assert hasattr(scope_models, ntype), f"scope_ontology.models missing {ntype}"
 
 
 def test_native_extension_types_are_typed_dicts_when_models_absent(native_doc) -> None:
@@ -96,6 +96,6 @@ def test_native_extension_types_are_typed_dicts_when_models_absent(native_doc) -
         ntype = node.get("node_type")
         if ntype in NATIVE_EXTENSION_NODE_TYPES:
             assert node.get("@type") == ntype or node.get("node_type") == ntype
-        if ntype in OXP_CORE_NODE_TYPES:
+        if ntype in SCOPE_CORE_NODE_TYPES:
             assert node.get("id") or node.get("callId") or node.get("sessionId")
     assert "AgentCall" in nodes_by_type

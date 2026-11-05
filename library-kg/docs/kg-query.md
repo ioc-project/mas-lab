@@ -52,7 +52,7 @@ files still load. Files written by the current pipeline use the canonical names.
 `type`). To filter by edge type, pass the `edge_type` string, for example `"hasLLMCall"`.
 
 Edge types come from the vocabulary of SCOPE (the
-open-source observability platform whose `oxp-ontology` package is a hard dependency of
+open-source observability platform whose `ioc-scope-ontology` package is a hard dependency of
 this library and ships the ontology and SHACL shapes). Common edge types in a generated
 KG, verified on `examples/qa-agent/kg-native.jsonld` (direction is `from_id` to `to_id`):
 

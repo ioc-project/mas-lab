@@ -33,7 +33,7 @@ Terms used below:
 - **State / Transition**: trajectory nodes. A `State` holds the content of one step's input or output; a `Transition` connects the two and *represents* that call (see [section 5](#5-synthesised-nodes-and-edges)).
 - **Layer**: a group of event kinds you can switch on or off (trajectory, provenance, infrastructure, governance; see [section 8](#8-layer-defaults-and-control)).
 
-OTel telemetry is input, not a node layer: normalization never emits `Span` nodes. Call nodes carry `sourceRecordIds`, the `event_id` of each native event that created or updated the node. Validation uses `mas-ontology.ttl` from the `oxp-ontology` package (the SCOPE ontology) plus the MAS Lab extension file (see [ontology.md](ontology.md)).
+OTel telemetry is input, not a node layer: normalization never emits `Span` nodes. Call nodes carry `sourceRecordIds`, the `event_id` of each native event that created or updated the node. Validation uses `mas-ontology.ttl` from the `ioc-scope-ontology` package (the SCOPE ontology) plus the MAS Lab extension file (see [ontology.md](ontology.md)).
 
 The native pipeline has three stages:
 
@@ -87,13 +87,14 @@ Both errors are observability gaps, not fatal: with the default `strict=False` t
 | Control | Where | Meaning |
 |---|---|---|
 | `strict` | `normalize_events`, `build_kg_document`, `run_normalize` | Raise on observability gaps instead of logging and skipping the event. |
-| `include_infrastructure` / `include_trajectory` / `include_provenance` / `include_governance` / `include_annotation` | same, and `--include-*` / `--no-include-*` CLI flags | Select optional layers; defaults `False` / `True` / `False` / `False` / `False` ([section 8](#8-layer-defaults-and-control)). |
+| `include_infrastructure` / `include_trajectory` / `include_provenance` / `include_governance` / `include_annotation` / `include_native_extensions` | same, and `--include-*` / `--no-include-*` CLI flags | Select optional layers; all default `False` ([section 8](#8-layer-defaults-and-control)). |
+| `all_attributes` | `build_kg_document`, `--all-attributes` | Keep native-only fields. Default keeps SCOPE model attributes. |
 | `split_session_id` | `build_kg_document`, `--split-session-id` | Split a `<appName>_<uuid>` run id into `Session.appName` and `Session.sessionId`; default on. |
 | `app_name` | `build_kg_document`, `--app-name` | Override `Session.appName`. |
 | `application_node` | `build_kg_document`, `--application-node` | Emit one `Application` node per app plus `hasSession` edges. |
 | `session_id_override` | `extract_graph`, `--session-id` | Rename the session of a single-run trace (ignored with a warning when the trace has several run ids). |
 | `include_normalization_provenance` | `build_kg_document`, `build_kg_from_otel_spans` | Add `normalization_path`, `provenance_mode`, `heuristics_applied` to `metadata` (default off). |
-| `rewrite_tool_delegation` | `NativeGraphBuilder` only (default `True`) | Drop `delegate_to_*` ToolCalls and emit `callsAgent` edges instead ([section 5](#5-synthesised-nodes-and-edges)). Not exposed on `build_kg_document`. |
+| `rewrite_tool_delegation` | `NativeGraphBuilder` only (default `True`) | Drop `delegate_to_*` ToolCalls and close the caller's visit so the delegate is a sibling AgentCall. `callsAgent` is not emitted until A2A observability lands. Not exposed on `build_kg_document`. |
 | `allow_heuristics`, `fill_synthesized_processing_defaults` | native entry points | Accepted and ignored; the heuristics they used to gate were removed. |
 
 ### 2.2 No heuristic recovery
@@ -232,11 +233,11 @@ All States and Transitions carry `layer = "normalized"` and `sessionId`. `State.
 
 ### ThinkingCall
 
-Created by `handlers/chat.py` on `llm_call_end` when `response.thinking` is non-empty: `callId = {llmCallId}-thinking`, `parentCallId` = the LLM call, `startTime` = the LLM call's start, `endTime = start + 0.85 x (end - start)`, `thinkingContent`, `status = "success"`. The edge `hasThinking` (LLMCall -> ThinkingCall) is emitted. The 85 percent split is a fixed convention, not a measurement.
+Created by `handlers/chat.py` on `llm_call_end` when `response.thinking` is non-empty **and** `include_native_extensions` is on: `callId = {llmCallId}-thinking`, `parentCallId` = the LLM call, `startTime` = the LLM call's start, `endTime = start + 0.85 x (end - start)`, `thinkingContent`, `status = "success"`. The edge `hasThinking` (LLMCall -> ThinkingCall) is emitted. The 85 percent split is a fixed convention, not a measurement.
 
-### Delegation: `callsAgent`
+### Delegation: `delegate_to_*`
 
-With `rewrite_tool_delegation` (default), a `ToolCall` whose `tool_name` starts with `delegate_to_` is **not** materialised. The handler emits `callsAgent` from the caller (`parent_call_id`, else `agent_id`) to the target agent id, ends the caller's current `AgentCall` visit, and the delegated `AgentCall` is flattened to a sibling under the `MASCall` / `TaskCall` (so delegations are siblings, not nested). If the caller later resumes, a new `AgentCall` `{callId}-resume-{n}` is opened. With the switch off, the `ToolCall` is kept and a `callsAgent` edge is added from it.
+With `rewrite_tool_delegation` (default), a `ToolCall` whose `tool_name` starts with `delegate_to_` is **not** materialised. The handler ends the caller's current `AgentCall` visit, and the delegated `AgentCall` is flattened to a sibling under the `MASCall` / `TaskCall` (so delegations are siblings, not nested). If the caller later resumes, a new `AgentCall` `{callId}-resume-{n}` is opened. With the switch off, the `ToolCall` is kept. `callsAgent` is not emitted until A2A observability lands.
 
 ### Catalog nodes (`_extract_catalog_layer` and alignment)
 
@@ -326,7 +327,7 @@ Attribute names are camelCase. Which attributes exist depends on which events ca
 | `contributesTo` | `ContextContribution` -> `LLMCall` (or enclosing call) | handler or annotation resolution |
 | `derivedFrom` | `ContextContribution` -> `ContextContribution` | `_derived_from_edges` |
 | `hasThinking` | `LLMCall` -> `ThinkingCall` | `handlers/chat.py` |
-| `callsAgent` | call -> `Agent` | `handlers/tool.py` |
+| `callsAgent` | call -> `Agent` | not emitted until A2A observability |
 | `hasSession` | `Application` -> `Session` | optional (`application_node`) |
 
 ### Internal names rewritten during alignment
@@ -342,15 +343,17 @@ Attribute names are camelCase. Which attributes exist depends on which events ca
 
 ## 8. Layer defaults and control
 
-Five boolean flags control which event kinds reach the KG. They are applied before any class lookup: filtered events produce no nodes or edges. The sets are `LAYER_KINDS` in `core/event_mappings.py`.
+Boolean flags control which event kinds reach the KG. They are applied before any class lookup: filtered events produce no nodes or edges. The sets are `LAYER_KINDS` in `core/event_mappings.py`.
 
 | Flag | Default | Event kinds in the layer | Effect when `False` |
 |---|---|---|---|
 | `include_infrastructure` | `False` | `infrastructure_info` | No `Worker` nodes (see note below). |
-| `include_trajectory` | `True` | `parallel_group_start/end`, `branch_start/end`, `routing`, `routing_result` | No `ParallelGroup` / `Branch` nodes and no routing annotations; routing-derived delegation parents are not inferred, so those parents come from time enclosure instead. |
+| `include_trajectory` | `False` | `parallel_group_start/end`, `branch_start/end`, `routing`, `routing_result` | No `ParallelGroup` / `Branch` nodes and no routing annotations; routing-derived delegation parents are not inferred, so those parents come from time enclosure instead. |
+| `include_native_extensions` | `False` | `rag_query_*`, `memory_*`, `skill_execution_*` | No `RAGQuery` / `MemoryCall` / `SkillCall` / `ThinkingCall` nodes. |
 | `include_provenance` | `False` | `context_part_contributed` | No `ContextContribution` nodes or `contributesTo` / `derivedFrom` edges. |
 | `include_governance` | `False` | the `GovernanceEvent` kinds listed in [section 4](#4-event-kg-mapping-table) | No `GovernanceEvent` nodes. |
 | `include_annotation` | `False` | `context_assembled`, `state_update_*`, `observability_*_execute_*`, `user_input` / `user_output`, `client_response`, `tool_result_injected`, `wait_state_*`, and the other point CallAnnotation kinds | No `CallAnnotation` nodes except routing (trajectory layer). Matches observe-sdk `annotation_enabled=False`. |
+| `all_attributes` | `False` | — | Keep only SCOPE model fields on core nodes. Native extras (`callId`, `agentId`, …) need `all_attributes=True`. |
 
 The structural core (all call kinds in [section 4](#4-event-kg-mapping-table)) cannot be switched off. CLI: `mas-lab kg normalize --include-governance`, `--include-annotation`, `--no-include-trajectory`, and so on. The flags are recorded in `metadata.layers`.
 
@@ -368,10 +371,10 @@ Three similarly named things exist.
 
 | Source | Classes |
 |---|---|
-| `oxp-ontology` (`mas-ontology.ttl`) | `Session`, `MASCall`, `AgentCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `State`, `Transition`, `MAS`, `Agent`, `LLM`, `Tool`, `Processing`, `Capability`, `CapabilityCall` |
+| `ioc-scope-ontology` (`mas-ontology.ttl`) | `Session`, `MASCall`, `AgentCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `State`, `Transition`, `MAS`, `Agent`, `LLM`, `Tool`, `Processing`, `Capability`, `CapabilityCall` |
 | `library-kg/ontology/extensions/mas-kg-native-extensions.ttl` | `RAGQuery`, `MemoryCall`, `SkillCall`, `Skill`, `ThinkingCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`, `ParallelGroup`, `Branch`, `Worker`, `Run`, `Application` |
 
-`TaskCall` is not declared in either file (it is accepted by the native builder and Neo4j push but reported as an unknown node type by `mas-lab kg validate`). Normalization resolves ontology files through `mas.library.kg.ontology`, which loads `mas-ontology.ttl` from `oxp-ontology` and adds the extension TTL; it is not a single-file snapshot. If `oxp-ontology` or `rdflib` cannot be loaded, `build_kg_document` logs a warning and continues without the ontology-derived `masUri` / `spanLevel` enrichment.
+`TaskCall` is not declared in either file (it is accepted by the native builder and Neo4j push but reported as an unknown node type by `mas-lab kg validate`). Normalization resolves ontology files through `mas.library.kg.ontology`, which loads `mas-ontology.ttl` from `ioc-scope-ontology` and adds the extension TTL; it is not a single-file snapshot. If `ioc-scope-ontology` or `rdflib` cannot be loaded, `build_kg_document` logs a warning and continues without the ontology-derived `masUri` / `spanLevel` enrichment.
 
 ## 9. Node ID stability
 

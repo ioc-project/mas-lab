@@ -188,6 +188,20 @@ LAYER_KINDS: Dict[str, FrozenSet[str]] = {
             "wait_state_end",
         }
     ),
+    "native_extensions": frozenset(
+        {
+            "rag_query_start",
+            "rag_query_end",
+            "memory_call_start",
+            "memory_call_end",
+            "memory_store_start",
+            "memory_store_end",
+            "memory_retrieve_start",
+            "memory_retrieve_end",
+            "skill_execution_start",
+            "skill_execution_end",
+        }
+    ),
     "governance": frozenset(
         {
             "audit",
