@@ -103,7 +103,7 @@ def build_rows() -> list[AlignmentRow]:
                     mas_class=extra,
                     owl_class_exists=extra in KNOWN_NODE_TYPES,
                     suppressed=False,
-                    notes="emitted by extract_graph; needs oxp-ontology class",
+                    notes="emitted by extract_graph; needs SCOPE class",
                 )
             )
 
@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = print_report(rows)
     if failures:
-        print(f"\n{failures} alignment gap(s) — resolve via oxp-ontology or KIND_TO_CLASS")
+        print(f"\n{failures} alignment gap(s) — resolve via SCOPE or KIND_TO_CLASS")
         return 1
     print("\nAlignment report: no gaps in kind → OWL class map")
     return 0

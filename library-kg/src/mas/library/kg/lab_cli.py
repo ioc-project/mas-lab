@@ -94,13 +94,18 @@ def _emit_artifact(
 
     if output_dir and not dry_run:
         saved = Path(output_dir).expanduser().resolve() / "kg.jsonld"
-        click.echo(json.dumps({
-            "output": str(saved),
-            "node_count": artifact.node_count,
-            "edge_count": artifact.edge_count,
-            "session_id": artifact.session_id(),
-            "run_id": artifact.run_id(),
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "output": str(saved),
+                    "node_count": artifact.node_count,
+                    "edge_count": artifact.edge_count,
+                    "session_id": artifact.session_id(),
+                    "run_id": artifact.run_id(),
+                },
+                indent=2,
+            )
+        )
         return
 
     click.echo(json.dumps(artifact.to_doc(), indent=2))
@@ -135,7 +140,11 @@ def kg_group() -> None:
 @click.option("--ontology-path", default=None)
 @click.option("--dry-run", is_flag=True)
 @click.option("--include-infrastructure/--no-include-infrastructure", default=False)
-@click.option("--include-trajectory/--no-include-trajectory", default=True)
+@click.option(
+    "--include-trajectory/--no-include-trajectory",
+    default=False,
+    help="Include ParallelGroup / Branch / routing (native extensions; default off).",
+)
 @click.option("--include-provenance/--no-include-provenance", default=False)
 @click.option(
     "--include-governance/--no-include-governance",
@@ -146,6 +155,16 @@ def kg_group() -> None:
     "--include-annotation/--no-include-annotation",
     default=False,
     help="Include CallAnnotation kinds (default: off, same as observe-sdk).",
+)
+@click.option(
+    "--include-native-extensions/--no-include-native-extensions",
+    default=False,
+    help="Include RAG / memory / skill kinds and ThinkingCall (default: off).",
+)
+@click.option(
+    "--all-attributes/--no-all-attributes",
+    default=False,
+    help="Keep native-only node fields. Default keeps SCOPE attributes only.",
 )
 def _normalize(
     events_path: str | None,
@@ -165,6 +184,8 @@ def _normalize(
     include_provenance: bool,
     include_governance: bool,
     include_annotation: bool,
+    include_native_extensions: bool,
+    all_attributes: bool,
 ) -> None:
     if bool(events_path) == bool(otel_path):
         raise click.UsageError("Pass either EVENTS_PATH or --otel SPANS_PATH.")
@@ -184,6 +205,7 @@ def _normalize(
             fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
             write_events=False,
             dry_run=dry_run,
+            all_attributes=all_attributes,
         )
         _emit_artifact(artifact, output_path, output_dir, dry_run)
         return
@@ -207,6 +229,8 @@ def _normalize(
         include_provenance=include_provenance,
         include_governance=include_governance,
         include_annotation=include_annotation,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
     )
     _emit_artifact(artifact, output_path, output_dir, dry_run)
 
@@ -279,18 +303,22 @@ def _validate(
         )
 
     if list_checks:
-        click.echo(json.dumps({
-            "checks": list_available_checks(),
-            "usage": {
-                "run_default": "mas-lab kg validate KG.jsonld",
-                "run_one": "mas-lab kg validate KG.jsonld --check shacl",
-                "run_subset": (
-                    "mas-lab kg validate KG.jsonld "
-                    "--check unknown_node_types --check shacl"
-                ),
-                "skip_one": "mas-lab kg validate KG.jsonld --skip-check shacl",
-            },
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "checks": list_available_checks(),
+                    "usage": {
+                        "run_default": "mas-lab kg validate KG.jsonld",
+                        "run_one": "mas-lab kg validate KG.jsonld --check shacl",
+                        "run_subset": (
+                            "mas-lab kg validate KG.jsonld --check unknown_node_types --check shacl"
+                        ),
+                        "skip_one": "mas-lab kg validate KG.jsonld --skip-check shacl",
+                    },
+                },
+                indent=2,
+            )
+        )
         if kg_path is None:
             return
 

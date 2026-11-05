@@ -26,10 +26,12 @@ def run_normalize(
     dry_run: bool = False,
     strict: bool = False,
     include_infrastructure: bool = False,
-    include_trajectory: bool = True,
+    include_trajectory: bool = False,
     include_provenance: bool = False,
     include_governance: bool = False,
     include_annotation: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
 ) -> KGArtifact:
     """Normalize events.jsonl to a :class:`~mas.library.kg.artifact.KGArtifact`.
 
@@ -39,7 +41,7 @@ def run_normalize(
         output_dir: Directory to write ``kg.jsonld`` into.  When *None* the
             artifact is returned in memory only (equivalent to ``dry_run``).
         ontology_path: Explicit path to ``mas-ontology.ttl``.  If omitted,
-            resolved via ``oxp_ontology`` or vendored copy.
+            resolved via ``scope_ontology``.
         dry_run: If *True*, parse and validate but do not write output.
         split_session_id: If *True*, split ``run_id`` when it matches
             ``<appName>_<sessionUuid>`` and write ``Session.appName``.
@@ -54,6 +56,10 @@ def run_normalize(
             of the mapping tables themselves.
         include_annotation: If *True*, keep point CallAnnotation kinds.
             Default *False* to match observe-sdk.
+        include_native_extensions: If *True*, keep RAG / memory / skill
+            kinds and ThinkingCall. Default *False*.
+        all_attributes: If *True*, keep native-only fields. Default
+            *False* keeps SCOPE model attributes only.
 
     Returns:
         :class:`KGArtifact` with the normalised KG.  If *output_dir* is given
@@ -79,13 +85,19 @@ def run_normalize(
         include_provenance=include_provenance,
         include_governance=include_governance,
         include_annotation=include_annotation,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
     )
     artifact = KGArtifact.from_doc(doc)
 
     if output_dir and not dry_run:
         out = Path(output_dir).expanduser().resolve()
         saved = artifact.save(out / "kg.jsonld")
-        logger.info("normalize: wrote %d nodes, %d edges → %s",
-                    artifact.node_count, artifact.edge_count, saved)
+        logger.info(
+            "normalize: wrote %d nodes, %d edges → %s",
+            artifact.node_count,
+            artifact.edge_count,
+            saved,
+        )
 
     return artifact

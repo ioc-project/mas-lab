@@ -4,11 +4,11 @@
 
 Resolution order for each TTL:
 1. Explicit ``config_path`` argument (user override).
-2. External ``oxp_ontology`` package (canonical source).
+2. External ``scope_ontology`` package (SCOPE, canonical source).
 3. MAS-Lab extension TTLs under ``library-kg/ontology/extensions/`` for
-   classes the native path needs that PyPI ``oxp-ontology`` 1.0.0 does not
-   yet declare (RAGQuery, MemoryCall, SkillCall, governance, …). These are
-   pending upstream into oxp-ontology — they are not a second ontology.
+   classes the native path needs that SCOPE does not yet declare
+   (RAGQuery, MemoryCall, SkillCall, governance, …). These are pending
+   upstream — they are not a second ontology.
 
 This module never imports a private ontology package.
 """
@@ -22,19 +22,19 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 # Local-name stems of extension TTLs shipped with this library. Loaded only
-# as a fallback when oxp-ontology does not already provide the file.
+# as a fallback when SCOPE does not already provide the file.
 _LOCAL_EXTENSION_TTLS: tuple[str, ...] = (
     "mas-kg-native-extensions",
 )
 
 
 def _get_ontology_path(name: str) -> str:
-    """Resolve an ontology TTL path from the oxp_ontology package."""
+    """Resolve an ontology TTL path from the SCOPE ``scope_ontology`` package."""
     try:
-        from oxp_ontology import get_ontology_path  # type: ignore[import]
+        from scope_ontology import get_ontology_path
     except ImportError as exc:
         raise ImportError(
-            "oxp_ontology is required to resolve ontology TTL files"
+            "scope_ontology (ioc-scope-ontology) is required to resolve ontology TTL files"
         ) from exc
 
     path = get_ontology_path(name)
@@ -67,7 +67,7 @@ def _resolve_local_extension(stem: str) -> Optional[Path]:
 def resolve_mas_ontology_path(config_path: Optional[str] = None) -> Path:
     """Return the path to ``mas-ontology.ttl``.
 
-    Tries: explicit config_path → external oxp_ontology.
+    Tries: explicit config_path → external SCOPE ``scope_ontology``.
     """
     if config_path:
         path = Path(config_path).expanduser().resolve()
@@ -83,7 +83,7 @@ def resolve_mas_shapes_path() -> Optional[Path]:
     try:
         return Path(_get_ontology_path("mas-shapes"))
     except FileNotFoundError:
-        logger.warning("mas-shapes.ttl not found in oxp_ontology")
+        logger.warning("mas-shapes.ttl not found in scope_ontology")
         return None
 
 
@@ -92,14 +92,14 @@ def resolve_mas_shapes_custom_path() -> Optional[Path]:
     try:
         return Path(_get_ontology_path("mas-shapes-custom"))
     except FileNotFoundError:
-        logger.warning("mas-shapes-custom.ttl not found in oxp_ontology")
+        logger.warning("mas-shapes-custom.ttl not found in scope_ontology")
         return None
 
 
 def resolve_kg_ontology_paths() -> List[Path]:
     """Return TTL paths for the combined KG validation graph.
 
-    Includes ``mas-ontology.ttl`` from oxp-ontology plus any MAS-Lab
+    Includes ``mas-ontology.ttl`` from SCOPE plus any MAS-Lab
     extension TTLs that declare native-path classes not yet upstream.
     Always resolves — never returns empty (raises if mas-ontology.ttl is
     missing).
@@ -121,12 +121,12 @@ def resolve_kg_ontology_paths() -> List[Path]:
 
 
 def resolve_all_ontology_paths() -> List[Path]:
-    """Return bundled oxp-ontology TTLs plus MAS-Lab native-path extensions."""
+    """Return bundled SCOPE TTLs plus MAS-Lab native-path extensions."""
     try:
-        from oxp_ontology import ONTOLOGY_FILES  # type: ignore[import]
+        from scope_ontology import ONTOLOGY_FILES
     except ImportError as exc:
         raise ImportError(
-            "oxp_ontology is required to resolve ontology TTL files"
+            "scope_ontology (ioc-scope-ontology) is required to resolve ontology TTL files"
         ) from exc
 
     paths: List[Path] = []
@@ -134,7 +134,7 @@ def resolve_all_ontology_paths() -> List[Path]:
         try:
             paths.append(Path(_get_ontology_path(name)))
         except FileNotFoundError:
-            logger.warning("Ontology TTL %s not found in oxp_ontology", name)
+            logger.warning("Ontology TTL %s not found in scope_ontology", name)
     for extra in resolve_kg_ontology_paths():
         if extra not in paths:
             paths.append(extra)

@@ -2172,6 +2172,19 @@ wheels = [
 ]
 
 [[package]]
+name = "ioc-scope-ontology"
+version = "1.1.0"
+source = { git = "https://github.com/ioc-project/scope.git?subdirectory=ontology#4e12864cfe5c3a05ab06952a5e9e79ec4faad9ba" }
+dependencies = [
+    { name = "rdflib" },
+]
+
+[package.optional-dependencies]
+models = [
+    { name = "pydantic" },
+]
+
+[[package]]
 name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
@@ -3367,16 +3380,16 @@ name = "mas-lab-library-kg"
 version = "0.2.0"
 source = { editable = "library-kg" }
 dependencies = [
-    { name = "oxp-ontology", extra = ["models"] },
+    { name = "ioc-scope-ontology", extra = ["models"] },
 ]
 
 [package.optional-dependencies]
 all = [
     { name = "click" },
+    { name = "ioc-scope-ontology", extra = ["models"] },
     { name = "jsonschema" },
     { name = "neo4j" },
     { name = "norm" },
-    { name = "oxp-ontology", extra = ["models"] },
     { name = "pyshacl" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3394,8 +3407,8 @@ compare-native-otel = [
 ]
 dev = [
     { name = "click" },
+    { name = "ioc-scope-ontology", extra = ["models"] },
     { name = "jsonschema" },
-    { name = "oxp-ontology", extra = ["models"] },
     { name = "pyshacl" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3415,13 +3428,13 @@ norm = [
     { name = "norm" },
 ]
 ontology = [
-    { name = "oxp-ontology", extra = ["models"] },
+    { name = "ioc-scope-ontology", extra = ["models"] },
 ]
 plot = [
     { name = "mas-lab-component-bench" },
 ]
 validation = [
-    { name = "oxp-ontology", extra = ["models"] },
+    { name = "ioc-scope-ontology", extra = ["models"] },
     { name = "pyshacl" },
     { name = "rdflib" },
 ]
@@ -3434,6 +3447,10 @@ verify = [
 requires-dist = [
     { name = "click", marker = "extra == 'bench'", specifier = ">=8.0" },
     { name = "click", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "ioc-scope-ontology", extras = ["models"], git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
+    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'dev'", git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
+    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'ontology'", git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
+    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'validation'", git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "jsonschema", marker = "extra == 'verify'", specifier = ">=4.0.0" },
     { name = "mas-lab-component-bench", marker = "extra == 'bench'", editable = "lab/components/bench" },
@@ -3441,11 +3458,7 @@ requires-dist = [
     { name = "mas-lab-library-kg", extras = ["dev", "neo4j", "norm"], marker = "extra == 'all'", editable = "library-kg" },
     { name = "mas-lab-library-telemetry", marker = "extra == 'compare-native-otel'", editable = "library-telemetry" },
     { name = "neo4j", marker = "extra == 'neo4j'", specifier = ">=5.0" },
-    { name = "norm", marker = "extra == 'norm'", git = "https://github.com/outshift-open/observe-and-explain-platform.git?subdirectory=backend%2Fnorm" },
-    { name = "oxp-ontology", extras = ["models"], specifier = ">=1.0.1" },
-    { name = "oxp-ontology", extras = ["models"], marker = "extra == 'dev'", specifier = ">=1.0.1" },
-    { name = "oxp-ontology", extras = ["models"], marker = "extra == 'ontology'", specifier = ">=1.0.1" },
-    { name = "oxp-ontology", extras = ["models"], marker = "extra == 'validation'", specifier = ">=1.0.1" },
+    { name = "norm", marker = "extra == 'norm'", git = "https://github.com/ioc-project/scope.git?subdirectory=backend%2Fnorm" },
     { name = "pyshacl", marker = "extra == 'dev'", specifier = ">=0.25.0" },
     { name = "pyshacl", marker = "extra == 'graph'", specifier = ">=0.25.0" },
     { name = "pyshacl", marker = "extra == 'validation'", specifier = ">=0.25.0" },
@@ -4039,10 +4052,10 @@ wheels = [
 [[package]]
 name = "norm"
 version = "1.0.0"
-source = { git = "https://github.com/outshift-open/observe-and-explain-platform.git?subdirectory=backend%2Fnorm#52c45cb74cb171a8e48eeed5e1e0ef3dff7624dd" }
+source = { git = "https://github.com/ioc-project/scope.git?subdirectory=backend%2Fnorm#4e12864cfe5c3a05ab06952a5e9e79ec4faad9ba" }
 dependencies = [
+    { name = "ioc-scope-ontology" },
     { name = "neo4j" },
-    { name = "oxp-ontology" },
     { name = "pydantic" },
 ]
 
@@ -4788,23 +4801,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cb/08/50dd7fd0c64775d3d6309f35c0cc9a9d635f392f94ee2c4f9122404f7f86/owlrl-7.6.2.tar.gz", hash = "sha256:c743f35c2d908396e77823852bb1ebbce88340cd49961493983bec42c93283a8", size = 48564, upload-time = "2026-07-08T08:38:26.462Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4a/5e/314be7440bf28dbd47f85321a7434c5b74179a762228487d6493c01bddce/owlrl-7.6.2-py3-none-any.whl", hash = "sha256:83347bf7f133979e87b2b18695d51d25510b99cec3f6919b5df05d4fbf058ae0", size = 55814, upload-time = "2026-07-08T08:38:23.842Z" },
-]
-
-[[package]]
-name = "oxp-ontology"
-version = "1.0.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "rdflib" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/62/40/c4c0eb849ddca002c047982a17a593315db69f695d0c38d9c5595d814be1/oxp_ontology-1.0.2.tar.gz", hash = "sha256:e05ef0c9d1ddc0ade7d3b4fd328ef4e491bc26b2db84beba59916a09c7ee3df2", size = 33295, upload-time = "2026-10-05T21:57:22.88Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/ae/11be83b0987984ed5fca081cc648cf85ba2d0a230d606a4b2f54fc8dc0fd/oxp_ontology-1.0.2-py3-none-any.whl", hash = "sha256:b91e591ede23cc59c9729b681ebf74e880d5378d9004ff2747e4eececcc0d450", size = 60846, upload-time = "2026-10-05T21:57:21.705Z" },
-]
-
-[package.optional-dependencies]
-models = [
-    { name = "pydantic" },
 ]
 
 [[package]]

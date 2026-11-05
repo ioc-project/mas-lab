@@ -904,6 +904,8 @@ def test_rewrite_tool_delegation_turns_delegate_to_into_agent_previous(tmp_path)
     assert schedule["attributes"].get("ioa_observe.agent.previous") == "moderator"
     assert schedule["attributes"].get("ioa_observe.agent.sequence")
     assert schedule["attributes"].get("ioa_observe.handoff.source.span_ids")
+    moderator_spans = [s for s in spans if s.get("name") == "moderator.agent"]
+    assert moderator_spans
 
     off = tmp_path / "off.jsonl"
     replay_events_file(

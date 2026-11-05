@@ -16,9 +16,10 @@ from unittest.mock import MagicMock
 import pytest
 
 from mas.library.kg.core.graph_builder import normalize_events
+from mas.library.kg.core.oxp_models import mas_namespace
 from mas.library.kg.exceptions import MissingCallIdError, UnknownSpanBoundaryError
 
-_MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
+_MAS_NS = mas_namespace()
 
 
 def _make_ontology() -> Any:

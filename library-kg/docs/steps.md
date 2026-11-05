@@ -76,10 +76,12 @@ def run_normalize(
     dry_run: bool = False,
     strict: bool = False,
     include_infrastructure: bool = False,
-    include_trajectory: bool = True,
+    include_trajectory: bool = False,
     include_provenance: bool = False,
     include_governance: bool = False,
     include_annotation: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
 ) -> KGArtifact
 ```
 
@@ -88,14 +90,15 @@ def run_normalize(
 | `events_path` | required | Path to the input `events.jsonl`. |
 | `run_id` | required | Run identifier, written into every node and edge. |
 | `output_dir` | `None` | Directory to write `kg.jsonld` into. `None` keeps the artifact in memory only. |
-| `ontology_path` | `None` | Explicit path to `mas-ontology.ttl`. Omit to resolve it from `oxp-ontology`. |
+| `ontology_path` | `None` | Explicit path to `mas-ontology.ttl`. Omit to resolve it from `ioc-scope-ontology`. |
 | `split_session_id` | `True` | Split a `run_id` of the form `<appName>_<sessionUuid>` and write `Session.appName`. |
 | `app_name` | `None` | Explicit `Session.appName` override. |
 | `application_node` | `False` | Emit an `Application` node and `hasSession` edges. |
 | `fill_synthesized_processing_defaults` | `True` | Populate recommended fields on synthesized `ProcessingCall` nodes. |
 | `dry_run` | `False` | Parse and validate, write nothing. |
 | `strict` | `False` | Raise on an observability gap (unmapped event kind, missing `call_id`, ...) instead of logging a warning and skipping the event. |
-| `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation` | `False`, `True`, `False`, `False`, `False` | Event categories (layers) to include; see [normalization.md](normalization.md#8-layer-defaults-and-control). |
+| `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`, `include_native_extensions` | all `False` | Event categories (layers) to include; see [normalization.md](normalization.md#8-layer-defaults-and-control). |
+| `all_attributes` | `False` | Keep native-only fields. Default keeps SCOPE model attributes. |
 
 Returns the normalised `KGArtifact`. With `output_dir` set and `dry_run` false, it also
 writes `<output_dir>/kg.jsonld`.
@@ -149,7 +152,7 @@ not recognised, the step logs a warning and returns an empty artifact instead of
 | `spans_path` | required | OTel spans file (JSON array or JSONL of span dicts). |
 | `run_id` | required | Run identifier, stored in the artifact metadata. |
 | `output_dir` | `None` | Directory to write `kg.jsonld` into. |
-| `ontology_path` | `None` | Unused here; `norm` resolves `oxp-ontology` itself. |
+| `ontology_path` | `None` | Unused here; `norm` resolves `ioc-scope-ontology` itself. |
 | `include_normalization_provenance` | `False` | Record `provenance_mode` and `heuristics_applied` in the metadata. |
 | `dry_run` | `False` | Convert, write nothing. |
 
@@ -345,7 +348,11 @@ def run_compare_kg(
     candidate: KGArtifact | str | Path,
     reference: KGArtifact | str | Path,
     *,
-    strict: bool = False,
+    strict: bool = True,
+    strict_nodes: bool | None = None,
+    strict_edges: bool | None = None,
+    strict_node_attributes: bool | None = None,
+    strict_edge_attributes: bool | None = None,
     fail_on_error: bool = False,
     output_path: Optional[str | Path] = None,
     node_types: Optional[list[str]] = None,
@@ -356,7 +363,8 @@ def run_compare_kg(
 |-----------|---------|-------------|
 | `candidate` | required | KG under test. |
 | `reference` | required | Ground-truth KG. |
-| `strict` | `False` | Count element-level diff failures as comparison failures. |
+| `strict` | `True` | Extra nodes / edges / attribute keys on the candidate fail. |
+| `strict_nodes`, `strict_edges`, `strict_node_attributes`, `strict_edge_attributes` | follow `strict` | Override one axis. `False` allows extras on that axis. |
 | `fail_on_error` | `False` | Raise `RuntimeError` if the comparison fails. |
 | `output_path` | `None` | Write the parity report JSON to this path. |
 | `node_types` | `None` | If set, only these node types (and edges between them) are compared. |
@@ -604,10 +612,10 @@ what it writes to the step output directory.
 | Step `type` | Wraps | Config keys read | Output |
 |-------------|-------|------------------|--------|
 | `verify_events` | `run_verify_events` | `events_path`, `filename`, `strictness`, `fail_on_error` | `events_verify_report.json` |
-| `normalize_events` | `run_normalize` | `events_path`, `filename`, `run_id`, `ontology_path`, `strict`, `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`, `artifact` (default `kg`) | `kg.jsonld` |
-| `normalize_otel` | `run_normalize_otel` | `spans_path`, `filename`, `run_id`, `ontology_path`, `strict`, `artifact` (default `kg_otel`) | `kg.jsonld` |
+| `normalize_events` | `run_normalize` | `events_path`, `filename`, `run_id`, `ontology_path`, `strict`, `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`, `include_native_extensions`, `all_attributes`, `artifact` (default `kg`) | `kg.jsonld` |
+| `normalize_otel` | `run_normalize_otel` | `spans_path`, `filename`, `run_id`, `ontology_path`, `strict`, `all_attributes`, `artifact` (default `kg_otel`) | `kg.jsonld` |
 | `validate_kg` | `run_validate_kg` | `kg_path`, `ontology_path`, `strict`, `fail_on_error` | `kg_validation_report.json` |
-| `compare_kg` | `run_compare_kg` | `reference_artifact`, `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`, `strict`, `fail_on_error`, `node_types` | `kg_compare_report.json` |
+| `compare_kg` | `run_compare_kg` | `reference_artifact`, `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`, `strict`, `strict_nodes`, `strict_edges`, `strict_node_attributes`, `strict_edge_attributes`, `fail_on_error`, `node_types` | `kg_compare_report.json` |
 | `neo4j_push` | `run_neo4j_push` | `kg_path`, `infra`, `uri`, `username`, `password_env`, `database`, `app_name`, `batch_size`, `clear_session`, `dry_run` | push summary |
 | `neo4j_dump` | `run_neo4j_dump` | `session_id`, `run_id`, `infra`, `uri`, `username`, `password_env`, `database` | `kg.jsonld` |
 

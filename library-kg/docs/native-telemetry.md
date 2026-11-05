@@ -136,9 +136,9 @@ Behaviour of `NativeGraphBuilder.upsert_call` (`core/native_graph_builder.py`):
 
 ## 5. Kind reference
 
-`KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` has 85 entries: 73 map to an ontology class (tables below) and 12 map to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the SCOPE ontology (`oxp-ontology`; see [ontology.md](ontology.md)).
+`KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` has 85 entries: 73 map to an ontology class (tables below) and 12 map to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the SCOPE ontology (`ioc-scope-ontology`; see [ontology.md](ontology.md)).
 
-**Optional layers.** `LAYER_KINDS` groups some kinds into five layers that `normalize_events` can drop. Defaults: `trajectory` on; `infrastructure`, `provenance`, `governance`, `annotation` off. CLI flags: `--include-infrastructure`, `--include-trajectory`, `--include-provenance`, `--include-governance`, `--include-annotation` (each with a `--no-` form); Python: the same `include_*` keyword arguments of `run_normalize`. A dropped layer produces no nodes for its kinds.
+**Optional layers.** `LAYER_KINDS` groups kinds into layers that `normalize_events` can drop. Defaults: all off (`infrastructure`, `trajectory`, `provenance`, `governance`, `annotation`, `native_extensions`). CLI flags: `--include-infrastructure`, `--include-trajectory`, `--include-provenance`, `--include-governance`, `--include-annotation`, `--include-native-extensions`, `--all-attributes` (each with a `--no-` form); Python: the same keyword arguments of `run_normalize`. A dropped layer produces no nodes for its kinds. Default attributes are SCOPE model fields only.
 
 | Layer | Kinds | Default |
 |-------|-------|---------|
@@ -271,17 +271,17 @@ The handler pairs the end with the agent's currently open `execution_start`, eve
 
 | Event field | KG attribute | Notes |
 |-------------|-------------|-------|
-| `response.usage.prompt_tokens` / `input_tokens` | `promptTokenCount` | |
-| `response.usage.completion_tokens` / `output_tokens` | `completionTokenCount` | |
-| `response.usage.total_tokens` | `totalTokenCount` | |
+| `response.usage.prompt_tokens` / `input_tokens` | `promptTokenCount` | Also `tokens_used` at the top level of the event. |
+| `response.usage.completion_tokens` / `output_tokens` | `completionTokenCount` | Same. |
+| `response.usage.total_tokens` | `totalTokenCount` | Same. |
 | `response.usage.cache_read_input_tokens` | `cacheReadTokenCount` | |
-| `response.model`, `response.id` | `modelName`, `responseId` | Only fill gaps left by the start event. |
-| `response.choices[0].finish_reason` | `finishReason` | |
+| `response.model`, top-level `model`, `response.id` | `modelName`, `responseId` | `provider/model` splits into `provider` + `modelName`. |
+| `response.choices[0].finish_reason` or top-level `finish_reason` | `finishReason` | |
 | `response.choices[0].message.{content,tool_calls}` or flat `response.{content,text,tool_calls}` | `completion`, `toolCalls` | Tool-use-only responses are rendered as `-> name(args)` lines. |
-| `response.thinking` | child `ThinkingCall` node | Linked from the LLM call by a `hasThinking` edge. |
+| `response.thinking` | child `ThinkingCall` node | Emitted when `include_native_extensions` is on. Linked from the LLM call by a `hasThinking` edge. |
 | `content` / `output` (flat) | `completion` | Used when there is no `response` object. |
 
-Spec-recommended `latency_ms`, `finish_reason` and `tokens_used` at the top level of the event are not read by the handler; token counts must be under `response.usage` to reach the graph. The runtime's own traces (see `examples/qa-agent`) carry a flat `output` and a top-level `tokens_used` object instead.
+Runtime traces (trip-planner, `examples/qa-agent`) put `tokens_used`, `model`, and `finish_reason` on the event. The handler reads those first, then falls back to `response.usage` / `response.choices`.
 
 ```json
 {"kind":"llm_call_end","agent_id":"planner","call_id":"tp-llm-001","parent_call_id":"tp-exec-001","run_id":"r1","status":"success","timestamp":1716200003.5,"latency_ms":1500,"response":{"id":"resp-abc123","model":"gemini-2.5-flash","choices":[{"message":{"role":"assistant","content":"Delegating to itinerary_agent."},"finish_reason":"stop"}],"usage":{"prompt_tokens":80,"completion_tokens":18,"total_tokens":98}}}
@@ -295,7 +295,7 @@ Spec-recommended `latency_ms`, `finish_reason` and `tokens_used` at the top leve
 | `tool_call_id` | `toolCallId` | Provider-assigned id. |
 | `tool_arguments` / `arguments` / `parameters` | `toolArguments` | First present, JSON-encoded. |
 
-**Delegation tools.** A tool named `delegate_to_<agent>` is treated as a hand-off, not a tool call: by default no `ToolCall` node is created; the builder emits a `callsAgent` edge to `<agent>` and closes the caller's agent visit so the delegate appears as a sibling visit.
+**Delegation tools.** A tool named `delegate_to_<agent>` is treated as a hand-off, not a tool call: by default no `ToolCall` node is created, and the caller's agent visit is closed so the delegate appears as a sibling visit (LangGraph / observe-sdk). `callsAgent` is not emitted until A2A observability lands.
 
 ```json
 {"kind":"tool_call_start","agent_id":"itinerary_agent","call_id":"tp-tc-001","parent_call_id":"tp-pg-001","run_id":"r1","tool_name":"search_flights","timestamp":1716200005.1,"arguments":{"origin":"NYC","destination":"CDG","date":"2026-07-01"}}
@@ -533,7 +533,7 @@ library-kg/src/mas/library/kg/core/event_mappings.py
    "my_new_event_end":   "ToolCall",
    ```
 
-   The value is the local name of a class in the SCOPE ontology (`oxp-ontology`), for example `ToolCall`, `LLMCall`, `AgentCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`. Classes with a dispatch entry in `observability/native/handlers/__init__.py` (`HANDLERS`) get class-specific enrichment; others fall back to the generic call handler.
+   The value is the local name of a class in the SCOPE ontology (`ioc-scope-ontology`), for example `ToolCall`, `LLMCall`, `AgentCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`. Classes with a dispatch entry in `observability/native/handlers/__init__.py` (`HANDLERS`) get class-specific enrichment; others fall back to the generic call handler.
 
 2. If the kind belongs to an optional layer, add it to `LAYER_KINDS` in the same file so it is dropped when the layer is off.
 

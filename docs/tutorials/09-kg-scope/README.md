@@ -39,9 +39,9 @@ Provenance and Explainability, [github.com/ioc-project/scope](https://github.com
 is the observability platform MAS-Lab feeds. Two of its pieces are not part of
 MAS Lab:
 
-- `oxp-ontology` (PyPI, hard dependency of the kg library): the ontology,
+- `ioc-scope-ontology` (SCOPE, hard dependency of the kg library): the ontology,
   the SHACL shapes (`mas-shapes.ttl`) and the Python models
-  `oxp_ontology.models.*`.
+  `scope_ontology.models.*`.
 - `norm` (kg library extra `norm`, installed from git): turns OTel spans
   into ontology nodes and edges with `norm.normalize()`.
 
@@ -172,7 +172,7 @@ case should pass.
 ## Step 5 — Validate against the ontology
 
 The validator checks vocabulary, blocks, layers and the SHACL shapes in
-`oxp-ontology`.
+`ioc-scope-ontology`.
 
 ```bash
 uv pip install -e "library-kg[validation]"   # rdflib + pyshacl
@@ -232,7 +232,7 @@ and the kg library. Neither exists yet.
 ## What you learned
 
 1. OTel→KG reuses SCOPE's `norm`; native→KG is first-party. Both target
-   `oxp_ontology.models.*`, and a test keeps them aligned.
+   `scope_ontology.models.*`, and a test keeps them aligned.
 2. `kg normalize` and `kg neo4j-push` are shortcuts for pipeline steps; a path,
    `--infra` or `$NEO4J_URI` picks the sink, and `--dry-run` needs no Neo4j.
 3. Layers match Tutorial 8's categories, with governance off by default.

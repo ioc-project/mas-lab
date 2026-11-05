@@ -26,6 +26,9 @@ def full_kg() -> dict:
         include_provenance=True,
         include_governance=True,
         include_annotation=True,
+        include_trajectory=True,
+        include_native_extensions=True,
+        all_attributes=True,
     )
 
 

@@ -30,6 +30,7 @@ def run_normalize_otel(
     synthesize_llm_gaps: bool = True,
     write_events: bool = True,
     dry_run: bool = False,
+    all_attributes: bool = False,
 ) -> KGArtifact:
     """Convert OTel spans to a :class:`~mas.library.kg.artifact.KGArtifact`.
 
@@ -42,7 +43,7 @@ def run_normalize_otel(
         spans_path: Path to OTel spans JSON/JSONL.
         run_id: Unique identifier written into artifact metadata.
         output_dir: Directory to write ``kg.jsonld`` into.
-        ontology_path: Unused on the OTel path (norm resolves oxp-ontology).
+        ontology_path: Unused on the OTel path (norm resolves SCOPE).
         strict: Unused; ``norm`` owns OTel error handling.
         allow_heuristics: Unused; this wrapper does not apply heuristics.
         include_normalization_provenance: Include path metadata.
@@ -80,7 +81,7 @@ def run_normalize_otel(
     else:
         logger.info("normalize_otel: detected format %r", otel_format)
         try:
-            nodes, edges = normalize_otel(spans)
+            nodes, edges = normalize_otel(spans, all_attributes=all_attributes)
         except ImportError as exc:
             logger.warning(
                 "normalize_otel: norm is not installed (%s) — producing an empty "

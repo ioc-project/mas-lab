@@ -58,7 +58,11 @@ def _resolve_run_file(
     """Resolve ``<run_dir>/traces/<filename>`` (or ``<run_dir>/<filename>``)."""
     run_dir = run_dir_from_ctx(ctx, config)
     if not run_dir:
-        return None
+        out = getattr(ctx, "output_dir", None)
+        if out and (Path(out) / "traces" / "events.jsonl").exists():
+            run_dir = Path(out)
+        else:
+            return None
     for sub in (run_dir / "traces" / filename, run_dir / filename):
         if sub.exists():
             return str(sub)

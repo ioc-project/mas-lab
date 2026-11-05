@@ -75,7 +75,7 @@ def test_suppressed_kinds_map_to_none() -> None:
 def test_governance_kinds_map_to_governance_event(ontology) -> None:
     """Governance kinds map to GovernanceEvent, not the interim CallAnnotation."""
     if "GovernanceEvent" not in ontology:
-        pytest.skip("GovernanceEvent not in the loaded ontology (oxp_ontology not installed)")
+        pytest.skip("GovernanceEvent not in the loaded ontology (scope_ontology not installed)")
     governance_kinds = {k for k, v in KIND_TO_CLASS.items() if v == "GovernanceEvent"}
     assert governance_kinds, "Expected at least one kind mapped to GovernanceEvent"
     for kind in governance_kinds:

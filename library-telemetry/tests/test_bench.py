@@ -55,3 +55,28 @@ def test_steps_discoverable_via_manifest():
     # mechanism the bench framework's step registry reads from.
     steps = list_steps()
     assert {"events_to_otel", "verify_otel"} <= steps.keys()
+
+
+@requires_bench
+def test_resolve_run_file_uses_output_dir_when_scope_is_missing(tmp_path):
+    """Standalone ``pipeline run -o <run folder>`` has no scope_context."""
+    from mas.library.telemetry.bench import _resolve_run_file
+
+    events = tmp_path / "traces" / "events.jsonl"
+    events.parent.mkdir()
+    events.write_text("{}\n", encoding="utf-8")
+
+    class _RunFolder:
+        output_dir = tmp_path
+        scope_context = None
+
+    assert _resolve_run_file(_RunFolder(), {}, "events.jsonl") == str(events)
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+
+    class _Empty:
+        output_dir = empty
+        scope_context = None
+
+    assert _resolve_run_file(_Empty(), {}, "events.jsonl") is None

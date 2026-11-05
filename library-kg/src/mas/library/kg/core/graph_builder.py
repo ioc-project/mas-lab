@@ -9,7 +9,7 @@ not by this module.
 Two stages:
 1. :func:`normalize_events` -- annotates each event with its ontology class
    (``mas_class``, ``mas_uri``, ``span_level``) from ``mas-ontology.ttl``
-   (parsed lazily via rdflib/``oxp_ontology``; degrades gracefully to
+   (parsed lazily via rdflib/``scope_ontology``; degrades gracefully to
    :data:`~mas.library.kg.core.event_mappings.KIND_TO_CLASS` alone when
    those aren't installed), and pairs ``*_start``/``*_end`` events into call
    records with a stable ``call_id``.
@@ -44,6 +44,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from mas.library.kg._dist import extra_hint
 from mas.library.kg.core.event_mappings import KIND_TO_CLASS, LAYER_KINDS
+from mas.library.kg.core.oxp_models import mas_namespace
 from mas.library.kg.exceptions import (
     MissingCallIdError,
     UnknownSpanBoundaryError,
@@ -96,7 +97,7 @@ def extract_plot_events(raw_events: List[Dict[str, Any]]) -> List[Dict[str, Any]
     return [dict(ev) for ev in raw_events if ev.get("kind")]
 
 
-_MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
+_MAS_NS = mas_namespace()
 
 # ---------------------------------------------------------------------------
 # Layer filtering
@@ -200,7 +201,7 @@ def _load_ontology(ttl_path: Path) -> _OntologyIndex:
 
 
 def _resolve_ontology_path(config_path: Optional[str]) -> Path:
-    """Resolve mas-ontology.ttl from config or the oxp_ontology package."""
+    """Resolve mas-ontology.ttl from config or the SCOPE package."""
     from mas.library.kg.ontology import resolve_mas_ontology_path
 
     return resolve_mas_ontology_path(config_path)
@@ -389,6 +390,7 @@ def layer_skip_kinds(
     include_provenance: bool,
     include_governance: bool,
     include_annotation: bool,
+    include_native_extensions: bool = False,
 ) -> frozenset:
     """Event kinds to drop, given which optional layers are enabled."""
     active: Dict[str, bool] = {
@@ -397,6 +399,7 @@ def layer_skip_kinds(
         "provenance": include_provenance,
         "governance": include_governance,
         "annotation": include_annotation,
+        "native_extensions": include_native_extensions,
     }
     return frozenset().union(*(LAYER_KINDS[name] for name, on in active.items() if not on))
 
@@ -407,10 +410,11 @@ def normalize_events(
     run_id: str,
     *,
     include_infrastructure: bool = False,
-    include_trajectory: bool = True,
+    include_trajectory: bool = False,
     include_provenance: bool = False,
     include_governance: bool = False,
     include_annotation: bool = False,
+    include_native_extensions: bool = False,
     strict: bool = False,
 ) -> List[Dict[str, Any]]:
     """Annotate a list of ObsEvents with ontology metadata.
@@ -430,8 +434,9 @@ def normalize_events(
     ----------------
     include_infrastructure : bool, default False
         Worker / endpoint presence events.
-    include_trajectory : bool, default True
-        Parallel groups, branches, and routing annotations.
+    include_trajectory : bool, default False
+        Parallel groups, branches, and routing annotations. Off by default:
+        those classes are native extensions, not SCOPE core.
     include_provenance : bool, default False
         Per-part context contributions (ContextContribution nodes).
     include_governance : bool, default False
@@ -441,6 +446,8 @@ def normalize_events(
         Point CallAnnotation kinds (state_update, context_assembled,
         observability_*_execute, user I/O, …). Matches observe-sdk
         ``annotation_enabled=False``. Routing stays on the trajectory layer.
+    include_native_extensions : bool, default False
+        RAG, memory, and skill call kinds (native-extension classes).
 
     strict : bool, default False
         An observability gap (an event kind with no ``KIND_TO_CLASS`` entry,
@@ -464,6 +471,7 @@ def normalize_events(
         include_provenance=include_provenance,
         include_governance=include_governance,
         include_annotation=include_annotation,
+        include_native_extensions=include_native_extensions,
     )
     gaps = _GapDedup(run_id)
 
@@ -958,6 +966,8 @@ def extract_graph(
     application_node: bool = False,
     fill_synthesized_processing_defaults: bool = True,
     allow_heuristics: bool = False,
+    include_native_extensions: bool = False,
+    all_attributes: bool = False,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Build nodes and edges from a normalized event list.
 
@@ -991,7 +1001,6 @@ def extract_graph(
     Edge types
     ----------
     hasCall         (:Run / :Session)  → (:AgentCall / :LLMCall / …)
-    callsAgent      (:ToolCall)        → (:Agent)  when tool_name starts delegate_to_
     contains        (:AgentCall)       → (:LLMCall / :ToolCall / …)  by timestamp enclosure
     hasInitialState (:AgentCall / :LLMCall) → (:State)
     hasFinalState   (:AgentCall / :LLMCall) → (:State)
@@ -1012,6 +1021,8 @@ def extract_graph(
         split_session_id=split_session_id,
         app_name_override=app_name_override,
         application_node=application_node,
+        include_native_extensions=include_native_extensions,
+        all_attributes=all_attributes,
     )
 
 

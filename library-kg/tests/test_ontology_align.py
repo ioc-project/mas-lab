@@ -52,3 +52,69 @@ def test_align_graph_strips_oxp_class_layer_and_fills_id():
     assert any(e["edge_type"] == "hasAgentCall" for e in edges)
     assert any(e["edge_type"] == "executesSession" for e in edges)
     assert any(n["node_type"] == "MAS" for n in nodes)
+
+
+def test_align_fills_agent_catalog_agent_id():
+    nodes, _edges = align_graph(
+        [
+            {"node_type": "Agent", "id": "moderator", "name": "moderator"},
+            {
+                "node_type": "AgentCall",
+                "id": "ac1",
+                "agentId": "moderator",
+                "spanId": "aaaabbbbccccdddd",
+            },
+        ],
+        [],
+        emit_topology=True,
+    )
+    agent = next(n for n in nodes if n["node_type"] == "Agent")
+    assert agent["agentId"] == "moderator"
+
+
+def test_align_does_not_mint_agent_from_mascall_agent_id():
+    nodes, _edges = align_graph(
+        [
+            {
+                "node_type": "MASCall",
+                "id": "mc1",
+                "name": "mas",
+                "agentId": "mas",
+            },
+            {"node_type": "Agent", "id": "moderator", "name": "moderator"},
+            {
+                "node_type": "AgentCall",
+                "id": "ac1",
+                "agentId": "moderator",
+            },
+        ],
+        [],
+        emit_topology=True,
+    )
+    agents = [n for n in nodes if n["node_type"] == "Agent"]
+    assert {n.get("agentId") or n.get("name") for n in agents} == {"moderator"}
+
+
+def test_align_does_not_emit_uses_tool_or_calls_agent():
+    nodes, edges = align_graph(
+        [
+            {"node_type": "Agent", "id": "schedule_agent", "name": "schedule_agent"},
+            {
+                "node_type": "AgentCall",
+                "id": "ac1",
+                "agentId": "schedule_agent",
+                "spanId": "1111222233334444",
+            },
+            {
+                "node_type": "ToolCall",
+                "id": "tc1",
+                "agentId": "schedule_agent",
+                "toolName": "lookup_schedule",
+                "parentSpanId": "1111222233334444",
+            },
+        ],
+        [],
+        emit_topology=True,
+    )
+    assert [e for e in edges if e["edge_type"] in {"usesTool", "callsAgent"}] == []
+    assert any(n["node_type"] == "Tool" for n in nodes)

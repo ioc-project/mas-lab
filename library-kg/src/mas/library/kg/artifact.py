@@ -46,13 +46,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
+from mas.library.kg.core.oxp_models import mas_namespace
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["KGArtifact", "stream_artifacts"]
 
-_MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
-_MASKG_NS = "https://outshift-open.github.io/oxp-ontology/kg#"
-_KG_ARTIFACT_NS = "https://outshift-open.github.io/oxp-ontology/kg-artifact#"
+_MAS_NS = mas_namespace()
+_MASKG_NS = "https://ioc-project.github.io/scope-ontology/kg#"
+_KG_ARTIFACT_NS = "https://ioc-project.github.io/scope-ontology/kg-artifact#"
 
 
 @dataclass
@@ -83,7 +85,9 @@ class KGArtifact:
         Expected shape: ``{"nodes": [...], "edges": [...], "metadata": {...}}``.
         """
         if "nodes" not in doc or "edges" not in doc:
-            raise ValueError("KGArtifact.from_doc expects a JSON-LD artifact payload with nodes and edges")
+            raise ValueError(
+                "KGArtifact.from_doc expects a JSON-LD artifact payload with nodes and edges"
+            )
         return cls(
             nodes=list(doc.get("nodes") or []),
             edges=list(doc.get("edges") or []),

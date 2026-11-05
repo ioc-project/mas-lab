@@ -372,19 +372,19 @@ uv pip install "mas-lab-library-kg[all]"  # PyPI, all extras
 
 **Optional extras:**
 
-| Extra                 | Packages / features                                                                                                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ontology`            | `oxp-ontology[models]>=1.0.1`                                                                                                                                                                    |
-| `graph`               | `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                                               |
-| `validation`          | `oxp-ontology[models]>=1.0.1`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                |
-| `verify`              | `jsonschema>=4.0.0`, `pyyaml>=6.0.0`                                                                                                                                                             |
-| `neo4j`               | `neo4j>=5.0`                                                                                                                                                                                     |
-| `bench`               | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                          |
-| `plot`                | `mas-lab-component-bench`                                                                                                                                                                        |
-| `norm`                | `norm @ git+https://github.com/outshift-open/observe-and-explain-platform.git@main#subdirectory=backend/norm`                                                                                    |
-| `compare-native-otel` | `mas-lab-library-telemetry`                                                                                                                                                                      |
-| `dev`                 | `pytest>=7.0`, `pytest-cov>=4.0`, `pytest-asyncio>=0.21`, `click>=8.0`, `ruff>=0.12.10`, `oxp-ontology[models]>=1.0.1`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`, `jsonschema>=4.0.0`, `pyyaml>=6.0.0` |
-| `all`                 | `mas-lab-library-kg[dev,neo4j,norm]`                                                                                                                                                             |
+| Extra                 | Packages / features                                                                                                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ontology`            | `ioc-scope-ontology[models]>=1.1.0`                                                                                                                                                                    |
+| `graph`               | `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                                                     |
+| `validation`          | `ioc-scope-ontology[models]>=1.1.0`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                |
+| `verify`              | `jsonschema>=4.0.0`, `pyyaml>=6.0.0`                                                                                                                                                                   |
+| `neo4j`               | `neo4j>=5.0`                                                                                                                                                                                           |
+| `bench`               | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                                |
+| `plot`                | `mas-lab-component-bench`                                                                                                                                                                              |
+| `norm`                | `norm @ git+https://github.com/ioc-project/scope.git@main#subdirectory=backend/norm`                                                                                                                   |
+| `compare-native-otel` | `mas-lab-library-telemetry`                                                                                                                                                                            |
+| `dev`                 | `pytest>=7.0`, `pytest-cov>=4.0`, `pytest-asyncio>=0.21`, `click>=8.0`, `ruff>=0.12.10`, `ioc-scope-ontology[models]>=1.1.0`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`, `jsonschema>=4.0.0`, `pyyaml>=6.0.0` |
+| `all`                 | `mas-lab-library-kg[dev,neo4j,norm]`                                                                                                                                                                   |
 
 **Python entry point `mas.lab.cli.components`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.cli.components` without a hard-coded path.
 

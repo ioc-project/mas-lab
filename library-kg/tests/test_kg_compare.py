@@ -241,12 +241,38 @@ class TestCompareKG:
 
     def test_strict_mode(self):
         ref = _make_kg(agents=("a",))
-        cand = _make_kg(agents=("a", "extra"))  # extra agent changes element diff
+        cand = _make_kg(agents=("a", "extra"))
         result_lenient = compare_kg(cand, ref, strict=False)
         result_strict = compare_kg(cand, ref, strict=True)
-        # Lenient may pass if structural checks pass; strict checks element diff
-        assert isinstance(result_lenient.passed, bool)
-        assert isinstance(result_strict.passed, bool)
+        assert result_lenient.passed is True
+        assert result_strict.passed is False
+
+    def test_strict_nodes_allows_extra_when_off(self):
+        ref = _make_kg(agents=("a",))
+        cand = _make_kg(agents=("a", "extra"))
+        result = compare_kg(
+            cand,
+            ref,
+            strict=True,
+            strict_nodes=False,
+            strict_edges=True,
+            strict_node_attributes=True,
+            strict_edge_attributes=True,
+        )
+        node_check = next(c for c in result.checks if c["name"] == "node_distribution")
+        assert node_check["extras"]
+        assert result.passed is True
+
+    def test_strict_node_attributes_rejects_extra_keys(self):
+        ref = _make_kg(agents=("a",))
+        cand = _make_kg(agents=("a",))
+        cand["nodes"][1]["kindBase"] = "execution"
+        result = compare_kg(cand, ref, strict=True)
+        attr = next(c for c in result.checks if c["name"] == "node_attributes")
+        assert "kindBase" in attr["extra"]
+        assert result.passed is False
+        result_open = compare_kg(cand, ref, strict=True, strict_node_attributes=False)
+        assert result_open.passed is True
 
     def test_result_has_all_checks(self):
         kg = _make_kg(agents=("a",))
@@ -258,6 +284,8 @@ class TestCompareKG:
         assert "call_depth" in check_names
         assert "tool_coverage" in check_names
         assert "delegation_topology" in check_names
+        assert "node_attributes" in check_names
+        assert "edge_attributes" in check_names
         assert "element_level_diff" in check_names
 
     def test_to_dict(self):

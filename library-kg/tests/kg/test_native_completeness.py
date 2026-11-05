@@ -78,6 +78,9 @@ def test_real_trip_planner_fixture_is_complete_across_all_layers():
         include_governance=True,
         include_infrastructure=True,
         include_provenance=True,
+        include_trajectory=True,
+        include_native_extensions=True,
+        all_attributes=True,
         include_annotation=True,
     )
     ok, violations = check_native_trace_completeness(events, doc["nodes"], run_id)

@@ -58,7 +58,13 @@ __all__ = [
 
 
 def _run_dir(ctx: "ExecutionContext", config: dict) -> Optional[Path]:
-    return run_dir_from_ctx(ctx, config)
+    rd = run_dir_from_ctx(ctx, config)
+    if rd is not None:
+        return rd
+    out = getattr(ctx, "output_dir", None)
+    if out and (Path(out) / "traces" / "events.jsonl").exists():
+        return Path(out)
+    return None
 
 
 def _run_file(ctx: "ExecutionContext", config: dict, filename: str) -> Optional[str]:
@@ -85,6 +91,12 @@ def _run_id(ctx: "ExecutionContext", config: dict) -> str:
         return str(rid)
     rd = _run_dir(ctx, config)
     return rd.name if rd else "run"
+
+
+def _opt_bool(config: dict, key: str) -> bool | None:
+    if key not in config:
+        return None
+    return bool(config.get(key))
 
 
 # --------------------------------------------------------------------------- #
@@ -118,10 +130,12 @@ class NormalizeEventsStep(PipelineStep):
             # step config to instead fail fast (e.g. CI conformance runs).
             strict=bool(config.get("strict", False)),
             include_infrastructure=bool(config.get("include_infrastructure", False)),
-            include_trajectory=bool(config.get("include_trajectory", True)),
+            include_trajectory=bool(config.get("include_trajectory", False)),
             include_provenance=bool(config.get("include_provenance", False)),
             include_governance=bool(config.get("include_governance", False)),
             include_annotation=bool(config.get("include_annotation", False)),
+            include_native_extensions=bool(config.get("include_native_extensions", False)),
+            all_attributes=bool(config.get("all_attributes", False)),
         )
         kg_path = output_dir / "kg.jsonld"
         return StepOutput(
@@ -160,6 +174,7 @@ class NormalizeOtelStep(PipelineStep):
             # NormalizeEventsStep above; opt into `strict: true` for CI
             # conformance checks of the mapping tables.
             strict=bool(config.get("strict", False)),
+            all_attributes=bool(config.get("all_attributes", False)),
         )
         kg_path = output_dir / "kg.jsonld"
         events_path = output_dir / "events.jsonl"
@@ -295,7 +310,11 @@ class CompareKgStep(PipelineStep):
         report = run_compare_kg(
             candidate,
             reference,
-            strict=bool(config.get("strict", False)),
+            strict=bool(config.get("strict", True)),
+            strict_nodes=_opt_bool(config, "strict_nodes"),
+            strict_edges=_opt_bool(config, "strict_edges"),
+            strict_node_attributes=_opt_bool(config, "strict_node_attributes"),
+            strict_edge_attributes=_opt_bool(config, "strict_edge_attributes"),
             fail_on_error=bool(config.get("fail_on_error", False)),
             output_path=report_file,
             node_types=node_types,

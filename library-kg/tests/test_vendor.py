@@ -1,39 +1,40 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tests for ontology resolution via the oxp_ontology package."""
+"""Tests for ontology resolution via the SCOPE scope_ontology package."""
 
 from __future__ import annotations
 
-import pytest
 from pathlib import Path
 
-pytest.importorskip("oxp_ontology")
+import pytest
+
+pytest.importorskip("scope_ontology")
 
 
 class TestOntologyPackage:
     def test_get_ontology_path_returns_existing_file(self):
-        from oxp_ontology import get_ontology_path
+        from scope_ontology import get_ontology_path
         path = get_ontology_path("mas-ontology")
         assert Path(path).exists(), f"mas-ontology.ttl not found at {path}"
 
     def test_get_ontology_path_shapes_returns_existing_file(self):
-        from oxp_ontology import get_ontology_path
+        from scope_ontology import get_ontology_path
         path = get_ontology_path("mas-shapes")
         assert Path(path).exists(), f"mas-shapes.ttl not found at {path}"
 
     def test_get_ontology_path_by_explicit_name(self):
-        from oxp_ontology import get_ontology_path
+        from scope_ontology import get_ontology_path
         p1 = get_ontology_path("mas-ontology")
         p2 = get_ontology_path("mas-ontology")
         assert Path(p1).resolve() == Path(p2).resolve()
 
     def test_unknown_name_raises_file_not_found(self):
-        from oxp_ontology import get_ontology_path
+        from scope_ontology import get_ontology_path
         with pytest.raises(FileNotFoundError):
             get_ontology_path("no-such-ontology-xyz")
 
     def test_mas_ontology_ttl_contains_expected_content(self):
-        from oxp_ontology import get_ontology_path
+        from scope_ontology import get_ontology_path
         path = Path(get_ontology_path("mas-ontology"))
         content = path.read_text()
         # Must contain OWL/RDFS declarations

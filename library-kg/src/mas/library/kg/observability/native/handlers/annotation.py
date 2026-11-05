@@ -119,7 +119,9 @@ def handle_context_contribution(
             if str(aid).strip().lower() not in {"", "agent", "unknown", "mas"}:
                 agent_id = aid
                 break
-    _MAS_NS = "https://outshift-open.github.io/oxp-ontology/mas#"
+    from mas.library.kg.core.oxp_models import mas_namespace
+
+    _MAS_NS = mas_namespace()
 
     part_id = event.get("part_id", _annotation_id(event, run_id))
     parents = list(event.get("parents") or (event.get("provenance") or {}).get("parents") or [])

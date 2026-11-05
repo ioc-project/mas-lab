@@ -61,10 +61,7 @@ def detect_span_shape(spans: Sequence[dict[str, Any]]) -> str:
         return "clickhouse_row"
     if is_sdk_span(sample):
         return "sdk"
-    raise OtelFormatError(
-        "unrecognised span keys "
-        f"{sorted(sample.keys())[:12]!r}"
-    )
+    raise OtelFormatError(f"unrecognised span keys {sorted(sample.keys())[:12]!r}")
 
 
 def _timestamp_to_clickhouse(value: Any) -> str:
@@ -174,11 +171,7 @@ def sdk_span_to_clickhouse(span: dict[str, Any]) -> dict[str, Any]:
             context.get("trace_id") or span.get("trace_id") or span.get("TraceId") or "",
             32,
         ),
-        "ParentSpanId": (
-            ""
-            if parent in (None, "None", "")
-            else _wire_hex(parent, 16)
-        ),
+        "ParentSpanId": ("" if parent in (None, "None", "") else _wire_hex(parent, 16)),
         "ServiceName": service_name,
         "Timestamp": _timestamp_to_clickhouse(span.get("start_time") or span.get("Timestamp")),
         "Duration": _duration_ns(span),
@@ -196,18 +189,29 @@ def to_clickhouse_spans(spans: Iterable[dict[str, Any]]) -> list[dict[str, Any]]
     return [sdk_span_to_clickhouse(span) for span in records]
 
 
-def normalize_otel(spans: Sequence[dict[str, Any]]) -> tuple[list, list]:
+def normalize_otel(
+    spans: Sequence[dict[str, Any]],
+    *,
+    all_attributes: bool = False,
+) -> tuple[list, list]:
     """Normalize OTel spans to ``(nodes, edges)`` via ``norm.normalize()``.
 
-    Uses whatever ``norm`` / ``oxp-ontology`` are installed, as published —
-    this package does not patch, subclass, or otherwise work around either
-    dependency's own behavior. If ``norm``'s handlers and the installed
-    ``oxp-ontology`` release disagree about what fields a model accepts,
+    Uses whatever ``norm`` / ``ioc-scope-ontology`` are installed, as
+    published — this package does not patch, subclass, or otherwise work
+    around either dependency's own behavior. If ``norm``'s handlers and the
+    installed SCOPE models disagree about what fields a model accepts,
     that is a real inconsistency in that dependency pair and is reported
     upstream, not silently papered over here.
+
+    Default ``all_attributes=False`` keeps SCOPE model fields only,
+    matching the native path.
     """
     from norm.normalizer import normalize
-    from mas.library.kg.core.ontology_align import align_graph
 
-    nodes, edges = normalize(to_clickhouse_spans(spans))
-    return align_graph(nodes, edges)
+    from mas.library.kg.core.ontology_align import align_graph
+    from mas.library.kg.core.oxp_models import restrict_graph
+
+    clickhouse = to_clickhouse_spans(spans)
+    nodes, edges = normalize(clickhouse)
+    aligned_nodes, aligned_edges = align_graph(nodes, edges)
+    return restrict_graph(aligned_nodes, aligned_edges, all_attributes=all_attributes)
