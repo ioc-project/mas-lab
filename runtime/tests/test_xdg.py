@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from pathlib import Path
 
 from mas.runtime.xdg import (
     mas_cache_root,
@@ -46,7 +45,6 @@ def test_xdg_defaults_when_env_unset(tmp_path, monkeypatch):
 def test_xdg_env_path_is_resolved(tmp_path, monkeypatch):
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    rel = Path("relative-data")
     monkeypatch.chdir(fake_home)
     monkeypatch.setenv("XDG_DATA_HOME", "relative-data")
 

@@ -160,9 +160,7 @@ def test_inspect_context_returns_numeric_snapshot_and_cache_rate() -> None:
         "estimated_remaining_tokens": 1011276,
         "fill_ratio": 300 / 1048576,
         "token_breakdown": {"context/system": 200, "conversation/user": 100},
-        "context_parts": [
-            {"source": "skills", "section_id": "skills/active", "tokens": 80, "pinned": True}
-        ],
+        "context_parts": [{"source": "skills", "section_id": "skills/active", "tokens": 80, "pinned": True}],
     }
     pricing = {
         "input_per_million_tokens": 1.0,
@@ -215,9 +213,7 @@ def test_inspect_archive_returns_covering_tree() -> None:
     ctx = session.instance.driver.ctx
     ctx.note_user_input("hello")
     ctx.note_agent_response("world")
-    dump = manager.control(
-        capability=ControlCapability(actor="debugger", surface="admin")
-    ).inspect_archive("s1")
+    dump = manager.control(capability=ControlCapability(actor="debugger", surface="admin")).inspect_archive("s1")
     assert dump["covers_archive"] is True
     assert dump["covering_ids"]
     assert dump["leaves"]
@@ -267,9 +263,7 @@ def test_steer_preempts_an_inflight_llm() -> None:
     session = _session(manager)
     control = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     session.controller.inflight = True
-    inflight_llm.register(
-        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
-    )
+    inflight_llm.register("s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})())
     try:
         control.steer("s1", text="use Lyon")
         assert inflight_llm.peek_preempt("s1") == "use Lyon"
@@ -289,9 +283,7 @@ def test_steer_replace_discards_partials() -> None:
     session = _session(manager)
     control = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     session.controller.inflight = True
-    inflight_llm.register(
-        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
-    )
+    inflight_llm.register("s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})())
     inflight_llm.append_partial("s1", "Hello ")
     try:
         control.steer("s1", text="start over", mode="replace")
@@ -350,9 +342,7 @@ def test_send_message_queues_and_never_amends() -> None:
     session = _session(manager)
     control = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     session.controller.inflight = True
-    inflight_llm.register(
-        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
-    )
+    inflight_llm.register("s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})())
     try:
         input_id = control.send_message("s1", text="also consider Lyon")
         assert input_id

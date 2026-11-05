@@ -151,9 +151,7 @@ def test_hitl_pause_fold_completes_parallel_group_from_working_memory() -> None:
 
 def test_assemble_drops_duplicate_tool_results_before_provider() -> None:
     ctx = AutoCtxAssembler(last_user_text="q")
-    ctx.working_memory.record_assistant_tool_calls(
-        [("call_a", "search", {"q": "a"}), ("call_b", "search", {"q": "b"})]
-    )
+    ctx.working_memory.record_assistant_tool_calls([("call_a", "search", {"q": "a"}), ("call_b", "search", {"q": "b"})])
     ctx.working_memory.record_tool_result(call_id="call_a", content="ra")
     ctx.working_memory.record_tool_result(call_id="call_b", content="rb")
     ctx.working_memory.record_tool_result(call_id="call_a", content="ra-dup")
@@ -258,9 +256,7 @@ def test_working_memory_messages_is_ignored() -> None:
     ctx = AutoCtxAssembler(last_user_text="plan a weekend trip to Celestia")
     for n in range(1, 6):
         _record_malformed_get_metrics_retry(ctx, n)
-    manifest = {
-        "spec": {"context_manager": {"type": "sliding_window", "params": {"working_memory_messages": 4}}}
-    }
+    manifest = {"spec": {"context_manager": {"type": "sliding_window", "params": {"working_memory_messages": 4}}}}
     messages = assemble_llm_messages(ctx, manifest=manifest)
     tool_msgs = [m for m in messages if m.get("role") == "tool"]
     assert len(tool_msgs) == 5

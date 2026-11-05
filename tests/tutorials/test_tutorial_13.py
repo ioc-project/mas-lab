@@ -165,12 +165,12 @@ def _resume_factory(_manifest: dict, _session_id: str):
     ctx = AutoCtxAssembler()
     instance = SimpleNamespace(
         snapshot=lambda: {"q": {}, "run": {}},
-        load_checkpoint=lambda data: setattr(instance, "loaded", data),
         pause=lambda **kw: None,
         resume=lambda: None,
         driver=SimpleNamespace(ctx=ctx),
         feed=lambda event: SimpleNamespace(client_responses=[], hitl_requests=[], boundary_errors=[]),
     )
+    instance.load_checkpoint = lambda data: setattr(instance, "loaded", data)
     return instance, SessionController(instance=instance, display=_Display(), agent_id="debug-script-demo")
 
 

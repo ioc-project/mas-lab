@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Schema registry resolves files from runtime/ and lab/components/bench/."""
+
 from __future__ import annotations
 
 import json
@@ -110,7 +111,10 @@ def test_api_schemas_endpoints(client):
 
     _, pipeline_schema = read_schema_text("pipeline")
     assert "Pipeline" in pipeline_schema
-    assert validate_pipeline_yaml(
-        "apiVersion: mas/v1\nkind: Pipeline\nmetadata:\n  name: p\n"
-        "spec:\n  steps:\n    - name: s1\n      type: noop\n"
-    )["valid"] is True
+    assert (
+        validate_pipeline_yaml(
+            "apiVersion: mas/v1\nkind: Pipeline\nmetadata:\n  name: p\n"
+            "spec:\n  steps:\n    - name: s1\n      type: noop\n"
+        )["valid"]
+        is True
+    )

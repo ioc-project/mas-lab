@@ -39,11 +39,7 @@ def _concord_lab_root() -> Path | None:
 
 
 def _max_stacked_service_missing_tool_messages(messages: list[dict]) -> int:
-    return sum(
-        1
-        for m in messages
-        if m.get("role") == "tool" and _SERVICE_MISSING in str(m.get("content") or "")
-    )
+    return sum(1 for m in messages if m.get("role") == "tool" and _SERVICE_MISSING in str(m.get("content") or ""))
 
 
 def _scan_events_for_stacked_service_errors(events_paths: list[Path]) -> tuple[int, int]:
@@ -117,7 +113,6 @@ def test_cc3_gls_live_run_does_not_stack_unbounded_service_missing_errors(
 
     pytest.importorskip("mas.lab.benchmark.worker")
     from mas.lab.benchmark.golden.cache_backup import find_events_in_tree
-    from mas.lab.benchmark.worker import run_benchmark_sync
     from mas.lab.benchmark.worker import run_benchmark_sync
     from mas.library.standard.lib.context.working_memory import working_memory_slice_limit
 

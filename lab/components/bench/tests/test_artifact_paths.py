@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Steps write inside their level folder: helper, load-time validator, executor."""
+
 from __future__ import annotations
 
 import os
@@ -32,9 +33,7 @@ def _ctx(root: Path) -> SimpleNamespace:
 
 
 def test_default_name_and_subdir(tmp_path: Path) -> None:
-    out = resolve_step_artifact_path(
-        _ctx(tmp_path), None, "s", "trace_stats.csv", {}, default_subdir="results"
-    )
+    out = resolve_step_artifact_path(_ctx(tmp_path), None, "s", "trace_stats.csv", {}, default_subdir="results")
     assert out == tmp_path / "results" / "trace_stats.csv"
 
 
@@ -43,18 +42,12 @@ def test_level_folder_follows_framework_scenario_test_run(tmp_path: Path) -> Non
     assert resolve_step_artifact_path(_ctx(tmp_path), None, "s", "a.csv", cfg) == (
         tmp_path / "base" / "item1" / "r1" / "a.csv"
     )
-    assert resolve_step_artifact_path(_ctx(tmp_path), "scenario", "s", "a.csv", cfg) == (
-        tmp_path / "base" / "a.csv"
-    )
-    assert resolve_step_artifact_path(_ctx(tmp_path), "experiment", "s", "a.csv", cfg) == (
-        tmp_path / "a.csv"
-    )
+    assert resolve_step_artifact_path(_ctx(tmp_path), "scenario", "s", "a.csv", cfg) == (tmp_path / "base" / "a.csv")
+    assert resolve_step_artifact_path(_ctx(tmp_path), "experiment", "s", "a.csv", cfg) == (tmp_path / "a.csv")
 
 
 def test_subdir_nested_is_allowed(tmp_path: Path) -> None:
-    out = resolve_step_artifact_path(
-        _ctx(tmp_path), None, "s", "a.csv", {"subdir": "results/figures"}
-    )
+    out = resolve_step_artifact_path(_ctx(tmp_path), None, "s", "a.csv", {"subdir": "results/figures"})
     assert out == tmp_path / "results" / "figures" / "a.csv"
 
 
@@ -74,9 +67,7 @@ def test_step_config_label_covers_str_dict_and_object() -> None:
 
 
 def test_mkdir_creates_parent_only(tmp_path: Path) -> None:
-    out = resolve_step_artifact_path(
-        _ctx(tmp_path), None, "s", "a.csv", {}, default_subdir="results", mkdir=True
-    )
+    out = resolve_step_artifact_path(_ctx(tmp_path), None, "s", "a.csv", {}, default_subdir="results", mkdir=True)
     assert out == tmp_path / "results" / "a.csv"
     assert out.parent.is_dir()
     assert not out.exists()
@@ -96,9 +87,7 @@ def test_named_file_uses_filename_and_suffix(tmp_path: Path) -> None:
 
 
 def test_output_relative_path_is_allowed(tmp_path: Path) -> None:
-    out = resolve_step_artifact_path(
-        _ctx(tmp_path), None, "s", "a.csv", {"output": "results/ci.csv"}
-    )
+    out = resolve_step_artifact_path(_ctx(tmp_path), None, "s", "a.csv", {"output": "results/ci.csv"})
     assert out == tmp_path / "results" / "ci.csv"
 
 
@@ -137,9 +126,10 @@ def test_helper_rejects_symlink_escape(tmp_path: Path) -> None:
     # a symlink that stays inside is fine
     (root / "real").mkdir()
     os.symlink(root / "real", root / "alias")
-    assert resolve_step_artifact_path(
-        _ctx(root), None, "s", "a.csv", {"output": "alias/a.csv"}
-    ) == root / "alias" / "a.csv"
+    assert (
+        resolve_step_artifact_path(_ctx(root), None, "s", "a.csv", {"output": "alias/a.csv"})
+        == root / "alias" / "a.csv"
+    )
 
 
 def test_helper_rejects_escape_from_template_var(tmp_path: Path) -> None:
@@ -279,9 +269,7 @@ def test_pipeline_load_rejects_escape(tmp_path: Path, _registered_writer) -> Non
 
 
 @pytest.mark.asyncio
-async def test_executor_runs_tiny_pipeline_inside_output_dir(
-    tmp_path: Path, _registered_writer
-) -> None:
+async def test_executor_runs_tiny_pipeline_inside_output_dir(tmp_path: Path, _registered_writer) -> None:
     clear_deprecation_warnings()
     path = _write_pipeline(
         tmp_path,
@@ -311,9 +299,7 @@ async def test_executor_runs_tiny_pipeline_inside_output_dir(
     assert (out / "a" / "b" / "writer.txt").read_text() == "nested"
     assert (out / "results" / "legacy.txt").read_text() == "legacy"
     assert (out / "results" / "tagged.txt").read_text() == "templated"
-    written = {
-        p.relative_to(out).as_posix() for p in out.rglob("*.txt") if ".cache" not in p.parts
-    }
+    written = {p.relative_to(out).as_posix() for p in out.rglob("*.txt") if ".cache" not in p.parts}
     assert len(written) == 5
 
 
@@ -325,9 +311,7 @@ async def test_executor_rejects_var_that_escapes(tmp_path: Path, _registered_wri
     )
     pipeline = Pipeline.from_yaml(path)
     outside = tmp_path / "elsewhere"
-    result = await PipelineExecutor(pipeline, output_dir=tmp_path / "out").run(
-        template_vars={"dest": str(outside)}
-    )
+    result = await PipelineExecutor(pipeline, output_dir=tmp_path / "out").run(template_vars={"dest": str(outside)})
     assert not result.success
     assert not (outside / "x.txt").exists()
     assert "absolute path" in result.step_errors["w"]

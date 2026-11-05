@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from mas.ctl.validate.identity import collect_identity_issues
 from mas.ctl.validate import validate_data
+from mas.ctl.validate.identity import collect_identity_issues
 
 
 def _agent(*, name: str) -> dict:

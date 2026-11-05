@@ -195,6 +195,4 @@ def test_w3c_tracestate_does_not_fail_a_send(
     assert seen[-1]["k"] == "v"
     assert "dropping tracestate" in caplog.text
     assert validate_headers({"tracestate": over, "k": "v"}) == {"k": "v"}
-    assert "baggage" not in validate_headers(
-        {"baggage": ",".join(f"k{i}=v{i}" for i in range(65))}
-    )
+    assert "baggage" not in validate_headers({"baggage": ",".join(f"k{i}=v{i}" for i in range(65))})

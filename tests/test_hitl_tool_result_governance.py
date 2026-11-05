@@ -40,11 +40,7 @@ def _merged_tutorial_agent(*, hitl_result: bool = True) -> dict:
 
 def _gov_decisions(instance) -> list[dict]:
     sink = instance.driver.observability
-    return [
-        e.payload
-        for e in (sink.events if sink else [])
-        if e.kind == ObsEventKind.GOVERNANCE_DECISION
-    ]
+    return [e.payload for e in (sink.events if sink else []) if e.kind == ObsEventKind.GOVERNANCE_DECISION]
 
 
 def _hitl_requests(instance) -> list:
@@ -187,11 +183,7 @@ def test_egress_skip_steering_binds_synthetic_tool_result() -> None:
     result = controller.run_turn("Who is current POTUS?")
     close_observability(controller)
 
-    tool_events = [
-        e
-        for e in instance.driver.kernel.run.events
-        if e.response_kind == "TOOL_RESULT"
-    ]
+    tool_events = [e for e in instance.driver.kernel.run.events if e.response_kind == "TOOL_RESULT"]
     assert tool_events, "expected synthetic TOOL_RESULT in run ledger"
     assert any(steer in (e.text or "") for e in tool_events)
     assert steer in _context_text(instance)
@@ -312,9 +304,5 @@ def test_ingress_hitl_only_when_enabled() -> None:
     close_observability(controller)
 
     hitl = _hitl_requests(instance)
-    ingress = [
-        e
-        for e in hitl
-        if (e.payload.get("question") or "").startswith("Include tool result")
-    ]
+    ingress = [e for e in hitl if (e.payload.get("question") or "").startswith("Include tool result")]
     assert not ingress

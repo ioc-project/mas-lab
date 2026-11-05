@@ -2,9 +2,9 @@
 #  SPDX-License-Identifier: Apache-2.0
 """RuntimeBuilder end-to-end embed integration."""
 
+from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.factory.builder import RuntimeBuilder
 from mas.runtime.kernel.config import KernelConfig
-from mas.runtime.driver.instance import RuntimeInstance
 
 
 def test_builder_kernel_driver_round_trip():

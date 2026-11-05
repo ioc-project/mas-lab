@@ -4,15 +4,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 from mas.runtime.boundary.context.plugin_collection import PluginCollection
 from mas.runtime.contracts.context_contract import ContextPart, ContextPlacement
-
 
 # ---------------------------------------------------------------------------
 # PluginCollection — collect_results
 # ---------------------------------------------------------------------------
+
 
 class _Plugin:
     def __init__(self, results):
@@ -64,6 +62,7 @@ def test_collect_results_skips_none_return():
 
 def test_collect_results_isolates_plugin_errors(caplog):
     import logging
+
     col = PluginCollection()
     col.register(_RaisingPlugin())
     col.register(_Plugin([ContextPart.skills("ok")]))
@@ -115,6 +114,7 @@ def test_len_and_bool():
 # ContextPart.skills() shorthand
 # ---------------------------------------------------------------------------
 
+
 def test_skills_shorthand_placement():
     part = ContextPart.skills("catalog content")
     assert part.placement == ContextPlacement.SYSTEM_SKILLS
@@ -144,6 +144,7 @@ def test_skills_shorthand_pinned_override():
 # ---------------------------------------------------------------------------
 # _inject_context_plugins orders parts by placement + priority
 # ---------------------------------------------------------------------------
+
 
 def test_inject_context_plugins_ordering(tmp_path):
     """Parts from multiple plugins are sorted by placement before injection."""

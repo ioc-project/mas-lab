@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.ctl.session.manifest_config import (
     agent_id_from_manifest,
     derive_observability_format,
@@ -67,10 +66,7 @@ class TestFlavourObservabilityFallback:
 
 
 def test_resolve_mas_id_from_mas_manifest() -> None:
-    assert (
-        resolve_mas_id({"kind": "MAS", "metadata": {"name": "trip-planner"}})
-        == "trip-planner"
-    )
+    assert resolve_mas_id({"kind": "MAS", "metadata": {"name": "trip-planner"}}) == "trip-planner"
 
 
 def test_mas_id_from_loaded_agent_document() -> None:
@@ -102,16 +98,11 @@ def test_resolve_mas_id_explicit_overrides_document() -> None:
 
 
 def test_require_agent_id_from_manifest() -> None:
-    assert (
-        require_agent_id_from_manifest({"kind": "Agent", "metadata": {"name": "qa-agent"}})
-        == "qa-agent"
-    )
+    assert require_agent_id_from_manifest({"kind": "Agent", "metadata": {"name": "qa-agent"}}) == "qa-agent"
     with pytest.raises(ValueError, match="metadata.name is required"):
         require_agent_id_from_manifest({"kind": "Agent", "metadata": {}})
     with pytest.raises(ValueError, match="metadata.name is required"):
         require_agent_id_from_manifest({"kind": "MAS", "spec": {}})
     with pytest.raises(ValueError, match="filesystem path"):
-        require_agent_id_from_manifest(
-            {"kind": "Agent", "metadata": {"name": "/opt/apps/trip-planner"}}
-        )
+        require_agent_id_from_manifest({"kind": "Agent", "metadata": {"name": "/opt/apps/trip-planner"}})
     assert require_agent_id_from_manifest({"kind": "Overlay"}) == ""

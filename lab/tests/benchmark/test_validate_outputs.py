@@ -5,16 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.reproducibility import OutputSchema
 from mas.library.lab.steps.eval.validate_outputs import ValidateOutputsStep
 
 
 def test_output_schema_validate_passes_when_files_and_columns_present(tmp_path: Path) -> None:
     (tmp_path / "results").mkdir()
-    (tmp_path / "results" / "ci_summary.csv").write_text(
-        "scenario,metric,mean\nbaseline,gsr,0.8\n", encoding="utf-8"
-    )
+    (tmp_path / "results" / "ci_summary.csv").write_text("scenario,metric,mean\nbaseline,gsr,0.8\n", encoding="utf-8")
     schema = OutputSchema(
         required_files=["results/ci_summary.csv"],
         required_columns={"results/ci_summary.csv": ["scenario", "metric", "mean"]},

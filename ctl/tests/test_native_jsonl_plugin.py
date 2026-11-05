@@ -129,7 +129,5 @@ def test_native_from_binding_uses_mas_name(tmp_path) -> None:
             }
         },
     )
-    plugin = NativeObservabilityPlugin.from_binding(
-        binding, base_dir=tmp_path, agent_id="planner"
-    )
+    plugin = NativeObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="planner")
     assert plugin.mas_id == "trip-planner"

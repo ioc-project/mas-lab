@@ -63,6 +63,8 @@ reconciling the release notes with the code and docs currently on that branch.
 - Native `llm_call_end` reads top-level `tokens_used`, `model`, and
   `finish_reason` (the shape the runtime actually writes). Native
   `AgentCall.success` follows an `ok` / `success` execution status.
+- `library-lab` defined `DeterministicVerifierPlugin` twice in one file;
+  only the first class ran.
 - Native CallAnnotation kinds (`state_update_*`, `context_assembled`,
   `observability_*_execute_*`, `client_response`, …) sit in an
   `annotation` layer, off by default, matching observe-sdk. Parallel
@@ -277,6 +279,8 @@ reconciling the release notes with the code and docs currently on that branch.
 - The interactive prompt (`You: `) is written only to a terminal, so piped
   input no longer prints `You: You: ...`. A request another agent sends to
   the entry agent is shown under the agent's label, not as the user's.
+- Lint tasks and CI run `ruff format --check` next to `ruff check` on the
+  Python a branch changes.
 - load_yaml_file reuses a parse when the content hash matches; a
   same-size rewrite with a frozen mtime still reloads. ctl inlines
   overlay schema fragments once. validate_data on a sample mas.yaml

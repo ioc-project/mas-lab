@@ -9,14 +9,13 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-
+from ci_llm import web_search_engine
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.schema.hitl import HitlResolveChoice
-from mas.runtime.schema.observability import ObsEventKind
 from mas.runtime.schema.ingress import HitlResolve
-from ci_llm import web_search_engine
+from mas.runtime.schema.observability import ObsEventKind
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T01 = REPO_ROOT / "docs" / "tutorials" / "01-building-an-agent"
@@ -133,9 +132,7 @@ def test_native_transform_emits_trajectory_events() -> None:
     # _resolve_transition_ids' CONTEXT_ASSEMBLED branch), not the old
     # synthetic "llm-{correlation_id}" placeholder that needed a later
     # nearest-timestamp reconstruction to link back to the real call.
-    llm_call_id = next(
-        r["llm_call_id"] for r in native if r["kind"] == "context_part_contributed"
-    )
+    llm_call_id = next(r["llm_call_id"] for r in native if r["kind"] == "context_part_contributed")
     assert llm_call_id and llm_call_id != "llm-3", llm_call_id
     llm_end_call_id = next(r["call_id"] for r in native if r["kind"] == "llm_call_end")
     assert llm_call_id == llm_end_call_id, (llm_call_id, llm_end_call_id)
@@ -203,8 +200,8 @@ def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
 
 def test_multilevel_trajectory_consumes_context_events() -> None:
     pytest.importorskip("mas.lab.plots.multilevel_trajectory")
-    from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
     from mas.lab.plots.multilevel_trajectory import _build_call_records, _collect_context_provenance
+    from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 
     op = ObservabilityOperator()
     ctx = AutoCtxAssembler(observability=op, last_user_text="Q")
@@ -243,8 +240,6 @@ def test_multilevel_trajectory_consumes_context_events() -> None:
     # (they cluttered the timeline and widened the chart); they remain in the
     # event stream as state_update_* events and surface via annotations /
     # provenance instead of as ContextState call records.
-    state_updates = [
-        e for e in events if str(e.get("kind", "")).startswith("state_update")
-    ]
+    state_updates = [e for e in events if str(e.get("kind", "")).startswith("state_update")]
     assert state_updates
     assert any(e.get("update_type") == "turn_start" for e in state_updates)

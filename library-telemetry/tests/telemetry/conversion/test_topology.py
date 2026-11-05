@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from mas.library.telemetry.conversion.topology import (
     build_topology,
     declared_mas_name,
@@ -17,6 +16,7 @@ from mas.library.telemetry.conversion.topology import (
     require_mas_name,
     topology_dynamism,
 )
+
 from tests.conftest import requires_otel
 
 _EVENTS = [
@@ -119,9 +119,7 @@ def test_topology_does_not_infer_handoff_from_call_id_substring():
             },
         ]
     )
-    assert ("moderator", "schedule_agent") in {
-        (e["source"], e["target"]) for e in topo["edges"]
-    }
+    assert ("moderator", "schedule_agent") in {(e["source"], e["target"]) for e in topo["edges"]}
     topo_no_parent = build_topology(
         [
             {
@@ -137,9 +135,7 @@ def test_topology_does_not_infer_handoff_from_call_id_substring():
             },
         ]
     )
-    assert ("moderator", "schedule_agent") not in {
-        (e["source"], e["target"]) for e in topo_no_parent["edges"]
-    }
+    assert ("moderator", "schedule_agent") not in {(e["source"], e["target"]) for e in topo_no_parent["edges"]}
 
 
 def test_topology_is_deterministic():
@@ -171,9 +167,7 @@ def test_graph_span_attributes_shape():
 
 def test_graph_span_attributes_rejects_list_nodes():
     with pytest.raises(TypeError, match="dict keyed by agent id"):
-        graph_span_attributes(
-            {"nodes": [{"id": "planner", "name": "planner"}], "edges": []}
-        )
+        graph_span_attributes({"nodes": [{"id": "planner", "name": "planner"}], "edges": []})
 
 
 def test_derive_app_name():
@@ -181,10 +175,7 @@ def test_derive_app_name():
     assert derive_app_name([{"kind": "x", "mas_id": "trip-planner"}], fallback="svc") == "trip-planner"
     assert derive_app_name([{"kind": "x"}], fallback="svc") == "svc"
     # system_specification name
-    assert (
-        derive_app_name([{"kind": "system_specification", "name": "spec-app"}], "svc")
-        == "spec-app"
-    )
+    assert derive_app_name([{"kind": "system_specification", "name": "spec-app"}], "svc") == "spec-app"
 
 
 def test_require_mas_name_first_nonempty():
@@ -286,11 +277,7 @@ def test_replay_emits_graph_span(tmp_path):
     }
     # app-name bug fixed: every span carries the real app id, not "mas-runtime"
     assert all(s["attributes"].get("application_id") == "travel-planner" for s in spans)
-    assert all(
-        (s.get("resource") or {}).get("attributes", {}).get("service.name")
-        == "travel-planner"
-        for s in spans
-    )
+    assert all((s.get("resource") or {}).get("attributes", {}).get("service.name") == "travel-planner" for s in spans)
     # graph span shares the run trace (child of the synthetic root).
     root = next(s for s in spans if s["name"] == "root")
     assert g["context"]["trace_id"] == root["context"]["trace_id"]
@@ -309,15 +296,11 @@ def test_explicit_app_name_overrides(tmp_path):
     # application_id is the primary MAS name (SCOPE/norm); service.name is
     # only the fallback when that attribute is empty. Both must be the
     # app name, not leftover ``service_name`` / ``mas-runtime``.
-    assert all(
-        s["attributes"].get("application_id") == "explicit-override" for s in spans
-    )
+    assert all(s["attributes"].get("application_id") == "explicit-override" for s in spans)
     session_start = next(s for s in spans if s["name"] == "session.start")
     assert session_start["attributes"].get("application.id") == "explicit-override"
     assert all(
-        (s.get("resource") or {}).get("attributes", {}).get("service.name")
-        == "explicit-override"
-        for s in spans
+        (s.get("resource") or {}).get("attributes", {}).get("service.name") == "explicit-override" for s in spans
     )
 
 
@@ -398,18 +381,14 @@ def test_session_end_emitted_on_mas_call_end(tmp_path):
     ep = tmp_path / "e.jsonl"
     ep.write_text("\n".join(json.dumps(e) for e in events))
     op = tmp_path / "s.jsonl"
-    replay_events_file(
-        ep, op, app_name="travel-planner", converter_profile="observe_sdk"
-    )
+    replay_events_file(ep, op, app_name="travel-planner", converter_profile="observe_sdk")
     spans = [json.loads(line) for line in op.read_text().splitlines() if line.strip()]
     names = [s["name"] for s in spans]
     assert names.count("session.start") == 1
     assert names.count("session.end") == 1
     assert any(n.endswith(".graph") for n in names)
     # graph before session.end on the known-end path
-    assert names.index(next(n for n in names if n.endswith(".graph"))) < names.index(
-        "session.end"
-    )
+    assert names.index(next(n for n in names if n.endswith(".graph"))) < names.index("session.end")
 
 
 @requires_otel
@@ -419,9 +398,7 @@ def test_session_end_fallback_without_mas_call_end(tmp_path):
     ep = tmp_path / "e.jsonl"
     ep.write_text("\n".join(json.dumps(e) for e in _EVENTS))
     op = tmp_path / "s.jsonl"
-    replay_events_file(
-        ep, op, app_name="travel-planner", converter_profile="observe_sdk"
-    )
+    replay_events_file(ep, op, app_name="travel-planner", converter_profile="observe_sdk")
     spans = [json.loads(line) for line in op.read_text().splitlines() if line.strip()]
     names = [s["name"] for s in spans]
     assert names.count("session.end") == 1
@@ -449,10 +426,6 @@ def test_finish_does_not_duplicate_session_end(tmp_path):
     export.finish()
     export.finish()
     export.close()
-    spans = [
-        json.loads(line)
-        for line in (tmp_path / "s.jsonl").read_text().splitlines()
-        if line.strip()
-    ]
+    spans = [json.loads(line) for line in (tmp_path / "s.jsonl").read_text().splitlines() if line.strip()]
     names = [s["name"] for s in spans]
     assert names.count("session.end") == 1

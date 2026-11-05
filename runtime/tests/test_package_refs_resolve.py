@@ -112,16 +112,12 @@ def _isolate_named_libraries(monkeypatch, *, installed=None, workspace=None) -> 
     import mas.library_roots as library_roots
 
     monkeypatch.delenv("MAS_LIBRARY_PATHS", raising=False)
-    monkeypatch.setattr(
-        library_roots, "_installed_named_libraries", lambda: dict(installed or {})
-    )
+    monkeypatch.setattr(library_roots, "_installed_named_libraries", lambda: dict(installed or {}))
     if workspace is None:
         monkeypatch.setattr(
             "mas.runtime.workspace_config.RuntimeWorkspaceConfig.load",
             classmethod(
-                lambda cls, start=None: type(
-                    "WS", (), {"found": False, "root": None, "manifest_libraries": {}}
-                )()
+                lambda cls, start=None: type("WS", (), {"found": False, "root": None, "manifest_libraries": {}})()
             ),
         )
     else:
@@ -183,9 +179,7 @@ def test_listed_lib_without_library_yaml_is_not_a_scheme(tmp_path: Path, monkeyp
     assert resolve_path_ref("lib/foo.yaml", lab) == rel.resolve()
 
 
-def test_resolve_path_ref_installed_library_when_no_local_or_workspace(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_resolve_path_ref_installed_library_when_no_local_or_workspace(tmp_path: Path, monkeypatch) -> None:
     installed = tmp_path / "installed-mylib"
     target = installed / "thing.yaml"
     target.parent.mkdir(parents=True)

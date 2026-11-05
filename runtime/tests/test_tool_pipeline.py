@@ -39,9 +39,7 @@ def test_undeclared_step_wraps_llm_only() -> None:
     assert stamped["for"] == ["llm"]
     assert stamped["per"] == "destination"
     assert filter_pipeline_for_kind([stamped], "tool") == []
-    assert [step["middleware"] for step in filter_pipeline_for_kind([stamped], "llm")] == [
-        "my_custom_audit"
-    ]
+    assert [step["middleware"] for step in filter_pipeline_for_kind([stamped], "llm")] == ["my_custom_audit"]
 
 
 def test_empty_for_list_is_llm_not_every_kind() -> None:

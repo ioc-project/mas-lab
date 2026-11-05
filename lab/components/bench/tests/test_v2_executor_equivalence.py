@@ -6,10 +6,9 @@ import asyncio
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.pipeline import Pipeline, PipelineConfig, PipelineStep, StepOutput
-from mas.lab.benchmark.pipeline.executor import PipelineExecutor
 from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
+from mas.lab.benchmark.pipeline.executor import PipelineExecutor
 from mas.lab.benchmark.pipeline.scheduler import Node, Scheduler
 
 

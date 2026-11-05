@@ -9,7 +9,6 @@ import subprocess
 import sys
 
 import pytest
-
 from mas.third_party_otel import (
     A2A_SDK_OTEL_FLAG,
     OBSERVE_REALTIME_FLAG,

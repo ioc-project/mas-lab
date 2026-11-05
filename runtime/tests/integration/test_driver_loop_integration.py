@@ -10,7 +10,7 @@ from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.engine.simulated import SimMode, SimulatedEngine
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.schema.egress import InvokeEngineIo
-from mas.runtime.schema.ingress import EngineIoReturn, LifecyclePause, LifecycleResume
+from mas.runtime.schema.ingress import EngineIoReturn
 
 
 @dataclass
@@ -237,7 +237,8 @@ def test_driver_records_real_memory_call_end_matching_start_call_id():
     memory-egress path (SimMode.MEMORY_PROBE's "DELEGATE" next_step)."""
     engine = SimulatedEngine(sim_mode=SimMode.MEMORY_PROBE)
     inst = RuntimeInstance.from_parts(
-        engine=engine, config=KernelConfig(enable_memory_egress=True),
+        engine=engine,
+        config=KernelConfig(enable_memory_egress=True),
     )
     cap = _CapturePlugin()
     inst.driver.observability.subscribe(cap)
@@ -282,9 +283,7 @@ def test_driver_records_tool_call_end_when_engine_raises() -> None:
     error_ends = [
         e
         for e in ends
-        if e.attributes.get("response_kind") == "ERROR"
-        or "get_deployments" in str(e.attributes.get("text") or "")
+        if e.attributes.get("response_kind") == "ERROR" or "get_deployments" in str(e.attributes.get("text") or "")
     ]
     assert error_ends, ends
     assert "get_deployments" in str(error_ends[-1].attributes.get("text") or "")
-

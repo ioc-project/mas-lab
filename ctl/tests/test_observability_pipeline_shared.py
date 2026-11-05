@@ -8,11 +8,11 @@ import json
 from dataclasses import dataclass, field
 
 from mas.ctl.adapters.obs.config import ObservabilityConfig
-from mas.ctl.session.observability import create_shared_observability, setup_shared_obs
+from mas.ctl.session.observability import create_shared_observability
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
-from mas.runtime.boundary.obs.plugins import ObsPluginSet, build_observability_plugins
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
+from mas.runtime.boundary.obs.plugins import ObsPluginSet, build_observability_plugins
 from mas.runtime.schema.observability import ObsEventKind
 
 
@@ -59,9 +59,7 @@ def test_subscribe_to_is_idempotent(tmp_path) -> None:
 
 
 def test_create_shared_observability_begin_run_on_first_setup(tmp_path) -> None:
-    config = ObservabilityConfig(
-        enabled=True, plugins=["native"], events_file="events.jsonl", agent_id="entry"
-    )
+    config = ObservabilityConfig(enabled=True, plugins=["native"], events_file="events.jsonl", agent_id="entry")
     shared_set, setup = create_shared_observability(config, base_dir=tmp_path)
     assert shared_set is not None and setup is not None
 
@@ -93,8 +91,13 @@ def test_sh_user_input_updates_turn_context() -> None:
     ctx._seen_engine_ops.add((1, "LLM_CALL"))
 
     out = transform.transform(
-        {"_source": "session", "session_kind": "user_input", "text": "hi",
-         "call_id": "planner-u2-exec", "turn_id": "u2"},
+        {
+            "_source": "session",
+            "session_kind": "user_input",
+            "text": "hi",
+            "call_id": "planner-u2-exec",
+            "turn_id": "u2",
+        },
         ctx=ctx,
     )
     assert out  # produces at least one event

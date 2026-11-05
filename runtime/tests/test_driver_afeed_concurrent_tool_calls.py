@@ -8,7 +8,6 @@ import asyncio
 import time
 
 import pytest
-
 from mas.runtime.driver.driver import DriverTrace, KernelDriver
 from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.schema.egress import InvokeEngineIo

@@ -37,10 +37,7 @@ def test_tutorials_do_not_ship_failure_catalogs_or_agent_traces() -> None:
         name = Path(rel).name.lower()
         if name.startswith("c8-") or "cognitive-fail" in name:
             leaked.append(rel)
-    assert not leaked, (
-        "Unexpected tutorial files (keep catalogs in local failure.bak): "
-        + ", ".join(leaked)
-    )
+    assert not leaked, "Unexpected tutorial files (keep catalogs in local failure.bak): " + ", ".join(leaked)
 
 
 def test_tutorials_do_not_name_cognitive_failures() -> None:
@@ -51,9 +48,7 @@ def test_tutorials_do_not_name_cognitive_failures() -> None:
         text = (REPO / rel).read_text(encoding="utf-8")
         if _C_CLASS.search(text) or _COGNITIVE.search(text):
             hits.append(rel)
-    assert not hits, "Cognitive-failure labels in tutorials (use local failure.bak): " + ", ".join(
-        hits
-    )
+    assert not hits, "Cognitive-failure labels in tutorials (use local failure.bak): " + ", ".join(hits)
 
 
 def test_sample_library_does_not_ship_failure_catalogs() -> None:
@@ -62,7 +57,4 @@ def test_sample_library_does_not_ship_failure_catalogs() -> None:
         for rel in _tracked("library-samples")
         if "failures" in Path(rel).parts or Path(rel).name.lower().startswith("c8-")
     ]
-    assert not leaked, (
-        "Failure catalogs belong in local failure.bak, not library-samples: "
-        + ", ".join(leaked)
-    )
+    assert not leaked, "Failure catalogs belong in local failure.bak, not library-samples: " + ", ".join(leaked)

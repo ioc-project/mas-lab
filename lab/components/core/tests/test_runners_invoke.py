@@ -1,11 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for RunContext, invoke_runner, and ArtifactCollector."""
+
 from __future__ import annotations
 
 from pathlib import Path
-
-import pytest
 
 from mas.lab.runners.artifacts import ArtifactCollector
 from mas.lab.runners.context import RunContext

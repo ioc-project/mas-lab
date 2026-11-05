@@ -7,9 +7,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from mas.lab.benchmark.pipeline.executor import PipelineExecutor
 from mas.lab.benchmark.pipeline import Pipeline, PipelineConfig, PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.executor import PipelineExecutor
 from mas.lab.benchmark.pipeline.resources import Artifact
 
 

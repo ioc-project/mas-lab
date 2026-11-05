@@ -9,6 +9,7 @@ real session id — but never actually passed session_id=sid into
 SessionController(...), so the governance/observability session id was
 silently a different, unrelated value every time.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -45,14 +46,10 @@ def _run_and_capture_real_session_id(tmp_path: Path, *, session_id):
                 "mas.ctl.session.hitl_config.resolve_hitl_from_manifest",
                 return_value=(None, None),
             ):
-                with patch(
-                    "mas.ctl.session.controller.SessionController.run_turn", _fake_run_turn
-                ):
+                with patch("mas.ctl.session.controller.SessionController.run_turn", _fake_run_turn):
                     with patch(
                         "mas.ctl.ui.turn_result.turn_to_agent_result",
-                        return_value=MagicMock(
-                            status="ok", response="ok", error_message="", error_detail=""
-                        ),
+                        return_value=MagicMock(status="ok", response="ok", error_message="", error_detail=""),
                     ):
                         run_agent_turn(
                             _MANIFEST_YAML,

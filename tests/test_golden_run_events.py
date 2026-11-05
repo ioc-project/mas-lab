@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Golden-run events.jsonl parity tests (llm_cache replay, isolated cache)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -45,9 +46,7 @@ def test_golden_events_match_committed_snapshot(golden_env) -> None:
     from mas.lab.benchmark.worker import run_benchmark_sync
 
     if not (GOLDEN_DIR / "events.normalized.jsonl").is_file():
-        raise AssertionError(
-            "golden snapshot missing — run: python scripts/capture_golden_run.py --labs lab-smoke"
-        )
+        raise AssertionError("golden snapshot missing — run: python scripts/capture_golden_run.py --labs lab-smoke")
 
     output_dir, trace_cache_dir = golden_env
     ok = run_benchmark_sync(

@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from pathlib import Path
 
 from mas.ctl.workspace.config import WorkspaceConfig
 
@@ -94,9 +93,7 @@ def test_workspace_config_plugins_default_off(tmp_path, monkeypatch):
     repo.mkdir()
     (repo / ".git").mkdir()
     (repo / "config.yaml").write_text(
-        "mas_ctl:\n  flavour: local\n"
-        "# plugins:\n"
-        "#   - mas.runtime.debug_script\n",
+        "mas_ctl:\n  flavour: local\n# plugins:\n#   - mas.runtime.debug_script\n",
         encoding="utf-8",
     )
     monkeypatch.chdir(repo)

@@ -16,9 +16,7 @@ def _has_codec_base() -> bool:
         return False
 
 
-requires_codec_base = pytest.mark.skipif(
-    not _has_codec_base(), reason="bench extra not installed"
-)
+requires_codec_base = pytest.mark.skipif(not _has_codec_base(), reason="bench extra not installed")
 
 
 def test_core_does_not_require_codec_base():

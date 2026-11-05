@@ -58,9 +58,7 @@ def test_shipped_middleware_accepts_own_params(tmp_path: Path, middleware: str, 
         ("fault_inject", {"state_path": "sched.json"}),
     ],
 )
-def test_shipped_middleware_rejects_sibling_plugin_params(
-    tmp_path: Path, middleware: str, params: dict
-) -> None:
+def test_shipped_middleware_rejects_sibling_plugin_params(tmp_path: Path, middleware: str, params: dict) -> None:
     pytest.importorskip("jsonschema")
     path = _write(tmp_path, "mw.yaml", _middleware(middleware, params))
     result = validate_file(path, kind="infra", strict=True, resolve_refs=True)

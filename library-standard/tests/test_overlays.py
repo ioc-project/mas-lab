@@ -9,14 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-OVERLAYS = (
-    Path(__file__).resolve().parents[1]
-    / "src"
-    / "mas"
-    / "library"
-    / "standard"
-    / "overlays"
-)
+OVERLAYS = Path(__file__).resolve().parents[1] / "src" / "mas" / "library" / "standard" / "overlays"
 INDEX = OVERLAYS / "README.md"
 
 

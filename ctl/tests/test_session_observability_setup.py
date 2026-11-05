@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.adapters.obs.config import ObservabilityConfig
 from mas.ctl.session.observability import (
     obs_config_to_binding,
@@ -136,7 +135,5 @@ def test_setup_observability_from_binding_reuses_existing_set(tmp_path: Path) ->
 
 
 def test_setup_observability_from_binding_empty_plugins_returns_none(tmp_path: Path) -> None:
-    rec = setup_observability_from_binding(
-        _FakeInstance(), ObservabilityBinding(plugins=[]), base_dir=tmp_path
-    )
+    rec = setup_observability_from_binding(_FakeInstance(), ObservabilityBinding(plugins=[]), base_dir=tmp_path)
     assert rec is None

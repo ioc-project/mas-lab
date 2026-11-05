@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import json
 
-from mas.runtime.kernel.state import QProduct
 from mas.library.standard.plugins.design_patterns.plan_execute import (
     PlanExecutePlugin,
     _parse_plan,
 )
+from mas.runtime.kernel.state import QProduct
 from mas.runtime.registry import get_registry
 
 

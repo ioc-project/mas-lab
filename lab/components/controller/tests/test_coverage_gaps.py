@@ -1,15 +1,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Additional coverage for controller infrastructure."""
+
 from __future__ import annotations
 
-import json
 import socket
 import threading
 import time
 
 import pytest
-
 from mas.lab.controller.api import ControllerAPI
 from mas.lab.controller.client import ControllerClient
 from mas.lab.controller.registry import WorkerRegistry

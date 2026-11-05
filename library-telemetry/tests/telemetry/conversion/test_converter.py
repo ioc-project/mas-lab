@@ -82,8 +82,8 @@ def test_deterministic_replay(tmp_path, events_path):
 def test_sdk_unavailable_error_is_typed():
     # Construction failure path is covered indirectly; assert the class exists.
     from mas.library.telemetry.exceptions import (
-        OtelSdkUnavailableError,
         ConversionError,
+        OtelSdkUnavailableError,
     )
 
     assert issubclass(OtelSdkUnavailableError, ConversionError)

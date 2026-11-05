@@ -88,7 +88,6 @@ def test_json_schema_check_skipped_is_distinct_from_pass(monkeypatch):
 def test_verify_events_file_surfaces_schema_skip_as_warning(tmp_path, monkeypatch):
     import builtins
 
-
     real_import = builtins.__import__
 
     def _no_jsonschema(name, *args, **kwargs):

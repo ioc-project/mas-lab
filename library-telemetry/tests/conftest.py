@@ -19,9 +19,7 @@ try:
 except ImportError:  # pragma: no cover
     OTEL_AVAILABLE = False
 
-requires_otel = pytest.mark.skipif(
-    not OTEL_AVAILABLE, reason="opentelemetry-sdk not installed"
-)
+requires_otel = pytest.mark.skipif(not OTEL_AVAILABLE, reason="opentelemetry-sdk not installed")
 
 
 @pytest.fixture
@@ -32,11 +30,7 @@ def events_path() -> Path:
 
 @pytest.fixture
 def events(events_path: Path) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in events_path.read_text().splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
 
 
 @pytest.fixture
@@ -48,7 +42,10 @@ def spans_path(tmp_path: Path, events_path: Path) -> Path:
 
     out = tmp_path / "otel_sdk_spans.jsonl"
     replay_events_file(
-        events_path, out, service_name="mas-runtime", app_name="test-app",
+        events_path,
+        out,
+        service_name="mas-runtime",
+        app_name="test-app",
         converter_profile="raw",
     )
     return out
@@ -56,9 +53,7 @@ def spans_path(tmp_path: Path, events_path: Path) -> Path:
 
 @pytest.fixture
 def spans(spans_path: Path) -> list[dict]:
-    return [
-        json.loads(line) for line in spans_path.read_text().splitlines() if line.strip()
-    ]
+    return [json.loads(line) for line in spans_path.read_text().splitlines() if line.strip()]
 
 
 @pytest.fixture
@@ -76,6 +71,4 @@ def observe_sdk_spans(tmp_path: Path, events_path: Path) -> list[dict]:
         app_name="test-app",
         converter_profile="observe_sdk",
     )
-    return [
-        json.loads(line) for line in out.read_text().splitlines() if line.strip()
-    ]
+    return [json.loads(line) for line in out.read_text().splitlines() if line.strip()]

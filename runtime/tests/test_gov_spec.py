@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.runtime.spec.gov import SpecBindingError, build_kernel_config, parse_gov_spec
 
 
@@ -55,27 +54,71 @@ def test_same_plugin_key_merges_policies_instead_of_overwriting_regression() -> 
     overlay's entire policy set once the declarative policy engine was
     actually wired into build_kernel_config — previously invisible because
     binding.policies was parsed and discarded."""
-    binding = parse_gov_spec([
-        {"sample_governance": {"policies": [{"name": "budget-cap", "trigger": {"on": "budget_threshold"}, "action": "block"}]}},
-        {"sample_governance": {"policies": [{"name": "forbidden-destination", "trigger": {"on": "tool_input"}, "action": "block"}]}},
-    ])
+    binding = parse_gov_spec(
+        [
+            {
+                "sample_governance": {
+                    "policies": [{"name": "budget-cap", "trigger": {"on": "budget_threshold"}, "action": "block"}]
+                }
+            },
+            {
+                "sample_governance": {
+                    "policies": [{"name": "forbidden-destination", "trigger": {"on": "tool_input"}, "action": "block"}]
+                }
+            },
+        ]
+    )
     names = {p["name"] for p in binding.policies}
     assert names == {"budget-cap", "forbidden-destination"}
 
 
 def test_same_plugin_key_scalar_field_last_value_wins() -> None:
-    binding = parse_gov_spec([
-        {"sample_governance": {"hitl_on_tool": False}},
-        {"sample_governance": {"hitl_on_tool": True}},
-    ])
+    binding = parse_gov_spec(
+        [
+            {"sample_governance": {"hitl_on_tool": False}},
+            {"sample_governance": {"hitl_on_tool": True}},
+        ]
+    )
     assert binding.hitl_on_tool is True
 
 
 def test_build_kernel_config_wires_merged_policies() -> None:
-    binding = parse_gov_spec([
-        {"sample_governance": {"policies": [{"name": "p1", "trigger": {"on": "tool_input", "tool": "*", "condition": "", "evaluation": "deterministic"}, "action": "log"}]}},
-        {"sample_governance": {"policies": [{"name": "p2", "trigger": {"on": "tool_input", "tool": "*", "condition": "", "evaluation": "deterministic"}, "action": "log"}]}},
-    ])
+    binding = parse_gov_spec(
+        [
+            {
+                "sample_governance": {
+                    "policies": [
+                        {
+                            "name": "p1",
+                            "trigger": {
+                                "on": "tool_input",
+                                "tool": "*",
+                                "condition": "",
+                                "evaluation": "deterministic",
+                            },
+                            "action": "log",
+                        }
+                    ]
+                }
+            },
+            {
+                "sample_governance": {
+                    "policies": [
+                        {
+                            "name": "p2",
+                            "trigger": {
+                                "on": "tool_input",
+                                "tool": "*",
+                                "condition": "",
+                                "evaluation": "deterministic",
+                            },
+                            "action": "log",
+                        }
+                    ]
+                }
+            },
+        ]
+    )
     config = build_kernel_config(binding)
     assert config.policy_engine is not None
     assert {p.name for p in config.policy_engine.policies} == {"p1", "p2"}
@@ -86,21 +129,33 @@ def test_malformed_policy_raises_spec_binding_error_regression() -> None:
     to raise a raw ValueError from deep inside PolicyDefinition.__post_init__,
     instead of this module's own SpecBindingError every other malformed
     governance shape raises."""
-    binding = parse_gov_spec([
-        {"sample_governance": {"policies": [
-            {"name": "bad-policy", "trigger": {"on": "tool_input"}, "action": "not_a_real_action"},
-        ]}}
-    ])
+    binding = parse_gov_spec(
+        [
+            {
+                "sample_governance": {
+                    "policies": [
+                        {"name": "bad-policy", "trigger": {"on": "tool_input"}, "action": "not_a_real_action"},
+                    ]
+                }
+            }
+        ]
+    )
     with pytest.raises(SpecBindingError, match="bad-policy"):
         build_kernel_config(binding)
 
 
 def test_malformed_policy_missing_trigger_key_raises_spec_binding_error() -> None:
-    binding = parse_gov_spec([
-        {"sample_governance": {"policies": [
-            {"name": "no-trigger", "action": "block"},
-        ]}}
-    ])
+    binding = parse_gov_spec(
+        [
+            {
+                "sample_governance": {
+                    "policies": [
+                        {"name": "no-trigger", "action": "block"},
+                    ]
+                }
+            }
+        ]
+    )
     with pytest.raises(SpecBindingError, match="no-trigger"):
         build_kernel_config(binding)
 
@@ -159,6 +214,7 @@ def test_flags_only_fallback_also_resolves_sample_governance_via_registry() -> N
     config = build_kernel_config(binding)
     assert config.egress_governance_plugin is not None
     assert config.egress_governance_plugin.config.hitl_on_tool is True
+
 
 def test_agent_spec_threads_through_to_kernel_config() -> None:
     spec = {"tools": ["lookup_schedule"], "models": [{"model": "gpt-4o"}]}
@@ -302,9 +358,7 @@ def test_backtrack_plugin_retries_first_error_and_requests_rollback_on_repeat() 
     )
 
     first = plugin.decide(context)
-    second = plugin.decide(
-        IngressErrorContext(**{**context.__dict__, "retry_count": 1})
-    )
+    second = plugin.decide(IngressErrorContext(**{**context.__dict__, "retry_count": 1}))
 
     assert first.action is ErrorRecoveryAction.RETRY
     assert second.action is ErrorRecoveryAction.BACKTRACK

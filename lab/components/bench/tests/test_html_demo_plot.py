@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from mas.lab.plots.html_demo import HtmlDemoPlotter, plot_demo, render_html, stream_for
 
 
@@ -19,7 +18,7 @@ def test_render_chat_html_embeds_update_hook() -> None:
     assert "drawChat" in html
     assert "drawSeries" not in html
     assert "drawStory" not in html
-    assert "el.select(\".idle\").remove()" in html
+    assert 'el.select(".idle").remove()' in html
     assert 'cls += " user"' in html
     assert "pinUser === true" in html
     assert "TEXT_LIMIT" in html

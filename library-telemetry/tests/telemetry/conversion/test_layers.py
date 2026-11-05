@@ -96,11 +96,7 @@ def test_provenance_enabled_by_default() -> None:
         KIND_ENVELOPE,
     )
 
-    provenance_kinds = [
-        k
-        for k, v in KIND_ENVELOPE.items()
-        if BLOCK_TO_EXPORT_LAYER.get(v[0]) == "provenance"
-    ]
+    provenance_kinds = [k for k, v in KIND_ENVELOPE.items() if BLOCK_TO_EXPORT_LAYER.get(v[0]) == "provenance"]
     assert provenance_kinds
     ev = {"kind": provenance_kinds[0]}
     assert should_export_event(ev, layers) is True
@@ -113,11 +109,7 @@ def test_provenance_suppressed_when_disabled() -> None:
         KIND_ENVELOPE,
     )
 
-    provenance_kinds = [
-        k
-        for k, v in KIND_ENVELOPE.items()
-        if BLOCK_TO_EXPORT_LAYER.get(v[0]) == "provenance"
-    ]
+    provenance_kinds = [k for k, v in KIND_ENVELOPE.items() if BLOCK_TO_EXPORT_LAYER.get(v[0]) == "provenance"]
     assert provenance_kinds
     ev = {"kind": provenance_kinds[0]}
     assert should_export_event(ev, layers) is False
@@ -130,11 +122,7 @@ def test_provenance_passes_when_enabled() -> None:
         KIND_ENVELOPE,
     )
 
-    provenance_kinds = [
-        k
-        for k, v in KIND_ENVELOPE.items()
-        if BLOCK_TO_EXPORT_LAYER.get(v[0]) == "provenance"
-    ]
+    provenance_kinds = [k for k, v in KIND_ENVELOPE.items() if BLOCK_TO_EXPORT_LAYER.get(v[0]) == "provenance"]
     assert provenance_kinds
     ev = {"kind": provenance_kinds[0]}
     assert should_export_event(ev, layers) is True

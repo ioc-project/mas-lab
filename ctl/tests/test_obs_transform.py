@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 
 from mas.library.standard.lib.observability.native.transform import BoundaryPassthroughTransform, TransformContext
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
-from mas.runtime.boundary.obs.plugins import ObsPluginSet, build_observability_plugins
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
+from mas.runtime.boundary.obs.plugins import ObsPluginSet, build_observability_plugins
 
 
 @dataclass

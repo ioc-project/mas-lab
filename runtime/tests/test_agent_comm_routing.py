@@ -35,9 +35,7 @@ def test_explicit_peer_route_overrides_materialized_local_agent() -> None:
         delegated_names={"schedule_agent"},
     )
 
-    delegator = LlmDelegator(
-        comm=local, routes=routes, allowed_peers=["schedule_agent"]
-    )
+    delegator = LlmDelegator(comm=local, routes=routes, allowed_peers=["schedule_agent"])
 
     assert delegator.delegate("schedule_agent", "find a train") == "remote result"
     assert remote.calls == [("schedule_agent", "find a train")]

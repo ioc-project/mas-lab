@@ -1,7 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 import pytest
-
 from mas.ctl.manifest.spec_bindings import SpecBindingError, validate_agent_spec_bindings
 
 
@@ -13,9 +12,7 @@ def test_spawn_subagent_accepts_named_validated_templates():
     validate_agent_spec_bindings(
         _spec(
             {
-                "templates": [
-                    {"id": "worker", "ref": "./agents/worker.yaml", "description": "Do work"}
-                ],
+                "templates": [{"id": "worker", "ref": "./agents/worker.yaml", "description": "Do work"}],
                 "max_spawns": 4,
                 "max_depth": 2,
             }

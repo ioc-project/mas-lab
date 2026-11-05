@@ -7,15 +7,14 @@ trace, metric list or judge model silently kept stale scores. The step now
 stamps ``inputs_digest`` and reuses a file only when it matches (legacy files
 are adopted once; a failed scoring is never reused).
 """
+
 from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.library.lab.steps.eval import mce as mce_mod
 
 
@@ -33,9 +32,7 @@ def harness(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mce_mod, "_compute_mixed_metrics", fake_compute)
     monkeypatch.setattr(mce_mod, "_install_judge", lambda c, x: (calls["model"], "test"))
-    monkeypatch.setattr(
-        mce_mod, "_resolve_judge", lambda c, x: SimpleNamespace(model=calls["model"], source="test")
-    )
+    monkeypatch.setattr(mce_mod, "_resolve_judge", lambda c, x: SimpleNamespace(model=calls["model"], source="test"))
 
     def run_step(**overrides):
         config = {

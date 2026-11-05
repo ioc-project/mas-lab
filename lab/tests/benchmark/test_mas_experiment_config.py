@@ -10,6 +10,7 @@ Covers:
   - Smoke-parse of every real experiment.yaml in labs/
   - Dry-run of every reproduce command (validates config + pipeline end-to-end)
 """
+
 import json
 import subprocess
 import sys
@@ -71,14 +72,13 @@ def _make_dataset_file(base: Path, filename: str) -> None:
         "metadata": {"name": Path(filename).stem, "version": "1.0"},
         "spec": {"items": [{"id": "q1", "prompt": "Test query"}]},
     }
-    (datasets_dir / filename).write_text(
-        yaml.dump(manifest, allow_unicode=True, sort_keys=False)
-    )
+    (datasets_dir / filename).write_text(yaml.dump(manifest, allow_unicode=True, sort_keys=False))
 
 
 # ---------------------------------------------------------------------------
 # dataset: path: (classic form — must keep working)
 # ---------------------------------------------------------------------------
+
 
 def test_dataset_path_form(tmp_path):
     """dataset: path: <relative> resolves correctly."""
@@ -94,6 +94,7 @@ def test_dataset_path_form(tmp_path):
 # ---------------------------------------------------------------------------
 # dataset: name: (shorthand — was the bug)
 # ---------------------------------------------------------------------------
+
 
 def test_dataset_name_only_resolves_to_datasets_folder(tmp_path):
     """dataset: name: <foo> → ./datasets/foo.yaml relative to experiment dir."""
@@ -166,9 +167,7 @@ def test_dataset_source_overlay_is_loaded_and_applied(tmp_path):
             }
         },
     }
-    (datasets_dir / "mmlu.yaml").write_text(
-        yaml.dump(manifest, allow_unicode=True, sort_keys=False)
-    )
+    (datasets_dir / "mmlu.yaml").write_text(yaml.dump(manifest, allow_unicode=True, sort_keys=False))
     exp_yaml = _write_experiment(
         tmp_path,
         "dataset:\n  path: ./datasets/mmlu.yaml\n  source:\n    limit: 1",
@@ -290,19 +289,22 @@ def test_pipeline_bind_key_rejected(tmp_path):
 # No dataset (optional)
 # ---------------------------------------------------------------------------
 
+
 def test_legacy_mas_key_still_loads(tmp_path):
     """Pre-applications mas: {manifest, configs_dir} must still parse."""
     mas_yaml = tmp_path / "mas.yaml"
     mas_yaml.write_text("apiVersion: mas/v1\nkind: MAS\nmetadata:\n  name: test\n")
     exp_yaml = tmp_path / "experiment.yaml"
-    exp_yaml.write_text(textwrap.dedent("""\
+    exp_yaml.write_text(
+        textwrap.dedent("""\
         experiment:
           name: legacy-mas
           description: "Existing labs still use mas:"
           mas:
             manifest: ./mas.yaml
             configs_dir: ./overlays
-    """))
+    """)
+    )
     cfg = MASExperimentConfig.from_yaml(exp_yaml)
     assert cfg.mas is not None
     assert cfg.mas.manifest == mas_yaml.resolve()
@@ -313,14 +315,16 @@ def test_no_dataset_is_valid(tmp_path):
     mas_yaml = tmp_path / "mas.yaml"
     mas_yaml.write_text("apiVersion: mas/v1\nkind: MAS\nmetadata:\n  name: test\n")
     exp_yaml = tmp_path / "experiment.yaml"
-    exp_yaml.write_text(textwrap.dedent("""\
+    exp_yaml.write_text(
+        textwrap.dedent("""\
         experiment:
           name: no-dataset
           description: "No dataset — scenarios only"
           application:
             manifest: ./mas.yaml
             configs_dir: ./overlays
-    """))
+    """)
+    )
     cfg = MASExperimentConfig.from_yaml(exp_yaml)
     assert cfg.dataset is None
 
@@ -330,7 +334,8 @@ def test_canonicalize_deprecated_aliases(tmp_path):
     mas_yaml = tmp_path / "mas.yaml"
     mas_yaml.write_text("apiVersion: mas/v1\nkind: MAS\nmetadata:\n  name: test\n")
     exp_yaml = tmp_path / "experiment.yaml"
-    exp_yaml.write_text(textwrap.dedent("""\
+    exp_yaml.write_text(
+        textwrap.dedent("""\
         experiment:
           name: deprecated-aliases
           applications:
@@ -345,7 +350,8 @@ def test_canonicalize_deprecated_aliases(tmp_path):
             post:
               - name: gather-experiment
                 type: gather_level
-    """))
+    """)
+    )
     _make_dataset_file(tmp_path, "my-queries.yaml")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -362,7 +368,8 @@ def test_canonical_application_and_item_keys(tmp_path):
     mas_yaml = tmp_path / "mas.yaml"
     mas_yaml.write_text("apiVersion: mas/v1\nkind: MAS\nmetadata:\n  name: test\n")
     exp_yaml = tmp_path / "experiment.yaml"
-    exp_yaml.write_text(textwrap.dedent("""\
+    exp_yaml.write_text(
+        textwrap.dedent("""\
         experiment:
           name: canonical
           application:
@@ -374,7 +381,8 @@ def test_canonical_application_and_item_keys(tmp_path):
           post:
             - name: gather-experiment
               type: gather_level
-    """))
+    """)
+    )
     cfg = MASExperimentConfig.from_yaml(exp_yaml)
     assert cfg.mas is not None
     assert "item" in cfg.levels
@@ -386,7 +394,8 @@ def test_output_schema_loaded(tmp_path):
     mas_yaml = tmp_path / "mas.yaml"
     mas_yaml.write_text("apiVersion: mas/v1\nkind: MAS\nmetadata:\n  name: test\n")
     exp_yaml = tmp_path / "experiment.yaml"
-    exp_yaml.write_text(textwrap.dedent("""\
+    exp_yaml.write_text(
+        textwrap.dedent("""\
         experiment:
           name: with-schema
           application:
@@ -396,7 +405,8 @@ def test_output_schema_loaded(tmp_path):
               - results/ci_summary.csv
             required_columns:
               results/ci_summary.csv: [scenario, mean]
-    """))
+    """)
+    )
     cfg = MASExperimentConfig.from_yaml(exp_yaml)
     assert cfg.output_schema["required_files"] == ["results/ci_summary.csv"]
     assert cfg.output_schema["required_columns"]["results/ci_summary.csv"] == ["scenario", "mean"]
@@ -406,14 +416,12 @@ def test_output_schema_loaded(tmp_path):
 # Smoke-parse: every real experiment.yaml in labs/
 # ---------------------------------------------------------------------------
 
+
 def _collect_lab_experiments() -> list[tuple[str, Path]]:
     """Return (label, path) pairs for all experiment.yaml files under labs/."""
     if not _LABS_DIR.exists():
         return []
-    return [
-        (str(p.relative_to(_LABS_DIR)), p)
-        for p in sorted(_LABS_DIR.rglob("experiment*.yaml"))
-    ]
+    return [(str(p.relative_to(_LABS_DIR)), p) for p in sorted(_LABS_DIR.rglob("experiment*.yaml"))]
 
 
 @pytest.mark.parametrize("label,exp_yaml", _collect_lab_experiments(), ids=[p[0] for p in _collect_lab_experiments()])
@@ -495,8 +503,7 @@ def test_reproduce_command_dry_run(rel_path: str):
 
     output = result.stdout + result.stderr
     assert result.returncode == 0, (
-        f"`mas-lab benchmark run {rel_path} --dry-run` exited with code "
-        f"{result.returncode}.\n\nOutput:\n{output}"
+        f"`mas-lab benchmark run {rel_path} --dry-run` exited with code {result.returncode}.\n\nOutput:\n{output}"
     )
     assert "Configuration valid" in output, (
         f"`--dry-run` did not print 'Configuration valid' for {rel_path}.\n\nOutput:\n{output}"

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from mas.lab.lab.config.execution import split_legacy_execution
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -89,10 +88,7 @@ def test_discover_includes_library_samples() -> None:
 def test_codemod_is_noop_without_execution(tmp_path: Path) -> None:
     path = tmp_path / "experiment.yaml"
     path.write_text(
-        "experiment:\n"
-        "  name: already-migrated\n"
-        "  schedule:\n"
-        "    ordering: coverage\n",
+        "experiment:\n  name: already-migrated\n  schedule:\n    ordering: coverage\n",
         encoding="utf-8",
     )
     mod = _load_script()

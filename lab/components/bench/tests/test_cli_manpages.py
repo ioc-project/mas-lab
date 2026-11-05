@@ -39,11 +39,7 @@ def test_every_man_page_file_has_name_and_synopsis() -> None:
 
 def test_every_pipeline_shortcut_has_a_man_page() -> None:
     by_cmd = {p.command: p for p in CLI_MAN_PAGES}
-    missing = [
-        item.command
-        for item in CLI_PIPELINE_SHORTCUTS
-        if item.command not in by_cmd
-    ]
+    missing = [item.command for item in CLI_PIPELINE_SHORTCUTS if item.command not in by_cmd]
     assert not missing, "pipeline shortcuts without man pages: " + ", ".join(missing)
 
 

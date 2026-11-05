@@ -3,14 +3,13 @@
 """Tests for scoped resource management in the pipeline."""
 
 import pytest
-
 from mas.lab.benchmark.pipeline.resources import (
-    Scope,
-    ResourceSpec,
-    ScopeContext,
-    ResourceRegistry,
-    resolve_resource_refs,
     _FACTORIES,
+    ResourceRegistry,
+    ResourceSpec,
+    Scope,
+    ScopeContext,
+    resolve_resource_refs,
 )
 
 
@@ -42,9 +41,7 @@ class TestResourceSpec:
         assert spec.config == {}
 
     def test_from_dict_explicit_scope(self):
-        spec = ResourceSpec.from_dict(
-            {"name": "shared", "type": "kg", "scope": "test", "config": {"x": 1}}
-        )
+        spec = ResourceSpec.from_dict({"name": "shared", "type": "kg", "scope": "test", "config": {"x": 1}})
         assert spec.scope == Scope.TEST
         assert spec.config == {"x": 1}
 

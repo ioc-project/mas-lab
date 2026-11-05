@@ -138,9 +138,7 @@ def test_apply_defaults_fills_omitted_eval_mce_only() -> None:
         _Step("eval_mce", {"model": "already"}),
         _Step("extract_trajectories", {}),
     ]
-    apply_eval_mce_model_defaults(
-        steps, ResolvedJudgeModel("gpt-4o-mini", "experiment.evaluation.model")
-    )
+    apply_eval_mce_model_defaults(steps, ResolvedJudgeModel("gpt-4o-mini", "experiment.evaluation.model"))
     assert steps[0].config["model"] == "gpt-4o-mini"
     assert steps[0].config["model_source"] == "experiment.evaluation.model"
     assert steps[1].config["model"] == "already"
@@ -162,9 +160,7 @@ def test_apply_defaults_skips_judge_model_only_step() -> None:
     from mas.library.eval.mce.judge_model import ResolvedJudgeModel
 
     steps = [_Step("eval_mce", {"judge_model": "already"})]
-    apply_eval_mce_model_defaults(
-        steps, ResolvedJudgeModel("gpt-4o-mini", "experiment.evaluation.model")
-    )
+    apply_eval_mce_model_defaults(steps, ResolvedJudgeModel("gpt-4o-mini", "experiment.evaluation.model"))
     assert steps[0].config == {"judge_model": "already"}
 
 

@@ -23,9 +23,7 @@ def _registry_with_scripts(tmp_path: Path, name: str = "my-skill") -> SkillRegis
     scripts_dir = skill_dir / "scripts"
     scripts_dir.mkdir()
     # Write a simple Python script
-    (scripts_dir / "hello.py").write_text(
-        "import sys\nprint('hello', *sys.argv[1:])\n", encoding="utf-8"
-    )
+    (scripts_dir / "hello.py").write_text("import sys\nprint('hello', *sys.argv[1:])\n", encoding="utf-8")
     # Write a script that exits non-zero
     (scripts_dir / "fail.py").write_text("import sys; sys.exit(1)\n", encoding="utf-8")
 
@@ -44,11 +42,13 @@ class _FakeCtx:
 # run_skill_script — basic execution
 # ---------------------------------------------------------------------------
 
+
 def test_run_python_script_success(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill", "script": "hello.py"},
+        "run_skill_script",
+        {"skill": "my-skill", "script": "hello.py"},
         ctx=_FakeCtx(reg),
     )
     assert result["ok"] is True
@@ -59,9 +59,7 @@ def test_run_python_script_success(tmp_path: Path):
 def test_run_python_script_with_stdin(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     scripts_dir = tmp_path / "my-skill" / "scripts"
-    (scripts_dir / "echo_stdin.py").write_text(
-        "import sys\nprint(sys.stdin.read(), end='')\n", encoding="utf-8"
-    )
+    (scripts_dir / "echo_stdin.py").write_text("import sys\nprint(sys.stdin.read(), end='')\n", encoding="utf-8")
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
         "run_skill_script",
@@ -88,7 +86,8 @@ def test_run_script_nonzero_exit(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill", "script": "fail.py"},
+        "run_skill_script",
+        {"skill": "my-skill", "script": "fail.py"},
         ctx=_FakeCtx(reg),
     )
     assert result["ok"] is False
@@ -98,6 +97,7 @@ def test_run_script_nonzero_exit(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # Security guards
 # ---------------------------------------------------------------------------
+
 
 def test_traversal_via_path_separator_rejected(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
@@ -116,7 +116,8 @@ def test_script_not_found_lists_available(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill", "script": "nonexistent.py"},
+        "run_skill_script",
+        {"skill": "my-skill", "script": "nonexistent.py"},
         ctx=_FakeCtx(reg),
     )
     assert "error" in result
@@ -133,7 +134,8 @@ def test_skill_without_scripts_dir(tmp_path: Path):
     reg.register(SkillRecord(name="no-scripts", description="x", path=skill_md))
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "no-scripts", "script": "foo.py"},
+        "run_skill_script",
+        {"skill": "no-scripts", "script": "foo.py"},
         ctx=_FakeCtx(reg),
     )
     assert "error" in result
@@ -144,21 +146,18 @@ def test_skill_without_scripts_dir(tmp_path: Path):
 # Input validation
 # ---------------------------------------------------------------------------
 
+
 def test_missing_skill_arg(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     plugin = RunSkillScriptPlugin()
-    result = plugin.on_execute_tool(
-        "run_skill_script", {"script": "hello.py"}, ctx=_FakeCtx(reg)
-    )
+    result = plugin.on_execute_tool("run_skill_script", {"script": "hello.py"}, ctx=_FakeCtx(reg))
     assert "error" in result
 
 
 def test_missing_script_arg(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     plugin = RunSkillScriptPlugin()
-    result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill"}, ctx=_FakeCtx(reg)
-    )
+    result = plugin.on_execute_tool("run_skill_script", {"skill": "my-skill"}, ctx=_FakeCtx(reg))
     assert "error" in result
 
 
@@ -235,7 +234,8 @@ def test_unknown_skill(tmp_path: Path):
     reg = _registry_with_scripts(tmp_path)
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "ghost", "script": "hello.py"},
+        "run_skill_script",
+        {"skill": "ghost", "script": "hello.py"},
         ctx=_FakeCtx(reg),
     )
     assert "error" in result
@@ -245,7 +245,8 @@ def test_unknown_skill(tmp_path: Path):
 def test_no_registry():
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "x", "script": "y.py"},
+        "run_skill_script",
+        {"skill": "x", "script": "y.py"},
         ctx=_FakeCtx(None),
     )
     assert "error" in result
@@ -254,6 +255,7 @@ def test_no_registry():
 # ---------------------------------------------------------------------------
 # on_collect_tools schema
 # ---------------------------------------------------------------------------
+
 
 def test_list_tools_schema():
     plugin = RunSkillScriptPlugin()
@@ -265,7 +267,7 @@ def test_list_tools_schema():
     assert "script" in params["properties"]
     assert "args" in params["properties"]
     assert "timeout" in params["properties"]
-    assert "env" in params["properties"]   # extra env support
+    assert "env" in params["properties"]  # extra env support
     assert "stdin" in params["properties"]
     assert set(params["required"]) == {"skill", "script"}
     assert tools[0]["semantics"] == {
@@ -279,9 +281,11 @@ def test_list_tools_schema():
 # Sandbox — environment sanitization
 # ---------------------------------------------------------------------------
 
+
 def test_sanitized_env_strips_sensitive_vars(tmp_path: Path):
     """Scripts should NOT receive API keys or other sensitive env vars."""
     import os
+
     # Inject a fake sensitive variable
     os.environ["FAKE_SECRET_TOKEN"] = "my-secret"
 
@@ -294,14 +298,15 @@ def test_sanitized_env_strips_sensitive_vars(tmp_path: Path):
     )
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill", "script": "dump_env.py"},
+        "run_skill_script",
+        {"skill": "my-skill", "script": "dump_env.py"},
         ctx=_FakeCtx(reg),
     )
     assert result["ok"] is True
     import json
+
     env_in_script = json.loads(result["stdout"])
-    assert "FAKE_SECRET_TOKEN" not in env_in_script, \
-        "sensitive env var must not leak into script subprocess"
+    assert "FAKE_SECRET_TOKEN" not in env_in_script, "sensitive env var must not leak into script subprocess"
 
     del os.environ["FAKE_SECRET_TOKEN"]
 
@@ -352,6 +357,7 @@ def test_extra_env_rejects_denylisted_overrides(tmp_path: Path):
     )
     assert result["ok"] is True
     import json
+
     env_in_script = json.loads(result["stdout"])
     assert env_in_script["PATH"] != "/tmp/evil"
     assert env_in_script["LD_PRELOAD"] == "MISSING"
@@ -361,12 +367,11 @@ def test_cwd_is_skill_base_dir(tmp_path: Path):
     """Script's working directory is the skill's base directory."""
     reg = _registry_with_scripts(tmp_path)
     scripts_dir = tmp_path / "my-skill" / "scripts"
-    (scripts_dir / "show_cwd.py").write_text(
-        "import os; print(os.getcwd())\n", encoding="utf-8"
-    )
+    (scripts_dir / "show_cwd.py").write_text("import os; print(os.getcwd())\n", encoding="utf-8")
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill", "script": "show_cwd.py"},
+        "run_skill_script",
+        {"skill": "my-skill", "script": "show_cwd.py"},
         ctx=_FakeCtx(reg),
     )
     assert result["ok"] is True
@@ -380,6 +385,7 @@ def test_cwd_is_skill_base_dir(tmp_path: Path):
 # _backend_plugin_from_ctx() in sk_shell.py -- the native tests above all
 # exercise the `backend_plugin is None` branch only)
 # ---------------------------------------------------------------------------
+
 
 def test_run_script_via_injected_backend_plugin_executes_for_real(tmp_path: Path):
     """End-to-end: command execution actually runs when routed through a
@@ -397,9 +403,7 @@ def test_run_script_via_injected_backend_plugin_executes_for_real(tmp_path: Path
         "---\nname: my-skill\ndescription: Does something.\n---\n# Body\n",
         encoding="utf-8",
     )
-    (backend_scripts_dir / "hello.py").write_text(
-        "import sys\nprint('hello', *sys.argv[1:])\n", encoding="utf-8"
-    )
+    (backend_scripts_dir / "hello.py").write_text("import sys\nprint('hello', *sys.argv[1:])\n", encoding="utf-8")
     backend_plugin = NativeSkillPlugin(base_dir=tmp_path)
     backend_plugin.discover(tmp_path)
 
@@ -433,7 +437,9 @@ def test_run_script_via_injected_backend_plugin_wraps_exceptions(tmp_path: Path)
 
     plugin = RunSkillScriptPlugin()
     result = plugin.on_execute_tool(
-        "run_skill_script", {"skill": "my-skill", "script": "hello.py"}, ctx=ctx,
+        "run_skill_script",
+        {"skill": "my-skill", "script": "hello.py"},
+        ctx=ctx,
     )
 
     assert "error" in result
@@ -444,10 +450,12 @@ def test_run_script_via_injected_backend_plugin_wraps_exceptions(tmp_path: Path)
 # Sandbox helpers — now in skill-sandbox package
 # ---------------------------------------------------------------------------
 
+
 def test_build_safe_env_strips_secrets():
     import os
 
     from sandbox.runner import _build_safe_env
+
     os.environ["MY_APIKEY"] = "secret123"
     env = _build_safe_env(Path("/tmp"), {})
     assert "MY_APIKEY" not in env
@@ -456,17 +464,20 @@ def test_build_safe_env_strips_secrets():
 
 def test_build_safe_env_includes_pwd():
     from sandbox.runner import _build_safe_env
+
     env = _build_safe_env(Path("/my/skill/dir"), {})
     assert env["PWD"] == "/my/skill/dir"
 
 
 def test_build_safe_env_merges_extra():
     from sandbox.runner import _build_safe_env
+
     env = _build_safe_env(Path("/tmp"), {"MY_CONF": "value"})
     assert env["MY_CONF"] == "value"
 
 
 def test_posix_set_limits_is_callable():
     from sandbox.runner import _posix_set_limits
+
     # Should not raise even on platforms without resource module
     _posix_set_limits()

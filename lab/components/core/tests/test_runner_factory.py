@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """RunnerFactory — unified entry point for bench + library extension runners."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
 from mas.lab.runners.factory import RunnerFactory
 from mas.lab.runners.protocol import ApplicationRunnerProtocol

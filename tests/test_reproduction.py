@@ -53,8 +53,7 @@ def test_experiment_dry_run(experiment: Path) -> None:
         timeout=85,
     )
     assert proc.returncode == 0, (
-        f"dry-run failed for {experiment.relative_to(REPO_ROOT)}:\n"
-        f"{proc.stderr}\n{proc.stdout}"
+        f"dry-run failed for {experiment.relative_to(REPO_ROOT)}:\n{proc.stderr}\n{proc.stdout}"
     )
 
 
@@ -74,8 +73,7 @@ def test_docs_reference_pages_exist() -> None:
 def test_reproduction_manifest_covers_all_lab_experiments() -> None:
     """Warn if a new labs/**/experiment.yaml is not in the reproduction manifest."""
     declared = {
-        (REPO_ROOT / rel).resolve()
-        for rel in (yaml.safe_load(MANIFEST.read_text()) or {}).get("experiments", [])
+        (REPO_ROOT / rel).resolve() for rel in (yaml.safe_load(MANIFEST.read_text()) or {}).get("experiments", [])
     }
     on_disk = {p.resolve() for p in REPO_ROOT.glob("labs/**/experiment*.yaml")}
     # experiment-fact-recall.yaml is heavy — optional full run, smoke variant is in manifest
@@ -83,7 +81,6 @@ def test_reproduction_manifest_covers_all_lab_experiments() -> None:
         (REPO_ROOT / "labs/extensions.lab/experiment-fact-recall.yaml").resolve(),
     }
     missing = sorted(on_disk - declared - optional)
-    assert not missing, (
-        "add to tests/fixtures/reproduction/experiments.yaml: "
-        + ", ".join(str(p.relative_to(REPO_ROOT)) for p in missing)
+    assert not missing, "add to tests/fixtures/reproduction/experiments.yaml: " + ", ".join(
+        str(p.relative_to(REPO_ROOT)) for p in missing
     )

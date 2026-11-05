@@ -128,9 +128,7 @@ def test_routing_annotations_avoid_the_real_routing_dispatch_convention(tmp_path
         converter_profile="observe_sdk",
         export_layers={"annotation": True},
     )
-    spans = [
-        json.loads(line) for line in out.read_text().splitlines() if line.strip()
-    ]
+    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
     names = {s["name"] for s in spans}
     assert not any(n.endswith(".routing") for n in names), names
     assert "moderator.routing_annotation" in names
@@ -187,14 +185,8 @@ def test_llm_call_naming_has_no_agent_specific_hardcoding(tmp_path):
         )
     )
     out = tmp_path / "spans.jsonl"
-    replay_events_file(
-        events_path, out, app_name="test-app", converter_profile="observe_sdk"
-    )
-    names = {
-        json.loads(line)["name"]
-        for line in out.read_text().splitlines()
-        if line.strip()
-    }
+    replay_events_file(events_path, out, app_name="test-app", converter_profile="observe_sdk")
+    names = {json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()}
     assert "moderator.chat" in names
     assert "moderator.task" not in names
 
@@ -202,14 +194,10 @@ def test_llm_call_naming_has_no_agent_specific_hardcoding(tmp_path):
 @requires_otel
 def test_observe_sdk_profile_sets_entity_input_output_per_boundary(observe_sdk_spans):
     agent_span = _first(observe_sdk_spans, suffix=".agent")
-    assert str(agent_span["attributes"].get("ioa_observe.entity.input") or "").endswith(
-        "solve the task"
-    )
+    assert str(agent_span["attributes"].get("ioa_observe.entity.input") or "").endswith("solve the task")
     # Agent output is wrapped so it cannot equal the last child output
     # (SCOPE skips capability-chain-boundary when contents match).
-    assert str(agent_span["attributes"].get("ioa_observe.entity.output") or "").endswith(
-        "done"
-    )
+    assert str(agent_span["attributes"].get("ioa_observe.entity.output") or "").endswith("done")
 
     llm_span = _first(observe_sdk_spans, suffix=".chat")
     assert llm_span["attributes"].get("ioa_observe.entity.input") is not None
@@ -224,15 +212,9 @@ def test_observe_sdk_profile_sets_entity_input_output_per_boundary(observe_sdk_s
 
 @requires_otel
 def test_observe_sdk_profile_sets_span_kind(observe_sdk_spans):
-    assert _first(observe_sdk_spans, suffix=".agent")["attributes"].get(
-        "ioa_observe.span.kind"
-    ) == "agent"
-    assert _first(observe_sdk_spans, suffix=".chat")["attributes"].get(
-        "ioa_observe.span.kind"
-    ) == "llm"
-    assert _first(observe_sdk_spans, suffix=".tool")["attributes"].get(
-        "ioa_observe.span.kind"
-    ) == "tool"
+    assert _first(observe_sdk_spans, suffix=".agent")["attributes"].get("ioa_observe.span.kind") == "agent"
+    assert _first(observe_sdk_spans, suffix=".chat")["attributes"].get("ioa_observe.span.kind") == "llm"
+    assert _first(observe_sdk_spans, suffix=".tool")["attributes"].get("ioa_observe.span.kind") == "tool"
 
 
 @requires_otel
@@ -335,16 +317,10 @@ def test_brownfield_output_fields_reach_oxp_attributes(tmp_path):
         encoding="utf-8",
     )
     out = tmp_path / "spans.jsonl"
-    replay_events_file(
-        events_path, out, app_name="trip-planner", converter_profile="observe_sdk"
-    )
-    spans = [
-        json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
+    replay_events_file(events_path, out, app_name="trip-planner", converter_profile="observe_sdk")
+    spans = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
     agent = _first(spans, suffix=".agent")["attributes"]
-    assert str(agent.get("ioa_observe.entity.output") or "").endswith(
-        '{"found": true, "origin": "A"}'
-    )
+    assert str(agent.get("ioa_observe.entity.output") or "").endswith('{"found": true, "origin": "A"}')
     tool = _first(spans, suffix=".tool")["attributes"]
     assert tool.get("ioa_observe.entity.output") == '{"routes": []}'
     llm = _first(spans, suffix=".chat")["attributes"]
@@ -418,12 +394,8 @@ def test_tool_end_closes_call_id_remapped_to_another_agent(tmp_path):
         encoding="utf-8",
     )
     out = tmp_path / "spans.jsonl"
-    replay_events_file(
-        events_path, out, app_name="trip-planner", converter_profile="observe_sdk"
-    )
-    spans = [
-        json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
+    replay_events_file(events_path, out, app_name="trip-planner", converter_profile="observe_sdk")
+    spans = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
     tools = _by_name(spans, suffix=".tool")
     assert len(tools) == 1
     assert tools[0]["attributes"].get("ioa_observe.entity.output") == '{"routes": ["A-B"]}'
@@ -502,11 +474,7 @@ def test_annotation_and_provenance_gate_independently(tmp_path):
             export_layers=export_layers,
             converter_profile="observe_sdk",
         )
-        return [
-            json.loads(line)["name"]
-            for line in out.read_text().splitlines()
-            if line.strip()
-        ]
+        return [json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()]
 
     default = _names({})
     assert not any(n.endswith(".routing_annotation") for n in default)
@@ -566,11 +534,7 @@ def test_call_annotations_are_off_by_default(tmp_path):
         app_name="test-app",
         converter_profile="observe_sdk",
     )  # default export_layers
-    names = {
-        json.loads(line)["name"]
-        for line in out.read_text().splitlines()
-        if line.strip()
-    }
+    names = {json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()}
     assert "CallAnnotation" not in names
     assert "planner.routing_annotation" not in names
     assert "planner.agent" in names
@@ -638,11 +602,7 @@ def test_observe_sdk_profile_gives_call_annotations_distinguishable_names(tmp_pa
         converter_profile="observe_sdk",
         export_layers={"annotation": True},
     )
-    names = {
-        json.loads(line)["name"]
-        for line in out.read_text().splitlines()
-        if line.strip()
-    }
+    names = {json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()}
     assert "CallAnnotation" not in names
     assert "planner.context_assembled" in names
 
@@ -777,11 +737,7 @@ def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
         converter_profile="observe_sdk",
         extensions=True,
     )
-    spans = [
-        json.loads(line)
-        for line in Path(out).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    spans = [json.loads(line) for line in Path(out).read_text(encoding="utf-8").splitlines() if line.strip()]
     by_name = {s["name"]: s for s in spans}
     moderator = by_name["moderator.agent"]
     schedule = by_name["schedule_agent.agent"]
@@ -794,9 +750,7 @@ def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
     chat = by_name["moderator.chat"]
     assert chat["parent_id"] == moderator["context"]["span_id"]
     mod_span = str(moderator["context"]["span_id"]).removeprefix("0x")
-    assert str(chat["attributes"].get("ioa_observe.agent.span_id")).removeprefix(
-        "0x"
-    ) == mod_span
+    assert str(chat["attributes"].get("ioa_observe.agent.span_id")).removeprefix("0x") == mod_span
     graph = next(s for s in spans if s["name"].endswith(".graph"))
     assert not any(s["name"] == "root" for s in spans)
     assert graph.get("parent_id") in (None, "")
@@ -893,9 +847,7 @@ def test_rewrite_tool_delegation_turns_delegate_to_into_agent_previous(tmp_path)
     events_path = tmp_path / "events.jsonl"
     events_path.write_text("\n".join(json.dumps(e) for e in events) + "\n")
     out = tmp_path / "spans.jsonl"
-    replay_events_file(
-        events_path, out, app_name="trip-planner", converter_profile="observe_sdk"
-    )
+    replay_events_file(events_path, out, app_name="trip-planner", converter_profile="observe_sdk")
     spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
     names = [s["name"] for s in spans]
     assert "delegate_to_schedule_agent.tool" not in names
@@ -915,11 +867,7 @@ def test_rewrite_tool_delegation_turns_delegate_to_into_agent_previous(tmp_path)
         converter_profile="observe_sdk",
         rewrite_tool_delegation=False,
     )
-    off_names = {
-        json.loads(line)["name"]
-        for line in off.read_text().splitlines()
-        if line.strip()
-    }
+    off_names = {json.loads(line)["name"] for line in off.read_text().splitlines() if line.strip()}
     assert "delegate_to_schedule_agent.tool" in off_names
 
 
@@ -1093,8 +1041,7 @@ def test_rewrite_splits_caller_agent_visit_after_delegate(tmp_path):
     first_span = str(first["context"]["span_id"]).removeprefix("0x")
     second_span = str(second["context"]["span_id"]).removeprefix("0x")
     chat_parents = {
-        str((c.get("attributes") or {}).get("ioa_observe.agent.span_id") or "").removeprefix("0x")
-        for c in chats
+        str((c.get("attributes") or {}).get("ioa_observe.agent.span_id") or "").removeprefix("0x") for c in chats
     }
     assert first_span in chat_parents
     assert second_span in chat_parents
@@ -1117,19 +1064,12 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
     from mas.library.telemetry.conversion.semconv import wire_span_id
 
     events = (
-        Path(__file__).resolve().parents[4]
-        / "library-samples"
-        / "apps"
-        / "trip-planner"
-        / "traces"
-        / "events.jsonl"
+        Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
     )
     if not events.exists():
         pytest.skip("trip-planner events missing")
     out = tmp_path / "spans.jsonl"
-    replay_events_file(
-        events, out, app_name="trip-planner", converter_profile="observe_sdk"
-    )
+    replay_events_file(events, out, app_name="trip-planner", converter_profile="observe_sdk")
     spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
     agents = [s for s in spans if str(s.get("name", "")).endswith(".agent")]
     by_sid = {wire_span_id(s["context"]["span_id"]): s for s in agents}
@@ -1142,24 +1082,16 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
         parent = by_sid.get(stamped)
         assert parent, (chat["name"], stamped, sorted(by_sid))
         assert parent["name"] == str(chat["name"]).removesuffix(".chat") + ".agent"
-        assert not str(chat["attributes"].get("ioa_observe.agent.span_id", "")).startswith(
-            "0x"
-        )
+        assert not str(chat["attributes"].get("ioa_observe.agent.span_id", "")).startswith("0x")
     chats = [s for s in spans if str(s.get("name", "")).endswith(".chat")]
     assert chats
-    assert all(
-        str((s.get("attributes") or {}).get("gen_ai.request.model") or "")
-        for s in chats
-    )
+    assert all(str((s.get("attributes") or {}).get("gen_ai.request.model") or "") for s in chats)
     assert all(
         (s.get("attributes") or {}).get("ioa_observe.entity.output")
         or (s.get("attributes") or {}).get("gen_ai.output.messages")
         for s in chats
     )
-    models = {
-        str((s.get("attributes") or {}).get("gen_ai.request.model") or "")
-        for s in chats
-    }
+    models = {str((s.get("attributes") or {}).get("gen_ai.request.model") or "") for s in chats}
     assert models
     assert "unknown" not in models
     assert any(
@@ -1167,5 +1099,3 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
         and "Plan a trip" in str((s.get("attributes") or {}).get("gen_ai.input.messages"))
         for s in chats
     )
-
-

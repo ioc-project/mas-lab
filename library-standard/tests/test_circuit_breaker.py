@@ -7,7 +7,6 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from mas.library.standard.plugins.reliability.circuit_breaker import ThresholdCircuitBreaker
 from mas.runtime.reliability.classes import CircuitOpenError, FailureClass
 from mas.runtime.reliability.policy import ReliabilitySettings

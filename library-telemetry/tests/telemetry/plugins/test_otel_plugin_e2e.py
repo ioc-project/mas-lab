@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from mas.library.telemetry.conversion.exporter import OTEL_AVAILABLE
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.transition import TransitionEvent
@@ -19,6 +18,7 @@ pytestmark = pytest.mark.skipif(not OTEL_AVAILABLE, reason="opentelemetry-sdk no
 def _otlp_exporter_available() -> bool:
     try:
         import opentelemetry.exporter.otlp.proto.http.trace_exporter  # noqa: F401
+
         return True
     except Exception:
         return False
@@ -29,12 +29,27 @@ _needs_otlp = pytest.mark.skipif(
 )
 
 _RECORDS = [
-    {"kind": "system_specification", "timestamp": 1.0,
-     "agents": [{"id": "planner"}, {"id": "worker"}], "app_name": "sample-app"},
-    {"kind": "mas_call_start", "call_id": "mas-1", "timestamp": 1.0,
-     "agent_id": "planner", "run_id": "r1", "session_id": "s1"},
-    {"kind": "routing", "timestamp": 2.0, "source_agent_id": "planner",
-     "target_agent_id": "worker", "call_id": "mas-1"},
+    {
+        "kind": "system_specification",
+        "timestamp": 1.0,
+        "agents": [{"id": "planner"}, {"id": "worker"}],
+        "app_name": "sample-app",
+    },
+    {
+        "kind": "mas_call_start",
+        "call_id": "mas-1",
+        "timestamp": 1.0,
+        "agent_id": "planner",
+        "run_id": "r1",
+        "session_id": "s1",
+    },
+    {
+        "kind": "routing",
+        "timestamp": 2.0,
+        "source_agent_id": "planner",
+        "target_agent_id": "worker",
+        "call_id": "mas-1",
+    },
     {"kind": "mas_call_end", "call_id": "mas-1", "status": "success", "timestamp": 3.0},
 ]
 
@@ -48,8 +63,12 @@ def _patch_projection(monkeypatch) -> None:
 
 def _transition() -> TransitionEvent:
     return TransitionEvent(
-        contract_id="orchestrator", mealy_symbol="user_input", phase="event",
-        agent_id="planner", run_id="r1", boundary_kind="session",
+        contract_id="orchestrator",
+        mealy_symbol="user_input",
+        phase="event",
+        agent_id="planner",
+        run_id="r1",
+        boundary_kind="session",
     )
 
 
@@ -134,9 +153,7 @@ def test_from_binding_requires_declared_mas_name(tmp_path: Path) -> None:
         },
     )
     with pytest.raises(ValueError, match="MAS app name is required"):
-        OtelObservabilityPlugin.from_binding(
-            binding, base_dir=tmp_path, agent_id="qa-agent"
-        )
+        OtelObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="qa-agent")
 
 
 def test_from_binding_rejects_filesystem_path_app_name(tmp_path: Path) -> None:
@@ -199,9 +216,7 @@ def test_from_binding_honours_env_otlp_endpoint(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setenv("MY_OTLP", "http://localhost:4318")
     binding = ObservabilityBinding(
         plugins=["otel"],
-        plugin_configs={
-            "otel": {"output_path": str(tmp_path / "out.jsonl"), "app_name": "sample-app"}
-        },
+        plugin_configs={"otel": {"output_path": str(tmp_path / "out.jsonl"), "app_name": "sample-app"}},
         otlp_endpoint_env="MY_OTLP",
     )
     plugin = OtelObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="a")
@@ -218,9 +233,7 @@ def test_from_binding_defaults_to_otel_exporter_env(tmp_path: Path, monkeypatch)
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
     binding = ObservabilityBinding(
         plugins=["otel"],
-        plugin_configs={
-            "otel": {"output_path": str(tmp_path / "out.jsonl"), "app_name": "sample-app"}
-        },
+        plugin_configs={"otel": {"output_path": str(tmp_path / "out.jsonl"), "app_name": "sample-app"}},
     )
     plugin = OtelObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="a")
     assert plugin is not None

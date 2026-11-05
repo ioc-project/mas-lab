@@ -79,7 +79,6 @@ def _make_registry(
 
 
 class TestContextResolverTools:
-
     def test_call_tool_success(self):
         tool = _FakeToolPlugin("calc", {"result": 42})
         resolver = ContextResolver(registry=_make_registry(tool_plugins=[tool]))
@@ -103,7 +102,6 @@ class TestContextResolverTools:
 
 
 class TestContextResolverMemory:
-
     def test_query_memory(self):
         mem = _FakeMemoryPlugin([{"content": "fact-1"}, {"content": "fact-2"}])
         resolver = ContextResolver(registry=_make_registry(memory_plugins=[mem]))
@@ -134,15 +132,16 @@ class _MetricsPlugin(ContextContract):
         if self.resolver is None:
             return []
         raw = self.resolver.call_tool("fetch_metrics", {"window": "5m"})
-        return [ContextPart.system(
-            content=f"Metrics: {raw}",
-            source="metrics",
-            placement=ContextPlacement.SYSTEM_BODY,
-        )]
+        return [
+            ContextPart.system(
+                content=f"Metrics: {raw}",
+                source="metrics",
+                placement=ContextPlacement.SYSTEM_BODY,
+            )
+        ]
 
 
 class TestResolverInPlugin:
-
     def test_plugin_with_resolver(self):
         """Plugin uses ContextResolver explicitly inside collect_context."""
         tool = _FakeToolPlugin("fetch_metrics", {"cpu": 42})
@@ -174,7 +173,6 @@ class _SimplePlugin(ContextContract):
 
 
 class TestContextContractBasic:
-
     def test_collect_context(self):
         p = _SimplePlugin()
         parts = p.collect_context()
@@ -218,7 +216,6 @@ class TestContextContractBasic:
 
 
 class TestContextResolverRecorder:
-
     def test_call_tool_emits_event(self):
         """call_tool emits a deterministic_tool_call recorder event."""
         tool = _FakeToolPlugin("calc", 42)

@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Migration script must keep extra user turns, matching the runtime loader."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -11,9 +12,7 @@ import yaml
 
 
 def _mod():
-    path = (
-        Path(__file__).resolve().parents[4] / "scripts" / "migrate_dataset_envelope.py"
-    )
+    path = Path(__file__).resolve().parents[4] / "scripts" / "migrate_dataset_envelope.py"
     spec = importlib.util.spec_from_file_location("migrate_dataset_envelope", path)
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -50,9 +49,7 @@ def test_migrate_moves_app_expectations_under_details():
 
 def test_migrate_rejects_details_key_clash():
     with pytest.raises(ValueError, match="already exist in details"):
-        _mod()._migrate_item(
-            {"id": "q1", "inputs": {"user": "Q"}, "expectations": {"k": 2, "details": {"k": 1}}}
-        )
+        _mod()._migrate_item({"id": "q1", "inputs": {"user": "Q"}, "expectations": {"k": 2, "details": {"k": 1}}})
 
 
 def test_migrate_collapses_single_pointer_tool_fixtures():
@@ -60,9 +57,10 @@ def test_migrate_collapses_single_pointer_tool_fixtures():
     out = migrate._migrate_item({"id": "q1", "inputs": {"user": "Q", "tool_fixtures": {"scene": "f.yaml"}}})
     assert out["inputs"]["tool_fixtures"] == "f.yaml"
     kept = {"by_tool": {"*": "f.yaml"}}
-    assert migrate._migrate_item({"id": "q", "inputs": {"user": "Q", "tool_fixtures": kept}})["inputs"][
-        "tool_fixtures"
-    ] == kept
+    assert (
+        migrate._migrate_item({"id": "q", "inputs": {"user": "Q", "tool_fixtures": kept}})["inputs"]["tool_fixtures"]
+        == kept
+    )
     with pytest.raises(ValueError, match="not generic"):
         migrate._migrate_item({"id": "q", "inputs": {"user": "Q", "tool_fixtures": {"a": "x", "b": "y"}}})
 

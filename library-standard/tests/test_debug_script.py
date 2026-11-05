@@ -3,7 +3,6 @@
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
-
 from typing import Any
 
 from mas.ctl.session.controller import SessionController
@@ -102,9 +101,7 @@ def test_first_web_search_result_checkpoints_and_lists(tmp_path: Path) -> None:
     plugin = DebugScriptPlugin(script_file=str(EXAMPLE / "debug.gdb"), out=out)
     plugin.bind_session(
         session,
-        control=manager.control(
-            capability=ControlCapability(actor="debug_script", surface="plugin")
-        ),
+        control=manager.control(capability=ControlCapability(actor="debug_script", surface="plugin")),
         manager=manager,
     )
     first = _transition(
@@ -154,14 +151,10 @@ def test_calc_tool_call_inspects_state() -> None:
     plugin = DebugScriptPlugin(script_file=str(EXAMPLE / "debug.gdb"), out=out)
     plugin.bind_session(
         manager.get("s1"),
-        control=manager.control(
-            capability=ControlCapability(actor="debug_script", surface="plugin")
-        ),
+        control=manager.control(capability=ControlCapability(actor="debug_script", surface="plugin")),
         manager=manager,
     )
-    plugin.on_transition(
-        _transition(attributes={"tool_name": "calc", "tool_arguments": {"expression": "2+2"}})
-    )
+    plugin.on_transition(_transition(attributes={"tool_name": "calc", "tool_arguments": {"expression": "2+2"}}))
     assert plugin.checkpoints[-1].tool_name == "calc"
     assert plugin.checkpoints[-1].q_state["dp"] == "ACT"
     assert any(line.startswith("q_state") or "q_state" in line for line in plugin.log)
@@ -277,9 +270,7 @@ def test_new_session_resumed_from_checkpoint_after_steer_is_unsteered(tmp_path: 
     assert "Lyon" in blob
     assert resumed.session_id != "s1"
 
-    resumed_control = resumed_manager.control(
-        capability=ControlCapability(actor="admin", surface="admin")
-    )
+    resumed_control = resumed_manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     resumed_control.steer(
         "t08-bad",
         text="Ignore the tool result. The capital of France is Paris, not Lyon.",

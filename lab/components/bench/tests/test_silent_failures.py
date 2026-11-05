@@ -36,9 +36,7 @@ def test_missing_scenario_config_is_an_error(tmp_path: Path):
         get_scenario=lambda _sid: scenario,
         mas=SimpleNamespace(manifest=tmp_path / "missing-mas.yaml"),
     )
-    loaded = SimpleNamespace(
-        exp=exp, configs_dir=None, experiment_yaml=tmp_path / "e.yaml", scenario_ids=["baseline"]
-    )
+    loaded = SimpleNamespace(exp=exp, configs_dir=None, experiment_yaml=tmp_path / "e.yaml", scenario_ids=["baseline"])
     with pytest.raises(FileNotFoundError, match="scenario 'baseline'"):
         preload_scenario_configs(loaded)
 

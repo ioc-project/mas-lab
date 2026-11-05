@@ -96,6 +96,7 @@ EXIT_1_PY = textwrap.dedent("""\
 # Fixture: minimal skill tree
 # ---------------------------------------------------------------------------
 
+
 def make_skill(
     root: Path,
     name: str,
@@ -113,14 +114,10 @@ def make_skill(
     skill_dir.mkdir(parents=True, exist_ok=True)
 
     template = FULL_SKILL_MD if full_frontmatter else MINIMAL_SKILL_MD
-    (skill_dir / "SKILL.md").write_text(
-        template.format(name=name, description=description), encoding="utf-8"
-    )
+    (skill_dir / "SKILL.md").write_text(template.format(name=name, description=description), encoding="utf-8")
 
     if with_workflow_md:
-        (skill_dir / "WORKFLOW.md").write_text(
-            WORKFLOW_MD.format(name=name, description=description), encoding="utf-8"
-        )
+        (skill_dir / "WORKFLOW.md").write_text(WORKFLOW_MD.format(name=name, description=description), encoding="utf-8")
 
     if with_script_py:
         scripts = skill_dir / "scripts"
@@ -143,6 +140,7 @@ def make_skill(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def skill_root(tmp_path: Path) -> Path:

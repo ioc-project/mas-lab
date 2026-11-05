@@ -39,8 +39,7 @@ def test_masspec_from_dict_library_app_string(tmp_path: Path, monkeypatch) -> No
     app = root / "apps" / "trip-planner" / "v2"
     app.mkdir(parents=True)
     (root / "library.yaml").write_text(
-        "apiVersion: mas/v1\nkind: Library\nname: mas-example-library\n"
-        "apps:\n  trip-planner: apps/trip-planner\n",
+        "apiVersion: mas/v1\nkind: Library\nname: mas-example-library\napps:\n  trip-planner: apps/trip-planner\n",
         encoding="utf-8",
     )
     (app / "mas.yaml").write_text(

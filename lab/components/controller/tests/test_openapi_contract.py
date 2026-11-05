@@ -24,6 +24,5 @@ def test_openapi_matches_committed_spec():
     committed = json.loads(SPEC.read_text(encoding="utf-8"))
     committed.pop("servers", None)
     assert live == committed, (
-        "OpenAPI drifted from docs/schemas/controller-openapi.json — "
-        "regenerate the file from create_app().openapi()"
+        "OpenAPI drifted from docs/schemas/controller-openapi.json — regenerate the file from create_app().openapi()"
     )

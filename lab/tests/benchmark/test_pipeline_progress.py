@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.pipeline import Pipeline, PipelineConfig, PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import PipelineExecutor
 
@@ -25,19 +24,14 @@ async def test_progress_rewrites_line_and_logs_artifacts(tmp_path: Path, capsys)
     pipeline = Pipeline(
         config=PipelineConfig(name="progress"),
         steps=[
-            *[
-                _WriteFile(name=f"write-{i}", config={"filename": "out.txt"})
-                for i in range(1, 5)
-            ],
+            *[_WriteFile(name=f"write-{i}", config={"filename": "out.txt"}) for i in range(1, 5)],
             _WriteFile(
                 name="figure",
                 config={"filename": "figure.png"},
             ),
         ],
     )
-    result = await PipelineExecutor(
-        pipeline, output_dir=tmp_path, progress=True
-    ).run()
+    result = await PipelineExecutor(pipeline, output_dir=tmp_path, progress=True).run()
     captured = capsys.readouterr().out
     assert result.success
     assert "100/500 200/500" not in captured

@@ -1,13 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for ExperimentConfig — specifically name-based dataset resolution."""
+
 import sys
 import tempfile
-import yaml
 from pathlib import Path
 
 import pytest
-
+import yaml
 from mas.lab.benchmark.experiment import _resolve_dataset_by_name, _resolve_dataset_from_package
 
 
@@ -28,12 +28,15 @@ def _make_dataset_manifest(tmpdir: Path, filename: str, name: str, items: list) 
 
 # ── Local resolution (locator absent / "local") ──────────────────────────────
 
+
 def test_resolve_dataset_by_name_in_datasets_folder():
     """A manifest in datasets/ is resolved by metadata.name."""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         _make_dataset_manifest(
-            base, "trip-queries.yaml", "trip-planner-queries",
+            base,
+            "trip-queries.yaml",
+            "trip-planner-queries",
             [{"id": "q1", "prompt": "Plan a trip"}],
         )
         resolved = _resolve_dataset_by_name(base, "trip-planner-queries")
@@ -49,7 +52,9 @@ def test_resolve_dataset_by_name_walks_up_past_nested_lab_config():
         lab = Path(tmp)
         (lab / "lab-config.yaml").write_text("lab:\n  name: example\n")
         expected = _make_dataset_manifest(
-            lab, "queries.yaml", "trip-planner-queries",
+            lab,
+            "queries.yaml",
+            "trip-planner-queries",
             [{"id": "q1", "inputs": {"user": "Plan a trip"}}],
         )
         nested = lab / "02-bit-exactness"
@@ -65,7 +70,8 @@ def test_resolve_dataset_by_name_root_fallback():
         base = Path(tmp)
         path = base / "dataset.yaml"
         manifest = {
-            "apiVersion": "lab/v1", "kind": "Dataset",
+            "apiVersion": "lab/v1",
+            "kind": "Dataset",
             "metadata": {"name": "my-eval"},
             "spec": {"items": [{"id": "1", "prompt": "Q"}]},
         }
@@ -111,25 +117,25 @@ def test_resolve_dataset_explicit_local_locator():
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         _make_dataset_manifest(base, "q.yaml", "my-queries", [{"id": "1", "prompt": "Q"}])
-        assert _resolve_dataset_by_name(base, "my-queries", locator="local") == \
-               _resolve_dataset_by_name(base, "my-queries")
+        assert _resolve_dataset_by_name(base, "my-queries", locator="local") == _resolve_dataset_by_name(
+            base, "my-queries"
+        )
 
 
 # ── Package / library locator ─────────────────────────────────────────────────
+
 
 def test_resolve_dataset_from_package_via_syspath(tmp_path):
     """A library path added to sys.path makes its datasets/ findable by locator."""
     # Simulate a library package installed at tmp_path/my_lib/
     lib_root = tmp_path / "my_lib"
-    _make_dataset_manifest(lib_root, "shared.yaml", "shared-queries",
-                           [{"id": "s1", "prompt": "Shared Q"}])
+    _make_dataset_manifest(lib_root, "shared.yaml", "shared-queries", [{"id": "s1", "prompt": "Shared Q"}])
 
     # Inject the library root into sys.path (as mas-lab would via workspace libraries:)
     sys.path.insert(0, str(tmp_path))
     try:
         # With locator="my_lib", the resolver finds the dataset in my_lib/datasets/
-        resolved = _resolve_dataset_by_name(Path("/nonexistent"), "shared-queries",
-                                            locator="my_lib")
+        resolved = _resolve_dataset_by_name(Path("/nonexistent"), "shared-queries", locator="my_lib")
         assert resolved == lib_root / "datasets" / "shared.yaml"
     finally:
         sys.path.remove(str(tmp_path))
@@ -145,13 +151,11 @@ def test_resolve_dataset_package_locator_preferred_over_local(tmp_path):
     """When locator is given, only that package's datasets/ is scanned (not lab local)."""
     # Lab has a dataset with the same name
     lab_base = tmp_path / "lab"
-    _make_dataset_manifest(lab_base, "local.yaml", "common-queries",
-                           [{"id": "local", "prompt": "Local"}])
+    _make_dataset_manifest(lab_base, "local.yaml", "common-queries", [{"id": "local", "prompt": "Local"}])
 
     # Library package has a different file for the same name
     lib_root = tmp_path / "my_lib2"
-    _make_dataset_manifest(lib_root, "shared.yaml", "common-queries",
-                           [{"id": "shared", "prompt": "Shared"}])
+    _make_dataset_manifest(lib_root, "shared.yaml", "common-queries", [{"id": "shared", "prompt": "Shared"}])
 
     sys.path.insert(0, str(tmp_path))
     try:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from mas.library.lab.ui.series import SeriesPlots, render_html, stream_for
 
 

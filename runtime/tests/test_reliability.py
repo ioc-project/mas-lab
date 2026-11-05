@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import classify_http_exception, classify_tool_exception
 from mas.runtime.reliability.policy import (
@@ -131,14 +130,10 @@ def test_classify_http_status_and_timeout() -> None:
     assert timeout.failure_class is FailureClass.TRANSIENT
     assert timeout.code == "TIMEOUT"
     resp = httpx.Response(429, request=httpx.Request("POST", "https://x"))
-    limited = classify_http_exception(
-        httpx.HTTPStatusError("n", request=resp.request, response=resp)
-    )
+    limited = classify_http_exception(httpx.HTTPStatusError("n", request=resp.request, response=resp))
     assert limited.failure_class is FailureClass.TRANSIENT
     auth = httpx.Response(401, request=httpx.Request("POST", "https://x"))
-    fatal = classify_http_exception(
-        httpx.HTTPStatusError("n", request=auth.request, response=auth)
-    )
+    fatal = classify_http_exception(httpx.HTTPStatusError("n", request=auth.request, response=auth))
     assert fatal.failure_class is FailureClass.FATAL
 
 

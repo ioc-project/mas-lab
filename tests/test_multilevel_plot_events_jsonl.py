@@ -9,16 +9,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-EVENTS_FIXTURE = (
-    REPO_ROOT / "docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl"
-)
-LAB_SMOKE_TRACE_FIXTURE = (
-    REPO_ROOT / "tests/fixtures/golden-runs/lab-smoke/events.jsonl"
-)
+EVENTS_FIXTURE = REPO_ROOT / "docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl"
+LAB_SMOKE_TRACE_FIXTURE = REPO_ROOT / "tests/fixtures/golden-runs/lab-smoke/events.jsonl"
 # Canonical copy of the trip-planner sandbox trace for deterministic tests.
-TRIP_PLANNER_EVENTS_FIXTURE = (
-    REPO_ROOT / "tests/fixtures/multilevel/trip-planner-plain-demo/events.r1.jsonl"
-)
+TRIP_PLANNER_EVENTS_FIXTURE = REPO_ROOT / "tests/fixtures/multilevel/trip-planner-plain-demo/events.r1.jsonl"
 
 
 @pytest.mark.parametrize("fmt", ["html", "svg"])
@@ -51,35 +45,94 @@ def _tool_loop_events() -> list[dict]:
     moder, tool_cid, llm1, llm2 = "moderator", "tool-1", "llm-1", "llm-2"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": moder, "parent_call_id": "mas-1",
-         "agent_id": moder, "timestamp": 0.0, "input": "hi"},
+        {
+            "kind": "execution_start",
+            "call_id": moder,
+            "parent_call_id": "mas-1",
+            "agent_id": moder,
+            "timestamp": 0.0,
+            "input": "hi",
+        },
         # LLM 1 (double-emitted) — child of the agent
-        {"kind": "llm_call_start", "call_id": llm1, "parent_call_id": moder,
-         "agent_id": moder, "correlation_id": 1, "timestamp": 0.0},
-        {"kind": "llm_call_start", "call_id": llm1, "parent_call_id": moder,
-         "agent_id": moder, "correlation_id": 1, "timestamp": 0.001},
-        {"kind": "llm_call_end", "call_id": llm1, "agent_id": moder,
-         "correlation_id": 1, "timestamp": 1.6},
-        {"kind": "llm_call_end", "call_id": llm1, "agent_id": moder,
-         "correlation_id": 1, "timestamp": 1.601},
+        {
+            "kind": "llm_call_start",
+            "call_id": llm1,
+            "parent_call_id": moder,
+            "agent_id": moder,
+            "correlation_id": 1,
+            "timestamp": 0.0,
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": llm1,
+            "parent_call_id": moder,
+            "agent_id": moder,
+            "correlation_id": 1,
+            "timestamp": 0.001,
+        },
+        {"kind": "llm_call_end", "call_id": llm1, "agent_id": moder, "correlation_id": 1, "timestamp": 1.6},
+        {"kind": "llm_call_end", "call_id": llm1, "agent_id": moder, "correlation_id": 1, "timestamp": 1.601},
         # Tool (double-emitted) — child of the agent
-        {"kind": "tool_call_start", "call_id": tool_cid, "parent_call_id": moder,
-         "agent_id": moder, "correlation_id": 2, "timestamp": 1.61, "tool_name": "contract_call"},
-        {"kind": "tool_call_start", "call_id": tool_cid, "parent_call_id": moder,
-         "agent_id": moder, "correlation_id": 2, "timestamp": 1.611, "tool_name": "contract_call"},
-        {"kind": "tool_call_end", "call_id": tool_cid, "agent_id": moder,
-         "correlation_id": 2, "timestamp": 8.0, "tool_name": "contract_call"},
+        {
+            "kind": "tool_call_start",
+            "call_id": tool_cid,
+            "parent_call_id": moder,
+            "agent_id": moder,
+            "correlation_id": 2,
+            "timestamp": 1.61,
+            "tool_name": "contract_call",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": tool_cid,
+            "parent_call_id": moder,
+            "agent_id": moder,
+            "correlation_id": 2,
+            "timestamp": 1.611,
+            "tool_name": "contract_call",
+        },
+        {
+            "kind": "tool_call_end",
+            "call_id": tool_cid,
+            "agent_id": moder,
+            "correlation_id": 2,
+            "timestamp": 8.0,
+            "tool_name": "contract_call",
+        },
         # LLM 2 (double-emitted) — child of the agent, same as LLM 1.
-        {"kind": "llm_call_start", "call_id": llm2, "parent_call_id": moder,
-         "agent_id": moder, "correlation_id": 3, "timestamp": 8.01},
-        {"kind": "llm_call_start", "call_id": llm2, "parent_call_id": moder,
-         "agent_id": moder, "correlation_id": 3, "timestamp": 8.011},
-        {"kind": "llm_call_end", "call_id": llm2, "agent_id": moder,
-         "correlation_id": 3, "timestamp": 9.3, "output": "done"},
-        {"kind": "llm_call_end", "call_id": llm2, "agent_id": moder,
-         "correlation_id": 3, "timestamp": 9.301, "output": "done"},
-        {"kind": "execution_end", "call_id": moder, "agent_id": moder,
-         "timestamp": 9.3, "output": "done"},
+        {
+            "kind": "llm_call_start",
+            "call_id": llm2,
+            "parent_call_id": moder,
+            "agent_id": moder,
+            "correlation_id": 3,
+            "timestamp": 8.01,
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": llm2,
+            "parent_call_id": moder,
+            "agent_id": moder,
+            "correlation_id": 3,
+            "timestamp": 8.011,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": llm2,
+            "agent_id": moder,
+            "correlation_id": 3,
+            "timestamp": 9.3,
+            "output": "done",
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": llm2,
+            "agent_id": moder,
+            "correlation_id": 3,
+            "timestamp": 9.301,
+            "output": "done",
+        },
+        {"kind": "execution_end", "call_id": moder, "agent_id": moder, "timestamp": 9.3, "output": "done"},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 9.3},
     ]
 
@@ -108,11 +161,11 @@ def test_tool_loop_dag_has_no_overlap() -> None:
 
     events = _tool_loop_events()
     _state_reg, lanes = _build_dag(_build_call_records(events), events)
-    calls_lane = next(l for l in lanes if l.lane_id == "calls")
+    calls_lane = next(lane for lane in lanes if lane.lane_id == "calls")
     bars = [el for el in calls_lane.sequence if getattr(el, "call_type", None)]
     assert [b.label for b in bars] == ["LLM", "contract_call", "LLM"]
     # No two consecutive call bars overlap in time.
-    for a, b in zip(bars, bars[1:]):
+    for a, b in zip(bars, bars[1:], strict=False):
         assert a.end_ts <= b.start_ts + 1e-6, f"{a.label} overlaps {b.label}"
 
 
@@ -130,29 +183,83 @@ def _delegation_events() -> list[dict]:
     mod, sched = "moderator", "schedule_agent"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "llm_call_start", "call_id": "m-llm-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 0.0},
-        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod,
-         "correlation_id": 1, "timestamp": 1.0},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 0.0,
+        },
+        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod, "correlation_id": 1, "timestamp": 1.0},
         # Delegation tool on the moderator; the peer runs inside its window.
-        {"kind": "tool_call_start", "call_id": "deleg-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 2, "timestamp": 1.1, "tool_name": "contract_call"},
-        {"kind": "execution_start", "call_id": "sched-exec", "parent_call_id": "deleg-1",
-         "agent_id": sched, "timestamp": 1.2, "input": "check schedule"},
-        {"kind": "llm_call_start", "call_id": "s-llm-1", "parent_call_id": "sched-exec",
-         "agent_id": sched, "correlation_id": 1, "timestamp": 1.3},
-        {"kind": "llm_call_end", "call_id": "s-llm-1", "agent_id": sched,
-         "correlation_id": 1, "timestamp": 3.0, "output": "no routes"},
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 2,
+            "timestamp": 1.1,
+            "tool_name": "contract_call",
+        },
+        {
+            "kind": "execution_start",
+            "call_id": "sched-exec",
+            "parent_call_id": "deleg-1",
+            "agent_id": sched,
+            "timestamp": 1.2,
+            "input": "check schedule",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "s-llm-1",
+            "parent_call_id": "sched-exec",
+            "agent_id": sched,
+            "correlation_id": 1,
+            "timestamp": 1.3,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "s-llm-1",
+            "agent_id": sched,
+            "correlation_id": 1,
+            "timestamp": 3.0,
+            "output": "no routes",
+        },
         {"kind": "execution_end", "call_id": "sched-exec", "agent_id": sched, "timestamp": 3.1},
-        {"kind": "tool_call_end", "call_id": "deleg-1", "agent_id": mod,
-         "correlation_id": 2, "timestamp": 3.2, "tool_name": "contract_call"},
+        {
+            "kind": "tool_call_end",
+            "call_id": "deleg-1",
+            "agent_id": mod,
+            "correlation_id": 2,
+            "timestamp": 3.2,
+            "tool_name": "contract_call",
+        },
         # Moderator resumes and synthesises the final answer.
-        {"kind": "llm_call_start", "call_id": "m-llm-2", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 3, "timestamp": 3.3},
-        {"kind": "llm_call_end", "call_id": "m-llm-2", "agent_id": mod,
-         "correlation_id": 3, "timestamp": 4.5, "output": "here is your plan"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-2",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 3,
+            "timestamp": 3.3,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-2",
+            "agent_id": mod,
+            "correlation_id": 3,
+            "timestamp": 4.5,
+            "output": "here is your plan",
+        },
         {"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": 4.5},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 4.5},
     ]
@@ -166,7 +273,7 @@ def test_delegation_agent_lane_interleaves_moderator_and_peer() -> None:
 
     events = _delegation_events()
     _state_reg, lanes = _build_dag(_build_call_records(events), events)
-    agents = next(l for l in lanes if l.lane_id == "agents")
+    agents = next(lane for lane in lanes if lane.lane_id == "agents")
     labels = [el.label for el in agents.sequence if getattr(el, "call_type", None)]
     assert labels == ["moderator", "schedule_agent", "moderator"], labels
 
@@ -177,9 +284,7 @@ def test_delegation_peer_llm_not_deduped_against_entry() -> None:
     from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
     recs = _build_call_records(_delegation_events())
-    llm_agents = sorted(
-        r["agent_id"] for r in recs if r["call_type"] == "LLMCall"
-    )
+    llm_agents = sorted(r["agent_id"] for r in recs if r["call_type"] == "LLMCall")
     # moderator (×2) + schedule_agent (×1) — the peer LLM was not swallowed.
     assert llm_agents == ["moderator", "moderator", "schedule_agent"], llm_agents
 
@@ -192,7 +297,14 @@ def _multi_agent_same_corr_prompt_events() -> list[dict]:
     """
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": "agent-a-exec", "parent_call_id": "mas-1", "agent_id": "agent_a", "timestamp": 0.0, "input": "task a"},
+        {
+            "kind": "execution_start",
+            "call_id": "agent-a-exec",
+            "parent_call_id": "mas-1",
+            "agent_id": "agent_a",
+            "timestamp": 0.0,
+            "input": "task a",
+        },
         {
             "kind": "context_assembled",
             "agent_id": "agent_a",
@@ -203,11 +315,31 @@ def _multi_agent_same_corr_prompt_events() -> list[dict]:
             ],
             "timestamp": 0.01,
         },
-        {"kind": "llm_call_start", "call_id": "a-llm-1", "parent_call_id": "agent-a-exec", "agent_id": "agent_a", "correlation_id": 1, "timestamp": 0.02},
-        {"kind": "llm_call_end", "call_id": "a-llm-1", "agent_id": "agent_a", "correlation_id": 1, "timestamp": 0.5, "output": "a done"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "a-llm-1",
+            "parent_call_id": "agent-a-exec",
+            "agent_id": "agent_a",
+            "correlation_id": 1,
+            "timestamp": 0.02,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "a-llm-1",
+            "agent_id": "agent_a",
+            "correlation_id": 1,
+            "timestamp": 0.5,
+            "output": "a done",
+        },
         {"kind": "execution_end", "call_id": "agent-a-exec", "agent_id": "agent_a", "timestamp": 0.6},
-
-        {"kind": "execution_start", "call_id": "agent-b-exec", "parent_call_id": "mas-1", "agent_id": "agent_b", "timestamp": 1.0, "input": "task b"},
+        {
+            "kind": "execution_start",
+            "call_id": "agent-b-exec",
+            "parent_call_id": "mas-1",
+            "agent_id": "agent_b",
+            "timestamp": 1.0,
+            "input": "task b",
+        },
         {
             "kind": "context_assembled",
             "agent_id": "agent_b",
@@ -218,8 +350,22 @@ def _multi_agent_same_corr_prompt_events() -> list[dict]:
             ],
             "timestamp": 1.01,
         },
-        {"kind": "llm_call_start", "call_id": "b-llm-1", "parent_call_id": "agent-b-exec", "agent_id": "agent_b", "correlation_id": 1, "timestamp": 1.02},
-        {"kind": "llm_call_end", "call_id": "b-llm-1", "agent_id": "agent_b", "correlation_id": 1, "timestamp": 1.5, "output": "b done"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "b-llm-1",
+            "parent_call_id": "agent-b-exec",
+            "agent_id": "agent_b",
+            "correlation_id": 1,
+            "timestamp": 1.02,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "b-llm-1",
+            "agent_id": "agent_b",
+            "correlation_id": 1,
+            "timestamp": 1.5,
+            "output": "b done",
+        },
         {"kind": "execution_end", "call_id": "agent-b-exec", "agent_id": "agent_b", "timestamp": 1.6},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 1.6},
     ]
@@ -229,11 +375,7 @@ def test_context_assembled_prompt_cache_is_scoped_by_agent_and_correlation_id() 
     from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
     recs = _build_call_records(_multi_agent_same_corr_prompt_events())
-    llms = {
-        r["agent_id"]: r
-        for r in recs
-        if r.get("call_type") == "LLMCall" and r.get("correlation_id") == 1
-    }
+    llms = {r["agent_id"]: r for r in recs if r.get("call_type") == "LLMCall" and r.get("correlation_id") == 1}
 
     assert "agent_a" in llms and "agent_b" in llms, llms
     assert "SYSTEM_A_ONLY" in llms["agent_a"].get("input", "")
@@ -246,15 +388,12 @@ def test_context_assembly_processing_call_exposes_diff_summary() -> None:
     from mas.lab.plots.multilevel_trajectory.records import _build_call_records
     from mas.lab.plots.trajectory import load_trace
 
-    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), (
-        f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
-    )
+    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
 
     events = load_trace(TRIP_PLANNER_EVENTS_FIXTURE)
     recs = _build_call_records(events)
     ctx_calls = [
-        r for r in recs
-        if r.get("call_type") == "ProcessingCall" and r.get("processing_name") == "context assembly"
+        r for r in recs if r.get("call_type") == "ProcessingCall" and r.get("processing_name") == "context assembly"
     ]
 
     assert ctx_calls, "expected at least one synthesized context assembly call"
@@ -339,8 +478,7 @@ def test_real_context_processing_events_prevent_synthetic_duplication() -> None:
 
     recs = _build_call_records(events)
     ctx_calls = [
-        r for r in recs
-        if r.get("call_type") == "ProcessingCall" and r.get("processing_name") == "context assembly"
+        r for r in recs if r.get("call_type") == "ProcessingCall" and r.get("processing_name") == "context assembly"
     ]
     assert len(ctx_calls) == 1
     assert ctx_calls[0].get("context_parts")
@@ -363,7 +501,7 @@ def test_delegation_tool_is_last_call_before_peer() -> None:
 
     events = _delegation_events()
     _state_reg, lanes = _build_dag(_build_call_records(events), events)
-    calls = next(l for l in lanes if l.lane_id == "calls")
+    calls = next(lane for lane in lanes if lane.lane_id == "calls")
     trans = [el for el in calls.sequence if getattr(el, "call_type", None)]
     labels = [el.label for el in trans]
     assert labels == ["LLM", "contract_call", "LLM", "LLM"], labels
@@ -388,27 +526,75 @@ def _delegation_events_no_tool_call_end() -> list[dict]:
     mod, sched = "moderator", "schedule_agent"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "llm_call_start", "call_id": "m-llm-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 0.0},
-        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod,
-         "correlation_id": 1, "timestamp": 1.0},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 0.0,
+        },
+        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod, "correlation_id": 1, "timestamp": 1.0},
         # Delegation tool — note: no matching tool_call_end anywhere below.
-        {"kind": "tool_call_start", "call_id": "deleg-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 2, "timestamp": 1.1, "tool_name": "delegate_to_schedule_agent"},
-        {"kind": "execution_start", "call_id": "sched-exec", "parent_call_id": "deleg-1",
-         "agent_id": sched, "timestamp": 1.2, "input": "check schedule"},
-        {"kind": "llm_call_start", "call_id": "s-llm-1", "parent_call_id": "sched-exec",
-         "agent_id": sched, "correlation_id": 1, "timestamp": 1.3},
-        {"kind": "llm_call_end", "call_id": "s-llm-1", "agent_id": sched,
-         "correlation_id": 1, "timestamp": 9.0, "output": "no routes"},
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 2,
+            "timestamp": 1.1,
+            "tool_name": "delegate_to_schedule_agent",
+        },
+        {
+            "kind": "execution_start",
+            "call_id": "sched-exec",
+            "parent_call_id": "deleg-1",
+            "agent_id": sched,
+            "timestamp": 1.2,
+            "input": "check schedule",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "s-llm-1",
+            "parent_call_id": "sched-exec",
+            "agent_id": sched,
+            "correlation_id": 1,
+            "timestamp": 1.3,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "s-llm-1",
+            "agent_id": sched,
+            "correlation_id": 1,
+            "timestamp": 9.0,
+            "output": "no routes",
+        },
         {"kind": "execution_end", "call_id": "sched-exec", "agent_id": sched, "timestamp": 9.1},
         # Moderator resumes and synthesises the final answer.
-        {"kind": "llm_call_start", "call_id": "m-llm-2", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 3, "timestamp": 9.2},
-        {"kind": "llm_call_end", "call_id": "m-llm-2", "agent_id": mod,
-         "correlation_id": 3, "timestamp": 10.5, "output": "here is your plan"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-2",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 3,
+            "timestamp": 9.2,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-2",
+            "agent_id": mod,
+            "correlation_id": 3,
+            "timestamp": 10.5,
+            "output": "here is your plan",
+        },
         {"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": 10.5},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 10.5},
     ]
@@ -430,7 +616,7 @@ def test_delegation_without_tool_call_end_still_links_peer() -> None:
     assert peer["parent_call_id"] == deleg["call_id"]
 
     _state_reg, lanes = _build_dag(recs, events)
-    calls = next(l for l in lanes if l.lane_id == "calls")
+    calls = next(lane for lane in lanes if lane.lane_id == "calls")
     trans = [el for el in calls.sequence if getattr(el, "call_type", None)]
     labels = [el.label for el in trans]
     assert labels == ["LLM", "delegate_to_schedule_a", "LLM", "LLM"], labels
@@ -453,27 +639,56 @@ def _repeated_delegation_events() -> list[dict]:
     mod, sched = "moderator", "schedule_agent"
     events: list[dict] = [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
     ]
     t = 0.0
     for i in range(3):
-        events.append({"kind": "llm_call_start", "call_id": f"m-llm-{i}", "parent_call_id": mod,
-                       "agent_id": mod, "correlation_id": i, "timestamp": t})
+        events.append(
+            {
+                "kind": "llm_call_start",
+                "call_id": f"m-llm-{i}",
+                "parent_call_id": mod,
+                "agent_id": mod,
+                "correlation_id": i,
+                "timestamp": t,
+            }
+        )
         t += 1.0
-        events.append({"kind": "llm_call_end", "call_id": f"m-llm-{i}", "agent_id": mod,
-                       "correlation_id": i, "timestamp": t})
-        events.append({"kind": "tool_call_start", "call_id": f"deleg-{i}", "parent_call_id": mod,
-                       "agent_id": mod, "correlation_id": 10 + i, "timestamp": t,
-                       "tool_name": "delegate_to_schedule_agent"})
+        events.append(
+            {"kind": "llm_call_end", "call_id": f"m-llm-{i}", "agent_id": mod, "correlation_id": i, "timestamp": t}
+        )
+        events.append(
+            {
+                "kind": "tool_call_start",
+                "call_id": f"deleg-{i}",
+                "parent_call_id": mod,
+                "agent_id": mod,
+                "correlation_id": 10 + i,
+                "timestamp": t,
+                "tool_name": "delegate_to_schedule_agent",
+            }
+        )
         # Same runtime call_id every time — the collision this test guards —
         # but each turn's OWN distinct delegating tool call_id as its parent.
-        events.append({"kind": "execution_start", "call_id": "schedule_agent-u1-exec",
-                       "parent_call_id": f"deleg-{i}", "agent_id": sched, "timestamp": t + 0.01,
-                       "input": "check schedule"})
+        events.append(
+            {
+                "kind": "execution_start",
+                "call_id": "schedule_agent-u1-exec",
+                "parent_call_id": f"deleg-{i}",
+                "agent_id": sched,
+                "timestamp": t + 0.01,
+                "input": "check schedule",
+            }
+        )
         t += 2.0
-        events.append({"kind": "execution_end", "call_id": "schedule_agent-u1-exec",
-                       "agent_id": sched, "timestamp": t})
+        events.append({"kind": "execution_end", "call_id": "schedule_agent-u1-exec", "agent_id": sched, "timestamp": t})
     events.append({"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": t})
     events.append({"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": t})
     return events
@@ -525,16 +740,33 @@ def _repeated_delegation_events_never_closed() -> list[dict]:
     mod, sched = "moderator", "schedule_agent"
     events: list[dict] = [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "llm_call_start", "call_id": "m-llm-0", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 0, "timestamp": 0.0},
-        {"kind": "llm_call_end", "call_id": "m-llm-0", "agent_id": mod,
-         "correlation_id": 0, "timestamp": 1.0},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-0",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 0,
+            "timestamp": 0.0,
+        },
+        {"kind": "llm_call_end", "call_id": "m-llm-0", "agent_id": mod, "correlation_id": 0, "timestamp": 1.0},
         # One shared delegation tool for all 3 turns — never gets tool_call_end.
-        {"kind": "tool_call_start", "call_id": "deleg-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 1.1,
-         "tool_name": "delegate_to_schedule_agent"},
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 1.1,
+            "tool_name": "delegate_to_schedule_agent",
+        },
     ]
     t = 2.0
     for i in range(3):
@@ -543,22 +775,60 @@ def _repeated_delegation_events_never_closed() -> list[dict]:
         # call_id as its own parent_call_id (a single tool call legitimately
         # wrapping several sequential peer turns — see the DelegationContract
         # docstring/tests for why this must not be forced into a 1:1 shape).
-        events.append({"kind": "execution_start", "call_id": "schedule_agent-u1-exec",
-                       "parent_call_id": "deleg-1", "agent_id": sched, "timestamp": t,
-                       "input": f"turn {i}"})
+        events.append(
+            {
+                "kind": "execution_start",
+                "call_id": "schedule_agent-u1-exec",
+                "parent_call_id": "deleg-1",
+                "agent_id": sched,
+                "timestamp": t,
+                "input": f"turn {i}",
+            }
+        )
         # This turn's own real LLM call — parented to the reused base id, not
         # to whatever suffixed id records.py will later mint for this turn.
-        events.append({"kind": "llm_call_start", "call_id": f"s-llm-{i}",
-                       "parent_call_id": "schedule_agent-u1-exec", "agent_id": sched,
-                       "correlation_id": i, "timestamp": t})
-        events.append({"kind": "llm_call_end", "call_id": f"s-llm-{i}", "agent_id": sched,
-                       "correlation_id": i, "timestamp": t + 0.5, "output": f"result {i}"})
+        events.append(
+            {
+                "kind": "llm_call_start",
+                "call_id": f"s-llm-{i}",
+                "parent_call_id": "schedule_agent-u1-exec",
+                "agent_id": sched,
+                "correlation_id": i,
+                "timestamp": t,
+            }
+        )
+        events.append(
+            {
+                "kind": "llm_call_end",
+                "call_id": f"s-llm-{i}",
+                "agent_id": sched,
+                "correlation_id": i,
+                "timestamp": t + 0.5,
+                "output": f"result {i}",
+            }
+        )
         # No execution_end — this turn's AgentCall record never closes.
         t += 1.0
-    events.append({"kind": "llm_call_start", "call_id": "m-llm-2", "parent_call_id": mod,
-                   "agent_id": mod, "correlation_id": 2, "timestamp": t})
-    events.append({"kind": "llm_call_end", "call_id": "m-llm-2", "agent_id": mod,
-                   "correlation_id": 2, "timestamp": t + 1.0, "output": "here is your plan"})
+    events.append(
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-2",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 2,
+            "timestamp": t,
+        }
+    )
+    events.append(
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-2",
+            "agent_id": mod,
+            "correlation_id": 2,
+            "timestamp": t + 1.0,
+            "output": "here is your plan",
+        }
+    )
     events.append({"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": t + 1.0})
     events.append({"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": t + 1.0})
     return events
@@ -586,9 +856,7 @@ def test_repeated_never_closed_delegation_every_branch_past_first_gets_reset() -
     events = _repeated_delegation_events_never_closed()
     records = _build_call_records(events)
 
-    sched_execs = [
-        r for r in records if r["agent_id"] == "schedule_agent" and r["level"] == "agent"
-    ]
+    sched_execs = [r for r in records if r["agent_id"] == "schedule_agent" and r["level"] == "agent"]
     assert len(sched_execs) == 3
     assert len({r["call_id"] for r in sched_execs}) == 3, sched_execs
     # All 3 never closed — the _t_final extension this bug hinges on.
@@ -609,9 +877,7 @@ def test_repeated_never_closed_delegation_every_branch_past_first_gets_reset() -
     call_sequence = _make_call_sequence(agent_sequence, children_of, reset_ids)
 
     tagged = {r["_branch_entry"] for r in call_sequence if r.get("_branch_entry")}
-    assert tagged == reset_ids, (
-        f"missing reset separator(s) for branch(es): {reset_ids - tagged}"
-    )
+    assert tagged == reset_ids, f"missing reset separator(s) for branch(es): {reset_ids - tagged}"
 
 
 def _three_way_fork_events() -> list[dict]:
@@ -625,49 +891,143 @@ def _three_way_fork_events() -> list[dict]:
     mod = "moderator"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "llm_call_start", "call_id": "m-llm-0", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 0, "timestamp": 0.0},
-        {"kind": "llm_call_end", "call_id": "m-llm-0", "agent_id": mod,
-         "correlation_id": 0, "timestamp": 1.0},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-0",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 0,
+            "timestamp": 0.0,
+        },
+        {"kind": "llm_call_end", "call_id": "m-llm-0", "agent_id": mod, "correlation_id": 0, "timestamp": 1.0},
         # Sibling batch dispatched with a clear ordering (1.10 < 1.20 < 1.30)
         # so each peer unambiguously nearest-matches its own tool.
-        {"kind": "tool_call_start", "call_id": "deleg-A", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 1.10, "tool_name": "delegate_to_agent_a"},
-        {"kind": "tool_call_start", "call_id": "deleg-B", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 2, "timestamp": 1.20, "tool_name": "delegate_to_agent_b"},
-        {"kind": "tool_call_start", "call_id": "deleg-C", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 3, "timestamp": 1.30, "tool_name": "delegate_to_agent_c"},
-
-        {"kind": "execution_start", "call_id": "agent_a-exec", "parent_call_id": "deleg-A",
-         "agent_id": "agent_a", "timestamp": 1.11, "input": "task a"},
-        {"kind": "llm_call_start", "call_id": "a-llm-1", "parent_call_id": "agent_a-exec",
-         "agent_id": "agent_a", "correlation_id": 1, "timestamp": 1.15},
-        {"kind": "llm_call_end", "call_id": "a-llm-1", "agent_id": "agent_a",
-         "correlation_id": 1, "timestamp": 2.0, "output": "done a"},
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-A",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 1.10,
+            "tool_name": "delegate_to_agent_a",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-B",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 2,
+            "timestamp": 1.20,
+            "tool_name": "delegate_to_agent_b",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-C",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 3,
+            "timestamp": 1.30,
+            "tool_name": "delegate_to_agent_c",
+        },
+        {
+            "kind": "execution_start",
+            "call_id": "agent_a-exec",
+            "parent_call_id": "deleg-A",
+            "agent_id": "agent_a",
+            "timestamp": 1.11,
+            "input": "task a",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "a-llm-1",
+            "parent_call_id": "agent_a-exec",
+            "agent_id": "agent_a",
+            "correlation_id": 1,
+            "timestamp": 1.15,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "a-llm-1",
+            "agent_id": "agent_a",
+            "correlation_id": 1,
+            "timestamp": 2.0,
+            "output": "done a",
+        },
         {"kind": "execution_end", "call_id": "agent_a-exec", "agent_id": "agent_a", "timestamp": 2.0},
-
-        {"kind": "execution_start", "call_id": "agent_b-exec", "parent_call_id": "deleg-B",
-         "agent_id": "agent_b", "timestamp": 1.21, "input": "task b"},
-        {"kind": "llm_call_start", "call_id": "b-llm-1", "parent_call_id": "agent_b-exec",
-         "agent_id": "agent_b", "correlation_id": 1, "timestamp": 1.25},
-        {"kind": "llm_call_end", "call_id": "b-llm-1", "agent_id": "agent_b",
-         "correlation_id": 1, "timestamp": 3.5, "output": "done b"},
+        {
+            "kind": "execution_start",
+            "call_id": "agent_b-exec",
+            "parent_call_id": "deleg-B",
+            "agent_id": "agent_b",
+            "timestamp": 1.21,
+            "input": "task b",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "b-llm-1",
+            "parent_call_id": "agent_b-exec",
+            "agent_id": "agent_b",
+            "correlation_id": 1,
+            "timestamp": 1.25,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "b-llm-1",
+            "agent_id": "agent_b",
+            "correlation_id": 1,
+            "timestamp": 3.5,
+            "output": "done b",
+        },
         {"kind": "execution_end", "call_id": "agent_b-exec", "agent_id": "agent_b", "timestamp": 3.5},
-
-        {"kind": "execution_start", "call_id": "agent_c-exec", "parent_call_id": "deleg-C",
-         "agent_id": "agent_c", "timestamp": 1.31, "input": "task c"},
-        {"kind": "llm_call_start", "call_id": "c-llm-1", "parent_call_id": "agent_c-exec",
-         "agent_id": "agent_c", "correlation_id": 1, "timestamp": 1.35},
-        {"kind": "llm_call_end", "call_id": "c-llm-1", "agent_id": "agent_c",
-         "correlation_id": 1, "timestamp": 5.0, "output": "done c"},
+        {
+            "kind": "execution_start",
+            "call_id": "agent_c-exec",
+            "parent_call_id": "deleg-C",
+            "agent_id": "agent_c",
+            "timestamp": 1.31,
+            "input": "task c",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "c-llm-1",
+            "parent_call_id": "agent_c-exec",
+            "agent_id": "agent_c",
+            "correlation_id": 1,
+            "timestamp": 1.35,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "c-llm-1",
+            "agent_id": "agent_c",
+            "correlation_id": 1,
+            "timestamp": 5.0,
+            "output": "done c",
+        },
         {"kind": "execution_end", "call_id": "agent_c-exec", "agent_id": "agent_c", "timestamp": 5.0},
-
-        {"kind": "llm_call_start", "call_id": "m-llm-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 4, "timestamp": 5.1},
-        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod,
-         "correlation_id": 4, "timestamp": 5.5, "output": "final plan"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 4,
+            "timestamp": 5.1,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-1",
+            "agent_id": mod,
+            "correlation_id": 4,
+            "timestamp": 5.5,
+            "output": "final plan",
+        },
         {"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": 5.5},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 5.5},
     ]
@@ -689,52 +1049,96 @@ def _three_way_fork_with_nested_fork_events() -> list[dict]:
     events = _three_way_fork_events()
     # Splice agent_c's nested fork in before its own execution_end/tail calls
     # (indices found by call_id — see _three_way_fork_events above).
-    c_llm_end_idx = next(
-        i for i, e in enumerate(events)
-        if e["call_id"] == "c-llm-1" and e["kind"] == "llm_call_end"
-    )
+    c_llm_end_idx = next(i for i, e in enumerate(events) if e["call_id"] == "c-llm-1" and e["kind"] == "llm_call_end")
     events[c_llm_end_idx]["timestamp"] = 4.0
     c_exec_end_idx = next(
-        i for i, e in enumerate(events)
-        if e["call_id"] == "agent_c-exec" and e["kind"] == "execution_end"
+        i for i, e in enumerate(events) if e["call_id"] == "agent_c-exec" and e["kind"] == "execution_end"
     )
     nested: list[dict] = [
-        {"kind": "tool_call_start", "call_id": "deleg-D", "parent_call_id": "agent_c-exec",
-         "agent_id": "agent_c", "correlation_id": 2, "timestamp": 4.10, "tool_name": "delegate_to_agent_d"},
-        {"kind": "tool_call_start", "call_id": "deleg-E", "parent_call_id": "agent_c-exec",
-         "agent_id": "agent_c", "correlation_id": 3, "timestamp": 4.20, "tool_name": "delegate_to_agent_e"},
-        {"kind": "execution_start", "call_id": "agent_d-exec", "parent_call_id": "deleg-D",
-         "agent_id": "agent_d", "timestamp": 4.11, "input": "task d"},
-        {"kind": "llm_call_start", "call_id": "d-llm-1", "parent_call_id": "agent_d-exec",
-         "agent_id": "agent_d", "correlation_id": 1, "timestamp": 4.15},
-        {"kind": "llm_call_end", "call_id": "d-llm-1", "agent_id": "agent_d",
-         "correlation_id": 1, "timestamp": 5.0, "output": "done d"},
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-D",
+            "parent_call_id": "agent_c-exec",
+            "agent_id": "agent_c",
+            "correlation_id": 2,
+            "timestamp": 4.10,
+            "tool_name": "delegate_to_agent_d",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-E",
+            "parent_call_id": "agent_c-exec",
+            "agent_id": "agent_c",
+            "correlation_id": 3,
+            "timestamp": 4.20,
+            "tool_name": "delegate_to_agent_e",
+        },
+        {
+            "kind": "execution_start",
+            "call_id": "agent_d-exec",
+            "parent_call_id": "deleg-D",
+            "agent_id": "agent_d",
+            "timestamp": 4.11,
+            "input": "task d",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "d-llm-1",
+            "parent_call_id": "agent_d-exec",
+            "agent_id": "agent_d",
+            "correlation_id": 1,
+            "timestamp": 4.15,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "d-llm-1",
+            "agent_id": "agent_d",
+            "correlation_id": 1,
+            "timestamp": 5.0,
+            "output": "done d",
+        },
         {"kind": "execution_end", "call_id": "agent_d-exec", "agent_id": "agent_d", "timestamp": 5.0},
-        {"kind": "execution_start", "call_id": "agent_e-exec", "parent_call_id": "deleg-E",
-         "agent_id": "agent_e", "timestamp": 4.21, "input": "task e"},
-        {"kind": "llm_call_start", "call_id": "e-llm-1", "parent_call_id": "agent_e-exec",
-         "agent_id": "agent_e", "correlation_id": 1, "timestamp": 4.25},
-        {"kind": "llm_call_end", "call_id": "e-llm-1", "agent_id": "agent_e",
-         "correlation_id": 1, "timestamp": 6.0, "output": "done e"},
+        {
+            "kind": "execution_start",
+            "call_id": "agent_e-exec",
+            "parent_call_id": "deleg-E",
+            "agent_id": "agent_e",
+            "timestamp": 4.21,
+            "input": "task e",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "e-llm-1",
+            "parent_call_id": "agent_e-exec",
+            "agent_id": "agent_e",
+            "correlation_id": 1,
+            "timestamp": 4.25,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "e-llm-1",
+            "agent_id": "agent_e",
+            "correlation_id": 1,
+            "timestamp": 6.0,
+            "output": "done e",
+        },
         {"kind": "execution_end", "call_id": "agent_e-exec", "agent_id": "agent_e", "timestamp": 6.0},
     ]
     events[c_exec_end_idx]["timestamp"] = 6.0
     events[c_exec_end_idx:c_exec_end_idx] = nested
     # Push the moderator's own resumption past the nested fork.
     m_llm_start_idx = next(
-        i for i, e in enumerate(events)
-        if e["call_id"] == "m-llm-1" and e["kind"] == "llm_call_start"
+        i for i, e in enumerate(events) if e["call_id"] == "m-llm-1" and e["kind"] == "llm_call_start"
     )
-    m_llm_end_idx = next(
-        i for i, e in enumerate(events)
-        if e["call_id"] == "m-llm-1" and e["kind"] == "llm_call_end"
-    )
+    m_llm_end_idx = next(i for i, e in enumerate(events) if e["call_id"] == "m-llm-1" and e["kind"] == "llm_call_end")
     events[m_llm_start_idx]["timestamp"] = 6.1
     events[m_llm_end_idx]["timestamp"] = 6.5
-    events[next(i for i, e in enumerate(events)
-                if e["call_id"] == "moderator" and e["kind"] == "execution_end")]["timestamp"] = 6.5
-    events[next(i for i, e in enumerate(events)
-                if e["call_id"] == "mas-1" and e["kind"] == "mas_call_end")]["timestamp"] = 6.5
+    events[next(i for i, e in enumerate(events) if e["call_id"] == "moderator" and e["kind"] == "execution_end")][
+        "timestamp"
+    ] = 6.5
+    events[next(i for i, e in enumerate(events) if e["call_id"] == "mas-1" and e["kind"] == "mas_call_end")][
+        "timestamp"
+    ] = 6.5
     return events
 
 
@@ -742,7 +1146,7 @@ def _agents_lane_dfs_positions(lanes) -> list[float]:
     """Flatten the Agents lane into its full sequence of dfs_pos values, in
     lane order — states contribute their own dfs_pos, transitions contribute
     both endpoints."""
-    agents = next(l for l in lanes if l.lane_id == "agents")
+    agents = next(lane for lane in lanes if lane.lane_id == "agents")
     positions: list[float] = []
     for el in agents.sequence:
         if hasattr(el, "call_type"):
@@ -766,12 +1170,31 @@ def _mas_lane_inflated_t_max_events() -> list[dict]:
     mod, sched = "moderator", "schedule_agent"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "tool_call_start", "call_id": "deleg-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 0.02, "tool_name": "delegate_to_schedule_agent"},
-        {"kind": "execution_start", "call_id": "sched-exec", "parent_call_id": "deleg-1",
-         "agent_id": sched, "timestamp": 0.021, "input": "check schedule"},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": "deleg-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 0.02,
+            "tool_name": "delegate_to_schedule_agent",
+        },
+        {
+            "kind": "execution_start",
+            "call_id": "sched-exec",
+            "parent_call_id": "deleg-1",
+            "agent_id": sched,
+            "timestamp": 0.021,
+            "input": "check schedule",
+        },
         {"kind": "execution_end", "call_id": "sched-exec", "agent_id": sched, "timestamp": 0.023},
         {"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": 0.024},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.024},
@@ -796,9 +1219,9 @@ def test_mas_lane_valid_when_global_t_max_is_inflated() -> None:
     isn't needed for this specific shape anymore. The invariant that matters —
     no consecutive states, no validator errors — is what's asserted here, not
     the specific mechanism that achieves it."""
+    from mas.lab.plots._trajectory_validator import validate_trajectory_dag
     from mas.lab.plots.multilevel_trajectory.dag import _build_dag
     from mas.lab.plots.multilevel_trajectory.records import _build_call_records
-    from mas.lab.plots._trajectory_validator import validate_trajectory_dag
 
     events = _mas_lane_inflated_t_max_events()
     records = _build_call_records(events)
@@ -808,13 +1231,10 @@ def test_mas_lane_valid_when_global_t_max_is_inflated() -> None:
     errors = [i for i in issues if i.severity == "error"]
     assert errors == [], errors
 
-    mas_lane = next(l for l in lanes if l.lane_id == "mas")
-    types = [
-        el.call_type if hasattr(el, "call_type") else "state"
-        for el in mas_lane.sequence
-    ]
+    mas_lane = next(lane for lane in lanes if lane.lane_id == "mas")
+    types = [el.call_type if hasattr(el, "call_type") else "state" for el in mas_lane.sequence]
     # No two "state" entries ever sit back-to-back with nothing between them.
-    for a, b in zip(types, types[1:]):
+    for a, b in zip(types, types[1:], strict=False):
         assert not (a == "state" and b == "state"), types
 
 
@@ -824,9 +1244,9 @@ def test_three_way_fork_agents_lane_is_structurally_valid() -> None:
     transitions — and every rank>0 branch (agent_b, agent_c) must get its own
     bracketing StateNode via a genuine connecting element (a BranchLink
     TransNode), not appended bare next to the previous branch's own state."""
+    from mas.lab.plots._trajectory_validator import validate_trajectory_dag
     from mas.lab.plots.multilevel_trajectory.dag import _build_dag
     from mas.lab.plots.multilevel_trajectory.records import _build_call_records
-    from mas.lab.plots._trajectory_validator import validate_trajectory_dag
 
     events = _three_way_fork_events()
     records = _build_call_records(events)
@@ -836,21 +1256,15 @@ def test_three_way_fork_agents_lane_is_structurally_valid() -> None:
     errors = [i for i in issues if i.severity == "error"]
     assert errors == [], errors
 
-    agents = next(l for l in lanes if l.lane_id == "agents")
-    labels_and_types = [
-        (el.call_type, el.label) if hasattr(el, "call_type") else "state"
-        for el in agents.sequence
-    ]
+    agents = next(lane for lane in lanes if lane.lane_id == "agents")
+    labels_and_types = [(el.call_type, el.label) if hasattr(el, "call_type") else "state" for el in agents.sequence]
     # Every rank>0 branch (agent_b, agent_c) is preceded by a BranchLink
     # connector bridging it in from the previous branch's own end state —
     # never a bare state-to-state jump.
     assert ("BranchLink", "") in labels_and_types
     assert labels_and_types.count(("BranchLink", "")) == 2  # agent_b, agent_c
 
-    agent_labels = [
-        el.label for el in agents.sequence
-        if hasattr(el, "call_type") and el.call_type == "AgentCall"
-    ]
+    agent_labels = [el.label for el in agents.sequence if hasattr(el, "call_type") and el.call_type == "AgentCall"]
     assert agent_labels == ["moderator", "agent_a", "agent_b", "agent_c", "moderator"]
 
 
@@ -876,9 +1290,9 @@ def test_nested_fork_agents_lane_is_structurally_valid() -> None:
     agent_d/agent_e) must still pass every structural validator check — the
     strict State/Trans alternation the Agents lane loop maintains does not
     depend on nesting depth."""
+    from mas.lab.plots._trajectory_validator import validate_trajectory_dag
     from mas.lab.plots.multilevel_trajectory.dag import _build_dag
     from mas.lab.plots.multilevel_trajectory.records import _build_call_records
-    from mas.lab.plots._trajectory_validator import validate_trajectory_dag
 
     events = _three_way_fork_with_nested_fork_events()
     records = _build_call_records(events)
@@ -889,12 +1303,20 @@ def test_nested_fork_agents_lane_is_structurally_valid() -> None:
     assert errors == [], errors
 
     agent_labels = [
-        el.label for lane in lanes if lane.lane_id == "agents"
+        el.label
+        for lane in lanes
+        if lane.lane_id == "agents"
         for el in lane.sequence
         if hasattr(el, "call_type") and el.call_type == "AgentCall"
     ]
     assert agent_labels == [
-        "moderator", "agent_a", "agent_b", "agent_c", "agent_d", "agent_e", "moderator",
+        "moderator",
+        "agent_a",
+        "agent_b",
+        "agent_c",
+        "agent_d",
+        "agent_e",
+        "moderator",
     ]
 
 
@@ -926,13 +1348,66 @@ def _parallel_tool_overlap_events() -> list[dict]:
     """
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": "agent-exec", "parent_call_id": "mas-1", "agent_id": "agent", "timestamp": 0.0, "input": "run"},
-        {"kind": "tool_call_start", "call_id": "tool-1", "parent_call_id": "agent-exec", "agent_id": "agent", "correlation_id": 1, "timestamp": 1.0, "tool_name": "tool_a", "arguments": {"x": 1}},
-        {"kind": "llm_call_start", "call_id": "tool-1-child", "parent_call_id": "tool-1", "agent_id": "agent", "correlation_id": 101, "timestamp": 1.1},
-        {"kind": "llm_call_end", "call_id": "tool-1-child", "agent_id": "agent", "correlation_id": 101, "timestamp": 5.0, "output": "child done"},
-        {"kind": "tool_call_end", "call_id": "tool-1", "agent_id": "agent", "correlation_id": 1, "timestamp": 5.1, "tool_name": "tool_a"},
-        {"kind": "tool_call_start", "call_id": "tool-2", "parent_call_id": "agent-exec", "agent_id": "agent", "correlation_id": 2, "timestamp": 1.2, "tool_name": "tool_b", "arguments": {"y": 2}},
-        {"kind": "tool_call_end", "call_id": "tool-2", "agent_id": "agent", "correlation_id": 2, "timestamp": 1.4, "tool_name": "tool_b"},
+        {
+            "kind": "execution_start",
+            "call_id": "agent-exec",
+            "parent_call_id": "mas-1",
+            "agent_id": "agent",
+            "timestamp": 0.0,
+            "input": "run",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": "tool-1",
+            "parent_call_id": "agent-exec",
+            "agent_id": "agent",
+            "correlation_id": 1,
+            "timestamp": 1.0,
+            "tool_name": "tool_a",
+            "arguments": {"x": 1},
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "tool-1-child",
+            "parent_call_id": "tool-1",
+            "agent_id": "agent",
+            "correlation_id": 101,
+            "timestamp": 1.1,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "tool-1-child",
+            "agent_id": "agent",
+            "correlation_id": 101,
+            "timestamp": 5.0,
+            "output": "child done",
+        },
+        {
+            "kind": "tool_call_end",
+            "call_id": "tool-1",
+            "agent_id": "agent",
+            "correlation_id": 1,
+            "timestamp": 5.1,
+            "tool_name": "tool_a",
+        },
+        {
+            "kind": "tool_call_start",
+            "call_id": "tool-2",
+            "parent_call_id": "agent-exec",
+            "agent_id": "agent",
+            "correlation_id": 2,
+            "timestamp": 1.2,
+            "tool_name": "tool_b",
+            "arguments": {"y": 2},
+        },
+        {
+            "kind": "tool_call_end",
+            "call_id": "tool-2",
+            "agent_id": "agent",
+            "correlation_id": 2,
+            "timestamp": 1.4,
+            "tool_name": "tool_b",
+        },
         {"kind": "execution_end", "call_id": "agent-exec", "agent_id": "agent", "timestamp": 6.0},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 6.0},
     ]
@@ -977,10 +1452,9 @@ def test_parallel_tool_overlap_gaps_are_classified_as_reset() -> None:
     gaps = data.get("bucketGaps", [])
 
     backward_resets = [
-        g for i, g in enumerate(gaps)
-        if i + 1 < len(buckets)
-        and buckets[i + 1] < buckets[i]
-        and g.get("kind") == "reset"
+        g
+        for i, g in enumerate(gaps)
+        if i + 1 < len(buckets) and buckets[i + 1] < buckets[i] and g.get("kind") == "reset"
     ]
 
     assert backward_resets, {"buckets": buckets, "gaps": gaps}
@@ -988,7 +1462,6 @@ def test_parallel_tool_overlap_gaps_are_classified_as_reset() -> None:
 
 def test_multilevel_cli_from_events_jsonl(tmp_path: Path) -> None:
     from click.testing import CliRunner
-
     from mas.lab.cli import app as cli
 
     runner = CliRunner()
@@ -1022,7 +1495,8 @@ def test_lab_smoke_trace_context_assembly_maps_to_real_llm_calls_only() -> None:
         if r.get("call_type") == "LLMCall" and r.get("correlation_id") is not None
     }
     ctx_calls = [
-        r for r in recs
+        r
+        for r in recs
         if r.get("call_type") == "ProcessingCall"
         and str(r.get("processing_name") or "").strip().lower() == "context assembly"
     ]
@@ -1035,10 +1509,10 @@ def test_lab_smoke_trace_context_assembly_maps_to_real_llm_calls_only() -> None:
 
 
 def test_lab_smoke_trace_context_assembly_precedes_llm_and_s1_stays_user_only() -> None:
-    from mas.lab.plots.multilevel_trajectory.dag import _build_dag
-    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
-    from mas.lab.plots.multilevel_trajectory.models import TransNode
     from mas.lab.plots.multilevel_trajectory.chart_data import build_trajectory_chart_data
+    from mas.lab.plots.multilevel_trajectory.dag import _build_dag
+    from mas.lab.plots.multilevel_trajectory.models import TransNode
+    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
     from mas.lab.plots.trajectory import load_trace
 
     events = load_trace(LAB_SMOKE_TRACE_FIXTURE)
@@ -1051,7 +1525,8 @@ def test_lab_smoke_trace_context_assembly_precedes_llm_and_s1_stays_user_only() 
         if r.get("call_type") == "LLMCall" and r.get("correlation_id") is not None
     }
     for ctx in (
-        r for r in recs
+        r
+        for r in recs
         if r.get("call_type") == "ProcessingCall"
         and str(r.get("processing_name") or "").strip().lower() == "context assembly"
         and r.get("correlation_id") is not None
@@ -1061,7 +1536,7 @@ def test_lab_smoke_trace_context_assembly_precedes_llm_and_s1_stays_user_only() 
         assert float(ctx.get("end_ts") or 0.0) <= float(llm_by_key[key].get("start_ts") or 0.0) + 1e-9
 
     _, lanes = _build_dag(recs, events)
-    call_lane = next(l for l in lanes if l.lane_id == "calls")
+    call_lane = next(lane for lane in lanes if lane.lane_id == "calls")
     states = [el for el in call_lane.sequence if not isinstance(el, TransNode)]
     assert states, "expected call-lane states"
     s1 = states[0]
@@ -1076,33 +1551,23 @@ def test_lab_smoke_trace_context_assembly_precedes_llm_and_s1_stays_user_only() 
     assert "System Prompt" not in (s1.hover or "")
     assert "You are" not in (s1.hover or "")
 
-    llm_trans = [
-        el for el in call_lane.sequence
-        if isinstance(el, TransNode) and el.call_type == "LLMCall"
-    ]
+    llm_trans = [el for el in call_lane.sequence if isinstance(el, TransNode) and el.call_type == "LLMCall"]
     assert llm_trans, "expected llm transitions in calls lane"
     synthetic_sources = {"llm/output", "state/assistant", "state/tool_input"}
     assert not any(
-        isinstance(p, dict) and p.get("source") in synthetic_sources
-        for st in states
-        for p in (st.cpr_data or [])
+        isinstance(p, dict) and p.get("source") in synthetic_sources for st in states for p in (st.cpr_data or [])
     )
     assert not any(
-        isinstance(p, dict) and p.get("source") in synthetic_sources
-        for tr in llm_trans
-        for p in (tr.cpr_data or [])
+        isinstance(p, dict) and p.get("source") in synthetic_sources for tr in llm_trans for p in (tr.cpr_data or [])
     )
 
     chart = build_trajectory_chart_data(events, width_mode="log")
-    call_lane_json = next(l for l in chart.get("lanes", []) if l.get("laneId") == "calls")
+    call_lane_json = next(lane for lane in chart.get("lanes", []) if lane.get("laneId") == "calls")
     llm_json = [
-        t for t in call_lane_json.get("sequence", [])
-        if t.get("type") == "trans" and t.get("callType") == "LLMCall"
+        t for t in call_lane_json.get("sequence", []) if t.get("type") == "trans" and t.get("callType") == "LLMCall"
     ]
     assert not any(
-        isinstance(p, dict) and p.get("source") in synthetic_sources
-        for t in llm_json
-        for p in (t.get("cprData") or [])
+        isinstance(p, dict) and p.get("source") in synthetic_sources for t in llm_json for p in (t.get("cprData") or [])
     )
 
 
@@ -1112,10 +1577,11 @@ def test_real_trace_calls_lane_has_no_spurious_connector_only_states() -> None:
 
     events = load_trace(LAB_SMOKE_TRACE_FIXTURE)
     chart = build_trajectory_chart_data(events, width_mode="log")
-    call_lane = next(l for l in chart.get("lanes", []) if l.get("laneId") == "calls")
+    call_lane = next(lane for lane in chart.get("lanes", []) if lane.get("laneId") == "calls")
 
     bad = [
-        s for s in call_lane.get("sequence", [])
+        s
+        for s in call_lane.get("sequence", [])
         if s.get("type") == "state" and s.get("connectorOnly") and not s.get("governance")
     ]
     assert bad == []
@@ -1127,7 +1593,7 @@ def test_real_trace_wait_states_if_present_are_followed_by_numbered_state_on_bot
 
     events = load_trace(LAB_SMOKE_TRACE_FIXTURE)
     chart = build_trajectory_chart_data(events, width_mode="log")
-    lane_by_id = {l.get("laneId"): l for l in chart.get("lanes", [])}
+    lane_by_id = {lane.get("laneId"): lane for lane in chart.get("lanes", [])}
     if "calls" not in lane_by_id or "agents" not in lane_by_id:
         return
 
@@ -1164,17 +1630,46 @@ def _session_boundary_collision_events() -> list[dict]:
     mod = "moderator"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "What trains run from Celestia to Verdantia?"},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "What trains run from Celestia to Verdantia?",
+        },
         # Technical context-assembly marker sharing the exact session-entry ts.
-        {"kind": "processing_call_start", "call_id": "ctx-1", "parent_call_id": mod,
-         "agent_id": mod, "timestamp": 0.0, "input": "context_assembly"},
-        {"kind": "processing_call_end", "call_id": "ctx-1", "agent_id": mod,
-         "timestamp": 0.0, "output": "context_assembly"},
-        {"kind": "llm_call_start", "call_id": "m-llm-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 0.1},
-        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod,
-         "correlation_id": 1, "timestamp": 2.0, "output": "Here is the train schedule."},
+        {
+            "kind": "processing_call_start",
+            "call_id": "ctx-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "context_assembly",
+        },
+        {
+            "kind": "processing_call_end",
+            "call_id": "ctx-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "output": "context_assembly",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 0.1,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-1",
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 2.0,
+            "output": "Here is the train schedule.",
+        },
         {"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": 2.0},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 2.0},
     ]
@@ -1218,12 +1713,30 @@ def test_session_exit_hover_falls_back_to_call_output_when_session_extraction_em
     mod = "moderator"
     events = [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "llm_call_start", "call_id": "m-llm-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 0.0},
-        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod,
-         "correlation_id": 1, "timestamp": 2.0, "output": "here is your plan"},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 0.0,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-1",
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 2.0,
+            "output": "here is your plan",
+        },
         # No execution_end / mas_call_end events at all — native telemetry
         # sometimes omits them; end_ts is synthesized from the last call.
     ]
@@ -1252,19 +1765,49 @@ def _tail_coincident_processing_calls_events() -> list[dict]:
     mod = "moderator"
     return [
         {"kind": "mas_call_start", "call_id": "mas-1", "agent_id": "mas", "timestamp": 0.0},
-        {"kind": "execution_start", "call_id": mod, "parent_call_id": "mas-1",
-         "agent_id": mod, "timestamp": 0.0, "input": "plan a trip"},
-        {"kind": "llm_call_start", "call_id": "m-llm-1", "parent_call_id": mod,
-         "agent_id": mod, "correlation_id": 1, "timestamp": 0.0},
-        {"kind": "llm_call_end", "call_id": "m-llm-1", "agent_id": mod,
-         "correlation_id": 1, "timestamp": 5.0, "output": "final answer"},
+        {
+            "kind": "execution_start",
+            "call_id": mod,
+            "parent_call_id": "mas-1",
+            "agent_id": mod,
+            "timestamp": 0.0,
+            "input": "plan a trip",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "m-llm-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 0.0,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "m-llm-1",
+            "agent_id": mod,
+            "correlation_id": 1,
+            "timestamp": 5.0,
+            "output": "final answer",
+        },
         {"kind": "execution_end", "call_id": mod, "agent_id": mod, "timestamp": 5.0},
         {"kind": "mas_call_end", "call_id": "mas-1", "agent_id": "mas", "timestamp": 5.0},
-        {"kind": "processing_call_start", "call_id": "pc-1", "parent_call_id": mod,
-         "agent_id": mod, "timestamp": 5.0, "input": "thinking"},
+        {
+            "kind": "processing_call_start",
+            "call_id": "pc-1",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "timestamp": 5.0,
+            "input": "thinking",
+        },
         {"kind": "processing_call_end", "call_id": "pc-1", "agent_id": mod, "timestamp": 5.0},
-        {"kind": "processing_call_start", "call_id": "pc-2", "parent_call_id": mod,
-         "agent_id": mod, "timestamp": 5.0, "input": "thinking"},
+        {
+            "kind": "processing_call_start",
+            "call_id": "pc-2",
+            "parent_call_id": mod,
+            "agent_id": mod,
+            "timestamp": 5.0,
+            "input": "thinking",
+        },
         {"kind": "processing_call_end", "call_id": "pc-2", "agent_id": mod, "timestamp": 5.0},
     ]
 
@@ -1273,10 +1816,10 @@ def test_tail_coincident_processing_calls_stagger_keeps_lanes_connected_to_exit(
     """Regression: staggering coincident tail ProcessingCalls must not
     leave the Session/MAS/Agents lanes' exit state disconnected from the
     Calls lane's real final (staggered) state."""
-    from mas.lab.plots.multilevel_trajectory.dag import _build_dag
-    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
-    from mas.lab.plots.multilevel_trajectory.models import StateNode
     from mas.lab.plots._trajectory_validator import validate_trajectory_dag
+    from mas.lab.plots.multilevel_trajectory.dag import _build_dag
+    from mas.lab.plots.multilevel_trajectory.models import StateNode
+    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
     events = _tail_coincident_processing_calls_events()
     state_reg, lanes = _build_dag(_build_call_records(events), events)
@@ -1310,8 +1853,8 @@ def test_all_lanes_share_entry_and_exit_state_objects(event_builder) -> None:
     extends that far — this is what lets the renderer draw one clean
     connector at both ends of the trace instead of a gap."""
     from mas.lab.plots.multilevel_trajectory.dag import _build_dag
-    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
     from mas.lab.plots.multilevel_trajectory.models import StateNode
+    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
     events = event_builder()
     state_reg, lanes = _build_dag(_build_call_records(events), events)
@@ -1341,7 +1884,7 @@ def test_calls_lane_transitions_agent_id_changes_across_delegation_boundary() ->
     from mas.lab.plots.multilevel_trajectory.chart_data import build_trajectory_chart_data
 
     chart = build_trajectory_chart_data(_delegation_events(), title="t")
-    calls_lane = next(l for l in chart["lanes"] if l["laneId"] == "calls")
+    calls_lane = next(lane for lane in chart["lanes"] if lane["laneId"] == "calls")
     trans = [el for el in calls_lane["sequence"] if el["type"] == "trans"]
     agent_ids = [el["agentId"] for el in trans]
 
@@ -1370,19 +1913,29 @@ def _delegation_events_with_wait() -> list[dict]:
     for ev in _delegation_events():
         out.append(ev)
         if ev.get("kind") == "tool_call_start" and ev.get("call_id") == "deleg-1":
-            out.append({
-                "kind": "processing_call_start", "call_id": "wait-proc-1",
-                "parent_call_id": "moderator", "agent_id": "moderator",
-                "timestamp": ev["timestamp"] + 0.01,
-                "processing_type": "wait_state", "wait_link_id": wait_id,
-                "wait_role": "WAIT", "wait_scope": "delegation",
-                "input": "agent wait on tool call; tool wait on delegated reply",
-            })
-            out.append({
-                "kind": "processing_call_end", "call_id": "wait-proc-1",
-                "agent_id": "moderator", "timestamp": ev["timestamp"] + 0.02,
-                "output": "agent wait on tool call; tool wait on delegated reply",
-            })
+            out.append(
+                {
+                    "kind": "processing_call_start",
+                    "call_id": "wait-proc-1",
+                    "parent_call_id": "moderator",
+                    "agent_id": "moderator",
+                    "timestamp": ev["timestamp"] + 0.01,
+                    "processing_type": "wait_state",
+                    "wait_link_id": wait_id,
+                    "wait_role": "WAIT",
+                    "wait_scope": "delegation",
+                    "input": "agent wait on tool call; tool wait on delegated reply",
+                }
+            )
+            out.append(
+                {
+                    "kind": "processing_call_end",
+                    "call_id": "wait-proc-1",
+                    "agent_id": "moderator",
+                    "timestamp": ev["timestamp"] + 0.02,
+                    "output": "agent wait on tool call; tool wait on delegated reply",
+                }
+            )
     return out
 
 
@@ -1394,16 +1947,13 @@ def test_wait_state_transition_is_connector_only() -> None:
     renderer hides the bar while the lifeline (always drawn between states)
     still bridges it, leaving neither a visible node nor a gap."""
     from mas.lab.plots.multilevel_trajectory.dag import _build_dag
-    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
     from mas.lab.plots.multilevel_trajectory.models import TransNode
+    from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
     events = _delegation_events_with_wait()
     _state_reg, lanes = _build_dag(_build_call_records(events), events)
-    calls_lane = next(l for l in lanes if l.lane_id == "calls")
-    wait_trans = [
-        el for el in calls_lane.sequence
-        if isinstance(el, TransNode) and el.processing_type == "wait_state"
-    ]
+    calls_lane = next(lane for lane in lanes if lane.lane_id == "calls")
+    wait_trans = [el for el in calls_lane.sequence if isinstance(el, TransNode) and el.processing_type == "wait_state"]
     assert wait_trans, "expected a wait_state ProcessingCall transition in the calls lane"
     for tr in wait_trans:
         assert tr.connector_only, "a wait transition must be connector_only (hidden bar, bridged by the lifeline)"

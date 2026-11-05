@@ -7,9 +7,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
-from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 from ci_llm import mas_infra_refs_for_ci, require_ci_cache
+from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SMOKE_EXPERIMENT = REPO_ROOT / "tests/fixtures/lab-smoke/experiment.yaml"

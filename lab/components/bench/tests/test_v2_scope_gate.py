@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import pytest
 
-from mas.lab.benchmark.pipeline.models import StepOutput
+import pytest
 from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
 from mas.lab.benchmark.pipeline.keys import RunKey
+from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.scheduler import Node, ResourcePool, Scheduler
 
 
@@ -29,9 +29,30 @@ async def test_v2_scope_gate() -> None:
     run_a = _Step("run-a")
     run_b = _Step("run-b")
     nodes = [
-        Node(name="run-a", scope="run", phase="post", step=run_a, adapter=LegacyStepAdapter(run_a), key=RunKey("e", "s", "item1", "r1")),
-        Node(name="run-b", scope="run", phase="post", step=run_b, adapter=LegacyStepAdapter(run_b), key=RunKey("e", "s", "item1", "r2")),
-        Node(name="item-post", scope="item", phase="post", step=item_step, adapter=LegacyStepAdapter(item_step), parent="item:s/item1"),
+        Node(
+            name="run-a",
+            scope="run",
+            phase="post",
+            step=run_a,
+            adapter=LegacyStepAdapter(run_a),
+            key=RunKey("e", "s", "item1", "r1"),
+        ),
+        Node(
+            name="run-b",
+            scope="run",
+            phase="post",
+            step=run_b,
+            adapter=LegacyStepAdapter(run_b),
+            key=RunKey("e", "s", "item1", "r2"),
+        ),
+        Node(
+            name="item-post",
+            scope="item",
+            phase="post",
+            step=item_step,
+            adapter=LegacyStepAdapter(item_step),
+            parent="item:s/item1",
+        ),
     ]
     sched = Scheduler(nodes, resources=ResourcePool())
     sched.set_gate("item:s/item1", 2)
@@ -124,8 +145,9 @@ async def test_v2_scope_gates_chain_item_scenario_experiment() -> None:
 
 
 def test_v2_pre_per_run() -> None:
-    from mas.lab.benchmark.pipeline.expand import planned_nodes
     from pathlib import Path
+
+    from mas.lab.benchmark.pipeline.expand import planned_nodes
 
     keys = [
         RunKey("e", "baseline", "item1", "r1"),

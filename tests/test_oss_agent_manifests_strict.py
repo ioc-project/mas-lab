@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.ctl.validate import validate_file
 
 _ROOT = Path(__file__).resolve().parents[1]

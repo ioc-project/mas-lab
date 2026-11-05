@@ -45,9 +45,7 @@ def test_loopback_cors_allows_docker_ui():
 
 
 def test_non_loopback_cors_requires_explicit_origin():
-    app = create_app(
-        ControllerSettings(host="0.0.0.0", token="s3cret-token", cors_origins=["http://ui.test"])
-    )
+    app = create_app(ControllerSettings(host="0.0.0.0", token="s3cret-token", cors_origins=["http://ui.test"]))
     client = TestClient(app)
     resp = client.options(
         "/api/info",
@@ -89,9 +87,7 @@ def test_docs_require_bearer_when_token_set():
 
 
 def test_bearer_401_still_sends_cors_allow_origin():
-    app = create_app(
-        ControllerSettings(token="s3cret-token", host="0.0.0.0", cors_origins=["http://ui.test"])
-    )
+    app = create_app(ControllerSettings(token="s3cret-token", host="0.0.0.0", cors_origins=["http://ui.test"]))
     client = TestClient(app)
     resp = client.get("/api/scopes", headers={"Origin": "http://ui.test"})
     assert resp.status_code == 401

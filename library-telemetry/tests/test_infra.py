@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from mas.library.telemetry.infra import OtelCollectorTarget, otel_collector_target
 
 _MANIFEST = {
@@ -51,9 +50,7 @@ def test_shipped_yaml_manifest():
 
 def test_endpoint_precedence(monkeypatch):
     t = OtelCollectorTarget(endpoint="http://from-manifest:4318")
-    assert (
-        t.resolved_endpoint("http://override:4318") == "http://override:4318"
-    )  # arg wins
+    assert t.resolved_endpoint("http://override:4318") == "http://override:4318"  # arg wins
     assert t.resolved_endpoint() == "http://from-manifest:4318"  # manifest
     empty = OtelCollectorTarget(endpoint="")
     monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://from-env:4318")
@@ -88,9 +85,7 @@ def test_resolve_otel_collector_requires_env_or_infra(monkeypatch):
 
 def test_missing_target_raises():
     with pytest.raises(ValueError):
-        otel_collector_target(
-            {"kind": "Infra", "spec": {"targets": [{"kind": "Neo4j"}]}}
-        )
+        otel_collector_target({"kind": "Infra", "spec": {"targets": [{"kind": "Neo4j"}]}})
 
 
 def test_push_step_uses_infra(tmp_path):

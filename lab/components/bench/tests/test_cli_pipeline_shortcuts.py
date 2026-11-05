@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import yaml
-
 from mas.lab.cli.pipeline_shortcuts import (
     CLI_PIPELINE_SHORTCUTS,
     library_root_for_shortcut,
@@ -43,9 +42,7 @@ def test_shortcut_pipeline_yaml_declares_step_types() -> None:
         steps = (data.get("spec") or {}).get("steps") or []
         types = {str(step.get("type") or "") for step in steps if isinstance(step, dict)}
         missing = [t for t in item.step_types if t not in types]
-        assert not missing, (
-            f"{item.command}: {item.source_path} missing step types {missing}; has {sorted(types)}"
-        )
+        assert not missing, f"{item.command}: {item.source_path} missing step types {missing}; has {sorted(types)}"
 
 
 def test_every_shortcut_pipeline_resolves() -> None:
@@ -54,8 +51,7 @@ def test_every_shortcut_pipeline_resolves() -> None:
     for item in CLI_PIPELINE_SHORTCUTS:
         resolved = resolve_shortcut_pipeline(item, root)
         assert resolved.resolve() == _source_file(item).resolve(), (
-            f"{item.command}: {item.pipeline_ref} resolved to {resolved}, "
-            f"not {item.source_path}"
+            f"{item.command}: {item.pipeline_ref} resolved to {resolved}, not {item.source_path}"
         )
 
 
@@ -82,9 +78,7 @@ def test_library_root_matches_source_path() -> None:
     root = _repo_root()
     for item in CLI_PIPELINE_SHORTCUTS:
         lib = library_root_for_shortcut(item, root)
-        assert lib.is_dir() and (lib / "library.yaml").is_file(), (
-            f"{item.command}: {lib} is not a library root"
-        )
+        assert lib.is_dir() and (lib / "library.yaml").is_file(), f"{item.command}: {lib} is not a library root"
         assert item.source_path.startswith(lib.name + "/"), (
             f"{item.command}: source_path {item.source_path} is not under {lib.name}"
         )
@@ -103,9 +97,7 @@ def test_shortcut_click_commands_are_registered() -> None:
         "telemetry": _click_command_names(
             root / "library-telemetry" / "src" / "mas" / "library" / "telemetry" / "lab_cli.py"
         ),
-        "kg": _click_command_names(
-            root / "library-kg" / "src" / "mas" / "library" / "kg" / "lab_cli.py"
-        ),
+        "kg": _click_command_names(root / "library-kg" / "src" / "mas" / "library" / "kg" / "lab_cli.py"),
     }
     from mas.lab.cli.commands.plot import plot_group
 
@@ -117,8 +109,5 @@ def test_shortcut_click_commands_are_registered() -> None:
             missing.append(f"{item.command}: unknown cli_group {item.cli_group!r}")
             continue
         if item.cli_name not in have:
-            missing.append(
-                f"{item.command}: {item.cli_group}.{item.cli_name} not registered "
-                f"(have {sorted(have)})"
-            )
+            missing.append(f"{item.command}: {item.cli_group}.{item.cli_name} not registered (have {sorted(have)})")
     assert not missing, "CLI shortcut commands missing:\n" + "\n".join(missing)

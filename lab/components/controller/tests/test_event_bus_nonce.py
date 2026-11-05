@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from mas.lab.controller.ui_stream.bus import EventBus
-from mas.lab.controller.ui_stream.refs import DataSourceRef, envelope, use_nonce, reset_nonce
+from mas.lab.controller.ui_stream.refs import DataSourceRef, envelope, reset_nonce, use_nonce
 
 
 def test_untagged_envelopes_reach_every_subscriber() -> None:

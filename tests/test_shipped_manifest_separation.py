@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.ctl.validate.separation import (
     AgentSeparationValidator,
     MASSeparationValidator,
@@ -65,7 +64,6 @@ def _collect_cases(kind: str) -> list[tuple[str, Path, dict]]:
                     continue
                 if str(doc.get("kind") or "").lower() != expected_kind:
                     continue
-                rel = str(path.relative_to(_ROOT))
                 out.append((validator_kind, path, doc))
     return out
 

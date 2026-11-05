@@ -355,9 +355,7 @@ def test_cache_hit_note_only_with_verbose():
 
     traced = io.StringIO()
     plugin = CliTraceExchangePlugin(err=traced)
-    plugin.configure(
-        trace=True, verbose=0, agent_id="agent", fmt=TraceFormatOptions(summary_only=True)
-    )
+    plugin.configure(trace=True, verbose=0, agent_id="agent", fmt=TraceFormatOptions(summary_only=True))
     plugin.on_exchange(hit)
     dump = traced.getvalue()
     assert dump  # --trace still prints the hop

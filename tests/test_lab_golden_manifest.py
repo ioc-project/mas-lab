@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Lab golden fixture manifest and optional fingerprint parity."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.golden.labs import DEFAULT_MANIFEST, load_labs_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,8 +36,7 @@ def test_lab_golden_fingerprint_when_present(label: str) -> None:
     events_path = golden_dir / "events.jsonl"
     if not fp_path.is_file() or not events_path.is_file():
         pytest.fail(
-            f"golden fixture not captured for {label} — run: "
-            f"python scripts/capture_golden_run.py --labs {label}"
+            f"golden fixture not captured for {label} — run: python scripts/capture_golden_run.py --labs {label}"
         )
 
     from mas.lab.benchmark.golden.events import events_fingerprint, normalize_events_file

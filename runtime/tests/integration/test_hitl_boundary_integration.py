@@ -9,9 +9,7 @@ from mas.runtime.schema.hitl import HitlResolveChoice
 
 
 def test_format_hitl_choice_help_dedupes_allow_schedule():
-    text = format_hitl_choice_help(
-        [HitlResolveChoice.ALLOW, HitlResolveChoice.SCHEDULE, HitlResolveChoice.BLOCK]
-    )
+    text = format_hitl_choice_help([HitlResolveChoice.ALLOW, HitlResolveChoice.SCHEDULE, HitlResolveChoice.BLOCK])
     assert "ALLOW" in text or "SCHEDULE" in text
     assert "BLOCK" in text
     assert text.count("Run the tool now") <= 1

@@ -24,9 +24,7 @@ def test_v2_expand_parity(tmp_path: Path) -> None:
         scope="run",
         phase="post",
     )
-    dicts = expand_step_dicts(
-        [spec], keys=keys, output_dir=tmp_path, scenario_ids=["alpha", "bravo"]
-    )
+    dicts = expand_step_dicts([spec], keys=keys, output_dir=tmp_path, scenario_ids=["alpha", "bravo"])
     assert dicts, "plan-based expansion must emit at least one step dict"
     blob = json.dumps(dicts, default=str)
     assert "alpha" in blob and "bravo" in blob
@@ -38,10 +36,11 @@ def test_v2_expand_parity(tmp_path: Path) -> None:
 
 def test_v2_ordering_property() -> None:
     """v2 order is a valid linearization: depends_on edges are respected."""
-    from mas.lab.benchmark.pipeline.scheduler import Node, Scheduler
-    from mas.lab.benchmark.pipeline.models import StepOutput
-    from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
     import asyncio
+
+    from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
+    from mas.lab.benchmark.pipeline.models import StepOutput
+    from mas.lab.benchmark.pipeline.scheduler import Node, Scheduler
 
     order: list[str] = []
 
@@ -91,6 +90,7 @@ def test_v2_judge_cap_global() -> None:
 
 def test_v2_cursor_resume() -> None:
     import asyncio
+
     from mas.lab.benchmark.pipeline.channel import InprocChannel
 
     async def _go():

@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.ctl.validate import validate_file
 from mas.ctl.validate.identity import collect_identity_issues
 
@@ -63,8 +62,7 @@ def test_shipped_agent_declares_identity(path: Path) -> None:
     identity_errors = [
         issue
         for issue in result.issues
-        if issue.level == "error"
-        and ("metadata.name" in issue.message or "filesystem path" in issue.message)
+        if issue.level == "error" and ("metadata.name" in issue.message or "filesystem path" in issue.message)
     ]
     assert not identity_errors, identity_errors
 
@@ -83,8 +81,7 @@ def test_shipped_mas_declares_identity(path: Path) -> None:
     identity_errors = [
         issue
         for issue in result.issues
-        if issue.level == "error"
-        and ("metadata.name" in issue.message or "filesystem path" in issue.message)
+        if issue.level == "error" and ("metadata.name" in issue.message or "filesystem path" in issue.message)
     ]
     assert not identity_errors, identity_errors
 

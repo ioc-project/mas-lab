@@ -3,9 +3,8 @@
 from pathlib import Path
 
 import pytest
-
-from mas.lab.benchmark.schedule.run_batch.load import _cross_checkpoint_axis
 from mas.lab.benchmark.schedule.run_batch.finalize import write_session_mappings
+from mas.lab.benchmark.schedule.run_batch.load import _cross_checkpoint_axis
 from mas.lab.lab.config.mas_experiment import CheckpointAxisEntry, _parse_checkpoint_axis
 
 

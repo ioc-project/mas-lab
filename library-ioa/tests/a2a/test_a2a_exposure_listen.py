@@ -97,7 +97,7 @@ def test_a2a_agent_comm_reaches_an_in_process_peer() -> None:
         webserver=UvicornWebServer(),
     ).serve_background(
         {"metadata": {"name": "peer"}, "spec": {"description": "peer"}},
-        lambda prompt, **_: (received.append(prompt) or {"text": f"peer:{prompt}"}),
+        lambda prompt, **_: received.append(prompt) or {"text": f"peer:{prompt}"},
     )
     comm = A2AAgentComm(url=url, timeout=10)
     try:

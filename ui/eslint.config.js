@@ -8,7 +8,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'e2e', 'src/api/generated', 'src/test', 'node_modules', '.yarn']),
+  globalIgnores(['dist', 'e2e', 'src/api/generated', 'src/types/agent-types.ts', 'src/types/mas-types.ts', 'src/test', 'node_modules', '.yarn']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

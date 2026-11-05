@@ -51,9 +51,7 @@ def test_import_hf_dry_run_uses_hf_token_from_the_environment(monkeypatch) -> No
         captured["token"] = getattr(args, "token", None)
         return 0
 
-    monkeypatch.setattr(
-        "mas.lab.benchmark.cli.export_import.import_hf_command", fake_import
-    )
+    monkeypatch.setattr("mas.lab.benchmark.cli.export_import.import_hf_command", fake_import)
     from click.testing import CliRunner
     from mas.lab.cli.commands.benchmark.import_hf import import_hf_cmd
 
@@ -73,9 +71,7 @@ def test_import_hf_dry_run_without_a_token_is_allowed(monkeypatch) -> None:
         captured["token"] = getattr(args, "token", None)
         return 0
 
-    monkeypatch.setattr(
-        "mas.lab.benchmark.cli.export_import.import_hf_command", fake_import
-    )
+    monkeypatch.setattr("mas.lab.benchmark.cli.export_import.import_hf_command", fake_import)
     from click.testing import CliRunner
     from mas.lab.cli.commands.benchmark.import_hf import import_hf_cmd
 
@@ -95,9 +91,7 @@ def test_import_hf_dry_run_uses_an_explicit_token_flag(monkeypatch) -> None:
         captured["token"] = getattr(args, "token", None)
         return 0
 
-    monkeypatch.setattr(
-        "mas.lab.benchmark.cli.export_import.import_hf_command", fake_import
-    )
+    monkeypatch.setattr("mas.lab.benchmark.cli.export_import.import_hf_command", fake_import)
     from click.testing import CliRunner
     from mas.lab.cli.commands.benchmark.import_hf import import_hf_cmd
 

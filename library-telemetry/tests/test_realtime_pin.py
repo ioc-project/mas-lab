@@ -18,8 +18,7 @@ def test_importing_telemetry_pins_observe_realtime_off() -> None:
         [
             sys.executable,
             "-c",
-            "import os; import mas.library.telemetry; "
-            "print(os.environ['OBSERVE_REALTIME_OBSERVABILITY_ENABLED'])",
+            "import os; import mas.library.telemetry; print(os.environ['OBSERVE_REALTIME_OBSERVABILITY_ENABLED'])",
         ],
         check=True,
         capture_output=True,

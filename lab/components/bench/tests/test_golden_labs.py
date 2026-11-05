@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Unit tests for golden lab target resolution."""
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -158,11 +158,7 @@ def test_undeclared_step_stays_llm_only(tmp_path: Path) -> None:
     arm = _proxy(tmp_path / "arm.yaml", name="arm", api_base="https://arm.example/v1")
     custom = tmp_path / "audit.yaml"
     custom.write_text(
-        "apiVersion: infra/v1\n"
-        "kind: InfraMiddleware\n"
-        "metadata: {name: audit}\n"
-        "spec:\n"
-        "  middleware: my_custom_audit\n",
+        "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata: {name: audit}\nspec:\n  middleware: my_custom_audit\n",
         encoding="utf-8",
     )
     infra = resolve_infra_refs([str(arm), str(custom)], anchor=tmp_path)
@@ -213,9 +209,7 @@ def test_wraps_attaches_middleware_to_named_leaf(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     infra = resolve_infra_refs([str(bundle)], anchor=tmp_path)
-    assert [middleware_id(step) for step in infra.llm_proxies["arm"].get("pipeline") or []] == [
-        "llm_scheduler"
-    ]
+    assert [middleware_id(step) for step in infra.llm_proxies["arm"].get("pipeline") or []] == ["llm_scheduler"]
     assert not infra.llm_proxies["judge"].get("pipeline")
 
 

@@ -107,9 +107,7 @@ def test_normalize_model_slots_scalar_is_main() -> None:
         "summarizer": "gpt-4o-mini",
         "judge": "haiku",
     }
-    assert normalize_model_slots(model="gpt-4o", models={"main": "gpt-4o-mini"}) == {
-        "main": "gpt-4o-mini"
-    }
+    assert normalize_model_slots(model="gpt-4o", models={"main": "gpt-4o-mini"}) == {"main": "gpt-4o-mini"}
     assert normalize_model_slots(model="gpt-4o", models={"main": "any", "judge": "haiku"}) == {
         "main": "gpt-4o",
         "judge": "haiku",

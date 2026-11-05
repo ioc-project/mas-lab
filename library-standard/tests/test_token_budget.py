@@ -42,9 +42,7 @@ def test_pin_tail_keeps_at_least_the_most_recent_group_even_if_over_budget() -> 
 
 def test_pin_tail_under_budget_is_untouched() -> None:
     pin_tail = _tool_group("c1")
-    out = trim_messages_to_budget(
-        [{"role": "system", "content": "sys"}], max_tokens=10_000, pin_tail=pin_tail
-    )
+    out = trim_messages_to_budget([{"role": "system", "content": "sys"}], max_tokens=10_000, pin_tail=pin_tail)
     assert out[-2:] == pin_tail
 
 

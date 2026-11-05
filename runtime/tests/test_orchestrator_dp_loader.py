@@ -6,7 +6,6 @@ resolution introduced by the registry refactor)."""
 from __future__ import annotations
 
 import pytest
-
 from mas.runtime.kernel.orchestrator import _load_design_pattern_plugin
 from mas.runtime.machines.design_pattern.protocol import DesignPatternPlugin
 

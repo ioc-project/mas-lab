@@ -10,7 +10,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-
 from mas.runtime.engine.llm_live import LiveLlmEngine
 
 
@@ -68,9 +67,7 @@ def test_streamed_content_is_reassembled_and_forwarded_chunk_by_chunk(monkeypatc
     ctx = SimpleNamespace(on_stream_chunk=received.append)
     engine = LiveLlmEngine(ctx=ctx, stream=True, use_cache=False)
 
-    message = engine._chat_completion(
-        [{"role": "user", "content": "hi"}], api_key="k", tools=None
-    )
+    message = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert received == ["Hel", "lo, ", "world."]
     assert message["content"] == "Hello, world."
@@ -86,9 +83,7 @@ def test_streamed_tool_calls_are_accumulated_across_chunks_and_not_forwarded(mon
                 "choices": [
                     {
                         "delta": {
-                            "tool_calls": [
-                                {"index": 0, "id": "call_1", "function": {"name": "get_", "arguments": ""}}
-                            ]
+                            "tool_calls": [{"index": 0, "id": "call_1", "function": {"name": "get_", "arguments": ""}}]
                         }
                     }
                 ]
@@ -97,11 +92,7 @@ def test_streamed_tool_calls_are_accumulated_across_chunks_and_not_forwarded(mon
         _sse(
             {
                 "choices": [
-                    {
-                        "delta": {
-                            "tool_calls": [{"index": 0, "function": {"name": "weather", "arguments": '{"city":'}}]
-                        }
-                    }
+                    {"delta": {"tool_calls": [{"index": 0, "function": {"name": "weather", "arguments": '{"city":'}}]}}
                 ]
             }
         ),

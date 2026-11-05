@@ -1,10 +1,10 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Coupled and one-factor execution plans."""
+
 from __future__ import annotations
 
 import pytest
-
 from mas.lab.benchmark.execution.plan import (
     _build_coupled_plan,
     build_execution_plan,
@@ -18,7 +18,7 @@ def test_coupled_plan_is_id_pairs_not_cartesian():
     couplings = [{"scenario": i, "items": [i]} for i in ids]
     plan = _build_coupled_plan(couplings, items, n_runs=1)
     assert len(plan) == 25
-    assert [(s, i["id"]) for s, i, _ in plan] == list(zip(ids, ids))
+    assert [(s, i["id"]) for s, i, _ in plan] == list(zip(ids, ids, strict=False))
 
 
 def test_coupled_plan_pairs_scenario_to_item_id():
@@ -83,9 +83,7 @@ def test_unknown_mode_raises():
 
 def test_one_factor_without_vary_raises():
     with pytest.raises(ValueError, match="one_factor"):
-        build_execution_plan(
-            ["s1"], [{"id": "a"}], 1, design={"mode": "one_factor"}
-        )
+        build_execution_plan(["s1"], [{"id": "a"}], 1, design={"mode": "one_factor"})
 
 
 def test_one_factor_unknown_item_raises():
@@ -103,6 +101,4 @@ def test_one_factor_unknown_item_raises():
 
 def test_coupled_without_couplings_raises():
     with pytest.raises(ValueError, match="couplings"):
-        build_execution_plan(
-            ["s1"], [{"id": "a"}], 1, design={"mode": "coupled"}
-        )
+        build_execution_plan(["s1"], [{"id": "a"}], 1, design={"mode": "coupled"})

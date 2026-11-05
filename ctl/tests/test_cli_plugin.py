@@ -9,7 +9,6 @@ import json
 import pytest
 import yaml
 from click.testing import CliRunner
-
 from mas.ctl.cli.commands import plugin as plugin_cli
 from mas.runtime.registry import PluginEntry, PluginRegistry, VariantInfo
 

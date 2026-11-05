@@ -35,7 +35,9 @@ def test_record_last_run_serializes_datetime_and_yaml_override(tmp_path, monkeyp
         total_scenarios=1,
     )
     BenchmarkRunManager(benchmarks_root=tmp_path / "labs").record_last_run(
-        metadata, run_dir, experiment_yaml=yaml_path,
+        metadata,
+        run_dir,
+        experiment_yaml=yaml_path,
     )
     text = last_run_write_path().read_text(encoding="utf-8")
     assert str(run_dir) in text

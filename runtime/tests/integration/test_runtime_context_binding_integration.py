@@ -2,10 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Runtime context binding integration."""
 
-from mas.runtime.kernel.runtime_context import runtime_binding
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
-
-
 from mas.runtime.kernel.runtime_context import get_governance_observability, runtime_binding
 
 

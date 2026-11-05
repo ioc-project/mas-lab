@@ -2,15 +2,15 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Declarative governance policy engine integration."""
 
+import pytest
+from mas.runtime.boundary.gov.exceptions import PolicySkip
 from mas.runtime.boundary.gov.policy_engine import (
     ConditionEvaluator,
     GovernancePolicyEngine,
     PolicyDefinition,
     PolicyTrigger,
 )
-from mas.runtime.boundary.gov.exceptions import PolicySkip
 from mas.runtime.schema.governance import GovernanceAction
-import pytest
 
 
 def test_condition_evaluator_numeric_compare():

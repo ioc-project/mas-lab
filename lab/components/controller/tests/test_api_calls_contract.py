@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Contract tests mirroring mas-lab-ui ``apiCalls.ts`` HTTP surface."""
+
 from __future__ import annotations
 
 import shutil
@@ -98,7 +99,6 @@ def mock_overlay_validate(monkeypatch):
         "mas.lab.controller.deps.validate_overlay_content",
         AsyncMock(return_value=None),
     )
-
 
 
 # --- Libraries (apiCalls: fetchLibraries, tools, skills, config-files) ---
@@ -318,10 +318,7 @@ def test_contract_scenarios_and_datasets(client):
 
 
 def test_contract_datasets_crud(client, demo_lab):
-    dataset_yaml = (
-        "apiVersion: lab/v1\nkind: Dataset\nmetadata:\n  name: new-dataset\n"
-        "spec:\n  items: []\n"
-    )
+    dataset_yaml = "apiVersion: lab/v1\nkind: Dataset\nmetadata:\n  name: new-dataset\nspec:\n  items: []\n"
     created = client.post(
         "/api/libraries/demo/datasets",
         json={"name": "new-dataset", "content": dataset_yaml},
@@ -403,9 +400,7 @@ def test_contract_experiments_crud(client, demo_lab):
     exp_names = {e["name"] for e in listed["experiments"]}
     assert "trip-planner-design-pattern-experiment" in exp_names
 
-    content = client.get(
-        "/api/libraries/demo/experiments/trip-planner-design-pattern-experiment"
-    ).json()
+    content = client.get("/api/libraries/demo/experiments/trip-planner-design-pattern-experiment").json()
     assert "content" in content
 
     exp_yaml = (_TEMPLATES / "new-experiment.yaml").read_text(encoding="utf-8")
@@ -424,14 +419,14 @@ def test_contract_experiments_crud(client, demo_lab):
     readback = client.get("/api/libraries/demo/experiments/new-experiment").json()
     assert "content" in readback
     import yaml as _yaml
+
     parsed = _yaml.safe_load(readback["content"])
     from mas.ctl.validate.validator import validate_data
+
     result = validate_data(parsed, kind="experiment", strict=True, resolve_refs=False)
     assert result.ok, f"schema validation failed: {[i.message for i in result.issues]}"
 
-    updated_yaml = exp_yaml.replace(
-        "name: new-experiment", "name: renamed-experiment"
-    )
+    updated_yaml = exp_yaml.replace("name: new-experiment", "name: renamed-experiment")
     updated = client.put(
         "/api/libraries/demo/experiments/new-experiment",
         json={"name": "renamed-experiment", "content": updated_yaml},
@@ -521,9 +516,7 @@ def test_contract_pipelines(mock_submit_job, client, demo_lab):
     after_create = client.get("/api/libraries/demo/pipelines").json()
     assert "analysis-pipeline" in {p["name"] for p in after_create["pipelines"]}
 
-    renamed_yaml = pipeline_yaml.replace(
-        "name: analysis-pipeline", "name: renamed-pipeline"
-    )
+    renamed_yaml = pipeline_yaml.replace("name: analysis-pipeline", "name: renamed-pipeline")
     updated = client.put(
         "/api/libraries/demo/pipelines/analysis-pipeline",
         json={"name": "renamed-pipeline", "content": renamed_yaml},
@@ -586,9 +579,7 @@ def test_contract_overlays(mock_overlay_validate, client, demo_lab):
     )
     assert created.status_code == 201
 
-    renamed_yaml = overlay_yaml.replace(
-        "name: verbose-moderator", "name: contract-overlay-renamed"
-    )
+    renamed_yaml = overlay_yaml.replace("name: verbose-moderator", "name: contract-overlay-renamed")
     updated = client.put(
         "/api/libraries/demo/overlays/contract-overlay",
         json={"name": "contract-overlay-renamed", "content": renamed_yaml, "run_validation": False},
@@ -604,7 +595,7 @@ def test_contract_overlays(mock_overlay_validate, client, demo_lab):
 # --- Datasets CRUD (apiCalls: fetchDatasetsList, create/update/delete) ---
 
 
-def test_contract_datasets_crud(client, demo_lab):
+def test_contract_datasets_list(client, demo_lab):
     listed = client.get("/api/libraries/demo/datasets").json()
     assert "datasets" in listed
 

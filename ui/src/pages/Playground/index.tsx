@@ -48,7 +48,10 @@ const Playground = () => {
   const [isSaving, setIsSaving] = useState(false);
 
   const validateMutation = useValidateAgent();
+
+  const { reset: resetValidate } = validateMutation;
   const validateMasMutation = useValidateMas();
+  const { reset: resetValidateMas } = validateMasMutation;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,15 +80,15 @@ const Playground = () => {
 
   useEffect(() => {
     if (!validateMutation.isSuccess && !validateMutation.isError) return;
-    const timer = setTimeout(() => validateMutation.reset(), 2000);
+    const timer = setTimeout(() => resetValidate(), 2000);
     return () => clearTimeout(timer);
-  }, [validateMutation.isSuccess, validateMutation.isError]);
+  }, [validateMutation.isSuccess, validateMutation.isError, resetValidate]);
 
   useEffect(() => {
     if (!validateMasMutation.isSuccess && !validateMasMutation.isError) return;
-    const timer = setTimeout(() => validateMasMutation.reset(), 5000);
+    const timer = setTimeout(() => resetValidateMas(), 5000);
     return () => clearTimeout(timer);
-  }, [validateMasMutation.isSuccess, validateMasMutation.isError]);
+  }, [validateMasMutation.isSuccess, validateMasMutation.isError, resetValidateMas]);
 
   const handleValidate = useCallback(() => {
     if (!selectedAgentName || !library) return;
@@ -250,7 +253,7 @@ const Playground = () => {
         {validateMutation.isError && (
           <Alert
             severity="error"
-            onClose={() => validateMutation.reset()}
+            onClose={() => resetValidate()}
             sx={{
               whiteSpace: "pre-wrap",
               position: "absolute",
@@ -267,7 +270,7 @@ const Playground = () => {
             severity={
               validateMutation.data.exit_code === 0 ? "success" : "error"
             }
-            onClose={() => validateMutation.reset()}
+            onClose={() => resetValidate()}
             sx={{
               whiteSpace: "pre-wrap",
               position: "absolute",
@@ -284,7 +287,7 @@ const Playground = () => {
         {validateMasMutation.isError && (
           <Alert
             severity="error"
-            onClose={() => validateMasMutation.reset()}
+            onClose={() => resetValidateMas()}
             sx={{
               whiteSpace: "pre-wrap",
               position: "absolute",
@@ -301,7 +304,7 @@ const Playground = () => {
             severity={
               validateMasMutation.data.exit_code === 0 ? "success" : "error"
             }
-            onClose={() => validateMasMutation.reset()}
+            onClose={() => resetValidateMas()}
             sx={{
               whiteSpace: "pre-wrap",
               position: "absolute",

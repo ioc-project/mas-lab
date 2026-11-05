@@ -13,13 +13,7 @@ def test_merge_two_metrics_files_and_details(tmp_path: Path) -> None:
     run_dir = tmp_path / "baseline" / "item1" / "r1"
     run_dir.mkdir(parents=True)
     (run_dir / "metrics.json").write_text(
-        json.dumps(
-            {
-                "session": {
-                    "groundedness": {"value": 0.5, "reasoning": "mce", "error": None}
-                }
-            }
-        ),
+        json.dumps({"session": {"groundedness": {"value": 0.5, "reasoning": "mce", "error": None}}}),
         encoding="utf-8",
     )
     (run_dir / "metrics_judge2.json").write_text(
@@ -41,9 +35,7 @@ def test_merge_two_metrics_files_and_details(tmp_path: Path) -> None:
         json.dumps({"elapsed_ms": 1000, "status": "ok"}),
         encoding="utf-8",
     )
-    session, _quality, paths = load_merged_session(
-        run_dir, ["metrics.json", "metrics_judge2.json"]
-    )
+    session, _quality, paths = load_merged_session(run_dir, ["metrics.json", "metrics_judge2.json"])
     assert len(paths) == 2
     assert set(session) == {"groundedness", "toy_echo"}
 

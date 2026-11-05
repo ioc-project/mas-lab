@@ -8,9 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 import mas.library_catalog as library_catalog
+import pytest
 from mas.library_catalog import (
     _dataset_keys,
     _is_app_directory,
@@ -18,8 +17,8 @@ from mas.library_catalog import (
     _resolve_manifest_entry,
     discover_apps,
     discover_datasets,
-    find_tool_manifest,
     discover_tools,
+    find_tool_manifest,
 )
 
 
@@ -98,9 +97,7 @@ def test_discover_apps_manifest_and_scan(tmp_path: Path, monkeypatch) -> None:
     scanned.mkdir(parents=True)
     (scanned / "mas.yaml").write_text("x", encoding="utf-8")
 
-    (root / "library.yaml").write_text(
-        "apps:\n  declared: custom/declared_app\n  123: bad\n", encoding="utf-8"
-    )
+    (root / "library.yaml").write_text("apps:\n  declared: custom/declared_app\n  123: bad\n", encoding="utf-8")
 
     monkeypatch.setattr(library_catalog, "discover_library_roots", lambda: [root])
     apps = discover_apps()
@@ -114,9 +111,7 @@ def test_discover_datasets_manifest_skips_non_str_name(tmp_path: Path, monkeypat
     ds = root / "data" / "d.yaml"
     ds.parent.mkdir(parents=True)
     ds.write_text("metadata:\n  name: d\n", encoding="utf-8")
-    (root / "library.yaml").write_text(
-        "datasets:\n  good: data/d.yaml\n  123: data/d.yaml\n", encoding="utf-8"
-    )
+    (root / "library.yaml").write_text("datasets:\n  good: data/d.yaml\n  123: data/d.yaml\n", encoding="utf-8")
 
     monkeypatch.setattr(library_catalog, "discover_library_roots", lambda: [root])
     datasets = discover_datasets()
@@ -134,9 +129,7 @@ def test_discover_tools_manifest_and_scan(tmp_path: Path, monkeypatch) -> None:
     scanned.mkdir(parents=True)
     (scanned / "b.tool.yaml").write_text("x", encoding="utf-8")
 
-    (root / "library.yaml").write_text(
-        "tools:\n  declared: custom/declared_tool\n  123: bad\n", encoding="utf-8"
-    )
+    (root / "library.yaml").write_text("tools:\n  declared: custom/declared_tool\n  123: bad\n", encoding="utf-8")
 
     monkeypatch.setattr(library_catalog, "discover_library_roots", lambda: [root])
     tools = discover_tools()

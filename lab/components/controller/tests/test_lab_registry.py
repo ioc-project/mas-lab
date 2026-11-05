@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for unified LabRegistry."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -49,9 +50,8 @@ def test_list_spec_design_pattern():
 def test_resolve_model_name_any_without_pin_raises(monkeypatch):
     monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
     monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
-    from mas.ctl.session.engine_factory import resolve_model_name, UnresolvedModelError
-
     import pytest
+    from mas.ctl.session.engine_factory import UnresolvedModelError, resolve_model_name
 
     with pytest.raises(UnresolvedModelError, match="will not substitute gpt-4o-mini"):
         resolve_model_name({"spec": {"llm": {"model": None}}}, None)

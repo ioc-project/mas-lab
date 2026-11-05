@@ -38,8 +38,7 @@ def test_list_registered_loads_manifest_steps() -> None:
 def test_resolve_class_from_python_file(tmp_path: Path):
     mod = tmp_path / "custom_step.py"
     mod.write_text(
-        "class MyStep:\n"
-        "    pass\n",
+        "class MyStep:\n    pass\n",
         encoding="utf-8",
     )
     cls = resolve_step_class(f"{mod}:MyStep")

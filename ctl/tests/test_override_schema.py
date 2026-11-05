@@ -196,9 +196,7 @@ def test_apply_rejects_undeclared_closed_field() -> None:
     }
 
     with pytest.raises(ValueError, match="not in the schema"):
-        apply_manifest_overrides(
-            document, ("infra:metadata.not_a_real_field=true",), validate=False
-        )
+        apply_manifest_overrides(document, ("infra:metadata.not_a_real_field=true",), validate=False)
 
 
 def test_apply_rejects_unknown_llm_cache_param() -> None:
@@ -257,16 +255,11 @@ def test_overlay_patch_accepts_plugin_binding_rows() -> None:
             "metadata": {"name": "guardrail"},
             "spec": {
                 "target": {"kind": "Agent"},
-                "patch": {
-                    "governance": [{"sample_governance": {"policies": [{"name": "forbidden-destination"}]}}]
-                },
+                "patch": {"governance": [{"sample_governance": {"policies": [{"name": "forbidden-destination"}]}}]},
             },
         },
     )
-    names = [
-        item if isinstance(item, str) else next(iter(item))
-        for item in merged_agent["spec"]["governance"]
-    ]
+    names = [item if isinstance(item, str) else next(iter(item)) for item in merged_agent["spec"]["governance"]]
     assert "sample_governance" in names
 
 

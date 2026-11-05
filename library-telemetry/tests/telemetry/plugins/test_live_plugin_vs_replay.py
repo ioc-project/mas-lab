@@ -22,9 +22,7 @@ from tests.conftest import requires_otel
 _HERE = Path(__file__).resolve()
 PACKAGE_ROOT = _HERE.parents[3]  # library-telemetry/
 REPO_ROOT = _HERE.parents[4]  # repository root
-TRIP_PLANNER_TRACE = (
-    REPO_ROOT / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
-)
+TRIP_PLANNER_TRACE = REPO_ROOT / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
 TRIP_PLANNER_EXAMPLE = PACKAGE_ROOT / "examples" / "trip-planner" / "events.jsonl"
 QA_AGENT_EXAMPLE = PACKAGE_ROOT / "examples" / "qa-agent" / "events.jsonl"
 
@@ -53,22 +51,14 @@ _VOLATILE_SPAN_KEYS = {
 
 
 def _load_events(path: Path) -> list[dict[str, Any]]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _canonical_span(span: dict[str, Any]) -> str:
     attrs = dict(span.get("attributes") or {})
     for key in list(attrs):
         k = str(key)
-        if (
-            k in _VOLATILE_ATTRS
-            or "span_id" in k
-            or k.endswith("span.id")
-        ):
+        if k in _VOLATILE_ATTRS or "span_id" in k or k.endswith("span.id"):
             attrs.pop(key, None)
     body = {
         "name": span.get("name"),
@@ -81,11 +71,7 @@ def _canonical_span(span: dict[str, Any]) -> str:
 
 
 def _span_multiset(path: Path) -> Counter[str]:
-    spans = [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    spans = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     return Counter(_canonical_span(s) for s in spans)
 
 
@@ -114,9 +100,7 @@ def _write_live_plugin_spans(
     # already applies before calling process_event.
     for rec in sorted(
         events,
-        key=lambda ev: (
-            float(ev["timestamp"]) if isinstance(ev.get("timestamp"), (int, float)) else float("inf")
-        ),
+        key=lambda ev: float(ev["timestamp"]) if isinstance(ev.get("timestamp"), (int, float)) else float("inf"),
     ):
         plugin.converter.process_event(rec)
     plugin.close()
@@ -175,9 +159,7 @@ def _assert_same_otel_json(live_path: Path, replay_path: Path) -> None:
     ],
 )
 @requires_otel
-def test_live_otel_plugin_json_matches_replay_pipeline(
-    tmp_path: Path, events_path: Path, app_name: str
-) -> None:
+def test_live_otel_plugin_json_matches_replay_pipeline(tmp_path: Path, events_path: Path, app_name: str) -> None:
     if not events_path.is_file():
         pytest.skip(f"sample trace not present: {events_path}")
     events = _load_events(events_path)
@@ -189,12 +171,8 @@ def test_live_otel_plugin_json_matches_replay_pipeline(
     live_path.parent.mkdir(parents=True)
     replay_path.parent.mkdir(parents=True)
 
-    _write_live_plugin_spans(
-        events, live_path, service_name=service_name, app_name=app_name
-    )
-    _write_replay_pipeline_spans(
-        events_path, replay_path, service_name=service_name, app_name=app_name
-    )
+    _write_live_plugin_spans(events, live_path, service_name=service_name, app_name=app_name)
+    _write_replay_pipeline_spans(events_path, replay_path, service_name=service_name, app_name=app_name)
 
     assert live_path.is_file() and live_path.stat().st_size > 0
     assert replay_path.is_file() and replay_path.stat().st_size > 0

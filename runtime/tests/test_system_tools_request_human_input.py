@@ -10,11 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-
-from mas.runtime.boundary.hitl.registry import get_hitl_resolver_registry
 from mas.library.standard.plugins.hitl.contracts import AutoResolveHitlContract
-from mas.runtime.engine.manifest_tool_provider import build_manifest_tool_provider
 from mas.library.standard.plugins.system_tools.request_human_input import RequestHumanInputTool
+from mas.runtime.boundary.hitl.registry import get_hitl_resolver_registry
+from mas.runtime.engine.manifest_tool_provider import build_manifest_tool_provider
 
 
 @dataclass
@@ -36,6 +35,7 @@ def empty_tool_tree(tmp_path: Path) -> Path:
 # timeout: default None (block until resolved, no TimeoutError), configurable
 # per call and via the manifest's spec.tools system-tool entry
 # ---------------------------------------------------------------------------
+
 
 def test_input_schema_defaults_timeout_to_none():
     """No timeout argument -> RequestHitlSignal.timeout is None (block forever)."""
@@ -138,6 +138,7 @@ def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
 # ---------------------------------------------------------------------------
 # auto-resolve decision: defaults to "approve", configurable
 # ---------------------------------------------------------------------------
+
 
 def test_auto_resolve_defaults_to_approve(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(

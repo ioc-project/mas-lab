@@ -8,9 +8,7 @@ from library_ioa.plugins.mcp.server import MCPToolServerFactory
 def test_factory_wraps_manifest_tool(tmp_path: Path) -> None:
     tool_module = tmp_path / "sample_tool.py"
     tool_module.write_text(
-        "class SampleTool:\n"
-        "    def execute(self, **kwargs):\n"
-        "        return {'answer': kwargs['a'] + kwargs['b']}\n",
+        "class SampleTool:\n    def execute(self, **kwargs):\n        return {'answer': kwargs['a'] + kwargs['b']}\n",
         encoding="utf-8",
     )
 
