@@ -1,7 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { ReactNode } from "react";
-import { Box, SxProps } from "@mui/material";
+import type { SxProps } from "@open-ui-kit/core";
+import { Box } from "@open-ui-kit/core";
 
 interface TabPanelProps {
   children?: ReactNode;

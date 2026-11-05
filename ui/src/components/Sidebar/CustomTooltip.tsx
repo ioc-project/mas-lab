@@ -1,8 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import Tooltip, { type TooltipProps } from "@mui/material/Tooltip";
+import { Tooltip, type TooltipProps, useTheme } from "@open-ui-kit/core";
 import { sideBarTooltip } from "./styles";
-import { useTheme } from "@mui/material";
 
 export type SideBarTooltipProps = TooltipProps;
 

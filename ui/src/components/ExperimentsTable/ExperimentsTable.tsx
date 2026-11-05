@@ -1,41 +1,34 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import {
-  MaterialReactTable,
-  MRT_RowSelectionState,
-  MRT_SortingState,
-  MRT_VisibilityState,
-} from "material-react-table";
-import {
-  CreateTableInstance,
-  EmptyState,
-  TableProps,
-  Tooltip,
-} from "@open-ui-kit/core";
-import {
-  Delete as DeleteIcon,
-  Edit as EditIcon,
-  PlayArrow as PlayIcon,
-  ClearAll as ClearCacheIcon,
-  ContentCopy as CopyIcon,
-  Check as CheckIcon,
-  Download as DownloadIcon,
-} from "@mui/icons-material";
-import { useCallback, useMemo, useRef, useState } from "react";
-import {
   Button,
   Dialog,
-  DialogTitle,
+  DialogActions,
   DialogContent,
   DialogContentText,
-  DialogActions,
+  DialogTitle,
+  EmptyState,
   IconButton,
+  Icons,
   ListItemIcon,
   MenuItem,
   Stack,
+  Table,
+  TableProps,
+  Tooltip,
   Typography,
-} from "@mui/material";
+} from "@open-ui-kit/core";
+import {
+  PlayArrow as PlayIcon,
+  ClearAll as ClearCacheIcon,
+} from "@mui/icons-material";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ExperimentSummary } from "@/api/apiCalls";
+import type {
+  TableRowSelectionState,
+  TableSortingState,
+  TableVisibilityState,
+} from "@open-ui-kit/core";
 import { Tags } from "@/components/Tags/Tags";
 import { ScrollableTooltip } from "@/components/ScrollableTooltip";
 
@@ -53,9 +46,9 @@ function CopyNameButton({ name }: { name: string }) {
       sx={{ p: 0.25 }}
     >
       {copied ? (
-        <CheckIcon sx={{ fontSize: 14, color: "success.main" }} />
+        <Icons.Check sx={{ fontSize: 14, color: "success.main" }} />
       ) : (
-        <CopyIcon sx={{ fontSize: 14 }} />
+        <Icons.ContentCopy sx={{ fontSize: 14 }} />
       )}
     </IconButton>
   );
@@ -110,7 +103,7 @@ export const ExperimentsTable = ({
   showLibraryColumn = false,
   title,
 }: ExperimentsTableProps) => {
-  const [columnVisibility, setColumnVisibility] = useState<MRT_VisibilityState>(
+  const [columnVisibility, setColumnVisibility] = useState<TableVisibilityState>(
     {
       ...defaultHiddenColumns.reduce((acc: Record<string, boolean>, column) => {
         acc[column] = false;
@@ -118,10 +111,10 @@ export const ExperimentsTable = ({
       }, {}),
     },
   );
-  const [sorting, setSorting] = useState<MRT_SortingState>([
+  const [sorting, setSorting] = useState<TableSortingState>([
     { id: "name", desc: true },
   ]);
-  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
+  const [rowSelection, setRowSelection] = useState<TableRowSelectionState>({});
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteNames, setPendingDeleteNames] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
@@ -366,7 +359,7 @@ export const ExperimentsTable = ({
     [data, runningJobs],
   );
 
-  const tableRef = CreateTableInstance({
+  const tableProps: TableProps<ExperimentSummary> = {
     data: enrichedData,
     columns,
     isLoading,
@@ -415,7 +408,7 @@ export const ExperimentsTable = ({
           }}
         >
           <ListItemIcon>
-            <DownloadIcon />
+            <Icons.Download />
           </ListItemIcon>
           Export
         </MenuItem>,
@@ -427,7 +420,7 @@ export const ExperimentsTable = ({
           }}
         >
           <ListItemIcon>
-            <EditIcon />
+            <Icons.Edit />
           </ListItemIcon>
           Edit
         </MenuItem>,
@@ -451,7 +444,7 @@ export const ExperimentsTable = ({
           }}
         >
           <ListItemIcon>
-            <DeleteIcon />
+            <Icons.Delete />
           </ListItemIcon>
           Delete
         </MenuItem>,
@@ -483,11 +476,11 @@ export const ExperimentsTable = ({
         },
       };
     },
-  });
+  };
 
   return (
     <>
-      <MaterialReactTable table={tableRef} />
+      <Table {...tableProps} />
       <Dialog open={deleteDialogOpen} onClose={handleCancelDelete}>
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
@@ -498,7 +491,11 @@ export const ExperimentsTable = ({
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete} disabled={deleting}>
+          <Button
+            variant="gradient"
+            onClick={handleCancelDelete}
+            disabled={deleting}
+          >
             Cancel
           </Button>
           <Button

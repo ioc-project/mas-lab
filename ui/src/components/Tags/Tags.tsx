@@ -1,11 +1,15 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import {
+  Box,
   GeneralSize,
+  Stack,
   Tag,
   TagBackgroundColorVariants,
+  Tooltip,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
-import { Box, Stack, Typography, Tooltip, useTheme } from "@mui/material";
 import { useMemo, isValidElement } from "react";
 
 interface Tag {

@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: Apache-2.0
 import { useCallback, useMemo } from "react";
 import type { MASManifest } from "@/types/mas-types";
-import { Stack } from "@mui/material";
+import { Stack } from "@open-ui-kit/core";
 import { MasTable } from "./MasTable";
 import { useNavigate } from "react-router";
 import { parse, stringify } from "yaml";

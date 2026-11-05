@@ -7,7 +7,7 @@ import {
   CanvasBuilder,
 } from "@/components";
 import type { YamlOutputMap } from "@/components/CanvasBuilder/types";
-import { Box, Stack, Typography, useTheme, Alert } from "@mui/material";
+import { Alert } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parse, stringify } from "yaml";
@@ -16,14 +16,18 @@ import { useValidateAgent, useValidateMas, createMasResource } from "@/api/apiCa
 import { useQueryClient } from "@tanstack/react-query";
 import { useScopeId } from "@/api/scope";
 import {
+  Box,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   InputField,
+  Stack,
   Tab,
   Tabs,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
 
 const PLAYGROUND_TAB_KEYS = ["graph", "yaml"] as const;
@@ -218,7 +222,7 @@ const Playground = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleOpenSaveDialog}
               disabled={sortedKeys.length === 0}
             >
@@ -226,7 +230,7 @@ const Playground = () => {
             </Button>
 
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={!selectedAgentName || validateMutation.isPending}
             >
@@ -234,7 +238,7 @@ const Playground = () => {
             </Button>
 
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidateMas}
               disabled={!yamlOutputMap["mas"] || validateMasMutation.isPending}
             >
@@ -428,7 +432,9 @@ const Playground = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseSaveDialog}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCloseSaveDialog}>
+            Cancel
+          </Button>
           <Button variant="gradient" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>

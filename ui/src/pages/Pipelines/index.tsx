@@ -1,36 +1,31 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle } from "@/components";
-import {
-  MaterialReactTable,
-  MRT_RowSelectionState,
-  MRT_SortingState,
-} from "material-react-table";
-import {
-  CreateTableInstance,
-  EmptyState,
-  TableProps,
-  Tooltip,
+import type {
+  TableRowSelectionState,
+  TableSortingState,
 } from "@open-ui-kit/core";
 import {
-  Delete as DeleteIcon,
-  PlayArrow as PlayIcon,
-} from "@mui/icons-material";
-import {
-  Alert,
   Box,
   Button,
-  Stack,
-  Typography,
-  useTheme,
-  ListItemIcon,
-  MenuItem,
   Dialog,
-  DialogTitle,
+  DialogActions,
   DialogContent,
   DialogContentText,
-  DialogActions,
-} from "@mui/material";
+  DialogTitle,
+  EmptyState,
+  Icons,
+  ListItemIcon,
+  MenuItem,
+  Stack,
+  Table,
+  TableProps,
+  Tooltip,
+  Typography,
+  useTheme,
+} from "@open-ui-kit/core";
+import { PlayArrow as PlayIcon } from "@mui/icons-material";
+import { Alert } from "@mui/material";
 import { useNavigate } from "react-router";
 import { useScopeId, scopeHref } from "@/api/scope";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,8 +40,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { CreateItemDialog } from "@/components/CreateItemDialog";
 import { fetchRuns } from "@/api/runs";
 import { ScrollableTooltip } from "@/components/ScrollableTooltip";
-
-const TABLE_BG = "transparent";
 
 interface PipelineJobStatus {
   jobId: string;
@@ -77,8 +70,8 @@ const Pipelines = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [pendingDeleteNames, setPendingDeleteNames] = useState<string[]>([]);
-  const [rowSelection, setRowSelection] = useState<MRT_RowSelectionState>({});
-  const [sorting, setSorting] = useState<MRT_SortingState>([
+  const [rowSelection, setRowSelection] = useState<TableRowSelectionState>({});
+  const [sorting, setSorting] = useState<TableSortingState>([
     { id: "name", desc: false },
   ]);
   const [runningJobs, setRunningJobs] = useState<
@@ -228,17 +221,10 @@ const Pipelines = () => {
             <Typography
               variant="body2"
               sx={{
-                cursor: "pointer",
-                "&:hover": { textDecoration: "underline" },
                 textOverflow: "ellipsis",
                 overflow: "hidden",
                 whiteSpace: "nowrap",
               }}
-              onClick={() =>
-                navigate(
-                  scopeHref(library, `/pipelines/${encodeURIComponent(row.name)}`),
-                )
-              }
             >
               {row.name}
             </Typography>
@@ -367,7 +353,7 @@ const Pipelines = () => {
         },
       },
     ],
-    [library, navigate, runningJobs],
+    [runningJobs],
   );
 
   const enrichedData = useMemo(
@@ -408,7 +394,7 @@ const Pipelines = () => {
     setPendingDeleteNames([]);
   }, []);
 
-  const tableRef = CreateTableInstance({
+  const tableProps: TableProps<PipelineSummary> = {
     data: enrichedData,
     columns,
     isLoading,
@@ -455,7 +441,7 @@ const Pipelines = () => {
           }}
         >
           <ListItemIcon>
-            <DeleteIcon />
+            <Icons.Delete />
           </ListItemIcon>
           Delete
         </MenuItem>,
@@ -478,33 +464,19 @@ const Pipelines = () => {
         </Button>
       );
     },
-    muiTableBodyRowProps: () => ({
+    muiTableBodyRowProps: ({ row }) => ({
+      onClick: () =>
+        navigate(
+          scopeHref(
+            library,
+            `/pipelines/${encodeURIComponent(row.original.name)}`,
+          ),
+        ),
       sx: {
         cursor: "pointer",
-        backgroundColor: TABLE_BG,
-        "& > td": {
-          backgroundColor: `${TABLE_BG} !important`,
-        },
       },
     }),
-    muiTablePaperProps: {
-      sx: {
-        padding: 0,
-        backgroundColor: TABLE_BG,
-        elevation: 0,
-      },
-    },
-    muiTableHeadCellProps: {
-      sx: { backgroundColor: TABLE_BG, color: "#ffffff" },
-    },
-    muiTableBodyCellProps: {
-      sx: {
-        backgroundColor: TABLE_BG,
-        color: "#ffffff",
-        height: "40px",
-      },
-    },
-  });
+  };
 
   return (
     <Box sx={{ position: "relative" }}>
@@ -541,12 +513,14 @@ const Pipelines = () => {
             >
               Pipelines
             </Typography>
-            <Button onClick={() => setCreateOpen(true)}>Add Pipeline</Button>
+            <Button variant="gradient" onClick={() => setCreateOpen(true)}>
+              Add Pipeline
+            </Button>
           </Stack>
         }
       >
         <Stack direction="column" sx={{ gap: "24px" }}>
-          <MaterialReactTable table={tableRef} />
+          <Table {...tableProps} />
         </Stack>
       </PageWithTitle>
 
@@ -560,7 +534,9 @@ const Pipelines = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCancelDelete}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCancelDelete}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             color="negative"

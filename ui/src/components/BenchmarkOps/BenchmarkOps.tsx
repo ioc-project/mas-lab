@@ -1,14 +1,13 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useCallback, useRef, useState } from "react";
-import { Box, Stack, Typography } from "@mui/material";
 import {
   analyzeBenchmark,
   uploadImportBenchmark,
   pollJob,
   type JobSubmitResponse,
 } from "@/api/apiCalls";
-import { InputField, Button } from "@open-ui-kit/core";
+import { Box, Button, InputField, Stack, Typography } from "@open-ui-kit/core";
 
 interface BenchmarkOpsProps {
   library: string;

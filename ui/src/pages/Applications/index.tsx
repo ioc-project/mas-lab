@@ -2,8 +2,7 @@
 //  SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { PageWithTitle, MasTable } from "@/components";
-import { Box, Stack, Typography, useTheme } from "@mui/material";
-import { Button } from "@open-ui-kit/core";
+import { Box, Button, Stack, Typography, useTheme } from "@open-ui-kit/core";
 import { useNavigate } from "react-router";
 
 import { CreateItemDialog } from "@/components/CreateItemDialog";
@@ -31,7 +30,9 @@ const Applications = () => {
             >
               Applications
             </Typography>
-            <Button onClick={() => setCreateOpen(true)}>Add Application</Button>
+            <Button variant="gradient" onClick={() => setCreateOpen(true)}>
+              Add Application
+            </Button>
           </Stack>
         }
       >
@@ -44,7 +45,9 @@ const Applications = () => {
         kind="application"
         scopeId={scopeId}
         onClose={() => setCreateOpen(false)}
-        onCreated={(sid, id) => navigate(scopeHref(sid, `/applications/${encodeURIComponent(id)}`))}
+        onCreated={(sid, id) =>
+          navigate(scopeHref(sid, `/applications/${encodeURIComponent(id)}`))
+        }
       />
     </Box>
   );

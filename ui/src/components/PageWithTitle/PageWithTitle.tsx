@@ -1,7 +1,13 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { Typography, Stack, Box, type SxProps } from "@mui/material";
-import { Breadcrumbs, type BreadcrumbsProps } from "@open-ui-kit/core";
+import type { SxProps } from "@open-ui-kit/core";
+import {
+  Box,
+  Breadcrumbs,
+  type BreadcrumbsProps,
+  Stack,
+  Typography,
+} from "@open-ui-kit/core";
 import React from "react";
 import { useLocation } from "react-router";
 import { toTitleCase } from "@/utils/string";
@@ -10,7 +16,7 @@ interface PageWithTitleProps {
   children: React.ReactNode;
   actions?: React.ReactNode[];
   breadcrumbItems?: BreadcrumbsProps["items"];
-  /** Set to false to hide the breadcrumbs entirely (default: true). */
+  /** Set to true to show breadcrumbs (default: false, hidden app-wide). */
   showBreadcrumbs?: boolean;
   title: React.ReactNode;
   subTitle?: string;
@@ -20,7 +26,7 @@ interface PageWithTitleProps {
 
 export const PageWithTitle = ({
   breadcrumbItems,
-  showBreadcrumbs = true,
+  showBreadcrumbs = false,
   children,
   title,
   subTitle,

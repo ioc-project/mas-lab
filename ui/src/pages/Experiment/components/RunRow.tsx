@@ -1,7 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
-import { Box, Collapse, ListItemButton, Typography } from "@mui/material";
+import { Collapse } from "@mui/material";
+import { Box, ListItemButton, Typography } from "@open-ui-kit/core";
 import { InsertDriveFileOutlined as FileIcon } from "@mui/icons-material";
 import { TreeNode } from "./TreeNode";
 import { runFileHint, transparentRowSx } from "../utils";

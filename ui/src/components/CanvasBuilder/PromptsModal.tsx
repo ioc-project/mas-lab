@@ -1,6 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useState, useEffect, useCallback } from "react";
+import { Save as SaveIcon } from "@mui/icons-material";
 import {
   Dialog,
   DialogTitle,
@@ -8,15 +9,12 @@ import {
   DialogActions,
   Button,
   IconButton,
+  Icons,
+  InputField,
   Stack,
-  TextField,
   Typography,
   Box,
-} from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import SaveIcon from "@mui/icons-material/Save";
-import SendIcon from "@mui/icons-material/Send";
-import AddIcon from "@mui/icons-material/Add";
+} from "@open-ui-kit/core";
 
 const STORAGE_KEY = "mas-lab-saved-prompts";
 
@@ -153,7 +151,7 @@ export function PromptsModal({ open, onClose, onSelect }: PromptsModalProps) {
                   alignItems: "flex-start",
                 }}
               >
-                <TextField
+                <InputField
                   fullWidth
                   multiline
                   minRows={2}
@@ -182,7 +180,7 @@ export function PromptsModal({ open, onClose, onSelect }: PromptsModalProps) {
                     title="Use this prompt"
                     disabled={!currentText.trim()}
                   >
-                    <SendIcon fontSize="small" />
+                    <Icons.Send fontSize="small" />
                   </IconButton>
                   <IconButton
                     size="small"
@@ -190,7 +188,7 @@ export function PromptsModal({ open, onClose, onSelect }: PromptsModalProps) {
                     onClick={() => handleDelete(prompt.id)}
                     title="Delete prompt"
                   >
-                    <DeleteIcon fontSize="small" />
+                    <Icons.Delete fontSize="small" />
                   </IconButton>
                 </Stack>
               </Box>
@@ -199,10 +197,16 @@ export function PromptsModal({ open, onClose, onSelect }: PromptsModalProps) {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button startIcon={<AddIcon />} onClick={handleAdd}>
+        <Button
+          variant="gradient"
+          startIcon={<Icons.Plus />}
+          onClick={handleAdd}
+        >
           Add Prompt
         </Button>
-        <Button onClick={handleClose}>Close</Button>
+        <Button variant="gradient" onClick={handleClose}>
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );

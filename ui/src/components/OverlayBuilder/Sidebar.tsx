@@ -1,7 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { type DragEvent } from "react";
-import { Tooltip } from "@mui/material";
+import { Tooltip } from "@open-ui-kit/core";
 import { useDnD } from "./DnDContext";
 import { mediumBlue, orange, teal, violet } from "../CanvasBuilder/color-tokens";
 import type { OverlayNodeType } from "./types";

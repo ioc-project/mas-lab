@@ -1,8 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import type { ReactNode } from "react";
-import { Stack, Typography, type SxProps, type Theme } from "@mui/material";
-import { Select, type SelectProps } from "@open-ui-kit/core";
+import type { SxProps, Theme } from "@open-ui-kit/core";
+import { Select, type SelectProps, Stack, Typography } from "@open-ui-kit/core";
 
 export interface SelectFieldProps<T = string> extends Omit<
   SelectProps<T>,

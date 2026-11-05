@@ -3,11 +3,11 @@
 import { PageWithTitle } from "@/components";
 import {
   Box,
-  CircularProgress,
+  Spinner,
   Typography,
   useTheme,
   Button,
-} from "@mui/material";
+} from "@open-ui-kit/core";
 import { useNavigate, useParams } from "react-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -88,7 +88,7 @@ const Experiment = () => {
           height: "50vh",
         }}
       >
-        <CircularProgress />
+        <Spinner />
       </Box>
     );
   }
@@ -107,7 +107,10 @@ const Experiment = () => {
         <Typography variant="h6">
           Experiment not found or not yet executed.
         </Typography>
-        <Button onClick={() => navigate(scopeHref(library, "/experiments"))}>
+        <Button
+          variant="gradient"
+          onClick={() => navigate(scopeHref(library, "/experiments"))}
+        >
           Back to Experiments
         </Button>
       </Box>
