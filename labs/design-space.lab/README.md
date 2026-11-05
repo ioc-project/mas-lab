@@ -75,7 +75,7 @@ Both measure goal success rate (GSR), answer relevancy (AR), and session latency
 
 | Scenario ID | Topology | Control flow |
 |-------------|----------|-------------|
-| `topo-parallel` | Parallel | Moderator fans out to all specialists concurrently |
+| `topo-parallel` | Parallel | Moderator sends every specialist the task in one batch (`deterministic_parallel`) |
 | `topo-linear-pipeline` | Linear pipeline | Agents execute in a fixed sequential chain |
 | `topo-moderator-broker` | Moderator-broker | Dynamic delegation to the right specialist |
 | `topo-supervised` | Supervised | Supervisor reviews and approves each agent output |

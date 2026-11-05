@@ -1,0 +1,165 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+name: tutorial-07-slim-link
+title: "Tutorial 07 — SLIM link"
+description: >
+  Move a support desk's agent calls onto endpoint rows that a Flavour links
+  the agents to: first in-process, then a SLIM node, then split across two
+  processes.
+version: "1.0"
+authors: ["MAS Framework Team"]
+tags: ["slim", "flavour", "tutorial"]
+prerequisites:
+  - "Tutorial 0"
+  - "Offline: pytest tests/tutorials/test_scenario_commands.py -k tuto-07"
+  - "Online steps need an LLM; the SLIM ones also need Docker, SLIM_SECRET and the Step 3 node"
+estimated_duration_min: 20
+working_dir: . # repo root
+cache_dir: ".demo-cache"
+
+sections:
+  - id: logic
+    title: "The desk, with no chain"
+    steps:
+      - type: command
+        title: "Validate the desk"
+        command: >-
+          mas-ctl validate docs/tutorials/07-slim-link/mas.yaml
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "OK"
+      - type: command
+        title: "Validate the specialists"
+        command: >-
+          mas-ctl validate docs/tutorials/07-slim-link/specialists.yaml
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "OK"
+      - type: command
+        title: "Every agent has the in-process link and no name"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml 
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "triage  local"
+      - type: command
+        title: "Run the desk"
+        command: >-
+          mas-ctl run-mas docs/tutorials/07-slim-link/mas.yaml --trace  -q "I was charged twice for my March invoice. What should I do?"
+        allowed_modes: [online]
+        timeout_s: 120
+        expected_exit_code: 0
+        expected_output: "delegate_to_billing"
+
+  - id: in-process
+    title: "Names on an in-process chain"
+    steps:
+      - type: command
+        title: "The Flavour links every agent to the in-process row"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/in-process.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/in-process.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "billing  local-group  acme/lab/desk/billing"
+      - type: command
+        title: "Run the desk on the in-process chain"
+        command: >-
+          mas-ctl run-mas docs/tutorials/07-slim-link/mas.yaml --trace --flavour docs/tutorials/07-slim-link/flavours/in-process.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/in-process.yaml" -q "I was charged twice for my March invoice. What should I do?"
+        allowed_modes: [online]
+        timeout_s: 120
+        expected_exit_code: 0
+        expected_output: "delegate_to_billing"
+
+  - id: slim
+    title: "Swap the medium for a SLIM node"
+    steps:
+      - type: command
+        title: "The names stay; the channel is slim"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "billing  slim  acme/lab/desk/billing"
+      - type: command
+        title: "Run the desk through the node"
+        command: >-
+          mas-ctl run-mas docs/tutorials/07-slim-link/mas.yaml --trace --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" -q "I was charged twice for my March invoice. What should I do?"
+        allowed_modes: [online]
+        timeout_s: 120
+        expected_exit_code: 0
+        expected_output: "delegate_to_billing"
+
+  - id: split
+    title: "Split the desk across two processes"
+    steps:
+      - type: command
+        title: "The front desk serves only triage"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/front-desk.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "triage  slim  acme/lab/desk/triage"
+
+  - id: mixed
+    title: "Mix transports"
+    steps:
+      - type: command
+        title: "Outage is reached at its own A2A server"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/mixed.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/outage-server.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "outage  a2a\n"
+      - type: command
+        title: "A2A framing above the node"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/a2a-over-slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "billing  slim, a2a-framing  acme/lab/desk/billing"
+      - type: command
+        title: "Billing alone on its own A2A chain"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/billing-over-a2a.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "billing  slim, a2a-framing  acme/lab/desk-a2a/billing"
+      - type: command
+        title: "One hub row for many agents, with a url override for outage"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/hub.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/agent-hub.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "billing  http, a2a-framing"
+
+  - id: broken
+    title: "What is refused"
+    steps:
+      - type: command
+        title: "A Flavour that names an agent the desk does not have"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-agent.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 1
+        expected_output: "bind.agents names 'billng', which is no agent"
+      - type: command
+        title: "A Flavour that names a row nobody declared"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-row.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 1
+        expected_output: "names 'desk-nod', which is no Application row"
+      - type: command
+        title: "A chain that starts with a framing row"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/wrong-first-layer.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 1
+        expected_output: "the first layer must be a transport; 'a2a-framing' needs a layer below it"
+      - type: command
+        title: "An identity with two parts"
+        command: >-
+          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/broken/bad-identity.yaml"
+        allowed_modes: [offline]
+        expected_exit_code: 1
+        expected_output: "identity must be a three-part org/ns/service name, got 'acme/desk'"

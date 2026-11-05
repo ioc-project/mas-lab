@@ -52,6 +52,7 @@ Remote tools: [ToolServerRegistry](../references/tool-server-registry.md).
 - [Bundles](#bundles)
 - [Relative refs and anchor](#relative-refs-and-anchor)
 - [A2A agent endpoints](#a2a-agent-endpoints)
+- [Rows a Flavour binds](#rows-a-flavour-binds)
 - [Separation from Flavour](#separation-from-flavour)
 - [LLM cache middleware](#llm-cache-middleware)
 - [LLM scheduler middleware](#llm-scheduler-middleware)
@@ -207,7 +208,7 @@ spec:
 `per` is `all` or `destination`. Cache is `all`; scheduler and fault injection are `destination`.
 `applies_to` is a read-only alias of `for` on middleware and of `wraps` on bundle entries. Mixing the old name with the new name in one mapping is an error.
 
-`mas-ctl infra show` prints each LLM and tool chain (and each agent's comm stack when a MAS or Agent file is passed). The comm row is MAS `spec.agent_comm` (`type`, `protocol`, or `kind`). `api_base` and tool `url` print scheme, host, and path only:
+`mas-ctl infra show` prints each LLM and tool chain (and each agent's comm row when a MAS or Agent file is passed). The comm column is how the agent is reached: the layers of the agent's Flavour [chain](#rows-a-flavour-binds) (`bind.agents.<id>.agent_comm`, else `bind.agent_comm`), bottom first, for an agent on a chain; the `protocol` of an agent reached at an A2A server; the row `protocol` for an agent at its own `url`; else the library default `agent_comm` plugin (`local`). An agent linked on chains also shows its name on the bottom layer of each one it joins. `--flavour NAME|PATH` selects the Flavour, as on `run-mas`. `api_base` and tool `url` print scheme, host, and path only:
 
 ```bash
 mas-ctl infra show --infra-ref arm.yaml --infra-ref standard:llm-cache
@@ -327,7 +328,8 @@ spec:
       url: http://127.0.0.1:9005
 ```
 
-Each endpoint requires `url` and `protocol`.
+Each agent-keyed endpoint needs `url` and `protocol`.
+A Flavour can also link an agent to an endpoint row instead; see [Rows a Flavour binds](#rows-a-flavour-binds).
 Optional fields:
 
 - `usage`: `connect` (default), `listen`, or `[connect, listen]`. `use`, `deploy` and `use-and-deploy` are deprecated aliases of `connect`, `listen` and `[connect, listen]`: still read, and `mas-ctl validate` and compose warn about them.
@@ -357,12 +359,87 @@ See [A2A internals: Exposure topology](../a2a/developer.md#exposure-topology).
 The current resolver is static and manifest-based.
 Directory discovery and search or composition plugins are not shipped.
 
+## Rows a Flavour binds
+
+Experimental. An `Application` row can also describe a server or endpoint that
+agents talk *over*: a SLIM node, an in-process channel, an HTTP url, an A2A server, or
+a framing such as A2A. Name the row by what it is, never by an agent. The row's
+`usage` is its capability: `connect`, a server we can dial that serves agents;
+`listen`, infrastructure on which we can host the agents we run. Default `connect`,
+as on every Application row. Infra only declares the row; a Flavour's
+[`spec.bind`](flavour.md#bind) links agents to it and says what this deployment does
+for each one, within that capability. A row is a layer only because the Flavour
+names it.
+
+```yaml
+apiVersion: infra/v1
+kind: Application
+metadata: {name: desk}
+spec:
+  endpoints:
+    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret_env: SLIM_SECRET,
+                usage: [connect, listen]}
+    desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}
+    outage-server: {protocol: a2a, url: "http://127.0.0.1:9003", usage: [connect, listen]}
+    agent-hub: {protocol: http, url: "https://hub.example.test/a2a/{agent}", usage: connect}
+```
+
+`protocol` is the layer plugin (`slim`, `local-group`, `http`, `a2a`, `a2a-framing`); every other
+field but `usage` and the legacy `expose` is a param of that layer, checked by the plugin. A string param may hold
+`{agent}`, replaced by each agent's id, so one row serves many agents (`agent-hub`
+above); it is the only placeholder, and a Flavour can override a row's params per
+agent. The agent id goes in as it is, never encoded, so an agent whose id holds
+anything but letters, digits, `.`, `_` and `-` (a `/`, `?`, `#`, a space) cannot fill
+`{agent}`: ctl refuses that row for it. That is the url grammar. A layer that names
+agents has its own, stricter or looser: `slim` also refuses a `.` in the service of
+`identity` and in the agent id, and `local-group` takes any name part
+([Flavour](flavour.md#bind)). ctl checks every layer of a chain for every agent it
+carries, whether or not the row uses `{agent}`. A transport that only connects (`http`) refuses a row that declares `listen`.
+Layer params that a naming transport reads:
+
+| Param | Meaning |
+| --- | --- |
+| `identity` | Three-part `org/ns/service` (`slim`, `local-group`). Each agent is `<identity>/<agent_id>`. |
+| `url` | The node or server (`slim`, `http`, an A2A server). Plain HTTP only on `127.0.0.1`, `localhost`, `::1`. |
+| `secret_env` | The *name* of the env var that holds the secret. ctl reads it and passes the value to the layer as `secret`; no layer reads the environment. |
+
+The schema requires `protocol` on every row and cannot require `url`: an agent-keyed
+row and an endpoint row differ only by their key (an agent id of the MAS, or an
+endpoint name), and an infra document is validated without its MAS. A framing row
+(`a2a-framing`) and an in-process channel have no address. ctl refuses an
+agent-keyed row without a `url` when it applies the Flavour, where it knows the agent
+ids, and the plugin of an endpoint row that needs a `url` refuses the row without one.
+
+A key named `secret`, `password`, `passwd`, `passphrase`, `token`, `api_key`,
+`authorization`, `cookie`, `credential(s)` or `private_key`, in any case, alone or after
+`_` or `-` (`access_token`, `X-Api-Key`), or capitalized after a lower-case letter
+(`accessToken`, `clientSecret`), is refused: by `mas-ctl validate` for a row's own keys
+and its `headers`, and by ctl at any depth of a bound row when it applies the Flavour, and so is an agent-keyed row that names no protocol. A row
+resolves to an `agent_comm` link first, then a `stack_layer`
+([the rule](../references/comm-stack.md#stack)). So `a2a` (a one-row chain on an A2A
+server) is the A2A SDK client at its url, the same as an agent-keyed `a2a` row, and
+`a2a-framing` is the A2A framing layer above a transport. A missing secret stops the
+run when the chain starts.
+
+Every local agent on a chain gets its own instance of the layers and its own
+receive; what the layers share (the SLIM node connection, the in-process fabric) is
+created once per chain and session and closed after the last agent's layers stop.
+Each distinct chain gets one handle. An agent that delegates gets a link on the chain
+of each agent it delegates to that the Flavour dials (`connect`).
+`mas-ctl serve` refuses an agent on a stack chain; run it with `run-mas`.
+
+Walkthrough: [Tutorial 7](../tutorials/07-slim-link/README.md).
+Plugin cards: [`slim`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/slim/slim.md),
+[`http`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/http_layer/http.md),
+[`a2a-framing`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/a2a/a2a-framing.md).
+
 ## Separation from Flavour
 
 | Infra | Flavour |
 |-------|---------|
 | **Where** (URLs, keys env names, registry paths) | **How** (protocol, OTel backend choice, tool-server policy) |
 | Shared across flavours | Selected per deployment profile |
+| Declares the rows that exist | `bind` names the rows a session rides |
 
 ## LLM cache middleware
 
@@ -433,6 +510,7 @@ Put root-qualified assignments under `spec.overrides`; see the [Overlay manifest
 They expand to `--override infra:...` and merge into the effective infra document.
 They are not a second resolver.
 Flavour stays `local` until an Application endpoint, from YAML or `--connect`, names a remote collaborator.
+A SLIM node is a [row a Flavour binds](#rows-a-flavour-binds), not a `--connect` scheme.
 
 ## LLM output-token policy
 

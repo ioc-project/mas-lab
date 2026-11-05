@@ -13,7 +13,7 @@ The MCP bridge supports both deployment patterns:
 1. Direct local tool calls in-process for lightweight development
 2. Separate MCP server process for remote or infra-style tool exposure
 
-The invocation contract is the same either way: the runtime calls `call_tool(name, arguments)`. MCP consumption and explicit local re-selection are infra dependencies; flavours configure exposure, not which third-party servers are consumed.
+The invocation contract is the same either way: the runtime calls `call_tool(name, arguments)`. MCP consumption and explicit local re-selection are infra dependencies. Flavour `tools` is unread.
 
 ## Developer Guide
 

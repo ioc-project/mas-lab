@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Agent
+
+metadata:
+  name: outage
+
+spec:
+  description: "Answer service-outage questions."
+  context:
+    role: |
+      You answer questions about service outages and degraded performance.
+      Answer in two sentences at most. If a question is not about an outage,
+      say so.

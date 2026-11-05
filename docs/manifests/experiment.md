@@ -129,7 +129,7 @@ scenarios:
 | `overlays` | no | Three overlay stacks applied in order `logic`, `control`, `infra`. Each entry is an overlay id (resolved in `configs_dir`) or `{ref: path}`. When `overlays` is present, all three keys are required; use `[]` for an empty stack. |
 | `description` | no | Label shown in reports. |
 | `tags` | no | Grouping and filtering labels. |
-| `flavour` | no | Per-scenario flavour name or path. A **flavour** is a deployment preset; see [flavour.md](flavour.md). |
+| `flavour` | no | Per-scenario flavour name or path. A **flavour** is the glue that links the logic spec to the infra (its `bind`); see [flavour.md](flavour.md). |
 
 When `overlays` is omitted, the scenario `id` is used as the single `logic` overlay.
 `overlays` must be a mapping. A bare list is rejected.

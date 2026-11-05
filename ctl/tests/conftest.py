@@ -20,6 +20,18 @@ def _isolate_user_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.fixture(autouse=True)
+def _no_slim_settle_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fake node needs no time to propagate subscriptions."""
+    try:
+        from library_ioa.plugins.slim.actor import ConnectionActor
+    except ImportError:  # library-ioa is not installed: no SLIM node to wait for
+        return
+
+    monkeypatch.setattr(ConnectionActor, "SUBSCRIBE_SETTLE_S", 0.0)
+    monkeypatch.setattr(ConnectionActor, "ROUTE_SETTLE_S", 0.0)
+
+
+@pytest.fixture(autouse=True)
 def _clear_library_discovery_caches():
     """Reset the lru_cache-memoized library/catalog discovery helpers.
 

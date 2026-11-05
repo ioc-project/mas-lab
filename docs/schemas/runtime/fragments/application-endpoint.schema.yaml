@@ -1,0 +1,87 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "infra/v1/fragments/application-endpoint"
+title: "Application endpoint"
+description: >
+  One named Application row. Two kinds share this shape. An agent-keyed row
+  (named by an agent id, as --connect and --listen write it) is a peer
+  reached at its ``url`` by the ``protocol`` link; it needs ``url`` and
+  ``protocol``, as before. An endpoint row (named by what it is: a SLIM node,
+  an A2A server, an in-process channel, an A2A framing) is a layer a Flavour
+  can name in ``spec.bind``: ``protocol`` is the layer plugin, ``usage`` is
+  its capability (``connect``, a server we can dial; ``listen``, a place to
+  host the agents we run), and the other fields are its params; a string
+  param may hold ``{agent}``. The two kinds differ only by their key (an
+  agent id of the MAS, or an endpoint name), and an infra document is
+  validated without its MAS, so one fragment serves both and cannot require
+  ``url``: a framing row and an in-process channel have no address. ctl
+  requires ``url`` on an agent-keyed row when it applies the Flavour (it
+  knows the agent ids then), and each plugin on the endpoint rows that need
+  one. No secret belongs on a row: a key named secret, password, passwd,
+  passphrase, token, api_key, authorization, cookie, credential(s) or
+  private_key, in any case, alone or after ``_`` or ``-`` (``access_token``,
+  ``X-Api-Key``), or capitalized after a lower-case letter (``accessToken``),
+  is refused, here for the row's own keys and its ``headers``, and at any
+  depth when ctl applies the Flavour; name the env var with ``secret_env``.
+
+type: object
+# protocol is always required. url is not, explicitly: an endpoint row with no address (A2A framing above a
+# transport, an in-process channel) is valid. ctl requires url on an agent-keyed row when it wires it.
+required: [protocol]
+# Other keys stay allowed: a layer row passes them to its plugin, which rejects what it does not know.
+additionalProperties: true
+# The same pattern as ctl's SECRET_KEY (mas.ctl.infra.bind); a test keeps the two equal.
+propertyNames: &no_secret_key
+  not:
+    pattern: "^((.*[_-])?([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy])|.*[a-z0-9](S[Ee][Cc][Rr][Ee][Tt]|P[Aa][Ss][Ss][Ww][Oo][Rr][Dd]|P[Aa][Ss][Ss][Ww][Dd]|P[Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|T[Oo][Kk][Ee][Nn]|A[Pp][Ii][_-]?[Kk][Ee][Yy]|A[Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|C[Oo][Oo][Kk][Ii][Ee]|C[Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|C[Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]|P[Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy]))$"
+properties:
+  protocol:
+    type: string
+    minLength: 1
+    description: The agent_comm link of an agent-keyed row, or the layer plugin of a row a Flavour binds.
+  url:
+    type: string
+    format: uri
+  identity:
+    type: string
+    description: >-
+      Three-part org/ns/service a naming layer (slim, local-group) puts each
+      agent under: an agent's name is <identity>/<agent_id>.
+  secret_env:
+    type: string
+    description: Env-var name of the layer's secret; ctl reads it and passes the value to the layer as secret.
+  usage:
+    default: connect
+    description: >-
+      connect (route to this agent as a client), listen (serve it from this
+      process), or [connect, listen]. use, deploy and use-and-deploy are
+      deprecated aliases, still read. On an agent-keyed row: what this
+      deployment does with that agent. On an endpoint row: what the row can
+      do; a Flavour's bind.agents.<id>.usage must stay within it.
+    oneOf:
+      - type: string
+        enum: [connect, listen]
+      - type: array
+        items: {type: string, enum: [connect, listen]}
+        minItems: 1
+        uniqueItems: true
+      - type: string
+        enum: [use, deploy, use-and-deploy]
+        deprecated: true
+        x-replaced-by: "connect, listen, or [connect, listen]"
+  expose:
+    type: boolean
+    default: false
+    description: Legacy; true reads as usage [connect, listen].
+  headers:
+    type: object
+    propertyNames: *no_secret_key
+    additionalProperties:
+      type: string
+  timeout:
+    type: number
+    exclusiveMinimum: 0
+  a2a:
+    type: object
+    additionalProperties: true

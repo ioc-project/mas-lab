@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.ctl.session import flavour as flavour_mod
 from mas.ctl.session.flavour import DEFAULT_FLAVOUR, FlavourError, resolve_flavour, validate_flavour
 
@@ -42,9 +41,7 @@ def test_missing_library_degrades_to_noop(monkeypatch) -> None:
 
 
 def test_invalid_manifest_raises_flavour_error(monkeypatch) -> None:
-    monkeypatch.setattr(
-        flavour_mod, "_load_bundled_flavour", lambda name: {"kind": "Flavour", "spec": {}}
-    )
+    monkeypatch.setattr(flavour_mod, "_load_bundled_flavour", lambda name: {"kind": "Flavour", "spec": {}})
 
     class _Result:
         def raise_if_failed(self):
@@ -62,9 +59,11 @@ class TestResolveFlavour:
         assert isinstance(spec, dict)
         assert spec.get("observability") == ["native"]
 
-    def test_mcp_flavour_selects_exposure_protocol(self) -> None:
-        spec = resolve_flavour("mcp")
-        assert spec["tools"]["exposure_protocol"] == "mcp"
+    def test_the_removed_mcp_flavour_is_an_unknown_flavour(self) -> None:
+        with pytest.raises(FlavourError, match=r"flavour 'mcp' is not supported yet \(bundled names: local\)"):
+            resolve_flavour("mcp")
+        with pytest.raises(FlavourError, match="bundled names: local"):
+            validate_flavour("mcp")
 
     def test_cli_override_applies_to_bundled_flavour(self, monkeypatch) -> None:
         monkeypatch.setattr(

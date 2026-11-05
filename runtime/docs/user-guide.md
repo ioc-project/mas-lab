@@ -24,13 +24,13 @@ mas-ctl chat agent.yaml                       # interactive
 mas-ctl chat agent.yaml -q "What is 2+2?"     # one scripted turn
 ```
 
-3. Switch the deployment profile with a flavour:
+3. Link the agents to infra with a flavour (its `bind` section; see [flavour.md](../../docs/manifests/flavour.md#bind)):
 
 ```bash
 mas-ctl chat agent.yaml --flavour local
 ```
 
-`mas-ctl flavour list` shows the flavours installed libraries provide.
+`--flavour` takes a bundled name (`local`) or a path to a Flavour file.
 
 ## Core concepts
 
@@ -73,7 +73,7 @@ mas-ctl chat agent.yaml --flavour local
 
 ## Production checklist
 
-- Flavour configured for target environment
+- Flavour `bind` links each agent to the infra rows it should use (or none, for the in-process default)
 - Governance policy enabled and tested
 - Telemetry spans emitted and export path validated
 - Integration tests cover failure paths and retries

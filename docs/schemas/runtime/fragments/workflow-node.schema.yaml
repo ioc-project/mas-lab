@@ -25,7 +25,10 @@ properties:
     default: []
   dispatch:
     type: string
-    description: "Fan-out mode. `parallel` (or `all`) runs this node's delegates_to peers concurrently via the async engine path."
+    deprecated: true
+    description: >
+      Deprecated, still accepted, ignored. The model chooses parallel tool
+      calls; a node does not fan out to its peers.
   config:
     type: object
     description: Plugin-specific parameters (pattern-dependent keys allowed).

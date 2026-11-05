@@ -48,7 +48,6 @@ mas-ctl run-mas library-samples/apps/trip-planner/mas.yaml --flavour local
 
 # Inspect workspace / infra
 mas-ctl infra list
-mas-ctl flavour list
 ```
 
 ---
@@ -62,8 +61,10 @@ Declares agents, workflow, and metadata. See
 
 ### Flavour
 
-Selects model endpoint and non-secret configuration (`local`, `mock`, …) from
-`library-standard`.
+Links the logic spec to the infra: `spec.bind` says which infra rows each agent
+rides and what this deployment does with it. The bundled name (`local`) comes
+from `library-standard`; `--flavour PATH` takes a file. It never holds a model
+endpoint. See [docs/manifests/flavour.md](../docs/manifests/flavour.md).
 
 ### Scenario
 
@@ -88,7 +89,7 @@ Named overlay for A/B configuration without duplicating manifests.
 | `mas-ctl plan …` | Dry-run placement plan | `mas-ctl plan --help` |
 | `mas-ctl validate PATH …` | Validate agent / MAS / experiment YAML | [docs/cli/mas-ctl.md](../docs/cli/mas-ctl.md) |
 | `mas-ctl schemas` | List JSON/YAML schemas | — |
-| `mas-ctl flavour list\|show` | List or show flavours | — |
+| `mas-ctl flavour list` | Deprecated: pass `--flavour PATH` or a bundled name (`local`) | — |
 | `mas-ctl infra list\|show` | List or show infra bundles | — |
 | `mas-ctl registry …` | Plugin registry introspection | `mas-ctl registry --help` |
 | `mas-ctl checkpoint …` | Session checkpoint utilities | `mas-ctl checkpoint --help` |

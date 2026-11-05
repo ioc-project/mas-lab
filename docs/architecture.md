@@ -43,7 +43,7 @@ Everything is a YAML manifest. There is no imperative glue.
 | **Agent** | One actor: models, tools, skills, memory, governance, observability | [agent](manifests/agent.md) |
 | **MAS** | A team: which agents exist, who delegates to whom | [mas](manifests/mas.md) |
 | **Overlay** | A patch merged onto any of the above, used to vary one knob | [overlay](manifests/overlay.md) |
-| **Flavour** | A deployment preset: observability export, transport, tool policy | [flavour](manifests/flavour.md) |
+| **Flavour** | The glue that links the logic spec to the infra (`bind`). Leftover keys are unread except deprecated `observability` fallback | [flavour](manifests/flavour.md) |
 | **Infra** | Resources resolved at execution time: model endpoints, tool servers, secrets mapping | [infra](manifests/infra.md) |
 | **Experiment** | Scenarios, dataset, repeats and analysis hooks | [experiment](manifests/experiment.md) |
 | **Dataset** · **Pipeline** | The items an experiment iterates over; the analysis steps | [dataset](manifests/dataset.md) · [pipeline](manifests/pipeline.md) |
@@ -59,7 +59,7 @@ separate layers. Keeping the layers apart is what makes a result trustworthy:
 
 Three more things stay fixed, unless one of them is the factor you study:
 
-- the **flavour**: a deployment preset for monitoring export, transport and tool policy
+- the **flavour**: the glue that links the agents to the infra (`bind`); leftover keys are unread except the deprecated `observability` fallback
 - the **infra bundle**: chosen with `--infra-ref` or in the workspace configuration
 - the **emulation mode**: live, mocked or replayed model and tools
 

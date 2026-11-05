@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-
+from ci_llm import web_search_engine
 from mas.runtime.boundary.context.assemble import assemble_llm_messages, llm_request_tools
 from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.engine.llm_live import LiveLlmEngine
@@ -17,7 +17,6 @@ from mas.runtime.engine.tools import openai_tools
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.hitl import HitlResolveChoice
 from mas.runtime.schema.ingress import EngineIoReturn, HitlResolve
-from ci_llm import web_search_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T01 = REPO_ROOT / "docs" / "tutorials" / "01-building-an-agent"
@@ -44,9 +43,7 @@ def _openai_tools_for_tutorial(manifest: dict, tutorial_tool_provider):
     return openai_tools(manifest, tool_provider=tutorial_tool_provider)
 
 
-def _ctx_with_steered_tool_result(
-    manifest: dict, *, steer: str
-) -> tuple[AutoCtxAssembler, dict]:
+def _ctx_with_steered_tool_result(manifest: dict, *, steer: str) -> tuple[AutoCtxAssembler, dict]:
     ctx = AutoCtxAssembler(last_user_text="Who is current POTUS ?")
     spec_ctx = (manifest.get("spec") or {}).get("context") or {}
     for key, val in spec_ctx.items():
@@ -65,9 +62,7 @@ def test_system_prompt_is_single_message_with_section_tags(
     tutorial_manifest_with_tools,
 ) -> None:
     """[intent]/[role] in trace are manifest section tags inside one system message."""
-    ctx, manifest = _ctx_with_steered_tool_result(
-        tutorial_manifest_with_tools, steer="Example Person is POTUS"
-    )
+    ctx, manifest = _ctx_with_steered_tool_result(tutorial_manifest_with_tools, steer="Example Person is POTUS")
     messages = assemble_llm_messages(ctx, manifest=manifest)
     system_msgs = [m for m in messages if m.get("role") == "system"]
     assert len(system_msgs) == 1
@@ -76,14 +71,10 @@ def test_system_prompt_is_single_message_with_section_tags(
     assert "[role]" in body
 
 
-def test_preview_keeps_tools_on_followup_react_turn(
-    tutorial_manifest_with_tools, tutorial_tool_provider
-) -> None:
+def test_preview_keeps_tools_on_followup_react_turn(tutorial_manifest_with_tools, tutorial_tool_provider) -> None:
     steer = "In 2028, Maxence Postu succeeded Joe Biden as President Of the USA"
     ctx, manifest = _ctx_with_steered_tool_result(tutorial_manifest_with_tools, steer=steer)
-    engine = LiveLlmEngine(
-        ctx=ctx, manifest=manifest, use_tool_loop=True, tool_provider=tutorial_tool_provider
-    )
+    engine = LiveLlmEngine(ctx=ctx, manifest=manifest, use_tool_loop=True, tool_provider=tutorial_tool_provider)
     preview = engine.exchange_preview("LLM_CALL")
 
     assert "[tool call_id=call_5]" in preview
@@ -93,18 +84,12 @@ def test_preview_keeps_tools_on_followup_react_turn(
     assert "single API message" in preview
 
 
-def test_preview_keeps_tools_after_tool_results(
-    tutorial_manifest_with_tools, tutorial_tool_provider
-) -> None:
+def test_preview_keeps_tools_after_tool_results(tutorial_manifest_with_tools, tutorial_tool_provider) -> None:
     steer = "In 2028, Maxence Postu succeeded Joe Biden as President Of the USA"
     ctx, manifest = _ctx_with_steered_tool_result(tutorial_manifest_with_tools, steer=steer)
-    engine = LiveLlmEngine(
-        ctx=ctx, manifest=manifest, use_tool_loop=True, tool_provider=tutorial_tool_provider
-    )
+    engine = LiveLlmEngine(ctx=ctx, manifest=manifest, use_tool_loop=True, tool_provider=tutorial_tool_provider)
     messages = engine._build_messages()
-    preview_tools = llm_request_tools(
-        messages, tools=_openai_tools_for_tutorial(manifest, tutorial_tool_provider)
-    )
+    preview_tools = llm_request_tools(messages, tools=_openai_tools_for_tutorial(manifest, tutorial_tool_provider))
     assert preview_tools == _openai_tools_for_tutorial(manifest, tutorial_tool_provider)
 
 
@@ -123,7 +108,7 @@ def test_invoke_payload_matches_preview_tools_and_temperature(
     )
     captured: dict = {}
 
-    def fake_chat(messages, *, api_key, tools, temperature=None):
+    def fake_chat(messages, *, tools, temperature=None, **_):
         captured["messages"] = messages
         captured["tools"] = tools
         captured["temperature"] = temperature
@@ -206,9 +191,7 @@ def test_empty_tool_result_still_lands_a_paired_tool_message() -> None:
                 text="done",
             )
 
-    instance.driver.engine = CaptureLive(
-        ctx=ctx, manifest=base, use_tool_loop=True, tool_provider=tool_provider
-    )
+    instance.driver.engine = CaptureLive(ctx=ctx, manifest=base, use_tool_loop=True, tool_provider=tool_provider)
     instance.driver.engine_pool = EngineWorkerPool(worker=instance.driver.engine.invoke)
 
     controller = SessionController(
@@ -222,10 +205,7 @@ def test_empty_tool_result_still_lands_a_paired_tool_message() -> None:
     assert captured["n"] == 2
     messages = captured["messages"]
     declared_ids = {
-        call.get("id")
-        for m in messages
-        if m.get("role") == "assistant"
-        for call in (m.get("tool_calls") or [])
+        call.get("id") for m in messages if m.get("role") == "assistant" for call in (m.get("tool_calls") or [])
     }
     resolved_ids = {m.get("tool_call_id") for m in messages if m.get("role") == "tool"}
     assert declared_ids, "expected at least one assistant tool_calls entry"
@@ -275,9 +255,7 @@ def test_hitl_egress_skip_steering_in_second_llm_payload(
                         messages,
                         tools=_openai_tools_for_tutorial(self.manifest, tutorial_tool_provider),
                     ),
-                    "has_steer": any(
-                        steer in str(m.get("content") or "") for m in messages if m.get("role") == "tool"
-                    ),
+                    "has_steer": any(steer in str(m.get("content") or "") for m in messages if m.get("role") == "tool"),
                 }
             )
             if captured["n"] == 1:

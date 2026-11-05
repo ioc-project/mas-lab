@@ -6,7 +6,7 @@
 
 `mas-ctl` runs, serves, and inspects a single agent or a multi-agent system (MAS) from YAML manifests. This page lists every flag. If this page and the code differ, `mas-ctl COMMAND --help` is correct.
 
-Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. A *flavour* is a deployment preset. An *infra bundle* is a YAML file that says where services live. A *session* is one conversation with an agent. A *checkpoint* is a saved session state. See the [glossary](../glossary.md).
+Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. A *flavour* is the glue that links the logic spec to the infra (its `bind`). An *infra bundle* is a YAML file that says where services live. A *session* is one conversation with an agent. A *checkpoint* is a saved session state. See the [glossary](../glossary.md).
 
 ## The three commands most people run
 
@@ -159,7 +159,7 @@ mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
-| `--flavour NAME` | `local` | Flavour from library-standard. |
+| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or the path of a Flavour YAML file. |
 | `--infra-ref REF` | workspace or user | Infra bundle. Repeatable. Wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
 | `--runtime-ref REF` | workspace or user | `RuntimeEngine` ref. Repeatable. |
 | `--model ID` | `spec.models`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model for this run. |
@@ -270,7 +270,7 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 | `--override PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
 | `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest. |
-| `--flavour NAME` | `local` | Flavour. |
+| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or a Flavour YAML file. |
 | `--infra-ref REF` | none | Infra bundle. Repeatable. |
 | `--kernel ID` | `mas-runtime-py` | Runtime id. It is the only value today. |
 | `-i` / `--interactive` | off | Open an interactive session. |
@@ -305,7 +305,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: listen`. Expands to `--override infra:…`. |
 | `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
 | `--cache-read-only` | off | Exclusive replay (see `chat`): answer from the cache only, no API key needed. |
-| `--flavour NAME` | `local` | Flavour. |
+| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or a Flavour YAML file. |
 | `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the A2A `contextId`. |
 | `--no-control` | off | Do not advertise a control endpoint. |
 
@@ -319,7 +319,7 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
-| `--flavour NAME` | `local` | Flavour. |
+| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or a Flavour YAML file. |
 | `--single-turn` | off | Exit after the first reply. |
 | `--memory-seed PATH` | none | Memory seed. |
 | `--infra-ref` / `--infra REF` | none | Infra bundle. Repeatable. |
@@ -339,9 +339,9 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
 | `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--connect`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
 | `mas-ctl plan MANIFEST` | Print the placement plan only. | `-d/--deployment`, `--kernel`, `--no-validate` |
-| `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: prefer `deployment/v1`. | none |
+| `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: it prints a warning on stderr; pass `--flavour PATH`, or the bundled name `local`. | none |
 | `mas-ctl infra list` | List infra bundles. Alias: `mas-ctl list-bundles`. | `-v` |
-| `mas-ctl infra show` | Print each LLM and tool chain, and each agent's comm stack. | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--json` |
+| `mas-ctl infra show` | Print each LLM and tool chain, and each agent's comm stack and its name on the Flavour's chain. | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--flavour`, `--json` |
 | `mas-ctl list-bundles` | List infra bundles from installed libraries. | `-v` |
 | `mas-ctl registry list`, `registry query PREFIX` | List registered runtime machines, ctl registries, and schema kinds. | `query`: `-l/--layer`, `--json` |
 | `mas-ctl plugin list`, `doctor [MANIFEST …]`, `enable URN` | Show plugin availability from `library.yaml` `plugins:`. `enable` installs the missing extra. | `list`: `--type`, `--json`. `doctor`: `--json`. `enable`: `--dry-run`. |

@@ -18,7 +18,7 @@ LLM access has three parts. Keep secrets out of YAML.
 | --- | --- | --- |
 | **Infra manifest** | Endpoint settings: API base URL, allowed models, `api_key_env` name (no secret) | `infra_refs` in `config.yaml`, or `--infra-ref` |
 | **Credential** | API key or token | `docker/.env` |
-| **Flavour** | Named runtime environment; `local` is the default | `mas_ctl.flavour` / `mas_lab.flavour` |
+| **Flavour** | Glue between the logic spec and the infra (`spec.bind`); `local` is the default and binds nothing | `mas_ctl.flavour` / `mas_lab.flavour` |
 
 The bundled `standard:openai` and `standard:ollama` infra need no `mas-lab init`. Set the key:
 

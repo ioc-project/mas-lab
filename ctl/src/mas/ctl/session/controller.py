@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -145,6 +146,9 @@ class SessionController:
     _turn: int = 0
     inflight: bool = field(default=False, repr=False)
     _turn_lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
+    # Held for every user turn when set: the lock a Flavour chain's requests to this agent take too
+    # (``ChainHandles.turn_lock``), so a served agent never runs two turns at once.
+    turn_guard: threading.RLock | None = field(default=None, repr=False, compare=False)
     _trace_turn_start: float = 0.0
     _trace_plugin: CliTraceExchangePlugin | None = field(default=None, repr=False)
     _bridge_plugin: _ToolErrorAndListenerBridge | None = field(default=None, repr=False)
@@ -403,10 +407,12 @@ class SessionController:
         auto_hitl: bool = True,
         parent_call_id: str = "",
     ) -> TurnResult:
+        with self.turn_guard or nullcontext():
+            if text.strip().lower() == "/backtrack" or text.strip().lower().startswith("/backtrack "):
+                return self._handle_backtrack(text)
+            return self._run_turn_guarded(text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id)
 
-        if text.strip().lower() == "/backtrack" or text.strip().lower().startswith("/backtrack "):
-            return self._handle_backtrack(text)
-
+    def _run_turn_guarded(self, text: str, *, turn_id: str | None, auto_hitl: bool, parent_call_id: str) -> TurnResult:
         inject_now = text.strip().lower().startswith("/steer ")
         with self._turn_lock:
             if self.inflight:

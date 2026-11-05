@@ -35,10 +35,17 @@ practical examples.
 
 | Class                 | Full module path                                       | Library            |
 | --------------------- | ------------------------------------------------------ | ------------------ |
+| `A2AAgentComm`        | `library_ioa.plugins.a2a.agent_comm`                   | `library-ioa`      |
 | `LocalAgentComm`      | `mas.library.standard.plugins.agentcomm.local`         | `library-standard` |
 | `LocalGroupAgentComm` | `mas.library.standard.plugins.agentcomm.local_group`   | `library-standard` |
 | `StackAgentComm`      | `mas.library.standard.plugins.agentcomm.stack`         | `library-standard` |
 | `TraceContextLayer`   | `mas.library.standard.plugins.agentcomm.trace_context` | `library-standard` |
+
+### Agent_Expose
+
+| Class         | Full module path                   | Library       |
+| ------------- | ---------------------------------- | ------------- |
+| `A2AExposure` | `library_ioa.plugins.a2a.exposure` | `library-ioa` |
 
 ### Assembler
 
@@ -205,6 +212,14 @@ practical examples.
 | ------------------ | ------------------------------------- | ---------------- |
 | `SkillToolsPlugin` | `mas.library.skills.plugins.sk_tools` | `library-skills` |
 
+### Stack_Layer
+
+| Class           | Full module path                           | Library       |
+| --------------- | ------------------------------------------ | ------------- |
+| `A2ALayer`      | `library_ioa.plugins.a2a.layer`            | `library-ioa` |
+| `HttpLayer`     | `library_ioa.plugins.http_layer.transport` | `library-ioa` |
+| `SlimAgentComm` | `library_ioa.plugins.slim.agent_comm`      | `library-ioa` |
+
 ### Step
 
 | Class                            | Full module path                                       | Library             |
@@ -248,6 +263,7 @@ practical examples.
 | Class               | Full module path                           | Library            |
 | ------------------- | ------------------------------------------ | ------------------ |
 | `LocalToolProvider` | `mas.library.standard.plugins.tools.local` | `library-standard` |
+| `MCPToolProvider`   | `library_ioa.plugins.mcp.provider`         | `library-ioa`      |
 
 ### User_Io_Contract
 
@@ -255,12 +271,21 @@ practical examples.
 | ------------------------ | --------------------------------------------- | ------------------ |
 | `RegistryUserIOContract` | `mas.library.standard.plugins.hitl.contracts` | `library-standard` |
 
+### Webserver
+
+| Class              | Full module path                | Library       |
+| ------------------ | ------------------------------- | ------------- |
+| `UvicornWebServer` | `library_ioa.plugins.webserver` | `library-ioa` |
+
 ---
 
 ## All Plugins — Alphabetical Index
 
 | Class                            | Category             | Library             |
 | -------------------------------- | -------------------- | ------------------- |
+| `A2AAgentComm`                   | agent_comm           | `library-ioa`       |
+| `A2AExposure`                    | agent_expose         | `library-ioa`       |
+| `A2ALayer`                       | stack_layer          | `library-ioa`       |
 | `ADKSkillPlugin`                 | skill_impl           | `library-skills`    |
 | `AutoApproveResponder`           | hitl_responder       | `library-standard`  |
 | `AutoDenyResponder`              | hitl_responder       | `library-standard`  |
@@ -285,6 +310,7 @@ practical examples.
 | `ExportOtelStep`                 | step                 | `library-telemetry` |
 | `FaultInjectMiddleware`          | infra_middleware     | `library-standard`  |
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |
+| `HttpLayer`                      | stack_layer          | `library-ioa`       |
 | `HybridCheckpointStore`          | checkpoint_store     | `library-standard`  |
 | `InformUserTool`                 | system_tool          | `library-standard`  |
 | `InMemoryCheckpointStore`        | checkpoint_store     | `library-standard`  |
@@ -298,6 +324,7 @@ practical examples.
 | `LocalAgentComm`                 | agent_comm           | `library-standard`  |
 | `LocalGroupAgentComm`            | agent_comm           | `library-standard`  |
 | `LocalToolProvider`              | tool_provider        | `library-standard`  |
+| `MCPToolProvider`                | tool_provider        | `library-ioa`       |
 | `ModeratedRoundsPlugin`          | design_pattern       | `library-standard`  |
 | `NativeObservabilityPlugin`      | observability        | `library-standard`  |
 | `NativeSkillPlugin`              | skill_impl           | `library-skills`    |
@@ -325,6 +352,7 @@ practical examples.
 | `SkillCatalogPlugin`             | skill_catalog        | `library-skills`    |
 | `SkillToolsPlugin`               | skill_tools          | `library-skills`    |
 | `SlidingWindowConversation`      | context_manager      | `library-standard`  |
+| `SlimAgentComm`                  | stack_layer          | `library-ioa`       |
 | `SpawnSubagentTool`              | system_tool          | `library-standard`  |
 | `SpawnSubagentTool`              | system_tool          | `library-standard`  |
 | `StackAgentComm`                 | agent_comm           | `library-standard`  |
@@ -336,6 +364,7 @@ practical examples.
 | `ToyEchoMetric`                  | eval_metric          | `library-eval`      |
 | `TraceContextLayer`              | agent_comm           | `library-standard`  |
 | `TreeOfThoughtsPlugin`           | design_pattern       | `library-standard`  |
+| `UvicornWebServer`               | webserver            | `library-ioa`       |
 | `ValidateKgStep`                 | step                 | `library-kg`        |
 | `VerifyEventsStep`               | step                 | `library-kg`        |
 | `VerifyOtelStep`                 | step                 | `library-telemetry` |
@@ -362,5 +391,4 @@ Flavour YAML files shipped inside library packages.
 | ----------------- | --------------------------------------------------------------------------------- | ------------------ |
 | `local`           | Default local development flavour. Infra bundles are resolved via workspace refs… | `library-standard` |
 | `local-benchmark` | Benchmark flavour for mas-lab batch runs. Uses file telemetry and native observa… | `library-standard` |
-| `mcp`             | Expose local tools through the MCP protocol.                                      | `library-standard` |
 

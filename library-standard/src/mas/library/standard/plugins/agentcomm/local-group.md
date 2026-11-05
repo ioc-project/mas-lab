@@ -11,7 +11,7 @@
 | **Kind** | `agent_comm` |
 | **URN** | `mas.agent_comm.local_group` |
 | **Implementation** | `LocalGroupAgentComm` in `mas.library.standard.plugins.agentcomm.local_group` |
-| **Manifest keys** | `spec.agent_comm` (`type: local-group`) |
+| **Manifest keys** | an infra row `{protocol: local-group, identity: org/ns/svc}` that a Flavour binds at the bottom of `bind.agent_comm` |
 
 Send reaches one peer, any instance of a service, or a room. Pass a
 shared `LocalGroupFabric` from Python; two links given only a name

@@ -1,0 +1,10 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# One A2A hub that serves many agents, each at its own path. {agent} is replaced by the agent id.
+# The hub only serves agents someone else runs, so its usage is connect.
+apiVersion: infra/v1
+kind: Application
+metadata: {name: agent-hub}
+spec:
+  endpoints:
+    agent-hub: {protocol: http, url: "https://agents.example.test/a2a/{agent}", usage: connect}

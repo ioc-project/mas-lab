@@ -10,13 +10,12 @@ library-samples/tools/*.tool.yaml and library-samples/infra/mixed-tools.infra.ya
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from conftest import REPO_ROOT, T01, free_port, load_yaml, run_cli
+from tutorial_support import REPO_ROOT, T01, free_port, load_yaml, run_cli
 
 WEB_SEARCH_TOOL = REPO_ROOT / "library-samples" / "tools" / "web-search.tool.yaml"
 MIXED_TOOLS_INFRA = REPO_ROOT / "library-samples" / "infra" / "mixed-tools.infra.yaml"
@@ -165,9 +164,7 @@ class TestMixedLocalAndMCPDispatch:
             assert "web-search" in mcp_names, last_error
 
             # The local provider still resolves calc — never advertised by MCP.
-            local_provider = build_manifest_tool_provider(
-                [{"ref": "samples:tools/calc.tool.yaml"}], T01
-            )
+            local_provider = build_manifest_tool_provider([{"ref": "samples:tools/calc.tool.yaml"}], T01)
             local_names = [t["name"] for t in local_provider.list_tools()]
             assert "calc" in local_names
             assert "web-search" not in local_names

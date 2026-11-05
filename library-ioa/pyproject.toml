@@ -7,13 +7,14 @@ build-backend = "hatchling.build"
 [project]
 name = "mas-lab-library-ioa"
 version = "0.2.0"
-description = "MCP client/server bridge and A2A agent_comm / agent_expose plugins."
+description = "MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A framing stack layers."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
     "mcp>=2.2",
     "mas-lab-runtime",
+    "mas-lab-library-standard",
     "a2a-sdk[http-server,sqlite]>=1.1.5",
     "uvicorn>=0.30",
 ]
@@ -24,9 +25,11 @@ cli = ["mcp[cli]"]
 # Same as cli. Protocol conformance is Node `@modelcontextprotocol/conformance`
 # (npx) — do not vendor mcp-python-sdk or mcp-conformance checkouts.
 all = ["mcp[cli]"]
+slim = ["slim-bindings>=2.2,<3"]
 
 [project.scripts]
 mas-mcp = "library_ioa.plugins.mcp.server:main"
+mas-slim = "library_ioa.plugins.slim.cli:main"
 
 [project.entry-points."mas.runtime.manifest_libraries"]
 ioa = "library_ioa"
@@ -39,3 +42,4 @@ packages = ["src/library_ioa"]
 
 [tool.uv.sources]
 mas-lab-runtime = { workspace = true }
+mas-lab-library-standard = { workspace = true }

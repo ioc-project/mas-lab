@@ -14,6 +14,7 @@ async def start_grpc_server(request_handler: Any, *, host: str, port: int) -> An
         from a2a.types.a2a_pb2_grpc import add_A2AServiceServicer_to_server
         from a2a.utils.constants import VERSION_HEADER
         from a2a.utils.errors import (
+            A2A_ERROR_MAPPING,
             A2A_ERROR_REASONS,
             PushNotificationNotSupportedError,
             UnsupportedOperationError,
@@ -59,12 +60,14 @@ async def start_grpc_server(request_handler: Any, *, host: str, port: int) -> An
                 await super().abort_context(error, context)
                 return
 
+            mapping = A2A_ERROR_MAPPING[type(error)]
             error_info = error_details_pb2.ErrorInfo(
-                reason=A2A_ERROR_REASONS.get(type(error), "UNKNOWN_ERROR"),
+                reason=mapping.reason or A2A_ERROR_REASONS.get(type(error), "UNKNOWN_ERROR"),
                 domain="a2a-protocol.org",
             )
+            grpc_code = getattr(grpc.StatusCode, mapping.grpc_status, grpc.StatusCode.UNKNOWN)
             status = status_pb2.Status(
-                code=grpc.StatusCode.UNIMPLEMENTED.value[0],
+                code=grpc_code.value[0],
                 message=getattr(error, "message", str(error)),
             )
             detail = any_pb2.Any()

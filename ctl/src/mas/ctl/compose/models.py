@@ -45,6 +45,11 @@ class ResolvedInfra:
     runtime_engine: dict[str, Any] = field(default_factory=dict)
     runtime_refs: list[str] = field(default_factory=list)
     applications: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Each agent on a Flavour chain: its chain (bind.agents.<id>.agent_comm, else bind.agent_comm), rows
+    # bottom first as {row, type, params, usage, chain}, with its params overrides and {agent} applied;
+    # agent_usage is what this deployment does with it (connect, listen).
+    agent_chains: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    agent_usage: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass

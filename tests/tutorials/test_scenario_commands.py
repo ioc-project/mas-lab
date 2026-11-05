@@ -30,6 +30,7 @@ Run from the ioc-project/mas-lab repo root:
     pytest tests/tutorials/test_scenario_commands.py -v -k tuto-03
     TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-01
 """
+
 from __future__ import annotations
 
 import importlib
@@ -42,10 +43,13 @@ from typing import NamedTuple
 
 import pytest
 import yaml
+from mas.ctl.testing.scenario_commands import rewrite_command_for_v2 as _rewrite_command_for_v2
 
 # Set TUTORIAL_ONLINE=1 to include steps that require a live LLM / network.
 _ONLINE_MODE: bool = os.environ.get("TUTORIAL_ONLINE", "").strip().lower() in (
-    "1", "true", "yes",
+    "1",
+    "true",
+    "yes",
 )
 
 _DOCKER_AVAILABLE: bool | None = None
@@ -87,10 +91,15 @@ def _docker_cli_image_built() -> bool:
             try:
                 result = subprocess.run(
                     [
-                        "docker", "compose",
-                        "--profile", "tools",
-                        "-f", str(_DOCKER_COMPOSE_FILE),
-                        "images", "--quiet", "cli",
+                        "docker",
+                        "compose",
+                        "--profile",
+                        "tools",
+                        "-f",
+                        str(_DOCKER_COMPOSE_FILE),
+                        "images",
+                        "--quiet",
+                        "cli",
                     ],
                     capture_output=True,
                     text=True,
@@ -100,6 +109,7 @@ def _docker_cli_image_built() -> bool:
             except (OSError, subprocess.TimeoutExpired):
                 _DOCKER_CLI_IMAGE_BUILT = False
     return _DOCKER_CLI_IMAGE_BUILT
+
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -160,6 +170,7 @@ _DOCKER_ENV_KEYS = (
 
 def _redact_secrets(text: str) -> str:
     import re
+
     return re.sub(
         r"(OPENAI_API_KEY|API_KEY)=[^\s'\"]+",
         r"\1=***",
@@ -186,6 +197,7 @@ def _inject_docker_env(command: str, env: dict[str, str]) -> str:
             return command.replace(n, f"{n} {' '.join(flags)}", 1)
     return command
 
+
 # Each entry: (scenario_yaml_path, working_dir, scenario_id)
 _SCENARIOS = [
     (
@@ -195,17 +207,17 @@ _SCENARIOS = [
     ),
     (
         REPO_ROOT / "docs/tutorials/01-building-an-agent/demo/scenario.yaml",
-        REPO_ROOT,          # working_dir is relative to repo root (as declared in YAML)
+        REPO_ROOT,  # working_dir is relative to repo root (as declared in YAML)
         "tuto-01",
     ),
     (
         REPO_ROOT / "docs/tutorials/02-creating-a-mas/demo/scenario.yaml",
-        REPO_ROOT,          # working_dir is relative to repo root (as declared in YAML)
+        REPO_ROOT,  # working_dir is relative to repo root (as declared in YAML)
         "tuto-02",
     ),
     (
         REPO_ROOT / "docs/tutorials/03-experiments-and-analysis/demo/scenario.yaml",
-        REPO_ROOT,          # working_dir is relative to repo root (as declared in YAML)
+        REPO_ROOT,  # working_dir is relative to repo root (as declared in YAML)
         "tuto-03",
     ),
     (
@@ -222,6 +234,11 @@ _SCENARIOS = [
         REPO_ROOT / "docs/tutorials/06-agent-skills/demo/scenario.yaml",
         REPO_ROOT,
         "tuto-06",
+    ),
+    (
+        REPO_ROOT / "docs/tutorials/07-slim-link/demo/scenario.yaml",
+        REPO_ROOT,
+        "tuto-07",
     ),
     (
         REPO_ROOT / "docs/tutorials/11-sessions-and-recovery/demo/scenario.yaml",
@@ -267,6 +284,7 @@ if (REPO_ROOT / "library-kg/examples/qa-agent").is_dir():
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 class _CommandCase(NamedTuple):
     scenario_id: str
     section_title: str
@@ -274,7 +292,7 @@ class _CommandCase(NamedTuple):
     command: str
     working_dir: Path
     expected_exit_code: int
-    expected_output: str   # substring; empty = not checked
+    expected_output: str  # substring; empty = not checked
     requires: tuple[str, ...] = ()  # Python modules that must be importable
     allowed_modes: tuple[str, ...] = ()  # empty = no restriction
     timeout_s: int = 60
@@ -317,25 +335,24 @@ def _collect_command_cases() -> list[_CommandCase]:
                     continue
                 if not _step_runnable(step):
                     continue
-                cases.append(_CommandCase(
-                    scenario_id=scenario_id,
-                    section_title=sec_title,
-                    step_title=step.get("title", step.get("command", "?")[:40]),
-                    command=step["command"],
-                    working_dir=working_dir,
-                    expected_exit_code=step.get("expected_exit_code", 0),
-                    expected_output=step.get("expected_output", ""),
-                    requires=tuple(step.get("requires", [])),
-                    allowed_modes=tuple(step.get("allowed_modes", [])),
-                    timeout_s=int(step.get("timeout_s", 60)),
-                ))
+                cases.append(
+                    _CommandCase(
+                        scenario_id=scenario_id,
+                        section_title=sec_title,
+                        step_title=step.get("title", step.get("command", "?")[:40]),
+                        command=step["command"],
+                        working_dir=working_dir,
+                        expected_exit_code=step.get("expected_exit_code", 0),
+                        expected_output=step.get("expected_output", ""),
+                        requires=tuple(step.get("requires", [])),
+                        allowed_modes=tuple(step.get("allowed_modes", [])),
+                        timeout_s=int(step.get("timeout_s", 60)),
+                    )
+                )
     return cases
 
 
 _CASES = _collect_command_cases()
-
-
-from mas.ctl.testing.scenario_commands import rewrite_command_for_v2 as _rewrite_command_for_v2
 
 
 def _idfn(case: _CommandCase) -> str:
@@ -346,6 +363,7 @@ def _idfn(case: _CommandCase) -> str:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("case", _CASES, ids=[_idfn(c) for c in _CASES])
 def test_scenario_command(case: _CommandCase, tmp_path):
@@ -364,7 +382,9 @@ def test_scenario_command(case: _CommandCase, tmp_path):
         if not _docker_available():
             pytest.skip("Docker daemon not available")
         if not _docker_cli_image_built():
-            pytest.skip("Docker cli image not built — run: docker compose --profile tools -f docker/compose.yaml build cli")
+            pytest.skip(
+                "Docker cli image not built — run: docker compose --profile tools -f docker/compose.yaml build cli"
+            )
 
     result = subprocess.run(
         command,
@@ -396,12 +416,11 @@ def test_scenario_command(case: _CommandCase, tmp_path):
 # Scenario file presence guard (separate from parametrized tests)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize("yaml_path,_base,scenario_id", _SCENARIOS, ids=[s[2] for s in _SCENARIOS])
 def test_scenario_yaml_exists(yaml_path: Path, _base: Path, scenario_id: str):
     """Each registered scenario YAML must exist."""
-    assert yaml_path.exists(), (
-        f"Scenario YAML for '{scenario_id}' not found: {yaml_path}"
-    )
+    assert yaml_path.exists(), f"Scenario YAML for '{scenario_id}' not found: {yaml_path}"
 
 
 @pytest.mark.parametrize("yaml_path,_base,scenario_id", _SCENARIOS, ids=[s[2] for s in _SCENARIOS])
@@ -455,9 +474,10 @@ _FIXTURE_SCENARIOS = _scenarios_using_fixture()
     ids=[s[2] for s in _FIXTURE_SCENARIOS],
 )
 def test_scenario_fixture_exists(
-    yaml_path: Path, _base: Path, scenario_id: str, fixture: Path,
+    yaml_path: Path,
+    _base: Path,
+    scenario_id: str,
+    fixture: Path,
 ):
     """Scenarios that reference fixtures/events.jsonl must ship that file."""
-    assert fixture.exists(), (
-        f"Fixture events.jsonl not found for scenario '{scenario_id}': {fixture}"
-    )
+    assert fixture.exists(), f"Fixture events.jsonl not found for scenario '{scenario_id}': {fixture}"

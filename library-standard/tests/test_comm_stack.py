@@ -18,7 +18,6 @@ from mas.library.standard.lib.comm.capabilities import (
     declared_capabilities,
     merge_capabilities,
 )
-from mas.library.standard.lib.comm.compose import bind_bottom_up
 from mas.library.standard.lib.comm.headers import get_headers
 from mas.library.standard.plugins.agentcomm.layer import BoundLayer
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
@@ -74,11 +73,9 @@ def test_layers_above_bottom_must_bind() -> None:
             return "ok"
 
     with pytest.raises(ValueError, match="bind"):
-        bind_bottom_up([LocalAgentComm(lambda *_: "x"), NoBind()])
-    with pytest.raises(ValueError, match="layer"):
-        bind_bottom_up([])
+        StackAgentComm(layers=[LocalAgentComm(lambda *_: "x"), NoBind()])
     with pytest.raises(ValueError, match="send"):
-        bind_bottom_up([object()])
+        StackAgentComm(layers=[object()])
 
 
 def test_stack_of_one_equals_the_layer() -> None:
@@ -141,9 +138,7 @@ def test_declared_capabilities_read_from_plugin_classes() -> None:
     assert declared_capabilities("deco", registry=registry) == capability_set()
     stacked = {"type": "stack", "params": {"layers": [{"type": "link"}, {"type": "deco"}]}}
     assert declared_capabilities(stacked, registry=registry) == LocalAgentComm.CAPABILITIES
-    assert declared_capabilities(
-        {"type": "stack", "params": {"layers": ["link", "bare"]}}, registry=registry
-    ) is None
+    assert declared_capabilities({"type": "stack", "params": {"layers": ["link", "bare"]}}, registry=registry) is None
     assert declared_capabilities("bare", registry=registry) is None
     with pytest.raises(ValueError, match="unknown"):
         capability_set(teleport=True)
@@ -232,6 +227,9 @@ def test_getattr_does_not_recurse_on_private_names() -> None:
     stack = StackAgentComm(layers=[links[0]])
     with pytest.raises(AttributeError):
         _ = stack._nope
+    with pytest.raises(AttributeError):
+        _ = stack.no_such_attribute
+    assert not hasattr(stack, "no_such_attribute")
     assert stack.agent_id == "a"
 
 
@@ -361,8 +359,10 @@ def test_explicit_headers_replace_context_headers() -> None:
     headers, ctx = seen[-1]
     assert isinstance(headers, dict)
     assert isinstance(ctx, SendContext)
-    assert headers == {"k": "v"}
-    assert dict(ctx.headers) == {"k": "v"}
+    # the stack stamps a traceparent on every send; everything else is what the caller wrote
+    assert {k: v for k, v in headers.items() if k != "traceparent"} == {"k": "v"}
+    assert dict(ctx.headers) == headers
+    assert "traceparent" in headers
     assert "baggage" not in headers
     assert "baggage" not in ctx.headers
 
@@ -438,6 +438,81 @@ def test_unknown_live_layer_has_no_security_claims() -> None:
     assert stack.capabilities() == {}
     for flag in SECURITY_FLAGS:
         assert not stack.capabilities().get(flag)
+
+
+def test_a_stack_says_who_it_is_from_its_bottom_link_and_forwards_nothing_else() -> None:
+    class Bare:
+        def send(self, *args: object, **kwargs: object) -> str:
+            return "x"
+
+        def extra(self) -> str:
+            return "not part of the stack's surface"
+
+    class Named(Bare):
+        plugin_id = "named"
+        endpoint = "http://127.0.0.1:1"
+        agent_id = "a"
+
+    plain = StackAgentComm(layers=[Bare()])
+    assert (plain.plugin_id, plain.endpoint, plain.fabric_id) == ("", "", None)
+    with pytest.raises(AttributeError):
+        _ = plain.agent_id
+    named = StackAgentComm(layers=[Named()])
+    assert (named.plugin_id, named.endpoint, named.agent_id) == ("named", "http://127.0.0.1:1", "a")
+    with pytest.raises(AttributeError):
+        _ = named.extra  # a stack has no proxy to the link: the link is ``_layers[0].link``
+    assert named._layers[0].link.extra()
+
+
+def test_a_bound_layer_sees_the_identity_of_the_link_below_and_nothing_else() -> None:
+    class Named:
+        plugin_id = "named"
+        endpoint = "http://127.0.0.1:1"
+        agent_id = "a"
+        fabric_id = 7
+        secret = "kept on the link"
+
+        def send(self, *args: object, **kwargs: object) -> str:
+            return "x"
+
+    decorator = BoundLayer()
+    StackAgentComm(layers=[Named(), decorator])
+    assert (decorator.plugin_id, decorator.endpoint, decorator.agent_id, decorator.fabric_id) == (
+        "named",
+        "http://127.0.0.1:1",
+        "a",
+        7,
+    )
+    with pytest.raises(AttributeError):
+        _ = decorator.secret
+
+
+def test_a_layer_needs_no_hook_to_be_a_layer_and_a_legacy_object_is_adapted_once() -> None:
+    from mas.library.standard.lib.stack import Layer
+    from mas.library.standard.lib.stack.legacy import LegacyLayer, LinkLayer, adapt_legacy
+
+    class Plain(Layer):
+        pass
+
+    layer = Plain()
+    assert layer.honoured_send_intents() is None and not layer.wraps_inbound
+    assert (layer.plugin_id, layer.endpoint, layer.fabric_id, layer.agent_id) == ("", "", None, "")
+    assert Plain.agent_name({}, "a") == "a" and Plain.shared_service({}) is None and Plain.LISTEN_REFUSAL == ""
+    Plain.check_agent_id({}, "anything")
+    assert adapt_legacy(layer, bottom=False) is layer
+
+    class Link:
+        def send(self, *args: object, **kwargs: object) -> str:
+            return "x"
+
+    assert isinstance(adapt_legacy(Link(), bottom=True), LinkLayer)
+    assert isinstance(adapt_legacy(BoundLayer(), bottom=False), LegacyLayer)
+    with pytest.raises(ValueError, match="bind layer cannot sit at the bottom"):
+        adapt_legacy(BoundLayer(), bottom=True)
+    with pytest.raises(ValueError, match="must be a link with send"):
+        adapt_legacy(object(), bottom=True)
+    with pytest.raises(ValueError, match="must bind to the layer below"):
+        adapt_legacy(Link(), bottom=False)
 
 
 def test_bound_layer_forwards_and_asend_fallback() -> None:
@@ -621,3 +696,79 @@ def test_check_agent_comm_fails_a_link_that_never_raises() -> None:
 
     with pytest.raises(AssertionError, match="missing peer"):
         check_agent_comm([Silent("a"), Silent("b"), Silent("c")])
+
+
+def test_a_link_is_found_before_a_stack_layer_wherever_the_entry_sits() -> None:
+    """The lookup order is always the plugin kind first, then ``stack_layer``; no position is involved."""
+    from types import SimpleNamespace
+
+    from mas.library.standard.lib.comm.compose import instantiate_layers, resolve_layer_class
+
+    class Link:
+        pass
+
+    class Frame:
+        pass
+
+    class Registry:
+        def resolve_spec(self, kind: str, binding: dict) -> SimpleNamespace:
+            table = {"agent_comm": {"link": Link}, "stack_layer": {"link": Frame, "frame": Frame}}[kind]
+            if binding["type"] not in table:
+                raise KeyError(binding["type"])
+            return SimpleNamespace(load_class=lambda: table[binding["type"]])
+
+    registry = Registry()
+    assert resolve_layer_class("agent_comm", {"type": "link", "params": {}}, registry) is Link
+    assert resolve_layer_class("agent_comm", {"type": "frame", "params": {}}, registry) is Frame
+    with pytest.raises(KeyError):
+        resolve_layer_class("agent_comm", {"type": "nothing", "params": {}}, registry)
+    built = instantiate_layers(
+        "agent_comm", [{"type": "link"}, {"type": "frame"}, {"type": "link"}], {"registry": registry}
+    )
+    assert [type(layer) for layer in built] == [Link, Frame, Link]
+
+
+def test_stack_takes_a_generic_layer_by_live_object() -> None:
+    from mas.library.standard.lib.stack import StackSendError
+    from mas.library.standard.testing.layer_conformance import FailingLayer
+
+    link = LocalAgentComm(lambda *_: "ok", agent_id="alice")
+    stack = StackAgentComm(layers=[link, FailingLayer(targets=("b",), message="b refused")])
+    assert stack.send("c", "t") == "ok"
+    with pytest.raises(StackSendError, match="b refused"):
+        stack.send("b", "t")
+
+
+def test_an_adapted_link_or_decorator_starts_and_stops_once() -> None:
+    from mas.library.standard.lib.stack.legacy import LegacyLayer, LinkLayer
+
+    class Counted(BoundLayer):
+        def __init__(self) -> None:
+            super().__init__()
+            self.calls: list[str] = []
+
+        def start(self) -> None:
+            self.calls.append("start")
+
+        def stop(self) -> None:
+            self.calls.append("stop")
+
+    class Link:
+        calls: list[str] = []
+
+        def send(self, *args: object, **kwargs: object) -> str:
+            return "x"
+
+        def start(self) -> None:
+            self.calls.append("start")
+
+        def stop(self) -> None:
+            self.calls.append("stop")
+
+    link, decorator = Link(), Counted()
+    for layer, calls in ((LinkLayer(link), link.calls), (LegacyLayer(decorator), decorator.calls)):
+        layer.start()
+        layer.start()
+        layer.stop()
+        layer.stop()
+        assert calls == ["start", "stop"]

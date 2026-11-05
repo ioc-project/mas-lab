@@ -1,9 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+"""Content-addressed trace cache — run hashing and cache entry I/O."""
 
 from __future__ import annotations
-
-"""Content-addressed trace cache — run hashing and cache entry I/O."""
 
 import logging
 from datetime import datetime, timezone
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
 
 def trace_cache_roots(explicit: Optional[Path] = None) -> list[Path]:
     """Return trace-cache directories to probe (canonical only)."""
@@ -60,6 +60,7 @@ def get_trace_cache_dir(explicit: Optional[Path] = None) -> Path:
     ``CLI > YAML > env > default`` chain.
     """
     from mas.lab import paths as _paths
+
     return _paths.trace_cache(explicit=explicit)
 
 
@@ -87,15 +88,17 @@ def extract_flavour_info(flavour: Optional[Any]) -> dict:
       _raw                            — FlavourManifest forward-compat store
       name, description               — organisational, not computational
       telemetry                       — logging backend doesn't affect LLM output
+      bind                            — which infra rows calls ride: deployment, not logic
     """
     if flavour is None:
         return {}
 
     _SECRETS = frozenset({"api_key_env", "embed_api_key_env"})
-    _SKIP = frozenset({"_available", "_raw", "name", "description", "telemetry"})
+    _SKIP = frozenset({"_available", "_raw", "name", "description", "telemetry", "bind"})
 
     def _scrub(obj: Any) -> Any:
         import dataclasses as _dc
+
         if _dc.is_dataclass(obj) and not isinstance(obj, type):
             return {
                 f.name: _scrub(getattr(obj, f.name))
@@ -118,6 +121,7 @@ def extract_flavour_info(flavour: Optional[Any]) -> dict:
 
     try:
         import dataclasses as _dc
+
         # FlavourManifest dataclass (most common path)
         if _dc.is_dataclass(flavour) and not isinstance(flavour, type):
             return _scrub(flavour)

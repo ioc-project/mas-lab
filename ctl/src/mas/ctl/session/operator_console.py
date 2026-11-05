@@ -93,8 +93,11 @@ class OperatorConsole:
                 break
 
     def _read_line(self, prompt: str) -> str | None:
-        self.err.write(prompt)
-        self.err.flush()
+        # The prompt is for a person at a terminal. With piped input nobody reads it, and it
+        # would run into the echo of the line on the same output ("You: You: ...").
+        if _is_terminal(sys.stdin):
+            self.err.write(prompt)
+            self.err.flush()
         try:
             line = sys.stdin.readline()
         except (EOFError, KeyboardInterrupt):
@@ -155,3 +158,10 @@ class OperatorConsole:
             "commands: /reset /pause /resume /abort /steer <text> /skills /skill <name> /quit\n"
         )
         self.err.flush()
+
+
+def _is_terminal(stream: TextIO) -> bool:
+    try:
+        return stream.isatty()
+    except (OSError, ValueError):  # a closed or detached stream is not a terminal
+        return False

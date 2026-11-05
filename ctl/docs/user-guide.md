@@ -37,7 +37,7 @@ Add `--override PATH=VALUE` (repeatable) for one-off, schema-validated changes a
 - MAS manifest: declares agents, topology/workflow, metadata
 - Deployment: placement strategy and runtime binding (`local-inproc` is the only OSS-supported strategy)
 - Overlay: a partial manifest merged over the base (`--overlay`, `--override`). In `mas-lab`, a *scenario* is the experiment-level construct that selects overlays per run (hierarchy: Experiment, Scenario, Item, Run).
-- Flavour: a named environment profile shipped by a library (list them with `mas-ctl flavour list`). Only `local` is available today.
+- Flavour: the glue between the MAS and the infra. Its `bind` links each agent to infra rows; the bundled name is `local`, and `--flavour PATH` takes a file.
 - Policy: guardrails and runtime limits declared in the manifest
 
 ### Placement (OSS)
@@ -70,7 +70,7 @@ Run `mas-ctl --help` and `mas-ctl <command> --help` for all options.
 - `run-mas` — execute a MAS workflow (`--prompt`/`--query`, `--interactive`)
 - `compile`, `compose`, `plan` — manifest compilation, composition and placement dry-run
 - `validate`, `schemas` — YAML validation and schema listing
-- `flavour list` — flavours shipped by installed libraries
+- `flavour list` — deprecated: prints a warning; use `--flavour PATH` or a bundled name (`local`)
 - `infra list` (alias `list-bundles`) — infra bundles
 - `registry list`, `registry query` — plugin registry introspection
 - `plugin list`, `plugin enable`, `plugin doctor` — plugin inspection and checks
