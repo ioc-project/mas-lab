@@ -6,18 +6,17 @@ Benchmark Tests for MAS Lab.
 Validates the benchmark harness itself.
 """
 
-import os
 import json
-import pytest
-import asyncio
 from datetime import datetime
 from unittest.mock import MagicMock
 
+import pytest
 from mas.lab.benchmark import (
+    ResultAnalyzer,
     ResultStorage,
     RunMetadata,
-    ResultAnalyzer,
 )
+
 
 @pytest.fixture
 def mock_mas_runner(mocker):
@@ -30,6 +29,7 @@ def mock_mas_runner(mocker):
         metadata={"usage": {"total_tokens": 1}},
     )
     return mock
+
 
 def test_benchmark_storage_creates_run_dir(tmp_path):
     """Test that saving a run creates the expected folder structure and metadata file."""
@@ -93,4 +93,3 @@ def test_analyzer_consolidates_results(tmp_path):
     assert set(df["pattern"].tolist()) == {"react", "cot_balanced"}
     assert "success" in df.columns
     assert df["success"].all()
-

@@ -258,7 +258,6 @@ class TestWithSkills:
         assert "activate_skill" in names
         assert "run_skill_script" not in names
 
-
     # -- Tier 2: activate_skill tool -----------------------------------------
 
     def test_activate_skill_returns_body(self):

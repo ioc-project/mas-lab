@@ -33,6 +33,17 @@ def test_ruff_command_check_includes_files(lint):
     assert cmd[-2:] == ["check", "scripts/ruff_changed.py"]
 
 
+def test_ruff_command_format_check_includes_files(lint):
+    cmd = lint.ruff_command("format-check", ["scripts/ruff_changed.py"])
+    assert cmd[-3:] == ["format", "--check", "scripts/ruff_changed.py"]
+
+
+def test_locked_ruff_version_reads_uv_lock(lint):
+    version = lint.locked_ruff_version()
+    assert version is not None
+    assert version[0].isdigit()
+
+
 def test_main_skips_when_no_python_files(lint, monkeypatch, capsys):
     monkeypatch.setattr(lint, "changed_python_files", lambda **_kwargs: [])
     assert lint.main(["check", "--base", "origin/main"]) == 0

@@ -112,9 +112,7 @@ def test_compare_spans_multi_and_output(tmp_path):
     r = run_compare_spans(ref, a, strict=True, output_path=out)
     assert r["passed"]
     assert out.exists()
-    multi = run_compare_spans_multi(
-        ref, [("cand-a", a)], strict=True, output_path=tmp_path / "m.json"
-    )
+    multi = run_compare_spans_multi(ref, [("cand-a", a)], strict=True, output_path=tmp_path / "m.json")
     assert multi["passed"]
 
 
@@ -138,9 +136,7 @@ def test_otlp_http_error(monkeypatch):
             "resource": {"attributes": {}},
         }
     ]
-    res = otlp.push_spans_to_collector(
-        sdk, "http://x:4318", app_name="app", dry_run=False
-    )
+    res = otlp.push_spans_to_collector(sdk, "http://x:4318", app_name="app", dry_run=False)
     assert res["status"] == "error"
     assert "503" in res["detail"]
 
@@ -194,9 +190,7 @@ def test_clickhouse_list_apps_and_dump(tmp_path, fake_clickhouse):
     assert result["spans"] == 2
     assert out.exists()
     assert "WHERE session_id = {'sess-1'}" in seen_queries[1]
-    result_t = dump_spans(
-        "trace-1", query_by="trace", output_path=tmp_path / "t.jsonl", app_name="app-a"
-    )
+    result_t = dump_spans("trace-1", query_by="trace", output_path=tmp_path / "t.jsonl", app_name="app-a")
     assert result_t["query_by"] == "trace"
     assert "WHERE TraceId = {'trace-1'} AND ServiceName = {'app-a'}" in seen_queries[2]
 
@@ -217,9 +211,7 @@ def test_clickhouse_unavailable(monkeypatch):
 def test_artifact_stream_and_repr(tmp_path):
     from mas.library.telemetry import OtelSpanSet, stream_span_sets
 
-    s1 = OtelSpanSet.from_spans(
-        [{"name": "A", "context": {"span_id": "1", "trace_id": "t"}, "attributes": {}}]
-    )
+    s1 = OtelSpanSet.from_spans([{"name": "A", "context": {"span_id": "1", "trace_id": "t"}, "attributes": {}}])
     p1 = s1.save(tmp_path / "1.jsonl")
     p2 = s1.save(tmp_path / "2.jsonl")
     loaded = list(stream_span_sets([p1, p2]))
@@ -492,9 +484,7 @@ def test_shift_otlp_spans_to_now_keeps_duration():
     _shift_otlp_spans_to_now([span], now_ns=now_ns)
     assert span.start_ns == now_ns
     assert span.end_ns - span.start_ns == 50_000
-    assert span.attributes["ioa_start_time"] == pytest.approx(
-        1.0 + (now_ns - 1_000_000_000) / 1e9
-    )
+    assert span.attributes["ioa_start_time"] == pytest.approx(1.0 + (now_ns - 1_000_000_000) / 1e9)
 
 
 def test_rekey_otlp_session_id_stamps_app_prefixed_uuid():
@@ -630,10 +620,7 @@ def test_otlp_hex_and_iso_helpers():
         _normalise_hex,
     )
 
-    assert (
-        _normalise_hex("0xABCDEF", 4) == "cdef"[:4]
-        or len(_normalise_hex("0xABCDEF", 4)) == 4
-    )
+    assert _normalise_hex("0xABCDEF", 4) == "cdef"[:4] or len(_normalise_hex("0xABCDEF", 4)) == 4
     assert _iso_to_ns("2024-01-01T00:00:00.123456789Z") > 0  # sub-us trimmed
     assert _iso_to_ns("") == 0
     kv = {d["key"]: d["value"] for d in _attrs_to_otlp({"n": 2})}

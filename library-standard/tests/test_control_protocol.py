@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.session.controller import SessionController
 from mas.ctl.session.manager import SessionManager
 from mas.library.standard.plugins.control.attach import (
@@ -202,9 +201,7 @@ async def test_subscribe_exchange_replays_then_streams(tmp_path: Path) -> None:
     directory = FileSessionDirectory(tmp_path)
     hub = ExchangeHub()
     hub.publish("s-sub-ex", {"kind": "user_in", "text": "hi"})
-    server, hosted = await serve_and_advertise(
-        control, directory, "s-sub-ex", host="127.0.0.1", hub=hub
-    )
+    server, hosted = await serve_and_advertise(control, directory, "s-sub-ex", host="127.0.0.1", hub=hub)
     client = await attach(directory, "s-sub-ex")
     seen: list[str] = []
     replayed = False

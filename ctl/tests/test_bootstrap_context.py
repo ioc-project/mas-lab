@@ -7,14 +7,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.session.bootstrap import _apply_manifest_context
+from mas.library.skills.lib.resolver import resolve_skill_path
+from mas.library.skills.plugins.sk_catalog import SkillCatalogPlugin
 from mas.runtime.boundary.context.manifest_context import (
     ContextRefNotFoundError,
     resolve_context_chunk,
 )
-from mas.library.skills.lib.resolver import resolve_skill_path
-from mas.library.skills.plugins.sk_catalog import SkillCatalogPlugin
 from mas.runtime.driver.mocks import AutoCtxAssembler
 
 
@@ -64,9 +63,7 @@ def test_apply_manifest_context_reads_array_chunk_as_one_joined_line(tmp_path: P
         }
     }
     _apply_manifest_context(ctx, manifest, tmp_path)
-    assert ctx.injected_context == [
-        "[role] You are a travel planner.\nConfirm the budget before booking."
-    ]
+    assert ctx.injected_context == ["[role] You are a travel planner.\nConfirm the budget before booking."]
 
 
 def test_apply_manifest_context_only_reads_context_chunks():
@@ -194,13 +191,7 @@ def test_resolve_skill_plugin_config_auto_inject_defaults_false(tmp_path: Path):
 def test_resolve_skill_plugin_config_reads_pin_and_unload(tmp_path: Path):
     from mas.ctl.session.bootstrap import _resolve_skill_plugin_config
 
-    manifest = {
-        "spec": {
-            "context_sources": [
-                {"native": {"pin_activated": False, "allow_unload": True}}
-            ]
-        }
-    }
+    manifest = {"spec": {"context_sources": [{"native": {"pin_activated": False, "allow_unload": True}}]}}
     cfg = _resolve_skill_plugin_config(manifest, default_base_dir=tmp_path)
     assert cfg.pin_activated is False
     assert cfg.allow_unload is True

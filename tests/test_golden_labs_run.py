@@ -1,9 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Golden-run parity for every lab in tests/fixtures/golden-runs/labs.yaml."""
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -67,10 +67,7 @@ def test_golden_lab_events_parity(label: str, experiment: Path, golden_env) -> N
     golden_fp_path = golden_dir / "events.sha256"
 
     if not golden_fp_path.is_file() or not golden_events.is_file():
-        pytest.fail(
-            f"golden fixture missing for {label} — run:\n"
-            f"  python scripts/capture_golden_run.py --labs {label}"
-        )
+        pytest.fail(f"golden fixture missing for {label} — run:\n  python scripts/capture_golden_run.py --labs {label}")
 
     assert experiment.is_file(), f"capture experiment missing: {experiment}"
 

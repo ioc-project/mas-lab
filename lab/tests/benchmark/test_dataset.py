@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.lab.benchmark import Dataset, DatasetItem
 from mas.lab.inputs import RunInput
 
@@ -187,13 +186,7 @@ def test_dataset_source_without_path_errors(tmp_path: Path):
 
 def test_spec_path_loads_yaml_sidecar(tmp_path: Path):
     (tmp_path / "rows.yaml").write_text(
-        yaml.dump(
-            {
-                "items": [
-                    {"id": "1", "inputs": {"user": "from sidecar"}, "group": "single_agent"}
-                ]
-            }
-        ),
+        yaml.dump({"items": [{"id": "1", "inputs": {"user": "from sidecar"}, "group": "single_agent"}]}),
         encoding="utf-8",
     )
     manifest = tmp_path / "dataset.yaml"
@@ -287,13 +280,7 @@ def test_empty_dataset_yaml_loads():
 
 
 def test_cataloged_trip_planner_benchmark_loads():
-    path = (
-        Path(__file__).resolve().parents[3]
-        / "library-samples"
-        / "datasets"
-        / "trip-planner"
-        / "benchmark.yaml"
-    )
+    path = Path(__file__).resolve().parents[3] / "library-samples" / "datasets" / "trip-planner" / "benchmark.yaml"
     dataset = Dataset.from_yaml(path)
     assert len(dataset) == 250
     assert dataset[0].prompt

@@ -1,7 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 import pytest
-
 from mas.ctl.adapters.checkpoint import JsonCheckpointStore
 from mas.ctl.cli.commands.chat import _embedded_checkpoint_manifest
 from mas.runtime.session import ManifestRef

@@ -120,11 +120,7 @@ def test_lab_rerun_after_cache_entry_removed(
     assert artifacts_after, f"pipeline artefacts not regenerated for {label}"
 
     events_after = find_events_in_tree(output_dir) or find_events_in_tree(trace_cache_dir)
-    assert events_after and any(p.stat().st_size > 0 for p in events_after), (
-        f"events.jsonl not regenerated for {label}"
-    )
+    assert events_after and any(p.stat().st_size > 0 for p in events_after), f"events.jsonl not regenerated for {label}"
 
     new_cache = _first_cache_entry(trace_cache_dir)
-    assert new_cache is not None and new_cache.exists(), (
-        f"trace-cache entry not recreated for {label}"
-    )
+    assert new_cache is not None and new_cache.exists(), f"trace-cache entry not recreated for {label}"

@@ -8,7 +8,6 @@ plugin-list merge semantics as agent overlays.
 """
 
 import pytest
-
 from mas.ctl.overlay.merge import OverlayTargetError, merge_flavour_overlay, merge_overlay
 
 
@@ -68,7 +67,9 @@ class TestMergeFlavourOverlayWhitelist:
 
     def test_control_uses_same_plugin_list_semantics(self):
         base = _flavour({})
-        merged = merge_flavour_overlay(base, _overlay({"control": {"$op": {"merge": {"budget": {"max_tokens": 1000}}}}}))
+        merged = merge_flavour_overlay(
+            base, _overlay({"control": {"$op": {"merge": {"budget": {"max_tokens": 1000}}}}})
+        )
         assert merged["spec"]["control"]["budget"]["max_tokens"] == 1000
 
     def test_agent_comm_dict_merges(self):

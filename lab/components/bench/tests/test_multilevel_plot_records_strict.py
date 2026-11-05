@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-
 from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
 

@@ -10,13 +10,19 @@ from mas.runtime.engine.manifest_tool_provider import (
     ManifestToolLoadError,
     build_manifest_tool_provider,
 )
-from mas.runtime.engine.tool_dispatch import ToolExecutionError, execute_engine_tool
+from mas.runtime.engine.tool_dispatch import execute_engine_tool
 from mas.runtime.engine.tools import openai_tools
 
 
 class _DynamicSystemTool:
     def on_collect_tools(self, **_):
-        return [{"name": "dynamic_system_tool", "description": "dynamic", "parameters": {"type": "object", "properties": {}}}]
+        return [
+            {
+                "name": "dynamic_system_tool",
+                "description": "dynamic",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
 
     def on_execute_tool(self, name, args, **_):
         return "registered" if name == "dynamic_system_tool" else None
@@ -24,7 +30,13 @@ class _DynamicSystemTool:
 
 class _DefaultEnabledSystemTool:
     def on_collect_tools(self, **_):
-        return [{"name": "default_enabled_system_tool", "description": "default", "parameters": {"type": "object", "properties": {}}}]
+        return [
+            {
+                "name": "default_enabled_system_tool",
+                "description": "default",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
 
     def on_execute_tool(self, name, args, **_):
         return "default-enabled" if name == "default_enabled_system_tool" else None
@@ -129,9 +141,7 @@ def test_system_tool_registry_supports_new_registered_tool_names(calculator_tool
             calculator_tool_tree,
         )
 
-        assert [tool["function"]["name"] for tool in provider.list_openai_tools()] == [
-            "dynamic_system_tool"
-        ]
+        assert [tool["function"]["name"] for tool in provider.list_openai_tools()] == ["dynamic_system_tool"]
         assert provider.call_tool("dynamic_system_tool", {}) == "registered"
     finally:
         unregister_plugin(urn)
@@ -153,9 +163,7 @@ def test_spawn_subagent_tool_advertises_only_granted_templates():
 
     tool = SpawnSubagentTool()
     assert tool.on_collect_tools(ctx=SimpleNamespace()) == []
-    assert tool.on_collect_tools(
-        ctx=SimpleNamespace(allow_subagent_spawning=True, subagent_templates=[])
-    ) == []
+    assert tool.on_collect_tools(ctx=SimpleNamespace(allow_subagent_spawning=True, subagent_templates=[])) == []
     advertised = tool.on_collect_tools(
         ctx=SimpleNamespace(
             allow_subagent_spawning=True,
@@ -178,11 +186,7 @@ def test_manifest_tool_attachment_gates_spawn_subagent_on_manifest_capability(tm
                 {
                     "kind": "system",
                     "name": "spawn_subagent",
-                    "params": {
-                        "templates": [
-                            {"id": "worker", "ref": "worker.yaml", "description": "Review"}
-                        ]
-                    },
+                    "params": {"templates": [{"id": "worker", "ref": "worker.yaml", "description": "Review"}]},
                 }
             ],
         }
@@ -197,9 +201,7 @@ def test_manifest_tool_attachment_gates_spawn_subagent_on_manifest_capability(tm
         "create_subagent",
         "spawn_subagent",
     ]
-    assert advertised[0]["function"]["parameters"]["properties"]["template"]["enum"] == [
-        "worker"
-    ]
+    assert advertised[0]["function"]["parameters"]["properties"]["template"]["enum"] == ["worker"]
 
 
 def test_manifest_tool_attachment_accepts_create_subagent_alias(tmp_path: Path):
@@ -213,11 +215,7 @@ def test_manifest_tool_attachment_accepts_create_subagent_alias(tmp_path: Path):
                 {
                     "kind": "system",
                     "name": "create_subagent",
-                    "params": {
-                        "templates": [
-                            {"id": "worker", "ref": "worker.yaml", "description": "Review"}
-                        ]
-                    },
+                    "params": {"templates": [{"id": "worker", "ref": "worker.yaml", "description": "Review"}]},
                 }
             ],
         }
@@ -326,9 +324,7 @@ class EchoImplTool:
 
 def test_openai_tools_uses_provider(calculator_tool_tree: Path):
     manifest = {"spec": {"tools": [{"ref": "tools/calculator.tool.yaml"}]}}
-    provider = build_manifest_tool_provider(
-        manifest["spec"]["tools"], calculator_tool_tree
-    )
+    provider = build_manifest_tool_provider(manifest["spec"]["tools"], calculator_tool_tree)
     tools = openai_tools(manifest, tool_provider=provider)
     assert tools[0]["function"]["name"] == "calculator"
 

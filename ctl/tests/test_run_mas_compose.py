@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.compose.runner import ComposeRequest, compose_run
 
 
@@ -97,9 +96,7 @@ spec:
     assert {a["agent_id"] for a in agents} == {"alpha", "beta"}
 
 
-def test_compose_run_library_app_keeps_experiment_workspace_infra(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_compose_run_library_app_keeps_experiment_workspace_infra(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A library-backed app must not replace the experiment's workspace config."""
     workspace_root = tmp_path / "experiment"
     workspace_root.mkdir()

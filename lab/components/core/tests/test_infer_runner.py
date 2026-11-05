@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for manifest-driven lab runner inference."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import yaml
-
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
 from mas.lab.runners.infer import (
     framework_adapter_from_dict,

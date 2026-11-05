@@ -35,13 +35,16 @@ def test_apply_engine_io_return_prefers_tool_metadata_for_correlation_id():
     )
     config = KernelConfig()
 
-    with patch(
-        "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
-        return_value=IngressGovDecision(action=GovernanceAction.ALLOW),
-    ) as env_mock, patch(
-        "mas.runtime.kernel.ingress_step.commit_engine_io_return",
-        return_value=[NoOp()],
-    ) as commit_mock:
+    with (
+        patch(
+            "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
+            return_value=IngressGovDecision(action=GovernanceAction.ALLOW),
+        ) as env_mock,
+        patch(
+            "mas.runtime.kernel.ingress_step.commit_engine_io_return",
+            return_value=[NoOp()],
+        ) as commit_mock,
+    ):
         out = apply_engine_io_return(
             q,
             run,
@@ -82,11 +85,7 @@ def test_ingress_denied_closes_envelope() -> None:
         )
     assert isinstance(out[0], RaiseBoundaryError)
     assert out[0].code == "INGRESS_DENIED"
-    symbols = [
-        e.payload.get("symbol")
-        for e in obs.events
-        if e.kind == ObsEventKind.ENVELOPE_ACTIVITY
-    ]
+    symbols = [e.payload.get("symbol") for e in obs.events if e.kind == ObsEventKind.ENVELOPE_ACTIVITY]
     assert EnvelopeSymbol.CONTRACT_END.value in symbols
     assert symbols == [s.value for s in INGRESS_ENVELOPE_SYMBOLS]
 
@@ -104,10 +103,13 @@ def test_hitl_skipped_still_closes_envelope() -> None:
     )
     obs = ObservabilityOperator()
     config = KernelConfig(hitl_once_per_turn=True, hitl_on_tool_result=True)
-    with runtime_binding(None, obs), patch(
-        "mas.runtime.kernel.ingress_step.commit_engine_io_return",
-        return_value=[NoOp()],
-    ) as commit_mock:
+    with (
+        runtime_binding(None, obs),
+        patch(
+            "mas.runtime.kernel.ingress_step.commit_engine_io_return",
+            return_value=[NoOp()],
+        ) as commit_mock,
+    ):
         out = apply_engine_io_return(
             q,
             run,
@@ -117,11 +119,7 @@ def test_hitl_skipped_still_closes_envelope() -> None:
         )
     commit_mock.assert_called_once()
     assert out == [NoOp()]
-    symbols = [
-        e.payload.get("symbol")
-        for e in obs.events
-        if e.kind == ObsEventKind.ENVELOPE_ACTIVITY
-    ]
+    symbols = [e.payload.get("symbol") for e in obs.events if e.kind == ObsEventKind.ENVELOPE_ACTIVITY]
     assert EnvelopeSymbol.OBSERVABILITY_POST_EXECUTE.value in symbols
     assert EnvelopeSymbol.CONTRACT_END.value in symbols
     assert EnvelopeSymbol.GOVERNANCE_VALIDATE.value not in symbols
@@ -138,14 +136,17 @@ def test_backtrack_decision_returns_session_boundary_signal_without_committing_e
         text="connection refused",
     )
 
-    with patch(
-        "mas.runtime.kernel.ingress_step.ingress_governance_valid",
-        return_value=True,
-    ), patch(
-        "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
-        return_value=IngressGovDecision(
-            action=GovernanceAction.BACKTRACK,
-            message="connection refused",
+    with (
+        patch(
+            "mas.runtime.kernel.ingress_step.ingress_governance_valid",
+            return_value=True,
+        ),
+        patch(
+            "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
+            return_value=IngressGovDecision(
+                action=GovernanceAction.BACKTRACK,
+                message="connection refused",
+            ),
         ),
     ):
         output = apply_engine_io_return(q, run, event, config=KernelConfig(), evaluate=MagicMock())
@@ -215,12 +216,15 @@ def test_ingress_skip_commits_under_original_cid_and_updates_tool_machine() -> N
         text="secret-result",
     )
     evaluate = MagicMock(return_value=[NoOp()])
-    with patch(
-        "mas.runtime.kernel.ingress_step.ingress_governance_valid",
-        return_value=True,
-    ), patch(
-        "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
-        return_value=IngressGovDecision(action=GovernanceAction.SKIP),
+    with (
+        patch(
+            "mas.runtime.kernel.ingress_step.ingress_governance_valid",
+            return_value=True,
+        ),
+        patch(
+            "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
+            return_value=IngressGovDecision(action=GovernanceAction.SKIP),
+        ),
     ):
         apply_engine_io_return(q, run, event, config=KernelConfig(), evaluate=evaluate)
 
@@ -239,12 +243,15 @@ def _apply_ingress(action: GovernanceAction, event: EngineIoReturn, *, q: QProdu
     q = q or QProduct()
     run = RunLedger()
     evaluate = MagicMock(return_value=[NoOp()])
-    with patch(
-        "mas.runtime.kernel.ingress_step.ingress_governance_valid",
-        return_value=True,
-    ), patch(
-        "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
-        return_value=IngressGovDecision(action=action),
+    with (
+        patch(
+            "mas.runtime.kernel.ingress_step.ingress_governance_valid",
+            return_value=True,
+        ),
+        patch(
+            "mas.runtime.kernel.ingress_step.run_ingress_validate_envelope",
+            return_value=IngressGovDecision(action=action),
+        ),
     ):
         out = apply_engine_io_return(q, run, event, config=KernelConfig(), evaluate=evaluate)
     return q, run, out, evaluate

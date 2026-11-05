@@ -9,7 +9,6 @@ import tempfile
 from pathlib import Path
 
 import yaml
-
 from mas.ctl.validate import validate_data, validate_file
 
 
@@ -71,10 +70,7 @@ def test_agent_tool_ref_without_dot_slash() -> None:
     }
     result = validate_data(manifest, kind="agent", strict=True)
     assert not result.ok
-    assert any(
-        "looks like a file path" in issue.message and "use './...'" in issue.message
-        for issue in result.issues
-    )
+    assert any("looks like a file path" in issue.message and "use './...'" in issue.message for issue in result.issues)
 
 
 def test_agent_tool_ref_with_correct_format() -> None:
@@ -191,7 +187,4 @@ def test_agent_bare_string_tool_ref_with_path() -> None:
     }
     result = validate_data(manifest, kind="agent", strict=True)
     assert not result.ok
-    assert any(
-        "looks like a file path" in issue.message and "use './...'" in issue.message
-        for issue in result.issues
-    )
+    assert any("looks like a file path" in issue.message and "use './...'" in issue.message for issue in result.issues)

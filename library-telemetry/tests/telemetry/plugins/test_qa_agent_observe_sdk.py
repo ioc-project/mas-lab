@@ -12,8 +12,8 @@ import json
 from pathlib import Path
 
 import pytest
-
 from mas.library.telemetry.conversion import semconv
+
 from tests.conftest import requires_otel
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[3]
@@ -21,19 +21,11 @@ QA_EVENTS = PACKAGE_ROOT / "examples" / "qa-agent" / "events.jsonl"
 
 
 def _load_events(path: Path) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _load_spans(path: Path) -> list[dict]:
-    return [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _attrs(span: dict) -> dict:
@@ -62,11 +54,7 @@ def test_qa_agent_live_plugin_emits_session_end_and_graph(tmp_path: Path) -> Non
     events = _load_events(QA_EVENTS)
     for rec in sorted(
         events,
-        key=lambda ev: (
-            float(ev["timestamp"])
-            if isinstance(ev.get("timestamp"), (int, float))
-            else float("inf")
-        ),
+        key=lambda ev: float(ev["timestamp"]) if isinstance(ev.get("timestamp"), (int, float)) else float("inf"),
     ):
         assert plugin.converter is not None
         plugin.converter.process_event(rec)

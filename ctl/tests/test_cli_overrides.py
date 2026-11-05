@@ -425,9 +425,7 @@ def test_overrides_for_root_excludes_nested_mas_agents() -> None:
 
     assert overrides_for_root(sources, "mas") == (".mas.spec.workflow.entry=moderator",)
     assert overrides_for_root(sources, "agent") == (".agent.spec.memory=short",)
-    assert overrides_for_root(sources, "agent", parent="mas") == (
-        ".mas.agent[reviewer].spec.memory=long",
-    )
+    assert overrides_for_root(sources, "agent", parent="mas") == (".mas.agent[reviewer].spec.memory=long",)
 
 
 def test_overlay_manifest_applies_selector_overrides_after_patch() -> None:

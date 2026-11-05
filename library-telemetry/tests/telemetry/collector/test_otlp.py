@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.library.telemetry.collector.otlp import (
     OtlpSpan,
     _attrs_to_otlp,
@@ -41,10 +40,7 @@ def test_iso_to_ns():
 
 
 def test_attrs_to_otlp_types():
-    out = {
-        d["key"]: d["value"]
-        for d in _attrs_to_otlp({"s": "x", "i": 3, "f": 1.5, "b": True})
-    }
+    out = {d["key"]: d["value"] for d in _attrs_to_otlp({"s": "x", "i": 3, "f": 1.5, "b": True})}
     assert out["s"] == {"stringValue": "x"}
     assert out["i"] == {"intValue": "3"}  # int64 as string
     assert out["f"] == {"doubleValue": 1.5}
@@ -52,9 +48,7 @@ def test_attrs_to_otlp_types():
 
 
 def test_sdk_to_otlp_roundtrip_fields():
-    spans = _sdk_spans_to_otlp(
-        [_sdk_span("AgentCall", "0xdead", "0xbeef", parent="0xcafe")]
-    )
+    spans = _sdk_spans_to_otlp([_sdk_span("AgentCall", "0xdead", "0xbeef", parent="0xcafe")])
     assert len(spans) == 1
     s = spans[0]
     assert isinstance(s, OtlpSpan)
@@ -68,9 +62,7 @@ def test_sdk_to_otlp_roundtrip_fields():
 
 def test_push_dry_run_builds_batches():
     sdk = [_sdk_span("AgentCall", f"0x{i:04x}", "0xbeef") for i in range(5)]
-    result = push_spans_to_collector(
-        sdk, "http://localhost:4318", app_name="app", dry_run=True, batch_size=2
-    )
+    result = push_spans_to_collector(sdk, "http://localhost:4318", app_name="app", dry_run=True, batch_size=2)
     assert result["status"] == "dry-run"
     assert result["spans"] == 5
     assert result["batches"] == 3

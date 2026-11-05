@@ -49,9 +49,7 @@ def test_collect_source_bundle_skips_sensitive_files(tmp_path: Path) -> None:
     (workspace / "__pycache__").mkdir(parents=True)
     (workspace / "__pycache__" / "cached.pyc").write_bytes(b"cached")
     (workspace / "certs").mkdir(parents=True)
-    (workspace / "certs" / "key.pem").write_text(
-        "-----BEGIN PRIVATE KEY-----\n", encoding="utf-8"
-    )
+    (workspace / "certs" / "key.pem").write_text("-----BEGIN PRIVATE KEY-----\n", encoding="utf-8")
 
     exp_dir = workspace / "experiments" / "demo"
     exp_dir.mkdir(parents=True)
@@ -59,9 +57,7 @@ def test_collect_source_bundle_skips_sensitive_files(tmp_path: Path) -> None:
     exp_yaml.write_text("manifest: ../../apps/demo/manifest.yaml\n", encoding="utf-8")
 
     bundle = _collect_source_bundle(exp_yaml)
-    archive_paths = [
-        entry["archive_path"] for entry in _manifest_source_entries(bundle["entries"])
-    ]
+    archive_paths = [entry["archive_path"] for entry in _manifest_source_entries(bundle["entries"])]
 
     assert not any(path.endswith(".env") for path in archive_paths)
     assert not any("__pycache__" in path for path in archive_paths)
@@ -79,9 +75,7 @@ def test_iter_allowed_source_files_skips_nested_sensitive_files(
     (app_dir / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
     blocked_dir = app_dir / "__pycache__"
     blocked_dir.mkdir(parents=True)
-    (blocked_dir / "key.pem").write_text(
-        "-----BEGIN PRIVATE KEY-----\n", encoding="utf-8"
-    )
+    (blocked_dir / "key.pem").write_text("-----BEGIN PRIVATE KEY-----\n", encoding="utf-8")
     (blocked_dir / "config.yaml").write_text("secret: true\n", encoding="utf-8")
 
     files = _iter_allowed_source_files(app_dir, workspace_root=workspace)
@@ -172,18 +166,14 @@ def test_publish_hf_defaults_private_review_branch(monkeypatch, tmp_path: Path) 
     assert observed["upload"]["revision"] == "main"
 
 
-def test_import_hf_pins_revision_and_verifies_sha256(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_import_hf_pins_revision_and_verifies_sha256(monkeypatch, tmp_path: Path) -> None:
     tarball = tmp_path / "archive.tar.gz"
     payload = b"benchmark bundle"
     tarball.write_bytes(payload)
     expected = hashlib.sha256(payload).hexdigest()
     captured = {}
 
-    def fake_hf_hub_download(
-        *, repo_id, repo_type, filename, token, revision, local_dir
-    ):
+    def fake_hf_hub_download(*, repo_id, repo_type, filename, token, revision, local_dir):
         captured["revision"] = revision
         return str(tarball)
 

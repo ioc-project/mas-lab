@@ -9,7 +9,6 @@ from mas.lab.plots.kg_adapter import (
     _enrich_kg_plot_data,
     kg_to_call_records,
     kg_to_events,
-    load_kg,
 )
 
 

@@ -18,19 +18,27 @@ from mas.lab.plots.multilevel_trajectory.governance import (
     _governance_severity,
 )
 
-
 # --- _collect_governance_decisions ------------------------------------------
+
 
 def test_collect_governance_decisions_matches_by_agent_and_correlation_id() -> None:
     events = [
-        {"kind": "governance_decision", "agent_id": "a", "correlation_id": 3,
-         "hook": "egress", "checkpoint": "after", "decision": "ALLOW",
-         "reason": "ok", "policy_name": "p1"},
+        {
+            "kind": "governance_decision",
+            "agent_id": "a",
+            "correlation_id": 3,
+            "hook": "egress",
+            "checkpoint": "after",
+            "decision": "ALLOW",
+            "reason": "ok",
+            "policy_name": "p1",
+        },
     ]
     records = [{"call_id": "tool-1", "agent_id": "a", "correlation_id": 3}]
     out = _collect_governance_decisions(events, records)
-    assert out == {"tool-1": [{"hook": "egress", "checkpoint": "after",
-                                "decision": "ALLOW", "reason": "ok", "policyName": "p1"}]}
+    assert out == {
+        "tool-1": [{"hook": "egress", "checkpoint": "after", "decision": "ALLOW", "reason": "ok", "policyName": "p1"}]
+    }
 
 
 def test_collect_governance_decisions_ignores_events_with_no_decision() -> None:
@@ -47,14 +55,16 @@ def test_collect_governance_decisions_no_matching_record_is_dropped() -> None:
 
 # --- _collect_hitl_exchanges -------------------------------------------------
 
+
 def test_collect_hitl_exchanges_pairs_request_and_resolve() -> None:
     events = [
         {"kind": "hitl_request", "correlation_id": 5, "question": "Proceed?", "offered_actions": ["yes", "no"]},
         {"kind": "hitl_resolve", "correlation_id": 5, "resolution": "approved", "answer": "yes"},
     ]
     out = _collect_hitl_exchanges(events)
-    assert out == {5: {"question": "Proceed?", "offeredActions": ["yes", "no"],
-                        "resolution": "approved", "answer": "yes"}}
+    assert out == {
+        5: {"question": "Proceed?", "offeredActions": ["yes", "no"], "resolution": "approved", "answer": "yes"}
+    }
 
 
 def test_collect_hitl_exchanges_request_without_resolve_stays_unresolved() -> None:
@@ -66,11 +76,20 @@ def test_collect_hitl_exchanges_request_without_resolve_stays_unresolved() -> No
 
 # --- _collect_blocked_actions -------------------------------------------------
 
+
 def test_collect_blocked_actions_finds_terminal_decision_with_no_live_call() -> None:
     events = [
-        {"kind": "governance_decision", "agent_id": "a", "correlation_id": 2, "timestamp": 0.6,
-         "hook": "egress", "checkpoint": "after", "decision": "BLOCK",
-         "reason": "blocked", "policy_name": "p1"},
+        {
+            "kind": "governance_decision",
+            "agent_id": "a",
+            "correlation_id": 2,
+            "timestamp": 0.6,
+            "hook": "egress",
+            "checkpoint": "after",
+            "decision": "BLOCK",
+            "reason": "blocked",
+            "policy_name": "p1",
+        },
     ]
     records: list[dict] = []  # correlation_id 2 never produced a live call
     out = _collect_blocked_actions(events, records)
@@ -79,8 +98,15 @@ def test_collect_blocked_actions_finds_terminal_decision_with_no_live_call() -> 
 
 def test_collect_blocked_actions_skips_when_call_actually_ran() -> None:
     events = [
-        {"kind": "governance_decision", "agent_id": "a", "correlation_id": 3, "timestamp": 0.6,
-         "hook": "egress", "checkpoint": "after", "decision": "BLOCK"},
+        {
+            "kind": "governance_decision",
+            "agent_id": "a",
+            "correlation_id": 3,
+            "timestamp": 0.6,
+            "hook": "egress",
+            "checkpoint": "after",
+            "decision": "BLOCK",
+        },
     ]
     records = [{"call_id": "tool-1", "agent_id": "a", "correlation_id": 3}]
     assert _collect_blocked_actions(events, records) == []
@@ -88,8 +114,15 @@ def test_collect_blocked_actions_skips_when_call_actually_ran() -> None:
 
 def test_collect_blocked_actions_ignores_non_terminal_decisions() -> None:
     events = [
-        {"kind": "governance_decision", "agent_id": "a", "correlation_id": 2, "timestamp": 0.6,
-         "hook": "egress", "checkpoint": "after", "decision": "ALLOW"},
+        {
+            "kind": "governance_decision",
+            "agent_id": "a",
+            "correlation_id": 2,
+            "timestamp": 0.6,
+            "hook": "egress",
+            "checkpoint": "after",
+            "decision": "ALLOW",
+        },
     ]
     assert _collect_blocked_actions(events, []) == []
 
@@ -98,23 +131,45 @@ def test_collect_blocked_actions_ignores_ingress_hook() -> None:
     """Only egress decisions can pre-empt a call before it runs — an ingress
     BLOCK happens after the engine already ran, so there IS a live record."""
     events = [
-        {"kind": "governance_decision", "agent_id": "a", "correlation_id": 2, "timestamp": 0.6,
-         "hook": "ingress", "checkpoint": "after", "decision": "BLOCK"},
+        {
+            "kind": "governance_decision",
+            "agent_id": "a",
+            "correlation_id": 2,
+            "timestamp": 0.6,
+            "hook": "ingress",
+            "checkpoint": "after",
+            "decision": "BLOCK",
+        },
     ]
     assert _collect_blocked_actions(events, []) == []
 
 
 # --- _collect_retry_chains ----------------------------------------------------
 
+
 def test_collect_retry_chains_links_two_attempts() -> None:
     events = [
         {"kind": "governance_decision", "agent_id": "a", "hook": "ingress", "decision": "RETRY", "timestamp": 0.35},
     ]
     records = [
-        {"call_id": "tool-1", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky",
-         "model": "", "start_ts": 0.1, "end_ts": 0.3},
-        {"call_id": "tool-2", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky",
-         "model": "", "start_ts": 0.4, "end_ts": 0.6},
+        {
+            "call_id": "tool-1",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.1,
+            "end_ts": 0.3,
+        },
+        {
+            "call_id": "tool-2",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.4,
+            "end_ts": 0.6,
+        },
     ]
     out = _collect_retry_chains(events, records)
     assert out["tool-1"] == {"groupId": "tool-1", "attempt": 1}
@@ -127,9 +182,33 @@ def test_collect_retry_chains_three_attempts_numbered_in_order() -> None:
         {"kind": "governance_decision", "agent_id": "a", "hook": "ingress", "decision": "RETRY", "timestamp": 0.65},
     ]
     records = [
-        {"call_id": "t1", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky", "model": "", "start_ts": 0.1, "end_ts": 0.3},
-        {"call_id": "t2", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky", "model": "", "start_ts": 0.4, "end_ts": 0.6},
-        {"call_id": "t3", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky", "model": "", "start_ts": 0.7, "end_ts": 0.9},
+        {
+            "call_id": "t1",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.1,
+            "end_ts": 0.3,
+        },
+        {
+            "call_id": "t2",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.4,
+            "end_ts": 0.6,
+        },
+        {
+            "call_id": "t3",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.7,
+            "end_ts": 0.9,
+        },
     ]
     out = _collect_retry_chains(events, records)
     assert [out[c]["attempt"] for c in ("t1", "t2", "t3")] == [1, 2, 3]
@@ -138,8 +217,24 @@ def test_collect_retry_chains_three_attempts_numbered_in_order() -> None:
 
 def test_collect_retry_chains_no_retry_decision_leaves_calls_unlinked() -> None:
     records = [
-        {"call_id": "t1", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky", "model": "", "start_ts": 0.1, "end_ts": 0.3},
-        {"call_id": "t2", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky", "model": "", "start_ts": 0.4, "end_ts": 0.6},
+        {
+            "call_id": "t1",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.1,
+            "end_ts": 0.3,
+        },
+        {
+            "call_id": "t2",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.4,
+            "end_ts": 0.6,
+        },
     ]
     assert _collect_retry_chains([], records) == {}
 
@@ -151,13 +246,30 @@ def test_collect_retry_chains_different_tool_not_linked() -> None:
         {"kind": "governance_decision", "agent_id": "a", "hook": "ingress", "decision": "RETRY", "timestamp": 0.35},
     ]
     records = [
-        {"call_id": "t1", "agent_id": "a", "call_type": "ToolCall", "tool_name": "flaky", "model": "", "start_ts": 0.1, "end_ts": 0.3},
-        {"call_id": "t2", "agent_id": "a", "call_type": "ToolCall", "tool_name": "other", "model": "", "start_ts": 0.4, "end_ts": 0.6},
+        {
+            "call_id": "t1",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "flaky",
+            "model": "",
+            "start_ts": 0.1,
+            "end_ts": 0.3,
+        },
+        {
+            "call_id": "t2",
+            "agent_id": "a",
+            "call_type": "ToolCall",
+            "tool_name": "other",
+            "model": "",
+            "start_ts": 0.4,
+            "end_ts": 0.6,
+        },
     ]
     assert _collect_retry_chains(events, records) == {}
 
 
 # --- _governance_severity ----------------------------------------------------
+
 
 def test_governance_severity_picks_worst_decision() -> None:
     gdata = [

@@ -55,8 +55,7 @@ def test_importing_a2a_plugin_package_does_not_import_a2a_sdk() -> None:
         [
             sys.executable,
             "-c",
-            "import sys; import library_ioa.plugins.a2a; "
-            "print('loaded' if 'a2a' in sys.modules else 'lazy')",
+            "import sys; import library_ioa.plugins.a2a; print('loaded' if 'a2a' in sys.modules else 'lazy')",
         ],
         check=True,
         capture_output=True,
@@ -95,8 +94,7 @@ def test_importing_library_ioa_pins_a2a_telemetry_before_sdk_import() -> None:
         [
             sys.executable,
             "-c",
-            "import library_ioa; import a2a.utils.telemetry; "
-            "print(a2a.utils.telemetry.otel_enabled)",
+            "import library_ioa; import a2a.utils.telemetry; print(a2a.utils.telemetry.otel_enabled)",
         ],
         check=True,
         capture_output=True,
@@ -281,10 +279,7 @@ def test_executor_returns_input_required_task_state() -> None:
         )
 
     assert response.status_code == 200
-    assert (
-        response.json()["result"]["task"]["status"]["state"]
-        == "TASK_STATE_INPUT_REQUIRED"
-    )
+    assert response.json()["result"]["task"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
 
 def test_executor_marks_task_failed_when_handler_raises() -> None:
@@ -630,14 +625,14 @@ def test_exposed_agent_can_delegate_outbound_over_a2a(transport: str | None) -> 
             grpc_port = listener.getsockname()[1]
     peer_url = f"http://127.0.0.1:{peer_port}"
     peer_manifest = {
-            "name": "remote-peer",
-            "description": "Remote A2A peer",
-            "url": peer_url,
-            "version": "1.0.0",
-            "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["text/plain"],
-            "skills": [],
-        }
+        "name": "remote-peer",
+        "description": "Remote A2A peer",
+        "url": peer_url,
+        "version": "1.0.0",
+        "defaultInputModes": ["text/plain"],
+        "defaultOutputModes": ["text/plain"],
+        "skills": [],
+    }
     peer_card = (
         agent_card_from_manifest(
             {

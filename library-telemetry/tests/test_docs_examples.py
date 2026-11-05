@@ -9,7 +9,6 @@ drift from working code.  The doc source is cited above each test.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from tests.conftest import requires_otel
 
@@ -40,14 +39,10 @@ def test_readme_batch_functions(tmp_path, events_path):
     )
 
     out = tmp_path / "spans.jsonl"
-    convert_events_to_spans_file(
-        events_path, out, app_name="my-app", converter_profile="raw"
-    )
+    convert_events_to_spans_file(events_path, out, app_name="my-app", converter_profile="raw")
     report = verify_spans_file(out, spanspec_level="L3")
     assert report["ok"]
-    push = push_spans_file(
-        out, "http://localhost:4318", app_name="my-app", dry_run=True
-    )
+    push = push_spans_file(out, "http://localhost:4318", app_name="my-app", dry_run=True)
     assert push["status"] == "dry-run"
 
 

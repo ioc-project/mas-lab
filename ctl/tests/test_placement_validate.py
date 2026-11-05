@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.compose.placement_validate import validate_placement_strategy
 from mas.ctl.compose.runner import ComposeRequest, compose_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID

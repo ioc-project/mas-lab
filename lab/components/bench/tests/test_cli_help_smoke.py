@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from click.testing import CliRunner
-
 from mas.lab.cli import app
 from mas.lab.cli.manpage import walk_click_commands
 

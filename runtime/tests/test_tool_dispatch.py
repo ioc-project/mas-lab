@@ -82,9 +82,7 @@ def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
     )
 
     assert result == "spawned"
-    assert calls == [
-        ("spawn_subagent", {"template": "worker", "task": "review"}, "parent-call")
-    ]
+    assert calls == [("spawn_subagent", {"template": "worker", "task": "review"}, "parent-call")]
 
 
 def test_execute_engine_tool_uses_manifest_provider(tmp_path):

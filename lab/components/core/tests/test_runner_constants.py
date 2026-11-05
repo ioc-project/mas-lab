@@ -6,7 +6,6 @@ import tomllib
 from pathlib import Path
 
 import yaml
-
 from mas.lab.runners.constants import (
     DEFAULT_LAB_RUNNER_ID,
     normalize_runner_id,
@@ -36,9 +35,7 @@ def test_runner_id_entry_point_and_schema_alignment() -> None:
 
     schema_path = REPO_ROOT / "docs" / "schemas" / "lab" / "experiment.schema.yaml"
     schema = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
-    runner_schema = (
-        schema["properties"]["experiment"]["properties"]["execution"]["properties"]["runner"]
-    )
+    runner_schema = schema["properties"]["experiment"]["properties"]["execution"]["properties"]["runner"]
     assert runner_schema["default"] == DEFAULT_LAB_RUNNER_ID
 
     assert MasRuntimeRunner.runner_id == DEFAULT_LAB_RUNNER_ID

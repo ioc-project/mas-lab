@@ -1,9 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Shared pytest fixtures — controller daemon for functional / tutorial tests."""
-from __future__ import annotations
 
-import mas.third_party_otel  # noqa: F401
+from __future__ import annotations
 
 import os
 import sys
@@ -11,6 +10,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import mas.third_party_otel  # noqa: F401
 import pytest
 
 # Allow `from ci_llm import ...` in tests/ without making tests a package.
@@ -76,9 +76,7 @@ def mas_controller_daemon(request: pytest.FixtureRequest, mas_controller_home: P
     except AttributeError:
         items = []
     if items and all(
-        "tests/tutorials" in str(item.path)
-        or "test_apply_license_headers" in str(item.path)
-        for item in items
+        "tests/tutorials" in str(item.path) or "test_apply_license_headers" in str(item.path) for item in items
     ):
         yield
         return

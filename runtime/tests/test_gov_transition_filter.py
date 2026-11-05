@@ -12,9 +12,7 @@ from mas.runtime.schema.ingress import UserInputReceived
 
 
 def _user_input_transition():
-    return build_gov_transition(
-        "ingress", UserInputReceived(user_turn_id="u1", text="hi"), q=QProduct()
-    )
+    return build_gov_transition("ingress", UserInputReceived(user_turn_id="u1", text="hi"), q=QProduct())
 
 
 def _tool_call_transition(*, destructive: bool = False):
@@ -37,17 +35,13 @@ def test_hook_mismatch_never_matches() -> None:
 def test_kind_filter() -> None:
     f = GovTransitionFilter(hook="ingress", kind=("USER_INPUT_RECEIVED",))
     assert f.matches(_user_input_transition())
-    assert not GovTransitionFilter(hook="ingress", kind=("HITL_RESOLVE",)).matches(
-        _user_input_transition()
-    )
+    assert not GovTransitionFilter(hook="ingress", kind=("HITL_RESOLVE",)).matches(_user_input_transition())
 
 
 def test_op_filter() -> None:
     f = GovTransitionFilter(hook="egress", op=("TOOL_CALL",))
     assert f.matches(_tool_call_transition())
-    assert not GovTransitionFilter(hook="egress", op=("LLM_CALL",)).matches(
-        _tool_call_transition()
-    )
+    assert not GovTransitionFilter(hook="egress", op=("LLM_CALL",)).matches(_tool_call_transition())
 
 
 def test_response_kind_filter() -> None:
@@ -77,9 +71,7 @@ def test_destructive_filter() -> None:
 def test_machine_filter() -> None:
     f = GovTransitionFilter(hook="egress", machine=("M_tool",))
     assert f.matches(_tool_call_transition())
-    llm_t = build_gov_transition(
-        "egress", InvokeEngineIo(correlation_id=2, op="LLM_CALL"), q=QProduct()
-    )
+    llm_t = build_gov_transition("egress", InvokeEngineIo(correlation_id=2, op="LLM_CALL"), q=QProduct())
     assert not f.matches(llm_t)
 
 

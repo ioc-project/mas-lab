@@ -72,10 +72,31 @@ def changed_python_files(base: str, head: str) -> list[str]:
     return sorted(files)
 
 
+def locked_ruff_version() -> str | None:
+    """Read the ruff version pinned in uv.lock, if present."""
+    lock = REPO_ROOT / "uv.lock"
+    if not lock.is_file():
+        return None
+    in_ruff = False
+    for line in lock.read_text(encoding="utf-8").splitlines():
+        if line == 'name = "ruff"':
+            in_ruff = True
+            continue
+        if in_ruff and line.startswith("version = "):
+            return line.split("=", 1)[1].strip().strip('"')
+        if in_ruff and line.startswith("name = "):
+            return None
+    return None
+
+
 def ruff_executable() -> list[str]:
     venv_ruff = Path(sys.executable).parent / "ruff"
     if os.access(venv_ruff, os.X_OK):
         return [str(venv_ruff)]
+    version = locked_ruff_version()
+    uvx = shutil.which("uvx")
+    if uvx and version:
+        return [uvx, f"ruff=={version}"]
     found = shutil.which("ruff")
     if found:
         return [found]

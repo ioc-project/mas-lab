@@ -188,11 +188,7 @@ def test_egress_block_closes_contract_envelope() -> None:
         out = emit_scheduled_egress(q, run, config)
     assert isinstance(out[0], RaiseBoundaryError)
     assert out[0].code == "GOV_BLOCK"
-    symbols = [
-        e.payload.get("symbol")
-        for e in ctx_obs.events
-        if e.kind == ObsEventKind.ENVELOPE_ACTIVITY
-    ]
+    symbols = [e.payload.get("symbol") for e in ctx_obs.events if e.kind == ObsEventKind.ENVELOPE_ACTIVITY]
     assert EnvelopeSymbol.CONTRACT_START.value in symbols
     assert EnvelopeSymbol.CONTRACT_END.value in symbols
     assert symbols[-len(INGRESS_ENVELOPE_SYMBOLS) :] == [s.value for s in INGRESS_ENVELOPE_SYMBOLS]
@@ -231,7 +227,8 @@ def test_egress_without_gov_collapses_symbols_and_skips_policy() -> None:
     ]
     assert symbols == [s.value for s in expected]
     assert not any(
-        e.kind == ObsEventKind.GOVERNANCE_DECISION for e in ctx.observability.events  # type: ignore[union-attr]
+        e.kind == ObsEventKind.GOVERNANCE_DECISION
+        for e in ctx.observability.events  # type: ignore[union-attr]
     )
 
 
@@ -243,9 +240,7 @@ def test_egress_without_obs_collapses_symbols() -> None:
         enable_governance=True,
         enable_envelope_observability=False,
     )
-    assert expected == (
-        resolve_egress_symbols(enable_governance=True, enable_envelope_observability=False)
-    )
+    assert expected == (resolve_egress_symbols(enable_governance=True, enable_envelope_observability=False))
     symbols = [
         e.payload.get("symbol")
         for e in ctx.observability.events  # type: ignore[union-attr]

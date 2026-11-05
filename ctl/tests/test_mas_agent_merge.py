@@ -204,9 +204,7 @@ def test_reset_engine_delegation_does_not_suppress_repeated_delegation():
 
     class _Engine:
         def __init__(self) -> None:
-            self.delegation = LlmDelegator(
-                comm=LocalAgentComm(run_turn), allowed_peers=["peer"]
-            )
+            self.delegation = LlmDelegator(comm=LocalAgentComm(run_turn), allowed_peers=["peer"])
 
     engine = _Engine()
     assert engine.delegation.delegate("peer", "task") == "findings:peer:task"
@@ -228,9 +226,7 @@ def test_reset_engine_delegation_walks_inner_wrapper():
 
     class _Engine:
         def __init__(self) -> None:
-            self.delegation = LlmDelegator(
-                comm=LocalAgentComm(run_turn), allowed_peers=["peer"]
-            )
+            self.delegation = LlmDelegator(comm=LocalAgentComm(run_turn), allowed_peers=["peer"])
 
     class _Wrapper:
         def __init__(self, inner: object) -> None:
@@ -342,9 +338,7 @@ def test_apply_agency_entry_overlay_skills_op_remove_and_clear():
     assert apply_agency_entry_overlay(manifest, {"id": "f", "skills": {"$op": {"remove": ["a"]}}})["spec"][
         "skills"
     ] == ["b"]
-    assert (
-        apply_agency_entry_overlay(manifest, {"id": "f", "skills": {"$op": {"clear": True}}})["spec"]["skills"] == []
-    )
+    assert apply_agency_entry_overlay(manifest, {"id": "f", "skills": {"$op": {"clear": True}}})["spec"]["skills"] == []
 
 
 def test_apply_agency_entry_overlay_skills_plain_list_still_replaces():
@@ -431,9 +425,7 @@ def test_stacked_mas_overlays_add_skills_on_top_of_agent_manifest():
     assert set(rows["lead"]) <= {"id", "ref", "name"}
     assert "_agent_patches" not in mas
 
-    role = apply_agency_entry_overlay(
-        {"spec": {"skills": ["own"]}}, rows["role"], agent_patch=patches.get("role")
-    )
+    role = apply_agency_entry_overlay({"spec": {"skills": ["own"]}}, rows["role"], agent_patch=patches.get("role"))
     lead = apply_agency_entry_overlay({"spec": {}}, rows["lead"], agent_patch=patches.get("lead"))
     assert role["spec"]["skills"] == ["own", "recv-a", "recv-b"]
     assert lead["spec"]["skills"] == ["orch-a", "orch-b"]
@@ -446,7 +438,6 @@ def test_stacked_mas_overlays_add_skills_on_top_of_agent_manifest():
     }
     result = validate_data(mas_for_validate, resolve_refs=False)
     assert result.ok, [str(i) for i in result.issues]
-
 
 
 def test_apply_agency_entry_overlay_plain_tools_list_still_adds_not_replaces():

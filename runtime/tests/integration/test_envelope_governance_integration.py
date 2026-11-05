@@ -2,10 +2,10 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Envelope HITL/block decision integration."""
 
+from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.envelope import EnvelopeContext, contract_kind_for_op, run_egress_authorize_envelope
 from mas.runtime.kernel.state import QProduct
-from mas.runtime.boundary.obs.operator import ObservabilityOperator
 
 
 def test_egress_hitl_when_configured():

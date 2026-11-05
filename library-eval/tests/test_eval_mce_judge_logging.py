@@ -6,7 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.library.lab.steps.eval.mce import EvalMceStep
 
 
@@ -95,9 +94,7 @@ async def test_eval_mce_defaults_judge_when_model_omitted(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_eval_mce_template_vars_beat_backfilled_application(
-    tmp_path, monkeypatch
-) -> None:
+async def test_eval_mce_template_vars_beat_backfilled_application(tmp_path, monkeypatch) -> None:
     events = _run_with_events(tmp_path)
     _stub_scoring(monkeypatch)
     seen: dict[str, object] = {}
@@ -135,9 +132,7 @@ async def test_eval_mce_template_vars_beat_backfilled_application(
 
 
 @pytest.mark.asyncio
-async def test_eval_mce_template_vars_beat_backfilled_metadata(
-    tmp_path, monkeypatch
-) -> None:
+async def test_eval_mce_template_vars_beat_backfilled_metadata(tmp_path, monkeypatch) -> None:
     events = _run_with_events(tmp_path)
     _stub_scoring(monkeypatch)
     seen: dict[str, object] = {}
@@ -175,9 +170,7 @@ async def test_eval_mce_template_vars_beat_backfilled_metadata(
 
 
 @pytest.mark.asyncio
-async def test_eval_mce_backfilled_evaluation_model_beats_template_vars(
-    tmp_path, monkeypatch
-) -> None:
+async def test_eval_mce_backfilled_evaluation_model_beats_template_vars(tmp_path, monkeypatch) -> None:
     events = _run_with_events(tmp_path)
     _stub_scoring(monkeypatch)
     seen: dict[str, object] = {}

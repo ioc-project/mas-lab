@@ -1,7 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from mas.lab.controller.ui_stream.ingest import NativeIngest
 from mas.lab.controller.ui_stream.bus import EventBus
+from mas.lab.controller.ui_stream.ingest import NativeIngest
 from mas.lab.controller.ui_stream.metrics import MetricsStore, coerce_timestamp
 from mas.lab.controller.ui_stream.refs import DataSourceRef
 
@@ -40,7 +40,9 @@ def test_iso_timestamps_drive_duration() -> None:
     store = MetricsStore()
     ref = DataSourceRef(session="sess-2")
     store.apply_native(ref, {"kind": "execution_start", "timestamp": "2026-10-07T12:00:00Z"})
-    store.apply_native(ref, {"kind": "llm_call_end", "timestamp": "2026-10-07T12:00:04Z", "tokens_used": {"total_tokens": 9}})
+    store.apply_native(
+        ref, {"kind": "llm_call_end", "timestamp": "2026-10-07T12:00:04Z", "tokens_used": {"total_tokens": 9}}
+    )
     assert store.snapshot(ref)["duration_s"] == 4.0
     assert store.snapshot(ref)["total_tokens"] == 9
 

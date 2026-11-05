@@ -144,7 +144,9 @@ class TestRunValidateKgStructuralChecks:
             run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
         result = excinfo.value.report
         assert result["error_count"] >= 1
-        assert any("inbound containment or ownership edge" in r["detail"] for r in result["results"])  # noqa: E501
+        assert any(
+            "inbound containment or ownership edge" in r["detail"] for r in result["results"]
+        )  # noqa: E501
         assert not any(r["detail"] in {"True", "[]"} for r in result["results"])
 
     def test_unknown_node_type_reported_without_typeerror(self, tmp_path):
@@ -227,7 +229,11 @@ class TestRunValidateKgStructuralChecks:
         result = excinfo.value.report
         assert result["error_count"] == 1
         assert result["results"] == [
-            {"check": "totally_fake_check", "status": "error", "detail": "Unknown check: 'totally_fake_check'"}  # noqa: E501
+            {
+                "check": "totally_fake_check",
+                "status": "error",
+                "detail": "Unknown check: 'totally_fake_check'",
+            }  # noqa: E501
         ]
 
     def test_missing_kg_file_raises(self, tmp_path):
@@ -273,9 +279,30 @@ class TestRunValidateKgStructuralChecks:
             "nodes": [
                 {"id": "s1", "node_type": "Session", "sessionId": "s1", "runId": "r1"},
                 {"id": "run-1", "node_type": "Run", "runId": "r1"},
-                {"id": "st-in", "node_type": "State", "stateNodeId": "st-in", "contentHash": "h1", "semanticType": "initial", "content": "hello"},  # noqa: E501
-                {"id": "st-out", "node_type": "State", "stateNodeId": "st-out", "contentHash": "h2", "semanticType": "final", "content": "world"},  # noqa: E501
-                {"id": "t-1", "node_type": "Transition", "transitionId": "t-1", "edgeType": "sequential", "fromState": "st-in", "toState": "st-out"},  # noqa: E501
+                {
+                    "id": "st-in",
+                    "node_type": "State",
+                    "stateNodeId": "st-in",
+                    "contentHash": "h1",
+                    "semanticType": "initial",
+                    "content": "hello",
+                },  # noqa: E501
+                {
+                    "id": "st-out",
+                    "node_type": "State",
+                    "stateNodeId": "st-out",
+                    "contentHash": "h2",
+                    "semanticType": "final",
+                    "content": "world",
+                },  # noqa: E501
+                {
+                    "id": "t-1",
+                    "node_type": "Transition",
+                    "transitionId": "t-1",
+                    "edgeType": "sequential",
+                    "fromState": "st-in",
+                    "toState": "st-out",
+                },  # noqa: E501
             ],
             "edges": [
                 {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
@@ -310,9 +337,30 @@ class TestRunValidateKgStructuralChecks:
                     "appName": "trip-planner",
                 },
                 {"id": "run-1", "node_type": "Run", "runId": "r1"},
-                {"id": "st-in", "node_type": "State", "stateNodeId": "st-in", "contentHash": "h1", "semanticType": "initial", "content": "hello"},  # noqa: E501
-                {"id": "st-out", "node_type": "State", "stateNodeId": "st-out", "contentHash": "h2", "semanticType": "final", "content": "world"},  # noqa: E501
-                {"id": "t-1", "node_type": "Transition", "transitionId": "t-1", "edgeType": "sequential", "fromState": "st-in", "toState": "st-out"},  # noqa: E501
+                {
+                    "id": "st-in",
+                    "node_type": "State",
+                    "stateNodeId": "st-in",
+                    "contentHash": "h1",
+                    "semanticType": "initial",
+                    "content": "hello",
+                },  # noqa: E501
+                {
+                    "id": "st-out",
+                    "node_type": "State",
+                    "stateNodeId": "st-out",
+                    "contentHash": "h2",
+                    "semanticType": "final",
+                    "content": "world",
+                },  # noqa: E501
+                {
+                    "id": "t-1",
+                    "node_type": "Transition",
+                    "transitionId": "t-1",
+                    "edgeType": "sequential",
+                    "fromState": "st-in",
+                    "toState": "st-out",
+                },  # noqa: E501
             ],
             "edges": [
                 {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
@@ -345,9 +393,30 @@ class TestRunValidateKgStructuralChecks:
                     "appName": "test-app",
                 },
                 {"id": "run-1", "node_type": "Run", "runId": "r1"},
-                {"id": "st-in", "node_type": "State", "stateNodeId": "st-in", "contentHash": "h1", "semanticType": "initial", "content": "hello"},  # noqa: E501
-                {"id": "st-out", "node_type": "State", "stateNodeId": "st-out", "contentHash": "h2", "semanticType": "final", "content": "world"},  # noqa: E501
-                {"id": "t-1", "node_type": "Transition", "transitionId": "t-1", "edgeType": "sequential", "fromState": "st-in", "toState": "st-out"},  # noqa: E501
+                {
+                    "id": "st-in",
+                    "node_type": "State",
+                    "stateNodeId": "st-in",
+                    "contentHash": "h1",
+                    "semanticType": "initial",
+                    "content": "hello",
+                },  # noqa: E501
+                {
+                    "id": "st-out",
+                    "node_type": "State",
+                    "stateNodeId": "st-out",
+                    "contentHash": "h2",
+                    "semanticType": "final",
+                    "content": "world",
+                },  # noqa: E501
+                {
+                    "id": "t-1",
+                    "node_type": "Transition",
+                    "transitionId": "t-1",
+                    "edgeType": "sequential",
+                    "fromState": "st-in",
+                    "toState": "st-out",
+                },  # noqa: E501
             ],
             "edges": [
                 {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
@@ -362,13 +431,13 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
 
-        result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full")  # noqa: E501
+        result = run_validate_kg(
+            p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full"
+        )  # noqa: E501
         session_callid_errors = [
             row
             for row in result["results"]
-            if row["status"] == "error"
-            and "callId" in row["detail"]
-            and "Session" in row["detail"]
+            if row["status"] == "error" and "callId" in row["detail"] and "Session" in row["detail"]
         ]
         if session_callid_errors:
             pytest.skip("Bundled ontology version still requires Session.callId")
@@ -387,9 +456,30 @@ class TestRunValidateKgStructuralChecks:
                     "appName": "trip-planner",
                 },
                 {"id": "run-1", "node_type": "Run", "runId": "run-1"},
-                {"id": "st-in", "node_type": "State", "stateNodeId": "st-in", "contentHash": "h1", "semanticType": "initial", "content": "hello"},  # noqa: E501
-                {"id": "st-out", "node_type": "State", "stateNodeId": "st-out", "contentHash": "h2", "semanticType": "final", "content": "world"},  # noqa: E501
-                {"id": "t-1", "node_type": "Transition", "transitionId": "t-1", "edgeType": "sequential", "fromState": "st-in", "toState": "st-out"},  # noqa: E501
+                {
+                    "id": "st-in",
+                    "node_type": "State",
+                    "stateNodeId": "st-in",
+                    "contentHash": "h1",
+                    "semanticType": "initial",
+                    "content": "hello",
+                },  # noqa: E501
+                {
+                    "id": "st-out",
+                    "node_type": "State",
+                    "stateNodeId": "st-out",
+                    "contentHash": "h2",
+                    "semanticType": "final",
+                    "content": "world",
+                },  # noqa: E501
+                {
+                    "id": "t-1",
+                    "node_type": "Transition",
+                    "transitionId": "t-1",
+                    "edgeType": "sequential",
+                    "fromState": "st-in",
+                    "toState": "st-out",
+                },  # noqa: E501
             ],
             "edges": [
                 {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
@@ -404,10 +494,13 @@ class TestRunValidateKgStructuralChecks:
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
 
-        result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full")  # noqa: E501
+        result = run_validate_kg(
+            p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full"
+        )  # noqa: E501
         forbidden_session_attrs = {"callId", "runId", "executionId", "startTime", "endTime"}
         inherited_rows = [
-            row for row in result["results"]
+            row
+            for row in result["results"]
             if "Session" in row["detail"]
             and any(attr in row["detail"] for attr in forbidden_session_attrs if attr != "runId")
         ]
@@ -457,16 +550,26 @@ class TestRunValidateKgStructuralChecks:
                 {"id": "s1", "node_type": "Session", "sessionId": "s1", "appName": "demo"},
                 {"id": "run-1", "node_type": "Run", "runId": "run-1"},
                 {
-                    "id": "call-1", "callId": "call-1", "node_type": "AgentCall",
-                    "agentName": "planner", "startTime": 0.0, "endTime": 1.0,
+                    "id": "call-1",
+                    "callId": "call-1",
+                    "node_type": "AgentCall",
+                    "agentName": "planner",
+                    "startTime": 0.0,
+                    "endTime": 1.0,
                 },
                 {
-                    "id": "st-in", "node_type": "State", "stateNodeId": "st-in",
-                    "contentHash": "h1", "semanticType": "initial",
+                    "id": "st-in",
+                    "node_type": "State",
+                    "stateNodeId": "st-in",
+                    "contentHash": "h1",
+                    "semanticType": "initial",
                 },
                 {
-                    "id": "st-out", "node_type": "State", "stateNodeId": "st-out",
-                    "contentHash": "h2", "semanticType": "final",
+                    "id": "st-out",
+                    "node_type": "State",
+                    "stateNodeId": "st-out",
+                    "contentHash": "h2",
+                    "semanticType": "final",
                 },
             ],
             "edges": [
@@ -486,10 +589,13 @@ class TestRunValidateKgStructuralChecks:
         result = excinfo.value.report
 
         session_state_errors = [
-            row for row in result["results"]
+            row
+            for row in result["results"]
             if row["status"] == "error"
-            and ("Session must have exactly one mas:hasInitialState" in row["detail"]
-                 or "Session must have exactly one mas:hasFinalState" in row["detail"])
+            and (
+                "Session must have exactly one mas:hasInitialState" in row["detail"]
+                or "Session must have exactly one mas:hasFinalState" in row["detail"]
+            )
         ]
         assert session_state_errors, (
             "Session-level hasInitialState/hasFinalState must be required "
@@ -533,7 +639,10 @@ class TestRunValidateKgStructuralChecks:
         result = excinfo.value.report
 
         assert result["error_count"] >= 1
-        assert any("mas:leadsTo subjects must be mas:Transition" in row["detail"] for row in result["results"])  # noqa: E501
+        assert any(
+            "mas:leadsTo subjects must be mas:Transition" in row["detail"]
+            for row in result["results"]
+        )  # noqa: E501
 
     @_OXP_SHACL_GAP
     def test_shacl_processing_gate_rejects_agentcall_with_llm_but_no_processing(self, tmp_path):
@@ -542,12 +651,50 @@ class TestRunValidateKgStructuralChecks:
         doc = {
             "nodes": [
                 {"id": "run-1", "node_type": "Run", "runId": "run-1"},
-                {"id": "agent-1", "node_type": "AgentCall", "callId": "agent-1", "agentName": "planner", "inputContent": "in", "outputContent": "out"},  # noqa: E501
-                {"id": "llm-1", "node_type": "LLMCall", "callId": "llm-1", "llmName": "planner", "prompt": "p", "completion": "c"},  # noqa: E501
-                {"id": "st-a", "node_type": "State", "stateNodeId": "st-a", "contentHash": "h1", "semanticType": "initial"},  # noqa: E501
-                {"id": "st-b", "node_type": "State", "stateNodeId": "st-b", "contentHash": "h2", "semanticType": "final"},  # noqa: E501
-                {"id": "st-c", "node_type": "State", "stateNodeId": "st-c", "contentHash": "h3", "semanticType": "initial"},  # noqa: E501
-                {"id": "st-d", "node_type": "State", "stateNodeId": "st-d", "contentHash": "h4", "semanticType": "final"},  # noqa: E501
+                {
+                    "id": "agent-1",
+                    "node_type": "AgentCall",
+                    "callId": "agent-1",
+                    "agentName": "planner",
+                    "inputContent": "in",
+                    "outputContent": "out",
+                },  # noqa: E501
+                {
+                    "id": "llm-1",
+                    "node_type": "LLMCall",
+                    "callId": "llm-1",
+                    "llmName": "planner",
+                    "prompt": "p",
+                    "completion": "c",
+                },  # noqa: E501
+                {
+                    "id": "st-a",
+                    "node_type": "State",
+                    "stateNodeId": "st-a",
+                    "contentHash": "h1",
+                    "semanticType": "initial",
+                },  # noqa: E501
+                {
+                    "id": "st-b",
+                    "node_type": "State",
+                    "stateNodeId": "st-b",
+                    "contentHash": "h2",
+                    "semanticType": "final",
+                },  # noqa: E501
+                {
+                    "id": "st-c",
+                    "node_type": "State",
+                    "stateNodeId": "st-c",
+                    "contentHash": "h3",
+                    "semanticType": "initial",
+                },  # noqa: E501
+                {
+                    "id": "st-d",
+                    "node_type": "State",
+                    "stateNodeId": "st-d",
+                    "contentHash": "h4",
+                    "semanticType": "final",
+                },  # noqa: E501
             ],
             "edges": [
                 {"edge_type": "hasCall", "from_id": "run-1", "to_id": "agent-1"},
@@ -566,7 +713,9 @@ class TestRunValidateKgStructuralChecks:
         result = excinfo.value.report
 
         assert result["error_count"] >= 1
-        assert any("must also contain a ProcessingCall" in row["detail"] for row in result["results"])  # noqa: E501
+        assert any(
+            "must also contain a ProcessingCall" in row["detail"] for row in result["results"]
+        )  # noqa: E501
 
     @_OXP_SHACL_GAP
     def test_shacl_temporal_enclosure_rejects_non_enclosing_parent(self, tmp_path):
@@ -574,8 +723,21 @@ class TestRunValidateKgStructuralChecks:
 
         doc = {
             "nodes": [
-                {"id": "run-1", "node_type": "Run", "runId": "run-1", "startTime": 2.0, "endTime": 3.0},  # noqa: E501
-                {"id": "child-1", "node_type": "AgentCall", "callId": "child-1", "agentName": "planner", "startTime": 1.0, "endTime": 4.0},  # noqa: E501
+                {
+                    "id": "run-1",
+                    "node_type": "Run",
+                    "runId": "run-1",
+                    "startTime": 2.0,
+                    "endTime": 3.0,
+                },  # noqa: E501
+                {
+                    "id": "child-1",
+                    "node_type": "AgentCall",
+                    "callId": "child-1",
+                    "agentName": "planner",
+                    "startTime": 1.0,
+                    "endTime": 4.0,
+                },  # noqa: E501
             ],
             "edges": [
                 {"edge_type": "contains", "from_id": "run-1", "to_id": "child-1"},

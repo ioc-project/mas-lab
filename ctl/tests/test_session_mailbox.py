@@ -32,9 +32,7 @@ def test_mailbox_submit_does_not_amend_inflight() -> None:
     from mas.runtime.engine import inflight_llm
 
     mailbox = SessionTurnMailbox()
-    inflight_llm.register(
-        "s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})()
-    )
+    inflight_llm.register("s1", type("T", (), {"done": lambda self: False, "cancel": lambda self: None})())
     try:
         assert mailbox.submit("s1", "extra", source="a2a", run=lambda text: text) == "extra"
         assert inflight_llm.peek_amend("s1") is None

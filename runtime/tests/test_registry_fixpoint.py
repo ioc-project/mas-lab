@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.runtime.registry import (
     PluginRegistry,
     VariantInfo,
@@ -80,6 +79,7 @@ def test_fixpoint_supports_dynamic_non_core_type() -> None:
 # `provides_types`) a no-op in practice -- a typo'd `type:` would silently
 # become a brand new "known" category instead of failing.
 # ---------------------------------------------------------------------------
+
 
 def test_manifest_data_rejects_type_not_declared_or_provided() -> None:
     """A plugin whose type is neither builtin, listed in `types:`, nor

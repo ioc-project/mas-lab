@@ -57,9 +57,7 @@ EXPECTED_NATIVE_EXTRA = frozenset(
 )
 IDENTITY_FIELDS = ("id", "callId", "sessionId", "canonicalId")
 
-DEFAULT_EVENTS = (
-    _LIBRARY_KG_REPO / "tests" / "fixtures" / "path_consistency" / "events.jsonl"
-)
+DEFAULT_EVENTS = _LIBRARY_KG_REPO / "tests" / "fixtures" / "path_consistency" / "events.jsonl"
 DEFAULT_SPANS = (
     _LIBRARY_KG_REPO / "tests" / "fixtures" / "path_consistency" / "otel_sdk_spans.jsonl"
 )
@@ -106,11 +104,11 @@ def _maybe_replay_spans(events_path: Path, spans_path: Path) -> Path:
         return spans_path
     try:
         from mas.library.telemetry.conversion.replay import replay_events_file
-    except ImportError:
+    except ImportError as err:
         raise SystemExit(
             f"spans file not found at {spans_path} and library-telemetry is "
             "not importable; provide --spans or generate otel_sdk_spans.jsonl"
-        )
+        ) from err
     replay_events_file(str(events_path), str(spans_path), converter_profile="observe_sdk")
     return spans_path
 

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
 from mas.lab.benchmark.pipeline.artifact import Artifact
 from mas.lab.benchmark.pipeline.gather import gather_artifacts, gather_records
 from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.kinds import CONTROL_KINDS, is_control_kind, is_native_export_kind
+from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.types import DATA
 
 
@@ -25,7 +25,6 @@ def test_gather_builtin_equals_gather_level(tmp_path: Path) -> None:
     import asyncio
 
     import pandas as pd
-
     from mas.library.lab.steps.data.gather_level import GatherLevelStep
 
     rows_a = [{"scenario": "a", "metric": "x", "value": 1}]
@@ -35,7 +34,7 @@ def test_gather_builtin_equals_gather_level(tmp_path: Path) -> None:
     assert all(r["level"] == "item" for r in gathered)
     arts = []
     for i, rows in enumerate((rows_a, rows_b)):
-        art = Artifact(name="data", key=RunKey("e", "s", "item1", f"r{i+1}"), spec=DATA)
+        art = Artifact(name="data", key=RunKey("e", "s", "item1", f"r{i + 1}"), spec=DATA)
         art.append(rows)
         art.seal()
         arts.append(art)

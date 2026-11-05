@@ -4,28 +4,27 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mas.lab.controller.ui_stream.plot_folds import fold_chat_event, fold_topology_event, topology_from_spec
-from mas.lab.controller.ui_stream.replay_cli import (
-    align_sidecar,
-    discover_traces,
-    load_records,
-    describe_target,
-    format_replay_progress_line,
-    live_fold_lanes,
-    post_ingest,
-    replay_speed,
-    records_from_sidecar,
-    replay_target,
-)
-from mas.lab.controller.ui_stream.spec_snapshot import merge_spec_snapshots, snapshot_from_records
-from mas.lab.controller.ui_stream.timeline import merge_timeline, pump_timeline, records_to_scheduled
 from mas.lab.controller.ui_stream.artefact_bind import (
     canonical_artefact,
     graph_from_steps,
     name_of_stream,
     stream_of,
 )
-from mas.lab.lab.config.artifact_types import artefact_uri, parse_artefact_uri
+from mas.lab.controller.ui_stream.plot_folds import fold_chat_event, fold_topology_event, topology_from_spec
+from mas.lab.controller.ui_stream.replay_cli import (
+    align_sidecar,
+    describe_target,
+    discover_traces,
+    format_replay_progress_line,
+    live_fold_lanes,
+    load_records,
+    post_ingest,
+    records_from_sidecar,
+    replay_speed,
+    replay_target,
+)
+from mas.lab.controller.ui_stream.spec_snapshot import merge_spec_snapshots, snapshot_from_records
+from mas.lab.controller.ui_stream.timeline import merge_timeline, pump_timeline, records_to_scheduled
 from mas.lab.controller.ui_stream.ui_trace import (
     artefact_filename,
     artefact_key,
@@ -37,6 +36,7 @@ from mas.lab.controller.ui_stream.ui_trace import (
     tree_of,
     write_ui_trace,
 )
+from mas.lab.lab.config.artifact_types import artefact_uri, parse_artefact_uri
 
 
 def test_discover_traces_file_and_lab(tmp_path: Path) -> None:
@@ -210,7 +210,7 @@ def test_fold_chat_splits_delegate_waves_by_time() -> None:
             )
     mods = [row for row in state["cards"] if row.get("from") == "coordinator"]
     assert len(mods) == 4
-    for card, t in zip(mods, waves):
+    for card, t in zip(mods, waves, strict=False):
         assert len(card.get("tools") or []) == 4
         assert all(abs(float(tool["t_start"]) - t) < 0.01 for tool in card["tools"])
 

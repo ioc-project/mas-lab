@@ -17,16 +17,12 @@ def _delegator(run_turn, routes=None, allowed_peers=()):
 def test_llm_delegator_dispatches_via_run_turn():
     calls: list[tuple[str, str, int, str, str]] = []
 
-    def run_turn(
-        agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str
-    ) -> str:
+    def run_turn(agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         calls.append((agent_id, prompt, correlation_id, caller_call_id, context_id))
         return f"ok:{agent_id}"
 
     delegator = _delegator(run_turn, allowed_peers=["telemetry"])
-    out = delegator.call_delegate_tool(
-        "delegate_to_telemetry", {"task": "check latency"}, correlation_id=7
-    )
+    out = delegator.call_delegate_tool("delegate_to_telemetry", {"task": "check latency"}, correlation_id=7)
     assert out == "ok:telemetry"
     assert calls == [("telemetry", "check latency", 7, "", "")]
 
@@ -50,9 +46,7 @@ def test_llm_delegator_is_delegate_tool():
 def test_llm_delegator_repeats_identical_task_per_session():
     calls: list[str] = []
 
-    def run_turn(
-        agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str
-    ) -> str:
+    def run_turn(agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         calls.append(agent_id)
         return f"findings:{agent_id}:{prompt}"
 
@@ -66,9 +60,7 @@ def test_llm_delegator_repeats_identical_task_per_session():
 def test_llm_delegator_different_tasks_call_peer_again():
     calls: list[tuple[str, str]] = []
 
-    def run_turn(
-        agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str
-    ) -> str:
+    def run_turn(agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         calls.append((agent_id, prompt))
         return f"findings:{agent_id}:{prompt}"
 
@@ -85,9 +77,7 @@ def test_llm_delegator_passes_correlation_id_through_to_run_turn():
     make_workflow_send / ObservabilityOperator.call_id_for)."""
     seen: list[int] = []
 
-    def run_turn(
-        agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str
-    ) -> str:
+    def run_turn(agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         seen.append(correlation_id)
         return "ok"
 
@@ -104,16 +94,12 @@ def test_llm_delegator_passes_caller_call_id_through_to_run_turn():
     value instead of something reconstructed downstream from timestamps."""
     seen: list[str] = []
 
-    def run_turn(
-        agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str
-    ) -> str:
+    def run_turn(agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         seen.append(caller_call_id)
         return "ok"
 
     delegator = _delegator(run_turn, allowed_peers=["a"])
-    delegator.call_delegate_tool(
-        "delegate_to_a", {"task": "t1"}, correlation_id=3, caller_call_id="tool-call-abc"
-    )
+    delegator.call_delegate_tool("delegate_to_a", {"task": "t1"}, correlation_id=3, caller_call_id="tool-call-abc")
     assert seen == ["tool-call-abc"]
 
 
@@ -123,19 +109,13 @@ def test_llm_delegator_passes_context_id_through_to_run_turn():
     already-consulted-this-session dedupe cache."""
     seen: list[str] = []
 
-    def run_turn(
-        agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str
-    ) -> str:
+    def run_turn(agent_id: str, prompt: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         seen.append(context_id)
         return f"ok:{context_id}"
 
     delegator = _delegator(run_turn, allowed_peers=["a"])
-    out_a = delegator.call_delegate_tool(
-        "delegate_to_a", {"task": "t1", "context_id": "ctx-a"}
-    )
-    out_b = delegator.call_delegate_tool(
-        "delegate_to_a", {"task": "t1", "context_id": "ctx-b"}
-    )
+    out_a = delegator.call_delegate_tool("delegate_to_a", {"task": "t1", "context_id": "ctx-a"})
+    out_b = delegator.call_delegate_tool("delegate_to_a", {"task": "t1", "context_id": "ctx-b"})
     assert seen == ["ctx-a", "ctx-b"]
     assert out_a == "ok:ctx-a"
     assert out_b == "ok:ctx-b"  # not the "already consulted" cache hit

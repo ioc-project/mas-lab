@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from mas.library.telemetry import OtelSpanSet
+
 from tests.conftest import requires_otel
 
 

@@ -5,6 +5,7 @@
 Run with:
     cd lab && uv run pytest tests/benchmark/test_ci_plot.py -v
 """
+
 from __future__ import annotations
 
 import csv
@@ -13,11 +14,9 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for _compute_ci (no dependencies beyond scipy/numpy)
 # ---------------------------------------------------------------------------
-
 from mas.library.lab.steps.viz.ci_plot import _compute_ci
 
 
@@ -70,6 +69,7 @@ class TestComputeCI:
 # Integration tests for CIPlotStep (mocked execution context)
 # ---------------------------------------------------------------------------
 
+
 class FakeExecutionContext:
     def __init__(self, output_dir=None):
         self.output_dir = output_dir
@@ -85,13 +85,15 @@ def _write_fake_results(path: Path) -> None:
         for scenario in scenarios:
             for item_group in item_groups:
                 for metric in metrics:
-                    rows.append({
-                        "scenario": scenario,
-                        "item_group": item_group,
-                        "metric": metric,
-                        "value": 0.7 + run * 0.05 if scenario != "baseline" else 0.5,
-                        "run_idx": run,
-                    })
+                    rows.append(
+                        {
+                            "scenario": scenario,
+                            "item_group": item_group,
+                            "metric": metric,
+                            "value": 0.7 + run * 0.05 if scenario != "baseline" else 0.5,
+                            "run_idx": run,
+                        }
+                    )
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["scenario", "item_group", "metric", "value", "run_idx"])
@@ -101,7 +103,7 @@ def _write_fake_results(path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_ci_step_writes_summary_csv(tmp_path):
-    import asyncio
+
     from mas.library.lab.steps.viz.ci_plot import CIPlotStep
 
     data_csv = tmp_path / "results.csv"
@@ -124,6 +126,7 @@ async def test_ci_step_writes_summary_csv(tmp_path):
     assert str(summary_path) in [str(f) for f in output.files]
 
     import csv as _csv
+
     with summary_path.open() as f:
         rows = list(_csv.DictReader(f))
     # 3 scenarios × 2 item_groups × 1 metric = 6 rows
@@ -138,6 +141,7 @@ async def test_ci_step_writes_summary_csv(tmp_path):
 @pytest.mark.asyncio
 async def test_ci_step_warns_on_single_run(tmp_path, caplog):
     import logging
+
     from mas.library.lab.steps.viz.ci_plot import CIPlotStep
 
     data_csv = tmp_path / "results.csv"

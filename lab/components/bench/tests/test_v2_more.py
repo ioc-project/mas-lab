@@ -14,7 +14,14 @@ def test_artifact_plan_time_check() -> None:
     prod = ArtifactType(name="data", shape="records", version=1)
     cons = ArtifactType(name="data", shape="records", version=1)
     assert plan_time_check([(prod, cons)]) == []
-    warn = plan_time_check([(ArtifactType(name="data", shape="records", version=1), ArtifactType(name="metrics", shape="value", version=2))])
+    warn = plan_time_check(
+        [
+            (
+                ArtifactType(name="data", shape="records", version=1),
+                ArtifactType(name="metrics", shape="value", version=2),
+            )
+        ]
+    )
     assert warn
 
 
@@ -79,6 +86,7 @@ def test_channel_emitter_publishes() -> None:
     ch = InprocChannel()
     set_channel(ch)
     from mas.lab.benchmark.pipeline.channel import set_stream_id
+
     sid = "e/s/i/r1#1"
     set_stream_id(sid)
 

@@ -1,18 +1,16 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for IPC client, worker registry, and ControllerAPI."""
+
 from __future__ import annotations
 
-import asyncio
 import threading
 import time
-
-import pytest
 
 from mas.lab.controller.api import ControllerAPI
 from mas.lab.controller.registry import WorkerRegistry
 from mas.lab.controller.worker_model import WorkerKind, WorkerStatus
-from mas.lab.controller.workers import WorkerRunner, run_benchmark_worker
+from mas.lab.controller.workers import WorkerRunner
 
 
 def test_worker_registry_lifecycle():
@@ -51,7 +49,7 @@ def test_controller_api_libraries(sample_lab, monkeypatch):
     monkeypatch.setattr(api.manifests, "refresh", lambda: None)
     api.manifests._libraries = {"demo": sample_lab}
     libs = api.list_libraries()
-    assert any(l["dir"] == "demo" for l in libs)
+    assert any(lib["dir"] == "demo" for lib in libs)
     exps = api.list_experiments("demo")
     assert exps[0]["name"] == "smoke"
 

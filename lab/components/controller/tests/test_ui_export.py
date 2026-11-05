@@ -187,8 +187,7 @@ def test_resolve_run_picks_up_progress(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (run / "progress.jsonl").write_text(
-        json.dumps({"elapsed_s": 1.0, "protocol": {"activated": False}, "snapshot_at": "2026-10-07T12:00:01Z"})
-        + "\n",
+        json.dumps({"elapsed_s": 1.0, "protocol": {"activated": False}, "snapshot_at": "2026-10-07T12:00:01Z"}) + "\n",
         encoding="utf-8",
     )
     (run / "metrics.json").write_text(
@@ -214,8 +213,7 @@ def test_build_bundle_and_write_site(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (tmp_path / "progress.jsonl").write_text(
-        json.dumps({"elapsed_s": 1.0, "protocol": {"activated": True}, "snapshot_at": "2026-10-07T12:00:01Z"})
-        + "\n",
+        json.dumps({"elapsed_s": 1.0, "protocol": {"activated": True}, "snapshot_at": "2026-10-07T12:00:01Z"}) + "\n",
         encoding="utf-8",
     )
     layouts = tmp_path / "layouts"

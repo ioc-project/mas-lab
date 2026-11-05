@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.library.telemetry.verification import (
     validate_spans_json_schema,
     verify_otel_spans,

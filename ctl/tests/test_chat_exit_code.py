@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from mas.ctl.cli.commands.chat import chat_cmd
 from click.testing import CliRunner
+from mas.ctl.cli.commands.chat import chat_cmd
 
 
 def test_chat_scripted_turn_failure_exits_nonzero(tmp_path) -> None:

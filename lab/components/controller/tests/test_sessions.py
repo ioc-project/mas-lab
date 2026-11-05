@@ -1,9 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Session lifecycle tests — acquire/release and idle shutdown."""
-from __future__ import annotations
 
-import time
+from __future__ import annotations
 
 import mas.lab.controller.daemon as daemon_mod
 from mas.lab.controller.api import ControllerAPI
@@ -25,18 +24,14 @@ def test_acquire_release_rpc(temp_mas_home, monkeypatch):
     daemon_mod._sessions = SessionRegistry()
     daemon_mod._shutdown.clear()
 
-    resp = daemon_mod._handle_request(
-        {"method": "acquire_session", "params": {"session_id": "test-cli-1"}}
-    )
+    resp = daemon_mod._handle_request({"method": "acquire_session", "params": {"session_id": "test-cli-1"}})
     assert resp["result"]["ok"] is True
     assert daemon_mod._sessions.count() == 1
 
     status = daemon_mod._handle_request({"method": "status", "params": {}})["result"]
     assert status["sessions"]["sessions"] == 1
 
-    daemon_mod._handle_request(
-        {"method": "release_session", "params": {"session_id": "test-cli-1"}}
-    )
+    daemon_mod._handle_request({"method": "release_session", "params": {"session_id": "test-cli-1"}})
     assert daemon_mod._sessions.count() == 0
 
 

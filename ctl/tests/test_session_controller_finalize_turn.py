@@ -7,12 +7,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.session.controller import ConversationConfig, SessionController, TurnResult
-from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.driver.driver import ExchangeRecord
-from mas.runtime.spec.checkpoint import CheckpointPolicy
+from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.session import BacktrackCapReached
+from mas.runtime.spec.checkpoint import CheckpointPolicy
 
 
 def _controller_with_ctx(ctx: AutoCtxAssembler, **config_kwargs) -> SessionController:
@@ -127,9 +126,9 @@ def test_backtrack_command_delegates_steps_and_note_to_managed_session():
     controller = _controller_with_ctx(AutoCtxAssembler())
     calls = []
     controller.managed_session = SimpleNamespace(
-        backtrack=lambda store, *, steps, steering_text: calls.append(
-            (store, steps, steering_text)
-        ) or "turn-2.checkpoint.json"
+        backtrack=lambda store, *, steps, steering_text: (
+            calls.append((store, steps, steering_text)) or "turn-2.checkpoint.json"
+        )
     )
     controller.checkpoint_store = object()
     controller.display = SimpleNamespace(on_system=lambda _message: None)
@@ -187,9 +186,7 @@ def test_automatic_backtrack_uses_policy_steps_and_error_as_steering():
         backtrack=lambda store, **kwargs: calls.append((store, kwargs)),
     )
     controller.checkpoint_store = object()
-    trace = SimpleNamespace(
-        boundary_errors=[SimpleNamespace(code="INGRESS_BACKTRACK", message="tool failed")]
-    )
+    trace = SimpleNamespace(boundary_errors=[SimpleNamespace(code="INGRESS_BACKTRACK", message="tool failed")])
 
     handled = controller._handle_automatic_backtrack(trace)
 
@@ -211,9 +208,7 @@ def test_automatic_backtrack_cap_pauses_for_operator_policy():
     controller.instance.pause = lambda **_kwargs: None
     messages = []
     controller.display = SimpleNamespace(on_system=messages.append)
-    trace = SimpleNamespace(
-        boundary_errors=[SimpleNamespace(code="INGRESS_BACKTRACK", message="repeat")]
-    )
+    trace = SimpleNamespace(boundary_errors=[SimpleNamespace(code="INGRESS_BACKTRACK", message="repeat")])
 
     assert controller._handle_automatic_backtrack(trace) is True
     assert messages == ["automatic backtrack limit reached (hitl)"]

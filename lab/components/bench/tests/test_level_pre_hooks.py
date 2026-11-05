@@ -12,16 +12,19 @@ beneath it will execute:
 * A run served from the trace cache executes nothing, so nothing under it is
   prepared.
 """
+
 from __future__ import annotations
 
 import csv
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, register_step_type
 
-from .test_golden_pipeline_path import REPO_ROOT, smoke_env  # noqa: F401  (fixture)
+from . import test_golden_pipeline_path as _golden
+
+REPO_ROOT = _golden.REPO_ROOT
+smoke_env = _golden.smoke_env  # re-exported pytest fixture
 
 FIXTURES = REPO_ROOT / "tests/fixtures/lab-smoke"
 
@@ -41,7 +44,9 @@ class _RecordPre(PipelineStep):
 register_step_type("record_pre", _RecordPre)
 
 
-def _experiment(tmp_path: Path, *, log: Path, n_runs: int = 2, cache: str = "disabled", fail_run_pre: bool = False) -> Path:
+def _experiment(
+    tmp_path: Path, *, log: Path, n_runs: int = 2, cache: str = "disabled", fail_run_pre: bool = False
+) -> Path:
     exp = tmp_path / "experiment.yaml"
     run_fail = "          fail: true\n" if fail_run_pre else ""
     exp.write_text(
@@ -49,18 +54,18 @@ def _experiment(tmp_path: Path, *, log: Path, n_runs: int = 2, cache: str = "dis
   name: pre-hooks
   default_flavour: local
   application:
-    manifest: {REPO_ROOT / 'docs/tutorials/01-building-an-agent/agent.yaml'}
-    configs_dir: {REPO_ROOT / 'docs/tutorials/01-building-an-agent/overlays'}
+    manifest: {REPO_ROOT / "docs/tutorials/01-building-an-agent/agent.yaml"}
+    configs_dir: {REPO_ROOT / "docs/tutorials/01-building-an-agent/overlays"}
   scenarios:
     - id: tools
       overlays:
         logic:
           - tools
-          - ref: {REPO_ROOT / 'tests/fixtures/golden-runs/hitl-system-tools.yaml'}
+          - ref: {REPO_ROOT / "tests/fixtures/golden-runs/hitl-system-tools.yaml"}
         control: []
         infra: []
   dataset:
-    path: {FIXTURES / 'dataset.yaml'}
+    path: {FIXTURES / "dataset.yaml"}
     limit: 1
   bench_emulation:
     runtime:

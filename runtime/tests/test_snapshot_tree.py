@@ -5,9 +5,7 @@ from mas.runtime.session.snapshot import SnapshotRef, SnapshotTree
 
 def test_snapshot_tree_branches_and_cursor_independent_of_live() -> None:
     tree = SnapshotTree()
-    root = SnapshotRef.from_state(
-        session_id="s", parent_snapshot_id=None, turn=0, kernel={"n": 0}, working_memory=[]
-    )
+    root = SnapshotRef.from_state(session_id="s", parent_snapshot_id=None, turn=0, kernel={"n": 0}, working_memory=[])
     a = SnapshotRef.from_state(
         session_id="s", parent_snapshot_id=root.snapshot_id, turn=1, kernel={"n": 1}, working_memory=[]
     )

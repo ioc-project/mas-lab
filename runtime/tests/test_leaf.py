@@ -8,7 +8,6 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-
 from mas.runtime.engine.leaf import leaf_engine
 
 

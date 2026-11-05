@@ -52,9 +52,7 @@ def test_dot_dir_yaml_not_listed(tmp_path: Path, monkeypatch):
         encoding="utf-8",
     )
     http = make_client(build_store(roots), monkeypatch)
-    items = http.get(
-        "/api/scopes/library:versioned_lib/items", params={"kind": "overlay"}
-    ).json()["items"]
+    items = http.get("/api/scopes/library:versioned_lib/items", params={"kind": "overlay"}).json()["items"]
     assert "ghost" not in {row["name"] for row in items}
 
 

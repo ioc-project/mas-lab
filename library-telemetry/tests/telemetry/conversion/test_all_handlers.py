@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
+
 from tests.conftest import requires_otel
 
 # Minimal field bag covering the union of what handlers read (unused keys are

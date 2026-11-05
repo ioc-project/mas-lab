@@ -34,9 +34,7 @@ def test_checkpoint_storage_is_independent_of_cadence() -> None:
     assert memory.uses_memory() is True
     assert memory.uses_disk() is False
 
-    disk = parse_checkpoint_policy(
-        {"mode": "every_turn", "storage": {"kind": "disk", "path": ".mas/ckpts"}}
-    )
+    disk = parse_checkpoint_policy({"mode": "every_turn", "storage": {"kind": "disk", "path": ".mas/ckpts"}})
     assert disk.resolved_storage() == "disk"
     assert disk.storage_path == ".mas/ckpts"
     assert disk.uses_disk() is True

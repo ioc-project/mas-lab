@@ -1114,7 +1114,7 @@ function CanvasFlow({
     if (!node) return [];
     const data = node.data as Record<string, unknown>;
     return (data.chatHistory as ChatMessage[]) ?? [];
-  }, [chatAgentNodeId]);
+  }, [chatAgentNodeId, nodes]);
 
   const handleChatMessagesChange = useCallback(
     (msgs: ChatMessage[]) => {

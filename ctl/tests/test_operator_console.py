@@ -1,12 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Operator console — state-driven stdin (no concurrent You:/HITL prompts)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from unittest.mock import MagicMock
-
-import pytest
 
 from mas.ctl.session.operator_console import OperatorConsole, OperatorMode
 from mas.runtime.schema.hitl import HitlResolveChoice
@@ -67,12 +66,8 @@ class TestOperatorConsole:
         after_hitl = _FakeTrace(awaiting_hitl=False)
         controller = MagicMock()
         controller.config.single_turn = True
-        controller.run_turn = MagicMock(
-            return_value=MagicMock(awaiting_hitl=True, trace=turn_trace)
-        )
-        controller.submit_hitl = MagicMock(
-            return_value=MagicMock(awaiting_hitl=False, trace=after_hitl)
-        )
+        controller.run_turn = MagicMock(return_value=MagicMock(awaiting_hitl=True, trace=turn_trace))
+        controller.submit_hitl = MagicMock(return_value=MagicMock(awaiting_hitl=False, trace=after_hitl))
         inputs = iter(["hello", "ALLOW"])
         monkeypatch.setattr(
             "mas.ctl.session.operator_console.sys.stdin",
@@ -88,9 +83,7 @@ class TestOperatorConsole:
         console = OperatorConsole(err=err)
         controller = MagicMock()
         controller.config.single_turn = True
-        controller.run_turn = MagicMock(
-            return_value=MagicMock(awaiting_hitl=False, trace=_FakeTrace())
-        )
+        controller.run_turn = MagicMock(return_value=MagicMock(awaiting_hitl=False, trace=_FakeTrace()))
         inputs = iter(["/reset", "/quit"])
         monkeypatch.setattr(
             "mas.ctl.session.operator_console.sys.stdin",
@@ -120,9 +113,7 @@ class TestOperatorConsole:
         console = OperatorConsole(err=__import__("io").StringIO())
         controller = MagicMock()
         controller.config.single_turn = True
-        controller.run_turn = MagicMock(
-            return_value=MagicMock(awaiting_hitl=False, trace=_FakeTrace())
-        )
+        controller.run_turn = MagicMock(return_value=MagicMock(awaiting_hitl=False, trace=_FakeTrace()))
         inputs = iter(["/steer focus on tests", "/quit"])
         monkeypatch.setattr(
             "mas.ctl.session.operator_console.sys.stdin",

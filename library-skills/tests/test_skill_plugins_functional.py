@@ -305,9 +305,7 @@ class TestADKSkillPluginFunctional(PluginBehaviourTests):
         )
         good_dir = tmp_path / "skills" / "good-skill"
         good_dir.mkdir(parents=True)
-        (good_dir / "SKILL.md").write_text(
-            "---\nname: good-skill\ndescription: Valid.\n---\n", encoding="utf-8"
-        )
+        (good_dir / "SKILL.md").write_text("---\nname: good-skill\ndescription: Valid.\n---\n", encoding="utf-8")
         plugin = ADKSkillPlugin(base_dir=tmp_path)
         skills = plugin.discover(tmp_path)
         assert "BadSkill" not in skills
@@ -316,9 +314,7 @@ class TestADKSkillPluginFunctional(PluginBehaviourTests):
     def test_run_script_js_uses_node(self, tmp_path):
         skill_dir = tmp_path / "skills" / "js-skill"
         (skill_dir / "scripts").mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: js-skill\ndescription: A JS skill.\n---\n", encoding="utf-8"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: js-skill\ndescription: A JS skill.\n---\n", encoding="utf-8")
         (skill_dir / "scripts" / "run.js").write_text("console.log('js')", encoding="utf-8")
 
         plugin = self.make_plugin(tmp_path)
@@ -333,9 +329,7 @@ class TestADKSkillPluginFunctional(PluginBehaviourTests):
     def test_run_script_sh_uses_bash(self, tmp_path):
         skill_dir = tmp_path / "skills" / "sh-skill"
         (skill_dir / "scripts").mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: sh-skill\ndescription: A shell skill.\n---\n", encoding="utf-8"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: sh-skill\ndescription: A shell skill.\n---\n", encoding="utf-8")
         (skill_dir / "scripts" / "run.sh").write_text("#!/bin/sh\necho hello\n", encoding="utf-8")
 
         plugin = self.make_plugin(tmp_path)

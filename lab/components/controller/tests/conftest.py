@@ -1,9 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Shared fixtures for controller tests."""
+
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -88,8 +88,7 @@ def sample_lab(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (lab / "datasets" / "queries.yaml").write_text(
-        "apiVersion: lab/v1\nkind: Dataset\nmetadata:\n  name: queries\n"
-        "  description: dataset\nspec:\n  items: []\n",
+        "apiVersion: lab/v1\nkind: Dataset\nmetadata:\n  name: queries\n  description: dataset\nspec:\n  items: []\n",
         encoding="utf-8",
     )
     (lab / "datasets" / "items.yaml").write_text(

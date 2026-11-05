@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.resources import ScopeContext
 from mas.lab.benchmark.pipeline.run_artifacts import (
@@ -35,15 +34,11 @@ def _ctx(output_dir: Path) -> ExecutionContext:
 
 def test_resolve_run_artifact_paths(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path / "bench")
-    assert resolve_run_artifact(ctx, "kg") == (
-        tmp_path / "bench" / "full" / "item1" / "r1" / "kg.json"
-    )
+    assert resolve_run_artifact(ctx, "kg") == (tmp_path / "bench" / "full" / "item1" / "r1" / "kg.json")
     assert resolve_run_artifact(ctx, "trajectory_kg") == (
         tmp_path / "bench" / "full" / "item1" / "r1" / "trajectory-kg.html"
     )
-    assert resolve_run_artifact(ctx, "kg_otel") == (
-        tmp_path / "bench" / "full" / "item1" / "r1" / "kg_otel.json"
-    )
+    assert resolve_run_artifact(ctx, "kg_otel") == (tmp_path / "bench" / "full" / "item1" / "r1" / "kg_otel.json")
 
 
 def test_resolve_run_events_via_run_ref(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -182,7 +177,6 @@ def test_compact_step_names_collapses_past_threshold() -> None:
 
 def test_kg_plotter_processor_registered() -> None:
     import mas.lab.graph  # noqa: F401 — registers internal processor
-
     from mas.lab.processor import get_processor
 
     cls = get_processor("multilevel_trajectory_kg_plotter")

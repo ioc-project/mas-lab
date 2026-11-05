@@ -93,11 +93,12 @@ tasks:
       - python3 scripts/check_literals.py
 
   verify-lint:
-    desc: "Fast static gates — lockfile, literals, ruff on changed Python"
+    desc: "Fast static gates — lockfile, literals, ruff check and format on changed Python"
     cmds:
       - task: verify-lock
       - task: verify:literals
       - python3 scripts/ruff_changed.py check
+      - python3 scripts/ruff_changed.py format-check
 
   verify-unit:
     desc: "Unit tests — repo gates + v2 lab/bench/core packages"
@@ -239,7 +240,7 @@ tasks:
         fi
 
   verify-library:
-    desc: "Ruff + pytest + changed-line coverage for one library"
+    desc: "Ruff check and format + pytest + changed-line coverage for one library"
     deps: [install-dev]
     vars:
       LIB: "{{.LIB}}"
@@ -247,6 +248,7 @@ tasks:
       FAIL_UNDER: '{{.FAIL_UNDER | default "90"}}'
     cmds:
       - python3 scripts/ruff_changed.py check --root {{.LIB}}
+      - python3 scripts/ruff_changed.py format-check --root {{.LIB}}
       - |
         {{.VENV}}/pytest {{.LIB}}/tests \
           --cov={{.COV}} \

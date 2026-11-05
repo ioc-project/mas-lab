@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.apps import AppNotFoundError, get_app
 from mas.library_catalog import (
     UnpinnedCatalogIdError,
@@ -51,9 +50,7 @@ def _write_versioned_library(tmp_path: Path) -> Path:
     )
     tf = queries / "tool_fixtures"
     tf.mkdir()
-    (tf / "celestia-weekend.yaml").write_text(
-        "id: celestia-weekend\n", encoding="utf-8"
-    )
+    (tf / "celestia-weekend.yaml").write_text("id: celestia-weekend\n", encoding="utf-8")
     (root / "library.yaml").write_text(
         "apiVersion: mas/v1\n"
         "kind: Library\n"
@@ -90,9 +87,7 @@ def test_parse_versioned_id() -> None:
     assert versioned_id("route-planner", None) == "route-planner"
 
 
-def test_get_app_library_qualified_and_latest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_app_library_qualified_and_latest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
 
@@ -105,9 +100,7 @@ def test_get_app_library_qualified_and_latest(
     assert get_app("route-planner") == v2
 
 
-def test_require_pinned_catalog_id_for_versioned_family(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_require_pinned_catalog_id_for_versioned_family(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
     require_pinned_catalog_id("example-library:route-planner@v1", kind="app")
@@ -121,9 +114,7 @@ def test_require_pinned_catalog_id_for_versioned_family(
     require_pinned_catalog_id("route-planner-scenarios@v1", kind="dataset")
 
 
-def test_get_app_rejects_hyphen_and_slash_aliases(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_app_rejects_hyphen_and_slash_aliases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
     with pytest.raises(AppNotFoundError, match="not found"):
@@ -132,18 +123,14 @@ def test_get_app_rejects_hyphen_and_slash_aliases(
         get_app("example-library:route-planner/v2")
 
 
-def test_get_app_unknown_library_app_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_get_app_unknown_library_app_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
     with pytest.raises(AppNotFoundError, match="not found"):
         get_app("example-library:does-not-exist")
 
 
-def test_resolve_path_ref_catalog_id_and_library_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_path_ref_catalog_id_and_library_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
     mas = resolve_path_ref("example-library:route-planner@v2", tmp_path)
@@ -160,9 +147,7 @@ def test_resolve_path_ref_catalog_id_and_library_path(
     assert path_ref.name == "v2"
 
 
-def test_resolve_path_ref_catalog_relative_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_path_ref_catalog_relative_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
     fixture = resolve_path_ref(
@@ -187,9 +172,7 @@ def test_resolve_path_ref_catalog_relative_file(
     assert apps.is_dir() and apps.name == "v2"
 
 
-def test_library_name_is_directory_stem_not_an_alias(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_library_name_is_directory_stem_not_an_alias(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     root = _write_versioned_library(tmp_path)
     monkeypatch.setenv("MAS_LIBRARY_PATHS", str(root))
     assert resolve_named_library_root("example-library") == root.resolve()

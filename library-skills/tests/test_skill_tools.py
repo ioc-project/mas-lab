@@ -67,6 +67,7 @@ class _FakeCtx:
 # activate_skill
 # ---------------------------------------------------------------------------
 
+
 def test_activate_skill_returns_body(tmp_path: Path):
     reg, _ = _registry_with_skill(tmp_path)
     plugin = SkillToolsPlugin()
@@ -129,9 +130,7 @@ def test_activate_skill_non_string_name_rejected():
 def test_read_skill_file_non_string_path_rejected(tmp_path: Path):
     reg, _ = _registry_with_skill(tmp_path)
     plugin = SkillToolsPlugin()
-    result = plugin.on_execute_tool(
-        "read_skill_file", {"skill": "my-skill", "path": 123}, ctx=_FakeCtx(reg)
-    )
+    result = plugin.on_execute_tool("read_skill_file", {"skill": "my-skill", "path": 123}, ctx=_FakeCtx(reg))
     assert "error" in result
     assert "must be a string" in result["error"]
 
@@ -139,6 +138,7 @@ def test_read_skill_file_non_string_path_rejected(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # list_skill_files
 # ---------------------------------------------------------------------------
+
 
 def test_list_skill_files(tmp_path: Path):
     reg, _ = _registry_with_skill(tmp_path)
@@ -162,11 +162,13 @@ def test_list_skill_files_unknown(tmp_path: Path):
 # read_skill_file
 # ---------------------------------------------------------------------------
 
+
 def test_read_skill_file_ok(tmp_path: Path):
     reg, _ = _registry_with_skill(tmp_path)
     plugin = SkillToolsPlugin()
     result = plugin.on_execute_tool(
-        "read_skill_file", {"skill": "my-skill", "path": "references/rules.md"},
+        "read_skill_file",
+        {"skill": "my-skill", "path": "references/rules.md"},
         ctx=_FakeCtx(reg),
     )
     assert "content" in result
@@ -177,7 +179,8 @@ def test_read_skill_file_traversal_blocked(tmp_path: Path):
     reg, _ = _registry_with_skill(tmp_path)
     plugin = SkillToolsPlugin()
     result = plugin.on_execute_tool(
-        "read_skill_file", {"skill": "my-skill", "path": "../../etc/passwd"},
+        "read_skill_file",
+        {"skill": "my-skill", "path": "../../etc/passwd"},
         ctx=_FakeCtx(reg),
     )
     assert "error" in result
@@ -188,7 +191,8 @@ def test_read_skill_file_not_found(tmp_path: Path):
     reg, _ = _registry_with_skill(tmp_path)
     plugin = SkillToolsPlugin()
     result = plugin.on_execute_tool(
-        "read_skill_file", {"skill": "my-skill", "path": "nonexistent.md"},
+        "read_skill_file",
+        {"skill": "my-skill", "path": "nonexistent.md"},
         ctx=_FakeCtx(reg),
     )
     assert "error" in result
@@ -204,7 +208,8 @@ def test_read_skill_file_non_utf8_binary_asset_returns_clean_error(tmp_path: Pat
 
     plugin = SkillToolsPlugin()
     result = plugin.on_execute_tool(
-        "read_skill_file", {"skill": "my-skill", "path": "assets/logo.png"},
+        "read_skill_file",
+        {"skill": "my-skill", "path": "assets/logo.png"},
         ctx=_FakeCtx(reg),
     )
     assert "error" in result
@@ -238,7 +243,8 @@ def test_read_skill_file_via_injected_backend_plugin(tmp_path: Path):
 
     plugin = SkillToolsPlugin()
     result = plugin.on_execute_tool(
-        "read_skill_file", {"skill": "my-skill", "path": "references/rules.md"},
+        "read_skill_file",
+        {"skill": "my-skill", "path": "references/rules.md"},
         ctx=ctx,
     )
     assert "content" in result
@@ -248,6 +254,7 @@ def test_read_skill_file_via_injected_backend_plugin(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # on_collect_tools — schema check
 # ---------------------------------------------------------------------------
+
 
 def test_on_collect_tools_without_registry_advertises_nothing():
     """Default: no skill is exposed to the LLM until a registry has entries."""
@@ -337,6 +344,7 @@ def test_on_collect_tools_without_ctx_falls_back_to_static_registry(tmp_path: Pa
 # steered toward the ones still missing.
 # ---------------------------------------------------------------------------
 
+
 def test_list_tools_enum_excludes_activated_skills(tmp_path: Path):
     reg = _registry_with_skills(tmp_path, ["skill-a", "skill-b", "skill-c"])
     plugin = SkillToolsPlugin()
@@ -369,9 +377,7 @@ def test_on_collect_tools_excludes_activated_skills_from_ctx_session_state(tmp_p
     tools = plugin.on_collect_tools(ctx=ctx)
     name_schema = next(t for t in tools if t["name"] == "activate_skill")["parameters"]["properties"]["name"]
     assert name_schema["enum"] == ["skill-b"]
-    assert "unload" not in next(
-        t for t in tools if t["name"] == "activate_skill"
-    )["parameters"]["properties"]
+    assert "unload" not in next(t for t in tools if t["name"] == "activate_skill")["parameters"]["properties"]
 
 
 def test_on_collect_tools_advertises_unload_param_when_enabled(tmp_path: Path):

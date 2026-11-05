@@ -9,11 +9,10 @@ from unittest.mock import MagicMock
 
 import pytest
 import yaml
-
+from ci_llm import web_search_engine
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.schema.hitl import HitlResolveChoice
 from mas.runtime.schema.ingress import HitlResolve
-from ci_llm import web_search_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 T01 = REPO_ROOT / "docs" / "tutorials" / "01-building-an-agent"
@@ -72,10 +71,7 @@ def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
     # ran this turn must not be silently dropped if the next turn's
     # note_user_input() clears working memory before HITL resolves.
     early_committed = instance.driver.ctx.committed_messages
-    assert any(
-        m.get("role") == "user" and m.get("content") == "Who is current POTUS ?"
-        for m in early_committed
-    )
+    assert any(m.get("role") == "user" and m.get("content") == "Who is current POTUS ?" for m in early_committed)
     assert any(m.get("role") == "assistant" and m.get("tool_calls") for m in early_committed)
 
     request = pending.trace.hitl_requests[-1]
@@ -99,8 +95,5 @@ def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
     roles = [m.get("role") for m in messages]
     assert roles.count("tool") >= 1
     assert any(steer in str(m.get("content")) for m in messages)
-    assert any(
-        m.get("role") == "user" and "2026" in str(m.get("content"))
-        for m in messages
-    )
+    assert any(m.get("role") == "user" and "2026" in str(m.get("content")) for m in messages)
     close_observability(controller)

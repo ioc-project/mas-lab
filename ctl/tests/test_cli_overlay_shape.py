@@ -76,9 +76,7 @@ def test_general_override_has_priority_over_legacy_inline_flags() -> None:
 def test_no_manifest_cli_only_builds_agent(tmp_path) -> None:
     # `mas-ctl chat --skill ... --memory ...` with no YAML manifest yields a
     # real kind: Agent, not a bare Overlay document.
-    data, plugin = load_merged_agent_manifest(
-        None, skills=("answer-formatting",), memory="semantic", validate=False
-    )
+    data, plugin = load_merged_agent_manifest(None, skills=("answer-formatting",), memory="semantic", validate=False)
     assert data["kind"] == "Agent"
     assert data["spec"]["memory"] == "semantic"
     assert data["spec"]["skills"] == ["answer-formatting"]

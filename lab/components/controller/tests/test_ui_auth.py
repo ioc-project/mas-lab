@@ -35,7 +35,7 @@ def test_non_loopback_bind_requires_tls_and_token(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(RuntimeError, match="MAS_DEMO_UI_TOKEN"):
         assert_ui_bind("10.0.0.8")
     monkeypatch.setenv("MAS_DEMO_UI_TOKEN", "secret")
-    assert_ui_bind("10.0.0.8") is None
+    assert assert_ui_bind("10.0.0.8") is None
 
 
 def test_ingest_and_commands_require_bearer(authed_client: TestClient) -> None:

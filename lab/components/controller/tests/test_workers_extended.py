@@ -1,17 +1,18 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Worker and registry edge-case tests."""
+
 from __future__ import annotations
 
 import time
 
 from mas.lab.controller.registry import WorkerRegistry
-from mas.lab.controller.worker_model import WorkerKind, WorkerStatus
+from mas.lab.controller.worker_model import WorkerStatus
 from mas.lab.controller.workers import WorkerRunner, run_pipeline_worker
 
 
 def test_worker_model_helpers():
-    from mas.lab.controller.worker_model import WorkerRecord, WorkerKind, WorkerStatus
+    from mas.lab.controller.worker_model import WorkerKind, WorkerRecord, WorkerStatus
 
     rec = WorkerRecord(id="w-1", kind=WorkerKind.APPLICATION)
     rec.append_stdout("line1")

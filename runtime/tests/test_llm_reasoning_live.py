@@ -13,7 +13,6 @@ import socket
 from urllib.parse import urlparse
 
 import pytest
-
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
 from mas.runtime.engine.llm_reasoning import sanitize_assistant_message
 
@@ -40,10 +39,7 @@ def _litellm_endpoint() -> tuple[str, str] | None:
         or ""
     ).strip()
     key = (
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("LITELLM_API_KEY")
-        or os.environ.get("LITELLM_USER_ID")
-        or ""
+        os.environ.get("OPENAI_API_KEY") or os.environ.get("LITELLM_API_KEY") or os.environ.get("LITELLM_USER_ID") or ""
     ).strip()
     if not base or not key:
         return None

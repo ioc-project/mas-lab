@@ -12,8 +12,8 @@ import pytest
 
 click = pytest.importorskip("click")
 from click.testing import CliRunner  # noqa: E402
-
 from mas.library.telemetry.lab_cli import TelemetryCliComponent, telemetry_group  # noqa: E402
+
 from tests.conftest import requires_otel  # noqa: E402
 
 runner = CliRunner()
@@ -149,9 +149,7 @@ def test_dump_and_list_apps(tmp_path, monkeypatch):
 
     r1 = runner.invoke(telemetry_group, ["list-apps"])
     assert r1.exit_code == 0 and "app-a" in r1.output
-    r2 = runner.invoke(
-        telemetry_group, ["dump", "sess-1", "-o", str(tmp_path / "d.jsonl")]
-    )
+    r2 = runner.invoke(telemetry_group, ["dump", "sess-1", "-o", str(tmp_path / "d.jsonl")])
     assert r2.exit_code == 0
     assert json.loads(r2.output)["spans"] == 1
 
@@ -243,8 +241,11 @@ def test_push_app_name_sets_service_name(tmp_path, monkeypatch):
 
 
 def _span(name, agent, **attrs):
-    return {"name": name, "status": {"status_code": attrs.pop("status", "UNSET")},
-            "attributes": {"mas.agent.id": agent, **attrs}}
+    return {
+        "name": name,
+        "status": {"status_code": attrs.pop("status", "UNSET")},
+        "attributes": {"mas.agent.id": agent, **attrs},
+    }
 
 
 def _write_conversation(path):

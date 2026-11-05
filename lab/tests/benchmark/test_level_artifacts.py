@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from mas.lab.benchmark.schedule.pipeline import materialize_step_dicts
 from mas.lab.benchmark.schedule.run_discovery import (
     discover_benchmark_scenarios,
@@ -34,8 +33,7 @@ def _tree(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     (run / "data.csv").write_text(
-        "scenario,item_id,run_idx,metric,value,latency_s\n"
-        "topo-parallel,1,1,goal_success_rate,1.0,1.5\n",
+        "scenario,item_id,run_idx,metric,value,latency_s\ntopo-parallel,1,1,goal_success_rate,1.0,1.5\n",
         encoding="utf-8",
     )
     return tmp_path
@@ -53,15 +51,9 @@ def test_discover_tests_and_scenarios(tmp_path: Path) -> None:
 
 def test_list_child_artifact_paths_is_direct_children_only(tmp_path: Path) -> None:
     _tree(tmp_path)
-    run_csvs = list_child_artifact_paths(
-        output_dir=tmp_path, scope="test", scenario="topo-parallel", test="item1"
-    )
-    assert run_csvs == [
-        tmp_path / "topo-parallel" / "item1" / "r1" / "data.csv"
-    ]
-    scenario_csvs = list_child_artifact_paths(
-        output_dir=tmp_path, scope="scenario", scenario="topo-parallel"
-    )
+    run_csvs = list_child_artifact_paths(output_dir=tmp_path, scope="test", scenario="topo-parallel", test="item1")
+    assert run_csvs == [tmp_path / "topo-parallel" / "item1" / "r1" / "data.csv"]
+    scenario_csvs = list_child_artifact_paths(output_dir=tmp_path, scope="scenario", scenario="topo-parallel")
     assert scenario_csvs == [tmp_path / "topo-parallel" / "item1" / "data.csv"]
 
 
@@ -85,9 +77,7 @@ def test_scope_run_materializes_per_run_dir(tmp_path: Path) -> None:
     )
     assert len(steps) == 1
     assert steps[0]["name"] == "eval-quality-topo-parallel-item1-r1"
-    assert steps[0]["config"]["run_dir"] == str(
-        (tmp_path / "topo-parallel" / "item1" / "r1").resolve()
-    )
+    assert steps[0]["config"]["run_dir"] == str((tmp_path / "topo-parallel" / "item1" / "r1").resolve())
 
 
 def test_test_gather_fans_in_run_df_and_depends_on(tmp_path: Path) -> None:
@@ -122,9 +112,7 @@ def test_test_gather_fans_in_run_df_and_depends_on(tmp_path: Path) -> None:
     by_name = {s["name"]: s for s in steps}
     gather = by_name["gather-test-topo-parallel-item1"]
     assert gather["depends_on"] == ["run-df-topo-parallel-item1-r1"]
-    assert gather["config"]["artifact_paths"] == [
-        str(tmp_path / "topo-parallel" / "item1" / "r1" / "data.csv")
-    ]
+    assert gather["config"]["artifact_paths"] == [str(tmp_path / "topo-parallel" / "item1" / "r1" / "data.csv")]
 
 
 def test_application_gather_fans_in_scenario_dfs(tmp_path: Path) -> None:
@@ -181,11 +169,7 @@ def test_application_gather_fans_in_scenario_dfs(tmp_path: Path) -> None:
         "gather-scenario-topo-parallel",
         "gather-scenario-topo-linear-pipeline",
     }
-    instance_paths = {
-        path
-        for inst in scenario_gathers
-        for path in inst["config"].get("artifact_paths") or []
-    }
+    instance_paths = {path for inst in scenario_gathers for path in inst["config"].get("artifact_paths") or []}
     assert instance_paths == {
         str(tmp_path / "topo-parallel" / "item1" / "data.csv"),
         str(tmp_path / "topo-linear-pipeline" / "item1" / "data.csv"),
@@ -208,9 +192,7 @@ async def test_metrics_to_dataframe_single_run(tmp_path: Path) -> None:
         '{"elapsed_ms": 2000, "status": "ok"}',
         encoding="utf-8",
     )
-    rows = rows_from_run_metrics(
-        run_dir, scenario="topo-parallel", test="item1", run="r1"
-    )
+    rows = rows_from_run_metrics(run_dir, scenario="topo-parallel", test="item1", run="r1")
     assert len(rows) == 1
     assert rows[0]["item_id"] == "1"
     assert rows[0]["value"] == 0.75
@@ -389,12 +371,8 @@ def test_batched_run_df_depends_on_batched_eval(tmp_path: Path) -> None:
         "run-df-topo-parallel-item1-r1",
         "run-df-topo-parallel-item1-r2",
     }
-    assert by_name["run-df-topo-parallel-item1-r1"]["depends_on"] == [
-        "eval-quality-topo-parallel-item1-r1"
-    ]
-    assert by_name["run-df-topo-parallel-item1-r2"]["depends_on"] == [
-        "eval-quality-topo-parallel-item1-r2"
-    ]
+    assert by_name["run-df-topo-parallel-item1-r1"]["depends_on"] == ["eval-quality-topo-parallel-item1-r1"]
+    assert by_name["run-df-topo-parallel-item1-r2"]["depends_on"] == ["eval-quality-topo-parallel-item1-r2"]
 
 
 @pytest.mark.asyncio
@@ -492,9 +470,7 @@ async def test_eval_mce_rejects_tree_walk(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_eval_mce_degrades_gracefully_on_scoring_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+async def test_eval_mce_degrades_gracefully_on_scoring_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A flaky judge call must not raise and fail the whole (often 100s-of-
     instances) post-phase pipeline — it should degrade this one run instead."""
     from mas.library.lab.steps.eval import mce as mce_module
@@ -507,9 +483,7 @@ async def test_eval_mce_degrades_gracefully_on_scoring_failure(
         raise RuntimeError("judge LLM proxy timed out")
 
     # Stock MCE metrics batch through runner.compute_session_metrics.
-    monkeypatch.setattr(
-        "mas.library.eval.mce.runner.compute_session_metrics", _boom
-    )
+    monkeypatch.setattr("mas.library.eval.mce.runner.compute_session_metrics", _boom)
 
     step = mce_module.EvalMceStep(
         name="eval-quality",
@@ -583,17 +557,13 @@ def test_gather_level_raises_when_artifact_paths_all_missing(tmp_path: Path) -> 
 def test_effective_scope_prefers_explicit_scope_over_legacy_flags() -> None:
     from mas.lab.benchmark.schedule.pipeline import _effective_scope
 
-    explicit_and_legacy = PipelineStepSpec(
-        type="gather_level", name="s", scope="scenario", per_run=True
-    )
+    explicit_and_legacy = PipelineStepSpec(type="gather_level", name="s", scope="scenario", per_run=True)
     assert _effective_scope(explicit_and_legacy) == "scenario"
 
     legacy_per_run_only = PipelineStepSpec(type="gather_level", name="s", per_run=True)
     assert _effective_scope(legacy_per_run_only) == "run"
 
-    legacy_per_scenario_only = PipelineStepSpec(
-        type="gather_level", name="s", per_scenario=True
-    )
+    legacy_per_scenario_only = PipelineStepSpec(type="gather_level", name="s", per_scenario=True)
     assert _effective_scope(legacy_per_scenario_only) == "scenario"
 
     no_hints = PipelineStepSpec(type="gather_level", name="s")
@@ -614,11 +584,7 @@ def test_gather_fan_in_honors_custom_level_artifact_path(tmp_path: Path) -> None
             self.artifacts = artifacts
 
     class _FakeExp:
-        levels = {
-            "run": _FakeLevel(
-                [ArtifactSpec(name="df", type="dataframe", path="{level_dir}/results.csv")]
-            )
-        }
+        levels = {"run": _FakeLevel([ArtifactSpec(name="df", type="dataframe", path="{level_dir}/results.csv")])}
 
     from mas.lab.benchmark.schedule.pipeline import _level_artifacts
 

@@ -130,7 +130,9 @@ _TRIP_PLANNER_SPANS = _EXAMPLES / "trip-planner" / "otel_spans.jsonl"
 def _load_spans(path: Path) -> list[dict]:
     import json
 
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]  # noqa: E501
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]  # noqa: E501
 
 
 def test_norm_accepts_realistic_converter_output() -> None:

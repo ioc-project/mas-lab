@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.lab.benchmark.dataset import Dataset
 from mas.lab.benchmark.experiment import ExperimentConfig
 from mas.lab.deprecations import clear_deprecation_warnings, docs_url, warn_deprecated
@@ -71,11 +70,7 @@ def test_tool_fixtures_survive_dataset_item_round_trip(tmp_path: Path) -> None:
             "apiVersion": "lab/v1",
             "kind": "Dataset",
             "metadata": {"name": "d"},
-            "spec": {
-                "items": [
-                    {"id": "x", "inputs": {"user": "Q", "tool_fixtures": "fixture.yaml"}}
-                ]
-            },
+            "spec": {"items": [{"id": "x", "inputs": {"user": "Q", "tool_fixtures": "fixture.yaml"}}]},
         },
         path.open("w"),
     )
@@ -189,9 +184,7 @@ def test_experiment_dataset_path_without_name_still_loads(tmp_path: Path) -> Non
     assert config.dataset == dataset_path.resolve()
 
 
-def test_former_ioc_dataset_still_loads_and_new_envelope_is_preferred(
-    tmp_path: Path, caplog
-) -> None:
+def test_former_ioc_dataset_still_loads_and_new_envelope_is_preferred(tmp_path: Path, caplog) -> None:
     former = tmp_path / "former.yaml"
     former.write_text(
         textwrap.dedent(
@@ -246,9 +239,7 @@ def test_former_ioc_dataset_still_loads_and_new_envelope_is_preferred(
     with caplog.at_level(logging.WARNING, logger="mas.lab.deprecations"):
         former_ds = Dataset.from_yaml(former)
     assert former_ds[0].prompt == "Triage the edge-gateway regression."
-    assert former_ds[0].run_input.expectations["details"]["correct_action"]["action"] == (
-        "rollback"
-    )
+    assert former_ds[0].run_input.expectations["details"]["correct_action"]["action"] == ("rollback")
     assert "dataset.legacy_item" in caplog.text
     assert "dataset.legacy_expectations" in caplog.text
 
@@ -257,9 +248,7 @@ def test_former_ioc_dataset_still_loads_and_new_envelope_is_preferred(
     with caplog.at_level(logging.WARNING, logger="mas.lab.deprecations"):
         modern_ds = Dataset.from_yaml(modern)
     assert modern_ds[0].prompt == "Triage the edge-gateway regression."
-    assert modern_ds[0].run_input.expectations["details"]["correct_action"]["service"] == (
-        "edge-gateway"
-    )
+    assert modern_ds[0].run_input.expectations["details"]["correct_action"]["service"] == ("edge-gateway")
     assert "dataset.legacy_item" not in caplog.text
     assert "dataset.legacy_expectations" not in caplog.text
 
@@ -283,13 +272,7 @@ def test_warn_deprecated_execution_once_per_where(caplog) -> None:
 def _write_split_experiment(tmp_path: Path, extra: str) -> Path:
     path = tmp_path / "experiment.yaml"
     path.write_text(
-        "experiment:\n"
-        "  name: dual-read\n"
-        "  application:\n"
-        "    manifest: ./mas.yaml\n"
-        "  run:\n"
-        "    n_runs: 2\n"
-        f"{extra}",
+        f"experiment:\n  name: dual-read\n  application:\n    manifest: ./mas.yaml\n  run:\n    n_runs: 2\n{extra}",
         encoding="utf-8",
     )
     return path

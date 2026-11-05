@@ -10,12 +10,7 @@ import yaml
 from mas.library.standard.plugins.context.summarizer import SUMMARIZE_INSTRUCTIONS, LlmSummarizer
 from mas.runtime.contracts.cm_factory import CMFactory
 
-SAMPLE = (
-    Path(__file__).resolve().parents[1]
-    / "examples"
-    / "context"
-    / "summarizer-override"
-)
+SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "context" / "summarizer-override"
 
 
 def _agent() -> dict:

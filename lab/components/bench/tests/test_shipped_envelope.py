@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Shipped experiments and datasets must not use deprecated envelope shapes."""
+
 from __future__ import annotations
 
 import warnings
@@ -8,7 +9,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.lab.benchmark.dataset import Dataset
 from mas.lab.deprecations import clear_deprecation_warnings
 
@@ -48,9 +48,7 @@ def _experiment_paths() -> list[Path]:
         if path.name.endswith(".schema.yaml"):
             continue
         data = _load_yaml(path)
-        if isinstance(data, dict) and (
-            "experiment" in data or data.get("kind") == "Experiment"
-        ):
+        if isinstance(data, dict) and ("experiment" in data or data.get("kind") == "Experiment"):
             out.append(path)
     return out
 
@@ -93,7 +91,6 @@ def test_shipped_datasets_load_without_deprecation(path: Path) -> None:
     leftover = [
         str(w.message)
         for w in caught
-        if issubclass(w.category, DeprecationWarning)
-        and str(w.message).startswith("Deprecated:")
+        if issubclass(w.category, DeprecationWarning) and str(w.message).startswith("Deprecated:")
     ]
     assert leftover == [], f"{_rel(path)} still uses a deprecated dataset shape: {leftover}"

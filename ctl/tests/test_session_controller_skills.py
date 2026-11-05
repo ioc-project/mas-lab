@@ -99,9 +99,7 @@ def test_skills_command_lists_no_skills_when_registry_missing() -> None:
 
     controller.run_turn("/skills", auto_hitl=False)
 
-    assert display.system_messages == [
-        "Skills are not configured for this agent (no SkillCatalogPlugin attached)."
-    ]
+    assert display.system_messages == ["Skills are not configured for this agent (no SkillCatalogPlugin attached)."]
 
 
 def test_skills_command_lists_no_skills_when_registry_empty() -> None:

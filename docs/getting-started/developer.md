@@ -56,7 +56,7 @@ The user config holds `infra_refs` (manifests to register, such as
 | Task | Purpose |
 | --- | --- |
 | `task verify` | Pre-commit gate |
-| `task verify-lint` | Lockfile, literals, Ruff on changed Python |
+| `task verify-lint` | Lockfile, literals, Ruff check and format on changed Python |
 | `task ci-fast` | Lint then unit |
 | `task ci` | Optional sequential run of every verify task |
 | `task docs-serve` | Local MkDocs site at `http://127.0.0.1:8000` |

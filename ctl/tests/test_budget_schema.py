@@ -67,13 +67,7 @@ def test_with_hardened_overlay_sets_budget_caps() -> None:
     from mas.ctl.overlay.merge import merge_overlay
 
     overlays_dir = (
-        Path(__file__).resolve().parents[2]
-        / "library-standard"
-        / "src"
-        / "mas"
-        / "library"
-        / "standard"
-        / "overlays"
+        Path(__file__).resolve().parents[2] / "library-standard" / "src" / "mas" / "library" / "standard" / "overlays"
     )
     overlay = yaml.safe_load((overlays_dir / "with-hardened.yaml").read_text(encoding="utf-8"))
     base = {

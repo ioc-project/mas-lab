@@ -112,4 +112,3 @@ spec:
     assert rc == 0
     mock_console.run.assert_not_called()
     run_turn.assert_called()
-

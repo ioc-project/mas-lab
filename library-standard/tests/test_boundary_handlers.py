@@ -50,14 +50,19 @@ def test_hitl_resolve_carries_resolution_and_answer() -> None:
         "payload": {"resolution": "approved", "answer": "yes, proceed"},
     }
     out = dispatch_boundary(record, ctx=_ctx())
-    assert out == [{
-        "kind": "hitl_resolve",
-        "agent_id": "moderator", "run_id": "run-1", "correlation_id": 5,
-        "timestamp": out[0]["timestamp"],
-        "resolution": "approved", "answer": "yes, proceed",
-        "operator_id": "",
-        "steering": "",
-    }]
+    assert out == [
+        {
+            "kind": "hitl_resolve",
+            "agent_id": "moderator",
+            "run_id": "run-1",
+            "correlation_id": 5,
+            "timestamp": out[0]["timestamp"],
+            "resolution": "approved",
+            "answer": "yes, proceed",
+            "operator_id": "",
+            "steering": "",
+        }
+    ]
 
 
 def test_hitl_resolve_carries_operator_id_and_steering() -> None:
@@ -83,8 +88,11 @@ def test_governance_decision_carries_reason_and_policy_name() -> None:
         "kind": "governance.decision",
         "correlation_id": 2,
         "payload": {
-            "hook": "egress", "checkpoint": "after", "decision": "BLOCK",
-            "reason": "Restricted destination: Shadowmere", "policy_name": "forbidden-destination",
+            "hook": "egress",
+            "checkpoint": "after",
+            "decision": "BLOCK",
+            "reason": "Restricted destination: Shadowmere",
+            "policy_name": "forbidden-destination",
         },
     }
     out = dispatch_boundary(record, ctx=_ctx())
@@ -117,8 +125,10 @@ def test_boundary_error_carries_code_and_message() -> None:
         "kind": "boundary.error",
         "correlation_id": 3,
         "payload": {
-            "code": "RETRY_BUDGET_EXHAUSTED", "recoverable": False,
-            "message": "max retries exceeded", "parent_call_id": "call-1",
+            "code": "RETRY_BUDGET_EXHAUSTED",
+            "recoverable": False,
+            "message": "max retries exceeded",
+            "parent_call_id": "call-1",
         },
     }
     out = dispatch_boundary(record, ctx=_ctx())
@@ -205,16 +215,18 @@ def test_cache_lookup_is_not_misreported_as_a_model_completion() -> None:
         "payload": {"op": "LLM_CALL", "cache_layer": "infra_llm_cache", "cache_status": "miss"},
     }
     out = dispatch_boundary(record, ctx=_ctx())
-    assert out == [{
-        "kind": "cache_lookup",
-        "agent_id": "moderator",
-        "run_id": "run-1",
-        "correlation_id": 8,
-        "call_id": "llm-call-8",
-        "timestamp": out[0]["timestamp"],
-        "cache_layer": "infra_llm_cache",
-        "cache_status": "miss",
-    }]
+    assert out == [
+        {
+            "kind": "cache_lookup",
+            "agent_id": "moderator",
+            "run_id": "run-1",
+            "correlation_id": 8,
+            "call_id": "llm-call-8",
+            "timestamp": out[0]["timestamp"],
+            "cache_layer": "infra_llm_cache",
+            "cache_status": "miss",
+        }
+    ]
 
 
 def test_parallel_group_emits_processing_start_and_end_for_fork_and_aggregation() -> None:

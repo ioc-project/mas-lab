@@ -82,9 +82,7 @@ class _Display:
         return None
 
 
-def _live_session(
-    pattern: str, session_id: str, *, engine: object | None = None, config: KernelConfig | None = None
-):
+def _live_session(pattern: str, session_id: str, *, engine: object | None = None, config: KernelConfig | None = None):
     instance = RuntimeInstance.from_parts(
         config=config or KernelConfig(),
         engine=engine or SimulatedEngine(llm_next_step=lambda _cid: "STOP", stop_text="ok"),
@@ -119,9 +117,7 @@ def test_peer_after_steer_is_applied_or_queued(pattern: str) -> None:
     labelled = label_untrusted_peer("nudge", sender="planner", intent="steer")
     assert comm.send("worker", "nudge", context=SendContext(intent="steer")) == "delivered"
     steer_events = [
-        event
-        for event in admin.events
-        if event.method == "steer" and event.session_id == session.session_id
+        event for event in admin.events if event.method == "steer" and event.session_id == session.session_id
     ]
     assert steer_events
     assert steer_events[0].actor == "planner"
@@ -133,16 +129,9 @@ def test_peer_after_steer_is_applied_or_queued(pattern: str) -> None:
     result = session.controller.run_turn("", auto_hitl=False)
     kinds = [step.ingress.__class__.__name__ for step in result.trace.steps]
     assert "UserInputReceived" in kinds
-    assembled = [
-        item
-        for step in result.trace.steps
-        for item in step.egress
-        if isinstance(item, RequestCtxAssembly)
-    ]
+    assembled = [item for step in result.trace.steps for item in step.egress if isinstance(item, RequestCtxAssembly)]
     assert assembled
-    first_user = next(
-        step.ingress for step in result.trace.steps if isinstance(step.ingress, UserInputReceived)
-    )
+    first_user = next(step.ingress for step in result.trace.steps if isinstance(step.ingress, UserInputReceived))
     assert first_user.sender == "planner"
     assert first_user.intent == "steer"
     assert first_user.source == "peer"
@@ -192,9 +181,7 @@ class _PartialHangEngine:
 @pytest.mark.asyncio
 async def test_peer_preempt_keeps_partials_and_applies_steer() -> None:
     engine = _PartialHangEngine("stream-react")
-    _manager, session, admin, comm = _live_session(
-        "react@v1", "stream-react", engine=engine
-    )
+    _manager, session, admin, comm = _live_session("react@v1", "stream-react", engine=engine)
     labelled = label_untrusted_peer("Answer Lyon.", sender="planner", intent="steer")
     task = asyncio.create_task(session.controller.arun_turn("hello", auto_hitl=False))
     for _ in range(80):
@@ -221,12 +208,7 @@ async def test_peer_preempt_keeps_partials_and_applies_steer() -> None:
     assert event.intent == "steer"
     assert event.source == "peer"
     assert event.context_text == labelled
-    assembled = [
-        item
-        for step in result.trace.steps
-        for item in step.egress
-        if isinstance(item, RequestCtxAssembly)
-    ]
+    assembled = [item for step in result.trace.steps for item in step.egress if isinstance(item, RequestCtxAssembly)]
     assert assembled
     assert any(item.operator_context == labelled for item in assembled)
     preempted = next(

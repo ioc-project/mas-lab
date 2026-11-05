@@ -75,7 +75,7 @@ jobs:
       - uses: ./.github/actions/fetch-base
         with:
           sha: ${{ github.event.pull_request.base.sha || github.event.before }}
-      - name: Lock, literals, ruff on changed Python
+      - name: Lock, literals, ruff check and format on changed Python
         env:
           GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: task verify-lint

@@ -5,8 +5,8 @@
 from types import SimpleNamespace
 
 from mas.runtime.boundary.context.assemble import assemble_llm_messages, has_tool_results
-from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.boundary.context.working_memory import WorkingMemoryStore
+from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.schema.observability import ObsEventKind
 
 
@@ -37,7 +37,9 @@ def test_assemble_llm_messages_includes_user_turn():
     assert ctx.last_context_usage["token_breakdown"]["tool_definitions"] > 0
     event = next(event for event in observability.events if event.kind == ObsEventKind.CONTEXT_ASSEMBLED)
     assert event.payload["context_usage"]["model"] == "vertex_ai/gemini-2.5-flash"
-    assert event.payload["context_usage"]["estimated_prompt_tokens"] == ctx.last_context_usage["estimated_prompt_tokens"]
+    assert (
+        event.payload["context_usage"]["estimated_prompt_tokens"] == ctx.last_context_usage["estimated_prompt_tokens"]
+    )
 
 
 def test_has_tool_results_detects_tool_role():

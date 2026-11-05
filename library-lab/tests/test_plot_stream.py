@@ -6,7 +6,6 @@ the real client-side contract (demo-ui/src/plot-host.js)."""
 import base64
 
 import pytest
-
 from mas.library.lab.steps.services.plot_stream import (
     build_plot_record,
     image_html_shell,

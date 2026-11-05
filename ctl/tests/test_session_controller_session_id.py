@@ -55,9 +55,7 @@ def _engine() -> SimulatedEngine:
 
 def test_session_id_defaults_to_a_fresh_uuid_when_not_given() -> None:
     plugin = _RecordingGovPlugin()
-    instance = RuntimeInstance.from_parts(
-        engine=_engine(), config=KernelConfig(egress_governance_plugin=plugin)
-    )
+    instance = RuntimeInstance.from_parts(engine=_engine(), config=KernelConfig(egress_governance_plugin=plugin))
     instance.capture_session_baseline()
     controller = SessionController(
         instance=instance, display=_SilentDisplay(), config=ConversationConfig(single_turn=False)
@@ -86,9 +84,7 @@ def test_session_id_is_shared_across_turns_task_id_is_not() -> None:
     SAME session (governance/observability see session_id unchanged) but
     gets its own fresh task_id."""
     plugin = _RecordingGovPlugin()
-    instance = RuntimeInstance.from_parts(
-        engine=_engine(), config=KernelConfig(egress_governance_plugin=plugin)
-    )
+    instance = RuntimeInstance.from_parts(engine=_engine(), config=KernelConfig(egress_governance_plugin=plugin))
     instance.capture_session_baseline()
     controller = SessionController(
         instance=instance,

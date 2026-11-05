@@ -20,9 +20,7 @@ from mas.lab.controller.ui_stream.run_index import resolve_run
 def _make_run(tmp_path: Path, *, scenario: str = "arm-b") -> Path:
     run_dir = tmp_path / "output" / scenario / "item1" / "r1"
     (run_dir / "traces").mkdir(parents=True)
-    (run_dir / "traces" / "events.jsonl").write_text(
-        json.dumps({"kind": "mas_call_start", "timestamp": 1.0}) + "\n"
-    )
+    (run_dir / "traces" / "events.jsonl").write_text(json.dumps({"kind": "mas_call_start", "timestamp": 1.0}) + "\n")
     return run_dir
 
 
@@ -91,9 +89,7 @@ def test_gold_cache_fallback_for_custom_traces(tmp_path):
     cache = tmp_path / "infra" / ".cache"
     cache.mkdir(parents=True)
     (cache / "baseline.events.jsonl").write_text(json.dumps({"kind": "mas_call_start", "timestamp": 1.0}) + "\n")
-    (cache / "baseline.custom.panel-a.jsonl").write_text(
-        json.dumps({"kind": "custom.panel-a.panel", "ts": 1.0}) + "\n"
-    )
+    (cache / "baseline.custom.panel-a.jsonl").write_text(json.dumps({"kind": "custom.panel-a.panel", "ts": 1.0}) + "\n")
     ref = DataSourceRef(library="lib", experiment="exp", scenario="baseline")
     record = resolve_run(tmp_path, ref)
     assert "custom_panel-a" in record.artefacts

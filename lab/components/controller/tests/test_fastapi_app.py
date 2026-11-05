@@ -6,6 +6,7 @@ The demo data lives in ``fixtures/demo_lab/`` — a self-contained,
 version-controlled lab tree that is copied into ``tmp_path`` for each test
 so CRUD operations never mutate the checked-in fixtures.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -56,12 +57,14 @@ def client(demo_lab, monkeypatch):
 
 # -- Health -------------------------------------------------------------------
 
+
 def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
     assert client.get("/api/health").json() == {"status": "ok"}
 
 
 # -- Libraries ----------------------------------------------------------------
+
 
 def test_list_libraries(client):
     data = client.get("/api/libraries").json()
@@ -70,6 +73,7 @@ def test_list_libraries(client):
 
 
 # -- Tools & Skills -----------------------------------------------------------
+
 
 def test_tools_and_skills(client):
     tools = client.get("/api/libraries/demo/tools").json()["tools"]
@@ -108,6 +112,7 @@ def test_read_library_document_missing(client):
 
 
 # -- Experiments CRUD ---------------------------------------------------------
+
 
 def test_experiments_crud(client, demo_lab):
     listed = client.get("/api/libraries/demo/experiments").json()["experiments"]
@@ -153,6 +158,7 @@ def test_experiments_crud(client, demo_lab):
 
 # -- Pipelines & Overlays ----------------------------------------------------
 
+
 def test_pipelines_and_overlays(client):
     pipes = client.get("/api/libraries/demo/pipelines").json()["pipelines"]
     pipe_names = {p["name"] for p in pipes}
@@ -169,6 +175,7 @@ def test_pipelines_and_overlays(client):
 
 # -- Datasets -----------------------------------------------------------------
 
+
 def test_datasets(client):
     datasets = client.get("/api/libraries/demo/datasets").json()["datasets"]
     dataset_names = {d["name"] for d in datasets}
@@ -177,6 +184,7 @@ def test_datasets(client):
 
 
 # -- MAS Resources (apps) ----------------------------------------------------
+
 
 def test_mas_resources(client, demo_lab):
     listed = client.get("/api/libraries/demo/apps").json()["mas_resources"]
@@ -263,9 +271,7 @@ def test_mas_canvas_persists_to_ui_canvas_overlay(client, demo_lab):
 
     listed = client.get("/api/libraries/demo/overlays").json()["overlays"]
     canvas_rows = [
-        o
-        for o in listed
-        if o["name"] == "canvas-app" and str(o.get("path", "")).endswith("overlays/canvas-app.yaml")
+        o for o in listed if o["name"] == "canvas-app" and str(o.get("path", "")).endswith("overlays/canvas-app.yaml")
     ]
     assert canvas_rows
     assert canvas_rows[0]["ui_canvas"] is True
@@ -289,8 +295,8 @@ def test_mas_canvas_persists_to_ui_canvas_overlay(client, demo_lab):
     assert saved_agent == "spec: [\n"
 
 
-
 # -- Pipeline step types ------------------------------------------------------
+
 
 def test_pipeline_step_types(client):
     data = client.get("/api/pipeline-step-types").json()
@@ -300,12 +306,14 @@ def test_pipeline_step_types(client):
 
 # -- Metrics ------------------------------------------------------------------
 
+
 def test_metrics_endpoints(client):
     assert client.get("/api/metrics/eval").status_code == 200
     assert client.get("/api/metrics/mce").status_code == 200
 
 
 # -- Jobs ---------------------------------------------------------------------
+
 
 def test_jobs_list_empty(client):
     from mas.lab.controller import api as api_mod
@@ -378,6 +386,7 @@ def test_jobs_origin_filter_and_delete(client):
 
 
 # -- Config files -------------------------------------------------------------
+
 
 def test_config_files(client):
     data = client.get("/api/libraries/demo/config-files").json()

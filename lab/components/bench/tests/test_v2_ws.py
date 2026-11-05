@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from mas.lab.benchmark.pipeline.channel import make_channel
 from mas.lab.benchmark.pipeline.ws import check_token, consume_stream, serve_channel
 

@@ -47,10 +47,7 @@ def test_schedule_parallel_tools_egress_siblings_share_one_parent() -> None:
     q = QProduct()
     run = RunLedger()
     config = KernelConfig(parallel_tool_calls=True)
-    tools = [
-        ToolCallSpec(tool_name=f"tool_{i}", tool_arguments={"i": i})
-        for i in range(3)
-    ]
+    tools = [ToolCallSpec(tool_name=f"tool_{i}", tool_arguments={"i": i}) for i in range(3)]
 
     with runtime_binding(None, op):
         out = schedule_parallel_tools_egress(q, run, config, tools)
@@ -77,9 +74,7 @@ def test_schedule_parallel_tools_egress_siblings_share_one_parent() -> None:
     # Correlate "which tool" <-> "which start event" via correlation_id,
     # shared between the returned InvokeEngineIo symbols, q.pending_tools_by_cid,
     # and TransitionEvent.correlation_id.
-    tool_name_by_cid = {
-        sym.correlation_id: q.pending_tools_by_cid[sym.correlation_id][0] for sym in out
-    }
+    tool_name_by_cid = {sym.correlation_id: q.pending_tools_by_cid[sym.correlation_id][0] for sym in out}
     starts_by_cid = {e.correlation_id: e for e in starts}
     assert set(tool_name_by_cid) == set(starts_by_cid)
     for cid, tool_name in tool_name_by_cid.items():

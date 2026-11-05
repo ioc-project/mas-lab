@@ -25,10 +25,7 @@ def _imported_modules(tree: ast.AST) -> list[str]:
                 and func.attr == "import_module"
                 and (
                     (isinstance(func.value, ast.Name) and func.value.id == "importlib")
-                    or (
-                        isinstance(func.value, ast.Attribute)
-                        and func.value.attr == "importlib"
-                    )
+                    or (isinstance(func.value, ast.Attribute) and func.value.attr == "importlib")
                 )
             )
             is_dunder_import = isinstance(func, ast.Name) and func.id == "__import__"

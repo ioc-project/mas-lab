@@ -5,7 +5,6 @@
 from pathlib import Path
 
 import yaml
-
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 
 

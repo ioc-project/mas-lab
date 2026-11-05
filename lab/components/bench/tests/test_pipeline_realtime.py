@@ -21,9 +21,7 @@ def test_folds_batches_from_class_on_batch() -> None:
 
 
 def test_step_spec_ignores_streaming_flags() -> None:
-    spec = PipelineStepSpec.from_dict(
-        {"name": "file-tail", "type": "file_tail", "realtime": True, "streaming": True}
-    )
+    spec = PipelineStepSpec.from_dict({"name": "file-tail", "type": "file_tail", "realtime": True, "streaming": True})
     assert "streaming" not in spec.__dataclass_fields__
     out = _step_dict(spec, spec.name or spec.type, {}, [])
     assert "realtime" not in out

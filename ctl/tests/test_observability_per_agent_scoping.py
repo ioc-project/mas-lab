@@ -79,9 +79,7 @@ def test_default_native_plugin_set_joins_shared(tmp_path) -> None:
     own_set.subscribe_to(planner.driver.observability, agent_id="planner")
     specialist = _FakeInstance(obs_plugin_set=_own_plugin_set(tmp_path, "scoped.jsonl"))
 
-    shared, scoped = partition_instances_by_observability(
-        {"planner": planner, "specialist": specialist}
-    )
+    shared, scoped = partition_instances_by_observability({"planner": planner, "specialist": specialist})
 
     assert list(shared) == ["planner"]
     assert list(scoped) == ["specialist"]

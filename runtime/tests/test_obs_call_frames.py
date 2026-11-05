@@ -6,7 +6,6 @@ import asyncio
 import threading
 
 import pytest
-
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 
 

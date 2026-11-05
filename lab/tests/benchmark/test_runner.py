@@ -3,20 +3,17 @@
 """Tests for benchmark runner initialization."""
 
 import tempfile
-from mas.lab.benchmark import ResultStorage, MultiRunOrchestrator
+
+from mas.lab.benchmark import MultiRunOrchestrator, ResultStorage
 
 
 def test_orchestrator_init():
     """Test MultiRunOrchestrator initialization."""
     with tempfile.TemporaryDirectory() as tmpdir:
         storage = ResultStorage(tmpdir)
-        
-        orchestrator = MultiRunOrchestrator(
-            storage=storage,
-            n_runs=3,
-            pause_between_runs=0.5
-        )
-        
+
+        orchestrator = MultiRunOrchestrator(storage=storage, n_runs=3, pause_between_runs=0.5)
+
         assert orchestrator.storage == storage
         assert orchestrator.n_runs == 3
         assert orchestrator.pause_between_runs == 0.5

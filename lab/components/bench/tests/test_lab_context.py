@@ -100,9 +100,7 @@ def test_discover_lab_name_matches_discover_lab_context(tmp_path) -> None:
     assert _discover_lab_name(exp_dir / "experiment.yaml") == "trip-planner"
 
 
-def test_inject_lab_libraries_puts_the_lab_root_on_sys_path_not_the_experiment_dir(
-    tmp_path, monkeypatch
-) -> None:
+def test_inject_lab_libraries_puts_the_lab_root_on_sys_path_not_the_experiment_dir(tmp_path, monkeypatch) -> None:
     lab_dir = tmp_path / "some.lab"
     exp_dir = lab_dir / "experiments" / "deeply" / "nested" / "example"
     exp_dir.mkdir(parents=True)
@@ -116,9 +114,7 @@ def test_inject_lab_libraries_puts_the_lab_root_on_sys_path_not_the_experiment_d
     assert str(exp_dir.resolve()) not in sys.path
 
 
-def test_inject_lab_libraries_resolves_libraries_relative_to_the_lab_root(
-    tmp_path, monkeypatch
-) -> None:
+def test_inject_lab_libraries_resolves_libraries_relative_to_the_lab_root(tmp_path, monkeypatch) -> None:
     lab_dir = tmp_path / "some.lab"
     exp_dir = lab_dir / "experiments" / "a" / "b" / "c"
     exp_dir.mkdir(parents=True)

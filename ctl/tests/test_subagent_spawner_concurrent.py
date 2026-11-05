@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from mas.ctl.executor.spawn_ledger import SpawnLedger
-from mas.ctl.executor.subagent_spawner import make_subagent_spawner, SubagentTemplate
+from mas.ctl.executor.subagent_spawner import SubagentTemplate, make_subagent_spawner
 from mas.ctl.placement.bus.inproc import InProcessCommBus
 from mas.ctl.session.controller import TurnResult
 from mas.runtime.boundary.context.working_memory_registry import (
@@ -55,9 +55,11 @@ def test_aspawn_two_siblings_via_gather_no_crosstalk(tmp_path: Path):
             raise AssertionError("sync run_turn must not run on aspawn")
 
         async def arun_turn(self, task, *, turn_id, parent_call_id):
-            registry.put(session_id="session", agent_id=self.agent_id, snapshot=WorkingMemorySnapshot(
-                turn_history=[(self.agent_id, task)]
-            ))
+            registry.put(
+                session_id="session",
+                agent_id=self.agent_id,
+                snapshot=WorkingMemorySnapshot(turn_history=[(self.agent_id, task)]),
+            )
             await asyncio.sleep(0.02)
             snap = registry.get("session", self.agent_id)
             assert snap is not None

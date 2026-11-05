@@ -7,15 +7,13 @@ from __future__ import annotations
 from mas.runtime.boundary.gov.transition import GovTransition, build_gov_transition
 from mas.runtime.kernel.state import QProduct
 from mas.runtime.schema.egress import InvokeEngineIo
-from mas.runtime.schema.ingress import EngineIoReturn, HitlResolve, UserInputReceived
 from mas.runtime.schema.hitl import HitlResolveChoice
+from mas.runtime.schema.ingress import EngineIoReturn, HitlResolve, UserInputReceived
 
 
 def test_ingress_user_input_received_shape() -> None:
     symbol = UserInputReceived(user_turn_id="u1", text="hello", session_id="s1", task_id="t1")
-    t = build_gov_transition(
-        "ingress", symbol, q=QProduct(), agent_id="agent-1", session_id="s1", task_id="t1"
-    )
+    t = build_gov_transition("ingress", symbol, q=QProduct(), agent_id="agent-1", session_id="s1", task_id="t1")
     assert isinstance(t, GovTransition)
     assert t.hook == "ingress"
     assert t.kind == "USER_INPUT_RECEIVED"

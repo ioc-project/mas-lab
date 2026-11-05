@@ -560,7 +560,7 @@ function OverlayFlow({
     if (onYamlChange) {
       onYamlChange(serializeOverlayToYaml(nodes, edges, overlayName, initialGraph?.description, selectedNamespace));
     }
-  }, [nodes, edges, onYamlChange, overlayName, selectedNamespace]);
+  }, [nodes, edges, onYamlChange, overlayName, initialGraph?.description, selectedNamespace]);
 
   return (
     <NamespaceProvider value={selectedNamespace}>

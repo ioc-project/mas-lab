@@ -2,7 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for the @plugin decorator (F15)."""
 
-import pytest
 from mas.runtime.contracts.base import BasePlugin, plugin
 from mas.runtime.contracts.memory_contract import MemoryContract
 from mas.runtime.contracts.tool_contract import ToolContract

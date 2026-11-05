@@ -21,9 +21,7 @@ def _has_bench() -> bool:
 
 
 _HAS_BENCH = _has_bench()
-requires_bench = pytest.mark.skipif(
-    not _HAS_BENCH, reason="bench extra not installed"
-)
+requires_bench = pytest.mark.skipif(not _HAS_BENCH, reason="bench extra not installed")
 
 
 def test_core_library_does_not_require_bench():

@@ -15,9 +15,7 @@ def test_convert_verify_roundtrip(tmp_path, events_path):
     )
 
     out = tmp_path / "spans.jsonl"
-    n = convert_events_to_spans_file(
-        events_path, out, service_name="mas-runtime", app_name="app"
-    )
+    n = convert_events_to_spans_file(events_path, out, service_name="mas-runtime", app_name="app")
     assert n == 11  # events in the fixture
     report = verify_spans_file(out, spanspec_level="L3")
     assert report["ok"], report["errors"]
@@ -27,14 +25,10 @@ def test_convert_verify_roundtrip(tmp_path, events_path):
 
 @requires_otel
 def test_replay_parity_is_deterministic(tmp_path, events_path):
-    from mas.library.telemetry.steps import run_convert, run_compare_spans
+    from mas.library.telemetry.steps import run_compare_spans, run_convert
 
-    a = run_convert(
-        events_path, output_dir=tmp_path, output_filename="a.jsonl", app_name="app"
-    )
-    run_convert(
-        events_path, output_dir=tmp_path, output_filename="b.jsonl", app_name="app"
-    )
+    a = run_convert(events_path, output_dir=tmp_path, output_filename="a.jsonl", app_name="app")
+    run_convert(events_path, output_dir=tmp_path, output_filename="b.jsonl", app_name="app")
     report = run_compare_spans(tmp_path / "a.jsonl", tmp_path / "b.jsonl", strict=True)
     assert report["passed"]
     assert report["summary"]["failed"] == 0
@@ -45,9 +39,7 @@ def test_replay_parity_is_deterministic(tmp_path, events_path):
 def test_push_dry_run_step(tmp_path, events_path):
     from mas.library.telemetry.steps import run_convert, run_push_otlp
 
-    run_convert(
-        events_path, output_dir=tmp_path, output_filename="s.jsonl", app_name="app"
-    )
+    run_convert(events_path, output_dir=tmp_path, output_filename="s.jsonl", app_name="app")
     result = run_push_otlp(
         tmp_path / "s.jsonl",
         endpoint="http://localhost:4318",

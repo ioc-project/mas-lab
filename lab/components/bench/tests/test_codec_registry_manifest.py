@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.lab.benchmark.codecs import get_codec, list_codecs
 
 

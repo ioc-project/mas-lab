@@ -19,7 +19,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
+from mas.lab.plots.multilevel_trajectory.chart_data import _build_chart_data, build_trajectory_chart_data
+from mas.lab.plots.multilevel_trajectory.dag import _build_dag
+from mas.lab.plots.multilevel_trajectory.models import TransNode
+from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 from mas.lab.plots.multilevel_trajectory.tree import (
     _assign_dfs_positions,
     _detect_delegation_forks,
@@ -27,17 +30,11 @@ from mas.lab.plots.multilevel_trajectory.tree import (
     _make_call_sequence,
     _reset_branch_agent_call_ids,
 )
-from mas.lab.plots.multilevel_trajectory.dag import _build_dag
-from mas.lab.plots.multilevel_trajectory.chart_data import _build_chart_data, build_trajectory_chart_data
-from mas.lab.plots.multilevel_trajectory.models import TransNode
-from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 from mas.lab.plots.trajectory import load_trace
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 # Canonical copy of the sandbox trace used by these regression tests.
-TRIP_PLANNER_EVENTS_FIXTURE = (
-    REPO_ROOT / "tests/fixtures/multilevel/trip-planner-plain-demo/events.r1.jsonl"
-)
+TRIP_PLANNER_EVENTS_FIXTURE = REPO_ROOT / "tests/fixtures/multilevel/trip-planner-plain-demo/events.r1.jsonl"
 
 # Sibling dispatch instants: real traces never produce exact float ties (see
 # module docstring) — microsecond-distinct, in dispatch order.
@@ -147,7 +144,7 @@ def test_native_visual_fork_only_badges_genuinely_concurrent_delegates():
     assert len(fork_groups["mod"]) == 3
 
     _, lanes = _build_dag(records, [])
-    agents_lane = next(l for l in lanes if l.lane_id == "agents")
+    agents_lane = next(lane for lane in lanes if lane.lane_id == "agents")
     fork_els = [el for el in agents_lane.sequence if getattr(el, "is_fork", False)]
     join_els = [el for el in agents_lane.sequence if getattr(el, "is_join", False)]
 
@@ -158,9 +155,11 @@ def test_native_visual_fork_only_badges_genuinely_concurrent_delegates():
 
     # The solo itinerary delegation must never be part of any fork/join
     # badge at all.
-    assert not any(getattr(el, "is_fork", False) or getattr(el, "is_join", False)
-                   for el in agents_lane.sequence
-                   if getattr(el, "ts", None) in (1.0, 4.0))
+    assert not any(
+        getattr(el, "is_fork", False) or getattr(el, "is_join", False)
+        for el in agents_lane.sequence
+        if getattr(el, "ts", None) in (1.0, 4.0)
+    )
 
 
 def test_make_call_sequence_empty_branch_fallback_uses_processing_call_type():
@@ -209,8 +208,7 @@ def test_make_call_sequence_reused_call_id_respects_next_turn_boundary():
     children_of = _children_of(records)
     agent_sequence = [
         {"call_id": shared, "start_ts": 1.0, "end_ts": 2.0, "agent_id": "sched"},
-        {"call_id": "sched-2", "start_ts": 2.0, "end_ts": 5.0, "agent_id": "sched",
-         "_reused_call_id": shared},
+        {"call_id": "sched-2", "start_ts": 2.0, "end_ts": 5.0, "agent_id": "sched", "_reused_call_id": shared},
     ]
 
     call_sequence = _make_call_sequence(agent_sequence, children_of, frozenset())
@@ -260,7 +258,7 @@ def test_make_call_sequence_tags_branch_entry_and_widens_marker_gap():
     call_sequence = _make_call_sequence(agent_sequence, children_of, reset_ids)
 
     by_id = {r["call_id"]: r for r in call_sequence}
-    deleg1, deleg2, deleg3 = by_id["deleg1"], by_id["deleg2"], by_id["deleg3"]
+    _deleg1, deleg2, deleg3 = by_id["deleg1"], by_id["deleg2"], by_id["deleg3"]
     ctx1, ctx2, ctx3 = by_id["sched1-ctx"], by_id["sched2-ctx"], by_id["sched3-ctx"]
 
     # All 3 markers dispatch within the same tolerance window (a genuine
@@ -298,11 +296,9 @@ def test_assign_dfs_positions_monotonic_across_sibling_batch():
         _rec("deleg1", "mod", "call", "ToolCall", _D1, _D1 + 0.001),
         _rec("sched1-llm", "sched1", "call", "LLMCall", _D1 + 0.001, 10.0),
         _rec("deleg2", "mod", "call", "ToolCall", _D2, _D2 + 0.001),
-        {**_rec("sched2-llm", "sched2", "call", "LLMCall", _D2 + 0.002, 12.0),
-         "_branch_entry": "sched2"},
+        {**_rec("sched2-llm", "sched2", "call", "LLMCall", _D2 + 0.002, 12.0), "_branch_entry": "sched2"},
         _rec("deleg3", "mod", "call", "ToolCall", _D3, _D3 + 0.001),
-        {**_rec("sched3-llm", "sched3", "call", "LLMCall", _D3 + 0.002, 14.0),
-         "_branch_entry": "sched3"},
+        {**_rec("sched3-llm", "sched3", "call", "LLMCall", _D3 + 0.002, 14.0), "_branch_entry": "sched3"},
     ]
     # Sanity: the fixture must actually reproduce a backward jump in real
     # time — sibling #2's marker sits, in DFS order, right after sibling
@@ -331,8 +327,7 @@ def test_assign_dfs_positions_marker_stays_before_its_own_reset():
         _rec("deleg1", "mod", "call", "ToolCall", _D1, _D1 + 0.001),
         _rec("sched1-llm", "sched1", "call", "LLMCall", _D1 + 0.001, 10.0),
         _rec("deleg2", "mod", "call", "ToolCall", _D2, _D2 + 0.001),
-        {**_rec("sched2-llm", "sched2", "call", "LLMCall", _D2 + 0.002, 12.0),
-         "_branch_entry": "sched2"},
+        {**_rec("sched2-llm", "sched2", "call", "LLMCall", _D2 + 0.002, 12.0), "_branch_entry": "sched2"},
     ]
     ts_to_pos, reset_branch_id = _assign_dfs_positions(call_sequence)
 
@@ -344,9 +339,7 @@ def test_assign_dfs_positions_marker_stays_before_its_own_reset():
 
 
 def test_context_assembly_processing_call_hides_raw_prompt_output():
-    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), (
-        f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
-    )
+    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
     events = load_trace(TRIP_PLANNER_EVENTS_FIXTURE)
     records = _build_call_records(events)
 
@@ -361,8 +354,7 @@ def test_context_assembly_processing_call_hides_raw_prompt_output():
     assert "You are a moderator" not in state_nodes[0].hover
 
     trans_nodes = [
-        el for lane in lanes for el in lane.sequence
-        if isinstance(el, TransNode) and el.call_type == "ProcessingCall"
+        el for lane in lanes for el in lane.sequence if isinstance(el, TransNode) and el.call_type == "ProcessingCall"
     ]
     assert trans_nodes, "expected at least one context assembly ProcessingCall"
     assert trans_nodes[0].hover_out == ""
@@ -370,9 +362,7 @@ def test_context_assembly_processing_call_hides_raw_prompt_output():
     # Native-only contract: no synthetic state chunks are injected.
     synthetic_sources = {"llm/output", "state/assistant", "state/tool_input"}
     assert not any(
-        isinstance(p, dict) and p.get("source") in synthetic_sources
-        for st in state_nodes
-        for p in (st.cpr_data or [])
+        isinstance(p, dict) and p.get("source") in synthetic_sources for st in state_nodes for p in (st.cpr_data or [])
     )
 
 
@@ -430,7 +420,7 @@ def test_wait_resume_states_expose_internal_wait_fields():
     ]
 
     _, lanes = _build_dag(records, events=[])
-    call_lane = next(l for l in lanes if l.lane_id == "calls")
+    call_lane = next(lane for lane in lanes if lane.lane_id == "calls")
     states = [el for el in call_lane.sequence if not isinstance(el, TransNode)]
 
     wait_states = [st for st in states if st.wait_role == "WAIT"]
@@ -457,31 +447,22 @@ def test_wait_resume_states_expose_internal_wait_fields():
 
 
 def test_native_cpr_does_not_inject_synthetic_chunks():
-    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), (
-        f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
-    )
+    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
     events = load_trace(TRIP_PLANNER_EVENTS_FIXTURE)
     records = _build_call_records(events)
 
     _, lanes = _build_dag(records, events)
-    call_lane = next(l for l in lanes if l.lane_id == "calls")
+    call_lane = next(lane for lane in lanes if lane.lane_id == "calls")
     states = [el for el in call_lane.sequence if not isinstance(el, TransNode)]
-    llm_trans = [
-        el for el in call_lane.sequence
-        if isinstance(el, TransNode) and el.call_type == "LLMCall"
-    ]
+    llm_trans = [el for el in call_lane.sequence if isinstance(el, TransNode) and el.call_type == "LLMCall"]
     assert llm_trans, "expected at least one LLM transition"
 
     synthetic_sources = {"llm/output", "state/assistant", "state/tool_input"}
     assert not any(
-        isinstance(p, dict) and p.get("source") in synthetic_sources
-        for tr in llm_trans
-        for p in (tr.cpr_data or [])
+        isinstance(p, dict) and p.get("source") in synthetic_sources for tr in llm_trans for p in (tr.cpr_data or [])
     )
     assert not any(
-        isinstance(p, dict) and p.get("source") in synthetic_sources
-        for st in states
-        for p in (st.cpr_data or [])
+        isinstance(p, dict) and p.get("source") in synthetic_sources for st in states for p in (st.cpr_data or [])
     )
 
 
@@ -500,14 +481,12 @@ def test_llm_call_own_output_becomes_third_context_chunk_on_next_state():
     it — that would mean the LLM's own turn was silently dropped from
     context instead of carried forward.
     """
-    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), (
-        f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
-    )
+    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
     events = load_trace(TRIP_PLANNER_EVENTS_FIXTURE)
     records = _build_call_records(events)
 
     _, lanes = _build_dag(records, events)
-    call_lane = next(l for l in lanes if l.lane_id == "calls")
+    call_lane = next(lane for lane in lanes if lane.lane_id == "calls")
     seq = call_lane.sequence
 
     checked_any = False
@@ -528,8 +507,7 @@ def test_llm_call_own_output_becomes_third_context_chunk_on_next_state():
         next_parts = next_state.cpr_data or []
         # Cumulative: never regresses to fewer facts than before the call.
         assert len(next_parts) >= len(prev_parts), (
-            f"LLM transition at seq idx {i} lost context: "
-            f"{len(prev_parts)} parts before, {len(next_parts)} after"
+            f"LLM transition at seq idx {i} lost context: {len(prev_parts)} parts before, {len(next_parts)} after"
         )
         # The LLM's own real output must be present as the newly-added part
         # (there is always a real decision/output in this trace's LLM calls).
@@ -619,20 +597,16 @@ def test_chart_data_serializes_wait_internal_fields():
         records=records,
     )
 
-    call_lane = next(l for l in data.get("lanes", []) if l.get("laneId") == "calls")
+    call_lane = next(lane for lane in data.get("lanes", []) if lane.get("laneId") == "calls")
 
     wait_states = [
-        s for s in call_lane.get("sequence", [])
-        if s.get("type") == "state" and s.get("waitLinkId") == "delegate-1"
+        s for s in call_lane.get("sequence", []) if s.get("type") == "state" and s.get("waitLinkId") == "delegate-1"
     ]
     assert wait_states, "expected serialized wait states"
     assert any(s.get("waitRole") == "WAIT" for s in wait_states)
     assert any(s.get("waitRole") == "RESUME" for s in wait_states)
     assert all(s.get("waitMeta") for s in wait_states)
-    assert any(
-        s.get("waitMeta", {}).get("blocking", {}).get("toolType") == "DELEGATION"
-        for s in wait_states
-    )
+    assert any(s.get("waitMeta", {}).get("blocking", {}).get("toolType") == "DELEGATION" for s in wait_states)
 
 
 def test_w1_content_has_wait_target_and_link_to_resume_state():
@@ -718,15 +692,11 @@ def test_w1_content_has_wait_target_and_link_to_resume_state():
         records=records,
     )
 
-    call_lane = next(l for l in data.get("lanes", []) if l.get("laneId") == "calls")
-    agents_lane = next(l for l in data.get("lanes", []) if l.get("laneId") == "agents")
-    wait = next(
-        s for s in call_lane.get("sequence", [])
-        if s.get("type") == "state" and s.get("labelOverride") == "W1"
-    )
+    call_lane = next(lane for lane in data.get("lanes", []) if lane.get("laneId") == "calls")
+    agents_lane = next(lane for lane in data.get("lanes", []) if lane.get("laneId") == "agents")
+    wait = next(s for s in call_lane.get("sequence", []) if s.get("type") == "state" and s.get("labelOverride") == "W1")
     resume = next(
-        s for s in call_lane.get("sequence", [])
-        if s.get("type") == "state" and s.get("labelOverride") == "R1"
+        s for s in call_lane.get("sequence", []) if s.get("type") == "state" and s.get("labelOverride") == "R1"
     )
 
     wm = wait.get("waitMeta") or {}
@@ -737,12 +707,10 @@ def test_w1_content_has_wait_target_and_link_to_resume_state():
     assert "cprData" not in wait
 
     wait_agent = next(
-        s for s in agents_lane.get("sequence", [])
-        if s.get("type") == "state" and s.get("labelOverride") == "W1"
+        s for s in agents_lane.get("sequence", []) if s.get("type") == "state" and s.get("labelOverride") == "W1"
     )
     resume_agent = next(
-        s for s in agents_lane.get("sequence", [])
-        if s.get("type") == "state" and s.get("labelOverride") == "R1"
+        s for s in agents_lane.get("sequence", []) if s.get("type") == "state" and s.get("labelOverride") == "R1"
     )
     wm_agent = wait_agent.get("waitMeta") or {}
     assert not (wait_agent.get("hoverByLane") or {}).get("agents")
@@ -834,7 +802,7 @@ def test_wait_w1_followed_by_next_numbered_state_on_calls_lane():
         records=records,
     )
 
-    lane_by_id = {l.get("laneId"): l for l in chart.get("lanes", [])}
+    lane_by_id = {lane.get("laneId"): lane for lane in chart.get("lanes", [])}
     assert "calls" in lane_by_id and "agents" in lane_by_id
 
     calls_states = [s for s in lane_by_id["calls"].get("sequence", []) if s.get("type") == "state"]
@@ -917,10 +885,9 @@ def test_calls_lane_avoids_spurious_connector_only_gaps():
         records=records,
     )
 
-    call_lane = next(l for l in chart.get("lanes", []) if l.get("laneId") == "calls")
+    call_lane = next(lane for lane in chart.get("lanes", []) if lane.get("laneId") == "calls")
     connector_only_states = [
-        s for s in call_lane.get("sequence", [])
-        if s.get("type") == "state" and s.get("connectorOnly")
+        s for s in call_lane.get("sequence", []) if s.get("type") == "state" and s.get("connectorOnly")
     ]
     assert connector_only_states == []
 
@@ -968,8 +935,8 @@ def test_calls_lane_sequence_alternates_without_double_state_gap():
             "start_ts": 1.6,
             "end_ts": 2.0,
             "agent_id": "moderator",
-            "input": "{\"q\":1}",
-            "output": "{\"ok\":true}",
+            "input": '{"q":1}',
+            "output": '{"ok":true}',
             "tool_name": "demo_tool",
         },
     ]
@@ -982,7 +949,7 @@ def test_calls_lane_sequence_alternates_without_double_state_gap():
         width_mode="log",
         records=records,
     )
-    call_lane = next(l for l in chart.get("lanes", []) if l.get("laneId") == "calls")
+    call_lane = next(lane for lane in chart.get("lanes", []) if lane.get("laneId") == "calls")
     seq = call_lane.get("sequence", [])
 
     for i in range(1, len(seq)):
@@ -1037,7 +1004,7 @@ def test_wait_s4_not_misplaced_relative_to_w1_in_shared_buckets():
         records=records,
     )
 
-    lane_by_id = {l.get("laneId"): l for l in chart.get("lanes", [])}
+    lane_by_id = {lane.get("laneId"): lane for lane in chart.get("lanes", [])}
     calls_states = [s for s in lane_by_id["calls"].get("sequence", []) if s.get("type") == "state"]
     i_w1 = next(i for i, s in enumerate(calls_states) if s.get("labelOverride") == "W1")
     j = i_w1 + 1
@@ -1055,18 +1022,14 @@ def test_wait_s4_not_misplaced_relative_to_w1_in_shared_buckets():
     assert i_s4_bucket > i_w1_bucket, "S4 bucket must come after W1 bucket"
 
 
-
 def test_chart_data_serializes_cpr_internal_fields_from_real_trace():
-    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), (
-        f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
-    )
+    assert TRIP_PLANNER_EVENTS_FIXTURE.is_file(), f"missing fixture: {TRIP_PLANNER_EVENTS_FIXTURE}"
     events = load_trace(TRIP_PLANNER_EVENTS_FIXTURE)
     chart = build_trajectory_chart_data(events, width_mode="log")
 
-    call_lane = next(l for l in chart.get("lanes", []) if l.get("laneId") == "calls")
+    call_lane = next(lane for lane in chart.get("lanes", []) if lane.get("laneId") == "calls")
     llm_trans = [
-        t for t in call_lane.get("sequence", [])
-        if t.get("type") == "trans" and t.get("callType") == "LLMCall"
+        t for t in call_lane.get("sequence", []) if t.get("type") == "trans" and t.get("callType") == "LLMCall"
     ]
     assert llm_trans, "expected serialized llm transitions"
     synthetic_sources = {"llm/output", "state/assistant", "state/tool_input"}
@@ -1110,11 +1073,8 @@ def test_chart_data_serializes_missing_telemetry_flags_on_transition():
         width_mode="log",
         records=records,
     )
-    call_lane = next(l for l in chart.get("lanes", []) if l.get("laneId") == "calls")
-    proc = next(
-        t for t in call_lane.get("sequence", [])
-        if t.get("type") == "trans" and t.get("callId") == "proc-1"
-    )
+    call_lane = next(lane for lane in chart.get("lanes", []) if lane.get("laneId") == "calls")
+    proc = next(t for t in call_lane.get("sequence", []) if t.get("type") == "trans" and t.get("callId") == "proc-1")
     assert set(proc.get("missingTelemetry") or []) == {"input", "end_event"}
 
 
@@ -1144,8 +1104,8 @@ def test_stagger_coinc_processing_calls_cascades_forward_bump_to_touching_siblin
     gap (or a timestamp inversion) staggering was meant to avoid, one hop
     later in the chain."""
     from mas.lab.plots.multilevel_trajectory.annotations import (
-        _stagger_coinc_processing_calls,
         _STAGGER_DUR,
+        _stagger_coinc_processing_calls,
     )
 
     # Two coincident point-in-time ProcessingCalls at ts=1.0 (a "wait" and a
@@ -1191,6 +1151,7 @@ def test_stagger_coinc_processing_calls_cascades_forward_bump_to_touching_siblin
 # change the cross-lane fallback logic in multilevel.html, update this port
 # to match.
 
+
 def _js_canonical_source(src):
     s = str(src or "").lower()
     if s == "assembled/user":
@@ -1230,10 +1191,10 @@ def _js_collect_parts(seq, until_idx):
             current_agent = agent_id
         bucket = by_agent.setdefault(current_agent or "__root__", {})
         if el.get("type") == "state":
-            for p in (el.get("cprData") or []):
+            for p in el.get("cprData") or []:
                 bucket[_js_part_key(p)] = p
         if el.get("type") == "trans":
-            for p in (el.get("cprData") or []):
+            for p in el.get("cprData") or []:
                 src = str(p.get("source") or "").lower()
                 if src.startswith("context/") or src == "assembled/user":
                     bucket[_js_part_key(p)] = p
@@ -1280,7 +1241,7 @@ _TRIP_PLANNER_TRACE = TRIP_PLANNER_EVENTS_FIXTURE
 
 
 def test_every_state_on_every_lane_yields_non_empty_cpr_popup():
-    """"All states show a CPR view" — including WAIT/RESUME markers on the
+    """ "All states show a CPR view" — including WAIT/RESUME markers on the
     agents/mas/session lanes, whose own cpr_data is intentionally cleared by
     dag.py (see test_wait_resume_states_expose_internal_wait_fields) but
     whose popup must fall back to the calls lane's own ground-truth view via
@@ -1306,7 +1267,7 @@ def test_every_state_on_every_lane_yields_non_empty_cpr_popup():
 
 
 def test_every_transition_on_every_lane_yields_diff_or_has_a_fallback():
-    """"All transitions show diff" — Session, MASCall, AgentCall, ToolCall,
+    """ "All transitions show diff" — Session, MASCall, AgentCall, ToolCall,
     LLMCall, ProcessingCall alike. When the cross-lane diff genuinely comes
     back empty, the transition must still carry hoverIn/hoverOut/label so
     the JS-side _buildGenericTransitionParts fallback (multilevel.html) has
@@ -1361,8 +1322,7 @@ def test_fork_join_states_carry_bidirectional_branch_navigation():
         checked_lanes.append(lane["laneId"])
         assert forks and joins, f"lane {lane['laneId']} has unmatched fork/join presence"
         assert len(forks) == len(joins), (
-            f"lane {lane['laneId']} has unequal fork/join counts: "
-            f"{len(forks)} forks, {len(joins)} joins"
+            f"lane {lane['laneId']} has unequal fork/join counts: {len(forks)} forks, {len(joins)} joins"
         )
 
         fork_by_group = {el["parallelGroupId"]: el for el in forks}
@@ -1376,8 +1336,7 @@ def test_fork_join_states_carry_bidirectional_branch_navigation():
             assert len(set(branch_ts)) == len(branch_ts), f"duplicate branch entry ts in {gid}: {branch_ts}"
             for ts in branch_ts:
                 assert ts in state_ts, (
-                    f"lane {lane['laneId']}: forkBranchTs entry {ts} for {gid} "
-                    "is not a real state on that lane"
+                    f"lane {lane['laneId']}: forkBranchTs entry {ts} for {gid} is not a real state on that lane"
                 )
 
         parallel_spans = lane.get("parallelSpans") or []
@@ -1420,7 +1379,9 @@ def test_calls_lane_fork_and_join_are_cross_linked_bidirectionally():
         join = join_by_group[gid]
         assert fork.get("joinTs") is not None, f"fork {gid} is missing its forward joinTs cross-link"
         assert fork["joinTs"] == join["ts"], f"fork {gid}'s joinTs does not point at its own join state's ts"
-        assert join.get("joinForkTs") == fork["ts"], f"join {gid}'s joinForkTs does not point back at its own fork state's ts"
+        assert join.get("joinForkTs") == fork["ts"], (
+            f"join {gid}'s joinForkTs does not point back at its own fork state's ts"
+        )
 
 
 def test_calls_lane_branch_begin_end_are_paired_within_each_group():
@@ -1496,7 +1457,8 @@ def test_calls_lane_branch_begin_end_are_cross_linked_to_each_other_and_to_fork_
             f"branch-begin {begin.get('num')}'s branchPartnerTs does not point at a branch-end state"
         )
         assert partner.get("branchPartnerTs") == begin["ts"], (
-            f"branch-end {partner.get('num')}'s own branchPartnerTs does not point back at branch-begin {begin.get('num')}"
+            f"branch-end {partner.get('num')}'s own branchPartnerTs does not point back at branch-begin "
+            f"{begin.get('num')}"
         )
 
     # Every branch-end whose own group's fork is on this same lane must
@@ -1509,4 +1471,3 @@ def test_calls_lane_branch_begin_end_are_cross_linked_to_each_other_and_to_fork_
         gid = end["parallelGroupId"]
         assert gid in join_by_group, f"branch-end {end.get('num')}'s group {gid} has no matching merge state"
         assert gid in fork_by_group, f"branch-end {end.get('num')}'s group {gid} has no matching fork state"
-

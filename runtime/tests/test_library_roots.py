@@ -79,10 +79,7 @@ def test_find_ancestor_with_file_stops_at_suffix_boundary(tmp_path) -> None:
     experiment.mkdir(parents=True)
     (outer_lab / "marker.txt").write_text("outer", encoding="utf-8")
 
-    assert (
-        find_ancestor_with_file(experiment, "marker.txt", stop_at_suffix=".lab")
-        is None
-    )
+    assert find_ancestor_with_file(experiment, "marker.txt", stop_at_suffix=".lab") is None
 
 
 def test_find_ancestor_with_file_finds_marker_at_the_suffix_boundary_itself(
@@ -94,9 +91,7 @@ def test_find_ancestor_with_file_finds_marker_at_the_suffix_boundary_itself(
     experiment.mkdir(parents=True)
     (lab_root / "marker.txt").write_text("x", encoding="utf-8")
 
-    assert find_ancestor_with_file(experiment, "marker.txt", stop_at_suffix=".lab") == (
-        lab_root.resolve()
-    )
+    assert find_ancestor_with_file(experiment, "marker.txt", stop_at_suffix=".lab") == (lab_root.resolve())
 
 
 def test_root_from_spec_resolves_real_importable_module() -> None:
@@ -190,9 +185,7 @@ def test_resolve_manifest_library_package_never_raises_on_broken_module(monkeypa
 
     monkeypatch.setattr(library_roots.importlib.util, "find_spec", _boom_spec)
     monkeypatch.setattr(library_roots.importlib, "import_module", _boom_import)
-    monkeypatch.setattr(
-        library_roots.importlib.metadata, "packages_distributions", lambda: {}
-    )
+    monkeypatch.setattr(library_roots.importlib.metadata, "packages_distributions", lambda: {})
 
     result = resolve_manifest_library_package("mas.library.totally_broken")
     assert result is None
@@ -273,9 +266,7 @@ def test_discover_library_roots_dedupes_across_strategies(tmp_path, monkeypatch)
     assert roots.count(lib.resolve()) == 1
 
 
-def test_discover_library_roots_one_broken_installed_library_does_not_hide_others(
-    tmp_path, monkeypatch
-) -> None:
+def test_discover_library_roots_one_broken_installed_library_does_not_hide_others(tmp_path, monkeypatch) -> None:
     """The end-to-end version of the regression test: even if the installed-
     package strategy blows up for one library, a library reachable via
     MAS_LIBRARY_PATHS must still be discovered."""

@@ -57,9 +57,7 @@ def test_matches_first_specific_rule_and_preserves_structured_response() -> None
     )
 
     assert response.content == "done"
-    assert response.artifacts == (
-        {"kind": "url", "url": "https://example.test"},
-    )
+    assert response.artifacts == ({"kind": "url", "url": "https://example.test"},)
 
 
 def test_prompt_constraint_and_default_are_deterministic() -> None:

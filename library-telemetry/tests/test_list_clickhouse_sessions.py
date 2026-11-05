@@ -32,9 +32,7 @@ def fake_conn(monkeypatch):
     from mas.library.telemetry.steps import list_clickhouse_sessions as mod
 
     conn = {"host": "ch.local", "port": 8123, "user": "u", "password": "p", "database": "db"}
-    monkeypatch.setattr(
-        "mas.lab.connections.resolve_clickhouse_conn", lambda: conn, raising=False
-    )
+    monkeypatch.setattr("mas.lab.connections.resolve_clickhouse_conn", lambda: conn, raising=False)
     return mod
 
 

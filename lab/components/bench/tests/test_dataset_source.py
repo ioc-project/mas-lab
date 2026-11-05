@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Unit tests for Dataset spec.source materialization."""
+
 from __future__ import annotations
 
 import csv
@@ -10,7 +11,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.lab.benchmark.dataset import Dataset
 from mas.lab.benchmark.dataset_source import materialize_source
 from mas.lab.schemas.validate import validate_against_lab_schema
@@ -108,9 +108,7 @@ def test_pickle_source(tmp_path: Path):
 
 
 def test_limit_and_template_object(tmp_path: Path):
-    lines = [
-        json.dumps({"id": str(i), "question": f"Q{i}"}) + "\n" for i in range(5)
-    ]
+    lines = [json.dumps({"id": str(i), "question": f"Q{i}"}) + "\n" for i in range(5)]
     (tmp_path / "rows.jsonl").write_text("".join(lines), encoding="utf-8")
     items = materialize_source(
         {
@@ -185,9 +183,7 @@ def test_load_huggingface_passes_id_and_split(monkeypatch):
     monkeypatch.setitem(sys.modules, "datasets", fake)
     from mas.lab.benchmark.dataset_source import _load_huggingface
 
-    rows = _load_huggingface(
-        {"kind": "huggingface", "id": "TIGER-Lab/MMLU-Pro", "split": "test", "config": "default"}
-    )
+    rows = _load_huggingface({"kind": "huggingface", "id": "TIGER-Lab/MMLU-Pro", "split": "test", "config": "default"})
     assert called["id"] == "TIGER-Lab/MMLU-Pro"
     assert called["split"] == "test"
     assert called["config"] == "default"

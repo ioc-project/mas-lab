@@ -49,7 +49,15 @@ def test_reset_clears_working_memory_and_turn_history() -> None:
 
     controller = SessionController(
         instance=instance,
-        display=type("D", (), {"on_system": lambda *_a, **_k: None, "on_user": lambda *_a, **_k: None, "on_agent": lambda *_a, **_k: None})(),
+        display=type(
+            "D",
+            (),
+            {
+                "on_system": lambda *_a, **_k: None,
+                "on_user": lambda *_a, **_k: None,
+                "on_agent": lambda *_a, **_k: None,
+            },
+        )(),
         hitl_terminal=ScriptedHitlTerminal(default=HitlResolveChoice.ALLOW),
         config=ConversationConfig(single_turn=False),
     )

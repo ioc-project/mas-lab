@@ -210,9 +210,7 @@ def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
         cache_write=False,
         use_tool_loop=True,
     )
-    out = reader._chat_completion(
-        [{"role": "user", "content": "hi"}], api_key="", tools=[{"type": "function"}]
-    )
+    out = reader._chat_completion([{"role": "user", "content": "hi"}], api_key="", tools=[{"type": "function"}])
     assert out["tool_calls"][0]["function"]["name"] == "demo_tool"
     assert reader_inner.calls == 0
 
@@ -231,9 +229,7 @@ def test_lookup_preview_ignores_legacy_key_with_several_leaves() -> None:
     preview = "assembled prompt"
     old_key = legacy_preview_cache_key(preview)
     cache = {old_key: "recorded-other-host"}
-    write_key, entry = lookup_preview_cache(
-        cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=2
-    )
+    write_key, entry = lookup_preview_cache(cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=2)
     assert entry is None
     assert write_key == bind_route_cache_key(preview, leaf="arm", model="m", api_base="https://a")
     assert old_key in cache
@@ -244,8 +240,6 @@ def test_lookup_preview_prefers_routed_key() -> None:
     write_key = bind_route_cache_key(preview, leaf="arm", model="m", api_base="https://a")
     old_key = legacy_preview_cache_key(preview)
     cache = {old_key: "legacy", write_key: "routed"}
-    found_key, entry = lookup_preview_cache(
-        cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=1
-    )
+    found_key, entry = lookup_preview_cache(cache, preview, leaf="arm", model="m", api_base="https://a", leaf_count=1)
     assert found_key == write_key
     assert entry == "routed"

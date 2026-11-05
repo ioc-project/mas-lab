@@ -7,15 +7,14 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # SkillRecord — optional fields
 # ---------------------------------------------------------------------------
 
+
 def test_skill_record_defaults():
     from mas.library.skills.lib.registry import SkillRecord
+
     rec = SkillRecord(name="x", description="y", path=Path("/tmp/SKILL.md"))
     assert rec.compatibility is None
     assert rec.license is None
@@ -25,6 +24,7 @@ def test_skill_record_defaults():
 
 def test_skill_record_with_optional_fields():
     from mas.library.skills.lib.registry import SkillRecord
+
     rec = SkillRecord(
         name="pdf",
         description="PDF tools",
@@ -44,21 +44,18 @@ def test_skill_record_with_optional_fields():
 # sk_catalog.py — optional fields parsed from frontmatter
 # ---------------------------------------------------------------------------
 
+
 def _write_skill(path: Path, extra: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"---\n"
-        f"name: test-skill\n"
-        f"description: Does something useful.\n"
-        f"{extra}"
-        f"---\n"
-        f"# Body\n",
+        f"---\nname: test-skill\ndescription: Does something useful.\n{extra}---\n# Body\n",
         encoding="utf-8",
     )
 
 
 def test_catalog_parses_compatibility(tmp_path: Path):
     from mas.library.skills.plugins.sk_catalog import SkillCatalogPlugin
+
     _write_skill(
         tmp_path / "test-skill" / "SKILL.md",
         "compatibility: Requires Python 3.11 and git\n",
@@ -74,6 +71,7 @@ def test_catalog_parses_compatibility(tmp_path: Path):
 
 def test_catalog_parses_license(tmp_path: Path):
     from mas.library.skills.plugins.sk_catalog import SkillCatalogPlugin
+
     _write_skill(tmp_path / "test-skill" / "SKILL.md", "license: Apache-2.0\n")
     plugin = SkillCatalogPlugin(
         manifest={"spec": {"skills": ["test-skill"]}},
@@ -85,6 +83,7 @@ def test_catalog_parses_license(tmp_path: Path):
 
 def test_catalog_parses_tags(tmp_path: Path):
     from mas.library.skills.plugins.sk_catalog import SkillCatalogPlugin
+
     _write_skill(tmp_path / "test-skill" / "SKILL.md", "tags: [pdf, documents]\n")
     plugin = SkillCatalogPlugin(
         manifest={"spec": {"skills": ["test-skill"]}},
@@ -98,6 +97,7 @@ def test_catalog_parses_tags(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # Name collision detection
 # ---------------------------------------------------------------------------
+
 
 def test_name_collision_warns_and_first_wins(tmp_path: Path, caplog):
     """When two refs resolve to the same name, first wins + warning logged."""
@@ -130,8 +130,10 @@ def test_name_collision_warns_and_first_wins(tmp_path: Path, caplog):
 # resolver.py — .agents/skills/ and user-level scanning
 # ---------------------------------------------------------------------------
 
+
 def test_search_roots_includes_agents_skills(tmp_path: Path):
     from mas.library.skills.lib.resolver import skill_search_roots
+
     # Create the .agents/skills dir so it's included
     agents_dir = tmp_path / ".agents" / "skills"
     agents_dir.mkdir(parents=True)
@@ -143,11 +145,10 @@ def test_search_roots_includes_agents_skills(tmp_path: Path):
 def test_resolve_via_agents_skills(tmp_path: Path):
     """Skill in .agents/skills/ is discoverable."""
     from mas.library.skills.lib.resolver import resolve_skill_path
+
     skill_dir = tmp_path / ".agents" / "skills" / "my-skill"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: my-skill\ndescription: x\n---\nBody\n", encoding="utf-8"
-    )
+    (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: x\n---\nBody\n", encoding="utf-8")
     path = resolve_skill_path("my-skill", base_dir=tmp_path)
     assert path is not None
     assert path.name == "SKILL.md"
@@ -157,6 +158,7 @@ def test_resolve_via_agents_skills(tmp_path: Path):
 # ---------------------------------------------------------------------------
 # activate_skill — compatibility field in response
 # ---------------------------------------------------------------------------
+
 
 def test_activate_skill_includes_compatibility(tmp_path: Path):
     from mas.library.skills.lib.registry import SkillRecord, SkillRegistry
@@ -170,10 +172,14 @@ def test_activate_skill_includes_compatibility(tmp_path: Path):
         encoding="utf-8",
     )
     reg = SkillRegistry()
-    reg.register(SkillRecord(
-        name="my-skill", description="x", path=skill_md,
-        compatibility="Requires git",
-    ))
+    reg.register(
+        SkillRecord(
+            name="my-skill",
+            description="x",
+            path=skill_md,
+            compatibility="Requires git",
+        )
+    )
 
     class _Ctx:
         skill_registry = reg
@@ -209,6 +215,7 @@ def test_activate_skill_no_compatibility_key_when_absent(tmp_path: Path):
 # SkillToolsPlugin(registry=…) — dynamic tool description
 # ---------------------------------------------------------------------------
 
+
 def test_list_tools_with_registry_includes_names(tmp_path: Path):
     from mas.library.skills.lib.registry import SkillRecord, SkillRegistry
     from mas.library.skills.plugins.sk_tools import SkillToolsPlugin
@@ -226,6 +233,7 @@ def test_list_tools_with_registry_includes_names(tmp_path: Path):
 
 def test_list_tools_without_registry_generic_description():
     from mas.library.skills.plugins.sk_tools import SkillToolsPlugin
+
     plugin = SkillToolsPlugin()
     tools = plugin.list_tools()
     activate = next(t for t in tools if t["name"] == "activate_skill")

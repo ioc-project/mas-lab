@@ -79,7 +79,13 @@ def test_persist_round_trips_spec_revision(tmp_path) -> None:
         snap,
         store,
         manifest=session.manifest_ref.content,
-        lineage={"session_id": "s", "parent_session_id": None, "forked_from_checkpoint": None, "root_session_id": "s", "created_at": session.lineage.created_at},
+        lineage={
+            "session_id": "s",
+            "parent_session_id": None,
+            "forked_from_checkpoint": None,
+            "root_session_id": "s",
+            "created_at": session.lineage.created_at,
+        },
     )
     payload = store.load_payload(path)
     assert payload["spec_revision"] == 4

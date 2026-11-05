@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Verify envelope migration preserved dataset primary prompts vs git HEAD."""
+
 from __future__ import annotations
 
 import json
@@ -56,9 +57,7 @@ def test_envelope_migration_preserves_primary_prompt(rel_path: str) -> None:
         pytest.skip(f"{rel_path} missing")
 
     try:
-        old_text = subprocess.check_output(
-            ["git", "show", f"HEAD:{rel_path}"], text=True, cwd=REPO_ROOT
-        )
+        old_text = subprocess.check_output(["git", "show", f"HEAD:{rel_path}"], text=True, cwd=REPO_ROOT)
     except subprocess.CalledProcessError:
         pytest.skip(f"no HEAD version for {rel_path}")
 
