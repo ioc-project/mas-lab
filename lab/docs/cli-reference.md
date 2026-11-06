@@ -13,7 +13,7 @@ Workflow: [benchmark.md](benchmark.md). Pipeline concepts: [pipeline.md](pipelin
 ## Top-level `mas-lab` commands
 
 | Command | Purpose |
-|---------|---------|
+| --------- | --------- |
 | `mas-lab benchmark …` | Run experiments, inspect and manage results (this page) |
 | `mas-lab control start\|stop\|status` | Controller daemon lifecycle (UI + background workers) |
 | `mas-lab worker list\|show\|follow\|cancel` | Inspect and control background workers |
@@ -129,8 +129,12 @@ Creates a `.tar.gz` containing:
 
 - the benchmark output directory (`metadata.yaml`, `results.csv`, per-run artifacts)
 - referenced trace-cache entries
-- a minimal `source/` bundle with local experiment inputs (experiment YAMLs, referenced dataset YAMLs, referenced app tree)
-- `MANIFEST.json` describing the archive contents
+- a minimal `source/` bundle with local experiment inputs (experiment YAMLs, referenced dataset YAMLs, referenced app tree), collected through an allowlist of folders and file types
+- `MANIFEST.json` describing the archive contents, with archive-relative paths only
+
+Export fails, and writes nothing, if a sensitive file (`.env*`, SSH or
+certificate keys) ends up in the source bundle. See
+[sharing-benchmarks.md](sharing-benchmarks.md) for the allowlist.
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
@@ -150,6 +154,9 @@ imported run points at the restored paths. When the archive contains a bundled
  experiment source tree, it is restored under `<output_dir>/_repro/source` and
 `experiment_yaml_path` is redirected there.
 
+The archive is untrusted input: members with absolute paths, `..`, or links
+resolving outside the extraction root are skipped and logged.
+
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
 | `--output-dir PATH` | auto | Directory to restore the benchmark output into |
@@ -163,12 +170,17 @@ mas-lab benchmark publish-hf RUN.tar.gz --repo-id ORG/REPO [OPTIONS]
 ```
 
 Uploads an existing benchmark archive tarball to a Hugging Face **dataset**
-repository. Pass `--token` or `--token-file`, or set `HF_TOKEN`.
+repository. Pass `--token` or `--token-file`, or set `HF_TOKEN`. The repo is
+created if missing. By default it is private and the upload opens a review PR
+rather than writing to the default branch. The command prints the commit SHA.
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ------ | --------- | ------------- |
 | `--repo-id TEXT` | required | Hugging Face dataset repo id (`user-or-org/repo`) |
 | `--path-in-repo TEXT` | derived from manifest | Override remote path inside the repo |
+| `--visibility [private\|public]` | `private` | Visibility of the repo if it is created |
+| `--revision TEXT` | `main` | Branch or commit SHA to target |
+| `--create-pr / --no-create-pr` | `--create-pr` | Open a review PR instead of committing directly |
 | `--token TEXT` | unset | Hugging Face access token |
 | `--token-file PATH` | unset | Read the access token from a file |
 
@@ -192,8 +204,25 @@ uses `HF_TOKEN` when it is set, and does not require a token when it is not.
 | Flag | Default | Description |
 | ------ | --------- | ------------- |
 | `--repo-id TEXT` | required | Hugging Face dataset repo id (`user-or-org/repo`) |
+| `--revision TEXT` | default branch | Branch or commit SHA to download from |
+| `--sha256 TEXT` | unset | Expected SHA-256 of the tarball. A mismatch aborts the import. Not checked when omitted |
 | `--output-dir PATH` | auto | Directory to restore the benchmark output into |
 | `--trace-cache PATH` | env / default | Directory to restore trace-cache entries into |
 | `--dry-run` | off | Download archive metadata and preview the local import |
 | `--token TEXT` | unset | Hugging Face access token |
 | `--token-file PATH` | unset | Read the access token from a file |
+
+### Share and reproduce
+
+```bash
+# author
+mas-lab benchmark export last -o run.tar.gz
+shasum -a 256 run.tar.gz                      # keep this digest
+mas-lab benchmark publish-hf run.tar.gz --repo-id ORG/REPO   # prints the commit SHA
+
+# reader
+mas-lab benchmark import-hf benchmarks/<experiment>/<short_id>/bundle.tar.gz \
+  --repo-id ORG/REPO --revision <commit-sha> --sha256 <digest>
+```
+
+Details and trust model: [sharing-benchmarks.md](sharing-benchmarks.md).
