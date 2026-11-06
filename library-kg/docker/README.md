@@ -23,7 +23,7 @@ authentication disabled; use it on a laptop only.
 
 The SCOPE `norm.normalize()` path that Tutorial 9
 uses for **OTel → KG** does not need this compose — it is an in-process Python
-call (extra `[norm]`, installed from git until it is published). Bring up the
+call (extra `[norm]`, installed from PyPI as `ioc-scope-norm`). Bring up the
 full SCOPE stack (API, workers, UI) from the SCOPE repository when you want its
 UI; it is not needed for the tutorial pipelines:
 

@@ -78,7 +78,7 @@ Both errors are observability gaps, not fatal: with the default `strict=False` t
 2. **OTel spans**
    - Entry points: `build_kg_from_otel_spans(...)`, `run_normalize_otel(...)`, `mas-lab kg otel-to-kg`, `mas-lab kg normalize --otel FILE`.
    - Code path: `observability/otel_via_norm.py:normalize_otel`. It detects ClickHouse-shaped rows (`SpanName` / `SpanAttributes`) versus OTel SDK span JSON (`name` / `context` / `attributes`), reshapes SDK spans mechanically, and calls `norm.normalize()` from the SCOPE OTel normalizer. Dispatch and span handlers live in `norm`, not here. The graph vocabulary is `norm`'s; no events are reconstructed.
-   - `norm` is the optional `[norm]` extra (installed from git until published). Without it, the OTel entry points log a warning and return an empty graph.
+   - `norm` is the optional `[norm]` extra (installed from PyPI as `ioc-scope-norm`). Without it, the OTel entry points log a warning and return an empty graph.
 
 `pipeline.normalize(raw_input)` detects the shape (`kind` field means native; `SpanName` or `name`+`context`/`attributes` means OTel) and returns `(nodes, edges)`.
 

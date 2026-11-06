@@ -250,8 +250,7 @@ def build_kg_from_otel_spans(
     except ImportError as exc:
         logger.warning(
             "build_kg_from_otel_spans: norm is not installed (%s). "
-            "Install extra 'norm' (temporary git dependency until "
-            "oxp-norm is published).",
+            "Install extra 'norm' (PyPI package ioc-scope-norm).",
             exc,
         )
         nodes, edges = [], []

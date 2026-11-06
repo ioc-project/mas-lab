@@ -27,8 +27,8 @@ The package builds on two pieces of
 
 | SCOPE piece | Role here | Install |
 |-----------|-----------|---------|
-| `ioc-scope-ontology` | Ontology TTL, SHACL shapes and generated `scope_ontology.models.*`. SHACL (Shapes Constraint Language) validates graph shapes. | Hard dependency (`>=1.1.0`, git until PyPI) |
-| `norm` | SCOPE's OTel normaliser; `norm.normalize()` does the OTel-to-KG step | Optional extra `[norm]`, installed from `github.com/ioc-project/scope` `backend/norm` until it is published (the PyPI name `norm` belongs to an unrelated package) |
+| `ioc-scope-ontology` | Ontology TTL, SHACL shapes and generated `scope_ontology.models.*`. SHACL (Shapes Constraint Language) validates graph shapes. | Hard dependency (`>=1.1.0`, from PyPI) |
+| `norm` | SCOPE's OTel normaliser; `norm.normalize()` does the OTel-to-KG step | Optional extra `[norm]`, installed from PyPI as `ioc-scope-norm` (import name `norm`) |
 
 First-party to this package: the native `events.jsonl`-to-KG normaliser, KG validation,
 Neo4j push and dump, the `mas-lab kg` commands and the pipeline steps.
@@ -97,14 +97,14 @@ MemoryCall, SkillCall, governance and trajectory annotations) are declared in
 uv pip install -e library-kg                    # normalisation, query, compare, spec, annotation
 uv pip install -e "library-kg[neo4j]"           # plus Neo4j push and dump
 uv pip install -e "library-kg[neo4j,dev]"       # development (pytest, ruff, validation + verify stacks)
-uv pip install -e "library-kg[norm]"            # OTel path (temporary git extra until SCOPE publishes it)
+uv pip install -e "library-kg[norm]"            # OTel path (installs ioc-scope-norm from PyPI)
 ```
 
 Other extras: `verify` (JSON Schema validation of `events.jsonl`), `validation` (`rdflib`
 and `pyshacl`, required for the SHACL check), `bench` (pipeline steps and the `mas-lab kg`
 CLI), `plot` and `all`. Without `validation`, the `shacl` check is reported as skipped,
-not passed. `ioc-scope-ontology` (`>=1.1.0`) is a hard dependency and resolves from git
-until it is on PyPI. The ontology files (`mas-ontology.ttl`, `mas-shapes.ttl`) come from
+not passed. `ioc-scope-ontology` (`>=1.1.0`) is a hard dependency and resolves from
+PyPI. The ontology files (`mas-ontology.ttl`, `mas-shapes.ttl`) come from
 that package, so validation always follows the canonical SCOPE ontology.
 
 To validate against an unpublished local ontology version without a separate virtual

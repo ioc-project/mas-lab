@@ -50,8 +50,8 @@ reconciling the release notes with the code and docs currently on that branch.
   models emit (`KGNode` / `KGEdge.to_json`). `callsAgent` and `usesTool`
   are not emitted until A2A / MCP observability lands.
 - KG ontology dependency is SCOPE (`ioc-scope-ontology` from
-  `https://github.com/ioc-project/scope`, import `scope_ontology`). The
-  OTel extra still installs `norm` from `backend/norm` in that repo.
+  PyPI, import `scope_ontology`). The OTel extra installs `norm` from PyPI
+  as `ioc-scope-norm`.
 - `compare_kg` `strict` defaults true: extra node types, edge types, and
   attribute keys on the candidate fail. `strict_nodes`, `strict_edges`,
   `strict_node_attributes`, and `strict_edge_attributes` override one
