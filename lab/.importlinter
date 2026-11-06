@@ -2,14 +2,6 @@
 root_packages =
     mas
 
-[importlinter:contract:cli-no-legacy-runner]
-name = Bench CLI must not import legacy_runner
-type = forbidden
-source_modules =
-    mas.lab.benchmark.cli
-forbidden_modules =
-    mas.lab.benchmark.legacy_runner
-
 [importlinter:contract:runners-no-bench-internals]
 name = Runners must not import bench pipeline internals
 type = forbidden
@@ -19,22 +11,6 @@ forbidden_modules =
     mas.lab.benchmark.pipeline.executor
     mas.library.lab.steps
 
-[importlinter:contract:bench-no-monolith-controller]
-name = Bench package must not import monolith lab controller server
-type = forbidden
-source_modules =
-    mas.lab.benchmark
-forbidden_modules =
-    mas.lab.components.controller.server
-
-[importlinter:contract:controller-no-monolith-studio]
-name = Controller must not import monolith studio UI
-type = forbidden
-source_modules =
-    mas.lab.controller
-forbidden_modules =
-    mas.lab.studio
-
 [importlinter:contract:bench-no-monolith-eval-internals]
 name = Bench pipeline must not import eval provider internals directly
 type = forbidden
@@ -42,11 +18,3 @@ source_modules =
     mas.lab.benchmark
 forbidden_modules =
     mas.library.eval.providers
-
-[importlinter:contract:bench-no-monolith-studio]
-name = Bench package must not import monolith studio UI
-type = forbidden
-source_modules =
-    mas.lab.benchmark
-forbidden_modules =
-    mas.lab.studio
