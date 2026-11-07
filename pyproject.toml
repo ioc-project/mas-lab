@@ -83,8 +83,6 @@ mas-lab-library-kg = { workspace = true }
 mas-lab-component-core    = { workspace = true }
 mas-lab-component-bench   = { workspace = true }
 mas-lab-component-controller = { workspace = true }
-ioc-scope-ontology = { git = "https://github.com/ioc-project/scope.git", subdirectory = "ontology" }
-norm = { git = "https://github.com/ioc-project/scope.git", subdirectory = "backend/norm" }
 
 [tool.ruff]
 line-length = 120

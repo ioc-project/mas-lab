@@ -11,7 +11,7 @@ description = "MAS Lab trace normalization and knowledge-graph validation algori
 requires-python = ">=3.10"
 # Ontology TTL + generated KG models come from SCOPE
 # (https://github.com/ioc-project/scope, package ioc-scope-ontology).
-# OTel→KG dispatch lives in `norm` (optional extra; git until published).
+# OTel→KG dispatch lives in `norm` (optional extra `[norm]`, PyPI package `ioc-scope-norm`).
 dependencies = [
   "ioc-scope-ontology[models]>=1.1.0",
 ]
@@ -54,11 +54,9 @@ bench = [
 plot = [
   "mas-lab-component-bench",
 ]
-# Temporary until `norm` is published under a SCOPE name. The PyPI name
-# `norm` is already taken (unrelated SQL package). This extra pulls
-# SCOPE `backend/norm` from git.
+# SCOPE's OTel normaliser (import name `norm`, PyPI name `ioc-scope-norm`).
 norm = [
-  "norm @ git+https://github.com/ioc-project/scope.git@main#subdirectory=backend/norm",
+  "ioc-scope-norm>=1.0.0",
 ]
 # observability/path_equivalence.py's native-vs-OTel-via-norm comparator
 # lazily imports mas.library.telemetry (the emitter side) to synthesize the
@@ -124,11 +122,6 @@ show_missing = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/mas"]
 
-[tool.hatch.metadata]
-# Required so the git+subdirectory SCOPE extras can be declared.
-# Remove when ioc-scope-ontology and norm are on PyPI.
-allow-direct-references = true
-
 [project.entry-points."mas.runtime.manifest_libraries"]
 # Short scheme name → refs read like a URN: `kg:pipelines/native-to-neo4j`
 # (`.yaml` suffix and `pipelines/` prefix optional — see resolve_path_ref).
@@ -139,7 +132,3 @@ kg = "mas.library.kg"
 "schemas/events.spec.yaml" = "mas/library/kg/schemas/events.spec.yaml"
 "ontology/extensions/mas-kg-native-extensions.ttl" = "mas/library/kg/ontology_extensions/mas-kg-native-extensions.ttl"
 
-# Temporary until SCOPE packages are on PyPI.
-[tool.uv.sources]
-ioc-scope-ontology = { git = "https://github.com/ioc-project/scope.git", subdirectory = "ontology" }
-norm = { git = "https://github.com/ioc-project/scope.git", subdirectory = "backend/norm" }

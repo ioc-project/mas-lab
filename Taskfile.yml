@@ -36,7 +36,7 @@ tasks:
       - task: install
       - uv pip install -e library-samples
       - uv pip install -e "library-skills[all]"
-      - uv pip install pytest pytest-asyncio pytest-cov pytest-timeout import-linter pyyaml click python-dotenv jsonschema httpx httpx2 certifi truststore pyarrow opentelemetry-sdk opentelemetry-exporter-otlp-proto-http ruff
+      - uv pip install pytest pytest-asyncio pytest-cov pytest-timeout "import-linter>=2.16" pyyaml click python-dotenv jsonschema httpx httpx2 certifi truststore pyarrow opentelemetry-sdk opentelemetry-exporter-otlp-proto-http ruff
 
   mcp-conformance:
     desc: "Compatibility alias for the standalone MCP compliance workflow"
