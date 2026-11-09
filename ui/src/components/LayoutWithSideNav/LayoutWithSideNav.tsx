@@ -3,7 +3,7 @@
 import { Sidebar } from "@/components/Sidebar";
 import { TopBar } from "@/components/TopBar/TopBar";
 import { Outlet } from "react-router";
-import { Box, Stack } from "@mui/material";
+import { Box, Stack } from "@open-ui-kit/core";
 
 const LayoutWithSideNav = () => {
   return (

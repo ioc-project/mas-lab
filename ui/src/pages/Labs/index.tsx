@@ -1,10 +1,10 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
+import { Alert } from "@mui/material";
 import {
-  Alert,
   Box,
-  Button as MuiButton,
+  Button,
   Card,
   CardActionArea,
   CardContent,
@@ -13,13 +13,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
+  InputField,
   Stack,
-  TextField,
   Typography,
   useTheme,
-} from "@mui/material";
-import { Button } from "@open-ui-kit/core";
+} from "@open-ui-kit/core";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -43,14 +41,21 @@ export default function Labs() {
       <PageWithTitle
         showBreadcrumbs={false}
         title={
-          <Stack direction="row" sx={{ gap: "8px", justifyContent: "space-between" }}>
+          <Stack
+            direction="row"
+            sx={{ gap: "8px", justifyContent: "space-between" }}
+          >
             <Typography
               variant="h5"
-              sx={{ color: theme.palette.vars.interactivePrimaryDefaultDefault }}
+              sx={{
+                color: theme.palette.vars.interactivePrimaryDefaultDefault,
+              }}
             >
               Labs
             </Typography>
-            <Button onClick={() => setCreateLabOpen(true)}>New Lab</Button>
+            <Button variant="gradient" onClick={() => setCreateLabOpen(true)}>
+              New Lab
+            </Button>
           </Stack>
         }
         subTitle="Every lab the controller can discover. Create a lab or open one to add experiments."
@@ -77,7 +82,11 @@ export default function Labs() {
             />
           ))}
         </Stack>
-        <OtherLibraries workspace={workspace} local={local} packaged={packaged} />
+        <OtherLibraries
+          workspace={workspace}
+          local={local}
+          packaged={packaged}
+        />
       </PageWithTitle>
       <CreateLabDialog
         open={createLabOpen}
@@ -124,22 +133,28 @@ function LabCard({
       <CardActionArea onClick={onOpen}>
         <CardContent>
           <Typography variant="h6">{lab.title}</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, minHeight: 40 }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mt: 0.5, minHeight: 40 }}
+          >
             {lab.description || "No description"}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {experiments} experiment{experiments === 1 ? "" : "s"}
-            {nested.length ? ` · local library ${nested.map((s) => s.title).join(", ")}` : ""}
+            {nested.length
+              ? ` · local library ${nested.map((s) => s.title).join(", ")}`
+              : ""}
           </Typography>
         </CardContent>
       </CardActionArea>
       <Stack direction="row" sx={{ px: 2, pb: 1.5, gap: 1 }}>
-        <MuiButton size="small" onClick={onOpen}>
+        <Button size="small" variant="gradient" onClick={onOpen}>
           Open
-        </MuiButton>
-        <MuiButton size="small" onClick={onNewExperiment}>
+        </Button>
+        <Button size="small" variant="gradient" onClick={onNewExperiment}>
           New experiment
-        </MuiButton>
+        </Button>
       </Stack>
     </Card>
   );
@@ -214,7 +229,13 @@ function CreateLabDialog({
       setDescription("");
       setLocalLibrary(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Create failed");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Create failed",
+      );
     } finally {
       setBusy(false);
     }
@@ -226,34 +247,36 @@ function CreateLabDialog({
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
-          <TextField
+          <InputField
             label="Name"
             size="small"
             value={name}
             onChange={(event) => setName(event.target.value)}
             helperText="Folder name becomes {name}.lab on the first labs_search_paths entry"
           />
-          <TextField
+          <InputField
             label="Description"
             size="small"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             multiline
           />
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={localLibrary}
-                onChange={(event) => setLocalLibrary(event.target.checked)}
-              />
-            }
+          <Checkbox
+            checked={localLibrary}
+            onChange={(event) => setLocalLibrary(event.target.checked)}
             label="Create a local library (applications, agents, tools)"
           />
         </Stack>
       </DialogContent>
       <DialogActions>
-        <MuiButton onClick={onClose}>Cancel</MuiButton>
-        <Button variant="primary" disabled={busy || !name.trim()} onClick={() => void submit()}>
+        <Button variant="gradient" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          variant="gradient"
+          disabled={busy || !name.trim()}
+          onClick={() => void submit()}
+        >
           Create
         </Button>
       </DialogActions>

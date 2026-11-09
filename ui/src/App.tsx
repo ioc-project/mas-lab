@@ -2,13 +2,12 @@
 //  SPDX-License-Identifier: Apache-2.0
 import "@open-ui-kit/core/typography.css";
 import "@xyflow/react/dist/style.css";
-import { ThemeMode, ThemeProvider } from "@open-ui-kit/core";
+import { Box, ThemeMode, ThemeProvider } from "@open-ui-kit/core";
 import {
   BrowserRouter as Router,
   useLocation,
   useNavigate,
 } from "react-router";
-import { Box, CssBaseline } from "@mui/material";
 import AppRoutes from "@/routes/routes.tsx";
 import { useEffect } from "react";
 
@@ -42,20 +41,18 @@ function ThemedApp() {
     };
   }, [location.pathname, navigate]);
 
+  // CssBaseline is already rendered by the kit's ThemeProvider.
   return (
-    <>
-      <CssBaseline />
-      <Box
-        sx={{
-          height: "100%",
-          width: "100%",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <AppRoutes />
-      </Box>
-    </>
+    <Box
+      sx={{
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <AppRoutes />
+    </Box>
   );
 }
 

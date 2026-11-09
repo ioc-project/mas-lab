@@ -1,6 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { type Theme, type SxProps } from "@mui/material";
+import type { Theme, SxProps } from "@open-ui-kit/core";
 
 export const openDrawerWidth = 264;
 export const compactDrawerWidth = 92;
@@ -91,6 +91,7 @@ export const sideBarPaperStyle = (theme: Theme, compact = false): SxProps => {
     overflowX: "hidden",
     zIndex: 80,
     marginTop: "12px",
+    padding: "0 12px",
 
     "&::-webkit-scrollbar": {
       width: 0,

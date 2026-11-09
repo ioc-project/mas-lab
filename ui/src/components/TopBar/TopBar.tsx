@@ -1,6 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { AppBar, Toolbar, Typography, useTheme } from "@mui/material";
+import { Header, Typography, useTheme } from "@open-ui-kit/core";
 import { useNavigate, useLocation } from "react-router";
 import { useCallback, useEffect, useMemo } from "react";
 
@@ -27,9 +27,20 @@ const TopBar = () => {
     const isValid = scopes.some((s) => s.id === currentScopeId);
     if (!isValid && fallback) {
       const target = scopes.find((s) => s.id === fallback);
-      navigate(scopeHref(fallback, restPathForScope(location.pathname, target, kinds)), { replace: true });
+      navigate(
+        scopeHref(fallback, restPathForScope(location.pathname, target, kinds)),
+        { replace: true },
+      );
     }
-  }, [scopes, currentScopeId, fallback, navigate, location.pathname, kinds, catalog]);
+  }, [
+    scopes,
+    currentScopeId,
+    fallback,
+    navigate,
+    location.pathname,
+    kinds,
+    catalog,
+  ]);
 
   const handleChange = useCallback(
     (next: string) => {
@@ -38,7 +49,9 @@ const TopBar = () => {
         return;
       }
       const target = scopes.find((s) => s.id === next);
-      navigate(scopeHref(next, restPathForScope(location.pathname, target, kinds)));
+      navigate(
+        scopeHref(next, restPathForScope(location.pathname, target, kinds)),
+      );
     },
     [location.pathname, navigate, scopes, kinds],
   );
@@ -50,28 +63,11 @@ const TopBar = () => {
       : fallback;
 
   return (
-    <AppBar
-      position="static"
-      elevation={0}
-      sx={{
-        backgroundColor: theme.palette.vars.baseBackgroundMedium,
-        borderBottom: `1px solid ${theme.palette.vars.baseBorderDefault}`,
-        color: theme.palette.text.primary,
-      }}
-    >
-      <Toolbar
-        variant="dense"
-        sx={{
-          minHeight: "32px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: 0,
-        }}
-      >
+    <Header
+      logo={null}
+      title={
         <Typography
           variant="subtitle1"
-          component="div"
           onClick={() => navigate("/labs")}
           sx={{
             fontWeight: 700,
@@ -82,16 +78,25 @@ const TopBar = () => {
         >
           MAS-LAB
         </Typography>
-        {scopes.length > 0 && (
+      }
+      customSearchNode={
+        scopes.length > 0 ? (
           <ScopeSelect
             scopes={scopes}
             value={value}
             onChange={handleChange}
             allowCatalog
           />
-        )}
-      </Toolbar>
-    </AppBar>
+        ) : undefined
+      }
+      position="static"
+      sx={{
+        height: "48px",
+        padding: "24px",
+        backgroundColor: theme.palette.vars.baseBackgroundMedium,
+        color: theme.palette.vars.baseTextStrong,
+      }}
+    />
   );
 };
 

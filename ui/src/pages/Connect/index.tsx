@@ -2,7 +2,8 @@
 //  SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Alert, Box, Button, Stack, TextField, Typography } from "@mui/material";
+import { Alert } from "@mui/material";
+import { Box, Button, InputField, Stack, Typography } from "@open-ui-kit/core";
 
 import { getApiBaseUrl } from "@/api/client";
 import {
@@ -48,21 +49,21 @@ export default function Connect() {
       </Typography>
       <Stack spacing={2}>
         {error && <Alert severity="error">{error}</Alert>}
-        <TextField
+        <InputField
           label="Controller address"
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           placeholder="http://localhost:8090"
           size="small"
         />
-        <TextField
+        <InputField
           label="Bearer token (optional)"
           value={token}
           onChange={(e) => setToken(e.target.value)}
           type="password"
           size="small"
         />
-        <Button variant="primary" onClick={() => void test()} disabled={busy || !address.trim()}>
+        <Button variant="gradient" onClick={() => void test()} disabled={busy || !address.trim()}>
           {busy ? "Testing…" : "Connect"}
         </Button>
       </Stack>

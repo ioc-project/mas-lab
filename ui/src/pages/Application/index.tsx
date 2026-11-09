@@ -7,16 +7,7 @@ import {
   CanvasBuilder,
 } from "@/components";
 import type { YamlOutputMap } from "@/components/CanvasBuilder/types";
-import {
-  Box,
-  CircularProgress,
-  Stack,
-  Typography,
-  useTheme,
-  MenuItem,
-  Select,
-  Alert,
-} from "@mui/material";
+import { Alert } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { toTitleCase } from "@/utils/string";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -35,14 +26,21 @@ import { scopeHref, useScopeId } from "@/api/scope";
 import { forkItem, useItem } from "@/api/items";
 import { CreateItemDialog } from "@/components/CreateItemDialog";
 import {
+  Box,
   Button,
   Dialog,
   InputField,
   DialogTitle,
   DialogContent,
   DialogActions,
+  MenuItem,
+  Select,
+  Spinner,
+  Stack,
   Tab,
   Tabs,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
 
 const APPLICATION_TAB_KEYS = ["graph", "yaml"] as const;
@@ -106,7 +104,10 @@ const Application = () => {
   useEffect(() => {
     if (itemMeta?.resolved_id && id && itemMeta.resolved_id !== id) {
       navigate(
-        scopeHref(library ?? "", `/applications/${encodeURIComponent(itemMeta.resolved_id)}`),
+        scopeHref(
+          library ?? "",
+          `/applications/${encodeURIComponent(itemMeta.resolved_id)}`,
+        ),
         { replace: true },
       );
     }
@@ -358,7 +359,9 @@ const Application = () => {
       handleCloseSaveDialog();
 
       if (trimmedName !== id) {
-        navigate(scopeHref(library, `/applications/${trimmedName}`), { replace: true });
+        navigate(scopeHref(library, `/applications/${trimmedName}`), {
+          replace: true,
+        });
       }
     } catch (err) {
       setSaveError(
@@ -390,7 +393,7 @@ const Application = () => {
           height: "100%",
         }}
       >
-        <CircularProgress />
+        <Spinner />
       </Box>
     );
   }
@@ -412,7 +415,7 @@ const Application = () => {
           The application &quot;{id}&quot; does not exist or has been deleted.
         </Typography>
         <Button
-          variant="primary"
+          variant="gradient"
           onClick={() => navigate(scopeHref(library, "/applications"))}
         >
           Back to Applications
@@ -435,7 +438,9 @@ const Application = () => {
           <Stack direction="row" sx={{ alignItems: "center", gap: 2 }}>
             <Typography
               variant={"h5"}
-              sx={{ color: theme.palette.vars.interactivePrimaryDefaultDefault }}
+              sx={{
+                color: theme.palette.vars.interactivePrimaryDefaultDefault,
+              }}
             >
               {toTitleCase(itemMeta?.name ?? id ?? "")}
             </Typography>
@@ -468,15 +473,30 @@ const Application = () => {
           <Stack direction="row" sx={{ gap: "8px" }}>
             {itemMeta && !itemMeta.writable && (
               <>
-                <Alert severity="info">Read-only — copy into a writable scope.</Alert>
-                <Button onClick={() => setCopyOpen(true)}>Copy into…</Button>
+                <Alert severity="info">
+                  Read-only — copy into a writable scope.
+                </Alert>
+                <Button variant="gradient" onClick={() => setCopyOpen(true)}>
+                  Copy into…
+                </Button>
               </>
             )}
             {itemMeta && (
               <Button
+                variant="gradient"
                 onClick={() => {
-                  void forkItem(library ?? "", "application", id ?? "", {}).then((created) =>
-                    navigate(scopeHref(library ?? "", `/applications/${encodeURIComponent(created.id)}`)),
+                  void forkItem(
+                    library ?? "",
+                    "application",
+                    id ?? "",
+                    {},
+                  ).then((created) =>
+                    navigate(
+                      scopeHref(
+                        library ?? "",
+                        `/applications/${encodeURIComponent(created.id)}`,
+                      ),
+                    ),
                   );
                 }}
               >
@@ -484,21 +504,21 @@ const Application = () => {
               </Button>
             )}
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleOpenSaveDialog}
               disabled={sortedKeys.length === 0}
             >
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={!selectedAgentName || validateMutation.isPending}
             >
               {validateMutation.isPending ? "Validating..." : "Validate"}
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidateMas}
               disabled={!yamlOutputMap["mas"] || validateMasMutation.isPending}
             >
@@ -507,7 +527,7 @@ const Application = () => {
                 : "Validate MAS"}
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleRunMas}
               disabled={isRunningMas}
             >
@@ -716,7 +736,9 @@ const Application = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseSaveDialog}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCloseSaveDialog}>
+            Cancel
+          </Button>
           <Button variant="gradient" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>
@@ -729,7 +751,9 @@ const Application = () => {
         copyFrom={id ? { scopeId: library ?? "", itemId: id } : undefined}
         onClose={() => setCopyOpen(false)}
         onCreated={(sid, createdId) =>
-          navigate(scopeHref(sid, `/applications/${encodeURIComponent(createdId)}`))
+          navigate(
+            scopeHref(sid, `/applications/${encodeURIComponent(createdId)}`),
+          )
         }
       />
     </PageWithTitle>

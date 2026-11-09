@@ -1,8 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { type ReactNode } from "react";
-import { Box, Paper, Stack, Typography } from "@mui/material";
-import { Tooltip } from "@open-ui-kit/core";
+import { Box, Paper, Stack, Tooltip, Typography } from "@open-ui-kit/core";
 import type { FlatFile, RunGroup } from "../utils";
 
 export interface ResultsOverviewCardsProps {

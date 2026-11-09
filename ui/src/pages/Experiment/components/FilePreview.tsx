@@ -1,8 +1,17 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useMemo } from "react";
-import { Box, CircularProgress, Link, Stack, Typography } from "@mui/material";
-import { Download as DownloadIcon } from "@mui/icons-material";
+import {
+  Box,
+  GeneralSize,
+  IconPosition,
+  Icons,
+  Link,
+  LinkType,
+  Spinner,
+  Stack,
+  Typography,
+} from "@open-ui-kit/core";
 import { CodeBlock } from "@/components";
 import {
   IMAGE_EXTENSIONS,
@@ -37,7 +46,8 @@ export function FilePreview({
 
   const downloadHref = useMemo(() => {
     if (!selectedFile || fileContent == null) return "";
-    if (isImageFile || isSvgFile) return imageDataUri(selectedFile, fileContent);
+    if (isImageFile || isSvgFile)
+      return imageDataUri(selectedFile, fileContent);
     const mime = isHtmlFile ? "text/html" : "text/plain";
     return `data:${mime};charset=utf-8,${encodeURIComponent(fileContent)}`;
   }, [selectedFile, fileContent, isImageFile, isSvgFile, isHtmlFile]);
@@ -62,7 +72,7 @@ export function FilePreview({
   if (fileLoading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", pt: 4 }}>
-        <CircularProgress size={24} />
+        <Spinner size={24} />
       </Box>
     );
   }
@@ -91,19 +101,17 @@ export function FilePreview({
           {prettyPath(selectedFile)}
         </Typography>
         {downloadHref && (
+          // `data:` URIs are absolute, so the kit Link (react-router) renders a
+          // plain anchor for them and `download` is passed through.
           <Link
             href={downloadHref}
             download={selectedFile.split("/").pop() ?? "file"}
-            underline="hover"
-            sx={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "12px",
-              flexShrink: 0,
-            }}
+            linkType={LinkType.StandaloneRegular}
+            size={GeneralSize.Small}
+            Icon={Icons.Download}
+            iconPosition={IconPosition.LeftIcon}
+            sx={{ flexShrink: 0 }}
           >
-            <DownloadIcon sx={{ fontSize: 15 }} />
             download
           </Link>
         )}

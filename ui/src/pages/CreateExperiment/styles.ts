@@ -1,8 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { type Theme } from "@mui/material";
+import type { SystemStyleObject, Theme } from "@open-ui-kit/core";
 import { keyframes } from "@mui/material/styles";
-import type { SystemStyleObject } from "@mui/system";
 
 // Expanding ring used to draw attention to a button.
 // The ring colour comes from the --pulse-color custom property set in sx.

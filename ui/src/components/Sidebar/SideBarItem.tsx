@@ -1,13 +1,14 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import {
+  LegacyIcons,
   ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   Typography,
   useTheme,
-} from "@mui/material";
+} from "@open-ui-kit/core";
 import { Link } from "react-router";
 import {
   sideBarItemLinkStyle,
@@ -15,7 +16,6 @@ import {
   siteBarItemStyle,
   previewIconStyle,
 } from "./styles";
-import { LegacyIcons } from "@open-ui-kit/core";
 import type { SideBarProps } from "@/routes/types.ts";
 
 const { Preview } = LegacyIcons;

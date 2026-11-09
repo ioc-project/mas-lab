@@ -12,21 +12,25 @@ import {
   createOverlay,
   updateOverlay,
 } from "@/api/apiCalls";
-import { Alert, Box, Stack, Typography, useTheme } from "@mui/material";
+import { Alert } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { parse, stringify } from "yaml";
 import { scopeHref, useScopeId } from "@/api/scope";
 import {
+  Box,
   InputField,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Stack,
   Tab,
   Tabs,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
 
 const TAB_KEYS = ["graph", "yaml"] as const;
@@ -227,7 +231,7 @@ const Overlay = () => {
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={!overlayYaml || validateMutation.isPending}
             >
@@ -377,7 +381,11 @@ const Overlay = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)} disabled={saving}>
+          <Button
+            variant="gradient"
+            onClick={() => setSaveDialogOpen(false)}
+            disabled={saving}
+          >
             Cancel
           </Button>
           <Button variant="gradient" onClick={handleDialogSave} disabled={saving}>

@@ -1,11 +1,8 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useState, type ReactNode } from "react";
-import { Box, Collapse, Stack, Typography } from "@mui/material";
-import {
-  ExpandMore as ExpandMoreIcon,
-  ChevronRight as ChevronRightIcon,
-} from "@mui/icons-material";
+import { Collapse } from "@mui/material";
+import { Box, Icons, Stack, Typography } from "@open-ui-kit/core";
 
 export interface CollapsibleSectionProps {
   icon: ReactNode;
@@ -41,9 +38,9 @@ export function CollapsibleSection({
         }}
       >
         {open ? (
-          <ExpandMoreIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+          <Icons.KeyboardArrowDown sx={{ fontSize: 16, color: "text.disabled" }} />
         ) : (
-          <ChevronRightIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+          <Icons.KeyboardArrowRight sx={{ fontSize: 16, color: "text.disabled" }} />
         )}
         {icon}
         <Typography

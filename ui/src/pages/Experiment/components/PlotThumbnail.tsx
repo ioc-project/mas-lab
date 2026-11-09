@@ -1,8 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
-import { ImageOutlined as PlotsIcon } from "@mui/icons-material";
+import { Box, Icons, Spinner, Typography } from "@open-ui-kit/core";
 import { fetchExperimentFile } from "@/api/apiCalls";
 import { imageDataUri } from "../utils";
 import type { FlatFile } from "../utils";
@@ -74,9 +73,9 @@ export function PlotThumbnail({
             style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
           />
         ) : error ? (
-          <PlotsIcon sx={{ fontSize: 28, color: "text.disabled" }} />
+          <Icons.ImageOutline sx={{ fontSize: 28, color: "text.disabled" }} />
         ) : (
-          <CircularProgress size={18} />
+          <Spinner size={18} />
         )}
       </Box>
       <Typography

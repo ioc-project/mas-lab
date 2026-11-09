@@ -1,17 +1,17 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from "react";
+import { Alert } from "@mui/material";
 import {
-  Alert,
   Button,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  InputField,
   MenuItem,
   Stack,
-  TextField,
-} from "@mui/material";
+} from "@open-ui-kit/core";
 
 import { ApiError } from "@/api/client";
 import { checkItem, createItem, forkItem, useKinds } from "@/api/items";
@@ -114,7 +114,7 @@ export function CreateItemDialog({
             writableOnly
             kind={kind}
           />
-          <TextField
+          <InputField
             label="Name"
             size="small"
             value={name}
@@ -122,7 +122,7 @@ export function CreateItemDialog({
             helperText={check && !check.ok ? check.reason : info?.name_pattern}
           />
           {info?.versioned && (
-            <TextField
+            <InputField
               label="Version"
               size="small"
               value={version}
@@ -130,7 +130,7 @@ export function CreateItemDialog({
             />
           )}
           {(info?.template_ids?.length ?? 0) > 0 && (
-            <TextField
+            <InputField
               select
               label="Template"
               size="small"
@@ -142,14 +142,19 @@ export function CreateItemDialog({
                   {id}
                 </MenuItem>
               ))}
-            </TextField>
+            </InputField>
           )}
           {check?.reason === "read_only" && (check.copy_into?.length ?? 0) > 0 && (
             <Alert severity="info">
               This scope is read-only. Copy into a writable scope:
               <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                 {check.copy_into!.map((id) => (
-                  <Button key={id} size="small" onClick={() => setTarget(id)}>
+                  <Button
+                    key={id}
+                    size="small"
+                    variant="gradient"
+                    onClick={() => setTarget(id)}
+                  >
                     {id}
                   </Button>
                 ))}
@@ -159,9 +164,11 @@ export function CreateItemDialog({
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="gradient" onClick={onClose}>
+          Cancel
+        </Button>
         <Button
-          variant="primary"
+          variant="gradient"
           disabled={busy || !name.trim() || check?.ok === false}
           onClick={() => void submit()}
         >

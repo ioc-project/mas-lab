@@ -1,11 +1,10 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { Box, List, Typography } from "@mui/material";
 import {
-  ImageOutlined as PlotsIcon,
   DescriptionOutlined as OutputsIcon,
   PlayArrowRounded as RunsIcon,
 } from "@mui/icons-material";
+import { Box, Icons, List, Typography } from "@open-ui-kit/core";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { PlotThumbnail } from "./PlotThumbnail";
 import { OutputFileRow } from "./OutputFileRow";
@@ -69,7 +68,7 @@ export function GroupedResults({
     <>
       {plots.length > 0 && (
         <CollapsibleSection
-          icon={<PlotsIcon sx={{ fontSize: 16, color: "success.main" }} />}
+          icon={<Icons.ImageOutline sx={{ fontSize: 16, color: "success.main" }} />}
           label="Plots"
         >
           <Box

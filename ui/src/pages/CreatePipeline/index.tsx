@@ -6,7 +6,7 @@ import {
   TabPanel,
   PipelineBuilder,
 } from "@/components";
-import { Box, Stack, Typography, useTheme, Alert } from "@mui/material";
+import { Alert } from "@mui/material";
 import { useLocation, useNavigate, useParams } from "react-router";
 import { useCallback, useEffect, useState } from "react";
 import { useValidatePipeline, createPipeline } from "@/api/apiCalls";
@@ -14,14 +14,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { parse, stringify } from "yaml";
 import { scopeHref, useScopeId } from "@/api/scope";
 import {
+  Box,
   Button,
   InputField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  Stack,
   Tab,
   Tabs,
+  Typography,
+  useTheme,
 } from "@open-ui-kit/core";
 
 const TAB_KEYS = ["graph", "yaml"] as const;
@@ -164,14 +168,14 @@ const CreatePipeline = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: "8px" }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleOpenSaveDialog}
               disabled={!pipelineYaml || !hasExperiment}
             >
               Save
             </Button>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={handleValidate}
               disabled={
                 !pipelineYaml || !hasExperiment || validateMutation.isPending
@@ -298,7 +302,9 @@ const CreatePipeline = () => {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseSaveDialog}>Cancel</Button>
+          <Button variant="gradient" onClick={handleCloseSaveDialog}>
+            Cancel
+          </Button>
           <Button variant="gradient" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save"}
           </Button>

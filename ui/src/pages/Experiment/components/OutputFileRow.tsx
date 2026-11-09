@@ -1,6 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { ListItemButton, Typography } from "@mui/material";
+import { ListItemButton, Typography } from "@open-ui-kit/core";
 import {
   fileIconFor,
   formatSize,

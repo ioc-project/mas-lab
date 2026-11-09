@@ -2,14 +2,7 @@
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle, DatasetEditor } from "@/components";
 import type { DatasetContent, DatasetItem } from "@/components/DatasetEditor/DatasetEditor";
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  Stack,
-  Typography,
-  useTheme,
-} from "@mui/material";
+import { Alert } from "@mui/material";
 import { useNavigate, useParams } from "react-router";
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import {
@@ -22,8 +15,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { scopeHref, useScopeId } from "@/api/scope";
 import {
+  Box,
   InputField,
   Button,
+  Spinner,
+  Stack,
+  Typography,
+  useTheme,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -238,7 +236,7 @@ const Dataset = () => {
           height: "50vh",
         }}
       >
-        <CircularProgress />
+        <Spinner />
       </Box>
     );
   }
@@ -259,7 +257,7 @@ const Dataset = () => {
           The dataset &quot;{id ?? ""}&quot; does not exist or has been deleted.
         </Typography>
         <Button
-          variant="primary"
+          variant="gradient"
           onClick={() => navigate(scopeHref(library, "/datasets"))}
         >
           Back to Datasets
@@ -287,7 +285,7 @@ const Dataset = () => {
           </Typography>
           <Stack direction="row" sx={{ gap: 1 }}>
             <Button
-              variant="primary"
+              variant="gradient"
               onClick={openSaveDialog}
               disabled={saveMutation.isPending || createMutation.isPending}
             >
@@ -342,7 +340,9 @@ const Dataset = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+          <Button variant="gradient" onClick={() => setSaveDialogOpen(false)}>
+            Cancel
+          </Button>
           <Button variant="gradient" onClick={handleSave} disabled={!saveName.trim()}>
             Save
           </Button>
@@ -362,6 +362,7 @@ const Dataset = () => {
         </DialogContent>
         <DialogActions>
           <Button
+            variant="gradient"
             onClick={() => setDeleteDialogOpen(false)}
             disabled={deleteMutation.isPending}
           >

@@ -1423,9 +1423,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@open-ui-kit/core@npm:3.2.0":
-  version: 3.2.0
-  resolution: "@open-ui-kit/core@npm:3.2.0"
+"@open-ui-kit/core@npm:3.2.1":
+  version: 3.2.1
+  resolution: "@open-ui-kit/core@npm:3.2.1"
   dependencies:
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.0"
@@ -1466,7 +1466,7 @@ __metadata:
     sonner: ">=2"
     use-debounce: ">=10"
     zustand: ">=5"
-  checksum: 10c0/b98bdbe41392a92e6cddd93c199413010a814694601cabe197f0a304a195f0c6ffa84fbed3300d9c1d1e3bbaeb24e7fcf771d12720332c05005259ef16011a19
+  checksum: 10c0/b49e47d5d405e0f86d9ea327419a7e2d44fc86bbf2895dd59db778778adbc6fd3947ce1de81b31d26281acb2b61d9018e14ba34f35ce849dcc73bd73f806aaa7
   languageName: node
   linkType: hard
 
@@ -4359,8 +4359,9 @@ __metadata:
     "@emotion/react": "npm:^11.14.0"
     "@emotion/styled": "npm:^11.14.1"
     "@eslint/js": "npm:^10.0.1"
+    "@mui/icons-material": "npm:^7.0.1"
     "@mui/material": "npm:^7.0.1"
-    "@open-ui-kit/core": "npm:3.2.0"
+    "@open-ui-kit/core": "npm:3.2.1"
     "@playwright/test": "npm:^1.56.0"
     "@tanstack/react-query": "npm:^5.100.6"
     "@testing-library/dom": "npm:^10.4.0"
