@@ -35,6 +35,7 @@ class LoadedExperiment:
     infra_name: Optional[str]
     n_runs: int
     trace_cache_dir: Optional[Path]
+    controls: tuple[str, ...] = ()
 
 
 def load_experiment(
@@ -47,6 +48,7 @@ def load_experiment(
     dataset_item: Optional[str] = None,
     single_run: bool = False,
     flavour_name: Optional[str] = None,
+    controls: Optional[list[str]] = None,
     infra_name: Optional[str] = None,
     trace_cache_dir: Optional[Path] = None,
     step_overrides: Optional[list] = None,
@@ -105,9 +107,7 @@ def load_experiment(
     try:
         from mas.ctl.env import env_model_override
 
-        exp = MASExperimentConfig.from_data(
-            raw, experiment_yaml, model_override=env_model_override()
-        )
+        exp = MASExperimentConfig.from_data(raw, experiment_yaml, model_override=env_model_override())
     except Exception as exc:
         logger.error(f"Failed to load MAS experiment: {exc}")
         return None
@@ -125,7 +125,7 @@ def load_experiment(
 
         _ws_libs = _WsCfg.load(experiment_yaml.parent)
         if _ws_libs.found:
-            for _lib_rel in (_ws_libs._data.get("libraries") or []):
+            for _lib_rel in _ws_libs._data.get("libraries") or []:
                 _lib_abs = str((_ws_libs._path / _lib_rel).resolve())
                 if _lib_abs not in _sys.path:
                     _sys.path.append(_lib_abs)
@@ -235,6 +235,7 @@ def load_experiment(
         step_overrides_dict=_step_overrides_dict,
         flavour=_flavour,
         flavour_name=flavour_name,
+        controls=tuple(controls or ()),
         infra_name=infra_name,
         n_runs=n_runs,
         trace_cache_dir=trace_cache_dir,
@@ -251,10 +252,7 @@ def _view_dataset_items(
     viewed = list(items)
     if dataset_filter:
         before = len(viewed)
-        viewed = [
-            item for item in viewed
-            if all(item.get(k) == v for k, v in dataset_filter.items())
-        ]
+        viewed = [item for item in viewed if all(item.get(k) == v for k, v in dataset_filter.items())]
         logger.info("Dataset filter %s: %s → %s items", dataset_filter, before, len(viewed))
     if dataset_limit is not None and len(viewed) > dataset_limit:
         viewed = viewed[:dataset_limit]

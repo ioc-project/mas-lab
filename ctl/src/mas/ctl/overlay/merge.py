@@ -34,6 +34,7 @@ _OVERLAY_PATCH_SCHEMA_FILES: dict[str, str] = {
     "MAS": "runtime/mas.schema.yaml",
     "Flavour": "runtime/flavour.schema.yaml",
     "Infra": "runtime/infra.schema.yaml",
+    "Control": "runtime/control.schema.yaml",
 }
 
 # Where to start reading "properties" from, per schema file, relative to that
@@ -44,6 +45,7 @@ _OVERLAY_PATCH_SCHEMA_ROOT: dict[str, tuple[str, ...]] = {
     "MAS": ("properties", "spec"),
     "Flavour": ("properties", "spec"),
     "Infra": ("properties", "spec"),
+    "Control": ("properties", "spec"),
 }
 
 
@@ -112,7 +114,7 @@ def _overlay_merge_meta(kind: str) -> dict[str, dict[str, Any]]:
 def overlay_runtime_semantics() -> dict[str, dict[str, str]]:
     """Return non-trivial overlay merge semantics derived from schema x-merge metadata."""
     out: dict[str, dict[str, str]] = {}
-    for kind in ("Agent", "MAS", "Flavour", "Infra"):
+    for kind in ("Agent", "MAS", "Flavour", "Infra", "Control"):
         out[kind] = {field: _format_semantic(meta) for field, meta in _overlay_merge_meta(kind).items()}
     return out
 
@@ -127,6 +129,8 @@ def _schema_kind_from_target(target_kind: str) -> str | None:
         return "Flavour"
     if normalized in ("infra",):
         return "Infra"
+    if normalized in ("control",):
+        return "Control"
     return None
 
 
@@ -272,10 +276,14 @@ def _merge_mapping_ops(existing: dict[str, Any], incoming: Any) -> dict[str, Any
 
 def _plugin_entry_key(item: Any) -> str:
     if isinstance(item, str):
-        return item
-    if isinstance(item, dict) and len(item) == 1:
-        return str(next(iter(item.keys())))
-    return str(item)
+        name = item
+    elif isinstance(item, dict) and len(item) == 1:
+        name = str(next(iter(item.keys())))
+    else:
+        return str(item)
+    from mas.ctl.session.flavour_control.plugins import canonical_plugin_id
+
+    return canonical_plugin_id(name)
 
 
 def _merge_plugin_list_ops(existing: list[Any], incoming: Any) -> list[Any]:
@@ -296,16 +304,18 @@ def _merge_plugin_list_ops(existing: list[Any], incoming: Any) -> list[Any]:
         result = list(ops.get(_PATCH_OP_REPLACE) or [])
 
     if _PATCH_OP_REMOVE in ops:
-        remove_keys = {str(v) for v in list(ops.get(_PATCH_OP_REMOVE) or [])}
+        remove_keys = {_plugin_entry_key(v) for v in list(ops.get(_PATCH_OP_REMOVE) or [])}
         result = [item for item in result if _plugin_entry_key(item) not in remove_keys]
 
     if _PATCH_OP_ADD in ops:
-        keys = {_plugin_entry_key(item) for item in result}
+        by_id = {_plugin_entry_key(item): index for index, item in enumerate(result)}
         for item in list(ops.get(_PATCH_OP_ADD) or []):
             key = _plugin_entry_key(item)
-            if key not in keys:
+            if key in by_id:
+                result[by_id[key]] = item
+            else:
+                by_id[key] = len(result)
                 result.append(item)
-                keys.add(key)
 
     return result
 
@@ -319,9 +329,7 @@ def _require_existing_list(existing: Any) -> list[Any]:
         return []
     if isinstance(existing, list):
         return list(existing)
-    raise OverlayTargetError(
-        f"$op cannot apply to a {type(existing).__name__} value; expected a list"
-    )
+    raise OverlayTargetError(f"$op cannot apply to a {type(existing).__name__} value; expected a list")
 
 
 def _require_existing_mapping(existing: Any) -> dict[str, Any]:
@@ -329,9 +337,7 @@ def _require_existing_mapping(existing: Any) -> dict[str, Any]:
         return {}
     if isinstance(existing, dict):
         return existing
-    raise OverlayTargetError(
-        f"$op cannot apply to a {type(existing).__name__} value; expected a mapping"
-    )
+    raise OverlayTargetError(f"$op cannot apply to a {type(existing).__name__} value; expected a mapping")
 
 
 def _merge_value_by_meta(existing: Any, incoming: Any, meta: dict[str, Any]) -> Any:
@@ -349,13 +355,13 @@ def _merge_value_by_meta(existing: Any, incoming: Any, meta: dict[str, Any]) -> 
             if _PATCH_OP_ADD in ops or _PATCH_OP_REMOVE in ops:
                 raise OverlayTargetError("$op add/remove requires a list field, not a mapping")
         elif strategy not in {"context_merge"}:
-            raise OverlayTargetError(
-                f"$op cannot apply to a {strategy or 'scalar'} field"
-            )
+            raise OverlayTargetError(f"$op cannot apply to a {strategy or 'scalar'} field")
 
     if strategy == "list_ops":
-        existing_list = _require_existing_list(existing) if ops is not None else (
-            list(existing) if isinstance(existing, list) else []
+        existing_list = (
+            _require_existing_list(existing)
+            if ops is not None
+            else (list(existing) if isinstance(existing, list) else [])
         )
         try:
             return _merge_list_ops(existing_list, incoming, dedupe_key=None)
@@ -537,11 +543,7 @@ def _merge_plugin_binding(existing: Any, incoming: Any) -> Any:
         return deepcopy(incoming)
     merged = deepcopy(base)
     for key, value in incoming.items():
-        if (
-            key in {"params", "config"}
-            and isinstance(merged.get(key), dict)
-            and isinstance(value, dict)
-        ):
+        if key in {"params", "config"} and isinstance(merged.get(key), dict) and isinstance(value, dict):
             merged[key] = _deep_merge_maps(merged[key], value)
         elif isinstance(merged.get(key), list) and isinstance(value, list):
             merged[key] = list(merged[key]) + list(value)
@@ -610,11 +612,7 @@ def apply_identity_merge_patch(target: dict[str, Any], patch: dict[str, Any]) ->
         if value is None:
             merged.pop(key, None)
             continue
-        if (
-            isinstance(value, list)
-            and value
-            and all(identity_pair(item) is not None for item in value)
-        ):
+        if isinstance(value, list) and value and all(identity_pair(item) is not None for item in value):
             merged[key] = _merge_identity_list(existing if isinstance(existing, list) else [], value)
         elif isinstance(value, dict) and _ops_dict(value) is None and isinstance(existing, dict):
             merged[key] = apply_identity_merge_patch(existing, value)
@@ -730,9 +728,7 @@ def extract_mas_agent_patches(
         target = by_id.get(aid)
         if target is None:
             if had_entry_key and aid == entry_id:
-                raise OverlayTargetError(
-                    f"patch.agents.$entry resolved to {aid!r}, which is not in spec.agency.agents"
-                )
+                raise OverlayTargetError(f"patch.agents.$entry resolved to {aid!r}, which is not in spec.agency.agents")
             continue
         _raise_if_legacy_transport(per_agent)
         incoming = {k: v for k, v in per_agent.items() if k != "ref"}
@@ -772,8 +768,7 @@ def extract_agent_overlay_fanout(overlay: dict[str, Any], mas: dict[str, Any]) -
     if matched == 0:
         named = f" named {target_name!r}" if target_name else ""
         raise OverlayTargetError(
-            f"target.kind: Agent overlay{named} matched no agents in "
-            "spec.agency.agents / spec.agents"
+            f"target.kind: Agent overlay{named} matched no agents in spec.agency.agents / spec.agents"
         )
     return out
 
@@ -809,9 +804,11 @@ def accumulate_agent_patches(
         existing_patch = out.get(aid, {})
         incoming_body = {key: value for key, value in patch.items() if key != _LOADED_AGENT_OVERRIDES}
         if incoming_body:
-            existing_body = {
-                key: value for key, value in existing_patch.items() if key != _LOADED_AGENT_OVERRIDES
-            } if isinstance(existing_patch, dict) else {}
+            existing_body = (
+                {key: value for key, value in existing_patch.items() if key != _LOADED_AGENT_OVERRIDES}
+                if isinstance(existing_patch, dict)
+                else {}
+            )
             out[aid] = _keep_unresolved_ops(existing_body, incoming_body)
         elif aid not in out:
             out[aid] = {}
@@ -1022,6 +1019,33 @@ def merge_flavour_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict
     return merged
 
 
+def merge_control_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Merge a ``target.kind: Control`` overlay into a Control document."""
+    merged = deepcopy(base)
+    if "spec" not in overlay:
+        return merged
+    overlay_spec = overlay["spec"]
+    if "patch" in overlay_spec and isinstance(overlay_spec["patch"], dict):
+        overlay_spec = overlay_spec["patch"]
+    allowed = _schema_property_keys("Control")
+    unknown = {k for k in overlay_spec if not _is_extension_key(k)} - allowed
+    if unknown:
+        raise OverlayTargetError(f"overlay patch for target.kind: Control contains unknown key(s) {sorted(unknown)!r}")
+    base_spec = merged.setdefault("spec", {})
+    control_meta = _overlay_merge_meta("Control")
+    for key, incoming in overlay_spec.items():
+        if _is_extension_key(key):
+            continue
+        meta = control_meta.get(key)
+        if meta is not None:
+            base_spec[key] = _merge_value_by_meta(base_spec.get(key), incoming, meta)
+            continue
+        if _ops_dict(incoming) is not None:
+            raise OverlayTargetError(f"$op is not valid for Control field {key!r}")
+        base_spec[key] = deepcopy(incoming)
+    return merged
+
+
 def merge_agent_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
     merged = deepcopy(base)
     if "spec" not in overlay:
@@ -1224,9 +1248,7 @@ def fanout_agent_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[
     return merged
 
 
-def fanout_agent_overrides(
-    base: dict[str, Any], overrides: tuple[str, ...], target_name: str | None
-) -> dict[str, Any]:
+def fanout_agent_overrides(base: dict[str, Any], overrides: tuple[str, ...], target_name: str | None) -> dict[str, Any]:
     """Apply root-qualified Agent overrides to selected MAS agency rows."""
     merged = deepcopy(base)
     spec = merged.setdefault("spec", {})
@@ -1245,8 +1267,7 @@ def fanout_agent_overrides(
     if matched == 0:
         named = f" named {target_name!r}" if target_name else ""
         raise OverlayTargetError(
-            f"target.kind: Agent override{named} matched no agents in "
-            "spec.agency.agents / spec.agents"
+            f"target.kind: Agent override{named} matched no agents in spec.agency.agents / spec.agents"
         )
     return merged
 
@@ -1287,6 +1308,7 @@ def merge_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, An
     overlay = deepcopy(overlay)
     overlay_spec = overlay.get("spec") or {}
     inline_overrides = list(overlay_spec.pop("overrides", []) or [])
+    overlay_spec.pop("control", None)
     overlay["spec"] = overlay_spec
     _validate_patch_fields_against_target_schema(overlay, base)
 
@@ -1295,6 +1317,8 @@ def merge_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, An
         merged = merge_mas_overlay(base, overlay)
     elif target_kind == "flavour":
         merged = merge_flavour_overlay(base, overlay)
+    elif target_kind == "control":
+        merged = merge_control_overlay(base, overlay)
     elif target_kind == "infra":
         merged = deepcopy(base)
         patch = deepcopy((overlay.get("spec") or {}).get("patch") or {})
@@ -1312,7 +1336,7 @@ def merge_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, An
             merged = merge_agent_overlay(base, overlay)
     else:
         raise OverlayTargetError(
-            "overlay spec.target.kind must be one of Agent, MAS, Flavour, Infra, Experiment, Workspace"
+            "overlay spec.target.kind must be one of Agent, MAS, Flavour, Infra, Experiment, Workspace, Control"
         )
     if inline_overrides:
         if target_kind == "agent" and _base_is_mas(merged):

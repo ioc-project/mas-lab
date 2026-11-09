@@ -22,7 +22,7 @@ from . import (
     _plugin_type_from_urn,
     _urn_for_type_name,
 )
-from .aliases import load_aliases
+from .aliases import load_aliases, load_deprecated_aliases
 from .defaults import load_defaults
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,7 @@ class _ManifestPluginCandidate:
     provides_types: set[str] = field(default_factory=set)
 
 
-def _variant_info_from_data(
-    vdata: dict[str, Any], *, source: Path | None = None
-) -> VariantInfo:
+def _variant_info_from_data(vdata: dict[str, Any], *, source: Path | None = None) -> VariantInfo:
     from mas._dist import expand_extra
 
     module = str(vdata.get("module") or "")
@@ -124,7 +122,6 @@ def _parse_generic_manifest(
     return known_types, candidates, role_aliases, defaults, runtime_spec_keys
 
 
-
 def _candidate_from_manifest_item(
     item: dict[str, Any], *, source: Path | None = None
 ) -> _ManifestPluginCandidate | None:
@@ -148,9 +145,7 @@ def _candidate_from_manifest_item(
     if isinstance(raw_variants, dict) and raw_variants:
         for variant_name, variant_data in raw_variants.items():
             if isinstance(variant_data, dict):
-                variants[str(variant_name)] = _variant_info_from_data(
-                    variant_data, source=source
-                )
+                variants[str(variant_name)] = _variant_info_from_data(variant_data, source=source)
     else:
         module = item.get("module")
         class_name = item.get("class") or item.get("class_name")
@@ -219,9 +214,7 @@ def _register_candidates_fixpoint(
                 reg.register_type(provided)
             progressed = True
         if not progressed:
-            unresolved = sorted(
-                f"{candidate.urn} (type={candidate.plugin_type!r})" for candidate in next_pending
-            )
+            unresolved = sorted(f"{candidate.urn} (type={candidate.plugin_type!r})" for candidate in next_pending)
             raise ValueError(
                 "Unresolved plugin manifest entries after fixpoint — the following "
                 "plugin types never became known (typo'd `type:`/`provides_types:` "
@@ -251,6 +244,9 @@ def load_registry(config: RuntimeWorkspaceConfig | None = None) -> PluginRegistr
     # Register aliases AFTER plugins are discovered (so URNs exist)
     for alias, urn in load_aliases(config).items():
         reg.register_alias(alias, urn)
+    for alias, urn in load_deprecated_aliases().items():
+        if alias.lower() not in reg._aliases:
+            reg.register_alias(alias, urn, deprecated=True)
     reg.validate_aliases()
 
     return reg
@@ -293,9 +289,7 @@ def _register_library_plugins(reg: PluginRegistry) -> None:
             _claim_library_package(manifest_path.parent, data, claimed)
             register_manifest_data(reg, data, source=manifest_path)
         except Exception as exc:
-            raise ValueError(
-                f"Failed to register plugin manifest {manifest_path}: {exc}"
-            ) from exc
+            raise ValueError(f"Failed to register plugin manifest {manifest_path}: {exc}") from exc
 
 
 def _manifest_modules(data: dict[str, Any]) -> list[str]:
@@ -326,8 +320,7 @@ def _claim_library_package(library_dir: Path, data: dict[str, Any], claimed: dic
     other = owner if owner != here else next((d for d in loaded_dirs if d != here), None)
     if other is not None:
         raise ValueError(
-            f"plugin package {name!r} at {here} clashes with {other}; "
-            "give each library a unique package name"
+            f"plugin package {name!r} at {here} clashes with {other}; give each library a unique package name"
         )
 
 
@@ -372,8 +365,8 @@ def register_manifest_data(
     *,
     source: Path | None = None,
 ) -> None:
-    known_types, candidates, role_aliases, defaults, runtime_spec_keys = (
-        _parse_generic_manifest(manifest_data, source=source)
+    known_types, candidates, role_aliases, defaults, runtime_spec_keys = _parse_generic_manifest(
+        manifest_data, source=source
     )
     merged_known_types = set(reg._known_types)
     merged_known_types.update(known_types)

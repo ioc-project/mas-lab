@@ -98,11 +98,10 @@ def test_observation_text() -> None:
 
 def test_with_hardened_overlay_appends_the_plugin() -> None:
     overlay_path = (
-        Path(__file__).resolve().parents[1] / "src" / "mas" / "library" / "standard" / "overlays" / "with-hardened.yaml"
+        Path(__file__).resolve().parents[1] / "src" / "mas" / "library" / "standard" / "controls" / "with-hardened.yaml"
     )
     doc = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
-    add = doc["spec"]["patch"]["governance"]["$op"]["add"]
-    names = [g if isinstance(g, str) else next(iter(g)) for g in add]
+    names = [g if isinstance(g, str) else next(iter(g)) for g in doc["spec"]["governance"]]
     assert "gov_no_undeclared_tool" in names
 
 
@@ -188,8 +187,11 @@ def test_mwe_agent_spec_matches_offered_tools() -> None:
     assert names == _offered_from_mwe(doc)
     assert "data-access-protocol" in agent["spec"]["skills"]
     assert "get_deployments" not in names
-    gov = agent["spec"]["governance"]
-    assert "gov_no_undeclared_tool" in gov
+    assert "governance" not in agent["spec"]
+    control = yaml.safe_load((SAMPLE / "control.yaml").read_text(encoding="utf-8"))
+    assert "gov_no_undeclared_tool" in control["spec"]["governance"]
+    flavour = yaml.safe_load((SAMPLE / "flavour.yaml").read_text(encoding="utf-8"))
+    assert flavour["spec"]["control"] == [{"ref": "./control.yaml"}]
 
 
 def test_sample_agent_validates() -> None:

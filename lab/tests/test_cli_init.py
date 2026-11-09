@@ -136,7 +136,7 @@ def test_init_config_lists_every_option_commented_out(monkeypatch, tmp_path: Pat
     assert active["mas_ctl"] == {"trace": "summary"}
     assert "cache" not in active["mas_ctl"]
     assert "# cache: read-only" in text
-    for section in ("runtime_refs", "middleware", "manifest_libraries", "aliases", "defaults", "paths", "plugins"):
+    for section in ("runtime_refs", "middleware", "manifest_libraries", "aliases", "defaults", "paths"):
         assert section not in active
         assert f"# {section}:" in text
 

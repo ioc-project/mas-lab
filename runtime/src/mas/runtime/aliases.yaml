@@ -1,59 +1,69 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# A plugin has a URN, a name, and few aliases. `name@version` is the versioned full name; the bare
+# name is the shortcut that stands for the default implementation. Keep aliases few: the ones that were
+# only another way to say the same thing are in `deprecated_aliases`, which still resolve with a warning.
 apiVersion: mas/v1
 kind: PluginAliasManifest
 metadata:
   name: runtime-default-aliases
 spec:
   aliases:
-    # -- friendly short names --------------------------------------------
-    analyst: mas.dp.react
-    cot: mas.dp.cot
-    context-assembler: mas.ctx.assembler
-    ctx-assembler: mas.ctx.assembler
-    full-history: mas.cm.stack
-    full_history: mas.cm.stack
-    introspection: mas.dp.introspection
-    linear: mas.dp.single_pass
-    memory: mas.mem.semantic
-    memory-semantic: mas.mem.semantic
-    memory_semantic: mas.mem.semantic
-    planner: mas.dp.react
-    plan-execute: mas.dp.plan_execute
-    plan_execute: mas.dp.plan_execute
-    react: mas.dp.react
-    reflection: mas.dp.introspection
-    sample_governance: mas.gov.sample
-    gov_no_undeclared_tool: mas.gov.no_undeclared_tool
-    no_undeclared_tool: mas.gov.no_undeclared_tool
-    retry_on_error: mas.gov.retry_on_error
     circuit_breaker: mas.circuit_breaker.threshold
+    circuit_breaker@v1: mas.circuit_breaker.threshold
     threshold: mas.circuit_breaker.threshold
-    single_pass: mas.dp.single_pass
-    sliding-window: mas.cm.sliding_window
     sliding_window: mas.cm.sliding_window
     stack: mas.cm.stack
     summarising: mas.cm.summarising
-    summarizing: mas.cm.summarising
-    tot: mas.dp.tree_of_thoughts
-    tree_of_thoughts: mas.dp.tree_of_thoughts
-
-    # -- legacy `plugin_id@version` compatibility shims -------------------
-    # These existed as `shortcuts:` on the deleted plugin_registry.yaml
-    # entries and/or in library-samples/aliases/plugin-aliases.yaml before
-    # the manifest/alias consolidation. Keep them so any external config
-    # still referencing the old `name@v1` spelling keeps resolving.
-    react@v1: mas.dp.react
+    cot: mas.dp.cot
     cot@v1: mas.dp.cot
+    introspection: mas.dp.introspection
     introspection@v1: mas.dp.introspection
-    reflection@v1: mas.dp.introspection
-    single_pass@v1: mas.dp.single_pass
-    linear@v1: mas.dp.single_pass
+    plan_execute: mas.dp.plan_execute
     plan_execute@v1: mas.dp.plan_execute
+    react: mas.dp.react
+    react@v1: mas.dp.react
+    single_pass: mas.dp.single_pass
+    single_pass@v1: mas.dp.single_pass
+    tree_of_thoughts: mas.dp.tree_of_thoughts
     tree_of_thoughts@v1: mas.dp.tree_of_thoughts
-    tot@v1: mas.dp.tree_of_thoughts
-    semantic_memory@v1: mas.mem.semantic
-    sample_governance@v1: mas.gov.sample
+    gov_no_undeclared_tool: mas.gov.no_undeclared_tool
     gov_no_undeclared_tool@v1: mas.gov.no_undeclared_tool
+    budget@v1: mas.gov.budget
+    gdb@v1: mas.gov.gdb
+    retry_on_error: mas.gov.retry_on_error
     retry_on_error@v1: mas.gov.retry_on_error
-    circuit_breaker@v1: mas.circuit_breaker.threshold
+    sample_governance: mas.gov.sample
+    sample_governance@v1: mas.gov.sample
+    memory: mas.mem.semantic
+    semantic_memory@v1: mas.mem.semantic
+
+  # Removed in a later release. Use the plugin's name or its versioned name.
+  deprecated_aliases:
+    sliding-window: mas.cm.sliding_window
+    full-history: mas.cm.stack
+    full_history: mas.cm.stack
+    summarizing: mas.cm.summarising
+    context-assembler: mas.ctx.assembler
+    ctx-assembler: mas.ctx.assembler
+    reflection: mas.dp.introspection
+    reflection@v1: mas.dp.introspection
+    plan-execute: mas.dp.plan_execute
+    analyst: mas.dp.react
+    planner: mas.dp.react
+    linear: mas.dp.single_pass
+    linear@v1: mas.dp.single_pass
+    tot: mas.dp.tree_of_thoughts
+    tot@v1: mas.dp.tree_of_thoughts
+    no_undeclared_tool: mas.gov.no_undeclared_tool
+    memory-semantic: mas.mem.semantic
+    memory_semantic: mas.mem.semantic
+    llm-scheduler: mas.infra_middleware.llm_scheduler
+    rate_limit: mas.infra_middleware.llm_scheduler
+    rate_limiter: mas.infra_middleware.llm_scheduler
+    llm_pace: mas.infra_middleware.llm_scheduler
+    fault-inject: mas.infra_middleware.fault_inject
+    chaos_lite: mas.infra_middleware.fault_inject
+    chaos-lite: mas.infra_middleware.fault_inject
+    debug_script: mas.gov.gdb
+    gov_debug_script: mas.gov.gdb

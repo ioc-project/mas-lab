@@ -19,9 +19,7 @@ from mas.runtime.kernel.config import KernelConfig
 class ChainableIngressPlugin(Protocol):
     plugin_id: str
 
-    def evaluate_ingress(
-        self, intent: IngressIntentView, *, config: KernelConfig
-    ) -> IngressGovDecision: ...
+    def evaluate_ingress(self, intent: IngressIntentView, *, config: KernelConfig) -> IngressGovDecision: ...
 
 
 @dataclass(frozen=True)
@@ -29,6 +27,7 @@ class RegisteredIngressPlugin:
     plugin: ChainableIngressPlugin
     filter: GovTransitionFilter = field(default_factory=GovTransitionFilter)
     chain: Literal["stop", "continue"] = "stop"
+    priority: int = 0
 
 
 def evaluate_ingress_chain(

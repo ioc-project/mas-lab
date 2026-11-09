@@ -34,3 +34,9 @@ properties:
         additionalProperties:
           type: string
           minLength: 1
+      deprecated_aliases:
+        description: Names that still resolve, with a one-time warning, until a later release removes them.
+        type: object
+        additionalProperties:
+          type: string
+          minLength: 1

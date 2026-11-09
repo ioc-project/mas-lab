@@ -88,34 +88,6 @@ def test_workspace_explicit_root_overrides_global(tmp_path, monkeypatch):
     assert _flavour(loaded) == "mounted"
 
 
-def test_workspace_config_plugins_default_off(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / ".git").mkdir()
-    (repo / "config.yaml").write_text(
-        "mas_ctl:\n  flavour: local\n# plugins:\n#   - mas.runtime.debug_script\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(repo)
-    monkeypatch.delenv("MAS_WORKSPACE_ROOT", raising=False)
-    loaded = WorkspaceConfig.load()
-    assert loaded.plugins == []
-
-
-def test_workspace_config_plugins_uncommented(tmp_path, monkeypatch):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / ".git").mkdir()
-    (repo / "config.yaml").write_text(
-        "plugins:\n  - mas.runtime.debug_script\n  - mas.checkpoint_store.hybrid\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(repo)
-    monkeypatch.delenv("MAS_WORKSPACE_ROOT", raising=False)
-    loaded = WorkspaceConfig.load()
-    assert loaded.plugins == ["mas.runtime.debug_script", "mas.checkpoint_store.hybrid"]
-
-
 def test_workspace_explicit_root_skips_global_when_missing(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()

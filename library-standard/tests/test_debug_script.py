@@ -287,4 +287,4 @@ def test_evaluate_egress_passes() -> None:
         config=SimpleNamespace(),
     )
     assert decision is GovDecision.ALLOW
-    assert name == "debug_script"
+    assert name == "gdb"

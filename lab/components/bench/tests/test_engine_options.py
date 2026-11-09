@@ -14,6 +14,23 @@ def test_benchmark_options_preserve_cli_overrides() -> None:
     assert options.overrides == ["experiment:experiment.run.n_runs=1"]
 
 
+def test_benchmark_options_preserve_cli_controls() -> None:
+    options = BenchmarkRunOptions.from_spec({"controls": ["gov.yaml@$not-entry"]})
+
+    assert options.controls == ["gov.yaml@$not-entry"]
+
+
+def test_benchmark_run_help_lists_control() -> None:
+    from click.testing import CliRunner
+    from mas.lab.cli import app
+
+    result = CliRunner().invoke(app, ["benchmark", "run", "--help"])
+    assert result.exit_code == 0
+    assert "--control REF[@SELECTOR]" in result.output
+    assert "$not-" in result.output
+    assert ".mas.agent[*]" in result.output
+
+
 @pytest.mark.asyncio
 async def test_run_benchmark_missing_file_returns_false(tmp_path: Path) -> None:
     ok = await run_benchmark(tmp_path / "missing.yaml")
@@ -109,6 +126,7 @@ async def test_run_benchmark_mas_route_uses_options(monkeypatch, tmp_path: Path)
         dataset_item="case-2",
         single_run=True,
         flavour_name="local",
+        controls=["gov.yaml@$not-entry", "desk.yaml@.mas.agent[*]"],
         infra_name="mock",
         force=True,
         trace_cache_dir=Path("/tmp/traces"),
@@ -128,6 +146,7 @@ async def test_run_benchmark_mas_route_uses_options(monkeypatch, tmp_path: Path)
     assert captured["dataset_item"] == "case-2"
     assert captured["single_run"] is True
     assert captured["flavour_name"] == "local"
+    assert captured["controls"] == ["gov.yaml@$not-entry", "desk.yaml@.mas.agent[*]"]
     assert captured["infra_name"] == "mock"
     assert captured["force"] is True
     assert captured["trace_cache_dir"] == Path("/tmp/traces")

@@ -157,12 +157,12 @@ def _wait_until(ready, timeout: float = 1.0) -> None:
 
 
 def _halt_listen(link: SlimAgentComm) -> None:
+    """Stop this link's inbound loop and wait until it has ended, so it cannot reconnect under the test."""
     link._stopped = True
-    link._listening = False
     app = link._app
     if app is not None:
         app.stopped = True
-    time.sleep(0.05)
+    _wait_until(lambda: not link._listening, timeout=5.0)
     link._stopped = False
     if app is not None:
         app.stopped = False

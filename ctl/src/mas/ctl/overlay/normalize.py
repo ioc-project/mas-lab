@@ -18,9 +18,7 @@ def normalize_overlay(data: dict[str, Any], *, name: str = "overlay") -> dict[st
 
     kind = str(data.get("kind") or "")
     if kind != "Overlay":
-        raise ValueError(
-            f"unsupported overlay shape (kind={kind!r}); expected apiVersion: mas/v1, kind: Overlay"
-        )
+        raise ValueError(f"unsupported overlay shape (kind={kind!r}); expected apiVersion: mas/v1, kind: Overlay")
 
     out = dict(data)
     out["apiVersion"] = "mas/v1"
@@ -43,10 +41,12 @@ def normalize_overlay(data: dict[str, Any], *, name: str = "overlay") -> dict[st
     overrides = spec.get("overrides", [])
     if not isinstance(overrides, list) or not all(isinstance(item, str) for item in overrides):
         raise ValueError("Overlay spec.overrides must be a list of PATH=VALUE strings")
+    control = spec.get("control")
 
     # Fold legacy top-level spec keys into patch if they are not already present.
+    # spec.control is a list of Control refs this overlay attaches, not an agent patch.
     for k, v in spec.items():
-        if k in {"target", "patch", "overrides"}:
+        if k in {"target", "patch", "overrides", "control"}:
             continue
         patch.setdefault(k, v)
 
@@ -80,4 +80,6 @@ def normalize_overlay(data: dict[str, Any], *, name: str = "overlay") -> dict[st
     out["spec"] = {"target": target, "patch": patch}
     if overrides:
         out["spec"]["overrides"] = list(overrides)
+    if isinstance(control, list):
+        out["spec"]["control"] = list(control)
     return out

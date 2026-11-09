@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 from ci_llm import stop_engine
-from tutorial_support import T01, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from tutorial_support import T01, live_cli_env, live_tutorial_chat, load_yaml, run_cli, tutorial_file
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Manifest & overlay validation (CLI)
@@ -40,7 +40,7 @@ class TestManifestValidation:
         ],
     )
     def test_validate_with_overlay(self, overlay):
-        overlay_path = T01 / "overlays" / overlay
+        overlay_path = tutorial_file(T01, overlay)
         if not overlay_path.exists():
             pytest.skip(f"{overlay} not present")
         r = run_cli(
@@ -57,7 +57,7 @@ class TestManifestValidation:
     @pytest.mark.parametrize("overlay", ["cot.yaml", "baseline.yaml"])
     def test_mas_patch_overlays_are_well_formed(self, overlay):
         """cot.yaml and baseline.yaml are MAS-level Patch overlays — verify structure."""
-        ov = load_yaml(T01 / "overlays" / overlay)
+        ov = load_yaml(tutorial_file(T01, overlay))
         assert ov.get("kind") == "Overlay" or ov.get("apiVersion") == "mas/v1"
         assert "spec" in ov
 
@@ -65,7 +65,7 @@ class TestManifestValidation:
         """Validate agent with tools + skills + memory stacked."""
         args = ["mas-ctl", "validate", str(T01 / "agent.yaml")]
         for ov in ["tools.yaml", "skills.yaml", "memory.yaml"]:
-            p = T01 / "overlays" / ov
+            p = tutorial_file(T01, ov)
             if p.exists():
                 args += ["--overlay", str(p)]
         r = run_cli(args)
@@ -94,7 +94,7 @@ class TestManifestStructure:
         Verify the expected overlays are all present."""
         expected = ["tools.yaml", "skills.yaml", "memory.yaml", "baseline.yaml", "cot.yaml"]
         for name in expected:
-            p = T01 / "overlays" / name
+            p = tutorial_file(T01, name)
             assert p.exists(), f"overlay {name} missing from tuto 01"
 
 
@@ -225,7 +225,7 @@ class TestOverlayMerging:
 
         base = load_yaml(T01 / "agent.yaml")
         for ov_name in ["tools.yaml", "skills.yaml", "memory.yaml"]:
-            ov_path = T01 / "overlays" / ov_name
+            ov_path = tutorial_file(T01, ov_name)
             if ov_path.exists():
                 ov = load_yaml(ov_path)
                 base = merge_overlay(base, ov)
@@ -254,23 +254,24 @@ class TestOverlayMerging:
 
 def _tutorial_agent(*extra_overlays: str) -> dict:
     """Tutorial agent.yaml plus optional overlays. Does not stack a fake LLM."""
-    from mas.ctl.overlay import merge_overlay
+    from overlay_support import load_agent_and_flavour
 
-    base = load_yaml(T01 / "agent.yaml")
-    for name in extra_overlays:
-        base = merge_overlay(base, load_yaml(T01 / "overlays" / name))
-    return base
+    agent, _flavour = load_agent_and_flavour(T01 / "agent.yaml", *[tutorial_file(T01, name) for name in extra_overlays])
+    return agent
 
 
 def _instantiate(*extra_overlays: str):
     from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
+    from overlay_support import load_agent_and_flavour
 
+    agent, flavour = load_agent_and_flavour(T01 / "agent.yaml", *[tutorial_file(T01, name) for name in extra_overlays])
     return instantiate_runtime(
         InstantiationOptions(
-            agent_manifest=_tutorial_agent(*extra_overlays),
+            agent_manifest=agent,
             manifest_dir=T01,
             validate_manifests=False,
             engine=stop_engine(),
+            flavour_spec=flavour,
         )
     )
 

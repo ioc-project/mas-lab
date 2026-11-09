@@ -4,13 +4,11 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
 import click
 import yaml
-
 from mas.ctl.validate import validate_file, validate_tree, validation_enabled
 
 
@@ -48,6 +46,7 @@ def validate_cmd(
 
     from mas.ctl.overlay import merge_overlay
     from mas.ctl.overlay.normalize import normalize_overlay
+    from mas.ctl.session.flavour_control import is_control_document
     from mas.ctl.validate import validate_data
 
     failed = 0
@@ -63,10 +62,21 @@ def validate_cmd(
                 from mas.ctl.paths import resolve_overlay_path
 
                 for ov in overlays:
-                    ov_path = resolve_overlay_path(
-                        ov, orig_cwd=Path.cwd(), manifest_dir=path.parent
-                    )
+                    ov_path = resolve_overlay_path(ov, orig_cwd=Path.cwd(), manifest_dir=path.parent)
                     ov_raw = yaml.safe_load(ov_path.read_text(encoding="utf-8"))
+                    if is_control_document(ov_raw):
+                        ov_result = validate_data(
+                            ov_raw,
+                            source=str(ov_path),
+                            kind="control",
+                            strict=strict,
+                            base_dir=ov_path.parent,
+                            resolve_refs=resolve_refs,
+                        )
+                        _print_result(ov_result)
+                        if not ov_result.ok:
+                            failed += 1
+                        continue
                     normalized = normalize_overlay(ov_raw, name=ov_path.stem)
                     ov_result = validate_data(
                         normalized,

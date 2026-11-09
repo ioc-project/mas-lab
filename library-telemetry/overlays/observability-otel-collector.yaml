@@ -2,19 +2,14 @@
 #  SPDX-License-Identifier: Apache-2.0
 # Live OTel plugin: JSONL plus OTLP. An infra OtelCollector manifest is
 # optional — set $OTEL_EXPORTER_OTLP_ENDPOINT and add the otel plugin
-# (this overlay, or spec.observability.plugins: [otel]).
-apiVersion: mas/v1
-kind: Overlay
+# (this Control, or a Control observability list that includes otel).
+apiVersion: control/v1
+kind: Control
 metadata:
   name: observability-otel-collector
 spec:
-  target:
-    kind: Agent
-  patch:
-    observability:
-      $op:
-        replace:
-          - otel:
-              output_path: traces/otel_sdk_spans.jsonl
-              converter_profile: observe_sdk
-              otlp_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT
+  observability:
+  - otel:
+      output_path: traces/otel_sdk_spans.jsonl
+      converter_profile: observe_sdk
+      otlp_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT

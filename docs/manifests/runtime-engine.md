@@ -33,7 +33,7 @@ The loader rejects unknown keys.
 The bundled ref `standard:runtime-default` (from `library-standard`) sets `queue_depth: 32`, `stream: false`, and no dispatch cap.
 To cap the loop, use one of two options:
 
-- Apply overlay `pkg://mas.library.standard/overlays/with-hardened.yaml`, which sets `design_pattern.params.max_steps: 512`.
+- Set `design_pattern.params.max_steps` (for example `512`) in the agent, or `max_steps` in a RuntimeEngine manifest.
 - Set `spec.engine.max_auto_steps` on a RuntimeEngine that you pass with `--runtime-ref`.
 
 For offline CI, replay responses recorded against a live provider with [llm_cache](llm-cache.md).

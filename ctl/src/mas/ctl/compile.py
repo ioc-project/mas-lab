@@ -3,15 +3,19 @@
 """Compile a manifest + overlay stack into the resolved in-memory spec.
 
 ``mas-ctl compose`` emits EffectiveBind + placement. This module dumps the
-author-facing Agent / MAS YAML after overlay merge and runtime default
+author-facing Agent / MAS YAML after overlay merge, ``--control`` / ``--flavour``
+attach (``-o`` Control is deprecated), and runtime default
 resolution — the dict ``chat`` / ``run-mas`` actually hold before bootstrap
 wiring (delegation tools, skill injection, filesystem tool-ref expansion).
+Control observability and governance stay on the Control; they are not copied
+onto the compiled agent.
 """
 
 from __future__ import annotations
 
 import copy
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -21,6 +25,15 @@ from mas.ctl.manifest.mas_agent_merge import apply_loaded_agent_patch
 from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay
 from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.overrides import apply_root_overrides, overlay_for_session_agent
+from mas.ctl.session.flavour_control import (
+    ControlError,
+    apply_control_overlays,
+    apply_flavour_controls,
+    apply_resolved_controls,
+    is_control_document,
+    session_controls_from_overlay_paths,
+)
+from mas.ctl.session.manifest_config import agent_id_from_manifest
 from mas.ctl.validate import validate_data, validate_file, validation_enabled
 from mas.ctl.workspace.config import WorkspaceConfig
 from mas.runtime.agent_defaults import (
@@ -145,8 +158,10 @@ def compile_manifest(
     validate: bool = True,
     workspace: Any = None,
     schema_kind: str | None = None,
+    control_rows: Sequence[dict[str, Any]] = (),
+    flavour_spec: dict[str, Any] | None = None,
 ) -> CompiledManifest:
-    """Load ``manifest``, apply overlays in order, optionally fill runtime defaults."""
+    """Load ``manifest``, apply overlays, attach Controls, optionally fill runtime defaults."""
     manifest = Path(manifest)
     overlays = [Path(p) for p in (overlay_paths or [])]
     doc = load_yaml_mapping(manifest)
@@ -181,6 +196,9 @@ def compile_manifest(
 
     classified = _classify_overlays(overlays, validate=validate)
     ws = workspace if workspace is not None else WorkspaceConfig.load(manifest.parent)
+    attached_controls = [*session_controls_from_overlay_paths(overlays), *control_rows]
+    if flavour_spec:
+        apply_control_overlays(flavour_spec, overlays)
 
     if kind_l == "agent":
         if classified.mas:
@@ -194,6 +212,17 @@ def compile_manifest(
             agent, _ = _apply_compile_overrides(agent, overrides, root="agent", validate=validate)
         if fill_defaults:
             agent = fill_agent_defaults(agent, workspace=ws)
+        try:
+            aid = agent_id_from_manifest(agent)
+            agent = _attach_controls(
+                agent,
+                control_rows=attached_controls,
+                flavour_spec=flavour_spec,
+                agent_id=aid,
+                entry_id=aid,
+            )
+        except ControlError as exc:
+            raise CompileError(str(exc)) from exc
         if validate and overrides and validation_enabled():
             validate_data(agent, source="CLI overrides", kind="agent").raise_if_failed()
         return CompiledManifest(
@@ -234,6 +263,22 @@ def compile_manifest(
 
     if fill_defaults:
         agents = {aid: fill_agent_defaults(adoc, workspace=ws) for aid, adoc in agents.items()}
+    from mas.ctl.infra.identities import declared_entry_id, peers_of
+
+    entry = declared_entry_id(mas)
+    delegates = list(peers_of(mas, list(agent_ids)).get(entry) or [])
+    try:
+        for aid in list(agent_ids):
+            agents[aid] = _attach_controls(
+                agents[aid],
+                control_rows=attached_controls,
+                flavour_spec=flavour_spec,
+                agent_id=aid,
+                entry_id=entry,
+                delegate_ids=delegates,
+            )
+    except ControlError as exc:
+        raise CompileError(str(exc)) from exc
     agents = {aid: _sanitize_doc(adoc) for aid, adoc in agents.items()}
 
     return CompiledManifest(
@@ -258,10 +303,7 @@ def _apply_compile_overrides(
     for source in overrides:
         path = parse_override(source).path
         if path.root == "manifest":
-            raise CompileError(
-                f"override root 'manifest' is not a session node; this file is {root!r} "
-                f"— use .{root}.…"
-            )
+            raise CompileError(f"override root 'manifest' is not a session node; this file is {root!r} — use .{root}.…")
         if root == "mas" and path.root == "agent" and path.parent == "mas":
             overlay = overlay_for_session_agent(source)
             result = merge_overlay(result, overlay)
@@ -269,20 +311,16 @@ def _apply_compile_overrides(
             continue
         if root == "mas" and path.root == "agent":
             raise CompileError(
-                f"{source!r} addresses a standalone agent; this document is a MAS. "
-                "Use .mas.agent[id].spec…"
+                f"{source!r} addresses a standalone agent; this document is a MAS. Use .mas.agent[id].spec…"
             )
         if root == "agent" and path.parent == "mas":
             raise CompileError(
-                f"{source!r} addresses an agent under a MAS; this document is a standalone agent. "
-                "Use .agent.spec…"
+                f"{source!r} addresses an agent under a MAS; this document is a standalone agent. Use .agent.spec…"
             )
         if path.root == root and path.parent is None:
             result = apply_root_overrides(result, (source,), root=root)
         else:
-            raise CompileError(
-                f"compile override {path.text} is not valid for this document; use .{root}.…"
-            )
+            raise CompileError(f"compile override {path.text} is not valid for this document; use .{root}.…")
     return result, extra
 
 
@@ -415,6 +453,34 @@ class _ClassifiedOverlays:
     agent: list[tuple[Path, dict[str, Any]]]
 
 
+def _attach_controls(
+    agent: dict[str, Any],
+    *,
+    control_rows: Sequence[dict[str, Any]],
+    flavour_spec: dict[str, Any] | None,
+    agent_id: str,
+    entry_id: str,
+    delegate_ids: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Resolve matching Controls. Observability and governance stay on the Control."""
+    agent = apply_resolved_controls(
+        agent,
+        control_rows,
+        agent_id=agent_id,
+        entry_id=entry_id,
+        delegate_ids=delegate_ids,
+    )
+    if flavour_spec:
+        agent = apply_flavour_controls(
+            agent,
+            flavour_spec,
+            agent_id=agent_id,
+            entry_id=entry_id,
+            delegate_ids=delegate_ids,
+        )
+    return agent
+
+
 def _classify_overlays(
     overlay_paths: list[Path],
     *,
@@ -423,6 +489,8 @@ def _classify_overlays(
     classified = _ClassifiedOverlays(mas=[], agent=[])
     for ov_path in overlay_paths:
         raw = load_yaml_mapping(ov_path)
+        if is_control_document(raw):
+            continue
         overlay = normalize_overlay(raw, name=ov_path.stem)
         if validate and validation_enabled():
             validate_data(overlay, source=str(ov_path), kind="overlay").raise_if_failed()
@@ -431,6 +499,8 @@ def _classify_overlays(
             classified.mas.append((ov_path, overlay))
         elif target_kind == "agent":
             classified.agent.append((ov_path, overlay))
+        elif target_kind == "control":
+            continue
         elif target_kind in _SKIP_OVERLAY_KINDS:
             logger.warning(
                 "skipping %s overlay %s (compile emits Agent/MAS specs only)",

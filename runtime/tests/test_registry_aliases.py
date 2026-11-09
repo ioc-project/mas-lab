@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import pytest
 from mas.runtime.registry import PluginEntry, PluginRegistry, VariantInfo
 from mas.runtime.registry.aliases import (
     _load_alias_manifest,
@@ -30,8 +31,8 @@ def test_default_aliases_loaded_from_package_data() -> None:
     aliases = load_default_aliases()
 
     assert aliases["react"] == "mas.dp.react"
-    assert aliases["planner"] == "mas.dp.react"
-    assert aliases["memory-semantic"] == "mas.mem.semantic"
+    assert "planner" not in aliases  # a second name for react: deprecated, not a default alias
+    assert "memory-semantic" not in aliases
 
 
 def test_workspace_aliases_override_package_defaults(tmp_path) -> None:
@@ -159,3 +160,54 @@ def test_validate_alias_manifest_rejects_invalid_value() -> None:
         assert "invalid alias manifest" in str(exc)
     else:
         raise AssertionError("expected validation error")
+
+
+def test_a_deprecated_alias_still_resolves_and_warns_once(caplog) -> None:
+    import logging
+
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    registry._warned.discard("planner")
+    with caplog.at_level(logging.WARNING, logger="mas.runtime.registry"):
+        assert registry.resolve("planner") is not None
+        assert registry.resolve_by_type("design_pattern", "planner") is not None
+    messages = [r.getMessage() for r in caplog.records if "'planner'" in r.getMessage()]
+    assert len(messages) == 1
+    assert "react" in messages[0]
+
+
+def test_a_name_is_matched_exactly_not_by_the_end_of_a_urn() -> None:
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    assert registry.entries_named("react", "design_pattern")
+    assert registry.entries_named("dp.react", "design_pattern") == []
+    assert registry.entries_named("native", "observability")[0].urn == "mas.observability.native"
+    assert [e.urn for e in registry.entries_named("drop", "summarizer")] == ["mas.summarizer.drop"]
+
+
+def test_the_debugger_has_one_name_and_its_old_names_are_deprecated(caplog) -> None:
+    import logging
+
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    assert registry.resolve_by_type("governance", "gdb").class_name == "DebugScriptPlugin"
+    registry._warned.discard("debug_script")
+    with caplog.at_level(logging.WARNING, logger="mas.runtime.registry"):
+        assert registry.resolve_by_type("governance", "debug_script").class_name == "DebugScriptPlugin"
+    assert any("'debug_script' is deprecated" in r.getMessage() for r in caplog.records)
+    assert [e.urn for e in registry.entries_named("gdb")] == ["mas.gov.gdb"]
+
+
+def test_two_plugins_of_one_type_cannot_answer_to_one_name() -> None:
+    from mas.runtime.registry import PluginEntry, PluginRegistry, VariantInfo
+
+    registry = PluginRegistry()
+    variants = {"builtin": VariantInfo(module="pathlib", class_name="Path")}
+    registry.register(PluginEntry(urn="mas.codec.one", shortcuts=["same"], variants=variants))
+    with pytest.raises(ValueError, match="two codec plugins answer to 'same'"):
+        registry.register(PluginEntry(urn="mas.codec.two", shortcuts=["same"], variants=variants))
+    with pytest.raises(ValueError, match="without '.'"):
+        registry.register(PluginEntry(urn="mas.codec.three", shortcuts=["a.b"], variants=variants))

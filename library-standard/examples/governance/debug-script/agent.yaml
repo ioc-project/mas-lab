@@ -1,9 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Runtime debugger example: gdb-like debug_script + control attach by session id.
+# Debugger example: the agent only defines behaviour. control.yaml holds the gdb-like debug_script,
+# attached by flavour.yaml; control attach by session id.
 #
 #   mas-ctl validate library-standard/examples/governance/debug-script/agent.yaml
-#   mas-ctl chat library-standard/examples/governance/debug-script/agent.yaml
+#   mas-ctl chat library-standard/examples/governance/debug-script/agent.yaml \
+#     --flavour library-standard/examples/governance/debug-script/flavour.yaml
 apiVersion: mas/v1
 kind: Agent
 
@@ -21,7 +23,3 @@ spec:
   tools:
     - ref: ./tools/web_search.tool.yaml
     - ref: ./tools/calc.tool.yaml
-  debug:
-    script_file: ./debug.gdb
-  observability:
-    - native

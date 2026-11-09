@@ -24,7 +24,7 @@ sections:
         title: "Validate native overlay"
         command: >-
           mas-ctl validate docs/tutorials/01-building-an-agent/agent.yaml
-          -o pkg://mas.library.standard/overlays/observability-native.yaml
+          -o pkg://mas.library.standard/controls/observability-native.yaml
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "OK"

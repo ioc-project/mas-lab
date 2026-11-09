@@ -1,0 +1,12 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Flavour: attaches the no-undeclared-tool Control.
+apiVersion: flavour/v1
+kind: Flavour
+
+metadata:
+  name: no-undeclared-tool
+
+spec:
+  control:
+    - ref: ./control.yaml

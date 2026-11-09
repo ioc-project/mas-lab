@@ -58,3 +58,10 @@ The runtime validates this mapping against [src/mas/runtime/aliases.schema.yaml]
 - Keep alias defaults in package data, not in registry code.
 - Prefer canonical URNs in new manifests and docs, and add aliases only for compatibility or ergonomics.
 - When adding or changing alias keys, update the manifest, schema, and tests together.
+
+## Deprecated aliases
+
+`aliases.yaml` also has a `deprecated_aliases` section: names that were only another way to say the same thing
+(`analyst`, `planner`, `linear`, `rate_limiter`, `debug_script`, ...). They still resolve, with a one-time warning that
+names the replacement, until a later release removes them. Keep aliases few; see [plugin-names.md](plugin-names.md) for
+how names, shortcuts and versioned names are used and matched.

@@ -11,19 +11,4 @@ metadata:
     and RAG skills backend are agent-spec / workspace-infra concerns —
     see docs/design/flavour-boundary.md.
 
-spec:
-  agent_comm:
-    protocol: agent-local
-    mode: local
-    emulation: true
-
-  tools:
-    remote_tools_enabled: false
-    allowed: ["*"]
-
-  telemetry:
-    backend: file
-    path: logs/
-
-  observability:
-    - native
+spec: {}

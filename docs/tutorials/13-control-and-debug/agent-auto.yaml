@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Tutorial 13 auto-checkpoint agent — every_turn + tool-error backtrack tree.
+# Tutorial 13 auto-checkpoint agent: every_turn + tool-error backtrack (flavour-auto.yaml).
 apiVersion: mas/v1
 kind: Agent
 
@@ -21,13 +21,3 @@ spec:
     mode: every_turn
     retention:
       mode: all
-  governance:
-    - sample:
-        error_recovery_plugin: backtrack_on_error
-        backtrack:
-          repeat_threshold: 2
-          max_backtracks_per_session: 3
-          steps: 1
-          on_cap_reached: stop_backtracking
-  observability:
-    - native

@@ -157,8 +157,7 @@ def collect_workflow_deprecations(data: dict[str, Any]) -> list[tuple[str, str]]
     return collect_delegates_to_deprecation(data) + collect_dispatch_deprecation(data)
 
 
-_FLAVOUR_IGNORED_KEYS = ("agent_comm", "tools", "control", "telemetry")
-_FLAVOUR_FALLBACK_KEY = "observability"
+_FLAVOUR_IGNORED_KEYS = ("agent_comm", "tools", "telemetry", "observability")
 
 
 def _flavour_block_for_deprecation(data: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
@@ -186,26 +185,22 @@ def _flavour_block_for_deprecation(data: dict[str, Any]) -> tuple[dict[str, Any]
 def collect_flavour_key_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
     """One warning per validation, listing leftover Flavour keys that are set.
 
-    ``agent_comm``, ``tools``, ``control`` and ``telemetry`` are accepted and
-    read by nothing. ``observability`` is still the fallback when the agent
-    declares none.
+    ``agent_comm``, ``tools``, ``telemetry`` and ``observability`` are accepted
+    and read by nothing. A leftover ``control`` mapping is unread; a ``control``
+    list of Control refs is live.
     """
     spec, path = _flavour_block_for_deprecation(data)
     if spec is None:
         return []
     ignored = [key for key in _FLAVOUR_IGNORED_KEYS if key in spec]
-    fallback = _FLAVOUR_FALLBACK_KEY in spec
-    if not ignored and not fallback:
+    if isinstance(spec.get("control"), dict):
+        ignored = [*ignored, "control"] if "control" not in ignored else ignored
+    if not ignored:
         return []
-    parts: list[str] = []
-    if ignored:
-        listed = ", ".join(ignored)
-        verb = "is" if len(ignored) == 1 else "are"
-        whom = "it" if len(ignored) == 1 else "them"
-        parts.append(f"{listed} {verb} deprecated and ignored; nothing reads {whom}")
-    if fallback:
-        parts.append("observability is deprecated, still used as a fallback when the agent declares none")
-    return [(path, "; ".join(parts))]
+    listed = ", ".join(ignored)
+    verb = "is" if len(ignored) == 1 else "are"
+    whom = "it" if len(ignored) == 1 else "them"
+    return [(path, f"{listed} {verb} deprecated and ignored; nothing reads {whom}")]
 
 
 def _usage_rows(node: Any, path: str) -> list[tuple[str, dict[str, Any]]]:
@@ -227,6 +222,87 @@ def _usage_rows(node: Any, path: str) -> list[tuple[str, dict[str, Any]]]:
         for i, item in enumerate(node):
             rows.extend(_usage_rows(item, f"{path}[{i}]"))
     return rows
+
+
+# Leftover lists a Control now owns. Still applied when no matching Control names them.
+_AGENT_CONTROL_KEYS = ("observability", "governance")
+# Still enforced as before; the budget governance plugin replaces it.
+_AGENT_BUDGET_KEYS = ("budget",)
+# ControlBinding keys no plugin reads. `retry` and `circuit_breaker` in it are still applied by the engine
+# and move to the infra pipeline in the next release, so they do not warn yet.
+_UNREAD_CONTROL_KEYS = ("budget", "rate_limiter")
+
+
+def _unread_control_keys(control: object, prefix: str) -> list[str]:
+    """``prefix.key`` for each ControlBinding key that is set and read by nothing."""
+    if not isinstance(control, dict):
+        return []
+    merged = ((control.get("$op") or {}).get("merge") or {}) if isinstance(control.get("$op"), dict) else control
+    if not isinstance(merged, dict):
+        return []
+    return [f"{prefix}.{key}" for key in _UNREAD_CONTROL_KEYS if key in merged]
+
+
+def collect_agent_control_keys_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """Warn once when an Agent, MAS, or Agent/MAS Overlay sets a key a ``kind: Control`` owns.
+
+    ``observability`` and ``governance`` constrain a run rather than define the agent, so they
+    belong in a ``kind: Control`` document a Flavour attaches. They still apply when no matching
+    Control names them. Overlay patches that set them target ``kind: Control``. ``budget`` is still
+    enforced; the ``budget`` governance plugin replaces it. Agent ``spec.control`` is deprecated:
+    ``retry`` and ``circuit_breaker`` in it still apply and move to the infra pipeline; ``budget`` and
+    ``rate_limiter`` in it are read by nothing, and warn.
+    Overlay ``spec.control`` (Control file refs) is the attach list, not a leftover.
+    """
+    if not isinstance(data, dict):
+        return []
+    kind = str(data.get("kind") or "").strip().lower()
+    spec = data.get("spec")
+    if not isinstance(spec, dict):
+        return []
+    unread: list[str] = []
+    budget: list[str] = []
+    if kind in {"agent", "mas"}:
+        budget = [f"spec.{key}" for key in _AGENT_BUDGET_KEYS if key in spec]
+        present = [f"spec.{key}" for key in _AGENT_CONTROL_KEYS if key in spec]
+        unread = _unread_control_keys(spec.get("control"), "spec.control")
+        where = "spec"
+    elif kind == "overlay":
+        target = str(((spec.get("target") or {}) if isinstance(spec.get("target"), dict) else {}).get("kind") or "")
+        if target.strip().lower() not in {"agent", "mas"}:
+            return []
+        patch = spec.get("patch") if isinstance(spec.get("patch"), dict) else {}
+        present = [f"spec.patch.{key}" for key in _AGENT_CONTROL_KEYS if key in patch]
+        unread = _unread_control_keys(patch.get("control"), "spec.patch.control")
+        budget = [f"spec.patch.{key}" for key in _AGENT_BUDGET_KEYS if key in patch]
+        for key in _AGENT_CONTROL_KEYS:
+            if key in spec:
+                present.append(f"spec.{key}")
+        where = "spec.patch"
+    else:
+        return []
+    out: list[tuple[str, str]] = []
+    if present:
+        verb, whom = ("is", "it") if len(present) == 1 else ("are", "them")
+        out.append(
+            (
+                where,
+                f"{', '.join(present)} {verb} deprecated and still applied when no matching Control names {whom}: "
+                f"put {whom} in a kind: Control document that a Flavour attaches (spec.control)",
+            )
+        )
+    if budget:
+        out.append(
+            (
+                where,
+                f"{budget[0]} is deprecated and still enforced: "
+                "name the budget plugin in a kind: Control spec.governance instead",
+            )
+        )
+    if unread:
+        verb = "is" if len(unread) == 1 else "are"
+        out.append((where, f"{', '.join(unread)} {verb} deprecated and read by no plugin: remove it"))
+    return out
 
 
 def collect_endpoint_usage_deprecation(

@@ -75,11 +75,7 @@ class MasRuntimePyKernelBackend:
                     agent_manifest = resolve_manifest_tool_refs(agent_manifest, manifest_dir)
 
         parent_model = None
-        mas_config = (
-            bind.composed_application.config
-            if bind.composed_application is not None
-            else None
-        )
+        mas_config = bind.composed_application.config if bind.composed_application is not None else None
         if isinstance(mas_config, dict):
             from mas.runtime.spec.model_ref import primary_model_string
 
@@ -97,6 +93,7 @@ class MasRuntimePyKernelBackend:
                 experiment_model_slots=bind.experiment_model_slots,
                 parent_spec=mas_config if isinstance(mas_config, dict) else None,
                 hitl_contract=hitl_contract_for_mode(bind.hitl_mode),
+                flavour_spec=bind.flavour_spec,
             ),
         )
         instance.driver.agent_id = agent_id

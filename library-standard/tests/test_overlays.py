@@ -10,7 +10,9 @@ import pytest
 import yaml
 
 OVERLAYS = Path(__file__).resolve().parents[1] / "src" / "mas" / "library" / "standard" / "overlays"
+CONTROLS = OVERLAYS.parent / "controls"
 INDEX = OVERLAYS / "README.md"
+_CONSTRAINT = ("observability", "governance")
 
 
 def _overlay_yaml_files() -> list[Path]:
@@ -29,83 +31,133 @@ def test_index_lists_every_overlay_file() -> None:
         assert str(name) in readme, f"{name} missing from overlays/README.md"
 
 
-def test_every_overlay_is_mas_v1_agent_overlay() -> None:
+def test_overlay_dir_files_are_overlay_or_control() -> None:
     for path in _overlay_yaml_files():
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-        assert doc["apiVersion"] == "mas/v1"
-        assert doc["kind"] == "Overlay"
-        assert (doc.get("spec") or {}).get("target", {}).get("kind") == "Agent"
-        assert (doc.get("spec") or {}).get("patch")
+        kind = doc.get("kind")
+        assert kind in {"Overlay", "Control"}, path.name
+        if kind == "Overlay":
+            assert doc["apiVersion"] == "mas/v1"
+            kind_target = (doc.get("spec") or {}).get("target", {}).get("kind")
+            assert kind_target in {"Agent", "Control"}, path.name
+            patch = (doc.get("spec") or {}).get("patch") or {}
+            assert patch
+            if kind_target == "Agent":
+                for key in _CONSTRAINT:
+                    assert key not in patch, path.name
+            else:
+                assert set(patch) <= {"observability", "governance"}
+        else:
+            assert doc["apiVersion"] == "control/v1"
 
 
-def test_with_hardened_appends_gov_no_undeclared_tool() -> None:
-    doc = yaml.safe_load((OVERLAYS / "with-hardened.yaml").read_text(encoding="utf-8"))
-    add = doc["spec"]["patch"]["governance"]["$op"]["add"]
-    names = [g if isinstance(g, str) else next(iter(g)) for g in add]
-    assert "gov_no_undeclared_tool" in names
-    assert "retry_on_error" in names
-    retry = next(item for item in add if isinstance(item, dict) and "retry_on_error" in item)
-    assert retry["retry_on_error"]["error_recovery_plugin"] == "retry_on_error"
-    assert retry["retry_on_error"]["error_policy"]["transient"] == "retry"
-    control = doc["spec"]["patch"]["control"]["$op"]["merge"]
-    assert control["retry"]["llm"]["max_attempts"] == 4
-    assert control["retry"]["tools"]["require_idempotent"] is True
-    assert control["circuit_breaker"]["on"] == ["unavailable"]
+def test_with_hardened_control_sets_governance_and_retry() -> None:
+    doc = yaml.safe_load((CONTROLS / "with-hardened.yaml").read_text(encoding="utf-8"))
+    names = [g if isinstance(g, str) else next(iter(g)) for g in doc["spec"]["governance"]]
+    assert names == ["gov_no_undeclared_tool", "budget", "retry_on_error"]
+    retry_on_error = next(
+        item for item in doc["spec"]["governance"] if isinstance(item, dict) and "retry_on_error" in item
+    )
+    assert retry_on_error["retry_on_error"]["error_recovery_plugin"] == "retry_on_error"
+    assert retry_on_error["retry_on_error"]["error_policy"]["transient"] == "retry"
+    budget = next(item for item in doc["spec"]["governance"] if isinstance(item, dict) and "budget" in item)
+    assert budget["budget"] == {"max_llm_calls": 50, "max_tool_calls": 100}
+    assert set(doc["spec"]) == {"governance"}
 
 
 def test_observability_native_sets_events_jsonl() -> None:
-    doc = yaml.safe_load((OVERLAYS / "observability-native.yaml").read_text(encoding="utf-8"))
-    obs = doc["spec"]["patch"]["observability"]
-    native = next(item for item in obs if isinstance(item, dict) and "native" in item)
-    assert native["native"]["path"] == "traces/events.jsonl"
+    doc = yaml.safe_load((CONTROLS / "observability-native.yaml").read_text(encoding="utf-8"))
+    native = next(
+        item for item in doc["spec"]["observability"] if isinstance(item, dict) and "mas.observability.native" in item
+    )
+    assert native["mas.observability.native"]["path"] == "traces/events.jsonl"
 
 
-def test_hardened_overlay_validates() -> None:
+def test_hardened_control_validates() -> None:
     pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_file
 
-    result = validate_file(OVERLAYS / "with-hardened.yaml", kind="overlay")
-    assert result.ok, result.issues
+    control = validate_file(CONTROLS / "with-hardened.yaml", kind="control")
+    assert control.ok, control.issues
 
 
-def test_pkg_refs_resolve_to_overlay_files() -> None:
+def test_pkg_refs_resolve_to_overlay_and_control_files() -> None:
     from mas.runtime.package_refs import resolve_path_ref
 
-    for name in ("with-hardened.yaml", "observability-native.yaml", "production-memory.yaml"):
-        path = resolve_path_ref(f"pkg://mas.library.standard/overlays/{name}", Path.cwd())
+    for directory, name in (
+        ("overlays", "production-memory.yaml"),
+        ("controls", "with-hardened.yaml"),
+        ("controls", "observability-native.yaml"),
+        ("controls", "openclaw.yaml"),
+    ):
+        path = resolve_path_ref(f"pkg://mas.library.standard/{directory}/{name}", Path.cwd())
         assert path.is_file(), path
         assert path.name == name
 
 
-def test_hardened_stacks_on_existing_governance() -> None:
-    from mas.ctl.overlay.merge import merge_overlay
+def test_the_hardened_control_replaces_agent_governance() -> None:
+    from mas.ctl.session.flavour_control import (
+        apply_flavour_controls,
+        attach_controls,
+        control_lists_for_agent,
+        control_row_from_path,
+    )
 
-    overlay = yaml.safe_load((OVERLAYS / "with-hardened.yaml").read_text(encoding="utf-8"))
-    base = {
+    merged = {
         "apiVersion": "mas/v1",
         "kind": "Agent",
         "metadata": {"name": "telemetry"},
         "spec": {"governance": ["sample_governance"], "tools": ["get_metrics"]},
     }
-    merged = merge_overlay(base, overlay)
-    names = [g if isinstance(g, str) else next(iter(g)) for g in merged["spec"]["governance"]]
-    assert names == ["sample_governance", "gov_no_undeclared_tool", "retry_on_error"]
-    assert merged["spec"]["control"]["circuit_breaker"]["failure_threshold"] == 5
-    assert merged["spec"]["design_pattern"]["params"]["max_steps"] == 512
+    flavour: dict = {}
+    row = control_row_from_path(CONTROLS / "with-hardened.yaml")
+    attach_controls(flavour, [row])
+    applied = apply_flavour_controls(merged, flavour, agent_id="telemetry", entry_id="telemetry", warn=False)
+    assert applied["spec"]["governance"] == ["sample_governance"]
+    lists = control_lists_for_agent([row], agent_id="telemetry", entry_id="telemetry")
+    names = [g if isinstance(g, str) else next(iter(g)) for g in lists["governance"]]
+    assert names == ["budget", "gov_no_undeclared_tool", "retry_on_error"]
 
 
-def test_hardened_then_native_keeps_both_patches() -> None:
-    from mas.ctl.overlay.merge import merge_overlay
+def test_hardened_then_native_keeps_both() -> None:
+    from mas.ctl.session.flavour_control import (
+        apply_flavour_controls,
+        attach_controls,
+        control_lists_for_agent,
+        control_row_from_path,
+    )
+    from mas.ctl.session.manifest_config import observability_config_from_manifest
 
-    hardened = yaml.safe_load((OVERLAYS / "with-hardened.yaml").read_text(encoding="utf-8"))
-    native = yaml.safe_load((OVERLAYS / "observability-native.yaml").read_text(encoding="utf-8"))
-    base = {
+    merged = {
         "apiVersion": "mas/v1",
         "kind": "Agent",
         "metadata": {"name": "telemetry"},
         "spec": {"governance": ["sample_governance"]},
     }
-    merged = merge_overlay(merge_overlay(base, hardened), native)
-    gov = [g if isinstance(g, str) else next(iter(g)) for g in merged["spec"]["governance"]]
+    flavour: dict = {}
+    rows = [control_row_from_path(CONTROLS / name) for name in ("with-hardened.yaml", "observability-native.yaml")]
+    attach_controls(flavour, rows)
+    applied = apply_flavour_controls(merged, flavour, agent_id="telemetry", entry_id="telemetry", warn=False)
+    assert applied["spec"]["governance"] == ["sample_governance"]
+    assert "observability" not in applied["spec"]
+    lists = control_lists_for_agent(rows, agent_id="telemetry", entry_id="telemetry")
+    gov = [g if isinstance(g, str) else next(iter(g)) for g in lists["governance"]]
     assert "gov_no_undeclared_tool" in gov
-    assert merged["spec"]["observability"]
+    native = lists["observability"][0]["mas.observability.native"]
+    assert native["path"] == "traces/events.jsonl"
+    cfg = observability_config_from_manifest(applied, flavour_spec=flavour, agent_id="telemetry")
+    assert cfg.plugins == ["native"]
+
+
+def test_controls_dir_holds_only_controls_that_name_no_absolute_path() -> None:
+    pytest.importorskip("jsonschema")
+    from mas.ctl.session.flavour_control import absolute_path_findings
+    from mas.ctl.validate import validate_file
+
+    files = sorted(CONTROLS.glob("*.yaml"))
+    assert {path.name for path in files} == {"observability-native.yaml", "openclaw.yaml", "with-hardened.yaml"}
+    for path in files:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert doc["kind"] == "Control", path.name
+        assert absolute_path_findings(doc) == [], path.name
+        assert validate_file(path, kind="control").ok, path.name

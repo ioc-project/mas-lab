@@ -1,0 +1,23 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Guardrail for with-vector-memory-guardrail: block Shadowmere.
+apiVersion: control/v1
+kind: Control
+metadata:
+  name: with-vector-memory-guardrail
+spec:
+  governance:
+  - sample_governance:
+      policies:
+      - name: forbidden-destination
+        trigger:
+          'on': tool_input
+          tool: '*'
+          condition: arguments.destination == "Shadowmere"
+          evaluation: deterministic
+        action: block
+        params:
+          message: 'Restricted destination: Shadowmere is not available in the Arborian
+            Network booking system.
+
+            '

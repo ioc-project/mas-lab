@@ -20,14 +20,15 @@ approves the call.
 Governance means rules that inspect a proposed operation before or after it
 crosses the agent boundary. HITL (human in the loop) means a rule pauses the
 operation and asks a person. An overlay is a small YAML file merged on top
-of a manifest with `-o`. All files are in `docs/tutorials/14-governance-hitl/`:
+of a manifest with `-o`. A Control (`kind: Control`) names the plugins a run
+applies, and `--control` attaches it. All files are in `docs/tutorials/14-governance-hitl/`:
 
 | File | Step | Purpose |
 | --- | --- | --- |
 | `agent.yaml` | 1 | Base agent |
 | `overlays/tools.yaml` | 2 | Adds the calculator |
-| `overlays/governance-interactive.yaml` | 3 | Asks an operator |
-| `overlays/governance-auto-approve.yaml`, `governance-auto-deny.yaml` | 5 | Decide without a person |
+| `controls/governance-interactive.yaml` | 3 | Asks an operator |
+| `controls/governance-auto-approve.yaml`, `governance-auto-deny.yaml` | 5 | Decide without a person |
 | `overlays/agent-asks-user.yaml` | 7 | Agent asks a question |
 
 The runtime enforces the rule. The agent cannot bypass it by changing its
@@ -61,7 +62,7 @@ cannot call a calculator.
 
 The overlay adds the calculator from the installed `library-samples`
 package (the `samples:` prefix), so no relative path is needed. `$op: add`
-appends to existing tools; Step 3 uses it for governance rules.
+appends to existing tools. Step 3 names the same governance plugin in a Control.
 
 ```yaml
 spec:
@@ -84,16 +85,17 @@ requires approval yet.
 ## Step 3 — Require an operator before the tool runs
 
 ```yaml
+apiVersion: control/v1
+kind: Control
+metadata:
+  name: budget-governance-interactive
 spec:
-  patch:
-    governance:
-      $op:
-        add:
-          - sample_governance:
-              hitl_on_tool: true
-              hitl_on_tool_result: false
-              hitl_once_per_turn: false
-              hitl_mode: interactive
+  governance:
+  - sample_governance:
+      hitl_on_tool: true
+      hitl_on_tool_result: false
+      hitl_once_per_turn: false
+      hitl_mode: interactive
 ```
 
 `hitl_on_tool: true` asks a human before every tool call.
@@ -101,7 +103,7 @@ spec:
 ```bash
 mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
   -o docs/tutorials/14-governance-hitl/overlays/tools.yaml \
-  -o docs/tutorials/14-governance-hitl/overlays/governance-interactive.yaml \
+  --control docs/tutorials/14-governance-hitl/controls/governance-interactive.yaml \
   --trace -i
 ```
 
@@ -124,7 +126,7 @@ For the curses terminal interface, run the same manifest and overlays with
 ```bash
 mas-ctl tui docs/tutorials/14-governance-hitl/agent.yaml \
   -o docs/tutorials/14-governance-hitl/overlays/tools.yaml \
-  -o docs/tutorials/14-governance-hitl/overlays/governance-interactive.yaml
+  --control docs/tutorials/14-governance-hitl/controls/governance-interactive.yaml
 ```
 
 ## Step 4 — Review results too
@@ -136,20 +138,20 @@ runs and after it returns. This tutorial leaves it off.
 ## Step 5 — Use explicit decisions in batch and CI
 
 A job with no terminal must state how HITL requests are resolved. These
-overlays use the same rule with a different `hitl_mode`. Do not use the
-interactive overlay without a terminal.
+Controls use the same rule with a different `hitl_mode`. Do not use the
+interactive Control without a terminal.
 
 ```bash
 # auto-approve: exercises the full tool path
 mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
   -o docs/tutorials/14-governance-hitl/overlays/tools.yaml \
-  -o docs/tutorials/14-governance-hitl/overlays/governance-auto-approve.yaml \
+  --control docs/tutorials/14-governance-hitl/controls/governance-auto-approve.yaml \
   -q "Calculate 125 * 3 + 42."
 
 # auto-deny: proves a protected operation cannot run silently
 mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
   -o docs/tutorials/14-governance-hitl/overlays/tools.yaml \
-  -o docs/tutorials/14-governance-hitl/overlays/governance-auto-deny.yaml \
+  --control docs/tutorials/14-governance-hitl/controls/governance-auto-deny.yaml \
   -q "Calculate 125 * 3 + 42."
 ```
 
@@ -160,7 +162,7 @@ denial, not `417`:
 ```bash
 mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
   -o docs/tutorials/14-governance-hitl/overlays/tools.yaml \
-  -o docs/tutorials/14-governance-hitl/overlays/governance-auto-deny.yaml \
+  --control docs/tutorials/14-governance-hitl/controls/governance-auto-deny.yaml \
   --trace -q "Calculate 125 * 3 + 42."
 ```
 
@@ -255,7 +257,7 @@ passes to the next rule, and `BLOCK` stops at once.
 1. Governance rules, not prompts, decide whether a tool runs.
    `hitl_on_tool` pauses before the call and `hitl_on_tool_result` before the
    model sees the result.
-2. Batch and CI runs need an explicit `auto-approve` or `auto-deny` overlay.
+2. Batch and CI runs need an explicit `auto-approve` or `auto-deny` Control.
    `BLOCK` / auto-deny stops the tool and ends the turn with the operator
    denial. `SKIP` with steering lets the model continue from that text. The
    decision, operator, and steering land in `traces/events.jsonl`.
@@ -264,9 +266,9 @@ passes to the next rule, and `BLOCK` stops at once.
 
 ## Troubleshooting
 
-- **No HITL prompt.** Check that both the tool and governance overlays and
+- **No HITL prompt.** Check that the tool overlay, the governance Control, and
   `-i` are present. The prompt appears only after the model asks for a tool.
-- **A non-interactive command blocks or exits.** Use a Step 5 overlay.
+- **A non-interactive command blocks or exits.** Use a Step 5 Control.
 - **You still see 417 after a denial.** `BLOCK` / auto-deny ends the turn
   with the operator denial. `417` means the call was allowed, you used
   `SKIP`, or a cached allow was replayed. Use `--no-cache-read`.

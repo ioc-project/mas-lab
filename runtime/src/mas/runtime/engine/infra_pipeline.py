@@ -263,9 +263,7 @@ def apply_middleware(engine: Any, spec: dict[str, Any]) -> Any:
     plugin_cls = variant.load_class()
     wrap = getattr(plugin_cls, "wrap", None)
     if not callable(wrap):
-        raise TypeError(
-            f"infra middleware {mid!r} must define a wrap(inner, params, *, call_kinds=) classmethod"
-        )
+        raise TypeError(f"infra middleware {mid!r} must define a wrap(inner, params, *, call_kinds=) classmethod")
     kinds = middleware_call_kinds(spec)
     try:
         sig = inspect.signature(wrap)

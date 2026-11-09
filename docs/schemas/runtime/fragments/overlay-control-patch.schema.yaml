@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+title: OverlayControlPatch
+# Structural (type-shape) validation ONLY for `mas-ctl validate <overlay.yaml>`.
+# Merge BEHAVIOR is read from control.schema.yaml x-merge annotations.
+type: object
+additionalProperties: false
+patternProperties:
+  "^x-": {}
+properties:
+  observability:
+    oneOf:
+      - type: "null"
+      - $ref: "./overlay-collection-ops-governance.schema.yaml"
+  governance:
+    oneOf:
+      - type: "null"
+      - $ref: "./overlay-collection-ops-governance.schema.yaml"

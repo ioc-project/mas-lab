@@ -7,9 +7,9 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
+from mas.runtime.spec.checkpoint import parse_checkpoint_policy
 from mas.runtime.spec.gov import GovernanceBinding, build_kernel_config, parse_gov_spec
 from mas.runtime.spec.obs import parse_obs_spec
-from mas.runtime.spec.checkpoint import parse_checkpoint_policy
 from mas.runtime.spec.plugin_binding import plugin_binding_id, plugin_binding_params
 
 if TYPE_CHECKING:
@@ -31,9 +31,7 @@ def _resolve_pattern_plugin_id(spec: dict[str, Any]) -> str:
     if info is None:
         import logging as _logging
 
-        _logging.getLogger(__name__).warning(
-            "design_pattern %r not found in registry; passing through to kernel", name
-        )
+        _logging.getLogger(__name__).warning("design_pattern %r not found in registry; passing through to kernel", name)
     return name
 
 
@@ -66,9 +64,6 @@ def parse_agent_spec(
     - ``KernelConfig`` built from governance spec + design pattern
     - ``ObservabilityBinding | None`` (None when observability is absent/empty)
     """
-    from mas.runtime.spec.runtime_plugins import attach_runtime_plugins, peel_legacy_debug_script
-
-    peel_legacy_debug_script(spec)
     gov_raw = spec.get("governance")
     obs_raw = spec.get("observability")
     parse_checkpoint_policy(spec.get("checkpoint"))
@@ -79,12 +74,6 @@ def parse_agent_spec(
         gov_binding,
         pattern_plugin_id=pattern_plugin_id,
         agent_spec=spec,
-        manifest_dir=manifest_dir,
-    )
-    kernel_config = attach_runtime_plugins(
-        kernel_config,
-        spec,
-        enabled_refs=[],
         manifest_dir=manifest_dir,
     )
     kernel_config = _apply_design_pattern_params(spec, kernel_config)

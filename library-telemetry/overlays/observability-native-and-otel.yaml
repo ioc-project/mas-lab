@@ -1,19 +1,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 # Keep native events.jsonl and add live OTel JSONL (replay/compare path).
-apiVersion: mas/v1
-kind: Overlay
+apiVersion: control/v1
+kind: Control
 metadata:
   name: observability-native-and-otel
 spec:
-  target:
-    kind: Agent
-  patch:
-    observability:
-      $op:
-        replace:
-          - native:
-              path: traces/events.jsonl
-          - otel:
-              output_path: traces/otel_sdk_spans.jsonl
-              converter_profile: observe_sdk
+  observability:
+  - mas.observability.native:
+      path: traces/events.jsonl
+  - otel:
+      output_path: traces/otel_sdk_spans.jsonl
+      converter_profile: observe_sdk

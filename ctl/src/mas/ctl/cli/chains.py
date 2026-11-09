@@ -17,15 +17,19 @@ from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.executor.mas_session import open_single_agent_chains
 from mas.ctl.executor.stacks import ChainHandles, ChainStartError
 from mas.ctl.infra.bind import BindError, bind_session
+from mas.ctl.session.flavour_control import ControlError
 
 
 def bind_or_exit(
-    resolved: ResolvedInfra | None, flavour_spec: dict[str, Any] | None, *, agent_id: str
+    resolved: ResolvedInfra | None,
+    flavour_spec: dict[str, Any] | None,
+    *,
+    agent_id: str,
 ) -> ResolvedInfra:
     """``resolved`` with the Flavour applied to the one agent; a bad ``bind`` exits with one line."""
     try:
         return bind_session(resolved, flavour_spec, agent_ids=[agent_id])
-    except BindError as exc:
+    except (BindError, ControlError) as exc:
         click.echo(f"error: {exc}", err=True)
         raise SystemExit(1) from None
 

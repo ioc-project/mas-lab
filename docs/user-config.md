@@ -55,11 +55,6 @@ say where the LLM endpoint and tool servers are) come from workspace refs,
 resolution. See [runtime/docs/plugin-aliases.md](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/plugin-aliases.md)
 for the discovery order and name mapping.
 
-`plugins:` lists **runtime** plugins to add (gdb, checkpoint stores). It is off
-unless you uncomment it. Observability and governance stay in the agent spec.
-See the
-[config.yaml reference](references/config.yaml.md#plugins-workspace-overlays).
-
 **Config file names**
 
 | Location | File | Role |
@@ -186,7 +181,7 @@ ref overrides log a warning when applied.
 | `MAS_DATA_ROOT` / `MAS_LAB_DATA` | Data root (derived from `paths.labs_dir`) |
 | `MAS_TRACE_CACHE`, `MAS_DATA_CACHE` | Trace / pipeline step cache (use `--trace-cache` / `--data-cache`) |
 | `MAS_LLM_CACHE`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | Built-in engine cache — [llm-cache.md](manifests/llm-cache.md) |
-| `MAS_LLM_HTTP_RETRIES` | Extra LLM HTTP retries (`attempts = retries + 1`). Prefer `spec.control.retry.llm` — [reliability.md](references/reliability.md) |
+| `MAS_LLM_HTTP_RETRIES` | Extra LLM HTTP retries (`attempts = retries + 1`). Prefer Agent `spec.control.retry.llm` — [reliability.md](references/reliability.md) |
 | `MAS_LLM_HTTP_RETRY_BACKOFF` | LLM HTTP base backoff seconds (also disables jitter) |
 | `MAS_HOME`, `MAS_CONTROLLER_SOCKET` | Controller data root / socket |
 

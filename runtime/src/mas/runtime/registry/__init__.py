@@ -5,10 +5,15 @@
 from __future__ import annotations
 
 import importlib
+import inspect
+import logging
 import sys
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -100,9 +105,7 @@ class PluginUnavailable(RuntimeError):
         self.missing = list(missing)
         self.extra = extra
         hint = f"mas-ctl plugin enable {urn}" if extra else f"pip install {' '.join(missing)}"
-        super().__init__(
-            f"plugin {urn!r} is unavailable: missing {', '.join(missing)} ({hint})"
-        )
+        super().__init__(f"plugin {urn!r} is unavailable: missing {', '.join(missing)} ({hint})")
 
 
 @dataclass
@@ -121,10 +124,7 @@ class PluginEntry:
     def resolve(self, variant: str = "") -> VariantInfo:
         key = variant or self.default_variant
         if key not in self.variants:
-            raise ValueError(
-                f"Unknown variant {key!r} for {self.urn}. "
-                f"Available: {list(self.variants)}"
-            )
+            raise ValueError(f"Unknown variant {key!r} for {self.urn}. Available: {list(self.variants)}")
         info = self.variants[key]
         missing = info.missing_requires()
         if missing:
@@ -163,6 +163,8 @@ class PluginRegistry:
     def __init__(self) -> None:
         self._entries: dict[str, PluginEntry] = {}
         self._aliases: dict[str, str] = {}
+        self._deprecated: dict[str, str] = {}
+        self._warned: set[str] = set()
         self._scan_paths: list[Path] = []
         self._known_types: set[str] = set()
         self._spec_defaults: dict[str, str] = {}
@@ -177,6 +179,15 @@ class PluginRegistry:
             if inferred_type:
                 entry.attributes["plugin_type"] = inferred_type
                 self.register_type(inferred_type)
+        plugin_type_now = self._entry_type(entry)
+        for shortcut in entry.shortcuts:
+            if "." in str(shortcut):
+                raise ValueError(f"plugin {entry.urn!r}: a name is a single token without '.', got {shortcut!r}")
+            for other in self._entries_for_type(plugin_type_now):
+                if other.urn != entry.urn and str(shortcut).lower() in {str(sc).lower() for sc in other.shortcuts}:
+                    raise ValueError(
+                        f"two {plugin_type_now} plugins answer to {shortcut!r}: {other.urn} and {entry.urn}"
+                    )
         previous = self._entries.get(entry.urn)
         if previous is not None:
             old_type = self._entry_type(previous)
@@ -236,12 +247,24 @@ class PluginRegistry:
     def set_default(self, spec_key: str, plugin_id: str) -> None:
         self._spec_defaults[_canonical_type_name(spec_key)] = str(plugin_id)
 
-    def register_alias(self, alias: str, urn: str) -> None:
+    def register_alias(self, alias: str, urn: str, *, deprecated: bool = False) -> None:
+        """Make *alias* resolve to *urn*. A deprecated alias still resolves, with a one-time warning."""
         key = str(alias).strip().lower()
         self._aliases[key] = urn
+        if deprecated:
+            self._deprecated[key] = urn
+            return
         entry = self._entries.get(urn)
         if entry is not None and key not in {str(sc).strip().lower() for sc in entry.shortcuts}:
             entry.shortcuts.append(alias)
+
+    def _note_alias_use(self, key: str) -> None:
+        """Warn once per process when a deprecated alias is the way a plugin was named."""
+        if key in self._deprecated and key not in self._warned:
+            self._warned.add(key)
+            target = self._entries.get(self._deprecated[key])
+            names = ", ".join(sorted(str(sc) for sc in target.shortcuts)) if target else self._deprecated[key]
+            _logger.warning("plugin alias %r is deprecated: use %s (%s)", key, names, self._deprecated[key])
 
     def validate_aliases(self) -> None:
         """Raise if any registered alias points at an unregistered URN.
@@ -262,8 +285,7 @@ class PluginRegistry:
         if dangling:
             details = ", ".join(f"{alias!r} -> {urn!r}" for alias, urn in sorted(dangling.items()))
             raise ValueError(
-                f"Alias table has {len(dangling)} alias(es) pointing at unregistered "
-                f"plugin URNs: {details}"
+                f"Alias table has {len(dangling)} alias(es) pointing at unregistered plugin URNs: {details}"
             )
 
     # ── Resolution (manifest spec bindings) ──────────────────────────────
@@ -293,12 +315,7 @@ class PluginRegistry:
     @staticmethod
     def _matches_name(entry: PluginEntry, name: str) -> bool:
         key = str(name).strip().lower()
-        if key == entry.urn.lower():
-            return True
-        if key in {str(sc).lower() for sc in entry.shortcuts}:
-            return True
-        key_token = key.replace("-", "_")
-        return entry.urn.lower().endswith(f".{key_token}")
+        return key == entry.urn.lower() or key in {str(sc).lower() for sc in entry.shortcuts}
 
     def resolve_spec(
         self,
@@ -310,10 +327,7 @@ class PluginRegistry:
         name = self.binding_plugin_id(binding) or self.default_for(spec_key)
         info = self.resolve_by_type(plugin_type, name)
         if info is None:
-            raise KeyError(
-                f"no plugin registered for spec.{spec_key} "
-                f"type/ref={name!r}"
-            )
+            raise KeyError(f"no plugin registered for spec.{spec_key} type/ref={name!r}")
         return info
 
     def instantiate_by_type(self, plugin_type: str, name: str, *args: Any, **kwargs: Any) -> Any:
@@ -354,9 +368,7 @@ class PluginRegistry:
         try:
             return cls(**ctor_params)
         except TypeError as exc:
-            raise TypeError(
-                f"PluginRegistry.create({spec_key!r}): {cls.__name__}(**{ctor_params!r}) failed"
-            ) from exc
+            raise TypeError(f"PluginRegistry.create({spec_key!r}): {cls.__name__}(**{ctor_params!r}) failed") from exc
 
     def resolve(self, name: str, variant: str = "") -> VariantInfo | None:
         key = name.lower()
@@ -364,6 +376,7 @@ class PluginRegistry:
             return self._entries[key].resolve(variant)
         urn = self._aliases.get(key)
         if urn and urn in self._entries:
+            self._note_alias_use(key)
             return self._entries[urn].resolve(variant)
         return None
 
@@ -372,6 +385,7 @@ class PluginRegistry:
         if urn:
             entry = self._entries.get(urn)
             if entry and self._entry_type(entry) == _canonical_type_name(plugin_type):
+                self._note_alias_use(name.lower())
                 return entry.resolve()
         for entry in self._entries_for_type(plugin_type):
             if self._matches_name(entry, name):
@@ -407,6 +421,24 @@ class PluginRegistry:
             return key
         return self._aliases.get(key)
 
+    def entries_named(self, name: str, plugin_types: str | Iterable[str] | None = None) -> list[PluginEntry]:
+        """Every registered plugin whose URN, shortcut or alias is exactly *name*.
+
+        With *plugin_types*, only entries registered under one of those types: the type a list asks for
+        says which ``native`` is meant. There is no suffix or prefix matching.
+        """
+        key = str(name).strip().lower()
+        aliased = self._aliases.get(key)
+        hits = [e for e in self.all_entries() if self._matches_name(e, name) or e.urn == aliased]
+        if plugin_types is not None:
+            wanted = {
+                _canonical_type_name(t) for t in ([plugin_types] if isinstance(plugin_types, str) else plugin_types)
+            }
+            hits = [e for e in hits if self._entry_type(e) in wanted]
+        if hits and aliased and key in self._deprecated:
+            self._note_alias_use(key)
+        return hits
+
     def get_entry(self, urn: str) -> PluginEntry | None:
         """Look up a :class:`PluginEntry` by URN or alias, without resolving a variant.
 
@@ -428,11 +460,7 @@ class PluginRegistry:
         for entry in self._entries_for_type(plugin_type):
             names.add(entry.urn.rsplit(".", 1)[-1])
             names.update(str(shortcut).strip().lower() for shortcut in entry.shortcuts if str(shortcut).strip())
-            names.update(
-                alias
-                for alias, target in self._aliases.items()
-                if target == entry.urn
-            )
+            names.update(alias for alias, target in self._aliases.items() if target == entry.urn)
         return sorted(names)
 
     # ── Query (UI / CLI / lab delegation) ────────────────────────────────
@@ -505,6 +533,39 @@ def get_registry() -> PluginRegistry:
     return _instance
 
 
+def construct_plugin(plugin_cls: type, params: Mapping[str, Any] | None = None) -> Any:
+    """Instantiate *plugin_cls*, allowing only its constructor field names.
+
+    A plugin that takes ``**kwargs`` still receives the remaining keys. YAML
+    ``on:`` parsed as boolean ``True`` is the ``on`` field.
+    """
+    data = dict(params or {})
+    data.pop("manifest_dir", None)
+    if True in data and "on" not in data:
+        data["on"] = data.pop(True)
+    try:
+        sig = inspect.signature(plugin_cls)
+    except (TypeError, ValueError):
+        return plugin_cls(**data)
+    named: set[str] = set()
+    takes_raw = False
+    for param in sig.parameters.values():
+        if param.name == "self":
+            continue
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            takes_raw = True
+            continue
+        if param.kind is inspect.Parameter.VAR_POSITIONAL:
+            continue
+        named.add(param.name)
+    if not takes_raw:
+        unknown = set(data) - named
+        if unknown:
+            raise TypeError(f"unknown field {sorted(str(k) for k in unknown)[0]!r}")
+        data = {key: value for key, value in data.items() if key in named}
+    return plugin_cls(**data)
+
+
 def add_plugin_path(path: str) -> None:
     get_registry().add_scan_path(path)
 
@@ -547,6 +608,7 @@ __all__ = [
     "PluginUnavailable",
     "VariantInfo",
     "add_plugin_path",
+    "construct_plugin",
     "get_registry",
     "register_manifest_data",
     "register_manifest_file",
@@ -555,4 +617,4 @@ __all__ = [
 ]
 
 
-from . import bootstrap as _bootstrap
+from . import bootstrap as _bootstrap  # noqa: E402

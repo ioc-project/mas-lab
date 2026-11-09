@@ -1,10 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-
-from __future__ import annotations
-
 """Compose MAS manifests to an inlined kind:MAS tree and validate recursively."""
 
+from __future__ import annotations
 
 import copy
 import logging
@@ -31,11 +29,7 @@ def _is_inline_agent(entry: dict[str, Any]) -> bool:
 
 def _load_agent_entry(entry: dict[str, Any], *, mas_dir: Path) -> tuple[str, dict[str, Any]]:
     if _is_inline_agent(entry):
-        aid = str(
-            entry.get("metadata", {}).get("name")
-            or entry.get("id")
-            or "agent"
-        )
+        aid = str(entry.get("metadata", {}).get("name") or entry.get("id") or "agent")
         doc = copy.deepcopy(entry)
         return aid, doc
 
@@ -97,7 +91,7 @@ def materialize_composed_mas_tree(
     Bench execution still uses :func:`load_stacked_config` for the runtime dict shape.
     """
     from mas.ctl.compose.runner import ComposeRequest, compose_run
-    from mas.runtime.spec.source import load_yaml_mapping, resolve_yaml_path
+    from mas.runtime.spec.source import load_yaml_mapping
 
     if not mas_yaml.is_file():
         raise FileNotFoundError(f"mas.yaml not found: {mas_yaml}")
@@ -135,16 +129,33 @@ def materialize_composed_mas_tree(
         from mas.ctl.manifest.mas_agent_merge import apply_agency_entry_overlay
 
         if not _is_inline_agent(entry):
-            doc = apply_agency_entry_overlay(
-                doc, entry, agent_patch=agent_patches.get(aid)
-            )
+            doc = apply_agency_entry_overlay(doc, entry, agent_patch=agent_patches.get(aid))
         agents_by_id[aid] = doc
 
     for overlay_path in overlay_paths:
         overlay = load_yaml_mapping(overlay_path)
+        if str(overlay.get("kind") or "") == "Control":
+            continue
         patch = (overlay.get("spec") or {}).get("patch") or {}
         if isinstance(patch, dict):
             _apply_patch_to_agents(agents_by_id, patch)
+
+    from mas.ctl.infra.identities import declared_entry_id, peers_of
+    from mas.ctl.session.flavour_control import apply_overlay_controls_to_manifest, control_files_from_paths
+
+    ids = list(agents_by_id)
+    entry = declared_entry_id(mas)
+    delegates = list(peers_of(mas, ids).get(entry) or [])
+    control_rows = control_files_from_paths(overlay_paths)
+    for aid in ids:
+        agents_by_id[aid] = apply_overlay_controls_to_manifest(
+            agents_by_id[aid],
+            (),
+            agent_id=aid,
+            entry_id=entry,
+            delegate_ids=delegates,
+            control_rows=control_rows,
+        )
 
     spec = mas.setdefault("spec", {})
     agency = spec.setdefault("agency", {})
@@ -233,22 +244,14 @@ def validate_composed_mas_tree(mas_doc: dict[str, Any], *, label: str, mas_dir: 
         violations.append(f"{label}: composed MAS has no agents (cardinality 1..N)")
         return violations
 
-    agent_ids = {
-        str(a.get("metadata", {}).get("name") or a.get("id") or "")
-        for a in agents
-        if isinstance(a, dict)
-    }
+    agent_ids = {str(a.get("metadata", {}).get("name") or a.get("id") or "") for a in agents if isinstance(a, dict)}
     agent_ids.discard("")
     entry = (spec.get("workflow") or {}).get("entry")
     if entry and str(entry) not in agent_ids:
-        violations.append(
-            f"{label}: workflow entry {entry!r} not in composed agents {sorted(agent_ids)!r}"
-        )
+        violations.append(f"{label}: workflow entry {entry!r} not in composed agents {sorted(agent_ids)!r}")
     for node in (spec.get("workflow") or {}).get("nodes") or []:
         if isinstance(node, dict) and node.get("id") and str(node["id"]) not in agent_ids:
-            violations.append(
-                f"{label}: workflow node {node['id']!r} has no matching composed agent"
-            )
+            violations.append(f"{label}: workflow node {node['id']!r} has no matching composed agent")
 
     for entry in agents:
         if not isinstance(entry, dict):
@@ -257,9 +260,7 @@ def validate_composed_mas_tree(mas_doc: dict[str, Any], *, label: str, mas_dir: 
             violations.append(f"{label}: agency agent is not inlined after compose: {entry!r}")
             continue
         agent_id = str(entry.get("metadata", {}).get("name") or "?")
-        agent_base = agent_bases.get(agent_id) or Path(
-            str(entry.get("_validation_base_dir") or mas_dir)
-        )
+        agent_base = agent_bases.get(agent_id) or Path(str(entry.get("_validation_base_dir") or mas_dir))
         agent_doc = apply_manifest_defaults(entry)
         agent_result = validate_data(
             agent_doc,

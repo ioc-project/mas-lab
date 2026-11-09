@@ -17,6 +17,7 @@ from mas.ctl.overrides import (
     overrides_for_root,
     parse_override,
 )
+from mas.ctl.overrides.parser import parse_agent_target
 from mas.ctl.runtime_cli import load_merged_agent_manifest
 from mas.ctl.validate.schemas import load_schema
 
@@ -60,6 +61,25 @@ def test_parse_mas_agent_id_selector_alias() -> None:
 
     assert parsed.path.target_name == "planner"
     assert parsed.path.parent == "mas"
+
+
+def test_parse_agent_target_matches_override_agent_targeting() -> None:
+    assert parse_agent_target(".mas.agent[planner]") == (False, "planner")
+    assert parse_agent_target(".mas.agent[id=planner]") == (False, "planner")
+    assert parse_agent_target('.mas.agent["planner"]') == (False, "planner")
+    assert parse_agent_target(".mas.agent[*]") == (True, None)
+    assert parse_agent_target(".app.agent[planner]") == (False, "planner")
+    assert parse_agent_target(".workflow.agent[planner]") == (False, "planner")
+    assert parse_agent_target("mas:agent[planner]") == (False, "planner")
+    assert parse_agent_target("app:agent[planner]") == (False, "planner")
+    assert parse_agent_target(".agent[planner]") == (False, "planner")
+    assert parse_agent_target(".agent[*]") == (True, None)
+    with pytest.raises(ValueError, match="not an index"):
+        parse_agent_target(".mas.agent[0]")
+    with pytest.raises(ValueError, match="the agent only"):
+        parse_agent_target(".mas.agent[planner].spec")
+    with pytest.raises(ValueError, match="agent path"):
+        parse_agent_target(".mas.infra[x]")
 
 
 def test_parse_selector_and_equals_in_value() -> None:

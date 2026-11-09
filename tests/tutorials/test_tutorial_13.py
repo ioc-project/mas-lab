@@ -19,6 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from tutorial_support import T13, run_cli
 
 
@@ -48,6 +49,40 @@ class TestManifestValidation:
         r = run_cli(["mas-ctl", "validate", str(T13 / "agent-auto.yaml")])
         assert r.returncode == 0, r.stderr
         assert "OK" in r.stdout
+
+    @pytest.mark.parametrize(
+        "name", ["control-debug.yaml", "flavour-debug.yaml", "control-auto.yaml", "flavour-auto.yaml"]
+    )
+    def test_validate_control_and_flavour_files(self, name):
+        r = run_cli(["mas-ctl", "validate", str(T13 / name)])
+        assert r.returncode == 0, r.stderr
+        assert "OK" in r.stdout
+
+    @pytest.mark.parametrize(
+        ("flavour", "plugin"), [("flavour-debug.yaml", "gdb"), ("flavour-auto.yaml", "sample_governance")]
+    )
+    def test_the_flavour_attaches_the_plugin_the_agent_no_longer_carries(self, flavour, plugin):
+        import yaml
+        from mas.ctl.session.flavour import resolve_flavour
+        from mas.ctl.session.flavour_control import (
+            apply_flavour_controls,
+            control_lists_for_agent,
+            plugin_entry,
+            resolve_controls,
+        )
+
+        agent = "agent.yaml" if flavour == "flavour-debug.yaml" else "agent-auto.yaml"
+        manifest = yaml.safe_load((T13 / agent).read_text(encoding="utf-8"))
+        kind = plugin_entry(plugin)["kind"]
+        assert kind not in manifest["spec"]
+        spec = resolve_flavour(str(T13 / flavour))
+        attached = apply_flavour_controls(manifest, spec, agent_id=manifest["metadata"]["name"])
+        assert kind not in attached["spec"]
+        lists = control_lists_for_agent(
+            resolve_controls(spec), agent_id=manifest["metadata"]["name"], entry_id=manifest["metadata"]["name"]
+        )
+        names = [item if isinstance(item, str) else next(iter(item)) for item in lists["governance"]]
+        assert names == [plugin]
 
 
 class TestToolFixtures:

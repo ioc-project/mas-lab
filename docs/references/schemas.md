@@ -75,6 +75,7 @@ Top-level kinds (see [manifest reference](../manifests/README.md)):
 | [`runtime/workflow.schema.yaml`](../schemas/runtime/workflow.schema.yaml) | `Workflow` |
 | [`runtime/overlay.schema.yaml`](../schemas/runtime/overlay.schema.yaml) | `Overlay` |
 | [`runtime/flavour.schema.yaml`](../schemas/runtime/flavour.schema.yaml) | `Flavour` |
+| [`runtime/control.schema.yaml`](../schemas/runtime/control.schema.yaml) | `Control`. See [control.md](../manifests/control.md) |
 | [`runtime/infra.schema.yaml`](../schemas/runtime/infra.schema.yaml) | Infra bundle, middleware, ToolServerRegistry. See [infra.md](../manifests/infra.md) and the [reference](tool-server-registry.md). |
 | [`runtime/tool.schema.yaml`](../schemas/runtime/tool.schema.yaml) | Tool definition. See [tool.md](../manifests/tool.md) |
 | [`runtime/fragments/infra-tool-server.schema.yaml`](../schemas/runtime/fragments/infra-tool-server.schema.yaml) | Infra `tool_servers[]` item. See [tool-server-registry.md](tool-server-registry.md) |
@@ -121,7 +122,7 @@ Sample overlays and bindings under [`schemas/examples/`](https://github.com/ioc-
 - [`overlays/live-llm.yaml`](../schemas/examples/overlays/live-llm.yaml)
 - [`overlays/llm-reasoning.yaml`](../schemas/examples/overlays/llm-reasoning.yaml)
 - [`overlays/llm-sampling.yaml`](../schemas/examples/overlays/llm-sampling.yaml)
-- [`overlays/observability-native.yaml`](../schemas/examples/overlays/observability-native.yaml)
+- [`controls/observability-native.yaml`](../schemas/examples/controls/observability-native.yaml)
 - [`infra/mcp-localhost.yaml`](../schemas/examples/infra/mcp-localhost.yaml)
 - [`library-samples/infra/mcp-localhost-deploy.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost-deploy.yaml): MCP server deployment posture
 - [`tools/annotated.tool.yaml`](../schemas/examples/tools/annotated.tool.yaml)

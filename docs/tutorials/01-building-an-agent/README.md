@@ -99,7 +99,7 @@ Everything else has a default. Run `mas-ctl compile agent.yaml` to print the exp
 | Layer | Answers | Holds |
 |-------|---------|-------|
 | `agent.yaml` | What | Model, context, tools, plugins |
-| Flavour | Glue | Which infra each agent uses (`bind`). Not the LLM. Flavour `observability` is a deprecated fallback. |
+| Flavour | Glue | Which infra each agent uses (`bind`). Not the LLM. Leftover Flavour `observability` is unread. |
 | `infra/` | Where | Model endpoint, tool providers, OpenTelemetry (OTel) collector |
 | `.env` | Secret | API key, never committed |
 
@@ -108,7 +108,7 @@ The runtime finds tools and skills next to the manifest first, then in the stand
 
 A flavour (`kind: Flavour`) links the agents to the infra; the shipped ones live in `library-standard`.
 Select one with `--flavour NAME` or `--flavour PATH`. `local` is the bundled name and the default.
-`local` runs agents in-process, resolves tools without servers, and writes file-based traces and native `events.jsonl`.
+`local` runs agents in-process and resolves tools without servers. Native `events.jsonl` is recorded by default; `--no-events` turns it off. Leftover Flavour `observability` is unread.
 
 The `llm_cache` middleware records and replays LLM answers without calling the provider ([llm-cache.md](../../manifests/llm-cache.md)).
 
@@ -307,7 +307,7 @@ mas-ctl chat agent.yaml -i --infra-ref standard:openai \
   --infra-ref ../../../library-samples/infra/llm-cache-replay.yaml
 ```
 
-Any `--flavour` other than `local` or a file path exits with an error that names the bundled flavour. The manifest never changes.
+Any `--flavour` other than `local`, `prod`, or a file path exits with an error that names the bundled flavours. The manifest never changes.
 
 For quick experiments, add capabilities from flags instead of YAML. This matches the tools, skills, and memory overlays of Steps 2 to 4:
 
@@ -366,9 +366,9 @@ See [Open standards → A2A](../../standards/a2a.md) for the full walkthrough.
 
 ## Step 7 — Inspecting the trace
 
-`events.jsonl` is the machine-readable trace: one JSON event per line. `--events` records it;
-`--events-file` sets the path (default `traces/events.jsonl`). The released `observability` key of a flavour (kept for
-compatibility) does the same declaratively for a whole MAS (Tutorial 3).
+`events.jsonl` is the machine-readable trace: one JSON event per line. Native events are
+recorded by default; `--no-events` turns that off; `--events-file` sets the path (default
+`traces/events.jsonl`). Leftover Flavour `observability` is unread.
 
 ### Which log do I need?
 
@@ -458,7 +458,7 @@ Live `mas-ctl chat` steps need `TUTORIAL_ONLINE=1` and a configured LLM.
 
 ## What you learned
 
-- An agent is a small `kind: Agent` manifest. You add behaviour by stacking `kind: Overlay` manifests with `-o`.
+- An agent is a small `kind: Agent` manifest. You add behaviour by stacking Overlay and Control files with `-o`.
 - You declare tools, skills, and memory by reference or name. The runtime and infra layer resolve them.
 - `mas-ctl compile` shows the merged agent. `events.jsonl` and `mas-lab plot` show what it did.
 

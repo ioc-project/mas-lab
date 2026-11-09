@@ -49,7 +49,7 @@ config.yaml       <- project defaults (flavour, infra_refs, .env path)
 | **Tools** | `Tool`, `ToolBundle`; runtime-owned system tools | [tool.md](tool.md) · [system-tools.md](system-tools.md) |
 | **MAS** | `MAS`, `Workflow` | [mas.md](mas.md) |
 | **Override** | `Overlay` | [overlay.md](overlay.md) |
-| **Environment** | `Flavour`; infra kinds (`InfraBundle`, `LLMProxy`, `InfraMiddleware`, …) | [flavour.md](flavour.md) · [infra.md](infra.md) · [llm-cache.md](llm-cache.md) |
+| **Environment** | `Flavour`, `Control`; infra kinds (`InfraBundle`, `LLMProxy`, `InfraMiddleware`, …) | [flavour.md](flavour.md) · [control.md](control.md) · [infra.md](infra.md) · [llm-cache.md](llm-cache.md) |
 | **Engine tuning** | `RuntimeEngine` | [runtime-engine.md](runtime-engine.md) · [execution.md](execution.md) (removed agent `spec.execution`) |
 | **Model data** | LLM model catalog (shipped data file, not a kind) | [llm-model-catalog.md](llm-model-catalog.md) |
 | **Experiment** | `experiment:` root | [experiment.md](experiment.md) |

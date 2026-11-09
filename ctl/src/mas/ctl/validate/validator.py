@@ -292,6 +292,25 @@ def validate_data(
         for path, msg in collect_flavour_key_deprecation(data):
             result.issues.append(ValidationIssue("warning", msg, path=path))
 
+    if resolved_kind in {"control", "flavour"}:
+        from mas.ctl.session.flavour_control import absolute_path_findings
+
+        for where, message in absolute_path_findings(data):
+            result.issues.append(ValidationIssue("error", f"is {message}", path=where))
+
+    if resolved_kind == "control":
+        from mas.ctl.session.flavour_control.plugins import duplicate_plugin_id_findings, priority_findings
+
+        spec = data.get("spec") if isinstance(data.get("spec"), dict) else {}
+        for where, message in [*duplicate_plugin_id_findings(spec), *priority_findings(spec)]:
+            result.issues.append(ValidationIssue("error", message, path=where))
+
+    if resolved_kind in {"agent", "mas"}:
+        from mas.ctl.validate.deprecations import collect_agent_control_keys_deprecation
+
+        for path, msg in collect_agent_control_keys_deprecation(data):
+            result.issues.append(ValidationIssue("warning", msg, path=path))
+
     if resolved_kind == "infra":
         from mas.ctl.validate.deprecations import collect_endpoint_usage_deprecation
 

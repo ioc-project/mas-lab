@@ -72,7 +72,7 @@ spec:
 `error_recovery_plugin` and `error_policy` may appear on any governance stanza. The parser flattens them and installs the recovery plugin on the ingress chain, not on `KernelConfig`.
 Full chain: [governance.md](governance.md). Retry defaults: [reliability.md](../references/reliability.md).
 
-Every list slot defaults to empty (no plugins). Omitting `spec.observability` attaches nothing by itself. Flavour `observability` is deprecated and still the fallback when the agent declares none (the bundled `local` sets `[native]`); `--events` still patches that key. A later optional Control manifest is the planned home.
+Every list slot defaults to empty (no plugins). Omitting `spec.observability` attaches nothing by itself. Leftover Flavour `observability` is unread. Leftover Agent `spec.observability` still applies when no matching Control names that list. `--events*` is a shortcut on the agent or MAS. Flavour `bind.events` names infra rows to send events to; each row adds its plugin to the selection. Native still records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins.
 
 ---
 
@@ -100,7 +100,7 @@ Aliases: `analyst` and `planner` (to `react`), `linear` (to `single_pass`), `ref
 
 | Param | Maps to | Default | Who uses it |
 |-------|---------|---------|-------------|
-| `max_steps` | `KernelConfig.max_auto_steps` | none | every pattern (loop cap; `with-hardened` sets 512) |
+| `max_steps` | `KernelConfig.max_auto_steps` | none | every pattern (loop cap; set an integer for production) |
 | `max_cot_pass` | `KernelConfig.max_cot_pass` | 1 | `cot`, `introspection`, `tree_of_thoughts` (min 2 internally) |
 | `parallel` | `KernelConfig.parallel_tool_calls` | true | `react` and tool-calling patterns |
 

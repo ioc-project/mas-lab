@@ -12,6 +12,52 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- `with-hardened` is one Control, written once for every agent you deploy: pass it with
+  `--control pkg://mas.library.standard/controls/with-hardened.yaml` (or attach it from a Flavour with `agents: $all`).
+  The `with-hardened` overlay is gone. It had set `design_pattern.params.max_steps: 512` (set it in the agent or a
+  RuntimeEngine manifest), and agent `spec.control` retry and circuit breaker (retry already defaults to 4 LLM and
+  2 tool attempts; the breaker returns, switched on for every agent, when the infra pipeline takes it).
+  `-o openclaw` no longer attaches governance: its governance is the Control of the same name.
+  `observability-native.yaml` moved from the overlays directory to `controls/` and is passed with `--control`.
+- Control `spec.observability` and `spec.governance` are sets of plugins. Matching
+  Controls union by plugin id; a later Control's config for the same id wins.
+  A Control that names the same plugin id twice is refused. Overlay `$op.add`
+  replaces the same id. Governance plugins that attach to the same transition
+  run in `priority` order (higher first, default 0). Attach does not copy those
+  lists onto the agent.
+  Overlay patches that set them target `kind: Control`. The shipped HITL Controls
+  (Tutorials 1 and 14, `hitl-on-tool`) and `observability-native` are `kind: Control`
+  files in `controls/` directories, passed with `--control` or attached by a Flavour.
+  A plugin `priority` must be an integer; any other value is refused at load and by `mas-ctl validate`
+  instead of counting as 0.
+  `openclaw` keeps its other patches. A tool that loaded `with-hardened` or `openclaw` governance as an
+  Overlay patch must read the Control instead.
+- Call ceilings are the new `budget` governance plugin (`max_llm_calls`, `max_tool_calls`; it TERMINATEs the run at
+  the cap), named in a Control `spec.governance`. A Control has no `budget` key. Agent `spec.budget` is deprecated
+  and still enforced. The `with-hardened` ceilings are in its Control.
+- A Control lists `observability` and `governance` plugins only. Every item in a Control list is looked up by
+  its name among the plugin types that list takes, and is refused when it is unknown, ambiguous within those types,
+  or of another type. Delay, drop, fail, corrupt and replay are not Control plugins: they belong on the infra
+  pipelines with retry and the circuit breaker, and land there in a later release. `spec.impair`, `spec.plugins`,
+  and `spec.control` on a Control are leftover and refused. Retry and the circuit breaker keep their agent
+  `spec.control` settings (deprecated, still applied) until the infra pipeline takes them in the next release.
+- A Flavour `spec.control` row takes `settings`, merged over the named plugins of the Control it attaches, so one
+  Control file gives different settings to different agents. The same file on the same agents with the same settings
+  is one attachment.
+- Plugin names: matching is exact (the registry no longer matches the end of a URN), a name has no `.`, and two
+  plugins of one type cannot answer to the same name. Aliases that were only another way to say the same thing
+  (`analyst`, `planner`, `linear`, `rate_limiter`, `chaos_lite`, ...) move to `deprecated_aliases` in `aliases.yaml`:
+  they still resolve, with a one-time warning naming the replacement. `name@version` and the bare shortcut stay.
+- The debugger is the `gdb` governance plugin, named in a Control; `debug_script` and `gov_debug_script` are
+  deprecated aliases. `spec.debug`, the workspace `plugins:` list, `lab.enable_plugins`, `runtime_plugins.py` and
+  `workspace_plugins.py` are removed; `mas-ctl chat --debug-script` writes a Control that names the plugin. A
+  checkpoint store is chosen by `spec.checkpoint.storage`.
+- Each leftover Agent list (`spec.observability`, `spec.governance`) is deprecated and still
+  applied when no matching Control names that list; a Control that names only observability no longer
+  drops the agent's governance. Leftover Flavour
+  `observability` is unread; it was a working fallback in 0.2.0. Name the event
+  plugin in a Control observability set the Flavour attaches, or use `--events*`.
+  A run that sets none still records native events.
 - The bundled `mcp` flavour is removed. It set only `tools.exposure_protocol`,
   a key nothing reads, so `--flavour mcp` never exposed tools; it now fails as
   an unknown flavour. There is no replacement: tool exposure is configured
@@ -60,6 +106,14 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- A governance plugin name that is not registered as a governance plugin is now an error. It was a logged warning
+  and the plugin was skipped, so a typo in a Control disabled it silently. The runtime names no fallback plugin.
+- The Agent deprecation warning printed a literal `{whom}`.
+- `governance-off` is an Overlay that targets Control: empty governance and native events, so stacking it after a governance Control clears those policies.
+- Applying the same Control twice does not attach the same plugins twice even when two selectors match.
+- `--events-sink` and Flavour `bind.events` add a sink and keep native `events.jsonl` unless a Control named the observability list (including `[]`) or leftover agent observability named plugins.
+- An MCP tool that declares a `ctx` parameter gets the SDK context on Python 3.14: the registered wrapper keeps its
+  annotations, which `functools.wraps` no longer copies there.
 - Native `llm_call_end` reads top-level `tokens_used`, `model`, and
   `finish_reason` (the shape the runtime actually writes). Native
   `AgentCall.success` follows an `ok` / `success` execution status.
@@ -98,6 +152,45 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- Flavour `spec.control` attaches `kind: Control` documents (observability and
+  governance sets) to agents by `$all`, `$entry`, `$not-entry`, `$delegates`, one
+  id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` /
+  `.mas.agent[*]`). Each id is looked up in the registry. Matching Controls union
+  by plugin id. Governance plugins on the same transition run in `priority` order
+  (higher first, default 0). A plugin's settings are a map. Attach does not copy
+  lists onto the agent. A Control names plugins and uses paths relative to itself:
+  an absolute path in a Control, a path that walks up with `..`, or an absolute
+  `ref` in a Flavour's `spec.control`, is refused. A Flavour `ref` cannot walk
+  out of that Flavour's directory with `..`. A plugin resolves its relative paths
+  against the Control's own directory. A stacked lab Control overlay copies those
+  lists onto the agent dicts the bench kernel reads, and warns once when an empty
+  list replaces leftover YAML. `$entry` is `workflow.entry` or `spec.entry_agent`;
+  omitted, it matches nobody. `$delegates` is that entry node's `delegates_to`
+  list; omitted or empty, it matches nobody. `mas-ctl compile` does not copy
+  Control lists onto the resolved spec. A Flavour with no Control, and a Control
+  that names no plugin, add none. A Control file is plugin lists only. Retry and
+  circuit_breaker stay on Agent `spec.control` (deprecated, still applied). They
+  are not Control plugins. `spec.control`, `spec.plugins`, and `spec.impair` on a
+  Control are refused. A relative path in a plugin setting must be listed in
+  `path_params` (a file next to the Control) or `run_path_params` (a path the run
+  writes); an unlisted one is refused.
+- `--control REF[@SELECTOR]` (`chat`, `tui`, `serve`, `run-mas`, `compile`, `infra show`, `mas-lab benchmark`) attaches a
+  Control to the session's Flavour from the command line; the run hash includes it. `--events-sink ROW` adds a row to `bind.events`.
+  `serve` takes `--no-events` and `--events-format` the way `chat` does.
+  A scenario's `overlays.control` attaches Control files the same way. The flags are another way to write
+  the Flavour, not another mechanism. Shipped Controls live in `controls/`
+  directories
+  (`pkg://mas.library.standard/controls/…`, `library-samples/controls/`, the tutorials).
+  Shipped constraint overlays (`observability-native`, `with-hardened` governance,
+  tutorial HITL) are Control documents.
+- Bundled flavour `prod` sets `require_usage`.
+- Flavour `bind.events` (and `--events-sink ROW`) names infra Application rows to send events to. Each
+  row adds the plugin its `protocol` names and gives it the row's settings.   Native `events.jsonl` still
+  records unless a Control named the observability list (including `[]`) or leftover
+  agent observability named plugins. `--no-events` and an explicit
+  `--events-format` still replace the set.
+- Flavour `spec.require_usage`: every agent of the session must have a
+  bind chain or an agent-keyed Application row.
 - PyPI names are `mas-lab-runtime`, `mas-lab-ctl`, `mas-lab-library-*`,
   and `mas-lab-component-*`. `mas-lab` is an empty meta-package that
   installs the rest. The `mas-lab`, `mas-ctl`, and `mas-runtime`
@@ -260,6 +353,22 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- `--events*` is a shortcut on the run. `--no-events` and
+  `--events-format` `native` / `otel` / `both` replace the plugin set.
+  `--events` only forces recording; `--events-file` and `--events-stdout`
+  name native's file and stream, so they add `native` when it is not
+  selected. `bind.events` adds a sink and keeps native when no Control named
+  the observability list (including `[]`) and no leftover agent named plugins.
+  Precedence: those flags, a Control's
+  `observability`, the agent's, Flavour `bind.events` rows, then native.
+- `--no-control-dir` skips the live control endpoint (`mas-ctl control attach`).
+  It is the pair of `--control-dir`, not of `--control`. `--no-control` is the same flag.
+- Bench records native events without replacing the agent's plugins.
+- The run hash includes Control bodies and `agents` selectors, resolved
+  when the Flavour loads. Control observability sinks and leftover Flavour
+  `observability` stay out; the `native` `categories` filter is in.
+  Cache keys that include Control, or that used leftover bundled `local`
+  / `local-benchmark` keys, change.
 - Bind is one path for every entry point; it refuses secrets and ids a
   layer cannot name.
 - A SLIM link reconnects after five read failures.
@@ -324,6 +433,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Deprecated
 
+- Passing a Control with `-o`, and listing Controls under an Overlay's `spec.control`, still work and warn
+  once per run: attach Controls with `--control` or a Flavour. A scenario's `overlays.control` attaches
+  Control files the same way `--control` does.
 - The `trace_context` agent_comm layer: every stack now stamps the
   `traceparent`. It still works.
 - `BoundLayer` decorators: write a `Layer` instead. A `BoundLayer` still
@@ -345,10 +457,13 @@ reconciling the release notes with the code and docs currently on that branch.
   deprecated aliases: still read, no removal date. `mas-ctl validate` warns
   per row and compose prints the warning on stderr. `--connect` and
   `--listen` now write the new values.
-- Flavour leftover keys `agent_comm`, `tools`, `control` and `telemetry` are
-  deprecated and ignored: the schema still accepts them and nothing reads
-  them. `observability` is deprecated and still the fallback when the agent
-  declares none. Validation warns once, listing the keys that are set, for a
+- Agent and MAS `spec.observability`, `spec.governance` and `spec.control` are
+  deprecated and still applied: they constrain a run rather than define the agent, so
+  they belong in a `kind: Control` a Flavour attaches. `mas-ctl validate` warns once per
+  file. The shipped Tutorial 13 and governance examples moved to Control.
+- Flavour leftover keys `agent_comm`, `tools`, `telemetry` and `observability`, and a
+  leftover `control` mapping, are deprecated and ignored: the schema still accepts them
+  and nothing reads them. Validation warns once, listing the keys that are set, for a
   Flavour file passed with `--flavour PATH` (`mas-ctl` and `mas-lab`), and in
   `mas-ctl validate` for a Flavour file or overlay; the bundled flavours stay
   quiet. `--no-validate` is silent.

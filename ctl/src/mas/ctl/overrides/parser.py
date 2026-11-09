@@ -34,9 +34,7 @@ def _split_assignment(source: str) -> tuple[str, str]:
     raise ValueError(f"override must be PATH=VALUE, got {source!r}")
 
 
-def _parse_selector(
-    raw: str, source: str
-) -> tuple[int | tuple[str, Any] | None, bool, str | None]:
+def _parse_selector(raw: str, source: str) -> tuple[int | tuple[str, Any] | None, bool, str | None]:
     value = raw.strip()
     if value == "*":
         return None, True, None
@@ -125,23 +123,36 @@ def _target_name(segment: PathSegment) -> str | None:
     return None
 
 
+def _refuse_agent_index(segment: PathSegment) -> None:
+    if isinstance(segment.selector, int):
+        raise ValueError(".mas.agent needs a name or id (.mas.agent[planner]), not an index")
+
+
+def _agent_segment(
+    node: PathSegment, rest: list[PathSegment]
+) -> tuple[PathSegment, list[PathSegment], str | None] | None:
+    """The agent segment of a session path, or None when the path does not target an agent."""
+    root = _canonical_node(node.name)
+    if rest and rest[0].name.lower() == _AGENT_CHILD and root == "mas":
+        return rest[0], rest[1:], "mas"
+    if root == "agent":
+        return node, rest, None
+    return None
+
+
 def _parse_path(raw: str, source: str) -> OverridePath:
     text = _normalize_colon(raw.strip().lstrip("."))
     parsed = [_parse_segment(part, source) for part in _split_path_segments(text)]
     if not parsed:
         raise ValueError(
-            f"override path must start at the session tree "
-            f"(.mas.spec…, .infra.spec…, .agent.spec…), got {raw!r}"
+            f"override path must start at the session tree (.mas.spec…, .infra.spec…, .agent.spec…), got {raw!r}"
         )
     node = parsed[0]
     if node.name.lower() == "root":
-        raise ValueError(
-            f"override path starts at the session; use .agent.spec… not root.agent.spec…, got {raw!r}"
-        )
+        raise ValueError(f"override path starts at the session; use .agent.spec… not root.agent.spec…, got {raw!r}")
     if node.name.lower() in _ENVELOPE_FIRST:
         raise ValueError(
-            f"override path must start with a session node "
-            f"(.mas, .infra, .config, .flavour, .agent), got {raw!r}"
+            f"override path must start with a session node (.mas, .infra, .config, .flavour, .agent), got {raw!r}"
         )
     rest = parsed[1:]
     parent: str | None = None
@@ -153,17 +164,15 @@ def _parse_path(raw: str, source: str) -> OverridePath:
             f"session node {node.name!r} needs a name or id "
             f"({node.name}[planner] or {node.name}[id=planner]), not an index"
         )
-    if rest and rest[0].name.lower() == _AGENT_CHILD and root == "mas":
-        child = rest[0]
-        if isinstance(child.selector, int):
-            raise ValueError(
-                ".mas.agent needs a name or id (.mas.agent[planner]), not an index"
-            )
-        parent = "mas"
-        root = "agent"
-        target_name = _target_name(child)
-        wildcard_target = child.wildcard
-        rest = rest[1:]
+    peeled = _agent_segment(node, rest)
+    if peeled is not None:
+        child, peeled_rest, parent = peeled
+        if parent == "mas":
+            _refuse_agent_index(child)
+            root = "agent"
+            target_name = _target_name(child)
+            wildcard_target = child.wildcard
+            rest = peeled_rest
     if not rest:
         raise ValueError(f"override path must address a field under the session node, got {raw!r}")
     return OverridePath(
@@ -173,6 +182,35 @@ def _parse_path(raw: str, source: str) -> OverridePath:
         target_name=target_name,
         wildcard_target=wildcard_target,
     )
+
+
+def parse_agent_target(source: str) -> tuple[bool, str | None]:
+    """Whether *source* names every agent or one agent id.
+
+    Same agent targeting as ``--override`` without a field: ``.mas.agent[id]``,
+    ``.mas.agent[id=name]``, ``.mas.agent[*]``, ``.agent[id]``, ``mas:agent[id]``.
+    A field after the agent (``.mas.agent[id].spec``) is not a Control selector.
+    """
+    text = _normalize_colon(source.strip().lstrip("."))
+    if not text:
+        raise ValueError(f"empty agent path {source!r}")
+    parts = [_parse_segment(part, source) for part in _split_path_segments(text)]
+    node = parts[0]
+    if node.name.lower() in _ENVELOPE_FIRST or node.name.lower() == "root":
+        raise ValueError(f"{source!r} is not an agent path; use .mas.agent[id] or .mas.agent[*]")
+    peeled = _agent_segment(node, parts[1:])
+    if peeled is None:
+        raise ValueError(f"{source!r} is not an agent path; use .mas.agent[id] or .mas.agent[*]")
+    agent_seg, rest, _parent = peeled
+    if rest:
+        raise ValueError(f"{source!r} addresses a field; a Control selector is the agent only")
+    _refuse_agent_index(agent_seg)
+    if agent_seg.wildcard:
+        return True, None
+    name = _target_name(agent_seg)
+    if not name:
+        raise ValueError(f"{source!r} needs a name or id (.mas.agent[planner]) or *")
+    return False, str(name)
 
 
 def parse_override(source: str) -> ParsedOverride:

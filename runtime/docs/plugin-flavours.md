@@ -8,7 +8,7 @@ A flavour is a small YAML document (`kind: Flavour`) that links the logic spec t
 Its `bind` section says which infra rows each agent rides and what this deployment does with it ([docs/manifests/flavour.md](../../docs/manifests/flavour.md#bind)); it defines nothing itself.
 This page is for authors who run agents in more than one environment.
 
-Leftover Flavour keys (`agent_comm`, `tools`, `control`, `telemetry`) are accepted and read by nothing. `observability` is deprecated and still the fallback when the agent declares none.
+Leftover Flavour keys (`agent_comm`, `tools`, `telemetry`, `observability`, and a leftover `control` mapping) are accepted and read by nothing. `--events*` is a shortcut on the run. `bind.events` names infra rows to send events to; each row adds its plugin to the selection.
 A flavour holds no model endpoints or credentials. Those live in the agent's `models` and in **infra** manifests (see [docs/manifests/infra.md](../../docs/manifests/infra.md)).
 
 Select a flavour when you run an agent:
@@ -19,12 +19,13 @@ mas-ctl chat agent.yaml --flavour local
 
 ## Shipped flavours
 
-`library-standard` ships two flavours (`library-standard/src/mas/library/standard/flavours/`):
+`library-standard` ships flavours under `library-standard/src/mas/library/standard/flavours/`:
 
 | Flavour | Purpose |
 |---------|---------|
-| `local` | Default development flavour. In-process communication is the library default, not this file's leftover `agent_comm` block. `observability: [native]` is still the fallback. |
-| `local-benchmark` | Same leftover keys as `local`, for `mas-lab` batch runs |
+| `local` | Default development flavour. Empty glue; in-process communication is the library default. |
+| `local-benchmark` | Same empty glue, for `mas-lab` batch runs |
+| `prod` | Sets `require_usage`: every agent must have a bind chain or an agent-keyed Application row |
 
 Select one with `--flavour NAME` (`local`) or `--flavour PATH`.
 
@@ -35,19 +36,7 @@ apiVersion: flavour/v1
 kind: Flavour
 metadata:
   name: local
-spec:
-  agent_comm:
-    protocol: agent-local     # deprecated, read by nothing
-    mode: local
-    emulation: true
-  tools:
-    remote_tools_enabled: false
-    allowed: ["*"]
-  telemetry:
-    backend: file
-    path: logs/
-  observability:
-    - native                  # deprecated fallback: used when the agent declares no observability
+spec: {}
 ```
 
 The full list of sections (`bind`, leftover keys, `capabilities`, `config`, `operator`)
@@ -72,7 +61,11 @@ mas-ctl run-mas mas.yaml --flavour local --infra-ref ./infra/prod-bundle.yaml
 
 ## Observability as a deployment concern
 
-Agents contain no telemetry code. Flavour `observability` is deprecated and still the fallback when the agent declares none; `--events/--no-events`, `--events-format` and `--events-file` still patch that key. See [docs/cli/observability.md](../../docs/cli/observability.md).
+Agents contain no telemetry code. Observability is a plugin list in a Control a Flavour
+attaches. Leftover Flavour `observability` is unread. `--events*` is a shortcut on the run.
+`bind.events` names infra rows to send events to; each row adds its plugin to the selection. A run that sets none records native events; `--no-events`
+turns recording off.
+See [docs/cli/observability.md](../../docs/cli/observability.md).
 
 ## Creating a flavour
 

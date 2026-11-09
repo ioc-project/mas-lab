@@ -50,7 +50,7 @@ def register_step(name: str, obj: Any, *, attributes: dict[str, Any] | None = No
     register_plugin(
         f"mas.step.{str(name).strip().lower().replace('-', '_').replace('.', '_')}",
         obj,
-        shortcuts=[str(name)],
+        shortcuts=[str(name).strip().replace(".", "_")],
         attributes={"source": source, **attrs},
     )
 

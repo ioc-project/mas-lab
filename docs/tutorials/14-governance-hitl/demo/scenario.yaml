@@ -30,7 +30,7 @@ sections:
         command: >-
           mas-ctl validate docs/tutorials/14-governance-hitl/agent.yaml
           -o docs/tutorials/14-governance-hitl/overlays/tools.yaml
-          -o docs/tutorials/14-governance-hitl/overlays/governance-auto-approve.yaml
+          -o docs/tutorials/14-governance-hitl/controls/governance-auto-approve.yaml
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "OK"
@@ -40,7 +40,7 @@ sections:
         command: >-
           mas-ctl validate docs/tutorials/14-governance-hitl/agent.yaml
           -o docs/tutorials/14-governance-hitl/overlays/tools.yaml
-          -o docs/tutorials/14-governance-hitl/overlays/governance-auto-deny.yaml
+          -o docs/tutorials/14-governance-hitl/controls/governance-auto-deny.yaml
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "OK"

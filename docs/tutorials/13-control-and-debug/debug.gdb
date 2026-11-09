@@ -1,4 +1,4 @@
-# Loaded by spec.governance debug_script.script_file — not by mas-ctl control.
+# Loaded by Control spec.governance gdb.script_file — not by mas-ctl control.
 
 break tool_result web_search if first
 commands

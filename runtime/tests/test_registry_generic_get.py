@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import pytest
 from mas.runtime.registry import PluginEntry, PluginRegistry, VariantInfo
 
 
@@ -33,28 +34,29 @@ def test_generic_get_name_with_attribute_mismatch_returns_none() -> None:
     assert info is None
 
 
-def test_generic_get_name_skips_mismatched_candidate_and_returns_next_match() -> None:
+def test_two_plugins_of_one_type_cannot_share_a_name() -> None:
     reg = PluginRegistry()
     reg.register(
         PluginEntry(
             urn="mas.codec.first",
             shortcuts=["shared-codec"],
             variants={"builtin": VariantInfo(module="pathlib", class_name="Path")},
-            attributes={"artifact_kind": "x", "store_type": "wrong"},
         )
     )
-    reg.register(
-        PluginEntry(
-            urn="mas.codec.second",
-            shortcuts=["shared-codec"],
-            variants={"builtin": VariantInfo(module="pathlib", class_name="PurePath")},
-            attributes={"artifact_kind": "x", "store_type": "right"},
+    with pytest.raises(ValueError, match="two codec plugins answer to 'shared-codec'"):
+        reg.register(
+            PluginEntry(
+                urn="mas.codec.second",
+                shortcuts=["shared-codec"],
+                variants={"builtin": VariantInfo(module="pathlib", class_name="PurePath")},
+            )
         )
-    )
 
-    info = reg.get("codec", "shared-codec", attributes={"artifact_kind": "x", "store_type": "right"})
-    assert info is not None
-    assert info.class_name == "PurePath"
+
+def test_a_name_has_no_dot() -> None:
+    reg = PluginRegistry()
+    with pytest.raises(ValueError, match="single token"):
+        reg.register(PluginEntry(urn="mas.codec.dotted", shortcuts=["a.b"], variants={}))
 
 
 def test_list_includes_attributes() -> None:

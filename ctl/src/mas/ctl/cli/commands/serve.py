@@ -7,17 +7,25 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, connect_option, listen_option, with_connects
-from mas.ctl.cli.obs_flags import resolve_observability_config
+from mas.ctl.cli.bind_flags import (
+    bind_option,
+    connect_option,
+    control_option,
+    events_sink_option,
+    listen_option,
+    no_control_dir_option,
+    with_connects,
+)
+from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.env import load_dotenv
 from mas.ctl.infra.resolve import application_endpoint_is_deployed
 from mas.ctl.runtime_cli import load_merged_agent_manifest
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.exposure import expose_agent
-from mas.ctl.session.flavour import FlavourError, resolve_flavour
+from mas.ctl.session.flavour import FlavourError, resolve_session_flavour
 from mas.ctl.session.infra_resolve import resolve_session_infra
 from mas.ctl.session.manifest_config import require_agent_id_from_manifest
-from mas.ctl.session.observability import setup_observability
+from mas.ctl.session.observability import cli_replaced_plugin_set, obs_config_to_binding, setup_observability
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
 
@@ -33,6 +41,8 @@ from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 )
 @connect_option
 @bind_option
+@control_option
+@events_sink_option
 @listen_option
 @click.option(
     "--infra-ref",
@@ -48,9 +58,8 @@ from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 )
 @click.option(
     "--flavour",
-    default="local",
-    show_default=True,
-    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
+    default=None,
+    help="Flavour: bundled name local or prod, or a Flavour YAML path. Omitted: local.",
 )
 @click.option(
     "--control-dir",
@@ -59,25 +68,31 @@ from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
     help="Advertise ControlContract so mas-ctl control can attach by A2A contextId "
     "(default: $XDG_RUNTIME_DIR/mas-ctl, else /var/run/mas-ctl, else temp)",
 )
-@click.option("--no-control", is_flag=True, help="Do not advertise a control endpoint")
+@no_control_dir_option
+@observability_options
 def serve_agent_cmd(
     agent: Path,
     overlays: tuple[str, ...],
     overrides: tuple[str, ...],
     connects: tuple[str, ...],
     binds: tuple[str, ...],
+    controls: tuple[str, ...],
+    event_sinks: tuple[str, ...],
     listens: tuple[str, ...],
     infra_refs_cli: tuple[str, ...],
     cache_read_only: bool,
-    flavour: str,
+    flavour: str | None,
     control_dir: Path | None,
     no_control: bool,
+    events: bool | None,
+    events_file: str | None,
+    events_stdout: bool,
+    events_format: str | None,
 ) -> None:
     """Serve an agent through the agent_expose plugin selected by its infra endpoint."""
     from mas.ctl.paths import manifest_cwd
 
     overrides = with_connects(connects=connects, binds=binds, overrides=overrides, listens=listens)
-
     from mas.ctl.session.flavour import flavour_argument
 
     flavour = flavour_argument(flavour)
@@ -97,7 +112,15 @@ def serve_agent_cmd(
             raise click.ClickException("serve requires an agent manifest")
 
         try:
-            flavour_spec = resolve_flavour(flavour, overrides=overrides)
+            flavour_spec = resolve_session_flavour(
+                flavour,
+                overrides=overrides,
+                controls=controls,
+                event_sinks=event_sinks,
+                search_dirs=[session.original_cwd, session.manifest_dir]
+                if session.manifest_dir
+                else [session.original_cwd],
+            )
         except FlavourError as error:
             raise click.BadParameter(str(error), param_hint="--flavour") from error
 
@@ -113,10 +136,12 @@ def serve_agent_cmd(
         )
         agent_id = require_agent_id_from_manifest(manifest)
         from mas.ctl.infra.bind import BindError, bind_session
+        from mas.ctl.session.flavour_control import ControlError, attach_overlay_controls
 
         try:
+            attach_overlay_controls(flavour_spec, tuple(str(path) for path in session.overlays))
             infra = bind_session(infra, flavour_spec, agent_ids=[agent_id])
-        except BindError as exc:
+        except (BindError, ControlError) as exc:
             raise click.ClickException(str(exc)) from exc
         if agent_id in infra.agent_chains:
             raise click.ClickException(
@@ -131,6 +156,18 @@ def serve_agent_cmd(
                 "in workspace infra_refs or pass --infra-ref"
             )
 
+        obs_config = resolve_observability_config(
+            events=events,
+            events_file=events_file,
+            events_stdout=events_stdout,
+            events_format=events_format,
+            agent_id=agent_id,
+            manifest=manifest,
+            flavour_spec=flavour_spec,
+            resolved_infra=infra,
+            entry_id=agent_id,
+        )
+        replaced = cli_replaced_plugin_set(events, events_format)
         instance, _ = instantiate_runtime(
             InstantiationOptions(
                 pattern_plugin_id=pattern_plugin_id,
@@ -139,16 +176,11 @@ def serve_agent_cmd(
                 resolved_infra=infra,
                 workspace=workspace,
                 cache_read_only=cache_read_only,
+                flavour_spec=flavour_spec,
+                events_file=obs_config.events_file,
+                obs_from_cli=replaced,
+                obs_binding_override=obs_config_to_binding(obs_config) if replaced else None,
             )
-        )
-        obs_config = resolve_observability_config(
-            events=None,
-            events_file=None,
-            events_stdout=False,
-            events_format=None,
-            agent_id=agent_id,
-            manifest=manifest,
-            flavour_spec=flavour_spec,
         )
         recorder = setup_observability(
             instance,

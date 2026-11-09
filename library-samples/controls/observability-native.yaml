@@ -1,15 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Standard overlay — enable native JSONL observability (events.jsonl).
+# Standard Control — enable native JSONL observability (events.jsonl).
 # CLI equivalent: mas-ctl chat agent.yaml --events
 # See docs/cli/observability.md
-apiVersion: mas/v1
-kind: Overlay
+apiVersion: control/v1
+kind: Control
 metadata:
   name: observability-native
 spec:
-  target:
-    kind: Agent
-  patch:
-    observability:
-      - native
+  observability:
+  - mas.observability.native

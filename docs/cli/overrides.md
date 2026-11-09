@@ -135,13 +135,18 @@ mas-ctl chat agent.yaml --override '.agent.spec.context["key.with.dots"]=value'
 
 The quoted key keeps dots and brackets inside one map key.
 
-### Set observability on the flavour
+### Set observability
+
+Leftover Flavour `observability` is unread. Leftover Agent `spec.observability`
+still applies when no matching Control names that list. Attach a Control, or
+name an infra row:
 
 ```bash
-mas-ctl chat agent.yaml --override '.flavour.spec.observability=[native]'
+mas-ctl chat agent.yaml --control docs/schemas/examples/controls/observability-native.yaml
+mas-ctl chat agent.yaml --events-sink collector
 ```
 
-A *flavour* is the glue that links the logic spec to the infra (its `bind`). This override patches the deprecated Flavour `observability` fallback. It does not switch internal agents to A2A: the Flavour's `bind` does, or an agent-keyed Application row with `usage: connect`, which `--connect` writes for you.
+A *flavour* is the glue that links the logic spec to the infra (its `bind`). It does not switch internal agents to A2A: the Flavour's `bind` does, or an agent-keyed Application row with `usage: connect`, which `--connect` writes for you.
 
 ## Connect
 

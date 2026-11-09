@@ -10,6 +10,7 @@ from typing import Any
 from mas.ctl.overlay import merge_overlay
 from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.overrides import apply_cli_overrides, parse_override
+from mas.ctl.session.flavour_control import is_control_document
 from mas.ctl.validate import validate_data, validate_file, validation_enabled
 from mas.runtime.spec.source import load_yaml_file, resolve_manifest_source
 
@@ -22,8 +23,7 @@ def _apply_agent_overrides(data: dict[str, Any], overrides: tuple[str, ...]) -> 
     nested = [source for source, p in parsed if p.path.parent == "mas"]
     if nested:
         raise ValueError(
-            f"{nested[0]!r} addresses an agent under a MAS; this session is a standalone agent. "
-            "Use .agent.spec…"
+            f"{nested[0]!r} addresses an agent under a MAS; this session is a standalone agent. Use .agent.spec…"
         )
     agent = [(source, p) for source, p in parsed if p.path.root not in _ROOTS_APPLIED_ELSEWHERE]
     if not agent:
@@ -148,6 +148,8 @@ def load_merged_agent_manifest(
     for ov in overlays:
         ov_path = Path(ov)
         raw = load_yaml_file(ov_path)
+        if is_control_document(raw):
+            continue
         normalized = normalize_overlay(raw, name=ov_path.stem)
         if validate and validation_enabled():
             validate_data(normalized, source=str(ov_path), kind="overlay").raise_if_failed()

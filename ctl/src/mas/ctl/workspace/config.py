@@ -214,13 +214,6 @@ class WorkspaceConfig:
         return None
 
     @property
-    def plugins(self) -> list[str]:
-        """Overlay plugin URNs from ``plugins:``. Empty when omitted or all commented."""
-        from mas.runtime.workspace_plugins import parse_plugin_refs
-
-        return parse_plugin_refs(self._data.get("plugins"))
-
-    @property
     def mas_ctl(self) -> dict[str, Any]:
         raw = self._data.get("mas_ctl") or {}
         return dict(raw) if isinstance(raw, dict) else {}

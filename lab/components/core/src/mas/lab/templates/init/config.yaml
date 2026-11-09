@@ -58,16 +58,6 @@ default_infra: __INFRA_NAME__
 
 # --- Optional sections, all commented out. ---
 
-# Overlay plugins — gdb and checkpoint stores. Off unless listed.
-# Uncomment the key and any line to enable.
-# Labs may enable the same URNs under lab.enable_plugins.
-# plugins:
-#   - mas.runtime.debug_script             # gdb breakpoints
-#   - mas.checkpoint_store.hybrid          # persist to memory and disk
-#   - mas.checkpoint_store.disk            # JSON files
-#   - mas.checkpoint_store.memory          # in-process map
-#   - mas.control_protocol.rpc             # JSON-lines ControlContract wire
-
 # Runtime engine manifests, merged left to right. Omit for package defaults.
 # runtime_refs:
 #   - standard:runtime-default

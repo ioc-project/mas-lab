@@ -255,7 +255,7 @@ It resolves to an empty string when the variable is unset.
 
 ### LLMProxy retry
 
-`spec.proxy.retry` uses the same RetryPolicy object as agent `spec.control.retry.llm`.
+`spec.proxy.retry` uses the same RetryPolicy object as Agent `spec.control.retry.llm`.
 Its fields are `max_attempts`, `backoff_s`, `backoff_multiplier`, `jitter`, `retry_on`, `require_idempotent`, and `max_backoff_s`.
 The agent spec wins when both are set.
 `MAS_LLM_HTTP_RETRIES` adds extra retries (`attempts = retries + 1`).
@@ -263,8 +263,9 @@ See [reliability.md](../references/reliability.md).
 
 !!! warning "Not used yet"
     The schema accepts `spec.proxy.retry`, but the current `mas-ctl` infra
-    resolver does not forward it to the engine, so it has no effect. Set
-    `spec.control.retry.llm` on the agent (or through an overlay) instead.
+    resolver does not forward it to the engine, so it has no effect. Use
+    Agent `spec.control.retry` (deprecated, still applied) until the infra
+    pipeline takes it.
 
 ## Bundles
 

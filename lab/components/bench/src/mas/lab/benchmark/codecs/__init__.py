@@ -33,9 +33,8 @@ To look up a codec at runtime::
 
 from __future__ import annotations
 
-from mas.runtime.registry import get_registry, register_plugin
-
 from mas.lab.benchmark.codecs.base import Codec
+from mas.runtime.registry import get_registry, register_plugin
 
 __all__ = ["Codec", "register_codec", "get_codec", "list_codecs"]
 
@@ -53,10 +52,7 @@ def register_codec(codec_class: type[Codec]) -> type[Codec]:
     register_plugin(
         _codec_urn(codec_class.artifact_kind, codec_class.store_type),
         codec_class,
-        shortcuts=[
-            _codec_name(codec_class.artifact_kind, codec_class.store_type),
-            f"{codec_class.artifact_kind}.{codec_class.store_type}",
-        ],
+        shortcuts=[_codec_name(codec_class.artifact_kind, codec_class.store_type)],
         attributes={
             "plugin_type": "codec",
             "artifact_kind": codec_class.artifact_kind,
@@ -73,10 +69,7 @@ def get_codec(artifact_kind: str, store_type: str) -> type[Codec]:
         attributes={"artifact_kind": artifact_kind, "store_type": store_type},
     )
     if info is None:
-        raise ValueError(
-            f"No codec registered for ({artifact_kind!r}, {store_type!r}). "
-            f"Available: {list_codecs()}"
-        )
+        raise ValueError(f"No codec registered for ({artifact_kind!r}, {store_type!r}). Available: {list_codecs()}")
     return info.load_class()
 
 

@@ -30,12 +30,12 @@ def lint():
 
 def test_ruff_command_check_includes_files(lint):
     cmd = lint.ruff_command("check", ["scripts/ruff_changed.py"])
-    assert cmd[-2:] == ["check", "scripts/ruff_changed.py"]
+    assert cmd[-3:] == ["check", "--force-exclude", "scripts/ruff_changed.py"]
 
 
 def test_ruff_command_format_check_includes_files(lint):
     cmd = lint.ruff_command("format-check", ["scripts/ruff_changed.py"])
-    assert cmd[-3:] == ["format", "--check", "scripts/ruff_changed.py"]
+    assert cmd[-4:] == ["format", "--check", "--force-exclude", "scripts/ruff_changed.py"]
 
 
 def test_locked_ruff_version_reads_uv_lock(lint):

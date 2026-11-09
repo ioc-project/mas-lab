@@ -18,13 +18,3 @@ spec:
         mode: all
       portability: self_contained
       auto_resume_latest: true
-    governance:
-      $op:
-        add:
-          - sample:
-              error_recovery_plugin: backtrack_on_error
-              backtrack:
-                repeat_threshold: 2
-                max_backtracks_per_session: 3
-                steps: 1
-                on_cap_reached: hitl

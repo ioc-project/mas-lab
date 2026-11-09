@@ -17,7 +17,9 @@ same mismatch. It is not a runner.
 
 | File | Role |
 |------|------|
-| `agent.yaml` | Runnable agent: listed tools, skill, governance chain, native events |
+| `agent.yaml` | Runnable agent: listed tools and skill |
+| `control.yaml` | Control: the `gov_no_undeclared_tool` governance chain |
+| `flavour.yaml` | Flavour: attaches the Control to the agent |
 | `tools/` | `get_metrics`, `get_logs`, `get_service_health` (no `get_deployments`) |
 | `skills/data-access-protocol/SKILL.md` | Skill body that names `get_deployments` |
 | `llm_call.json` | Recorded LLM payload: `tools` omit `get_deployments` |
@@ -26,17 +28,19 @@ From the repo root (workspace config / Tutorial 0 infra):
 
 ```bash
 mas-ctl validate library-standard/examples/governance/undeclared-tool/agent.yaml
+mas-ctl validate library-standard/examples/governance/undeclared-tool/flavour.yaml
 mas-ctl chat library-standard/examples/governance/undeclared-tool/agent.yaml \
+  --flavour library-standard/examples/governance/undeclared-tool/flavour.yaml \
   -q "Investigate the latency spike for payment-service."
 ```
 
-To add the same chain rule to some other agent, use the overlay instead of
-copying `spec.governance`:
+To add the same chain rule to some other agent, attach the Control with a Flavour
+(`spec.control`), or use the overlay:
 
 ```bash
 mas-ctl chat other-agent.yaml \
-  -o pkg://mas.library.standard/overlays/with-hardened.yaml \
-  -o pkg://mas.library.standard/overlays/observability-native.yaml
+  --control pkg://mas.library.standard/controls/with-hardened.yaml \
+  --control pkg://mas.library.standard/controls/observability-native.yaml
 ```
 
 Plugin card: [no-undeclared-tool.md](../../../src/mas/library/standard/plugins/governance/no-undeclared-tool.md).

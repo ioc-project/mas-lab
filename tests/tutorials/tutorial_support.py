@@ -106,3 +106,8 @@ live_tutorial_chat = pytest.mark.skipif(
 def live_cli_env() -> dict[str, str]:
     """pytest isolates XDG_CONFIG_HOME; live chat must see the operator config."""
     return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}
+
+
+def tutorial_file(root: Path, name: str) -> Path:
+    """A tutorial's overlay or Control: governance files are Controls in ``controls/``, patches are in ``overlays/``."""
+    return root / ("controls" if name.startswith("governance-") else "overlays") / name

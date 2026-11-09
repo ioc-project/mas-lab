@@ -115,15 +115,7 @@ properties:
     oneOf:
       - type: "null"
       - $ref: "./overlay-collection-ops-control.schema.yaml"
-  governance:
-    oneOf:
-      - type: "null"
-      - $ref: "./overlay-collection-ops-governance.schema.yaml"
   hitl_contract:
     $ref: "../agent.schema.yaml#/properties/spec/properties/hitl_contract"
   user_io_contract:
     $ref: "../agent.schema.yaml#/properties/spec/properties/user_io_contract"
-  observability:
-    oneOf:
-      - type: "null"
-      - $ref: "./overlay-collection-ops-observability.schema.yaml"

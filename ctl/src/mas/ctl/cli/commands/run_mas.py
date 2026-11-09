@@ -4,10 +4,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
-import yaml
-from mas.ctl.cli.bind_flags import bind_option, connect_option, middleware_option, with_connects
-from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
+from mas.ctl.cli.bind_flags import (
+    bind_option,
+    connect_option,
+    control_option,
+    events_sink_option,
+    middleware_option,
+    with_connects,
+)
+from mas.ctl.cli.obs_flags import observability_options
 from mas.ctl.cli.runtime_flags import runtime_id_choice
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
@@ -28,12 +36,13 @@ from mas.ctl.executor.run_mas import execute_run_mas
 )
 @connect_option
 @bind_option
+@control_option
+@events_sink_option
 @click.option("-d", "--deployment", "deployment", default=None, type=click.Path())
 @click.option(
     "--flavour",
-    default="local",
-    show_default=True,
-    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
+    default=None,
+    help="Flavour: bundled name local or prod, or a Flavour YAML path. Omitted: local.",
 )
 @click.option("--infra-ref", "infra_refs", multiple=True)
 @middleware_option
@@ -62,8 +71,10 @@ def run_mas_cmd(
     overrides: tuple[str, ...],
     connects: tuple[str, ...],
     binds: tuple[str, ...],
+    controls: tuple[str, ...],
+    event_sinks: tuple[str, ...],
     deployment: str | None,
-    flavour: str,
+    flavour: str | None,
     infra_refs: tuple[str, ...],
     middleware_refs: tuple[str, ...],
     kernel: str,
@@ -91,10 +102,16 @@ def run_mas_cmd(
     verbose = int(ctx.obj.get("verbose", 0) if ctx.obj else 0)
     overrides = with_connects(connects=connects, binds=binds, overrides=overrides)
 
-    from mas.ctl.session.flavour import FlavourError, resolve_flavour
+    from mas.ctl.session.flavour import FlavourError, resolve_session_flavour
 
     try:
-        flavour_spec = resolve_flavour(flavour, overrides=overrides)
+        flavour_spec = resolve_session_flavour(
+            flavour,
+            overrides=overrides,
+            controls=controls,
+            event_sinks=event_sinks,
+            search_dirs=[Path.cwd()],
+        )
     except FlavourError as exc:
         click.echo(f"error: {exc}", err=True)
         raise SystemExit(2) from None
@@ -117,25 +134,13 @@ def run_mas_cmd(
             verbose=verbose,
         )
         deployment_path = None
-        deployment_doc = None
         if deployment:
             deployment_path = resolve_overlay_path(
                 deployment,
                 orig_cwd=session.original_cwd,
                 manifest_dir=session.manifest_dir,
             )
-            deployment_doc = yaml.safe_load(deployment_path.read_text(encoding="utf-8"))
 
-        mas_doc = yaml.safe_load(session.local_manifest.read_text(encoding="utf-8"))
-        obs_cfg = resolve_observability_config(
-            events=events,
-            events_file=events_file,
-            events_stdout=events_stdout,
-            events_format=events_format,
-            manifest=mas_doc,
-            deployment=deployment_doc,
-            flavour_spec=flavour_spec,
-        )
         rc = execute_run_mas(
             session.local_manifest,
             prompt=prompt,
@@ -152,7 +157,10 @@ def run_mas_cmd(
             validate=not no_validate,
             verbose=verbose,
             manifest_dir=session.manifest_dir,
-            obs_config=obs_cfg,
+            events=events,
+            events_file=events_file,
+            events_stdout=events_stdout,
+            events_format=events_format,
             flavour_spec=flavour_spec,
             **trace.as_session_kwargs(),
         )

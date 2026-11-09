@@ -65,7 +65,8 @@ def test_fixpoint_supports_dynamic_non_core_type() -> None:
 
     _register_candidates_fixpoint(registry, known_types, candidates)
 
-    assert registry.resolve_by_type("observability", "sample") is not None
+    assert registry.resolve_by_type("observability", "mas.observability.sample") is not None
+    assert registry.resolve_by_type("observability", "sample") is None  # exact: not the end of a URN
     assert registry.resolve("obs-sample") is not None
 
 

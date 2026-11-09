@@ -121,7 +121,7 @@ def bound_chains(flavour_spec: dict[str, Any] | None) -> tuple[list[str], list[s
         return [], list(DEFAULT_USAGE), {}
     if not isinstance(bind, dict):
         raise BindError("Flavour bind must be a map")
-    unknown = sorted(set(bind) - {"agent_comm", "agents", "usage"})
+    unknown = sorted(set(bind) - {"agent_comm", "agents", "usage", "events"})
     if unknown:
         raise BindError(f"Flavour bind: unknown keys {unknown}")
     default = _row_names(bind["agent_comm"], "bind.agent_comm") if bind.get("agent_comm") is not None else []
@@ -143,6 +143,22 @@ def bound_chains(flavour_spec: dict[str, Any] | None) -> tuple[list[str], list[s
             "params": {str(row): dict(values) for row, values in params.items()},
         }
     return default, default_usage, entries
+
+
+def _named_side_rows(
+    bind: dict[str, Any],
+    key: str,
+    *,
+    rows: dict[str, Any],
+) -> list[str]:
+    """Row names of ``bind.events``; each name must exist as an Application row."""
+    if key not in bind or bind.get(key) is None:
+        return []
+    names = _row_names(bind[key], f"bind.{key}")
+    for name in names:
+        if name not in rows:
+            raise BindError(f"Flavour bind.{key} names {name!r}, which is no Application row")
+    return names
 
 
 def flavour_spec_of(flavour: Any) -> dict[str, Any]:
@@ -331,6 +347,9 @@ def bind_flavour(
     """
     default_names, default_usage, entries = bound_chains(flavour_spec)
     rows = dict(resolved.applications or {})
+    bind = flavour_spec.get("bind") if isinstance(flavour_spec, dict) else None
+    if isinstance(bind, dict):
+        _named_side_rows(bind, "events", rows=rows)
     known = list(agent_ids) if agent_ids is not None else list(entries)
     unknown = sorted(set(entries) - set(known))
     if unknown:
@@ -367,6 +386,10 @@ def bind_flavour(
         agent_chains[agent_id] = chain
         agent_usage[agent_id] = usage
     _refuse_shared_bottoms(agent_chains)
+    if (flavour_spec or {}).get("require_usage"):
+        missing = [agent_id for agent_id in known if agent_id not in rows and agent_id not in agent_chains]
+        if missing:
+            raise BindError(f"require_usage: agent {missing[0]!r} has no bind chain or agent-keyed Application row")
     return dataclasses.replace(resolved, applications=rows, agent_chains=agent_chains, agent_usage=agent_usage)
 
 

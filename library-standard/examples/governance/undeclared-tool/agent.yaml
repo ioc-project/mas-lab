@@ -1,10 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 # Governance example agent for gov_no_undeclared_tool.
-# spec.tools is the offer; the skill still names get_deployments.
+# spec.tools is the offer; the skill still names get_deployments. flavour.yaml attaches
+# the governance chain through control.yaml.
 #
 #   mas-ctl validate library-standard/examples/governance/undeclared-tool/agent.yaml
 #   mas-ctl chat library-standard/examples/governance/undeclared-tool/agent.yaml \
+#     --flavour library-standard/examples/governance/undeclared-tool/flavour.yaml \
 #     -q "Investigate the latency spike for payment-service."
 apiVersion: mas/v1
 kind: Agent
@@ -25,7 +27,3 @@ spec:
     - ref: ./tools/get_service_health.tool.yaml
   skills:
     - data-access-protocol
-  governance:
-    - gov_no_undeclared_tool
-  observability:
-    - native

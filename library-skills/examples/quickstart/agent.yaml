@@ -16,7 +16,7 @@
 # Run offline (no API key needed):
 #   mas-ctl chat agent.yaml \
 #     -o overlays/with-skills.yaml \
-#     -o pkg://standard/overlays/observability-native.yaml \
+#     --control pkg://standard/controls/observability-native.yaml \
 #     -i -q "What is the speed of light?"
 
 apiVersion: mas/v1

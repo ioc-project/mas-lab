@@ -167,6 +167,7 @@ class SlimInbound:
                 self._readers.append(reader)
                 reader.add_done_callback(self._forget_reader)
         finally:
+            self._listening = False
             readers = list(self._readers)
             self._readers.clear()
             for task in readers:

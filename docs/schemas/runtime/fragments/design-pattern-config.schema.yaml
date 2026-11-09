@@ -13,7 +13,7 @@ properties:
     default: null
     description: >
       Kernel dispatch-loop cap (KernelConfig.max_auto_steps). Null / omitted
-      means no cap. Production overlay `with-hardened` sets 512.
+      means no cap. Set an integer (for example 512) in production.
   max_cot_pass:
     type: integer
     minimum: 0

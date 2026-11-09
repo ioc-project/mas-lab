@@ -1,17 +1,23 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """``mas-lab benchmark run`` command."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import click
+from mas.ctl.cli.bind_flags import control_option
 
 
 @click.command("run")
 @click.argument("experiment_yaml", type=Path, metavar="EXPERIMENT_YAML")
-@click.option("--force", is_flag=True, default=False,
-              help="Force a new run even if a previous run exists (Makefile --force semantics).")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force a new run even if a previous run exists (Makefile --force semantics).",
+)
 @click.option(
     "--override",
     "overrides",
@@ -22,65 +28,86 @@ import click
         "before -x overlays and --pipeline attachments, so an overlay can supersede it."
     ),
 )
-@click.option("--resume", is_flag=True, default=False, hidden=True,
-              help="(Deprecated) Resume an interrupted run — default behaviour now.")
-@click.option("--benchmark-id", default=None,
-              help="Specific benchmark ID to resume.")
-@click.option("--progress/--no-progress", default=True, show_default=True,
-              help="Show real-time progress bar.")
-@click.option("--dry-run", is_flag=True, default=False,
-              help="Validate config and show what would be executed without running.")
-@click.option("--max-runs", type=int, default=None,
-              help="Override n_runs from YAML.")
-@click.option("--limit-scenarios", type=int, default=None,
-              help="Limit to first N scenarios.")
-@click.option("--scenario-id", default=None,
-              help="Run only the scenario with this ID.")
-@click.option("--dataset-item", default=None,
-              help="Run only the dataset item with this ID.")
-@click.option("--sample-scenarios", type=int, default=None,
-              help="Randomly sample N scenarios.")
-@click.option("--single-run", is_flag=True, default=False,
-              help="Run exactly 1 scenario for quick pipeline testing.")
-@click.option("-o", "--output-dir", type=Path, default=None,
-              help="Output directory for benchmark results.")
-@click.option("--trace-cache", "trace_cache_dir", type=Path, default=None,
-              help="Override trace-cache directory (CLI > YAML > MAS_TRACE_CACHE > $XDG_CACHE_HOME/mas/traces).")
-@click.option("--data-cache", "data_cache_dir", type=Path, default=None,
-              help="Override step-cache directory (CLI > MAS_DATA_CACHE > <output_dir>/.cache). "
-                   "Use a shared path to reuse computed pipeline outputs after benchmark import.")
-@click.option("--force-lock", is_flag=True, default=False,
-              help="Force break existing lock.")
-@click.option("--flavour", default=None,
-              show_default=False,
-              help=(
-                  "Runtime flavour name resolved to <experiment_dir>/flavours/<name>.yaml. "
-                  "Defaults to experiment's default_flavour, then 'local'."
-              ))
-@click.option("--infra", "infra", default=None,
-              show_default=False,
-              help=(
-                  "Infra bundle name resolved to <experiment_dir>/infra/<name>.yaml. "
-                  "Selects which infrastructure services (OTel collector, storage, …) "
-                  "are provisioned by service_start / service_stop pipeline steps. "
-                  "Defaults to experiment's default_infra (opt-in, no default)."
-              ))
-@click.option("--strategy",
-              type=click.Choice(["coverage", "depth"], case_sensitive=False),
-              default=None,
-              help=(
-                  "Execution ordering (overrides YAML schedule.ordering). "
-                  "coverage (default): breadth-first — every condition gets one run before "
-                  "any gets a second run, maximising coverage after partial execution. "
-                  "depth: depth-first — complete all runs for each condition before moving on."
-              ))
-@click.option("--set", "step_overrides", multiple=True, metavar="STEP.KEY=VALUE",
-              help=(
-                  "Override a pipeline step config key from the CLI. "
-                  "Format: STEP_TYPE.key=value (e.g. --set export_otel.destination=mock). "
-                  "Value is auto-coerced: 'true'/'false' → bool, integers → int. "
-                  "Can be repeated for multiple overrides."
-              ))
+@click.option(
+    "--resume",
+    is_flag=True,
+    default=False,
+    hidden=True,
+    help="(Deprecated) Resume an interrupted run — default behaviour now.",
+)
+@click.option("--benchmark-id", default=None, help="Specific benchmark ID to resume.")
+@click.option("--progress/--no-progress", default=True, show_default=True, help="Show real-time progress bar.")
+@click.option(
+    "--dry-run", is_flag=True, default=False, help="Validate config and show what would be executed without running."
+)
+@click.option("--max-runs", type=int, default=None, help="Override n_runs from YAML.")
+@click.option("--limit-scenarios", type=int, default=None, help="Limit to first N scenarios.")
+@click.option("--scenario-id", default=None, help="Run only the scenario with this ID.")
+@click.option("--dataset-item", default=None, help="Run only the dataset item with this ID.")
+@click.option("--sample-scenarios", type=int, default=None, help="Randomly sample N scenarios.")
+@click.option("--single-run", is_flag=True, default=False, help="Run exactly 1 scenario for quick pipeline testing.")
+@click.option("-o", "--output-dir", type=Path, default=None, help="Output directory for benchmark results.")
+@click.option(
+    "--trace-cache",
+    "trace_cache_dir",
+    type=Path,
+    default=None,
+    help="Override trace-cache directory (CLI > YAML > MAS_TRACE_CACHE > $XDG_CACHE_HOME/mas/traces).",
+)
+@click.option(
+    "--data-cache",
+    "data_cache_dir",
+    type=Path,
+    default=None,
+    help="Override step-cache directory (CLI > MAS_DATA_CACHE > <output_dir>/.cache). "
+    "Use a shared path to reuse computed pipeline outputs after benchmark import.",
+)
+@click.option("--force-lock", is_flag=True, default=False, help="Force break existing lock.")
+@click.option(
+    "--flavour",
+    default=None,
+    show_default=False,
+    help=(
+        "Runtime flavour name resolved to <experiment_dir>/flavours/<name>.yaml. "
+        "Defaults to experiment's default_flavour, then 'local'."
+    ),
+)
+@control_option
+@click.option(
+    "--infra",
+    "infra",
+    default=None,
+    show_default=False,
+    help=(
+        "Infra bundle name resolved to <experiment_dir>/infra/<name>.yaml. "
+        "Selects which infrastructure services (OTel collector, storage, …) "
+        "are provisioned by service_start / service_stop pipeline steps. "
+        "Defaults to experiment's default_infra (opt-in, no default)."
+    ),
+)
+@click.option(
+    "--strategy",
+    type=click.Choice(["coverage", "depth"], case_sensitive=False),
+    default=None,
+    help=(
+        "Execution ordering (overrides YAML schedule.ordering). "
+        "coverage (default): breadth-first — every condition gets one run before "
+        "any gets a second run, maximising coverage after partial execution. "
+        "depth: depth-first — complete all runs for each condition before moving on."
+    ),
+)
+@click.option(
+    "--set",
+    "step_overrides",
+    multiple=True,
+    metavar="STEP.KEY=VALUE",
+    help=(
+        "Override a pipeline step config key from the CLI. "
+        "Format: STEP_TYPE.key=value (e.g. --set export_otel.destination=mock). "
+        "Value is auto-coerced: 'true'/'false' → bool, integers → int. "
+        "Can be repeated for multiple overrides."
+    ),
+)
 @click.option(
     "--pipeline",
     "pipeline_attachments",
@@ -95,7 +122,8 @@ import click
     ),
 )
 @click.option(
-    "-x", "--experiment-overlay",
+    "-x",
+    "--experiment-overlay",
     "experiment_overlays",
     multiple=True,
     metavar="OVERLAY_YAML",
@@ -108,22 +136,50 @@ import click
         "Paths are resolved relative to experiment.yaml's directory."
     ),
 )
-@click.option("-b", "--background", "background", is_flag=True, default=False,
-              help="Submit via controller daemon and return immediately (print worker id).")
-@click.option("--clean-stale", "clean_stale", is_flag=True, default=False,
-              help="Remove benchmark output for scenarios no longer in the experiment YAML "
-                   "(and unreferenced trace-cache entries when enabled in config).")
-def run_cmd(experiment_yaml: Path, force: bool, resume: bool, benchmark_id: str | None,
-            overrides: tuple[str, ...],
-            progress: bool, dry_run: bool, max_runs: int | None,
-            limit_scenarios: int | None, sample_scenarios: int | None,
-            scenario_id: str | None, dataset_item: str | None,
-            single_run: bool, output_dir: Path | None, trace_cache_dir: Path | None,
-            data_cache_dir: Path | None,
-            force_lock: bool, flavour: str | None, infra: str | None, strategy: str | None,
-            step_overrides: tuple[str, ...], pipeline_attachments: tuple[str, ...],
-            experiment_overlays: tuple[str, ...],
-            background: bool, clean_stale: bool) -> None:
+@click.option(
+    "-b",
+    "--background",
+    "background",
+    is_flag=True,
+    default=False,
+    help="Submit via controller daemon and return immediately (print worker id).",
+)
+@click.option(
+    "--clean-stale",
+    "clean_stale",
+    is_flag=True,
+    default=False,
+    help="Remove benchmark output for scenarios no longer in the experiment YAML "
+    "(and unreferenced trace-cache entries when enabled in config).",
+)
+def run_cmd(
+    experiment_yaml: Path,
+    force: bool,
+    resume: bool,
+    benchmark_id: str | None,
+    overrides: tuple[str, ...],
+    progress: bool,
+    dry_run: bool,
+    max_runs: int | None,
+    limit_scenarios: int | None,
+    sample_scenarios: int | None,
+    scenario_id: str | None,
+    dataset_item: str | None,
+    single_run: bool,
+    output_dir: Path | None,
+    trace_cache_dir: Path | None,
+    data_cache_dir: Path | None,
+    force_lock: bool,
+    flavour: str | None,
+    controls: tuple[str, ...],
+    infra: str | None,
+    strategy: str | None,
+    step_overrides: tuple[str, ...],
+    pipeline_attachments: tuple[str, ...],
+    experiment_overlays: tuple[str, ...],
+    background: bool,
+    clean_stale: bool,
+) -> None:
     """Run a benchmark from an experiment YAML via the controller daemon.
 
     MAS ``--dry-run`` (without ``-b``) validates in-process — no daemon required.
@@ -153,6 +209,7 @@ def run_cmd(experiment_yaml: Path, force: bool, resume: bool, benchmark_id: str 
                 data_cache_dir=data_cache_dir,
                 force_lock=force_lock,
                 flavour_name=flavour or "local",
+                controls=list(controls),
                 infra_name=infra,
                 strategy=strategy,
                 step_overrides=list(step_overrides),
@@ -183,6 +240,7 @@ def run_cmd(experiment_yaml: Path, force: bool, resume: bool, benchmark_id: str 
         "data_cache_dir": str(data_cache_dir) if data_cache_dir else None,
         "force_lock": force_lock,
         "flavour_name": flavour,
+        "controls": list(controls),
         "infra_name": infra,
         "strategy": strategy,
         "step_overrides": list(step_overrides),

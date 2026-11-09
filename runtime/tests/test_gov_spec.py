@@ -48,12 +48,17 @@ class _IngressOnlyPlugin:
         return IngressGovDecision(action=GovernanceAction.BLOCK, message="ingress test")
 
 
-def test_same_plugin_key_merges_policies_instead_of_overwriting_regression() -> None:
-    """Regression: two overlay entries both using "sample_governance" used to
-    silently overwrite (configs[name] = dict(cfg)), dropping the first
-    overlay's entire policy set once the declarative policy engine was
-    actually wired into build_kernel_config — previously invisible because
-    binding.policies was parsed and discarded."""
+class _ErrorIngressPlugin:
+    plugin_id = "test_error_ingress"
+
+    def evaluate_ingress(self, intent, *, config):
+        from mas.runtime.boundary.gov.ingress_plugin import IngressGovDecision
+        from mas.runtime.schema.governance import GovernanceAction
+
+        return IngressGovDecision(action=GovernanceAction.ALLOW, message="other error")
+
+
+def test_same_plugin_key_last_config_wins() -> None:
     binding = parse_gov_spec(
         [
             {
@@ -69,7 +74,8 @@ def test_same_plugin_key_merges_policies_instead_of_overwriting_regression() -> 
         ]
     )
     names = {p["name"] for p in binding.policies}
-    assert names == {"budget-cap", "forbidden-destination"}
+    assert names == {"forbidden-destination"}
+    assert binding.plugins == ["sample_governance"]
 
 
 def test_same_plugin_key_scalar_field_last_value_wins() -> None:
@@ -121,7 +127,7 @@ def test_build_kernel_config_wires_merged_policies() -> None:
     )
     config = build_kernel_config(binding)
     assert config.policy_engine is not None
-    assert {p.name for p in config.policy_engine.policies} == {"p1", "p2"}
+    assert {p.name for p in config.policy_engine.policies} == {"p2"}
 
 
 def test_malformed_policy_raises_spec_binding_error_regression() -> None:
@@ -160,13 +166,10 @@ def test_malformed_policy_missing_trigger_key_raises_spec_binding_error() -> Non
         build_kernel_config(binding)
 
 
-def test_unknown_plugin_name_is_skipped_not_crashed() -> None:
-    """No plugin class is ever named/imported directly in build_kernel_config
-    — an unresolvable name just logs a warning and leaves egress_governance_plugin
-    unset, the same as an empty governance list."""
-    binding = parse_gov_spec(["totally_unknown_plugin_name"])
-    config = build_kernel_config(binding)
-    assert config.egress_governance_plugin is None
+def test_unknown_plugin_name_is_an_error() -> None:
+    """A name the spec gives must be registered as a governance plugin, or the build fails."""
+    with pytest.raises(SpecBindingError, match="'totally_unknown_plugin_name' is not registered"):
+        build_kernel_config(parse_gov_spec(["totally_unknown_plugin_name"]))
 
 
 def test_named_plugin_resolves_via_registry_not_a_hardcoded_check() -> None:
@@ -200,20 +203,17 @@ def test_named_plugin_resolves_via_registry_not_a_hardcoded_check() -> None:
         assert config.egress_governance_plugin.cfg == {"threshold": 3}
     finally:
         reg = get_registry()
-        reg._entries.pop(urn, None)
-        reg._aliases.pop(shortcut, None)
+        reg.unregister(urn)
 
 
-def test_flags_only_fallback_also_resolves_sample_governance_via_registry() -> None:
-    """The hitl_on_tool-without-a-named-plugin fallback used to call
-    SampleGovernancePlugin(**cfg) directly (a hardcoded import). It must now
-    go through the exact same registry lookup as the named-plugin path."""
+def test_kernel_flags_without_a_named_plugin_build_no_plugin() -> None:
+    """No plugin is named by the runtime: a flag with no plugin leaves the parametric default."""
     import dataclasses
 
     binding = dataclasses.replace(parse_gov_spec([]), hitl_on_tool=True)
     config = build_kernel_config(binding)
-    assert config.egress_governance_plugin is not None
-    assert config.egress_governance_plugin.config.hitl_on_tool is True
+    assert config.egress_governance_plugin is None
+    assert config.hitl_on_tool is True
 
 
 def test_agent_spec_threads_through_to_kernel_config() -> None:
@@ -247,18 +247,27 @@ def test_distinct_plugins_are_chained_not_last_wins() -> None:
             shortcuts=["test_composite_block"],
             attributes={"plugin_type": "governance"},
         )
-        config = build_kernel_config(parse_gov_spec(["test_composite_allow", "test_composite_block"]))
+        config = build_kernel_config(
+            parse_gov_spec(
+                [
+                    {"test_composite_block": {"priority": 0}},
+                    {"test_composite_allow": {"priority": 10}},
+                ]
+            )
+        )
         plugin = config.egress_governance_plugin
         assert isinstance(plugin, GovernancePluginChain)
-        assert len(plugin.plugins) == 2
+        assert [type(item).__name__ for item in plugin.plugins] == [
+            "_CompositeAllowPlugin",
+            "_CompositeBlockPlugin",
+        ]
     finally:
         reg = get_registry()
-        for urn, shortcut in (
+        for urn, _shortcut in (
             (allow_urn, "test_composite_allow"),
             (block_urn, "test_composite_block"),
         ):
-            reg._entries.pop(urn, None)
-            reg._aliases.pop(shortcut, None)
+            reg.unregister(urn)
 
 
 def test_error_recovery_plugin_resolves_from_manifest_governance_binding() -> None:
@@ -295,8 +304,7 @@ def test_error_recovery_plugin_resolves_from_manifest_governance_binding() -> No
         assert plugin.repeat_threshold == 2
     finally:
         registry = get_registry()
-        registry._entries.pop(urn, None)
-        registry._aliases.pop(shortcut, None)
+        registry.unregister(urn)
 
 
 def test_error_recovery_plugin_ignores_session_level_backtrack_fields() -> None:
@@ -339,8 +347,7 @@ def test_error_recovery_plugin_ignores_session_level_backtrack_fields() -> None:
         assert plugin.repeat_threshold == 2
     finally:
         registry = get_registry()
-        registry._entries.pop(urn, None)
-        registry._aliases.pop(shortcut, None)
+        registry.unregister(urn)
 
 
 def test_backtrack_plugin_retries_first_error_and_requests_rollback_on_repeat() -> None:
@@ -389,8 +396,55 @@ def test_ingress_plugins_from_manifest_are_wired_to_kernel_config() -> None:
         assert entry.filter.response_kind == ("TOOL_RESULT",)
     finally:
         registry = get_registry()
-        registry._entries.pop(urn, None)
-        registry._aliases.pop(shortcut, None)
+        registry.unregister(urn)
         typed = registry._by_type.get("governance")
         if typed:
             registry._by_type["governance"] = [item for item in typed if item.urn != urn]
+
+
+def test_error_recovery_plugin_orders_by_priority_not_first() -> None:
+    from mas.library.standard.plugins.governance.backtrack_on_error import BacktrackOnErrorPlugin
+    from mas.runtime.registry import get_registry, register_plugin
+
+    recovery_urn = "mas.gov.test_recovery_priority"
+    other_urn = "mas.gov.test_error_ingress"
+    try:
+        register_plugin(
+            recovery_urn,
+            BacktrackOnErrorPlugin,
+            shortcuts=["test_recovery_priority"],
+            attributes={"plugin_type": "governance"},
+        )
+        register_plugin(
+            other_urn,
+            _ErrorIngressPlugin,
+            shortcuts=["test_error_ingress"],
+            attributes={"plugin_type": "governance"},
+        )
+        binding = parse_gov_spec(
+            [
+                {
+                    "sample_governance": {
+                        "error_recovery_plugin": "test_recovery_priority",
+                        "ingress_plugins": [{"type": "test_error_ingress", "response_kind": "ERROR", "priority": 10}],
+                    }
+                }
+            ]
+        )
+        config = build_kernel_config(binding)
+        ids = [
+            getattr(entry.plugin, "plugin_id", type(entry.plugin).__name__)
+            for entry in config.ingress_governance_plugins
+        ]
+        assert ids[0] == "test_error_ingress"
+        assert "backtrack_on_error@v1" in ids
+    finally:
+        registry = get_registry()
+        for urn, _shortcut in (
+            (recovery_urn, "test_recovery_priority"),
+            (other_urn, "test_error_ingress"),
+        ):
+            registry.unregister(urn)
+            typed = registry._by_type.get("governance")
+            if typed:
+                registry._by_type["governance"] = [item for item in typed if item.urn != urn]

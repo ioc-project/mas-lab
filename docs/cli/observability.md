@@ -16,7 +16,7 @@ mas-ctl chat agent.yaml -i --trace                          # prints a readable 
 mas-lab telemetry show traces/events.jsonl --filter tool_call   # summarises tool calls from the log
 ```
 
-These flags apply to `mas-ctl chat`, `mas-ctl tui`, `mas-ctl run-mas`, and, for benchmarks, `mas-lab benchmark run`. The `--trace*` flags do not exist on `tui`.
+These flags apply to `mas-ctl chat`, `mas-ctl tui`, `mas-ctl serve`, `mas-ctl run-mas`, and, for benchmarks, `mas-lab benchmark run`. The `--trace*` flags do not exist on `tui`.
 
 Flag tables: [mas-ctl.md](mas-ctl.md). `config.yaml` keys: [config.yaml reference](../references/config.yaml.md).
 
@@ -32,30 +32,58 @@ In experiments, check structural claims in `events.jsonl`, never in the exchange
 
 ## Turn on the event log
 
-Pick one of three ways.
+Native `events.jsonl` is recorded by default unless a Control named the
+observability list (including `[]`) or leftover agent `spec.observability`
+named plugins. `--no-events` turns recording off.
+Leftover Flavour `observability` is unread. Leftover Agent `spec.observability`
+still applies when no matching Control names that list. Flavour `bind.events`
+(or `--events-sink ROW`) names infra rows to send events to; each row adds its
+plugin to the selection.
 
-### Option 1: set it in the manifest
+Pick one of three ways to choose a sink other than that default.
 
-Add `observability` to the agent or MAS manifest. The setting persists across runs.
+### Option 1: set it in a Control
+
+Observability constrains a run, so it lives in a [Control](../manifests/control.md) a
+Flavour attaches. The setting persists across runs.
 
 ```yaml
+# control.yaml
+apiVersion: control/v1
+kind: Control
+metadata: {name: events}
 spec:
   observability:
-    enabled: true
-    format: native          # native | boundary | both | otel
-    events_file: traces/events.jsonl
+    - mas.observability.native:
+        path: traces/events.jsonl
 ```
 
-### Option 2: use the observability overlay
-
-Use this for experiments. The overlay is the standard patch that turns on native events.
+```yaml
+# flavour.yaml
+apiVersion: flavour/v1
+kind: Flavour
+metadata: {name: traced}
+spec:
+  control:
+    - ref: ./control.yaml
+```
 
 ```bash
-mas-ctl chat agent.yaml -o docs/schemas/examples/overlays/observability-native.yaml
-mas-ctl run-mas mas.yaml -o docs/schemas/examples/overlays/observability-native.yaml
+mas-ctl chat agent.yaml --flavour flavour.yaml
 ```
 
-Source: [observability-native.yaml](../schemas/examples/overlays/observability-native.yaml).
+The agent and MAS `spec.observability` key is deprecated and still applied when no matching Control names that list.
+
+### Option 2: use the observability Control
+
+Use this for experiments. `--control` on this Control turns on native events.
+
+```bash
+mas-ctl chat agent.yaml --control docs/schemas/examples/controls/observability-native.yaml
+mas-ctl run-mas mas.yaml --control docs/schemas/examples/controls/observability-native.yaml
+```
+
+Source: [observability-native.yaml](../schemas/examples/controls/observability-native.yaml).
 
 ### Option 3: pass flags for one session
 
@@ -63,12 +91,12 @@ These flags work on `chat`, `tui`, and `run-mas`. They override the manifest for
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--events` / `--no-events` | manifest | Force observability on or off. |
-| `--events-file PATH` | `traces/events.jsonl` under the run directory | Write the JSONL log here. |
-| `--events-stderr` | off | Also stream JSONL records on stderr. Stdout stays the conversation. `--events-stdout` is a legacy alias. |
-| `--events-format FORMAT` | manifest | Choose `native`, `boundary`, `both`, or `otel`. |
+| `--events` / `--no-events` | native on when the agent declares none | `--no-events` turns recording off. `--events` keeps the agent's plugins, or records native when the agent declares none. |
+| `--events-file PATH` | `traces/events.jsonl` under the run directory | Write the native JSONL log here. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
+| `--events-stderr` | off | Also stream JSONL records on stderr. Stdout stays the conversation. `--events-stdout` is a legacy alias. Adds `native` when it is not in the plugin set; never replaces a plugin. |
+| `--events-format FORMAT` | manifest | `native`, `otel`, and `both` replace the plugin set. `boundary` is the transform chain only. |
 
-`--events` equals the `observability-native` overlay for one run. For benchmarks, use the overlay or the manifest. Then every scenario sees the same settings.
+On a silent agent, `--events` records native events for one run. For benchmarks, use the overlay or the manifest when you want every scenario to see the same settings. `--events` on an agent that already declares plugins keeps those plugins.
 
 ```bash
 mas-ctl chat agent.yaml -i \
@@ -81,7 +109,7 @@ mas-ctl chat agent.yaml -i \
 
 | Goal | Manifest | Overlay | CLI |
 | --- | --- | --- | --- |
-| Native `events.jsonl` | `spec.observability.enabled: true` | `observability-native.yaml` | `--events` |
+| Native `events.jsonl` | Control `observability` | Control `observability-native.yaml` | `--events` |
 | Custom path | `events_file:` | Patch `events_file` | `--events-file PATH` |
 | Stream JSONL to terminal | none | none | `--events-stderr` |
 | Boundary and native | `format: both` | none | `--events-format both` |

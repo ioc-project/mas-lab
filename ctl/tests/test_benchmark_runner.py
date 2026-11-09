@@ -125,6 +125,117 @@ def test_mas_bench_compose_called_once_for_mas_kind(tmp_path: Path):
     assert compose_run.call_count == 1
 
 
+def test_mas_bench_runner_attaches_cli_controls(tmp_path: Path):
+    mas_path = tmp_path / "workflow.yaml"
+    mas_path.write_text(
+        "kind: mas\nmetadata:\n  name: demo\nspec:\n  workflow:\n    entry: alpha\n",
+        encoding="utf-8",
+    )
+    agent_path = tmp_path / "agents" / "alpha.yaml"
+    agent_path.parent.mkdir()
+    agent_path.write_text(
+        "kind: agent\nmetadata:\n  name: alpha\nspec:\n  design_pattern:\n    type: react\n",
+        encoding="utf-8",
+    )
+    gov = tmp_path / "gov.yaml"
+    gov.write_text(
+        "apiVersion: control/v1\nkind: Control\nmetadata: {name: gov}\nspec:\n  governance: [sample_governance]\n",
+        encoding="utf-8",
+    )
+    compose = ComposeResult(
+        mas_id="demo",
+        mas_config={
+            "kind": "mas",
+            "metadata": {"name": "demo"},
+            "spec": {
+                "workflow": {"entry": "alpha"},
+                "agency": {"agents": [{"id": "alpha", "ref": "agents/alpha.yaml"}]},
+            },
+        },
+        effective_bind={},
+        placement_plan={},
+        deployment={},
+        infra_refs=[],
+        bind=EffectiveBindManifest(
+            mas_id="demo",
+            spec_revision="",
+            runtime_id="mas-runtime-py",
+            deployment_name="local",
+            agents=[AgentBindSlice(agent_id="alpha", pattern_plugin_id="react@v1")],
+        ),
+        plan=PlacementPlan(),
+    )
+    captured: dict = {}
+
+    def _bind(resolved, flavour, **kwargs):
+        captured["flavour"] = flavour
+        from mas.ctl.compose.models import ResolvedInfra
+
+        return resolved or ResolvedInfra()
+
+    with patch("mas.ctl.benchmark.runner.compose_run", return_value=compose):
+        with patch("mas.ctl.benchmark.runner.bind_session", side_effect=_bind):
+            with patch("mas.ctl.benchmark.runner.instantiate_runtime") as inst:
+                inst.return_value = (object(), None)
+                with patch.object(MasBenchRunner, "_run_controller_turns") as turns:
+                    turns.return_value = RunResult(content="ok")
+                    MasBenchRunner().run(
+                        "hello",
+                        config=compose.mas_config,
+                        spec_path=mas_path,
+                        output_dir=tmp_path / "out",
+                        flavour={},
+                        controls=[f"{gov.name}@.mas.agent[*]"],
+                        workspace_root=tmp_path,
+                    )
+    from mas.ctl.infra.bind import flavour_spec_of
+
+    spec = flavour_spec_of(captured["flavour"])
+    assert spec["_controls"][0]["name"] == "gov"
+    assert spec["_controls"][0]["agents"] == ".mas.agent[*]"
+
+
+def test_attach_run_controls_does_not_stick_on_the_shared_flavour(tmp_path: Path) -> None:
+    from mas.ctl.infra.bind import flavour_spec_of
+    from mas.ctl.session.flavour_control import session_flavour_with_controls
+
+    def _gov(name: str) -> Path:
+        path = tmp_path / f"{name}.yaml"
+        path.write_text(
+            f"apiVersion: control/v1\nkind: Control\nmetadata: {{name: {name}}}\n"
+            "spec:\n  governance: [sample_governance]\n",
+            encoding="utf-8",
+        )
+        return path
+
+    flavour: dict = {}
+    first = session_flavour_with_controls(flavour, overlay_paths=[_gov("a")])
+    second = session_flavour_with_controls(flavour, overlay_paths=[_gov("b")])
+    assert flavour_spec_of(flavour).get("_controls") in (None, [])
+    assert flavour_spec_of(first)["_controls"][0]["name"] == "a"
+    assert flavour_spec_of(second)["_controls"][0]["name"] == "b"
+
+
+def test_standalone_unknown_control_is_a_run_result(tmp_path: Path) -> None:
+    agent = tmp_path / "desk.yaml"
+    agent.write_text(
+        "kind: agent\nmetadata:\n  name: desk\nspec:\n  description: x\n",
+        encoding="utf-8",
+    )
+    result = MasBenchRunner().run(
+        "hello",
+        config={"kind": "agent", "metadata": {"name": "desk"}, "spec": {"description": "x"}},
+        spec_path=agent,
+        output_dir=tmp_path / "out",
+        flavour={},
+        controls=["nowhere.yaml"],
+        workspace_root=tmp_path,
+    )
+    assert result.status == "error"
+    assert "nowhere.yaml" in (result.error or "")
+    assert "Traceback" not in (result.error or "")
+
+
 def test_multi_agent_topology_runs_on_unified_controller_path(tmp_path: Path):
     """Multi-agent topologies use unified SessionController path."""
     mas_path = tmp_path / "mas.yaml"

@@ -107,10 +107,8 @@ Harness overlays (`pkg://mas.library.skills/overlays/harness-profiles/`)
 pick the variant — cadence, portability, skill pin, overflow — so each
 framework's behaviour is a spec overlay, not a fork of the runtime.
 
-A workspace or lab may enable a store via `config.yaml` `plugins:` /
-`lab.enable_plugins` (`mas.checkpoint_store.hybrid`, …) when the spec omits
-`storage`. Spec `storage` still wins. CLI `--checkpoint-dir` overrides
-`storage.path`. When disk persistence is
+The store is chosen by `storage` in the spec (or by `mode` when it is omitted).
+CLI `--checkpoint-dir` overrides `storage.path`. When disk persistence is
 enabled without either, the CLI uses `.mas/checkpoints` beside the active
 manifest (or current working directory). Retention prunes only files belonging
 to the same session.
@@ -126,8 +124,6 @@ It is not a new envelope slot.
 - `hybrid`: memory plus files. The in-process copy is fast, and the disk copy is what a resume loads.
 
 When `storage` is omitted, `mode: in_memory` means memory, and `on_event` and `every_turn` mean disk.
-A workspace or lab can enable a store through `config.yaml` `plugins:` or `lab.enable_plugins` (for example `mas.checkpoint_store.hybrid`) when the spec omits `storage`.
-Spec `storage` still wins.
 
 The checkpoint directory resolves in this order:
 

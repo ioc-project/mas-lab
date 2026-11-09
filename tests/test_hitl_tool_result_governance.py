@@ -21,21 +21,23 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _merged_tutorial_agent(*, hitl_result: bool = True) -> dict:
-    from mas.ctl.overlay import merge_overlay
+def _merged_tutorial_agent(*, hitl_result: bool = True) -> tuple[dict, dict]:
+    from mas.ctl.session.flavour_control import attach_controls, control_row_from_path
+    from overlay_support import load_agent_and_flavour
 
-    base = _load_yaml(T01 / "agent.yaml")
-    for name in ("tools.yaml",):
-        base = merge_overlay(base, _load_yaml(T01 / "overlays" / name))
-    gov = _load_yaml(T01 / "overlays" / "governance-hitl.yaml")
+    base, flavour = load_agent_and_flavour(T01 / "agent.yaml", T01 / "overlays" / "tools.yaml")
+    gov_path = T01 / "controls" / "governance-hitl.yaml"
     if not hitl_result:
-        add_items = gov["spec"]["patch"]["governance"]["$op"]["add"]
-        for item in add_items:
+        gov = _load_yaml(gov_path)
+        for item in gov["spec"]["governance"]:
             if isinstance(item, dict) and "sample_governance" in item:
                 item["sample_governance"]["hitl_on_tool_result"] = False
                 break
-    base = merge_overlay(base, gov)
-    return base
+        row = control_row_from_path(gov_path)
+        row["spec"] = gov["spec"]
+        attach_controls(flavour, [row])
+        return base, flavour
+    return load_agent_and_flavour(base, gov_path)
 
 
 def _gov_decisions(instance) -> list[dict]:
@@ -68,13 +70,14 @@ def test_tool_cycle_emits_four_governance_checkpoints() -> None:
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
     from mas.ctl.ui.stdout import StdoutConversationDisplay
 
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -107,13 +110,14 @@ def test_ingress_hitl_steering_text() -> None:
     from mas.runtime.schema.ingress import HitlResolve
 
     steer = "Operator note: treat the capital of France as the answer."
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -153,13 +157,14 @@ def test_egress_skip_steering_binds_synthetic_tool_result() -> None:
     from mas.runtime.schema.ingress import HitlResolve
 
     steer = "Current is Maxence Augé"
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -200,13 +205,14 @@ def test_egress_block_synthetic_tool_result() -> None:
     from mas.ctl.ui.stdout import StdoutConversationDisplay
     from mas.runtime.schema.ingress import HitlResolve
 
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -243,13 +249,14 @@ def test_ingress_block_synthetic_tool_result() -> None:
     from mas.ctl.ui.stdout import StdoutConversationDisplay
     from mas.runtime.schema.ingress import HitlResolve
 
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -284,13 +291,14 @@ def test_ingress_hitl_only_when_enabled() -> None:
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
     from mas.ctl.ui.stdout import StdoutConversationDisplay
 
-    manifest = _merged_tutorial_agent(hitl_result=False)
+    manifest, flavour = _merged_tutorial_agent(hitl_result=False)
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )

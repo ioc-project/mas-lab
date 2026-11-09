@@ -909,24 +909,15 @@ properties:
             type: boolean
             default: false
 
-      debug:
-        type: object
-        additionalProperties: false
-        description: >
-          gdb-like debug_script plugin (script / script_file).
-          Enable the plugin from config.yaml plugins / lab.enable_plugins.
-          This object is the script config (script_file or inline script).
-        properties:
-          script_file:
-            type: string
-          script:
-            type: string
-
       governance:
-        $ref: "./fragments/governance-binding.schema.yaml"
+        deprecated: true
+        oneOf:
+          - $ref: "./fragments/governance-binding.schema.yaml"
         description: >
-          Governance bindings (typically applied via overlay). See
-          spec-contract-bindings.md — flat scalars + ingress_plugins[] only.
+          Deprecated leftover. Still applied when no matching Control names
+          governance. Live governance is kind: Control spec.governance (a set;
+          same-transition order is each plugin's priority). Overlay patches
+          that set it target kind: Control. mas-ctl validate warns once.
         x-merge:
           strategy: plugin_list_ops
           identity: plugin_id
@@ -972,16 +963,14 @@ properties:
 
       budget:
         type: object
+        deprecated: true
         x-merge:
           strategy: mapping_merge_or_ops
         description: >
-          Call-count ceilings enforced by the runtime engine during a run
-          (LiveLlmEngine / BudgetTracker). Omit a field, or the whole
-          object, for no limit -- this is the default. Typically left
-          unset on the agent manifest and set via an overlay instead
-          (e.g. pkg://mas.library.standard/overlays/with-hardened.yaml).
-          Distinct from spec.control.budget (token/cost accounting; not
-          yet wired to the engine).
+          Deprecated. Still enforced as before. Call ceilings are the budget
+          governance plugin, named in a kind: Control spec.governance
+          (max_llm_calls, max_tool_calls; omit for no limit). mas-ctl
+          validate warns once.
         additionalProperties: false
         properties:
           max_llm_calls:
@@ -995,15 +984,30 @@ properties:
         default: {}
 
       control:
-        $ref: "./fragments/control-binding.schema.yaml"
+        allOf:
+          - $ref: "./fragments/control-binding.schema.yaml"
+        deprecated: true
         x-merge:
           strategy: mapping_ops
-        description: "Control-plane plugin configs keyed by plugin id."
+        description: >
+          Deprecated. Control-plane knobs keyed by id. `retry` and
+          `circuit_breaker` are still applied by the engine; they move to the
+          infra pipeline (where the LLM cache, scheduler and fault injection
+          already are) in the next release. `budget` (tokens/cost) and
+          `rate_limiter` are read by nothing. Call ceilings are the `budget`
+          plugin in a Control spec.governance.
         default: {}
 
       observability:
-        $ref: "./fragments/observability-binding.schema.yaml"
-        description: "ObservabilitySink plugin list — list form only."
+        deprecated: true
+        oneOf:
+          - $ref: "./fragments/observability-binding.schema.yaml"
+        description: >
+          Deprecated leftover. Still applied when no matching Control names
+          observability. Live observability is kind: Control spec.observability
+          (a set). Overlay patches that set it target kind: Control.
+          mas-ctl validate warns once. Native records when no Control and no
+          leftover agent named plugins.
         x-merge:
           strategy: plugin_list_ops
           identity: plugin_id

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,12 +28,13 @@ from mas.ctl.executor.mas_session import (
 )
 from mas.ctl.executor.stacks import ChainHandles, ChainStartError
 from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
-from mas.ctl.infra.bind import BindError, bind_session
-from mas.ctl.infra.identities import agency_ids
+from mas.ctl.infra.bind import BindError, bind_session, flavour_spec_of
+from mas.ctl.infra.identities import agency_ids, declared_entry_id
 from mas.ctl.infra.resolve import resolve_infra_refs
 from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.session.bootstrap import InstantiationOptions, hitl_contract_for_mode, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
+from mas.ctl.session.flavour_control import ControlError, control_search_dirs, session_flavour_with_controls
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.lab.manifest.load import (
     agent_manifest_from_path,
@@ -114,26 +116,6 @@ def _manifest_kind_on_disk(spec_path: Path) -> str:
     return str((doc or {}).get("kind", "")).lower()
 
 
-def _manifest_with_flavour_observability(
-    manifest: dict[str, Any],
-    flavour: Any,
-) -> dict[str, Any]:
-    """Overlay flavour ``spec.observability`` onto *manifest* for bench runs."""
-    if not flavour or not isinstance(flavour, dict):
-        return manifest
-    fl_spec = flavour.get("spec")
-    if not isinstance(fl_spec, dict):
-        fl_spec = flavour
-    fl_obs = fl_spec.get("observability")
-    if not fl_obs:
-        return manifest
-    merged = dict(manifest)
-    spec = dict(merged.get("spec") or {})
-    spec["observability"] = list(fl_obs) if isinstance(fl_obs, list) else fl_obs
-    merged["spec"] = spec
-    return merged
-
-
 def bench_obs_config(
     output_dir: Path,
     manifest: dict[str, Any],
@@ -150,15 +132,19 @@ def bench_obs_config(
     events_path = output_dir / "traces" / "events.jsonl"
     events_path.parent.mkdir(parents=True, exist_ok=True)
     mas_id = mas_id_from_manifest(mas_config) if mas_config else mas_id_from_manifest(manifest)
-    effective_manifest = _manifest_with_flavour_observability(manifest, flavour)
+
+    agent_id = agent_manifest_label(manifest, manifest_path)
+    entry_id = declared_entry_id(mas_config) if mas_config else agent_id
     obs_cfg = resolve_observability_config(
         events=True,
         events_file=str(events_path),
         events_stdout=False,
         events_format=None,
-        agent_id=agent_manifest_label(manifest, manifest_path),
+        agent_id=agent_id,
         mas_id=mas_id,
-        manifest=effective_manifest,
+        manifest=manifest,
+        flavour_spec=flavour_spec_of(flavour) if flavour else None,
+        entry_id=entry_id,
     )
     return events_path, obs_cfg
 
@@ -295,6 +281,7 @@ class MasBenchRunner:
 
         experiment_default_model = kwargs.get("experiment_default_model")
         experiment_model_slots = kwargs.get("experiment_model_slots")
+        controls = list(kwargs.get("controls") or ())
         if not experiment_default_model and isinstance(experiment_model_slots, dict):
             from mas.runtime.spec.model_ref import SLOT_MAIN, slot_model
 
@@ -321,6 +308,7 @@ class MasBenchRunner:
                 workspace_root=kwargs.get("workspace_root"),
                 tool_fixtures=tool_fixtures,
                 run_params=run_params,
+                controls=controls,
             )
         except ChainStartError as exc:
             return self._with_bench_metadata(RunResult(content="", status="error", error=str(exc)), run_seed=run_seed)
@@ -391,18 +379,15 @@ class MasBenchRunner:
         workspace_root: Path | None = None,
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
+        controls: Sequence[str] = (),
     ) -> RunResult | _ControllerTarget:
         entry_manifest = config
         entry_manifest_path = spec_path
 
         resolved_mas_path = mas_path or mas_manifest_path(config, spec_path)
         if resolved_mas_path is None:
-            has_oasf_doc = isinstance(config.get("metadata"), dict) and isinstance(
-                config.get("spec"), dict
-            )
-            if _manifest_kind_on_disk(spec_path) == "agent" and (
-                is_loaded_mas_raw(config) or not has_oasf_doc
-            ):
+            has_oasf_doc = isinstance(config.get("metadata"), dict) and isinstance(config.get("spec"), dict)
+            if _manifest_kind_on_disk(spec_path) == "agent" and (is_loaded_mas_raw(config) or not has_oasf_doc):
                 entry_manifest, entry_manifest_path = agent_manifest_from_path(
                     spec_path,
                     overlay_refs=overlay_refs,
@@ -432,8 +417,9 @@ class MasBenchRunner:
                     workspace_root=workspace_root,
                     tool_fixtures=tool_fixtures,
                     run_params=run_params,
+                    controls=controls,
                 )
-            except BindError as exc:
+            except (BindError, ControlError) as exc:
                 return RunResult(content="", status="error", error=str(exc))
 
         # Do not prepend observability-native. That overlay is target.kind:
@@ -457,11 +443,17 @@ class MasBenchRunner:
             )
         )
         try:
-            compose.resolved_infra = bind_session(
-                compose.resolved_infra, flavour, agent_ids=agency_ids(compose.mas_config)
+            ids = agency_ids(compose.mas_config)
+            flavour = session_flavour_with_controls(
+                flavour,
+                overlay_paths=overlay_paths,
+                controls=controls,
+                search_dirs=control_search_dirs(workspace_root, resolved_mas_path.parent, spec_path.parent, Path.cwd()),
             )
-        except BindError as exc:
+            compose.resolved_infra = bind_session(compose.resolved_infra, flavour, agent_ids=ids)
+        except (BindError, ControlError) as exc:
             return RunResult(content="", status="error", error=str(exc))
+        compose.bind.flavour_spec = flavour_spec_of(flavour)
         entry_manifest, entry_manifest_path = entry_agent_from_compose(compose, resolved_mas_path)
         if should_merge_stacked_entry_agent_config(config):
             entry_manifest = merge_stacked_entry_agent_manifest(entry_manifest, config)
@@ -474,9 +466,7 @@ class MasBenchRunner:
         entry = entry_agent_id(compose.mas_config)
 
         if len(bind.agents) <= 1:
-            pattern_plugin_id = resolve_entry_pattern_plugin_id(
-                compose, entry, entry_manifest=entry_manifest
-            )
+            pattern_plugin_id = resolve_entry_pattern_plugin_id(compose, entry, entry_manifest=entry_manifest)
             instance, store = instantiate_runtime(
                 InstantiationOptions(
                     agent_manifest=entry_manifest,
@@ -491,6 +481,7 @@ class MasBenchRunner:
                     experiment_model_slots=experiment_model_slots,
                     hitl_contract=hitl_contract_for_mode("auto"),
                     events_file=str(output_dir / "traces" / "events.jsonl"),
+                    flavour_spec=flavour_spec_of(flavour),
                 ),
             )
             _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -599,6 +590,7 @@ class MasBenchRunner:
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
         events_file: str | None = None,
+        controls: Sequence[str] = (),
     ) -> _ControllerTarget:
         workspace = WorkspaceConfig.load(workspace_root or entry_manifest_path.parent)
         user = UserConfig.load()
@@ -608,10 +600,13 @@ class MasBenchRunner:
             cli_refs=list(infra_refs or []),
             workspace_found=workspace.found,
         )
-        resolved = resolve_infra_refs(
-            merged, anchor=entry_manifest_path.parent, workspace=workspace, user=user
-        )
+        resolved = resolve_infra_refs(merged, anchor=entry_manifest_path.parent, workspace=workspace, user=user)
         entry_id = agent_manifest_label(entry_manifest, entry_manifest_path)
+        flavour = session_flavour_with_controls(
+            flavour,
+            controls=controls,
+            search_dirs=control_search_dirs(workspace_root, entry_manifest_path.parent, Path.cwd()),
+        )
         resolved = bind_session(resolved, flavour, agent_ids=[entry_id])
         pattern_plugin_id = resolve_entry_pattern_plugin_id(None, entry_id, entry_manifest=entry_manifest)
         instance, store = instantiate_runtime(
@@ -628,6 +623,7 @@ class MasBenchRunner:
                 experiment_model_slots=experiment_model_slots,
                 hitl_contract=hitl_contract_for_mode("auto"),
                 events_file=events_file,
+                flavour_spec=flavour_spec_of(flavour),
             ),
         )
         _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -642,6 +638,8 @@ class MasBenchRunner:
             parent_agent_id=entry_id,
             session_id=session_id,
             working_memory_registry=working_memory_registry,
+            flavour_spec=flavour_spec_of(flavour),
+            entry_id=entry_id,
         )
         chains = open_single_agent_chains(instance, entry_id, resolved)
         return _ControllerTarget(
@@ -693,11 +691,9 @@ class MasBenchRunner:
         from mas.ctl.session.observability import setup_observability
         from mas.ctl.ui.stdout import StdoutConversationDisplay
 
-        events_path, obs_cfg = bench_obs_config(
-            output_dir, config, spec_path, flavour=flavour
-        )
-        obs_rec = obs_recorder if obs_recorder is not None else setup_observability(
-            instance, obs_cfg, base_dir=output_dir
+        events_path, obs_cfg = bench_obs_config(output_dir, config, spec_path, flavour=flavour)
+        obs_rec = (
+            obs_recorder if obs_recorder is not None else setup_observability(instance, obs_cfg, base_dir=output_dir)
         )
 
         if memory_seeds:

@@ -94,18 +94,5 @@ spec:
       type: react
       config:
         max_steps: 12
-
-  governance:
-    - sample_governance:
-        policies:
-          - name: forbidden-destination
-            trigger:
-              "on": tool_input
-              tool: "*"
-              condition: 'arguments.destination == "Shadowmere"'
-              evaluation: deterministic
-            action: block
-            params:
-              message: >
-                Restricted destination: Shadowmere is not available in the
-                Arborian Network booking system.
+  control:
+    - ref: with-vector-memory-guardrail.control.yaml

@@ -70,26 +70,16 @@ LIBRARY_TYPES = frozenset(
         "related_state",
         "execute_sandbox",
         "circuit_breaker",
+        "retry",
         "infra_middleware",
         "hitl_responder",
         "control_protocol",
         "checkpoint_store",
-        "runtime",
         "eval_metric",
     }
 )
 
-# Workspace / lab ``plugins:`` — gdb, checkpoint stores, control wire.
-# Off unless listed. Observability and governance stay in agent YAML.
-WORKSPACE_PLUGIN_TYPES = frozenset(
-    {
-        "runtime",
-        "checkpoint_store",
-        "control_protocol",
-    }
-)
-
-# Spec slots — reject if someone puts them in config.yaml plugins.
+# Spec slots: the plugin types an agent spec key names.
 SPEC_IDENTITY_TYPES = frozenset(
     {
         "design_pattern",
@@ -228,8 +218,7 @@ class HarnessCatalog:
     def _assert_acyclic(self) -> None:
         for name, item in list(self._items.items()):
             if any(
-                req not in self._items and req not in KERNEL_OPS and req not in BOUNDARY_SLOTS
-                for req in item.requires
+                req not in self._items and req not in KERNEL_OPS and req not in BOUNDARY_SLOTS for req in item.requires
             ):
                 continue
             self.depends(name)
@@ -287,8 +276,6 @@ def default_catalog(extra: Iterable[HarnessComposition] = ()) -> HarnessCatalog:
     for item in list(catalog._items.values()):
         for req in item.requires:
             if req not in catalog._items and req not in KERNEL_OPS and req not in BOUNDARY_SLOTS:
-                raise IllegalHarnessLeafError(
-                    f"harness {item.name!r} requires unknown {req!r}"
-                )
+                raise IllegalHarnessLeafError(f"harness {item.name!r} requires unknown {req!r}")
         catalog._assert_acyclic()
     return catalog

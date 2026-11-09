@@ -6,7 +6,7 @@
 
 `mas-ctl compile` applies a manifest and its overlays, then writes the resolved spec. Use it to see what `chat` or `run-mas` will load. Part of [References → CLI](../references/index.md#cli). Topic index: [command line](index.md).
 
-Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. See the [glossary](../glossary.md) and the [overlay manifest](../manifests/overlay.md).
+Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. `--control` attaches a Control; observability and governance stay on the Control and are not copied onto the compiled spec. Passing a Control with `-o` is deprecated. See the [glossary](../glossary.md) and the [overlay manifest](../manifests/overlay.md).
 
 ## The three commands most people run
 
@@ -32,7 +32,7 @@ The result is a single document, printed or written with `-O`. The original file
 
 ## What "resolved" means
 
-The resolved spec is the Agent or MAS document in memory before bootstrap wiring. Overlays are merged and omitted runtime defaults are filled. Bootstrap wiring then adds delegation tools, injects skills, and expands tool refs to files.
+The resolved spec is the Agent or MAS document in memory before bootstrap wiring. Agent overlays are merged and omitted runtime defaults are filled. `--control` and Flavour `spec.control` attach Control documents; observability and governance stay on the Control and are not copied onto the agent. Overlay patches that set those keys target `kind: Control`. Event plugins stay off the compiled spec. Bootstrap wiring then adds delegation tools, injects skills, and expands tool refs to files.
 
 `compile` applies `target.kind: Agent` overlays onto each nested agent file.
 
@@ -117,7 +117,7 @@ Omitted plugin slots are filled from the same accessors the runtime uses (`defau
 
 The model is not baked in. An omitted Agent or MAS model compiles to `any`. At run time the model resolves in this order: CLI, Agent, MAS, `experiment.models.main` or `experiment.model`, local `config.yaml` `defaults.model`, then the package `defaults.yaml`.
 
-- `spec.design_pattern`: package default `react`. The string `design_pattern: cot` equals `{type: cot}`. Compile fills `params.max_cot_pass: 1` and `parallel: true`. It omits `max_steps` unless an overlay such as `with-hardened` sets it.
+- `spec.design_pattern`: package default `react`. The string `design_pattern: cot` equals `{type: cot}`. Compile fills `params.max_cot_pass: 1` and `parallel: true`. It omits `max_steps` unless the agent or an overlay sets it.
 - `spec.models[0]`: `model: any` when omitted. At run time it inherits from the MAS or `experiment.models.main`, then local `config.yaml`.
 - MAS `spec.models[0]`: the same `any` sentinel when the MAS omits a default.
 - `spec.context_manager`: `summarising`, `keep_turns` 10, `hysteresis_ratio` 0.1, `summarizer: llm`, safety margin 0.1.
@@ -130,6 +130,8 @@ The runtime resolves automatic context windows after infra model mappings. Compi
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-o` / `--overlay` | none | Overlay YAML. Repeatable. Later wins. |
+| `--control REF[@SELECTOR]` | none | Attach a `kind: Control` file (repeatable). Observability and governance stay on the Control; compile does not copy them onto the agent. |
+| `--flavour NAME\|PATH` | omitted (`local`) | Flavour whose `spec.control` attaches Controls the way `chat` does. Compile does not copy those lists onto the agent. |
 | `--override PATH=VALUE` | none | Schema-backed session-tree override. Repeatable. Applies after overlays. |
 | `--kind SCHEMA` | none | Registered schema for a document without a declared kind. |
 | `-O` / `--output` | stdout | Directory or YAML file to write. |

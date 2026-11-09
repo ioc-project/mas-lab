@@ -134,6 +134,89 @@ def _apply_overlay_plugin_list(
     return True
 
 
+def _stacked_entry_and_delegates(config: dict) -> tuple[str, list[str]]:
+    """``$entry`` / ``$delegates`` for a stacked lab config.
+
+    Entry is ``workflow.entry``, then ``mas.entry_agent``. Omitted, ``$entry``
+    matches nobody. Delegates are that entry node's ``delegates_to`` list;
+    omitted or empty, ``$delegates`` matches nobody.
+    """
+    workflow = config.get("workflow") if isinstance(config.get("workflow"), dict) else {}
+    entry = str((workflow or {}).get("entry") or ((config.get("mas") or {}).get("entry_agent") or ""))
+    for node in (workflow or {}).get("nodes") or []:
+        if isinstance(node, dict) and str(node.get("id") or "") == entry:
+            raw = node.get("delegates_to") or []
+            return entry, [str(item) for item in raw] if isinstance(raw, list) else []
+    return entry, []
+
+
+def _lab_flavour(config: dict) -> dict:
+    flavour = config.get("_lab_flavour_spec")
+    if not isinstance(flavour, dict):
+        flavour = {"_controls": []}
+        config["_lab_flavour_spec"] = flavour
+    flavour.setdefault("_controls", [])
+    return flavour
+
+
+def _overlay_targets_control(overlay: Optional[dict]) -> bool:
+    if not isinstance(overlay, dict):
+        return False
+    if overlay.get("kind") == "Control":
+        return True
+    target = (overlay.get("spec") or {}).get("target") or {}
+    return overlay.get("kind") == "Overlay" and str(target.get("kind") or "").strip().lower() == "control"
+
+
+def _rewrite_agent_control_lists(config: dict, flavour: dict) -> None:
+    from mas.ctl.session.flavour_control.documents import resolve_controls
+    from mas.ctl.session.flavour_control.plugins import control_lists_for_agent
+    from mas.ctl.session.flavour_control.spec import (
+        GOVERNANCE,
+        OBSERVABILITY,
+        empty_list_silences_warning,
+    )
+    from mas.ctl.session.notices import warn_once
+
+    rows = resolve_controls(flavour)
+    entry, delegates = _stacked_entry_and_delegates(config)
+    for agent_cfg in config.get("agents") or []:
+        aid = str(agent_cfg.get("id") or agent_cfg.get("name") or "")
+        lists = control_lists_for_agent(
+            rows,
+            agent_id=aid,
+            entry_id=entry,
+            delegate_ids=delegates,
+        )
+        for key in (OBSERVABILITY, GOVERNANCE):
+            if key in lists:
+                if agent_cfg.get(key) and not lists[key]:
+                    warn_once(empty_list_silences_warning(aid, key))
+                agent_cfg[key] = lists[key]
+
+
+def _apply_control_pipeline(overlay: Optional[dict], config: dict, overlay_path: Path) -> bool:
+    """Copy matching Control lists onto stacked agents, replacing leftover when a Control names the list.
+
+    Lab config agents are the bench kernel input. Session attach does not copy
+    these lists onto an Agent document.
+    Overlay patches that target ``kind: Control`` apply to the stacked Controls.
+    """
+    if not _overlay_targets_control(overlay):
+        return False
+    from mas.ctl.session.flavour_control.attach import apply_control_overlays
+    from mas.ctl.session.flavour_control.documents import row_from_loaded, validate_control_document
+
+    flavour = _lab_flavour(config)
+    if overlay.get("kind") == "Control":
+        overlay = validate_control_document(overlay, overlay_path)
+        flavour["_controls"].append(row_from_loaded(overlay_path, overlay, agents=None))
+    else:
+        apply_control_overlays(flavour, [overlay_path])
+    _rewrite_agent_control_lists(config, flavour)
+    return True
+
+
 def _apply_overlay_governance(overlay: Optional[dict], overlay_spec: dict, config: dict) -> bool:
     """Inject an overlay's governance plugin list onto each agent's own
     "governance" list, mirroring the spec.plugins merge elsewhere in this
@@ -262,7 +345,7 @@ def load_scenario_config(
         #   spec.plugins         (direct overlay format)
         #   spec.patch.plugins   (kind:Patch format used by locomo mem0 overlays)
         overlay_spec = overlay.get("spec", {}).get("patch", {}) if overlay else {}
-        if overlay:
+        if overlay and overlay.get("kind") != "Control":
             _overlay_agent_plugins = overlay.get("spec", {}).get("plugins") or overlay_spec.get("plugins")
             if _overlay_agent_plugins and config.get("agents"):
                 for _agent_cfg in config["agents"]:
@@ -369,10 +452,13 @@ def load_scenario_config(
                     _agent_cfg.setdefault("pattern_params", {}).update(dp_params)
             logger.debug("[overlay] design_pattern set to '%s' for all agents (scenario=%s)", dp_type, scenario_id)
 
-        if _apply_overlay_governance(overlay, overlay_spec, config):
+        if _apply_control_pipeline(overlay, config, overlay_path):
+            logger.debug("[overlay] Control lists copied onto stacked agents (scenario=%s)", scenario_id)
+        elif _apply_overlay_governance(overlay, overlay_spec, config):
             logger.debug("[overlay] governance policies injected (scenario=%s)", scenario_id)
-        if _apply_overlay_plugin_list(overlay, overlay_spec, config, "observability"):
-            logger.debug("[overlay] observability sinks injected (scenario=%s)", scenario_id)
+        if overlay and overlay.get("kind") != "Control":
+            if _apply_overlay_plugin_list(overlay, overlay_spec, config, "observability"):
+                logger.debug("[overlay] observability sinks injected (scenario=%s)", scenario_id)
 
         # Embed the full raw overlay in the config so _compute_run_hash captures
         # every overlay dimension automatically — including any fields not yet
@@ -380,6 +466,7 @@ def load_scenario_config(
         # _materialize_config deep-copies the config dict, so _overlay_hash_input
         # flows into the SHA-256 payload without any extra plumbing.
         config["_overlay_hash_input"] = [overlay]
+        config.pop("_lab_flavour_spec", None)
 
         return config, mas_yaml
 
@@ -538,21 +625,21 @@ def load_stacked_config(
                 if dp_params:
                     _agent_cfg.setdefault("pattern_params", {}).update(dp_params)
 
-        _apply_overlay_governance(overlay, overlay_spec, config)
-        _apply_overlay_plugin_list(overlay, overlay_spec, config, "observability")
-
-        # Overlay-level plugins injection (spec.plugins)
-        if overlay:
-            _overlay_plugins = overlay.get("spec", {}).get("plugins")
-            if _overlay_plugins and config.get("agents"):
-                for _agent_cfg in config["agents"]:
-                    _existing = list(_agent_cfg.get("plugins") or [])
-                    _agent_cfg["plugins"] = _existing + list(_overlay_plugins)
+        if not _apply_control_pipeline(overlay, config, overlay_path):
+            _apply_overlay_governance(overlay, overlay_spec, config)
+            _apply_overlay_plugin_list(overlay, overlay_spec, config, "observability")
+            if overlay:
+                _overlay_plugins = overlay.get("spec", {}).get("plugins")
+                if _overlay_plugins and config.get("agents"):
+                    for _agent_cfg in config["agents"]:
+                        _existing = list(_agent_cfg.get("plugins") or [])
+                        _agent_cfg["plugins"] = _existing + list(_overlay_plugins)
 
         # Accumulate raw overlay for cache key (see load_scenario_config for rationale).
         _applied_overlays.append(overlay)
 
     # Embed all applied overlays so _compute_run_hash sees every dimension.
     config["_overlay_hash_input"] = _applied_overlays
+    config.pop("_lab_flavour_spec", None)
 
     return config, mas_yaml

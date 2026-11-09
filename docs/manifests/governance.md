@@ -4,9 +4,9 @@
 -->
 # Governance (`spec.governance`)
 
-`spec.governance` declares a chain of **governance** plugins on an Agent manifest. A plugin is a class that a library registers and a manifest names. Each governance plugin can allow, block, modify, or ask a human before a tool call or LLM call runs. It sees the result or error again when it comes back.
-Write a chain to stop undeclared or destructive tool calls. Also write one to require human in the loop (HITL) approval, or to set a recovery policy for engine errors.
-This page extends the [Agent manifest](agent.md). It is not a YAML kind.
+Live `spec.governance` is a set of **governance** plugins on a [Control](control.md). A plugin is a class that a library registers and a manifest names. Each governance plugin can allow, block, modify, or ask a human before a tool call or LLM call runs. It sees the result or error again when it comes back.
+Write a set to stop undeclared or destructive tool calls. Also write one to require human in the loop (HITL) approval, or to set a recovery policy for engine errors.
+Leftover Agent `spec.governance` is deprecated and still applied when no matching Control names governance. This page is not a YAML kind.
 
 Minimal working chain. It blocks any tool the LLM call did not declare:
 
@@ -25,7 +25,7 @@ spec:
 
 ## Chain
 
-`spec.governance` is an **iptables-style chain**. Plugins run in list order. BLOCK stops the chain and returns that error. ALLOW passes control to the next plugin.
+`spec.governance` is an **iptables-style chain**, not a list order. Plugins that attach to the same transition run in `priority` order (higher first, default 0; same-priority order is the plugin id). BLOCK stops the chain and returns that error. ALLOW passes control to the next plugin.
 `spec.observability` differs: it is a sequence, and every plugin always runs.
 
 Two hook points carry governance decisions:
@@ -35,8 +35,8 @@ Two hook points carry governance decisions:
 
 | Layer | When | Who |
 |-------|------|-----|
-| Infra retry | Inside the LLM HTTP POST or tool invocation | `spec.control.retry` |
-| Circuit breaker | After infra retries on `unavailable` | Library plugin via `spec.control.circuit_breaker` (default `threshold`) |
+| Infra retry | Inside the LLM HTTP POST or tool invocation | Agent `spec.control.retry` (deprecated, still applied) |
+| Circuit breaker | After infra retries on `unavailable` | Agent `spec.control.circuit_breaker` (deprecated, still applied) |
 | Egress chain | Before the engine call (`TOOL_CALL`, `LLM_CALL`) | Plugins in `spec.governance[]` |
 | Ingress `error_policy` | After `_end`, on engine `ERROR` | `retry_on_error` plugin, if installed |
 
@@ -75,13 +75,11 @@ governance:
         fatal: block
 ```
 
-The `with-hardened` overlay sets this up for you. It does five things:
+The `with-hardened` Control sets this up for you:
 
-1. Appends both governance plugins.
-2. Merges `control.retry` and `control.circuit_breaker`, which loads the `threshold` circuit-breaker plugin.
-3. Sets `spec.budget.max_llm_calls: 50`.
-4. Sets `spec.budget.max_tool_calls: 100`.
-5. Caps the dispatch loop at `design_pattern.params.max_steps: 512`.
+1. It names `gov_no_undeclared_tool`, `budget` and `retry_on_error` in `spec.governance`.
+2. The `budget` plugin is set to `max_llm_calls: 50` and `max_tool_calls: 100`.
+3. The infra retry and the circuit breaker stay agent `spec.control` settings until the infra pipeline takes them (next release).
 
 Details: [reliability.md](../references/reliability.md#with-hardened).
 
@@ -94,14 +92,14 @@ Each ingress or egress decision is a `kind: governance_decision` record in nativ
 ## Stanza keys read by the runtime
 
 Besides the plugin's own constructor arguments, the runtime reads these keys from any stanza in the chain. Each key applies to the whole agent.
-When two stanzas set the same key, the first stanza in list order wins. The `policies` and `ingress_plugins` lists are concatenated instead.
+When two Controls name the same plugin id, the later Control's config wins. When two stanzas in one parsed set set the same kernel field, the first in priority order wins.
 
 | Key | Default | Effect |
 |-----|---------|--------|
 | `hitl_on_tool` | `false` | Ask a human before a tool call runs (egress). |
 | `hitl_on_tool_result` | `false` | Ask a human before a tool result enters working memory (ingress). |
 | `hitl_once_per_turn` | `false` | After one tool call is approved in a turn, later tool calls in that turn skip the prompt. |
-| `hitl_mode` | `interactive` | Who answers HITL prompts: `interactive` (terminal operator), `auto-approve`, or `auto-deny`. A non-interactive session with `interactive` auto-approves. |
+| `hitl_mode` | `interactive` | Who answers HITL prompts: `interactive` (terminal operator), `auto_approve`, or `auto_deny`. A non-interactive session with `interactive` auto_approves. |
 | `gov_policy_profile` | `BLOCK_DESTRUCTIVE` | Built-in policy for destructive tools: `PERMISSIVE`, `BLOCK_DESTRUCTIVE`, `HITL_DESTRUCTIVE`, `LOG_ALL`, `MODIFY_DESTRUCTIVE`, `TERMINATE_DESTRUCTIVE`, `SKIP_DESTRUCTIVE`, `BLACKLIST_DESTRUCTIVE`. |
 | `gov_block_destructive` / `gov_trigger_destructive` | `false` | Turn the destructive-tool policy on. |
 | `gov_ingress_profile` | `PERMISSIVE` | Ingress decision on engine `ERROR` when no recovery plugin is installed: `PERMISSIVE`, `RETRY_ON_ERROR`, `BLOCK_ON_ERROR`, `SKIP_ON_ERROR`. |
@@ -119,7 +117,7 @@ governance:
       hitl_on_tool: true
 ```
 
-`BLOCK` (and `hitl_mode: auto-deny`) refuses the tool and ends the turn with
+`BLOCK` (and `hitl_mode: auto_deny`) refuses the tool and ends the turn with
 that denial as the user-visible answer. Optional steering is appended to the
 denial. `SKIP` injects optional steering as the tool result and lets the model
 continue. Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
@@ -129,4 +127,4 @@ continue. Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
 - [Tutorial 14: governance and HITL](../tutorials/14-governance-hitl/README.md)
 - [Agent manifest](agent.md): where `spec.governance` lives
 - [Plugin bindings](plugin-bindings.md): entry syntax
-- [Overlay manifest](overlay.md): add governance to an existing agent
+- [Control manifest](control.md): attach governance to an existing agent

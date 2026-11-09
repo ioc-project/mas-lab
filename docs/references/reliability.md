@@ -61,26 +61,29 @@ For ordinary chat and LLM HTTP, the runtime retries a dropped socket, connect-re
 | `error_recovery_plugin` | unset |
 | `max_gov_retries` | `2` |
 | Lab run `max_attempts` | `3` (`experiment.schedule.max_attempts`; set `1` to disable) |
-| `spec.budget.max_llm_calls` / `max_tool_calls` | unset (no call-count ceiling) |
+| `budget` governance plugin | not named (no call-count ceiling) |
 
 ### `with-hardened`
 
-An *overlay* is a small YAML file merged on top of a manifest. The overlay `pkg://mas.library.standard/overlays/with-hardened.yaml` keeps the infra retry defaults. It turns on governance, the breaker, and call-count caps. Use it for a production posture:
+One Control, written once and attached to every agent you deploy: `pkg://mas.library.standard/controls/with-hardened.yaml`.
 
 | Knob | Value |
 |------|--------|
-| Egress | append `gov_no_undeclared_tool` |
-| Ingress | append `retry_on_error` with `error_recovery_plugin: retry_on_error` |
+| Egress | `gov_no_undeclared_tool` |
+| Call ceilings | the `budget` plugin: `max_llm_calls: 50`; `max_tool_calls: 100` |
+| Ingress | `retry_on_error` with `error_recovery_plugin: retry_on_error` |
 | `error_policy` | transient/unavailable → `retry`; application → `allow`; fatal → `block` |
-| Circuit breaker | on; `failure_threshold: 5`; `reset_timeout_s: 30`; `"on": [unavailable]` |
-| `spec.budget` | `max_llm_calls: 50`; `max_tool_calls: 100` |
-| `spec.design_pattern.params` | `max_steps: 512` (caps the kernel dispatch loop) |
 
 ```bash
 mas-ctl chat agent.yaml \
-  -o pkg://mas.library.standard/overlays/with-hardened.yaml \
-  -o pkg://mas.library.standard/overlays/observability-native.yaml
+  --control pkg://mas.library.standard/controls/with-hardened.yaml \
+  --control pkg://mas.library.standard/controls/observability-native.yaml
 ```
+
+Two production settings are not governance, so they are not in it. The infra retry already defaults to 4 LLM and 2
+tool attempts. The circuit breaker is off unless an agent's `spec.control.circuit_breaker` turns it on, and the
+dispatch-loop cap is `design_pattern.params.max_steps` (or a RuntimeEngine manifest). The breaker moves to the infra
+pipeline in the next release, and `with-hardened` is where it will be switched on for every agent.
 
 ---
 
@@ -100,6 +103,8 @@ To make a provider trip the breaker, declare a tool as down with `ExplicitToolUn
 ## Spec knobs
 
 ### `spec.control.retry.llm` / `.tools`
+
+`spec.control` is deprecated: `retry` and `circuit_breaker` still apply, and move to the infra pipeline (next to the LLM cache, scheduler and fault injection) in the next release. Its `budget` and `rate_limiter` keys are read by nothing; call ceilings are the `budget` governance plugin.
 
 | Field | Type | LLM default | Tools default |
 |-------|------|-------------|----------------|
@@ -180,7 +185,7 @@ A flavour is the glue between the logic spec and the infra (`bind`). It is not a
 | Concern | Overlay / plugin | Notes |
 |---------|------------------|--------|
 | Undeclared tools | `with-hardened` → `gov_no_undeclared_tool` | Egress chain BLOCK |
-| Typed retry / breaker | `with-hardened` → `retry_on_error` + `control.retry` + `circuit_breaker` | Infra then ingress |
+| Typed retry / breaker | `with-hardened` → `retry_on_error` (Control); infra retry and `circuit_breaker` are agent `spec.control` for now | Infra then ingress |
 | Native traces | `observability-native` | Sequence, not chain |
 | Checkpoints / resume | separate overlay | Compose it. The flavour does not carry it. |
 | Backtrack on application errors | `error_policy.application` or a dedicated plugin | The default is `allow` (stored in working memory). |

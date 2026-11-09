@@ -1,11 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Gdb-like debug scripts as a runtime plugin.
+"""Gdb-like debug scripts as a governance plugin.
 
-Not governance: breakpoints observe tool-call / tool-result so the process
-can act as a debugger (checkpoint, inspect, pause). ``evaluate_egress``
-always PASSes if the class is ever asked. Enable from config.yaml
-``plugins:`` / ``lab.enable_plugins``; ``spec.debug`` holds the script.
+Breakpoints observe tool-call / tool-result transitions and act through the
+ControlContract (checkpoint, inspect, pause, resume). ``evaluate_egress`` always
+PASSes: the plugin never blocks. Name it in a Control ``spec.governance`` with
+``script`` or ``script_file``; ``mas-ctl chat --debug-script`` writes that Control.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.coupling import GovDecision
 from mas.runtime.session import SessionStatus
 
-PLUGIN_ID = "debug_script"
+PLUGIN_ID = "gdb"
 
 BreakpointKind = Literal["tool_call", "tool_result"]
 
@@ -130,7 +130,12 @@ def _parse_break(rest: list[str]) -> Breakpoint:
 
 
 def _read_script_file(script_file: str, *, manifest_dir: str = "") -> str:
-    """Load a gdb-like script from ``script_file``, relative to the agent dir."""
+    """Load a gdb-like script from ``script_file``.
+
+    A relative path is resolved against ``manifest_dir`` (the agent dir). A
+    Control attach rewrites ``script_file`` to an absolute path first, so a
+    script next to the Control file is found.
+    """
     path = Path(script_file)
     tried = [path]
     if not path.is_file() and manifest_dir and not path.is_absolute():
@@ -157,16 +162,13 @@ def _is_tool_call(transition: Any) -> bool:
 
 
 def _is_tool_result(transition: Any) -> bool:
-    return (
-        getattr(transition, "hook", "") == "ingress"
-        and getattr(transition, "response_kind", "") == "TOOL_RESULT"
-    )
+    return getattr(transition, "hook", "") == "ingress" and getattr(transition, "response_kind", "") == "TOOL_RESULT"
 
 
 class DebugScriptPlugin:
     """Interpret a gdb-like script at governance transitions."""
 
-    plugin_id = "debug_script@v1"
+    plugin_id = "gdb@v1"
 
     def __init__(
         self,
@@ -329,17 +331,13 @@ class DebugScriptPlugin:
             self._emit(f"checkpoints {len(self.checkpoints)}")
             for item in self.checkpoints:
                 self._emit(
-                    f"  {item.checkpoint_id} session={item.session_id} "
-                    f"{item.reason} tool={item.tool_name or '-'}"
+                    f"  {item.checkpoint_id} session={item.session_id} {item.reason} tool={item.tool_name or '-'}"
                 )
             if self._control is not None:
                 nodes = self._control.list_checkpoints(session_id)
                 self._emit(f"snapshot_tree {len(nodes)}")
                 for node in nodes:
-                    self._emit(
-                        f"  tree {getattr(node, 'snapshot_id', node)} "
-                        f"label={getattr(node, 'label', '')}"
-                    )
+                    self._emit(f"  tree {getattr(node, 'snapshot_id', node)} label={getattr(node, 'label', '')}")
             return
         if key in {"working_memory", "wm", "state"}:
             self._emit(f"working_memory session {session_id}")

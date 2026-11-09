@@ -41,24 +41,30 @@ the live process. It is not checkpoint resume.
 - Snapshot and persist need a paused session. `--auto-stop` pauses first.
   A chained CLI line, `-e`, `-f` and `--data @file` use the same command
   language. Agents call `run_control_script` with the same text.
-- gdb-style breakpoints are separate. They load from `debug_script` in
-  `spec.governance` (the policy layer that can allow, block or change a tool
-  call) or from `--debug-script`:
+- gdb-style breakpoints are separate. They load from `gdb` in the
+  governance set of a Control (the policy layer that can allow, block or
+  change a tool call) that a Flavour attaches, or from `--debug-script`:
 
 ```bash
-mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml
+mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
+  --flavour docs/tutorials/13-control-and-debug/flavour-debug.yaml
 mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
   --debug-script @docs/tutorials/13-control-and-debug/debug.gdb
 mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
   --debug-script $'break tool_call calc\ncommands\n  checkpoint\n  continue\nend'
 ```
 
-In YAML, use `script_file: ./debug.gdb`, `script: @./debug.gdb`, or an inline
-`script: |` block. Validate the manifests:
+`flavour-debug.yaml` lists `control-debug.yaml`, which holds `gdb` with
+`script_file: ./debug.gdb`. A `script:` value can also be `@./debug.gdb` or an
+inline `script: |` block. Governance does not belong in the agent file: the agent
+spec keys `governance`, `control` and `observability` are deprecated in favour of a
+Control. Validate the manifests:
 
 ```bash
 mas-ctl validate docs/tutorials/13-control-and-debug/agent.yaml
 mas-ctl validate docs/tutorials/13-control-and-debug/agent-auto.yaml
+mas-ctl validate docs/tutorials/13-control-and-debug/control-debug.yaml
+mas-ctl validate docs/tutorials/13-control-and-debug/flavour-debug.yaml
 ```
 
 ## Step 1 — Run a session that goes bad
@@ -67,6 +73,7 @@ In terminal A:
 
 ```bash
 mas-ctl chat docs/tutorials/13-control-and-debug/agent.yaml \
+  --flavour docs/tutorials/13-control-and-debug/flavour-debug.yaml \
   --checkpoint-dir .mas/t13-checkpoints
 ```
 
@@ -159,6 +166,7 @@ The proof: load the file, still wrong, steer, right.
 
 ```bash
 mas-ctl chat docs/tutorials/13-control-and-debug/agent-auto.yaml \
+  --flavour docs/tutorials/13-control-and-debug/flavour-auto.yaml \
   --checkpoint-dir .mas/t13-auto
 ```
 
@@ -168,7 +176,8 @@ You: What is 3+3?
 ```
 
 `calc` fails twice (`fail_first: 2`), then works. `spec.checkpoint.mode:
-every_turn` writes a file per completed turn. `backtrack_on_error` restores
+every_turn` writes a file per completed turn. The Control in `control-auto.yaml`
+sets `backtrack_on_error`, which restores
 an earlier checkpoint after the repeated error and records an
 `after-backtrack` node. In-memory checkpoints form a tree (failed path and
 retry), not a line.
@@ -185,12 +194,15 @@ live in-memory tree. The JSON includes `parent_snapshot_id`, which encodes the t
 ## Observability
 
 Every control verb is logged as `ControlEvent` and emitted on the native
-stream as `kind: control`, `category: control.<method>`. Export may filter:
+stream as `kind: control`, `category: control.<method>`. A run records native
+events by default. A Control observability set names the event plugin and can narrow
+or extend what it writes:
 
 ```yaml
+# in a kind: Control document
 spec:
   observability:
-    - native:
+    - mas.observability.native:
         categories:
           include: [control, tool, execution]
           exclude: [control.inspect]

@@ -123,7 +123,7 @@ mas-lab benchmark step restart <benchmark-id> <step-id>   # one step
 mas-lab benchmark pipeline run pipeline.yaml -o DIR --force STEP
 ```
 
-For the relation to the run-level trace cache, see [benchmark CLI](../src/mas/lab/cli/commands/benchmark/) and [benchmark-state-architecture.md](benchmark-state-architecture.md).
+For the relation to the run-level trace cache, see [benchmark CLI](cli/benchmark.md) and [benchmark-state-architecture.md](benchmark-state-architecture.md).
 
 Command reference: [cli-reference.md](cli-reference.md) (`mas-lab benchmark pipeline run|plan|show|validate`).
 

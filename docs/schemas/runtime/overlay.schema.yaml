@@ -89,8 +89,8 @@ properties:
         properties:
           kind:
             type: string
-            description: "Resource kind: MAS | Flavour | Agent | Infra | Experiment | Workspace"
-            enum: [Agent, MAS, Flavour, Infra, Experiment, Workspace]
+            description: "Resource kind: MAS | Flavour | Agent | Infra | Experiment | Workspace | Control"
+            enum: [Agent, MAS, Flavour, Infra, Experiment, Workspace, Control]
           name:
             type: string
             description: >
@@ -102,8 +102,9 @@ properties:
       patch:
         description: >
           Patch payload. Validation is target-aware: Agent overlays accept
-          agent-patch fields, MAS overlays accept MAS-patch fields, and Flavour
-          overlays accept deployment-posture fields only.
+          agent-patch fields, MAS overlays accept MAS-patch fields, Flavour
+          overlays accept deployment-posture fields only, and Control overlays
+          accept observability and governance.
         type: object
 
       overrides:
@@ -113,6 +114,32 @@ properties:
           same type/id selector syntax as the CLI --override option.
         items:
           type: string
+
+      control:
+        type: array
+        description: >
+          Deprecated. Control files this overlay attaches for the session.
+          Each row is {ref, agents}, resolved against the overlay file.
+          Attach Controls with --control or a Flavour spec.control list.
+        items:
+          type: object
+          additionalProperties: false
+          required: [ref]
+          properties:
+            ref:
+              type: string
+              minLength: 1
+            agents:
+              oneOf:
+                - type: string
+                  minLength: 1
+                  description: "$all, $entry, $not-entry, $delegates, one agent id, or the same agent path as --override"
+                - type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  minItems: 1
+                  uniqueItems: true
 
     allOf:
       - if:
@@ -167,3 +194,16 @@ properties:
           properties:
             patch:
               $ref: "./fragments/overlay-infra-patch.schema.yaml"
+      - if:
+          required: [target]
+          properties:
+            target:
+              type: object
+              required: [kind]
+              properties:
+                kind:
+                  const: "Control"
+        then:
+          properties:
+            patch:
+              $ref: "./fragments/overlay-control-patch.schema.yaml"

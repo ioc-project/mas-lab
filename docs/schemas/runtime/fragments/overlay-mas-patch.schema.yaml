@@ -9,11 +9,8 @@ title: OverlayMasPatch
 # (single source of truth; see that file's `x-merge` blocks). Same pattern
 # as overlay-agent-patch.schema.yaml -- see that file's header comment.
 #
-# `governance` was removed from here: merge_mas_overlay special-cases the
-# key (excludes it from the generic x-merge dispatch) but has never had a
-# merge implementation for it -- patching spec.governance via a MAS-targeted
-# overlay was a silent no-op with zero test coverage. Agent-level governance
-# (a different, real, working mechanism) is unaffected.
+# Observability and governance live on kind: Control. Patch them with
+# target.kind: Control, not a MAS overlay.
 type: object
 additionalProperties: false
 patternProperties:

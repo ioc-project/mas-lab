@@ -18,6 +18,7 @@ from mas.ctl.compile import (
     resolve_layout,
     write_compiled,
 )
+from mas.ctl.session.flavour_control import control_row_from_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TUTORIAL_1 = REPO_ROOT / "docs/tutorials/01-building-an-agent"
@@ -210,6 +211,94 @@ def test_fill_agent_defaults_preserves_summarizer_model_id() -> None:
     params = filled["spec"]["context_manager"]["params"]
     assert params["summarizer"]["params"]["model"] == "summarizer"
     assert "summary_threshold" not in params
+
+
+def test_compile_mas_entry_control_without_workflow_matches_nobody(tmp_path: Path) -> None:
+    (tmp_path / "desk.yaml").write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: desk}\nspec: {}\n", encoding="utf-8"
+    )
+    (tmp_path / "bill.yaml").write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: bill}\nspec: {}\n", encoding="utf-8"
+    )
+    mas = tmp_path / "mas.yaml"
+    mas.write_text(
+        "apiVersion: mas/v1\nkind: MAS\nmetadata: {name: pair}\n"
+        "spec:\n  agency:\n    agents:\n      - {id: desk, ref: desk.yaml}\n      - {id: bill, ref: bill.yaml}\n",
+        encoding="utf-8",
+    )
+    control = tmp_path / "entry.yaml"
+    control.write_text(
+        "apiVersion: control/v1\nkind: Control\nmetadata: {name: entry}\n"
+        "spec:\n  agents: $entry\n  governance: [sample_governance]\n",
+        encoding="utf-8",
+    )
+    compiled = compile_manifest(mas, validate=False, control_rows=[control_row_from_path(control)])
+    for agent_id in ("desk", "bill"):
+        assert "sample_governance" not in ((compiled.agents[agent_id].get("spec") or {}).get("governance") or []), (
+            agent_id
+        )
+
+
+def test_compile_mas_entry_control_uses_workflow_entry(tmp_path: Path) -> None:
+    (tmp_path / "desk.yaml").write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: desk}\nspec: {}\n", encoding="utf-8"
+    )
+    (tmp_path / "bill.yaml").write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: bill}\nspec: {}\n", encoding="utf-8"
+    )
+    mas = tmp_path / "mas.yaml"
+    mas.write_text(
+        "apiVersion: mas/v1\nkind: MAS\nmetadata: {name: pair}\n"
+        "spec:\n  agency:\n    agents:\n      - {id: desk, ref: desk.yaml}\n      - {id: bill, ref: bill.yaml}\n"
+        "  workflow:\n    entry: bill\n",
+        encoding="utf-8",
+    )
+    control = tmp_path / "entry.yaml"
+    control.write_text(
+        "apiVersion: control/v1\nkind: Control\nmetadata: {name: entry}\n"
+        "spec:\n  agents: $entry\n  governance: [sample_governance]\n",
+        encoding="utf-8",
+    )
+    compiled = compile_manifest(mas, validate=False, control_rows=[control_row_from_path(control)])
+    from mas.ctl.session.flavour_control import control_lists_for_agent
+
+    row = control_row_from_path(control)
+    assert control_lists_for_agent([row], agent_id="desk", entry_id="bill").get("governance", []) == []
+    assert control_lists_for_agent([row], agent_id="bill", entry_id="bill")["governance"] == ["sample_governance"]
+    assert "governance" not in (compiled.agents["desk"].get("spec") or {})
+    assert "governance" not in (compiled.agents["bill"].get("spec") or {})
+
+
+def test_compile_minus_o_control_does_not_copy_governance() -> None:
+    compiled = compile_manifest(
+        TUTORIAL_1 / "agent.yaml",
+        [TUTORIAL_1 / "controls/governance-hitl.yaml"],
+        validate=False,
+    )
+    assert compiled.agent is not None
+    assert "governance" not in compiled.agent["spec"]
+    assert "observability" not in compiled.agent["spec"]
+    from mas.ctl.session.flavour_control import control_lists_for_agent, control_row_from_path
+
+    row = control_row_from_path(TUTORIAL_1 / "controls/governance-hitl.yaml")
+    gov = control_lists_for_agent([row], agent_id="desk", entry_id="desk")["governance"]
+    assert gov[0]["sample_governance"]["hitl_on_tool"] is True
+
+
+def test_compile_with_hardened_does_not_copy_control_lists() -> None:
+    control = REPO_ROOT / "library-standard/src/mas/library/standard/controls/with-hardened.yaml"
+    compiled = compile_manifest(
+        TUTORIAL_1 / "agent.yaml", [], validate=False, control_rows=[control_row_from_path(control)]
+    )
+    assert compiled.agent is not None
+    spec = compiled.agent["spec"]
+    assert "budget" not in spec
+    assert "governance" not in spec
+    from mas.ctl.session.flavour_control import control_lists_for_agent
+
+    lists = control_lists_for_agent([control_row_from_path(control)], agent_id="desk", entry_id="desk")
+    names = [item if isinstance(item, str) else next(iter(item)) for item in lists["governance"]]
+    assert names == ["budget", "gov_no_undeclared_tool", "retry_on_error"]
 
 
 def test_compile_tutorial_1_stacks_overlays() -> None:

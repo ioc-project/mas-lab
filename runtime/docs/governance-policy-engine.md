@@ -66,7 +66,7 @@ spec:
 
 (Quote the key `"on"` in YAML 1.1 parsers that read bare `on` as a boolean.)
 
-`policies` lists from several stanzas or stacked overlays are concatenated, in declaration order.
+A later Control's config for the same plugin id wins, including its `policies` list.
 
 ### Policy fields
 

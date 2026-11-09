@@ -1,65 +1,54 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-apiVersion: mas/v1
-kind: Overlay
+apiVersion: control/v1
+kind: Control
 metadata:
   name: production-circuit-fault
-  description: "Production + circuit-breaker fault injection (tool failure)"
-# NOTE: the previous `emulation.tools.lookup_schedule.{failure_rate,error}`
-# block (deterministic tool-failure injection) has no home in the mas/v1
-# overlay schema (spec.patch has no `emulation` key) and was never actually
-# applied by the overlay merge path (merge_agent_overlay/merge_mas_overlay
-# only read `spec`/`spec.patch`) — it was already inert before this
-# migration. The runtime's fault-inject infra middleware only wraps
-# LLM_CALL today (TOOL_HTTP is unimplemented — see
-# docs/schemas/runtime/infra.schema.yaml), so there is currently no
-# supported way to force `lookup_schedule` to fail deterministically.
-# The circuit-break-schedule-lookup policy below is retained for when
-# tool-level fault injection lands; until then it only fires on organic
-# tool failures.
+  description: Production + circuit-breaker fault injection (tool failure)
 spec:
-  target:
-    kind: Agent
-  patch:
-    observability:
-      - native
-    governance:
-      - sample_governance:
-          policies:
-            - name: high-cost-approval
-              trigger:
-                "on": tool_output
-                tool: fare_estimation
-                condition: "result.total_cost_usd > 500"
-                evaluation: deterministic
-              action: hitl
-              params:
-                { auto_approve: false, timeout_s: 10, resolution_mode: dataset_pool }
-            - name: forbidden-destination
-              trigger:
-                "on": tool_input
-                tool: flight_search
-                condition: "arguments.destination in ['NK', 'SY']"
-                evaluation: deterministic
-              action: block
-              params: { message: "Sanctioned destination" }
-            - name: budget-cap
-              trigger:
-                "on": budget_threshold
-                condition: "cumulative.total_cost_usd > 0.10"
-                evaluation: deterministic
-              action: terminate
-              params: { reason: "Budget exceeded" }
-            - name: circuit-break-schedule-lookup
-              trigger:
-                "on": tool_failure_streak
-                tool: lookup_schedule
-                threshold: 1
-                reset_on: success
-                evaluation: deterministic
-              action: skip
-              params:
-                synthetic_result: "Service unavailable — circuit open after repeated failures"
-                hide_from_llm: false
-              recovery:
-                timeout: 30
+  observability:
+  - mas.observability.native
+  governance:
+  - sample_governance:
+      policies:
+      - name: high-cost-approval
+        trigger:
+          'on': tool_output
+          tool: fare_estimation
+          condition: result.total_cost_usd > 500
+          evaluation: deterministic
+        action: hitl
+        params:
+          auto_approve: false
+          timeout_s: 10
+          resolution_mode: dataset_pool
+      - name: forbidden-destination
+        trigger:
+          'on': tool_input
+          tool: flight_search
+          condition: arguments.destination in ['NK', 'SY']
+          evaluation: deterministic
+        action: block
+        params:
+          message: Sanctioned destination
+      - name: budget-cap
+        trigger:
+          'on': budget_threshold
+          condition: cumulative.total_cost_usd > 0.10
+          evaluation: deterministic
+        action: terminate
+        params:
+          reason: Budget exceeded
+      - name: circuit-break-schedule-lookup
+        trigger:
+          'on': tool_failure_streak
+          tool: lookup_schedule
+          threshold: 1
+          reset_on: success
+          evaluation: deterministic
+        action: skip
+        params:
+          synthetic_result: Service unavailable — circuit open after repeated failures
+          hide_from_llm: false
+        recovery:
+          timeout: 30

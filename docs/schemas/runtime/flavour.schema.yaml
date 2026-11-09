@@ -23,16 +23,11 @@ description: >
                                                     allowed models, embed
                                                     defaults
 
-  agent_comm, tools, control and telemetry are accepted and read by nothing
-  (deprecated: true). observability is deprecated and still the fallback when
-  an agent declares none. Their target home is a later, optional Control
-  manifest that references plugins. They are not what a Flavour is. The bundled
-  flavours still set some of them:
-    spec:
-      agent_comm: {protocol: local, mode: local, emulation: true}
-      tools: {remote_tools_enabled: false, allowed: ["*"]}
-      telemetry: {backend: file, path: logs/}
-      observability: [native]
+  agent_comm, tools, telemetry and observability are accepted and read by
+  nothing (deprecated: true). spec.control as a list of {ref, agents} attaches
+  kind: Control documents; the leftover mapping form is still accepted and
+  unread. They are not what a Flavour is. Bundled local, prod, auto, and
+  local-benchmark set none of those leftover keys.
 
   Infrastructure references (infra_refs) are NOT part of the Flavour — they
   belong in config.yaml or on the CLI (--infra-ref).  This separation
@@ -162,6 +157,17 @@ properties:
                     A string value may hold {agent}, the only placeholder.
                   additionalProperties:
                     type: object
+          events:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            description: >
+              Application row names of observability sinks this deployment
+              uses (native JSONL, OTel). The Flavour names the rows; the
+              rows themselves are infra.
+            items:
+              type: string
+              minLength: 1
       agent_comm:
         type: object
         deprecated: true
@@ -218,24 +224,58 @@ properties:
           strategy: plugin_list_ops
           identity: plugin_id
         description: >
-          Deprecated, still used: the default observability sink plugins
-          (e.g. [native], [otel], [native, {otel: {output_path:
-          traces/otel}}]) of an agent that declares none; selects *which*
-          plugins run, not backend/span-export internals. local → [native].
-          Planned to move to an optional Control manifest.
+          Deprecated and ignored: leftover observability plugin list.
+          Nothing reads it. Observability is a Control entry or --events*
+          on the agent or MAS. bind.events names sink rows.
         default: null
 
+      require_usage:
+        type: boolean
+        description: >
+          When true, every agent of the session must have a bind chain or
+          an agent-keyed Application row. Bundled prod sets this. A file
+          named prod.yaml does not.
+
       control:
-        deprecated: true
-        oneOf:
-          - type: "null"
-          - $ref: "./fragments/control-binding.schema.yaml"
+        description: >
+          Control manifests this Flavour attaches. A list of {ref, agents}.
+          agents is $all (default), $entry, $not-entry, $delegates, one agent
+          id, a list of ids, or the same agent path as --override (.mas.agent[id] / .mas.agent[*]).
+          The leftover mapping form (budget, retry, …) is still accepted and
+          read by nothing.
         x-merge:
           strategy: mapping_ops
-        description: >
-          Deprecated and ignored: control-plane plugin selection (budget,
-          circuit_breaker, rate_limiter). Nothing reads it. Planned to move
-          to an optional Control manifest.
+        oneOf:
+          - type: "null"
+          - type: array
+            items:
+              type: object
+              additionalProperties: false
+              required: [ref]
+              properties:
+                ref:
+                  type: string
+                  minLength: 1
+                settings:
+                  type: object
+                  description: >
+                    Settings merged over the named plugins of that Control, so one Control file can carry
+                    different settings on different agents. Keys are plugin names the Control lists; values
+                    are that plugin's settings.
+                  additionalProperties:
+                    type: object
+                agents:
+                  oneOf:
+                    - type: string
+                      minLength: 1
+                      description: "$all, $entry, $not-entry, $delegates, one agent id, or the same agent path as --override"
+                    - type: array
+                      items:
+                        type: string
+                        minLength: 1
+                      minItems: 1
+                      uniqueItems: true
+          - $ref: "./fragments/control-binding.schema.yaml"
         default: null
 
       tools:

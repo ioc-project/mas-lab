@@ -19,7 +19,7 @@ from mas.lab.lab.config.lab_context import (
 )
 
 
-def _write_lab_config(lab_dir, *, name="my-lab", libraries=None, plugins=None, enable_plugins=None) -> None:
+def _write_lab_config(lab_dir, *, name="my-lab", libraries=None, plugins=None) -> None:
     lines = ["lab:", f'  name: "{name}"']
     if libraries:
         lines.append("  libraries:")
@@ -29,9 +29,6 @@ def _write_lab_config(lab_dir, *, name="my-lab", libraries=None, plugins=None, e
         for p in plugins:
             lines.append(f"    - path: {p['path']}")
             lines.append(f"      module: {p['module']}")
-    if enable_plugins:
-        lines.append("  enable_plugins:")
-        lines += [f"    - {urn}" for urn in enable_plugins]
     (lab_dir / "lab-config.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -127,22 +124,3 @@ def test_inject_lab_libraries_resolves_libraries_relative_to_the_lab_root(tmp_pa
     inject_lab_libraries(ctx)
 
     assert str(lib_dir.resolve()) in sys.path
-
-
-def test_discover_lab_context_reads_enable_plugins(tmp_path) -> None:
-    lab_dir = tmp_path / "control.lab"
-    exp_dir = lab_dir / "experiments" / "01-smoke"
-    exp_dir.mkdir(parents=True)
-    _write_lab_config(
-        lab_dir,
-        name="control",
-        enable_plugins=["mas.runtime.debug_script", "mas.checkpoint_store.hybrid"],
-    )
-
-    ctx = discover_lab_context(exp_dir / "experiment.yaml")
-
-    assert ctx.enable_plugins == [
-        "mas.runtime.debug_script",
-        "mas.checkpoint_store.hybrid",
-    ]
-    assert ctx.plugins == []

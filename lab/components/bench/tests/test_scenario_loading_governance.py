@@ -64,6 +64,40 @@ def test_no_agents_is_a_no_op() -> None:
     assert applied is False
 
 
+def test_governance_off_replaces_other_event_plugins() -> None:
+    from pathlib import Path
+
+    import yaml
+    from mas.lab.lab.config.scenario_loading import _apply_overlay_plugin_list
+
+    overlay = yaml.safe_load(
+        (
+            Path(__file__).resolve().parents[4] / "labs" / "lifecycle-control.lab" / "overlays" / "governance-off.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    overlay_spec = (overlay.get("spec") or {}).get("patch") or {}
+    config = {"agents": [{"id": "desk", "governance": ["sample_governance"], "observability": ["otel"]}]}
+    _apply_overlay_governance(overlay, overlay_spec, config)
+    _apply_overlay_plugin_list(overlay, overlay_spec, config, "observability")
+    assert config["agents"][0]["governance"] == []
+    assert config["agents"][0]["observability"] == ["native"]
+
+
+def test_governance_off_stacked_after_guardrail_clears_policies() -> None:
+    from pathlib import Path
+
+    from mas.lab.lab.config.scenario_loading import load_stacked_config
+
+    repo = Path(__file__).resolve().parents[4]
+    mas = repo / "library-samples" / "apps" / "trip-planner" / "mas.yaml"
+    overlays = repo / "labs" / "lifecycle-control.lab" / "overlays"
+    cfg, _ = load_stacked_config(mas, ["with-guardrail", "governance-off"], overlays_dir=overlays, base_dir=overlays)
+    assert cfg["agents"]
+    for agent in cfg["agents"]:
+        assert (agent.get("governance") or []) == [], agent.get("id")
+        assert "native" in (agent.get("observability") or []), agent.get("id")
+
+
 def test_with_guardrail_overlay_lands_on_trip_planner_agents() -> None:
     from pathlib import Path
 
@@ -78,4 +112,5 @@ def test_with_guardrail_overlay_lands_on_trip_planner_agents() -> None:
         gov = agent.get("governance") or []
         names = [g if isinstance(g, str) else next(iter(g)) for g in gov]
         assert "sample_governance" in names, agent.get("id")
-        assert "native" in (agent.get("observability") or [])
+        obs = [item if isinstance(item, str) else next(iter(item)) for item in (agent.get("observability") or [])]
+        assert any(name.rsplit(".", 1)[-1] == "native" for name in obs), agent.get("id")
