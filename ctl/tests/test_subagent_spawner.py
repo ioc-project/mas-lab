@@ -4,26 +4,25 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
+from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.executor.subagent_spawner import (
     SubagentTemplate,
     load_subagent_templates,
     make_subagent_spawner,
     wire_subagent_spawning,
 )
+from mas.ctl.placement.bus.inproc import InProcessCommBus
+from mas.ctl.session.controller import TurnResult
 from mas.library.standard.plugins.engine_tools.subagent_spawner import (
     SubagentSpawner as LibrarySubagentSpawner,
 )
-from mas.ctl.placement.bus.inproc import InProcessCommBus
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryRegistry,
     WorkingMemorySnapshot,
 )
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.runtime.driver.driver import DriverTrace
-from mas.runtime.schema.egress import EmitClientResponse
-from mas.ctl.session.controller import TurnResult
 from mas.runtime.engine.tool_dispatch import execute_engine_tool
+from mas.runtime.schema.egress import EmitClientResponse
 
 
 def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):
@@ -151,11 +150,7 @@ def test_spawn_emits_kernel_spawn_observability(tmp_path: Path):
 def test_wire_subagent_spawning_loads_validated_manifest_templates(tmp_path: Path):
     worker = tmp_path / "worker.yaml"
     worker.write_text(
-        "apiVersion: mas/v1\n"
-        "kind: Agent\n"
-        "metadata: {name: worker}\n"
-        "spec:\n"
-        "  description: Worker agent\n",
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: worker}\nspec:\n  description: Worker agent\n",
         encoding="utf-8",
     )
     manifest = {
@@ -185,25 +180,24 @@ def test_wire_subagent_spawning_loads_validated_manifest_templates(tmp_path: Pat
     assert list(spawner.templates) == ["worker"]
     assert engine.engine_tool_contracts == (spawner,)
 
-    assert wire_subagent_spawning(
-        engine,
-        materialized=materialized,
-        manifest=manifest,
-        manifest_dir=tmp_path,
-        parent_agent_id="root",
-        session_id="session",
-    ) is spawner
+    assert (
+        wire_subagent_spawning(
+            engine,
+            materialized=materialized,
+            manifest=manifest,
+            manifest_dir=tmp_path,
+            parent_agent_id="root",
+            session_id="session",
+        )
+        is spawner
+    )
     assert engine.engine_tool_contracts == (spawner,)
 
 
 def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
     worker = tmp_path / "worker.yaml"
     worker.write_text(
-        "apiVersion: mas/v1\n"
-        "kind: Agent\n"
-        "metadata: {name: worker}\n"
-        "spec:\n"
-        "  description: Worker agent\n",
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: worker}\nspec:\n  description: Worker agent\n",
         encoding="utf-8",
     )
     manifest = {
@@ -272,9 +266,7 @@ def test_template_loader_rejects_refs_outside_manifest_root(tmp_path: Path):
                         {
                             "kind": "system",
                             "name": "spawn_subagent",
-                            "params": {
-                                "templates": [{"id": "escape", "ref": "../outside.yaml"}]
-                            },
+                            "params": {"templates": [{"id": "escape", "ref": "../outside.yaml"}]},
                         }
                     ]
                 }
@@ -292,11 +284,7 @@ def test_template_loader_rejects_unknown_template_keys(tmp_path: Path):
                         {
                             "kind": "system",
                             "name": "spawn_subagent",
-                            "params": {
-                                "templates": [
-                                    {"id": "w", "ref": "./w.yaml", "unexpected": True}
-                                ]
-                            },
+                            "params": {"templates": [{"id": "w", "ref": "./w.yaml", "unexpected": True}]},
                         }
                     ]
                 }

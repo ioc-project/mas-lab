@@ -19,7 +19,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from conftest import T13, run_cli
+from tutorial_support import T13, run_cli
 
 
 def _load_demo_tools():
@@ -113,14 +113,15 @@ def _stub_instance():
     from mas.runtime.driver.mocks import AutoCtxAssembler
 
     ctx = AutoCtxAssembler()
-    return SimpleNamespace(
+    instance = SimpleNamespace(
         snapshot=lambda: {"q": {}, "run": {}},
-        load_checkpoint=lambda data: setattr(instance, "loaded", data),
         pause=lambda **kw: None,
         resume=lambda: None,
         driver=SimpleNamespace(ctx=ctx),
         feed=lambda event: SimpleNamespace(client_responses=[], hitl_requests=[], boundary_errors=[]),
-    ), None
+    )
+    instance.load_checkpoint = lambda data: setattr(instance, "loaded", data)
+    return instance, None
 
 
 class _Display:
@@ -164,12 +165,12 @@ def _resume_factory(_manifest: dict, _session_id: str):
     ctx = AutoCtxAssembler()
     instance = SimpleNamespace(
         snapshot=lambda: {"q": {}, "run": {}},
-        load_checkpoint=lambda data: setattr(instance, "loaded", data),
         pause=lambda **kw: None,
         resume=lambda: None,
         driver=SimpleNamespace(ctx=ctx),
         feed=lambda event: SimpleNamespace(client_responses=[], hitl_requests=[], boundary_errors=[]),
     )
+    instance.load_checkpoint = lambda data: setattr(instance, "loaded", data)
     return instance, SessionController(instance=instance, display=_Display(), agent_id="debug-script-demo")
 
 
@@ -183,8 +184,8 @@ class TestCheckpointOnFirstWebSearchResult:
     """Step 1: the first web_search result breaks, checkpoints, and lists."""
 
     def test_first_result_checkpoints_once(self):
-        from mas.runtime.boundary.control.contract import ControlCapability
         from mas.library.standard.plugins.governance.debug_script import DebugScriptPlugin
+        from mas.runtime.boundary.control.contract import ControlCapability
 
         manager = _manager()
         session = manager.get("s1")
@@ -193,9 +194,7 @@ class TestCheckpointOnFirstWebSearchResult:
         plugin = DebugScriptPlugin(script_file=str(T13 / "debug.gdb"), out=out)
         plugin.bind_session(
             session,
-            control=manager.control(
-                capability=ControlCapability(actor="debug_script", surface="plugin")
-            ),
+            control=manager.control(capability=ControlCapability(actor="debug_script", surface="plugin")),
             manager=manager,
         )
         first = _transition(
@@ -230,9 +229,7 @@ class TestWitness:
     executed through the tutorial's own recover.ctl / steer-fix.ctl files,
     not hand-typed control calls."""
 
-    def test_recover_ctl_persists_a_checkpoint_without_the_live_session_s_later_state(
-        self, tmp_path: Path
-    ):
+    def test_recover_ctl_persists_a_checkpoint_without_the_live_session_s_later_state(self, tmp_path: Path):
         from mas.ctl.adapters.checkpoint import JsonCheckpointStore
         from mas.library.standard.plugins.control.script import run_control_script
         from mas.runtime.boundary.control.contract import ControlCapability
@@ -254,9 +251,7 @@ class TestWitness:
         assert "France" in blob and "Lyon" in blob
         assert payload["version"] == 2
 
-    def test_new_chat_from_the_persisted_file_still_has_lyon_then_steer_fixes_it(
-        self, tmp_path: Path
-    ):
+    def test_new_chat_from_the_persisted_file_still_has_lyon_then_steer_fixes_it(self, tmp_path: Path):
         """The full witness: resume says Lyon; steering the restarted session
         replaces it with Paris. Mirrors steer-fix.ctl exactly — the steer
         text asserted below is read from that file, not hand-typed."""
@@ -275,17 +270,13 @@ class TestWitness:
 
         # "start a new chat from that file" (a fresh SessionManager/session).
         resumed_manager = SessionManager(store, _resume_factory)
-        resumed = resumed_manager.fork_from_checkpoint(
-            Path(saved["path"]), new_session_id="t13-bad"
-        )
+        resumed = resumed_manager.fork_from_checkpoint(Path(saved["path"]), new_session_id="t13-bad")
         blob = str(resumed.working_memory.export_session("t13-bad"))
         assert "France" in blob
         assert "Lyon" in blob, "resumed session must still believe the bad answer"
         assert resumed.session_id != "s1"
 
-        resumed_control = resumed_manager.control(
-            capability=ControlCapability(actor="admin", surface="admin")
-        )
+        resumed_control = resumed_manager.control(capability=ControlCapability(actor="admin", surface="admin"))
         steer_statements = _parse_ctl("steer-fix.ctl")
         steer_text = next(s.kwargs["text"] for s in steer_statements if s.verb == "steer")
         assert "Paris" in steer_text and "Lyon" in steer_text  # sanity on the real fixture

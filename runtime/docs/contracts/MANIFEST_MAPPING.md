@@ -52,7 +52,7 @@ Entry: `mas-lab benchmark run`.
 
 | Artifact | Role |
 |----------|------|
-| `flavour/*.yaml` | Protocol, observability, control, and tool deployment posture |
+| `flavour/*.yaml` | The glue: `bind` links agents to infra rows. Leftover keys are unread, except the deprecated `observability` fallback |
 | `infra/*.yaml` | Provider endpoints, tool servers, middleware, and data connections |
 | `config.yaml` | Workspace defaults: infra refs, default model, aliases |
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
-
 from mas.ctl.cli.commands.validate import validate_cmd
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

@@ -98,6 +98,5 @@ def test_namespace_packages_use_pep420_consistently():
             if (REPO_ROOT / src / marker).exists():
                 offenders.append(f"{src}/{marker}")
     assert not offenders, (
-        "These namespace markers break PEP 420 consistency and can shadow "
-        f"sibling packages: {offenders}"
+        f"These namespace markers break PEP 420 consistency and can shadow sibling packages: {offenders}"
     )

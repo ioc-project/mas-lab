@@ -10,7 +10,6 @@ import sys
 import threading
 
 import pytest
-
 from mas.library.telemetry.conversion.converter import _safe_detach
 from mas.library.telemetry.conversion.exporter import OTEL_AVAILABLE
 

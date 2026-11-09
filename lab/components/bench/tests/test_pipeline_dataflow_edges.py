@@ -5,13 +5,13 @@
 They used to be metadata for fan-in only; ordering came from level order plus
 explicit ``depends_on``.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.schedule.pipeline import materialize_step_dicts
 from mas.lab.lab.config import PipelineStepSpec
 
@@ -24,14 +24,23 @@ def out_dir(tmp_path: Path) -> Path:
 
 def _spec(name, scope, *, inp=(), out=(), phase="post", deps=()):
     return PipelineStepSpec(
-        type="shell", name=name, scope=scope, phase=phase,
-        inputs=list(inp), outputs=list(out), depends_on=list(deps),
+        type="shell",
+        name=name,
+        scope=scope,
+        phase=phase,
+        inputs=list(inp),
+        outputs=list(out),
+        depends_on=list(deps),
     )
 
 
 def _deps(specs, out_dir, phase="post") -> dict[str, list[str]]:
     dicts = materialize_step_dicts(
-        specs, phase=phase, scenario_ids=["s1"], infra_name=None, step_overrides={},
+        specs,
+        phase=phase,
+        scenario_ids=["s1"],
+        infra_name=None,
+        step_overrides={},
         template_vars={"output_dir": str(out_dir)},
     )
     return {d["name"]: list(d["depends_on"]) for d in dicts}

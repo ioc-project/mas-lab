@@ -25,9 +25,7 @@ def test_discovers_types_from_library_manifest() -> None:
 
 
 def test_artifact_type_names_come_from_library_lab_yaml() -> None:
-    doc = yaml.safe_load(
-        (_REPO / "library-lab" / "library.yaml").read_text(encoding="utf-8")
-    )
+    doc = yaml.safe_load((_REPO / "library-lab" / "library.yaml").read_text(encoding="utf-8"))
     plugins = doc["plugins"]
     assert isinstance(plugins, list)
     declared = [entry["name"] for entry in plugins if entry.get("type") == "artifact"]

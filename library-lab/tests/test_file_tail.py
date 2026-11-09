@@ -10,7 +10,6 @@ import logging
 from types import SimpleNamespace
 
 import pytest
-
 from mas.library.lab.steps.services.file_tail import (
     FileTailStep,
     append_custom_trace,
@@ -63,8 +62,7 @@ def test_state_dir_token_falls_back_to_per_protocol_env_var(monkeypatch):
     monkeypatch.delenv("MAS_SKILL_STATE_DIR", raising=False)
     monkeypatch.setenv("MAS_ALPHA_STATE_DIR", "/tmp/alpha-session")
     assert (
-        resolve_path_pattern("{state_dir}/alpha-state*.json", owner="alpha")
-        == "/tmp/alpha-session/alpha-state*.json"
+        resolve_path_pattern("{state_dir}/alpha-state*.json", owner="alpha") == "/tmp/alpha-session/alpha-state*.json"
     )
     monkeypatch.delenv("MAS_ALPHA_STATE_DIR", raising=False)
     assert resolve_path_pattern("{state_dir}/alpha-state*.json", owner="alpha") == ""
@@ -74,8 +72,7 @@ def test_state_dir_token_prefers_skill_state_dir_over_per_protocol_override(monk
     monkeypatch.setenv("MAS_SKILL_STATE_DIR", "/tmp/shared-session")
     monkeypatch.setenv("MAS_ALPHA_STATE_DIR", "/tmp/alpha-only-session")
     assert (
-        resolve_path_pattern("{state_dir}/alpha-state*.json", owner="alpha")
-        == "/tmp/shared-session/alpha-state*.json"
+        resolve_path_pattern("{state_dir}/alpha-state*.json", owner="alpha") == "/tmp/shared-session/alpha-state*.json"
     )
 
 

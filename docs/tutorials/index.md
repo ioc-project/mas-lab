@@ -31,7 +31,7 @@ credentials, and a check that everything works. The CLI and web UI share it.
 | 4 | [MCP tools](04-mcp-tools/README.md) | Call local and remote tools (Model Context Protocol) through one contract |
 | 5 | [A2A agents](05-a2a-agents/README.md) | Call local and remote agents (Agent2Agent) through one contract |
 | 6 | [Agent skills](06-agent-skills/README.md) | Give an agent a reusable skill (procedure, reference material, checked script) outside its own instructions |
-| 7 | *(reserved)* | |
+| 7 | [SLIM link](07-slim-link/README.md) | Experimental. Bind infra rows in a Flavour to move agent calls onto a SLIM node, split agents across processes, and gate them with a secret |
 | 8 | [Telemetry](08-telemetry/README.md) | Native traces, live OTel, replay, collector / ClickHouse |
 | 9 | [KG & SCOPE](09-kg-scope/README.md) | Build a knowledge graph (KG) from native traces or OpenTelemetry (OTel) spans, using the SCOPE `norm` normalizer; write to Neo4j |
 | 10 | [Evaluation metrics](10-evaluation-metrics/README.md) | Stock MCE, one-off prompts, reusable EvalMetrics, judge infra |

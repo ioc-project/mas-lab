@@ -6,7 +6,8 @@ kind: Library
 
 name: ioa
 description: >
-  MCP client/server bridge and A2A agent_comm / agent_expose plugins.
+  MCP client/server bridge, A2A agent_comm / agent_expose, and stack layers: SLIM and HTTP
+  transports, and A2A framing above either.
 version: "0.1.0"
 dependencies:
   - mcp>=2.2
@@ -19,6 +20,7 @@ types:
   - tool_provider
   - agent_comm
   - agent_expose
+  - stack_layer
   - webserver
 
 plugins:
@@ -39,6 +41,34 @@ plugins:
     urn: mas.agent_expose.a2a
     module: library_ioa.plugins.a2a.exposure
     class: A2AExposure
+  - type: stack_layer
+    name: slim
+    urn: mas.stack_layer.slim
+    module: library_ioa.plugins.slim.agent_comm
+    class: SlimAgentComm
+    shortcuts:
+      - slim
+    attributes:
+      default_enabled: false
+      semantic: stack_layer
+  - type: stack_layer
+    name: a2a-framing
+    urn: mas.stack_layer.a2a-framing
+    module: library_ioa.plugins.a2a.layer
+    class: A2ALayer
+    attributes:
+      default_enabled: false
+      semantic: stack_layer
+  - type: stack_layer
+    name: http
+    urn: mas.stack_layer.http
+    module: library_ioa.plugins.http_layer.transport
+    class: HttpLayer
+    shortcuts:
+      - http
+    attributes:
+      default_enabled: false
+      semantic: stack_layer
   - type: webserver
     name: uvicorn
     urn: mas.webserver.uvicorn

@@ -17,9 +17,8 @@ from __future__ import annotations
 import importlib
 import sys
 
-import pytest
-
 import mas.library_catalog as library_catalog
+import pytest
 from mas.library_catalog import (
     _declares_plugins,
     discover_plugin_manifests,
@@ -101,7 +100,7 @@ def test_discover_plugin_manifests_scan_fallback_still_works(tmp_path, monkeypat
     root = tmp_path / "library-y"
     root.mkdir()
     (root / "library.yaml").write_text(
-        "apiVersion: mas/v1\nkind: Library\nname: mas-library-y\nversion: \"0.1.0\"\n", encoding="utf-8"
+        'apiVersion: mas/v1\nkind: Library\nname: mas-library-y\nversion: "0.1.0"\n', encoding="utf-8"
     )
     plugins_dir = root / "plugins"
     plugins_dir.mkdir()

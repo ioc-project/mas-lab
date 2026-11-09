@@ -4,7 +4,6 @@
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.paths import resolve_overlay_ref_entries
 
 

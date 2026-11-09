@@ -58,7 +58,6 @@ def test_mcp_style_tool_provider_still_runs_inside_sandbox() -> None:
     assert "mcp_echo" in out
 
 
-
 def test_sandbox_from_name_passthrough() -> None:
     box = sandbox_from_name("none")
     assert box.run(lambda: 7) == 7

@@ -179,8 +179,8 @@ spec:
     cfg, _ = load_stacked_config(MAS, ["remove-add"], overlays_dir=tmp_path, base_dir=tmp_path)
 
     assert [agent["id"] for agent in cfg["agents"]] == [
-      "schedule_agent",
-      "itinerary_agent",
-      "concierge_agent",
-      "moderator",
+        "schedule_agent",
+        "itinerary_agent",
+        "concierge_agent",
+        "moderator",
     ]

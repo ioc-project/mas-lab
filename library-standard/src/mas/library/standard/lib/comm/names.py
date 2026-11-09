@@ -39,3 +39,25 @@ def namespace_of(parts: tuple[str, ...]) -> str:
     if len(parts) < 2:
         raise AgentCommError(f"name {'/'.join(parts)!r} needs org/ns")
     return f"{parts[0]}/{parts[1]}"
+
+
+def instance_name(identity: str, agent_id: str) -> str:
+    """``<identity>/<agent_id>``: an agent's four-part name under a three-part ``org/ns/service`` identity.
+
+    An agent id that is already four parts is kept only when it sits under
+    ``identity``: an agent id cannot name another service.
+    """
+    base = parse_name(str(identity or "").strip().strip("/"))
+    if len(base) != 3:
+        raise AgentCommError(f"identity must be a three-part org/ns/service name, got {identity!r}")
+    prefix = "/".join(base)
+    agent = str(agent_id or "").strip().strip("/")
+    if not agent:
+        raise AgentCommError("an agent id cannot be empty")
+    if "/" in agent:
+        head, _, last = agent.rpartition("/")
+        if head != prefix or not last:
+            raise AgentCommError(f"agent id {agent!r} is outside the identity {prefix!r}")
+        agent = last
+    parse_name(agent)
+    return f"{prefix}/{agent}"

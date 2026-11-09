@@ -42,7 +42,7 @@ The YAML kinds and how they compose.
 | Agent | [agent.md](../manifests/agent.md) · [governance.md](../manifests/governance.md) (`spec.governance`) · [checkpoints](../manifests/checkpoint.md) · [subagents](../manifests/subagents.md) |
 | MAS & workflow | [mas.md](../manifests/mas.md) |
 | Overlay | [overlay.md](../manifests/overlay.md) |
-| Flavour & environment | [flavour.md](../manifests/flavour.md), [infra.md](../manifests/infra.md) |
+| Flavour & infra | [flavour.md](../manifests/flavour.md), [infra.md](../manifests/infra.md) |
 | Workspace file | [config.yaml](config.yaml.md), [user-config.md](../user-config.md) |
 | Compiled defaults | [What a minimal agent expands to](defaults.md) |
 | Tools | [ToolContract](tool-contract.md) · [ToolServerRegistry](tool-server-registry.md) · [System tools](system-tools.md) |

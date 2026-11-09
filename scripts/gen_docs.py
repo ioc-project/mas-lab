@@ -139,7 +139,7 @@ def _plugins_from_library_yaml(path: Path, library_name: str) -> list[Plugin]:
             module = entry.get("module", "")
             # Entries may spell out the fully-qualified module or a path
             # relative to module_base.
-            if module.startswith("mas."):
+            if module.startswith("mas.") or (module_base and module.startswith(f"{module_base}.")):
                 full_module = module
             elif module_base:
                 full_module = f"{module_base}.{module}"
@@ -528,6 +528,7 @@ LIBRARY_MANIFESTS: list[str] = [
     "library-telemetry/library.yaml",
     "library-kg/library.yaml",
     "library-eval/library.yaml",
+    "library-ioa/library.yaml",
 ]
 
 # Tool/flavour search roots: relative path (PyPI name comes from pyproject).

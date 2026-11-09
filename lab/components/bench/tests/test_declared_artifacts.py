@@ -176,10 +176,7 @@ def test_list_marks_generated_and_missing(tmp_path: Path) -> None:
 def test_list_command_uses_output_dir(tmp_path: Path, capsys, monkeypatch) -> None:
     yaml_path = tmp_path / "experiment.yaml"
     yaml_path.write_text(
-        "experiment:\n"
-        "  artifacts:\n"
-        "    fig-fork: plot\n"
-        "    not-written: plot\n",
+        "experiment:\n  artifacts:\n    fig-fork: plot\n    not-written: plot\n",
         encoding="utf-8",
     )
     _write(tmp_path / "fig-fork.png")
@@ -187,12 +184,14 @@ def test_list_command_uses_output_dir(tmp_path: Path, capsys, monkeypatch) -> No
         "mas.lab.benchmark.cli.artifacts._output_dir_for",
         lambda _yaml: tmp_path,
     )
-    rc = artifact_list_command(SimpleNamespace(
-        target=str(yaml_path),
-        artifact_type=None,
-        level=None,
-        verbose=False,
-    ))
+    rc = artifact_list_command(
+        SimpleNamespace(
+            target=str(yaml_path),
+            artifact_type=None,
+            level=None,
+            verbose=False,
+        )
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "fig-fork" in out
@@ -214,12 +213,14 @@ def test_list_yaml_uses_last_run_dir(tmp_path: Path, capsys, monkeypatch) -> Non
         "mas.lab.benchmark.cli.artifacts._last_run",
         lambda: (SimpleNamespace(experiment_yaml_path=str(yaml_path)), run_dir),
     )
-    rc = artifact_list_command(SimpleNamespace(
-        target=str(yaml_path),
-        artifact_type=None,
-        level=None,
-        verbose=False,
-    ))
+    rc = artifact_list_command(
+        SimpleNamespace(
+            target=str(yaml_path),
+            artifact_type=None,
+            level=None,
+            verbose=False,
+        )
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "fig-fork" in out
@@ -228,12 +229,14 @@ def test_list_yaml_uses_last_run_dir(tmp_path: Path, capsys, monkeypatch) -> Non
 
 def test_list_command_rejects_directory(tmp_path: Path, caplog) -> None:
     with caplog.at_level(logging.ERROR, logger="mas.lab.benchmark.cli.artifacts"):
-        rc = artifact_list_command(SimpleNamespace(
-            target=str(tmp_path),
-            artifact_type=None,
-            level=None,
-            verbose=False,
-        ))
+        rc = artifact_list_command(
+            SimpleNamespace(
+                target=str(tmp_path),
+                artifact_type=None,
+                level=None,
+                verbose=False,
+            )
+        )
     assert rc == 1
     assert "not a directory" in caplog.text
 
@@ -250,12 +253,14 @@ def test_list_command_uses_last_run(tmp_path: Path, capsys, monkeypatch) -> None
         "mas.lab.benchmark.cli.artifacts._last_run",
         lambda: (SimpleNamespace(experiment_yaml_path=str(yaml_path)), run_dir),
     )
-    rc = artifact_list_command(SimpleNamespace(
-        target="last",
-        artifact_type=None,
-        level=None,
-        verbose=False,
-    ))
+    rc = artifact_list_command(
+        SimpleNamespace(
+            target="last",
+            artifact_type=None,
+            level=None,
+            verbose=False,
+        )
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "fig-fork" in out
@@ -278,12 +283,14 @@ def test_list_command_uses_benchmark_id(tmp_path: Path, capsys, monkeypatch) -> 
             return SimpleNamespace(experiment_yaml_path=str(yaml_path)), run_dir
 
     monkeypatch.setattr("mas.lab.benchmark.cli.artifacts._run_manager", _Mgr)
-    rc = artifact_list_command(SimpleNamespace(
-        target="abcd1234",
-        artifact_type=None,
-        level=None,
-        verbose=False,
-    ))
+    rc = artifact_list_command(
+        SimpleNamespace(
+            target="abcd1234",
+            artifact_type=None,
+            level=None,
+            verbose=False,
+        )
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "fig-fork" in out

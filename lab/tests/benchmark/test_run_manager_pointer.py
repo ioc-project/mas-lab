@@ -55,7 +55,9 @@ def test_record_last_run_serializes_datetime_timestamp(tmp_path, monkeypatch):
         total_scenarios=1,
     )
     BenchmarkRunManager(benchmarks_root=tmp_path / "labs").record_last_run(
-        metadata, run_dir, experiment_yaml=yaml_path,
+        metadata,
+        run_dir,
+        experiment_yaml=yaml_path,
     )
     ptr = last_run_write_path()
     text = ptr.read_text(encoding="utf-8")

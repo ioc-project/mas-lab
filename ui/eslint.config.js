@@ -39,6 +39,8 @@ export default defineConfig([
     "dist",
     "e2e",
     "src/api/generated",
+    "src/types/agent-types.ts",
+    "src/types/mas-types.ts",
     "src/test",
     "node_modules",
     ".yarn",

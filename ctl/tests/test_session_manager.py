@@ -4,10 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.adapters.checkpoint import JsonCheckpointStore
 from mas.ctl.session.manager import SessionManager
-from mas.runtime.boundary.context.working_memory_registry import WorkingMemorySnapshot
 
 
 def _factory(_manifest: dict, _session_id: str):

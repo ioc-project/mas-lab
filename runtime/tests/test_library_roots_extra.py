@@ -90,8 +90,8 @@ def test_workspace_search_path_scans_children(tmp_path: Path, monkeypatch) -> No
         root = ws_root
         _data = {"manifest_libraries": ["."]}
 
-    from mas.runtime.workspace_config import RuntimeWorkspaceConfig
     from mas.library_roots import resolve_named_library_root
+    from mas.runtime.workspace_config import RuntimeWorkspaceConfig
 
     monkeypatch.setattr(RuntimeWorkspaceConfig, "load", classmethod(lambda cls: _FakeWS()))
     assert resolve_named_library_root("example-library") == lib.resolve()

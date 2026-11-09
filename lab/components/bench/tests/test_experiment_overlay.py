@@ -14,6 +14,7 @@ from mas.lab.benchmark.execution.experiment_overlay import apply_experiment_over
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_overlay(tmp_path: Path, name: str, spec: dict) -> Path:
     p = tmp_path / name
     p.write_text(
@@ -42,6 +43,7 @@ def _base() -> dict:
 # Basic merge
 # ---------------------------------------------------------------------------
 
+
 def test_no_overlays_returns_unchanged(tmp_path: Path) -> None:
     base = _base()
     result = apply_experiment_overlays(base, [], base_dir=tmp_path)
@@ -49,9 +51,9 @@ def test_no_overlays_returns_unchanged(tmp_path: Path) -> None:
 
 
 def test_scalar_override(tmp_path: Path) -> None:
-    overlay = _write_overlay(tmp_path, "o.yaml", {
-        "execution": {"emulation": {"runtime": {"cache": "content-addressed"}}}
-    })
+    overlay = _write_overlay(
+        tmp_path, "o.yaml", {"execution": {"emulation": {"runtime": {"cache": "content-addressed"}}}}
+    )
     result = apply_experiment_overlays(_base(), [overlay])
     assert result["experiment"]["execution"]["emulation"]["runtime"]["cache"] == "content-addressed"
 
@@ -73,6 +75,7 @@ def test_n_runs_override(tmp_path: Path) -> None:
 # List replace semantics (RFC 7386)
 # ---------------------------------------------------------------------------
 
+
 def test_run_post_replaced_by_overlay(tmp_path: Path) -> None:
     """Lists replace rather than append — provide the full desired list."""
     overlay = _write_overlay(tmp_path, "o.yaml", {"run": {"post": [{"ref": "pipelines/eval.yaml"}]}})
@@ -92,6 +95,7 @@ def test_experiment_post_replaced_by_overlay(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Multiple overlays applied in order
 # ---------------------------------------------------------------------------
+
 
 def test_multiple_overlays_applied_left_to_right(tmp_path: Path) -> None:
     o1 = _write_overlay(tmp_path, "o1.yaml", {"execution": {"parallel_scenarios": 8}})
@@ -113,6 +117,7 @@ def test_multiple_overlays_pipelines_last_wins(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Overlay format variants
 # ---------------------------------------------------------------------------
+
 
 def test_bare_overlay_without_spec_key(tmp_path: Path) -> None:
     p = tmp_path / "bare.yaml"
@@ -143,6 +148,7 @@ def test_missing_overlay_raises(tmp_path: Path) -> None:
 # Edge cases
 # ---------------------------------------------------------------------------
 
+
 def test_empty_overlay_spec_is_noop(tmp_path: Path) -> None:
     overlay = _write_overlay(tmp_path, "empty.yaml", {})
     base = _base()
@@ -160,6 +166,7 @@ def test_original_dict_not_mutated(tmp_path: Path) -> None:
     overlay = _write_overlay(tmp_path, "o.yaml", {"execution": {"emulation": {"runtime": {"cache": "forced"}}}})
     base = _base()
     import copy
+
     base_copy = copy.deepcopy(base)
     apply_experiment_overlays(base, [overlay])
     assert base == base_copy  # original unchanged
@@ -174,10 +181,14 @@ def test_bare_experiment_dict_without_experiment_wrapper(tmp_path: Path) -> None
 
 
 def test_schedule_overlay_merge(tmp_path: Path) -> None:
-    overlay = _write_overlay(tmp_path, "o.yaml", {
-        "bench_emulation": {"runtime": {"cache": "content-addressed"}},
-        "schedule": {"parallel_scenarios": 8},
-    })
+    overlay = _write_overlay(
+        tmp_path,
+        "o.yaml",
+        {
+            "bench_emulation": {"runtime": {"cache": "content-addressed"}},
+            "schedule": {"parallel_scenarios": 8},
+        },
+    )
     base = {
         "experiment": {
             "name": "my-exp",

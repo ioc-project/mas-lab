@@ -12,7 +12,7 @@ import sys
 
 import pytest
 import yaml
-from conftest import T02, load_yaml, run_cli
+from tutorial_support import T02, load_yaml, run_cli
 
 # Ensure the tutorial tools directory is importable
 sys.path.insert(0, str(T02))
@@ -89,9 +89,7 @@ class TestMASStructure:
         ov = load_yaml(T02 / "overlays" / "single-agent.yaml")
         assert ov["kind"] == "Overlay"
         patch = ov["spec"]["patch"]
-        assert patch["agents"]["$op"]["replace"] == [
-            {"id": "generalist", "ref": "agents/generalist/agent.yaml"}
-        ]
+        assert patch["agents"]["$op"]["replace"] == [{"id": "generalist", "ref": "agents/generalist/agent.yaml"}]
         assert "workflow" in patch
         assert patch["workflow"]["entry"] == "generalist"
 

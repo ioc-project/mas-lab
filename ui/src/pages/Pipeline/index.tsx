@@ -64,6 +64,8 @@ const Pipeline = () => {
 
   const validateMutation = useValidatePipeline();
 
+  const { reset: resetValidate } = validateMutation;
+
   const selectedTab = Math.max(0, TAB_KEYS.indexOf(pipelineTab as PipelineTab));
   const handleTabChange = useCallback(
     (_event: React.SyntheticEvent, newValue: number) => {
@@ -104,9 +106,9 @@ const Pipeline = () => {
 
   useEffect(() => {
     if (!validateMutation.isSuccess) return;
-    const timer = setTimeout(() => validateMutation.reset(), 5000);
+    const timer = setTimeout(() => resetValidate(), 5000);
     return () => clearTimeout(timer);
-  }, [validateMutation.isSuccess]);
+  }, [validateMutation.isSuccess, resetValidate]);
 
   useEffect(() => {
     if (!runError) return;
@@ -354,7 +356,7 @@ const Pipeline = () => {
                 ? "success"
                 : "error"
             }
-            onClose={() => validateMutation.reset()}
+            onClose={() => resetValidate()}
             sx={alertSx}
           >
             {validateMutation.data.message ||
@@ -368,7 +370,7 @@ const Pipeline = () => {
         {validateMutation.isError && (
           <Alert
             severity="error"
-            onClose={() => validateMutation.reset()}
+            onClose={() => resetValidate()}
             sx={alertSx}
           >
             {validateMutation.error.message}

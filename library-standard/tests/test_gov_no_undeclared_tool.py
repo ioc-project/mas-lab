@@ -98,13 +98,7 @@ def test_observation_text() -> None:
 
 def test_with_hardened_overlay_appends_the_plugin() -> None:
     overlay_path = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "mas"
-        / "library"
-        / "standard"
-        / "overlays"
-        / "with-hardened.yaml"
+        Path(__file__).resolve().parents[1] / "src" / "mas" / "library" / "standard" / "overlays" / "with-hardened.yaml"
     )
     doc = yaml.safe_load(overlay_path.read_text(encoding="utf-8"))
     add = doc["spec"]["patch"]["governance"]["$op"]["add"]
@@ -145,12 +139,7 @@ def test_non_tool_ops_are_not_checked() -> None:
         assert decision == GovDecision.ALLOW
 
 
-SAMPLE = (
-    Path(__file__).resolve().parents[1]
-    / "examples"
-    / "governance"
-    / "undeclared-tool"
-)
+SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "governance" / "undeclared-tool"
 
 
 def _mwe() -> dict:

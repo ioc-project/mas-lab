@@ -40,9 +40,9 @@ A2A `tasks/cancel` cancels the server-side wait and emits a `CANCELED` status. I
 
 ## Registry and routing
 
-`infra/v1` `Application.spec.endpoints` holds the public protocol configuration. It is keyed by the exact agency agent id. The runtime registry category stays `agent_comm`. The endpoint's `protocol` selects the implementation.
+`infra/v1` `Application.spec.endpoints` holds public protocol configuration. An agent-keyed row (`--connect NAME=a2a://...`) still selects the `agent_comm` plugin from that row's `protocol`. A Flavour `spec.bind` chain names infra rows instead; each row's `protocol` is the layer. The runtime registry category stays `agent_comm`.
 
-The MAS-wide in-process comm variant resolves from `spec.agent_comm` (`type` or `protocol`, with optional `params`) through `registry.create`. If it is omitted, the library default (`defaults.agent_comm`) applies. The delegation plugin does not choose it, and `ctl` does not hardcode it.
+The in-process link is the library default (`defaults.agent_comm`), created with `registry.create("agent_comm", binding=None)`. The MAS has no `agent_comm` field. A Flavour leftover `agent_comm` block is accepted and read by nothing. The delegation plugin does not choose the plugin, and `ctl` does not hardcode it.
 
 The route builder resolves every `delegates_to` target against materialized local agents and against infra endpoints with `usage: connect` or `[connect, listen]`. Missing targets fail during wiring.
 

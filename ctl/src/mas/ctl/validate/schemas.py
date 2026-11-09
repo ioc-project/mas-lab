@@ -38,6 +38,7 @@ _KIND_MAP: dict[str, str] = {
     "mas": "runtime/mas.schema.yaml",
     "overlay": "runtime/overlay.schema.yaml",
     "infra": "runtime/infra.schema.yaml",
+    "application": "runtime/infra.schema.yaml",
     "flavour": "runtime/flavour.schema.yaml",
     "workflow": "runtime/workflow.schema.yaml",
     "tool": "runtime/tool.schema.yaml",

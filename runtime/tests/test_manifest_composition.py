@@ -12,4 +12,3 @@ def test_apply_merge_patch_deletes_keys_with_none() -> None:
     result = apply_merge_patch(target, patch)
 
     assert result == {"spec": {"telemetry": {"path": "a.jsonl"}}}
-

@@ -5,7 +5,6 @@
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.deployment import resolve_runtime_id_for_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
 

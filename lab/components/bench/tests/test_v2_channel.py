@@ -5,13 +5,11 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
-from mas.lab.benchmark.pipeline.channel import InprocChannel, LogChannel, make_channel
+from mas.lab.benchmark.pipeline.channel import InprocChannel, LogChannel, make_channel, set_channel
+from mas.lab.benchmark.pipeline.counters import counters, reset_counters
 from mas.lab.benchmark.pipeline.digest import rolling_digest
 from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.lifecycle import attempt_reset, begin_run, terminal_run
-from mas.lab.benchmark.pipeline.channel import set_channel
-from mas.lab.benchmark.pipeline.counters import reset_counters, counters
 
 
 @pytest.mark.asyncio

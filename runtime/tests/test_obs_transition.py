@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
-from mas.runtime.boundary.obs.plugins import ObsPluginSet, build_observability_plugins
+from mas.runtime.boundary.obs.plugins import build_observability_plugins
 from mas.runtime.boundary.obs.transition import TransitionEvent, boundary_event_to_transition
-from mas.runtime.schema.observability import ObsEventKind, ObsPhase, ObservabilityEvent
+from mas.runtime.schema.observability import ObservabilityEvent, ObsEventKind, ObsPhase
 
 
 @dataclass
@@ -215,19 +215,27 @@ def test_native_plugin_engine_io_is_sole_source_of_llm_call(tmp_path) -> None:
         op.subscribe(plugin)
     op.set_context(agent_id="planner", run_id="run-test")
     op.record_envelope_activity(
-        symbol="CONTRACT_START", activity="contract_call", boundary="start",
-        phase=ObsPhase.REQUEST, correlation_id=5, payload={"op": "LLM_CALL"},
+        symbol="CONTRACT_START",
+        activity="contract_call",
+        boundary="start",
+        phase=ObsPhase.REQUEST,
+        correlation_id=5,
+        payload={"op": "LLM_CALL"},
     )
     op.record_engine_io(correlation_id=5, op="LLM_CALL")
     op.record_engine_io_return(correlation_id=5, op="LLM_CALL", text="hi")
     op.record_envelope_activity(
-        symbol="CONTRACT_END", activity="contract_call", boundary="end",
-        phase=ObsPhase.RESULT, correlation_id=5, payload={"op": "LLM_CALL"},
+        symbol="CONTRACT_END",
+        activity="contract_call",
+        boundary="end",
+        phase=ObsPhase.RESULT,
+        correlation_id=5,
+        payload={"op": "LLM_CALL"},
     )
     op.drain_plugin_queue()
     lines = (tmp_path / "events.jsonl").read_text().splitlines()
-    starts = [l for l in lines if '"kind": "llm_call_start"' in l]
-    ends = [l for l in lines if '"kind": "llm_call_end"' in l]
+    starts = [line for line in lines if '"kind": "llm_call_start"' in line]
+    ends = [line for line in lines if '"kind": "llm_call_end"' in line]
     assert len(starts) == 1, starts
     assert len(ends) == 1, ends
 
@@ -243,7 +251,10 @@ def test_governance_decision_resolves_real_call_id_and_parent() -> None:
     op.push_call_frame("exec-001")
 
     op.record_governance_decision(
-        hook="egress", phase="before", correlation_id=9, op="TOOL_CALL",
+        hook="egress",
+        phase="before",
+        correlation_id=9,
+        op="TOOL_CALL",
     )
     gov_before = cap.seen[-1]
     assert gov_before.parent_call_id == "exec-001", gov_before
@@ -255,7 +266,10 @@ def test_governance_decision_resolves_real_call_id_and_parent() -> None:
     op.record_engine_io_return(correlation_id=9, op="TOOL_CALL", text="ok")
 
     op.record_governance_decision(
-        hook="ingress", phase="after", correlation_id=9, op="TOOL_CALL",
+        hook="ingress",
+        phase="after",
+        correlation_id=9,
+        op="TOOL_CALL",
     )
     gov_after = cap.seen[-1]
     assert gov_after.call_id == tool_start.call_id, (gov_after, tool_start)
@@ -292,15 +306,23 @@ def test_hitl_request_and_resolve_share_call_id_with_real_parent() -> None:
     op.push_call_frame("exec-001")
 
     ev_request = ObservabilityEvent(
-        seq=1, kind=ObsEventKind.HITL_REQUEST, phase=ObsPhase.AUTHZ,
-        machine_id="M_gov", correlation_id=4, payload={"question": "proceed?"},
+        seq=1,
+        kind=ObsEventKind.HITL_REQUEST,
+        phase=ObsPhase.AUTHZ,
+        machine_id="M_gov",
+        correlation_id=4,
+        payload={"question": "proceed?"},
     )
     call_id_req, parent_req = op._resolve_transition_ids(ev_request)
     assert parent_req == "exec-001"
 
     ev_resolve = ObservabilityEvent(
-        seq=2, kind=ObsEventKind.HITL_RESOLVE, phase=ObsPhase.AUTHZ,
-        machine_id="M_gov", correlation_id=4, payload={"resolution": "approve"},
+        seq=2,
+        kind=ObsEventKind.HITL_RESOLVE,
+        phase=ObsPhase.AUTHZ,
+        machine_id="M_gov",
+        correlation_id=4,
+        payload={"resolution": "approve"},
     )
     call_id_res, parent_res = op._resolve_transition_ids(ev_resolve)
     assert call_id_res == call_id_req
@@ -314,10 +336,17 @@ def test_hitl_request_call_id_does_not_collide_across_agents() -> None:
     own HITL requests must not collide on the same call_id."""
     op_a = ObservabilityOperator()
     op_b = ObservabilityOperator()
-    ev = lambda: ObservabilityEvent(
-        seq=1, kind=ObsEventKind.HITL_REQUEST, phase=ObsPhase.AUTHZ,
-        machine_id="M_gov", correlation_id=3, payload={},
-    )
+
+    def ev() -> ObservabilityEvent:
+        return ObservabilityEvent(
+            seq=1,
+            kind=ObsEventKind.HITL_REQUEST,
+            phase=ObsPhase.AUTHZ,
+            machine_id="M_gov",
+            correlation_id=3,
+            payload={},
+        )
+
     call_id_a, _ = op_a._resolve_transition_ids(ev())
     call_id_b, _ = op_b._resolve_transition_ids(ev())
     assert call_id_a != call_id_b
@@ -450,7 +479,10 @@ def test_context_mutation_resolves_real_parent_for_1to1_op() -> None:
     op.record_engine_io_return(correlation_id=4, op="TOOL_CALL", text="ok")
 
     op.record_context_mutation(
-        action="wm_append", correlation_id=4, role="tool", op="TOOL_CALL",
+        action="wm_append",
+        correlation_id=4,
+        role="tool",
+        op="TOOL_CALL",
     )
     mutation = cap.seen[-1]
     assert mutation.parent_call_id == tool_start.call_id, (mutation, tool_start)

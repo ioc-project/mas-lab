@@ -5,7 +5,6 @@
 from pathlib import Path
 
 import pytest
-
 from mas.runtime.boundary.context.manifest_context import (
     ContextChunkError,
     ContextRefNotFoundError,
@@ -60,9 +59,7 @@ def test_resolve_context_chunk_missing_bare_path_warns(tmp_path: Path, caplog):
     import logging
 
     caplog.set_level(logging.WARNING)
-    assert resolve_context_chunk("prompts/missing-role.md", base_dir=tmp_path) == (
-        "prompts/missing-role.md"
-    )
+    assert resolve_context_chunk("prompts/missing-role.md", base_dir=tmp_path) == ("prompts/missing-role.md")
     assert any("looks like a file path" in r.message for r in caplog.records)
 
 
@@ -87,10 +84,7 @@ def test_resolve_context_chunk_long_inline_role_without_slash(tmp_path: Path):
 
 def test_resolve_context_chunk_array_joins_fragments(tmp_path: Path):
     value = ["You are a triage agent.", "Always cite your sources."]
-    assert (
-        resolve_context_chunk(value, base_dir=tmp_path)
-        == "You are a triage agent.\nAlways cite your sources."
-    )
+    assert resolve_context_chunk(value, base_dir=tmp_path) == "You are a triage agent.\nAlways cite your sources."
 
 
 def test_resolve_context_chunk_array_mixes_inline_and_ref(tmp_path: Path):

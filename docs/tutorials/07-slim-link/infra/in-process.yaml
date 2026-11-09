@@ -1,0 +1,9 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# An in-process transport: no node, no secret. A Flavour puts it in its bind.agent_comm chain.
+apiVersion: infra/v1
+kind: Application
+metadata: {name: desk-in-process}
+spec:
+  endpoints:
+    desk-group: {protocol: local-group, identity: acme/lab/desk, usage: [connect, listen]}

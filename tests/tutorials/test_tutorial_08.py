@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import REPO_ROOT, T08, run_cli
+from tutorial_support import REPO_ROOT, T08, run_cli
 
 QA = REPO_ROOT / "library-telemetry" / "examples" / "qa-agent"
 

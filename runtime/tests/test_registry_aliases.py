@@ -5,10 +5,6 @@
 from __future__ import annotations
 
 from mas.runtime.registry import PluginEntry, PluginRegistry, VariantInfo
-from mas.runtime.registry.bootstrap import (
-    register_manifest_data,
-    register_manifest_file,
-)
 from mas.runtime.registry.aliases import (
     _load_alias_manifest,
     _load_alias_mapping,
@@ -17,7 +13,11 @@ from mas.runtime.registry.aliases import (
     load_default_aliases,
     validate_alias_manifest,
 )
-from mas.runtime.registry.bootstrap import load_registry
+from mas.runtime.registry.bootstrap import (
+    load_registry,
+    register_manifest_data,
+    register_manifest_file,
+)
 from mas.runtime.workspace_config import RuntimeWorkspaceConfig
 
 

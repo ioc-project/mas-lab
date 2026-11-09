@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """End-to-end parse + observable effect tests for the design/schedule split."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 from mas.lab.benchmark.execution.plan import build_execution_plan
 from mas.lab.deprecations import clear_deprecation_warnings
 from mas.lab.lab.config import MASExperimentConfig
@@ -36,11 +36,7 @@ def _load(tmp_path: Path, body: str) -> MASExperimentConfig:
 def test_new_shape_parses_without_scheduler_fields_in_design(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
-        "  run:\n"
-        "    n_runs: 4\n"
-        "  design:\n"
-        "    mode: cartesian\n"
-        "    max_executions: 50\n",
+        "  run:\n    n_runs: 4\n  design:\n    mode: cartesian\n    max_executions: 50\n",
     )
     assert cfg.n_runs == 4
     assert cfg.design.mode == "cartesian"
@@ -51,12 +47,8 @@ def test_new_shape_parses_without_scheduler_fields_in_design(tmp_path: Path) -> 
 
 def test_schedule_ordering_changes_plan_not_n_runs(tmp_path: Path) -> None:
     items = [{"id": "a"}, {"id": "b"}]
-    coverage = build_execution_plan(
-        ["s1", "s2"], items, 2, strategy="coverage"
-    )
-    depth = build_execution_plan(
-        ["s1", "s2"], items, 2, strategy="depth"
-    )
+    coverage = build_execution_plan(["s1", "s2"], items, 2, strategy="coverage")
+    depth = build_execution_plan(["s1", "s2"], items, 2, strategy="depth")
     assert len(coverage) == len(depth) == 8
     assert coverage[0][2] == 0 and coverage[1][2] == 0
     assert depth[0] == ("s1", {"id": "a"}, 0)
@@ -65,28 +57,18 @@ def test_schedule_ordering_changes_plan_not_n_runs(tmp_path: Path) -> None:
 
     cfg = _load(
         tmp_path,
-        "  run:\n"
-        "    n_runs: 2\n"
-        "  schedule:\n"
-        "    ordering: depth\n"
-        "    parallel_scenarios: 9\n",
+        "  run:\n    n_runs: 2\n  schedule:\n    ordering: depth\n    parallel_scenarios: 9\n",
     )
     assert cfg.n_runs == 2
     assert cfg.schedule.parallel_scenarios == 9
-    plan = build_execution_plan(
-        cfg.scenario_ids(), items, cfg.n_runs, strategy=cfg.schedule.ordering
-    )
+    plan = build_execution_plan(cfg.scenario_ids(), items, cfg.n_runs, strategy=cfg.schedule.ordering)
     assert plan[1] == ("s1", {"id": "a"}, 1)
 
 
 def test_design_max_executions_changes_which_cells_are_legal(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
-        "  run:\n"
-        "    n_runs: 3\n"
-        "  design:\n"
-        "    mode: cartesian\n"
-        "    max_executions: 2\n",
+        "  run:\n    n_runs: 3\n  design:\n    mode: cartesian\n    max_executions: 2\n",
     )
     with pytest.raises(RuntimeError, match="design.max_executions=2"):
         build_execution_plan(
@@ -118,11 +100,7 @@ def test_new_keys_win_over_legacy_execution(tmp_path: Path) -> None:
 def test_legacy_max_attempts_lands_on_schedule(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
-        "  run:\n"
-        "    n_runs: 1\n"
-        "  execution:\n"
-        "    max_attempts: 1\n"
-        "    retry_backoff_s: 0\n",
+        "  run:\n    n_runs: 1\n  execution:\n    max_attempts: 1\n    retry_backoff_s: 0\n",
     )
     assert cfg.schedule.max_attempts == 1
     assert cfg.schedule.retry_backoff_s == 0.0

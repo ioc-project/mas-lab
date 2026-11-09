@@ -13,7 +13,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from conftest import REPO_ROOT, T02, load_yaml, run_cli
+from tutorial_support import REPO_ROOT, T02, load_yaml, run_cli
 
 INFRA = REPO_ROOT / "library-samples" / "infra" / "mixed-agents.infra.yaml"
 
@@ -25,9 +25,7 @@ class TestManifestValidation:
         assert "OK" in r.stdout
 
     def test_validate_schedule_agent(self):
-        r = run_cli(
-            ["mas-ctl", "validate", str(T02 / "agents" / "schedule-agent" / "agent.yaml")]
-        )
+        r = run_cli(["mas-ctl", "validate", str(T02 / "agents" / "schedule-agent" / "agent.yaml")])
         assert r.returncode == 0, r.stderr
 
 
@@ -59,9 +57,7 @@ class TestMixedTopologyEndToEnd:
         )
 
         def _run_turn(*_args: object, **_kwargs: object):
-            response = httpx.get(
-                f"http://127.0.0.1:{port}/.well-known/agent-card.json", timeout=5
-            )
+            response = httpx.get(f"http://127.0.0.1:{port}/.well-known/agent-card.json", timeout=5)
             assert response.status_code == 200, response.text
             cards["schedule_agent"] = response.json()
             return SimpleNamespace(
@@ -72,9 +68,7 @@ class TestMixedTopologyEndToEnd:
             )
 
         with patch("mas.ctl.session.bootstrap.build_engine", return_value=sel):
-            with patch(
-                "mas.ctl.session.controller.SessionController.run_turn", side_effect=_run_turn
-            ):
+            with patch("mas.ctl.session.controller.SessionController.run_turn", side_effect=_run_turn):
                 rc = execute_run_mas(
                     T02 / "mas.yaml",
                     prompt="Plan a trip and compare the available transport schedules.",
@@ -129,9 +123,7 @@ class TestServeCommandOffline:
             last_error: Exception | None = None
             while time.monotonic() < deadline:
                 try:
-                    r = httpx.get(
-                        f"http://127.0.0.1:{port}/.well-known/agent-card.json", timeout=1
-                    )
+                    r = httpx.get(f"http://127.0.0.1:{port}/.well-known/agent-card.json", timeout=1)
                     if r.status_code == 200:
                         assert r.json()["name"] == "schedule_agent"
                         return

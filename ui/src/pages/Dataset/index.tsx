@@ -4,7 +4,7 @@ import { PageWithTitle, DatasetEditor } from "@/components";
 import type { DatasetContent, DatasetItem } from "@/components/DatasetEditor/DatasetEditor";
 import { Alert } from "@mui/material";
 import { useNavigate, useParams } from "react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import {
   useDatasetDetail,
   useUpdateDataset,
@@ -92,6 +92,8 @@ function editorContentToYaml(
   return stringifyYaml(doc, { lineWidth: 0 });
 }
 
+const EMPTY_DATASET_CONTENT = JSON.stringify({ items: [] }, null, 2);
+
 const Dataset = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -113,10 +115,8 @@ const Dataset = () => {
     message: string;
   } | null>(null);
 
-  const emptyDatasetContent = JSON.stringify({ items: [] }, null, 2);
-
   const initialContent = useMemo(() => {
-    if (isNew) return emptyDatasetContent;
+    if (isNew) return EMPTY_DATASET_CONTENT;
     if (!dataset?.content) return "";
     try {
       const editorData = yamlToEditorContent(dataset.content);
@@ -163,7 +163,7 @@ const Dataset = () => {
     }
   };
 
-  useEffect(() => {
+  const handleSaveSettled = useEffectEvent(() => {
     if (saveMutation.isSuccess) {
       queryClient.removeQueries({ queryKey: ["datasets-list", library] });
       if (lastSavedName && lastSavedName !== (id ?? "")) {
@@ -185,9 +185,13 @@ const Dataset = () => {
         message: err instanceof Error ? err.message : "Failed to save dataset",
       });
     }
-  }, [saveMutation.isSuccess, saveMutation.isError]);
+  });
 
   useEffect(() => {
+    handleSaveSettled();
+  }, [saveMutation.isSuccess, saveMutation.isError]);
+
+  const handleCreateSettled = useEffectEvent(() => {
     if (createMutation.isSuccess) {
       queryClient.removeQueries({ queryKey: ["datasets-list", library] });
       setSaveAlert({ severity: "success", message: "Dataset created successfully" });
@@ -200,11 +204,15 @@ const Dataset = () => {
         message: err instanceof Error ? err.message : "Failed to create dataset",
       });
     }
+  });
+
+  useEffect(() => {
+    handleCreateSettled();
   }, [createMutation.isSuccess, createMutation.isError]);
 
   const deleteMutation = useDeleteDataset(library, id ?? "");
 
-  useEffect(() => {
+  const handleDeleteSettled = useEffectEvent(() => {
     if (deleteMutation.isSuccess) {
       queryClient.removeQueries({ queryKey: ["datasets-list", library] });
       navigate(scopeHref(library, "/datasets"), { replace: true });
@@ -212,6 +220,10 @@ const Dataset = () => {
     if (deleteMutation.isError) {
       setDeleteDialogOpen(false);
     }
+  });
+
+  useEffect(() => {
+    handleDeleteSettled();
   }, [deleteMutation.isSuccess, deleteMutation.isError]);
 
   if (!isNew && isLoading) {

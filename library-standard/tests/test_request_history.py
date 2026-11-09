@@ -65,13 +65,9 @@ def test_request_history_projects_chat_rows_not_chunk_ids() -> None:
 
 def test_request_history_falls_back_to_committed_then_turn_history() -> None:
     empty = ConversationChunkStore()
-    committed = request_history(
-        _ctx(store=empty, committed_messages=[{"role": "user", "content": "kept"}])
-    )
+    committed = request_history(_ctx(store=empty, committed_messages=[{"role": "user", "content": "kept"}]))
     assert committed == [{"role": "user", "content": "kept"}]
-    from_turns = request_history(
-        _ctx(store=empty, committed_messages=[], turn_history=[("q", "a"), ("later", "   ")])
-    )
+    from_turns = request_history(_ctx(store=empty, committed_messages=[], turn_history=[("q", "a"), ("later", "   ")]))
     assert from_turns == [
         {"role": "user", "content": "q"},
         {"role": "assistant", "content": "a"},

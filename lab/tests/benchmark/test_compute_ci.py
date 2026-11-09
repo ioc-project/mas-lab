@@ -5,6 +5,7 @@
 Run with:
     cd lab && uv run pytest tests/benchmark/test_compute_ci.py -v
 """
+
 from __future__ import annotations
 
 import math
@@ -14,15 +15,13 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 import pytest
-
-from mas.lab.benchmark.pipeline import StepOutput
-from mas.library.lab.steps.eval.compute_ci import ComputeCIStep, compute_ci
 from mas.lab.benchmark.pipeline.lib.data_source import resolve_dataframe, write_dataframe
-
+from mas.library.lab.steps.eval.compute_ci import ComputeCIStep, compute_ci
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_tidy_df() -> pd.DataFrame:
     """3 runs × 3 scenarios × 2 item_groups × 2 metrics = 36 rows."""
@@ -105,6 +104,7 @@ class TestComputeCi:
 # Unit tests: resolve_dataframe
 # ---------------------------------------------------------------------------
 
+
 class TestResolveDataframe:
     def test_reads_csv_file(self, tmp_path):
         df = _make_tidy_df()
@@ -130,17 +130,13 @@ class TestResolveDataframe:
 
     def test_in_memory_df_key(self):
         df = _make_tidy_df()
-        ctx = FakeExecutionContext(
-            step_outputs={"prior": FakeStepOutput(data={"df": df})}
-        )
+        ctx = FakeExecutionContext(step_outputs={"prior": FakeStepOutput(data={"df": df})})
         result = resolve_dataframe("@prior", ctx)
         assert result is df
 
     def test_in_memory_custom_field(self):
         df = _make_tidy_df()
-        ctx = FakeExecutionContext(
-            step_outputs={"prior": FakeStepOutput(data={"my_df": df})}
-        )
+        ctx = FakeExecutionContext(step_outputs={"prior": FakeStepOutput(data={"my_df": df})})
         result = resolve_dataframe("@prior:my_df", ctx)
         assert result is df
 
@@ -149,12 +145,10 @@ class TestResolveDataframe:
         df = _make_tidy_df()
         p = tmp_path / "results.csv"
         df.to_csv(p, index=False)
-        ctx = FakeExecutionContext(
-            step_outputs={"prior": FakeStepOutput(data={"csv_path": str(p)})}
-        )
+        ctx = FakeExecutionContext(step_outputs={"prior": FakeStepOutput(data={"csv_path": str(p)})})
         with pytest.raises(ValueError, match="no data field 'df'"):
             resolve_dataframe("@prior", ctx)
-        result = resolve_dataframe(f"@prior:csv_path", ctx)
+        result = resolve_dataframe("@prior:csv_path", ctx)
         assert len(result) == len(df)
 
     def test_missing_step_raises(self):
@@ -163,9 +157,7 @@ class TestResolveDataframe:
             resolve_dataframe("@missing", ctx)
 
     def test_missing_field_raises(self):
-        ctx = FakeExecutionContext(
-            step_outputs={"prior": FakeStepOutput(data={"other": "x"})}
-        )
+        ctx = FakeExecutionContext(step_outputs={"prior": FakeStepOutput(data={"other": "x"})})
         with pytest.raises(ValueError, match="no data field"):
             resolve_dataframe("@prior:nonexistent", ctx)
 
@@ -214,6 +206,7 @@ class TestWriteDataframe:
 # ---------------------------------------------------------------------------
 # Integration tests: ComputeCIStep.execute()
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_compute_ci_step_from_csv_file(tmp_path):
@@ -281,9 +274,7 @@ async def test_compute_ci_step_prior_csv_path_ref(tmp_path):
     df.to_csv(csv_path, index=False)
 
     ctx = FakeExecutionContext(
-        step_outputs={
-            "collect-metrics": FakeStepOutput(data={"csv_path": str(csv_path)})
-        },
+        step_outputs={"collect-metrics": FakeStepOutput(data={"csv_path": str(csv_path)})},
         output_dir=tmp_path,
     )
 

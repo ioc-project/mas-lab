@@ -7,11 +7,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from mas.ctl.benchmark.runner import MasBenchRunner, select_mas_runner
-from mas.ctl.executor.mas_session import agent_manifest_label
 from mas.ctl.benchmark.runner_dispatch import is_mas_manifest_kind, mas_manifest_path
-from mas.ctl.compose.models import AgentBindSlice, EffectiveBindManifest
-from mas.ctl.compose.models import PlacementPlan
+from mas.ctl.compose.models import AgentBindSlice, EffectiveBindManifest, PlacementPlan
 from mas.ctl.compose.runner import ComposeResult
+from mas.ctl.executor.mas_session import MaterializedMas, agent_manifest_label
 from mas.lab.manifest.load import entry_agent_from_compose
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
 from mas.lab.runners.protocol import RunResult
@@ -93,7 +92,10 @@ def test_mas_bench_compose_called_once_for_mas_kind(tmp_path: Path):
         mas_config={
             "kind": "mas",
             "metadata": {"name": "demo"},
-            "spec": {"workflow": {"entry": "alpha"}, "agency": {"agents": [{"id": "alpha", "ref": "agents/alpha.yaml"}]}},
+            "spec": {
+                "workflow": {"entry": "alpha"},
+                "agency": {"agents": [{"id": "alpha", "ref": "agents/alpha.yaml"}]},
+            },
         },
         effective_bind={},
         placement_plan={},
@@ -130,7 +132,8 @@ def test_multi_agent_topology_runs_on_unified_controller_path(tmp_path: Path):
     agent_path.parent.mkdir()
     agent_path.write_text("kind: agent\nmetadata:\n  name: step-a\n", encoding="utf-8")
     mas_path.write_text(
-        "kind: mas\nmetadata:\n  name: demo\nspec:\n  workflow:\n    entry: step-a\n  agency:\n    agents:\n      - id: step-a\n        ref: agents/step-a.yaml\n",
+        "kind: mas\nmetadata:\n  name: demo\nspec:\n  workflow:\n    entry: step-a\n  agency:\n    agents:\n      - "
+        "id: step-a\n        ref: agents/step-a.yaml\n",
         encoding="utf-8",
     )
 
@@ -174,7 +177,7 @@ def test_multi_agent_topology_runs_on_unified_controller_path(tmp_path: Path):
         driver=SimpleNamespace(agent_id=None, observability=None),
         obs_plugin_set=None,
     )
-    materialized = SimpleNamespace(
+    materialized = MaterializedMas(
         compose=compose,
         materialized=SimpleNamespace(instances={"step-a": stub_instance, "step-b": stub_instance}),
         mas_base_dir=mas_path.parent,
@@ -184,7 +187,9 @@ def test_multi_agent_topology_runs_on_unified_controller_path(tmp_path: Path):
         with patch("mas.ctl.benchmark.runner.materialize_mas_compose", return_value=materialized):
             with patch("mas.ctl.benchmark.runner.prepare_delegation_entry_session", return_value=prepared):
                 with patch("mas.ctl.benchmark.runner.wire_peer_delegation"):
-                    with patch.object(MasBenchRunner, "_run_controller_turns", return_value=RunResult(content="ok", status="ok")) as run_turns:
+                    with patch.object(
+                        MasBenchRunner, "_run_controller_turns", return_value=RunResult(content="ok", status="ok")
+                    ) as run_turns:
                         result = MasBenchRunner().run(
                             "hello",
                             config=compose.mas_config,
@@ -194,8 +199,6 @@ def test_multi_agent_topology_runs_on_unified_controller_path(tmp_path: Path):
 
     assert result.status == "ok"
     run_turns.assert_called_once()
-
-
 
 
 def test_compose_path_skips_stacked_merge_for_loaded_mas_raw(tmp_path: Path):
@@ -220,7 +223,10 @@ def test_compose_path_skips_stacked_merge_for_loaded_mas_raw(tmp_path: Path):
         mas_config={
             "kind": "mas",
             "metadata": {"name": "demo"},
-            "spec": {"workflow": {"entry": "alpha"}, "agency": {"agents": [{"id": "alpha", "ref": "agents/alpha.yaml"}]}},
+            "spec": {
+                "workflow": {"entry": "alpha"},
+                "agency": {"agents": [{"id": "alpha", "ref": "agents/alpha.yaml"}]},
+            },
         },
         effective_bind={},
         placement_plan={},
@@ -254,7 +260,8 @@ def test_compose_path_skips_stacked_merge_for_loaded_mas_raw(tmp_path: Path):
 def test_entry_agent_from_compose_mas_kind_nonstandard_filename(tmp_path: Path):
     mas_path = tmp_path / "triage.yaml"
     mas_path.write_text(
-        "kind: mas\nmetadata:\n  name: triage\nspec:\n  workflow:\n    entry: alpha\n  agency:\n    agents:\n      - id: alpha\n        ref: agents/alpha.yaml\n",
+        "kind: mas\nmetadata:\n  name: triage\nspec:\n  workflow:\n    entry: alpha\n  agency:\n    agents:\n      - "
+        "id: alpha\n        ref: agents/alpha.yaml\n",
         encoding="utf-8",
     )
     agent_path = tmp_path / "agents" / "alpha.yaml"

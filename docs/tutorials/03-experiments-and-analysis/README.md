@@ -247,7 +247,7 @@ Is that better than the alternatives? Each topology is an overlay in `topologies
 | Deterministic linear (`linear.yaml`) | `delegates_to` plus entry `design_pattern: deterministic_linear` | Plugin calls specialists in declared order |
 | Moderator (`moderator.yaml`) | Entry `delegates_to` targets, `design_pattern: react` | Entry agent's LLM picks peers |
 
-`delegates_to` declares allowed peers, not a sequence. Parallel fan-out uses `dispatch: parallel` on a node.
+`delegates_to` declares allowed peers, not a sequence. Parallel fan-out is the model's choice of parallel tool calls, or the entry agent's `design_pattern: deterministic_parallel`.
 The schema has no `workflow.type` or `workflow.edges`.
 
 ### C.1 — Read the overlays

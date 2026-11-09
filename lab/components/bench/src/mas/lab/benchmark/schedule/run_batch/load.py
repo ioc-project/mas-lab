@@ -78,6 +78,7 @@ def load_experiment(
             from mas.lab.benchmark.execution.experiment_overlay import (
                 apply_experiment_overlays,
             )
+
             raw = apply_experiment_overlays(
                 raw,
                 [Path(p) for p in experiment_overlays],
@@ -121,6 +122,7 @@ def load_experiment(
 
     try:
         from mas.lab.workspace import WorkspaceConfig as _WsCfg
+
         _ws_libs = _WsCfg.load(experiment_yaml.parent)
         if _ws_libs.found:
             for _lib_rel in (_ws_libs._data.get("libraries") or []):
@@ -129,7 +131,7 @@ def load_experiment(
                     _sys.path.append(_lib_abs)
                     logger.debug("Library path added to sys.path: %s", _lib_abs)
     except Exception:
-        logger.debug('suppressed', exc_info=True)
+        logger.debug("suppressed", exc_info=True)
 
     _step_overrides_dict = parse_step_overrides(step_overrides)
     if _step_overrides_dict:
@@ -149,11 +151,9 @@ def load_experiment(
     _flavour = None
     if flavour_name:
         try:
-            from mas.lab.flavour.load import load_flavour as _load_flavour
-            from mas.lab.flavour.resolve import resolve_flavour_path
+            from mas.lab.flavour.load import load_named_flavour
 
-            _fpath = resolve_flavour_path(flavour_name)
-            _flavour = _load_flavour(_fpath)
+            _flavour, _fpath = load_named_flavour(flavour_name)
             logger.info(
                 "Flavour: %s (mas.library.standard: %s)",
                 _flavour.get("metadata", {}).get("name", flavour_name),
@@ -184,6 +184,7 @@ def load_experiment(
             logger.error(f"configs_dir not found: {configs_dir}")
             return None
         from mas.lab.lab.config import discover_scenario_stems
+
         scenario_ids = discover_scenario_stems(configs_dir)
         if not scenario_ids:
             logger.error(f"No scenarios found under {configs_dir}")

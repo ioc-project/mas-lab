@@ -14,9 +14,7 @@ from pathlib import Path
 
 from tests.conftest import requires_otel
 
-EXAMPLE_EVENTS = (
-    Path(__file__).resolve().parents[1] / "examples" / "travel-planner.events.jsonl"
-)
+EXAMPLE_EVENTS = Path(__file__).resolve().parents[1] / "examples" / "travel-planner.events.jsonl"
 INFRA = Path(__file__).resolve().parents[1] / "infra" / "local-otel.yaml"
 
 
@@ -40,9 +38,7 @@ def test_story_step1_convert(tmp_path):
     assert names["travel-planner.graph"] == 1
 
     # App name derived from the trace (not "mas-runtime").
-    assert all(
-        s["attributes"].get("application_id") == "travel-planner" for s in ss.spans
-    )
+    assert all(s["attributes"].get("application_id") == "travel-planner" for s in ss.spans)
 
     # The graph span carries all four agents.
     g = next(s for s in ss.spans if s["name"].endswith(".graph"))

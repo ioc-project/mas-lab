@@ -74,8 +74,9 @@ def test_context_window_resolves_from_effective_model_catalog() -> None:
 def test_infra_context_window_override_precedes_catalog_but_not_agent_override() -> None:
     generation = {"context_window": 200000}
     assert (
-        resolve_output_limits(_manifest(), model="vertex_ai/gemini-2.5-flash", generation=generation, env={})
-        .context_window
+        resolve_output_limits(
+            _manifest(), model="vertex_ai/gemini-2.5-flash", generation=generation, env={}
+        ).context_window
         == 200000
     )
     assert (

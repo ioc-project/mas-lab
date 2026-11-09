@@ -19,12 +19,9 @@ from a2a.server.tasks import InMemoryTaskStore, PushNotificationConfigStore, Pus
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, TaskState
 from a2a.utils.error_handlers import build_rest_error_payload
 from a2a.utils.errors import (
-    A2A_ERROR_MAPPING,
     ContentTypeNotSupportedError,
-    ErrorMapping,
     ExtensionSupportRequiredError,
     InvalidParamsError,
-    TaskNotCancelableError,
     UnsupportedOperationError,
 )
 from fastapi import FastAPI, Request, Response
@@ -37,11 +34,10 @@ _DYNAMIC_PROTO_MESSAGES = {
     "google.protobuf.Struct",
     "google.protobuf.Value",
 }
-A2A_ERROR_MAPPING[TaskNotCancelableError] = ErrorMapping(
-    409,
-    "FAILED_PRECONDITION",
-    "TASK_NOT_CANCELABLE",
-)
+A2A_JSON = "application/a2a+json"
+JSON_CONTENT_TYPE = "application/json"
+_ACCEPTED_CONTENT_TYPES = frozenset({A2A_JSON, JSON_CONTENT_TYPE})
+_REST_PREFIX = "/a2a/rest"
 _TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_COMPLETED,
     TaskState.TASK_STATE_FAILED,
@@ -63,12 +59,30 @@ class _A2ARequestHandler(DefaultRequestHandler):
                 f"Required extensions were not requested: {', '.join(sorted(missing))}"
             )
 
+    def _reject_unsupported_part_media(self, message: Any) -> None:
+        accepted: set[str] = set()
+        for value in list(self._agent_card.default_input_modes) + [
+            mode for skill in self._agent_card.skills for mode in skill.input_modes
+        ]:
+            media = str(value).partition(";")[0].strip().lower()
+            if media:
+                accepted.add(media)
+        for part in message.parts:
+            media = str(part.media_type or "").partition(";")[0].strip().lower()
+            if not media:
+                continue
+            if media in accepted or "*/*" in accepted or f"{media.split('/', 1)[0]}/*" in accepted:
+                continue
+            raise ContentTypeNotSupportedError()
+
     async def on_message_send(self, params: Any, context: Any):
         self._validate_required_extensions(context)
+        self._reject_unsupported_part_media(params.message)
         return await super().on_message_send(params, context)
 
     async def on_message_send_stream(self, params: Any, context: Any):
         self._validate_required_extensions(context)
+        self._reject_unsupported_part_media(params.message)
         async for event in super().on_message_send_stream(params, context):
             yield event
 
@@ -292,7 +306,7 @@ def build_app(
             "/a2a/rest/message:send",
         }:
             content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-            if content_type != "application/json":
+            if content_type not in _ACCEPTED_CONTENT_TYPES:
                 error = ContentTypeNotSupportedError()
                 if request.url.path == "/":
                     try:
@@ -303,9 +317,11 @@ def build_app(
                         build_error_response(payload.get("id"), error)
                     )
                 error_payload = build_rest_error_payload(error)
-                error_payload["error"]["code"] = 415
-                error_payload["error"]["status"] = "UNSUPPORTED_MEDIA_TYPE"
-                return JSONResponse(status_code=415, content=error_payload)
+                return JSONResponse(
+                    status_code=int(error_payload["error"]["code"]),
+                    content=error_payload,
+                    media_type=A2A_JSON,
+                )
             try:
                 payload = await request.json()
             except (json.JSONDecodeError, UnicodeDecodeError):
@@ -316,8 +332,10 @@ def build_app(
                     separators=(",", ":"),
                 ).encode("utf-8")
         response = await call_next(request)
-        if request.method == "POST" and request.url.path == "/a2a/rest/message:send":
-            response.headers["content-type"] = "application/json"
+        if request.url.path.startswith(_REST_PREFIX):
+            media = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if media != "text/event-stream":
+                response.headers["content-type"] = A2A_JSON
         if request.method == "GET" and request.url.path == "/.well-known/agent-card.json":
             response.headers.setdefault("Cache-Control", "public, max-age=300")
             response.headers.setdefault("ETag", card_etag)

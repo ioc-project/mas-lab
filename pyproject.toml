@@ -83,8 +83,6 @@ mas-lab-library-kg = { workspace = true }
 mas-lab-component-core    = { workspace = true }
 mas-lab-component-bench   = { workspace = true }
 mas-lab-component-controller = { workspace = true }
-ioc-scope-ontology = { git = "https://github.com/ioc-project/scope.git", subdirectory = "ontology" }
-norm = { git = "https://github.com/ioc-project/scope.git", subdirectory = "backend/norm" }
 
 [tool.ruff]
 line-length = 120
@@ -95,6 +93,8 @@ select = ["E", "F", "B", "I"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# test-only helpers shared by several test trees (the in-process SLIM node); not part of any package
+pythonpath = ["tests/support"]
 testpaths = ["tests", "ctl/tests", "runtime/tests", "library-ioa/tests", "lab/components/controller/tests"]
 markers = [
     "timeout: per-test timeout (pytest-timeout)",
@@ -112,7 +112,7 @@ omit = [
     # PR #5 FastAPI surface — route-tested in test_fastapi_*.py (separate report)
     "*/fastapi_app.py",
     "*/http_server.py",
-    "*/cli.py",
+    "*/mas/lab/**/cli.py",
     "*/__main__.py",
 ]
 

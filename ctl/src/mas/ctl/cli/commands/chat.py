@@ -61,7 +61,7 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
     "--flavour",
     default="local",
     show_default=True,
-    help="Deployment flavour from library-standard (local, mcp exposure)",
+    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
 )
 @click.option(
     "--infra-ref",
@@ -214,7 +214,9 @@ def chat_cmd(
     hitl_responder, hitl_terminal = None, None
 
     from mas.ctl.paths import manifest_cwd, resolve_overlay_path, resolve_path
+    from mas.ctl.session.flavour import flavour_argument
 
+    flavour = flavour_argument(flavour)
     with manifest_cwd(manifest, overlay_paths=overlays) as session:
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)
         workspace = WorkspaceConfig.load(session.manifest_dir or session.original_cwd)
@@ -368,6 +370,9 @@ def chat_cmd(
             anchor=session.manifest_dir or session.original_cwd,
             with_interceptors=True,
         )
+        from mas.ctl.cli.chains import bind_or_exit, single_agent_chains
+
+        resolved_infra = bind_or_exit(resolved_infra, flavour_spec, agent_id=require_agent_id_from_manifest(agent_data))
         obs_cfg = resolve_observability_config(
             events=events,
             events_file=events_file,
@@ -488,10 +493,7 @@ def chat_cmd(
                 hub=exchange_hub,
             )
             control_host.start(managed_session.session_id)
-            display.on_system(
-                "control attach: mas-ctl control attach "
-                f"{managed_session.session_id}  ({advertised})"
-            )
+            display.on_system(f"control attach: mas-ctl control attach {managed_session.session_id}  ({advertised})")
 
         if interactive:
             emit_session_protocol_hints(
@@ -505,25 +507,28 @@ def chat_cmd(
             )
         from mas.ctl.session.exposure import close_exposures, start_hosted_exposures
 
-        hosted = {} if agent_name in {"", "n/a"} or not agent_data else {str(agent_name): instance}
-        exposure_handles = start_hosted_exposures(
-            hosted,
-            resolved_infra.applications,
-            conversation_ids=set(hosted),
-            manifests={str(agent_name): agent_data} if hosted else None,
-        )
-        try:
-            rc = run_session_loop(controller, interactive=interactive, scripted=scripted)
+        served_id = require_agent_id_from_manifest(agent_data)
+        with single_agent_chains(instance, served_id, resolved_infra, display=display, verbose=verbose) as chains:
+            controller.turn_guard = chains.turn_lock(served_id)  # a request over the chain waits for your turn
+            hosted = {} if agent_name in {"", "n/a"} or not agent_data else {str(agent_name): instance}
+            exposure_handles = start_hosted_exposures(
+                hosted,
+                resolved_infra.applications,
+                conversation_ids=set(hosted),
+                manifests={str(agent_name): agent_data} if hosted else None,
+            )
+            try:
+                rc = run_session_loop(controller, interactive=interactive, scripted=scripted)
 
-            if save_checkpoint and controller_store is not None:
-                path = session_manager.checkpoint(managed_session.session_id, label="final")
-                display.on_system(f"checkpoint saved: {path}")
-        finally:
-            close_exposures(exposure_handles)
-            if control_host is not None:
-                control_host.close()
-            close_observability(controller)
-        raise SystemExit(rc)
+                if save_checkpoint and controller_store is not None:
+                    path = session_manager.checkpoint(managed_session.session_id, label="final")
+                    display.on_system(f"checkpoint saved: {path}")
+            finally:
+                close_exposures(exposure_handles)
+                if control_host is not None:
+                    control_host.close()
+                close_observability(controller)
+            raise SystemExit(rc)
 
 
 def _apply_debug_script_option(agent_data: dict, value: str, *, manifest_dir) -> None:

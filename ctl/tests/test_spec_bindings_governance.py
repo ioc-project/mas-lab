@@ -3,7 +3,6 @@
 """Governance binding — plugin list only."""
 
 import pytest
-
 from mas.ctl.manifest.spec_bindings import SpecBindingError, parse_governance
 
 

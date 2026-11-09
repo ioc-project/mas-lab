@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.lab.benchmark.dataset import Dataset
 from mas.lab.manifests.validator import ManifestValidationError, validate_manifest
 

@@ -58,6 +58,8 @@ const Overlay = () => {
   );
 
   const validateMutation = useValidateOverlay();
+
+  const { reset: resetValidate } = validateMutation;
   const [overlayYaml, setOverlayYaml] = useState("");
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [nameInput, setNameInput] = useState(overlayName);
@@ -111,9 +113,9 @@ const Overlay = () => {
 
   useEffect(() => {
     if (!validateMutation.isSuccess) return;
-    const timer = setTimeout(() => validateMutation.reset(), 5000);
+    const timer = setTimeout(() => resetValidate(), 5000);
     return () => clearTimeout(timer);
-  }, [validateMutation.isSuccess]);
+  }, [validateMutation.isSuccess, resetValidate]);
 
   const handleValidate = useCallback(() => {
     if (!library || !overlayYaml) return;
@@ -258,7 +260,7 @@ const Overlay = () => {
         {validateMutation.isSuccess && (
           <Alert
             severity="success"
-            onClose={() => validateMutation.reset()}
+            onClose={() => resetValidate()}
             sx={{
               whiteSpace: "pre-wrap",
               position: "absolute",
@@ -273,7 +275,7 @@ const Overlay = () => {
         {validateMutation.isError && (
           <Alert
             severity="error"
-            onClose={() => validateMutation.reset()}
+            onClose={() => resetValidate()}
             sx={{
               whiteSpace: "pre-wrap",
               position: "absolute",

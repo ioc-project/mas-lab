@@ -8,8 +8,8 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.boundary.context import assemble as context_assemble
+from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.boundary.context.provider_invariant import assert_provider_payload
 from mas.runtime.contracts.cm_factory import CMFactory
 from mas.runtime.driver.mocks import AutoCtxAssembler
@@ -142,9 +142,7 @@ def test_commit_bounds_chunks_then_assemble_still_compresses_view() -> None:
     messages = assemble_llm_messages(ctx, manifest=manifest)
     assert_provider_payload(messages)
     assert calls
-    assert any(
-        m.get("role") == "system" and "rolled-up" in str(m.get("content")) for m in messages
-    )
+    assert any(m.get("role") == "system" and "rolled-up" in str(m.get("content")) for m in messages)
 
 
 def test_tool_result_in_wm_pairs_with_committed_ask() -> None:
@@ -158,9 +156,7 @@ def test_tool_result_in_wm_pairs_with_committed_ask() -> None:
             "tool_calls": [{"id": "call_1", "function": {"name": "search", "arguments": "{}"}}],
         },
     ]
-    ctx.working_memory.messages.append(
-        {"role": "tool", "tool_call_id": "call_1", "content": "ok"}
-    )
+    ctx.working_memory.messages.append({"role": "tool", "tool_call_id": "call_1", "content": "ok"})
     messages = assemble_llm_messages(ctx, manifest={"spec": {"context_manager": {"type": "stack"}}})
     assert_provider_payload(messages)
     assert [m.get("role") for m in messages[-3:]] == ["user", "assistant", "tool"]
@@ -169,9 +165,7 @@ def test_tool_result_in_wm_pairs_with_committed_ask() -> None:
 
 def test_parallel_live_tools_fill_missing_result_through_plugin() -> None:
     ctx = AutoCtxAssembler(last_user_text="continue")
-    ctx.working_memory.record_assistant_tool_calls(
-        [("call_a", "search", {"q": "a"}), ("call_b", "search", {"q": "b"})]
-    )
+    ctx.working_memory.record_assistant_tool_calls([("call_a", "search", {"q": "a"}), ("call_b", "search", {"q": "b"})])
     ctx.working_memory.record_tool_result(call_id="call_a", content="result-a")
     messages = assemble_llm_messages(ctx)
     assert_provider_payload(messages)
@@ -203,15 +197,9 @@ def test_tiny_token_budget_drops_history_before_live_wm() -> None:
 
 def test_wrong_tool_result_id_is_rebound_on_the_plugin_path() -> None:
     ctx = AutoCtxAssembler(last_user_text="q")
-    ctx.working_memory.record_assistant_tool_calls(
-        [("call_a", "search", {}), ("call_b", "search", {})]
-    )
-    ctx.working_memory.messages.append(
-        {"role": "tool", "tool_call_id": "wrong", "content": "first"}
-    )
-    ctx.working_memory.messages.append(
-        {"role": "tool", "tool_call_id": "also-wrong", "content": "second"}
-    )
+    ctx.working_memory.record_assistant_tool_calls([("call_a", "search", {}), ("call_b", "search", {})])
+    ctx.working_memory.messages.append({"role": "tool", "tool_call_id": "wrong", "content": "first"})
+    ctx.working_memory.messages.append({"role": "tool", "tool_call_id": "also-wrong", "content": "second"})
     messages = assemble_llm_messages(ctx)
     assert_provider_payload(messages)
     tools = [m for m in messages if m.get("role") == "tool"]

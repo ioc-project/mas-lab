@@ -168,9 +168,9 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
             mas = merge_overlay(mas, overlay)
             agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
     if req.validate and validation_enabled():
-        from mas.ctl.validate.deprecations import collect_delegates_to_deprecation
+        from mas.ctl.validate.deprecations import collect_workflow_deprecations
 
-        for _path, msg in collect_delegates_to_deprecation(mas):
+        for _path, msg in collect_workflow_deprecations(mas):
             print(f"warning: {msg}", file=sys.stderr)
     mas_id = mas.get("metadata", {}).get("name") or req.manifest.stem
 

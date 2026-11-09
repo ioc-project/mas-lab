@@ -5,3 +5,7 @@
 from __future__ import annotations
 
 import mas.third_party_otel  # noqa: F401
+
+
+def pytest_configure(config) -> None:
+    config.addinivalue_line("markers", "slim: needs slim-bindings extra and a running SLIM node")

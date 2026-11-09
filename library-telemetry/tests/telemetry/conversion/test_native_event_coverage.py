@@ -12,16 +12,10 @@ from mas.library.telemetry.conversion.envelope import KIND_ENVELOPE
 from mas.library.telemetry.conversion.layers import ExportLayers
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
 from mas.library.telemetry.verification.spanspec import SpanValidator
+
 from tests.conftest import requires_otel
 
-SAMPLES = (
-    Path(__file__).resolve().parents[4]
-    / "library-samples"
-    / "apps"
-    / "trip-planner"
-    / "traces"
-    / "events.jsonl"
-)
+SAMPLES = Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
 
 
 @requires_otel

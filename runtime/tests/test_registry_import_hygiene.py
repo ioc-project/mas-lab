@@ -21,8 +21,10 @@ def test_registry_list_does_not_import_a2a_or_otel_sdk() -> None:
             "get_registry().list(); "
             "mods = set(sys.modules); "
             "print('a2a' if 'a2a' in mods or any(m.startswith('a2a.') for m in mods) else 'no-a2a'); "
-            "print('otel' if any(m == 'opentelemetry' or m.startswith('opentelemetry.') for m in mods) else 'no-otel'); "
-            "print('a2a-plugin' if any(m.startswith('library_ioa.plugins.a2a.') and m != 'library_ioa.plugins.a2a' for m in mods) else 'no-a2a-plugin')",
+            "print('otel' if any(m == 'opentelemetry' or m.startswith('opentelemetry.') for m in mods) else "
+            "'no-otel'); "
+            "print('a2a-plugin' if any(m.startswith('library_ioa.plugins.a2a.') and m != 'library_ioa.plugins.a2a' for "
+            "m in mods) else 'no-a2a-plugin')",
         ],
         check=True,
         capture_output=True,

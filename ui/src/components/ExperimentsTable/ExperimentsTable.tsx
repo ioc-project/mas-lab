@@ -342,7 +342,7 @@ export const ExperimentsTable = ({
         ),
       },
     ],
-    [runningJobs, showLibraryColumn],
+    [showLibraryColumn],
   );
 
   const enrichedData = useMemo(

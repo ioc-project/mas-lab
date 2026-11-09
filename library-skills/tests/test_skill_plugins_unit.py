@@ -107,9 +107,7 @@ class TestSkillPluginRegistry:
     def test_available_implementations_come_from_plugin_registry(self):
         from mas.runtime.registry import get_registry
 
-        assert set(SkillPluginRegistry.available_implementations()) == set(
-            get_registry().list_names("skill_impl")
-        )
+        assert set(SkillPluginRegistry.available_implementations()) == set(get_registry().list_names("skill_impl"))
 
     def test_repr(self):
         reg = SkillPluginRegistry(impl="adk")
@@ -184,9 +182,7 @@ class TestNativeSkillPlugin:
         mock_registry.all.return_value = [mock_record]
 
         plugin = NativeSkillPlugin(base_dir=tmp_path)
-        with patch(
-            "mas.library.skills.plugins.plugin_skills_native.Discovery"
-        ) as mock_disc:
+        with patch("mas.library.skills.plugins.plugin_skills_native.Discovery") as mock_disc:
             mock_disc.return_value.discover.return_value = mock_registry
             skills = plugin.discover(tmp_path)
 
@@ -228,9 +224,7 @@ class TestNativeSkillPlugin:
         skill_dir.mkdir(parents=True)
 
         plugin = NativeSkillPlugin(base_dir=tmp_path)
-        plugin._cache = {
-            "qa": _make_entry(skill_dir, "qa", allowed_tools=["python", "bash"])
-        }
+        plugin._cache = {"qa": _make_entry(skill_dir, "qa", allowed_tools=["python", "bash"])}
         assert set(plugin.allowed_tools("qa")) == {"python", "bash"}
 
     def test_allowed_tools_empty_when_not_set(self, tmp_path):
@@ -370,9 +364,7 @@ class TestLangChainSkillPlugin:
         with patch(_LIST_SKILLS_PATCH, return_value=[_DEEPAGENTS_SKILL]):
             plugin.discover(tmp_path)
         with patch(_BACKEND_READ_PATCH, return_value="print('hello from deepagents')"):
-            with patch(
-                "mas.library.skills.plugins.skill_plugin_base.subprocess.run"
-            ) as mock_run:
+            with patch("mas.library.skills.plugins.skill_plugin_base.subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(returncode=0, stdout="hello\n", stderr="")
                 result = plugin.run_script("my-skill", "main.py")
         assert result["ok"] is True
@@ -439,9 +431,7 @@ class TestADKSkillPlugin:
     def test_discover_calls_load_skill_from_dir_per_subdir(self, tmp_path):
         skill_dir = tmp_path / "skills" / "my-skill"
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: my-skill\ndescription: A skill.\n---\nBody.", encoding="utf-8"
-        )
+        (skill_dir / "SKILL.md").write_text("---\nname: my-skill\ndescription: A skill.\n---\nBody.", encoding="utf-8")
         mock_skill = _make_adk_skill_mock("my-skill", "A skill.", "Body.")
         with patch(ADK_LOAD_PATCH, return_value=mock_skill) as mock_loader:
             plugin = ADKSkillPlugin(base_dir=tmp_path)
@@ -499,9 +489,7 @@ class TestADKSkillPlugin:
         mock_skill.resources.get_script.return_value = mock_script
         plugin = ADKSkillPlugin(base_dir=tmp_path)
         plugin._discover_with(tmp_path, MagicMock(return_value=mock_skill))
-        with patch(
-            "mas.library.skills.plugins.skill_plugin_base.subprocess.run"
-        ) as mock_run:
+        with patch("mas.library.skills.plugins.skill_plugin_base.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="hello\n", stderr="")
             result = plugin.run_script("s", "main.py")
         assert result["ok"] is True

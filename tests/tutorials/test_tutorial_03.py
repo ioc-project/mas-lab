@@ -5,20 +5,19 @@
 Tests experiment configs, pipeline definitions, overlay patterns, and
 the benchmark/analysis CLI subcommands. Instantiation uses SimulatedEngine.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-import yaml
-
-from conftest import T03, T01, T02, load_yaml, run_cli
 from ci_llm import stop_engine
-
+from tutorial_support import T01, T03, load_yaml, run_cli
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Manifest validation (CLI)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestManifestValidation:
     """Validate all T03 manifests."""
@@ -55,6 +54,7 @@ class TestManifestValidation:
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. Experiment config structure (Python)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestExperimentConfig:
     """Verify experiment YAML files have correct structure."""
@@ -126,8 +126,7 @@ class TestServiceBundle:
 
     def test_dry_run_shows_both_steps(self):
         r = run_cli(
-            ["mas-lab", "benchmark", "run", "experiment-services.yaml",
-             "--infra", "local-http", "--dry-run"],
+            ["mas-lab", "benchmark", "run", "experiment-services.yaml", "--infra", "local-http", "--dry-run"],
             cwd=T03,
             timeout=30,
         )
@@ -139,6 +138,7 @@ class TestServiceBundle:
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. Dataset files (Python)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestDatasets:
     """Verify dataset files."""
@@ -179,6 +179,7 @@ class TestDatasets:
 # 4. Pipeline config (Python)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestPipelineConfig:
     """Verify pipeline YAML definitions."""
 
@@ -200,6 +201,7 @@ class TestPipelineConfig:
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. Overlay patterns (Python)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestOverlayPatterns:
     """Verify design pattern overlays."""
@@ -229,6 +231,7 @@ class TestOverlayPatterns:
     def test_overlays_merge_onto_mas(self):
         """All three overlays should merge cleanly onto mas.yaml."""
         from mas.ctl.overlay import merge_overlay
+
         base = load_yaml(T03 / "mas.yaml")
         for ov_name in ["react.yaml", "cot.yaml", "reflection.yaml"]:
             ov = load_yaml(T03 / "overlays" / ov_name)
@@ -241,14 +244,18 @@ class TestOverlayPatterns:
 # 6. Topology overlay structure (Python)
 # ═══════════════════════════════════════════════════════════════════════════
 
+
 class TestTopologyOverlays:
     """Verify topology overlay files for the Part C experiment."""
 
-    @pytest.mark.parametrize("topo_file,expected_entry", [
-        ("single-agent.yaml", "generalist"),
-        ("linear.yaml", "moderator"),
-        ("moderator.yaml", "moderator"),
-    ])
+    @pytest.mark.parametrize(
+        "topo_file,expected_entry",
+        [
+            ("single-agent.yaml", "generalist"),
+            ("linear.yaml", "moderator"),
+            ("moderator.yaml", "moderator"),
+        ],
+    )
     def test_topology_workflow_entry(self, topo_file, expected_entry):
         topo_path = T03 / "topologies" / topo_file
         if not topo_path.exists():
@@ -261,6 +268,7 @@ class TestTopologyOverlays:
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. CLI subcommands (smoke tests)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestCLISubcommands:
     """Smoke-test CLI subcommands (no LLM, no network)."""
@@ -304,6 +312,7 @@ class TestCLISubcommands:
 # ═══════════════════════════════════════════════════════════════════════════
 # 8. Agent instantiation with T03 manifests (default runtime)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestT03AgentInstantiation:
     """Instantiate T03 agents via mas-ctl session bootstrap."""
@@ -350,6 +359,7 @@ class TestT03AgentInstantiation:
 # ═══════════════════════════════════════════════════════════════════════════
 # 9. Cross-tutorial consistency (Python)
 # ═══════════════════════════════════════════════════════════════════════════
+
 
 class TestCrossTutorialConsistency:
     """Verify conventions are consistent across tutorials."""

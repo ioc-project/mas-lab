@@ -2172,11 +2172,29 @@ wheels = [
 ]
 
 [[package]]
+name = "ioc-scope-norm"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ioc-scope-ontology" },
+    { name = "neo4j" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a9/1d/7b0d0490ec711af8ed1d87f85747ecade1dd4ee0a7af720bbcbebb5892e2/ioc_scope_norm-1.0.0.tar.gz", hash = "sha256:6ebb66eedea0c47cfb364c89b0ad05d4d67d762f9b3e1cdcd2a8af8c279bf421", size = 161295, upload-time = "2026-11-05T18:40:02.363Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/ca/e8ec4e8b83fdda32c59ca601129cbad9be462520d584e16694871121bcf7/ioc_scope_norm-1.0.0-py3-none-any.whl", hash = "sha256:f0afe432634f1b1d59be303ee0895f211c7e98d408713087a036bf304cd265f8", size = 38645, upload-time = "2026-11-05T18:40:00.987Z" },
+]
+
+[[package]]
 name = "ioc-scope-ontology"
 version = "1.1.0"
-source = { git = "https://github.com/ioc-project/scope.git?subdirectory=ontology#4e12864cfe5c3a05ab06952a5e9e79ec4faad9ba" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rdflib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ab/57/4a477c5c61be3475a52350539e6fe6df91e5cb03e94cda8e7b5ced375263/ioc_scope_ontology-1.1.0.tar.gz", hash = "sha256:bb4774200533b73d3dfe9b055e9417fc992dc1749ed95d94fea9a520a463c2cc", size = 39536, upload-time = "2026-11-05T17:51:47.312Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ba/a1/4260c9ec8a78acc3b08782e72f6fbb29e337d5a6164eb5921bb7b65a8d79/ioc_scope_ontology-1.1.0-py3-none-any.whl", hash = "sha256:60a4638d027904f62bde75689632709b793cfeafcade38d0972b3de66788c617", size = 69861, upload-time = "2026-11-05T17:51:45.957Z" },
 ]
 
 [package.optional-dependencies]
@@ -3351,6 +3369,7 @@ version = "0.2.0"
 source = { editable = "library-ioa" }
 dependencies = [
     { name = "a2a-sdk", extra = ["http-server", "sqlite"] },
+    { name = "mas-lab-library-standard" },
     { name = "mas-lab-runtime" },
     { name = "mcp" },
     { name = "uvicorn" },
@@ -3363,17 +3382,22 @@ all = [
 cli = [
     { name = "mcp", extra = ["cli"] },
 ]
+slim = [
+    { name = "slim-bindings" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "a2a-sdk", extras = ["http-server", "sqlite"], specifier = ">=1.1.5" },
+    { name = "mas-lab-library-standard", editable = "library-standard" },
     { name = "mas-lab-runtime", editable = "runtime" },
     { name = "mcp", specifier = ">=2.2" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'all'" },
     { name = "mcp", extras = ["cli"], marker = "extra == 'cli'" },
+    { name = "slim-bindings", marker = "extra == 'slim'", specifier = ">=2.2,<3" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
-provides-extras = ["cli", "all"]
+provides-extras = ["cli", "all", "slim"]
 
 [[package]]
 name = "mas-lab-library-kg"
@@ -3386,10 +3410,10 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "click" },
+    { name = "ioc-scope-norm" },
     { name = "ioc-scope-ontology", extra = ["models"] },
     { name = "jsonschema" },
     { name = "neo4j" },
-    { name = "norm" },
     { name = "pyshacl" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -3425,7 +3449,7 @@ neo4j = [
     { name = "neo4j" },
 ]
 norm = [
-    { name = "norm" },
+    { name = "ioc-scope-norm" },
 ]
 ontology = [
     { name = "ioc-scope-ontology", extra = ["models"] },
@@ -3447,10 +3471,11 @@ verify = [
 requires-dist = [
     { name = "click", marker = "extra == 'bench'", specifier = ">=8.0" },
     { name = "click", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "ioc-scope-ontology", extras = ["models"], git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
-    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'dev'", git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
-    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'ontology'", git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
-    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'validation'", git = "https://github.com/ioc-project/scope.git?subdirectory=ontology" },
+    { name = "ioc-scope-norm", marker = "extra == 'norm'", specifier = ">=1.0.0" },
+    { name = "ioc-scope-ontology", extras = ["models"], specifier = ">=1.1.0" },
+    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'dev'", specifier = ">=1.1.0" },
+    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'ontology'", specifier = ">=1.1.0" },
+    { name = "ioc-scope-ontology", extras = ["models"], marker = "extra == 'validation'", specifier = ">=1.1.0" },
     { name = "jsonschema", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "jsonschema", marker = "extra == 'verify'", specifier = ">=4.0.0" },
     { name = "mas-lab-component-bench", marker = "extra == 'bench'", editable = "lab/components/bench" },
@@ -3458,7 +3483,6 @@ requires-dist = [
     { name = "mas-lab-library-kg", extras = ["dev", "neo4j", "norm"], marker = "extra == 'all'", editable = "library-kg" },
     { name = "mas-lab-library-telemetry", marker = "extra == 'compare-native-otel'", editable = "library-telemetry" },
     { name = "neo4j", marker = "extra == 'neo4j'", specifier = ">=5.0" },
-    { name = "norm", marker = "extra == 'norm'", git = "https://github.com/ioc-project/scope.git?subdirectory=backend%2Fnorm" },
     { name = "pyshacl", marker = "extra == 'dev'", specifier = ">=0.25.0" },
     { name = "pyshacl", marker = "extra == 'graph'", specifier = ">=0.25.0" },
     { name = "pyshacl", marker = "extra == 'validation'", specifier = ">=0.25.0" },
@@ -4047,16 +4071,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e0/e6/fe51d2bb1a3b446f59c5c8165999a9fee208bc346af90a7cbf7657bc0d75/nltk-3.10.3.tar.gz", hash = "sha256:bb9327a461c3811c2fa4900e03840401f2126adfb30c0072827c433bd2444ea4", size = 5137152, upload-time = "2026-08-12T23:46:37.258Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b6/6d/ebd2af4640b12168fdf0cb74b6118df2f32a2f62ec7e0c06fbfd80706639/nltk-3.10.3-py3-none-any.whl", hash = "sha256:ff9598a8e20518ee0d557745890cc4435b9578489e2dcbc69c4f81fa060caf7c", size = 1798643, upload-time = "2026-08-12T23:44:13.478Z" },
-]
-
-[[package]]
-name = "norm"
-version = "1.0.0"
-source = { git = "https://github.com/ioc-project/scope.git?subdirectory=backend%2Fnorm#4e12864cfe5c3a05ab06952a5e9e79ec4faad9ba" }
-dependencies = [
-    { name = "ioc-scope-ontology" },
-    { name = "neo4j" },
-    { name = "pydantic" },
 ]
 
 [[package]]
@@ -6311,6 +6325,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
+name = "slim-bindings"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/35/8456fc7f1fdf0259258594066bb7b96021317550f8c71661293cc8bda97f/slim_bindings-2.2.0-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:6fd9f3219f0856decc2c8265a09664504254f5c390096e3a6be2234197bef9f4", size = 23160820, upload-time = "2026-10-02T08:07:08.519Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/c0/443fec314fbd496c8decd2ea5f713cc0aabcd25d2c9385c27baabba968c5/slim_bindings-2.2.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:22cfc57c032cb4b18e9b09c8a5b913d849124cf01c74de135503bcd92998aec7", size = 22366537, upload-time = "2026-10-02T08:07:12.325Z" },
+    { url = "https://files.pythonhosted.org/packages/64/49/05a52a3d9178d787db5e4673ea4b62044850b8780db7c331243bcc56bf22/slim_bindings-2.2.0-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:ab684bf6540e6ad9d97566ba0a10516e7bd065f9f0b5b23bf9e1c5637b6e2dea", size = 23410455, upload-time = "2026-10-02T08:07:15.918Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/06/ff4a9ca439820afb4f5ceba0c8bbb329ba8e117aaa1626fc482e08732201/slim_bindings-2.2.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:ca85cff8cf3af664a391d1228681ca528d20005b60d399e3ffa73d43e7d704a8", size = 24176760, upload-time = "2026-10-02T08:07:19.322Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/a6/8c4fd591ec7ceb0ea11018f9c88206bbe2dff45084bc4baf171a4f509d92/slim_bindings-2.2.0-py3-none-musllinux_1_2_aarch64.whl", hash = "sha256:14ac2fda9c8b4687d68492e2bb8974f137261a24d51248dd5c85e5756c5850bc", size = 23261037, upload-time = "2026-10-02T08:07:23.038Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/06/87adcf5d5dc9d52ce9270452be6d26e7c67b138322c26af0aa901706d056/slim_bindings-2.2.0-py3-none-musllinux_1_2_x86_64.whl", hash = "sha256:1d664541621fe54acc698072251538f14f6d64f6f497d8d32895c6a72aabd527", size = 24175607, upload-time = "2026-10-02T08:07:26.711Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/ec/edc0f7201470d794faec1b905f10a8d37395a2a3f4873621afea04390828/slim_bindings-2.2.0-py3-none-win_amd64.whl", hash = "sha256:83f4e53f1077000d263c4c0a5d2a02d59220f8f1be4a6ee8fdd22a43a127069a", size = 21614935, upload-time = "2026-10-02T08:07:35.413Z" },
+    { url = "https://files.pythonhosted.org/packages/04/c3/15ee7c211a7900186a601ee5baa9dd1c3de9294fd2b45f8e71cd633f7c52/slim_bindings-2.2.0-py3-none-win_arm64.whl", hash = "sha256:ba4e8fe65af36ad3503a1e14279fe73cfed4100f022e20f7c5f8e7e7526e0787", size = 20174252, upload-time = "2026-10-02T08:07:39.171Z" },
 ]
 
 [[package]]

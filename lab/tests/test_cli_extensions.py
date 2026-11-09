@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import click
-
 from mas.lab.cli import app
 from mas.lab.cli.extensions import register_extension_components
 
@@ -63,10 +62,12 @@ def test_core_cli_has_no_enterprise_commands_by_default():
 def test_register_extension_components_registers_commands(monkeypatch):
     target = click.Group()
 
-    fake_eps = _FakeEPs([
-        _FakeEP("demo", _DemoComponent),
-        _FakeEP("services", _ServicesComponent()),
-    ])
+    fake_eps = _FakeEPs(
+        [
+            _FakeEP("demo", _DemoComponent),
+            _FakeEP("services", _ServicesComponent()),
+        ]
+    )
 
     monkeypatch.setattr("mas.lab.cli.extensions.entry_points", lambda: fake_eps)
 
@@ -92,11 +93,13 @@ def test_register_extension_components_skips_invalid_and_duplicate(monkeypatch):
     target = click.Group()
     target.add_command(_dup_name)
 
-    fake_eps = _FakeEPs([
-        _FakeEP("invalid-target", object()),
-        _FakeEP("duplicate", _DuplicateComponent),
-        _FakeEP("load-error", RuntimeError("boom")),
-    ])
+    fake_eps = _FakeEPs(
+        [
+            _FakeEP("invalid-target", object()),
+            _FakeEP("duplicate", _DuplicateComponent),
+            _FakeEP("load-error", RuntimeError("boom")),
+        ]
+    )
 
     monkeypatch.setattr("mas.lab.cli.extensions.entry_points", lambda: fake_eps)
 

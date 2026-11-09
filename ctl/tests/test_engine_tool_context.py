@@ -3,14 +3,13 @@
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
+from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryRegistry,
     WorkingMemorySnapshot,
 )
 from mas.runtime.boundary.engine_tools import EngineToolBudgetExceeded
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 
 
 def _instance():

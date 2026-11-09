@@ -48,9 +48,7 @@ def test_mixed_case_traceparent_is_recognised() -> None:
         seen.append(get_headers())
         return "ok"
 
-    TraceContextLayer(LocalAgentComm(run_turn)).send(
-        "b", "t", headers={"Traceparent": parent}
-    )
+    TraceContextLayer(LocalAgentComm(run_turn)).send("b", "t", headers={"Traceparent": parent})
     child = seen[-1]["traceparent"]
     assert "Traceparent" not in seen[-1]
     assert child.split("-")[1] == "c" * 32
@@ -78,9 +76,7 @@ def test_asend_mints_child_span() -> None:
     parent = "00-" + "e" * 32 + "-" + "f" * 16 + "-01"
 
     async def _go() -> str:
-        return await TraceContextLayer(LocalAgentComm(_Run())).asend(
-            "b", "t", headers={"traceparent": parent}
-        )
+        return await TraceContextLayer(LocalAgentComm(_Run())).asend("b", "t", headers={"traceparent": parent})
 
     assert asyncio.run(_go()) == "ok"
     assert seen[-1]["traceparent"].split("-")[1] == "e" * 32

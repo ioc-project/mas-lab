@@ -47,6 +47,19 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/ioc-project/mas-lab
+  analytics:
+    provider: google
+    property: G-SRSXDZ0G92
+  consent:
+    title: Cookie consent
+    description: >-
+      We use cookies to recognize your repeated visits and preferences, as well
+      as to measure the effectiveness of our documentation and whether users
+      find what they're searching for. With your consent, you're helping us to
+      make our documentation better.
+    actions:
+      - accept
+      - reject
 
 hooks:
   - scripts/mkdocs_github_stats.py
@@ -135,6 +148,7 @@ nav:
           - "4 MCP tools": tutorials/04-mcp-tools/README.md
           - "5 A2A agents": tutorials/05-a2a-agents/README.md
           - "6 Agent skills": tutorials/06-agent-skills/README.md
+          - "7 SLIM link": tutorials/07-slim-link/README.md
           - "8 Telemetry": tutorials/08-telemetry/README.md
           - "9 KG and SCOPE": tutorials/09-kg-scope/README.md
           - "10 Evaluation metrics": tutorials/10-evaluation-metrics/README.md

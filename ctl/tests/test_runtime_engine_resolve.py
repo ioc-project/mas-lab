@@ -6,15 +6,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.infra.resolve import InfraResolveError, resolve_infra_refs
+from mas.ctl.workspace.config import WorkspaceConfig
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.spec.parser import parse_agent_spec
 from mas.runtime.spec.runtime_engine import (
     merge_runtime_engine_layers,
     normalize_runtime_engine_spec,
 )
-from mas.ctl.workspace.config import WorkspaceConfig
 
 
 def test_normalize_runtime_engine_spec():

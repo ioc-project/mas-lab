@@ -20,9 +20,7 @@ def _span(name, attrs, span_id="s1", trace_id="t1", parent_id=None):
 
 def test_agentcall_missing_required_is_error():
     v = SpanValidator()
-    span = _span(
-        "AgentCall", {"application_id": "app", "session.id": "s"}
-    )  # no mas.agent.id/boundary
+    span = _span("AgentCall", {"application_id": "app", "session.id": "s"})  # no mas.agent.id/boundary
     report = v.validate([span])
     l3_errors = [e for e in report.errors("L3") if e.rule == "missing_required_attr"]
     assert any(e.attribute == "mas.agent.id" for e in l3_errors)
@@ -101,9 +99,7 @@ def test_strictness_promotes_recommended_to_error():
     )  # missing recommended mas.input / mas.status
     lenient = v.validate([span], strictness="required")
     strict = v.validate([span], strictness="recommended")
-    assert not lenient.errors("L3") or all(
-        e.rule != "missing_recommended_attr" for e in lenient.errors("L3")
-    )
+    assert not lenient.errors("L3") or all(e.rule != "missing_recommended_attr" for e in lenient.errors("L3"))
     assert any(e.rule == "missing_recommended_attr" for e in strict.errors("L3"))
 
 
@@ -122,10 +118,7 @@ def test_graph_span_mandatory():
         )
     ]
     report = v.validate(without_graph)
-    assert any(
-        vi.rule == "graph_span_present" and vi.severity == "error"
-        for vi in report.violations
-    )
+    assert any(vi.rule == "graph_span_present" and vi.severity == "error" for vi in report.violations)
 
     with_graph = without_graph + [
         _span(
@@ -153,10 +146,7 @@ def test_application_id_mandatory():
         {"session.id": "s", "mas.agent.id": "p", "mas.boundary": "AgentCall"},
     )
     report = v.validate([span])
-    assert any(
-        vi.rule == "global_required_attr" and vi.attribute == "application_id"
-        for vi in report.errors("L2")
-    )
+    assert any(vi.rule == "global_required_attr" and vi.attribute == "application_id" for vi in report.errors("L2"))
     # JSON schema envelope also rejects a span with no application_id (when jsonschema present).
     errs = validate_span_json_schema(span)
     if errs:  # jsonschema installed
@@ -165,9 +155,7 @@ def test_application_id_mandatory():
 
 def test_summary_shape():
     v = SpanValidator()
-    report = v.validate(
-        [_span("AgentCall", {"mas.agent.id": "p", "mas.boundary": "AgentCall"})]
-    )
+    report = v.validate([_span("AgentCall", {"mas.agent.id": "p", "mas.boundary": "AgentCall"})])
     s = report.summary()
     assert set(s) >= {"spec_file", "total_spans", "conformance", "counts", "violations"}
     assert set(s["conformance"]) == {"L1", "L2", "L3", "L4"}

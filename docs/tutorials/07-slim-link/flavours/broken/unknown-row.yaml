@@ -1,0 +1,9 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Broken on purpose: desk-nod is a typo; no infra row has that name.
+apiVersion: flavour/v1
+kind: Flavour
+metadata: {name: desk-typo}
+spec:
+  bind:
+    agent_comm: [desk-nod]

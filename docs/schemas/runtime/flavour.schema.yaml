@@ -6,10 +6,11 @@ title: "Flavour Manifest"
 description: >
   Schema for kind: Flavour manifests.
 
-  A Flavour is a *deployment posture* — it selects protocols and
-  observability/control plugins. It does NOT own model names, LLM inference
-  parameters, skills/RAG configuration, or infrastructure coordinates.
-  Those concerns belong to:
+  A Flavour is the glue between the logic spec and the infra: spec.bind links
+  each agent to infra rows and says what this deployment does with it. It
+  defines no endpoint, protocol or plugin of its own, and it does NOT own model
+  names, LLM inference parameters, skills/RAG configuration, or infrastructure
+  coordinates. Those concerns belong to:
 
     * kind: Agent  (spec.models, spec.skills)  — model choice, inference
                                                   params, RAG backend
@@ -22,7 +23,11 @@ description: >
                                                     allowed models, embed
                                                     defaults
 
-  A typical Flavour only needs:
+  agent_comm, tools, control and telemetry are accepted and read by nothing
+  (deprecated: true). observability is deprecated and still the fallback when
+  an agent declares none. Their target home is a later, optional Control
+  manifest that references plugins. They are not what a Flavour is. The bundled
+  flavours still set some of them:
     spec:
       agent_comm: {protocol: local, mode: local, emulation: true}
       tools: {remote_tools_enabled: false, allowed: ["*"]}
@@ -85,12 +90,87 @@ properties:
       references belong in config.yaml or on the CLI (--infra-ref). The
       separation validator rejects flavours that include them.
     properties:
+      bind:
+        type: object
+        additionalProperties: false
+        description: >
+          What each interaction rides. The Flavour names infra rows; it
+          defines none. Unrelated to the deprecated --bind CLI alias of
+          --connect.
+        properties:
+          agent_comm:
+            type: array
+            minItems: 1
+            uniqueItems: true
+            description: >
+              Application row names, bottom first: the layers every
+              agent-to-agent call of the session rides, unless an agent has
+              its own chain under agents. Each row's protocol is
+              the layer plugin and its other fields are the layer's params.
+            items:
+              type: string
+              minLength: 1
+          usage:
+            description: >
+              This deployment's default usage for every agent that omits its
+              own: connect (reach it), listen (host it), or both. Default
+              connect. An agent this process serves sets listen.
+            oneOf:
+              - type: string
+                enum: [connect, listen]
+              - type: array
+                items: {type: string, enum: [connect, listen]}
+                minItems: 1
+                uniqueItems: true
+          agents:
+            type: object
+            description: >
+              How this deployment links each agent, by agent id. agent_comm
+              is the agent's own chain of rows (else the default agent_comm
+              above); usage says whether this deployment reaches the agent
+              there (connect), hosts it here (listen), or both. Omitted, it
+              is bind.usage, else connect, and must be within the usage of
+              every row of the chain; params
+              overrides a row's params for this agent. A
+              one-row chain whose row is an agent_comm link with a url (an
+              A2A server) reaches the agent at that url, the released direct
+              path. An id that is no agent of the session is refused.
+            additionalProperties:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                agent_comm:
+                  type: array
+                  minItems: 1
+                  uniqueItems: true
+                  items:
+                    type: string
+                    minLength: 1
+                usage:
+                  oneOf:
+                    - type: string
+                      enum: [connect, listen]
+                    - type: array
+                      items: {type: string, enum: [connect, listen]}
+                      minItems: 1
+                      uniqueItems: true
+                params:
+                  type: object
+                  description: >
+                    Per-row overrides for this agent: row name to {param: value}.
+                    A string value may hold {agent}, the only placeholder.
+                  additionalProperties:
+                    type: object
       agent_comm:
         type: object
+        deprecated: true
         x-merge:
           strategy: mapping_merge_or_ops
         additionalProperties: true
-        description: "Agent-to-agent communication settings."
+        description: >
+          Deprecated and ignored: the in-process link block of the bundled
+          flavours. Nothing reads it. How agents reach each other is bind.
         properties:
           protocol:
             type: string
@@ -115,10 +195,13 @@ properties:
 
       telemetry:
         type: object
+        deprecated: true
         x-merge:
           strategy: mapping_merge_or_ops
         additionalProperties: true
-        description: "Basic telemetry / log sink configuration."
+        description: >
+          Deprecated and ignored: basic telemetry / log sink configuration.
+          Nothing reads it. Planned to move to an optional Control manifest.
         properties:
           backend:
             type: string
@@ -127,6 +210,7 @@ properties:
             type: string
 
       observability:
+        deprecated: true
         oneOf:
           - type: "null"
           - $ref: "./fragments/observability-binding.schema.yaml"
@@ -134,28 +218,35 @@ properties:
           strategy: plugin_list_ops
           identity: plugin_id
         description: >
-          Observability sink plugin selection (e.g. [native], [otel],
-          [native, {otel: {output_path: traces/otel}}]). This is the
-          deployment-posture concern the guiding principle refers to — a
-          flavour selects *which* plugins run, not backend/span-export
-          internals. local → [native].
+          Deprecated, still used: the default observability sink plugins
+          (e.g. [native], [otel], [native, {otel: {output_path:
+          traces/otel}}]) of an agent that declares none; selects *which*
+          plugins run, not backend/span-export internals. local → [native].
+          Planned to move to an optional Control manifest.
         default: null
 
       control:
+        deprecated: true
         oneOf:
           - type: "null"
           - $ref: "./fragments/control-binding.schema.yaml"
         x-merge:
           strategy: mapping_ops
-        description: "Control-plane plugin selection (budget, circuit_breaker, rate_limiter)."
+        description: >
+          Deprecated and ignored: control-plane plugin selection (budget,
+          circuit_breaker, rate_limiter). Nothing reads it. Planned to move
+          to an optional Control manifest.
         default: null
 
       tools:
         type: object
+        deprecated: true
         x-merge:
           strategy: mapping_merge_or_ops
         additionalProperties: true
-        description: "Tool deployment posture and provider selection."
+        description: >
+          Deprecated and ignored: tool exposure protocol and remote-tool
+          policy. Nothing reads it. Tool exposure is configured through infra.
         properties:
           exposure_protocol:
             type: string

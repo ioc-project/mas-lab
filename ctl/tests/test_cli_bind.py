@@ -240,9 +240,7 @@ def test_live_commands_bad_connect_is_usage_error(
 
 
 @pytest.mark.parametrize(("module_name", "attr", "needs_manifest"), _LIVE_COMMANDS)
-def test_live_commands_bind_alias_warns(
-    tmp_path: Path, module_name: str, attr: str, needs_manifest: bool
-) -> None:
+def test_live_commands_bind_alias_warns(tmp_path: Path, module_name: str, attr: str, needs_manifest: bool) -> None:
     from click.testing import CliRunner
 
     result = CliRunner().invoke(

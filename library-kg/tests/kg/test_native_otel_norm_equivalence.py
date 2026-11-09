@@ -30,7 +30,9 @@ _TELEMETRY_SRC = Path(
 
 
 def _load_events(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]  # noqa: E501
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]  # noqa: E501
 
 
 def test_native_kg_complete_keeps_annotation_off_default() -> None:

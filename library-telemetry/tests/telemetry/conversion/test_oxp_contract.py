@@ -8,7 +8,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from mas.library.telemetry.conversion import semconv
 from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -106,9 +105,7 @@ def test_observe_sdk_profile_has_oxp_required_attributes(tmp_path):
     assert len(ends) == 1, "SCOPE session lifecycle requires session.end"
     assert _attrs(starts[0]).get("session.started_at")
     assert _attrs(ends[0]).get("session.ended_at")
-    assert _attrs(starts[0]).get(semconv.SESSION_ID) == _attrs(ends[0]).get(
-        semconv.SESSION_ID
-    )
+    assert _attrs(starts[0]).get(semconv.SESSION_ID) == _attrs(ends[0]).get(semconv.SESSION_ID)
     traces = {
         (s.get("context") or {}).get("trace_id")
         for s in (*starts, *ends, *graphs, *agents)
@@ -130,11 +127,7 @@ def test_new_session_id_replaces_event_session_id(tmp_path):
         new_session_id=True,
     )
     spans = _load_spans(out)
-    sids = {
-        str(_attrs(s).get(semconv.SESSION_ID) or "")
-        for s in spans
-        if _attrs(s).get(semconv.SESSION_ID)
-    }
+    sids = {str(_attrs(s).get(semconv.SESSION_ID) or "") for s in spans if _attrs(s).get(semconv.SESSION_ID)}
     assert len(sids) == 1
     sid = next(iter(sids))
     assert sid.startswith("trip-planner_")
@@ -176,12 +169,7 @@ def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
     wire — ingest silently ignores them. Required ingest keys stay on.
     """
     sample = (
-        Path(__file__).resolve().parents[4]
-        / "library-samples"
-        / "apps"
-        / "trip-planner"
-        / "traces"
-        / "events.jsonl"
+        Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
     )
     if not sample.exists():
         pytest.skip(f"missing tutorial sample {sample}")
@@ -321,8 +309,21 @@ def test_realtime_lifecycle_pair_shares_one_span_id(tmp_path):
             json.dumps(e)
             for e in [
                 {"kind": "mas_call_start", "call_id": "run", "timestamp": 0.0, "agent_id": "orchestrator"},
-                {"kind": "execution_start", "call_id": "a1", "parent_call_id": "run", "timestamp": 0.1, "agent_id": "planner"},
-                {"kind": "tool_call_start", "call_id": "t1", "parent_call_id": "a1", "agent_id": "planner", "tool_name": "lookup_schedule", "timestamp": 0.2},
+                {
+                    "kind": "execution_start",
+                    "call_id": "a1",
+                    "parent_call_id": "run",
+                    "timestamp": 0.1,
+                    "agent_id": "planner",
+                },
+                {
+                    "kind": "tool_call_start",
+                    "call_id": "t1",
+                    "parent_call_id": "a1",
+                    "agent_id": "planner",
+                    "tool_name": "lookup_schedule",
+                    "timestamp": 0.2,
+                },
                 {"kind": "tool_call_end", "call_id": "t1", "agent_id": "planner", "timestamp": 0.3},
                 {"kind": "execution_end", "call_id": "a1", "agent_id": "planner", "timestamp": 0.4},
                 {"kind": "mas_call_end", "call_id": "run", "timestamp": 0.5, "agent_id": "orchestrator"},

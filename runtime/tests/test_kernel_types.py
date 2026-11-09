@@ -17,9 +17,9 @@ def test_kernel_types_has_no_machines_import():
 
 
 def test_gov_state_lives_in_kernel_types():
+    from mas.runtime.kernel.state import QProduct
     from mas.runtime.kernel.types import GovState
     from mas.runtime.machines.gov import gov_is_hitl_pending
-    from mas.runtime.kernel.state import QProduct
 
     q = QProduct()
     q.gov_state = GovState.HITL_PENDING.value

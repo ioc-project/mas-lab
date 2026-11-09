@@ -32,9 +32,7 @@ def test_extra_spec_and_hint_use_pyproject_name() -> None:
     expected = _toml_name("library-telemetry")
     assert extra_spec("convert", file=yaml_path) == f"{expected}[convert]"
     assert extra_hint("convert", file=yaml_path) == f'uv pip install "{expected}[convert]"'
-    assert extra_hint("convert", file=yaml_path, editable=True) == (
-        f'uv pip install -e "{expected}[convert]"'
-    )
+    assert extra_hint("convert", file=yaml_path, editable=True) == (f'uv pip install -e "{expected}[convert]"')
 
 
 def test_expand_extra_leaves_full_spec() -> None:

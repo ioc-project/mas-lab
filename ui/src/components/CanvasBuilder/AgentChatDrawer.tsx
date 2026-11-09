@@ -1,6 +1,6 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useEffectEvent } from "react";
 import { parse, stringify } from "yaml";
 import { Drawer } from "@mui/material";
 import {
@@ -53,17 +53,25 @@ export function AgentChatDrawer({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
 
-  useEffect(() => {
+  const resetOnOpenChange = useEffectEvent(() => {
     if (open) {
       setMessages(initialMessages);
     } else {
       setInput("");
     }
-  }, [open]);
+  });
 
   useEffect(() => {
+    resetOnOpenChange();
+  }, [open]);
+
+  const reportMessages = useEffectEvent(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     onMessagesChange?.(messages);
+  });
+
+  useEffect(() => {
+    reportMessages();
   }, [messages]);
 
   const buildManifestWithHistory = useCallback(

@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from unittest.mock import MagicMock
 
 import pytest
-
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.transition import TransitionEvent
 from mas.runtime.driver.driver import DriverTrace, KernelDriver
@@ -67,35 +66,21 @@ def test_dispatch_engine_batch_records_correct_tool_per_correlation_id():
     ]
     driver._dispatch_engine_batch(ios, DriverTrace())
 
-    execs = {
-        e.correlation_id: e
-        for e in cap.seen
-        if e.attributes.get("activity") == "contract_execute"
-    }
+    execs = {e.correlation_id: e for e in cap.seen if e.attributes.get("activity") == "contract_execute"}
     assert set(execs) == {1, 2}
     assert execs[1].attributes.get("tool_name") == "delegate_to_schedule_agent"
     assert execs[1].attributes.get("tool_arguments") == {"task": "look up trains"}
     assert execs[2].attributes.get("tool_name") == "delegate_to_concierge_agent"
     assert execs[2].attributes.get("tool_arguments") == {"task": "check fares"}
 
-    waits = [
-        e for e in cap.seen
-        if e.attributes.get("activity") == "wait_state"
-    ]
+    waits = [e for e in cap.seen if e.attributes.get("activity") == "wait_state"]
     assert waits
     assert any(e.phase == "start" and e.attributes.get("wait_role") == "WAIT" for e in waits)
     assert any(e.phase == "end" and e.attributes.get("wait_role") == "RESUME" for e in waits)
-    assert {
-        e.attributes.get("wait_link_id") for e in waits if e.correlation_id == 1
-    } == {"delegate-1"}
-    assert {
-        e.attributes.get("wait_link_id") for e in waits if e.correlation_id == 2
-    } == {"delegate-2"}
+    assert {e.attributes.get("wait_link_id") for e in waits if e.correlation_id == 1} == {"delegate-1"}
+    assert {e.attributes.get("wait_link_id") for e in waits if e.correlation_id == 2} == {"delegate-2"}
 
-    pgroups = [
-        e for e in cap.seen
-        if e.attributes.get("activity") == "parallel_group"
-    ]
+    pgroups = [e for e in cap.seen if e.attributes.get("activity") == "parallel_group"]
     assert pgroups
     for pg in pgroups:
         tools = list(pg.attributes.get("tools") or [])

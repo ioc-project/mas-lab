@@ -72,7 +72,7 @@ spec:
 `error_recovery_plugin` and `error_policy` may appear on any governance stanza. The parser flattens them and installs the recovery plugin on the ingress chain, not on `KernelConfig`.
 Full chain: [governance.md](governance.md). Retry defaults: [reliability.md](../references/reliability.md).
 
-Every list slot defaults to empty (no plugins). The flavour or CLI attaches native observability. Omitting `spec.observability` does not attach it.
+Every list slot defaults to empty (no plugins). Omitting `spec.observability` attaches nothing by itself. Flavour `observability` is deprecated and still the fallback when the agent declares none (the bundled `local` sets `[native]`); `--events` still patches that key. A later optional Control manifest is the planned home.
 
 ---
 

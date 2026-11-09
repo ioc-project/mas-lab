@@ -3,12 +3,11 @@
 from types import SimpleNamespace
 
 import pytest
-
+from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
+from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.session.control import SessionControl
 from mas.ctl.session.controller import SessionController
 from mas.ctl.session.manager import SessionManager
-from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.library.standard.plugins.system_tools.control import ControlTools
 from mas.library.standard.plugins.system_tools.spawn_subagent import SpawnSubagentTool
 from mas.runtime.boundary.control.contract import ControlCapability
@@ -149,10 +148,13 @@ def test_spawn_copies_parent_spec_revision() -> None:
         obs_plugin_set=None,
     )
     materialized = SimpleNamespace(instances={"root": parent}, bus=None)
-    child_factory = lambda _m, _d, _cid, _tid: SimpleNamespace(
-        driver=SimpleNamespace(agent_id="", ctx=SimpleNamespace(session_id="", agent_id="")),
-        obs_plugin_set=None,
-    )
+
+    def child_factory(_m, _d, _cid, _tid):
+        return SimpleNamespace(
+            driver=SimpleNamespace(agent_id="", ctx=SimpleNamespace(session_id="", agent_id="")),
+            obs_plugin_set=None,
+        )
+
     ctx = MaterializedEngineToolContext(
         materialized=materialized,
         session_id="session",
@@ -194,4 +196,3 @@ def test_plan_mode_is_a_spec_revision_and_restore_rolls_it_back() -> None:
     apply_default_mode(control, sid)
     assert session.spec_revision == 0
     assert "write" not in disabled_tool_names(current_spec_for_advertise(ctx))
-

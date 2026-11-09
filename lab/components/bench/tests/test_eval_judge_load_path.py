@@ -17,8 +17,7 @@ _REPO = Path(__file__).resolve().parents[4]
 
 def _write_experiment(tmp_path: Path, extra: str) -> Path:
     (tmp_path / "mas.yaml").write_text(
-        "apiVersion: mas/v1\nkind: MAS\nmetadata: {name: t}\n"
-        "spec:\n  agency:\n    agents: []\n",
+        "apiVersion: mas/v1\nkind: MAS\nmetadata: {name: t}\nspec:\n  agency:\n    agents: []\n",
         encoding="utf-8",
     )
     (tmp_path / "overlays").mkdir(exist_ok=True)
@@ -47,14 +46,10 @@ def _write_experiment(tmp_path: Path, extra: str) -> Path:
 
 
 @pytest.mark.asyncio
-async def test_per_run_under_experiment_post_fails_on_dry_run(
-    tmp_path, caplog
-) -> None:
+async def test_per_run_under_experiment_post_fails_on_dry_run(tmp_path, caplog) -> None:
     path = _write_experiment(
         tmp_path,
-        "  post:\n"
-        "    - type: metrics_to_dataframe\n"
-        "      per_run: true\n",
+        "  post:\n    - type: metrics_to_dataframe\n      per_run: true\n",
     )
     with caplog.at_level(logging.ERROR):
         ok = await run_mas_benchmark(path, dry_run=True)
@@ -66,8 +61,7 @@ def test_load_experiment_env_override_sets_judge(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_CTL_MODEL", "bedrock/claude-haiku")
     path = _write_experiment(
         tmp_path,
-        "  post:\n"
-        "    - type: eval_mce\n",
+        "  post:\n    - type: eval_mce\n",
     )
     loaded = load_experiment(path)
     assert loaded is not None
@@ -80,8 +74,7 @@ def test_from_yaml_without_override_ignores_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_CTL_MODEL", "bedrock/claude-haiku")
     path = _write_experiment(
         tmp_path,
-        "  post:\n"
-        "    - type: eval_mce\n",
+        "  post:\n    - type: eval_mce\n",
     )
     exp = MASExperimentConfig.from_yaml(path)
     step = exp.levels["experiment"].pipeline[0]
@@ -93,12 +86,9 @@ def test_from_yaml_explicit_override_beats_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_CTL_MODEL", "bedrock/claude-haiku")
     path = _write_experiment(
         tmp_path,
-        "  post:\n"
-        "    - type: eval_mce\n",
+        "  post:\n    - type: eval_mce\n",
     )
-    exp = MASExperimentConfig.from_yaml(
-        path, model_override="azure/gpt-4o"
-    )
+    exp = MASExperimentConfig.from_yaml(path, model_override="azure/gpt-4o")
     step = exp.levels["experiment"].pipeline[0]
     assert exp.model == "azure/gpt-4o"
     assert step.config["model"] == "azure/gpt-4o"
@@ -108,8 +98,7 @@ def test_from_data_without_override_ignores_env(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_CTL_MODEL", "bedrock/claude-haiku")
     path = _write_experiment(
         tmp_path,
-        "  post:\n"
-        "    - type: eval_mce\n",
+        "  post:\n    - type: eval_mce\n",
     )
     exp = MASExperimentConfig.from_data(load_yaml_file(path), path)
     step = exp.levels["experiment"].pipeline[0]
@@ -123,9 +112,7 @@ def test_from_yaml_does_not_read_env() -> None:
 
 
 def test_pipeline_step_cmd_passes_env_model_override() -> None:
-    src = (_REPO / "lab/components/core/src/mas/lab/cli/commands/run.py").read_text(
-        encoding="utf-8"
-    )
+    src = (_REPO / "lab/components/core/src/mas/lab/cli/commands/run.py").read_text(encoding="utf-8")
     assert "model_override=env_model_override()" in src
 
 

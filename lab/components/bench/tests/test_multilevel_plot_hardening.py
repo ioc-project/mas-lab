@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.lab.plots.multilevel_trajectory import plot_multilevel_trajectory
 from mas.lab.plots.multilevel_trajectory.records import _build_call_records
 
@@ -68,15 +67,32 @@ def test_processing_call_with_segment_count_does_not_crash() -> None:
     # Some emitters report ``segments`` as a count, not a list of parts.
     events = [
         {"kind": "mas_call_start", "timestamp": 0.0, "agent_id": "mas", "call_id": "mas-1"},
-        {"kind": "execution_start", "timestamp": 0.1, "agent_id": "root", "call_id": "exec-1",
-         "parent_call_id": "mas-1"},
-        {"kind": "processing_call_start", "timestamp": 0.2, "agent_id": "root", "call_id": "pc-1",
-         "parent_call_id": "exec-1", "processing_name": "context assembly",
-         "processing_type": "context_assembly", "segments": 3, "tokens": 450},
-        {"kind": "processing_call_end", "timestamp": 0.3, "agent_id": "root", "call_id": "pc-1",
-         "parent_call_id": "exec-1"},
-        {"kind": "execution_end", "timestamp": 0.9, "agent_id": "root", "call_id": "exec-1",
-         "parent_call_id": "mas-1"},
+        {
+            "kind": "execution_start",
+            "timestamp": 0.1,
+            "agent_id": "root",
+            "call_id": "exec-1",
+            "parent_call_id": "mas-1",
+        },
+        {
+            "kind": "processing_call_start",
+            "timestamp": 0.2,
+            "agent_id": "root",
+            "call_id": "pc-1",
+            "parent_call_id": "exec-1",
+            "processing_name": "context assembly",
+            "processing_type": "context_assembly",
+            "segments": 3,
+            "tokens": 450,
+        },
+        {
+            "kind": "processing_call_end",
+            "timestamp": 0.3,
+            "agent_id": "root",
+            "call_id": "pc-1",
+            "parent_call_id": "exec-1",
+        },
+        {"kind": "execution_end", "timestamp": 0.9, "agent_id": "root", "call_id": "exec-1", "parent_call_id": "mas-1"},
         {"kind": "mas_call_end", "timestamp": 1.0, "agent_id": "mas", "call_id": "mas-1"},
     ]
     assert "segments" not in next(r for r in _build_call_records(events) if r["call_id"] == "pc-1")
@@ -158,7 +174,7 @@ def test_tool_call_recorded_under_an_llm_call_is_laid_out_after_it() -> None:
     nodes = _calls_lane_transitions(events)
     spans = [(n.dfs_pos_start, n.dfs_pos_end) for n in nodes]
     assert [n.call_type for n in nodes] == ["LLMCall", "ToolCall", "LLMCall"]
-    for (_, prev_end), (nxt_start, _) in zip(spans, spans[1:]):
+    for (_, prev_end), (nxt_start, _) in zip(spans, spans[1:], strict=False):
         assert nxt_start >= prev_end - 1e-9, spans
     assert nodes[1].start_ts >= nodes[0].end_ts
 
@@ -184,8 +200,7 @@ def test_llm_call_without_parent_is_attached_to_its_only_agent_execution() -> No
 
 
 def test_parentless_call_with_ambiguous_owner_is_not_guessed() -> None:
-    llm = next(r for r in _build_call_records(_orphan_llm_events(second_agent_run=True))
-               if r["call_type"] == "LLMCall")
+    llm = next(r for r in _build_call_records(_orphan_llm_events(second_agent_run=True)) if r["call_type"] == "LLMCall")
     assert not llm.get("parent_call_id")
 
 

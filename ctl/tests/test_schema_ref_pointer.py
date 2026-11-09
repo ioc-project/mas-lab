@@ -49,11 +49,7 @@ def test_json_pointer_ref_extracts_one_nested_property(tmp_path: Path):
         },
     )
     patch_schema = {
-        "properties": {
-            "working_memory": {
-                "$ref": "./agent.schema.yaml#/properties/spec/properties/working_memory"
-            }
-        }
+        "properties": {"working_memory": {"$ref": "./agent.schema.yaml#/properties/spec/properties/working_memory"}}
     }
 
     resolved = _resolve_local_refs(patch_schema, tmp_path)
@@ -82,11 +78,7 @@ def test_json_pointer_ref_resolves_refs_nested_inside_the_pointed_at_node(tmp_pa
             }
         },
     )
-    patch_schema = {
-        "working_memory": {
-            "$ref": "./agent.schema.yaml#/properties/spec/properties/working_memory"
-        }
-    }
+    patch_schema = {"working_memory": {"$ref": "./agent.schema.yaml#/properties/spec/properties/working_memory"}}
 
     resolved = _resolve_local_refs(patch_schema, tmp_path)
 

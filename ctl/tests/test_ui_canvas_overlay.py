@@ -137,9 +137,7 @@ def test_apply_projects_library_overlay_named_for_mas(tmp_path: Path):
     )
     mas_yaml = "kind: MAS\nmetadata:\n  name: demo\n"
     agents = {"sre": "kind: Agent\nmetadata:\n  name: sre\n"}
-    out_mas, _agents, path = apply_ui_canvas_to_yaml(
-        mas_dir, mas_yaml, agents, extra_overlay_dirs=[lib_overlays]
-    )
+    out_mas, _agents, path = apply_ui_canvas_to_yaml(mas_dir, mas_yaml, agents, extra_overlay_dirs=[lib_overlays])
     assert path is not None
     assert path.name == "layout.yaml"
     assert "x: 4" in out_mas
@@ -307,18 +305,14 @@ def test_overlay_document_canvas_roundtrip(tmp_path: Path):
     assert layout["spec"]["target"] == {"kind": "Overlay", "name": "cot-moderator"}
     assert layout["spec"]["patch"] == {}
     assert "x-canvas-positions" not in spec
-    dest = write_ui_canvas_overlay(
-        tmp_path, layout, target_kind="Overlay", target_name="cot-moderator"
-    )
+    dest = write_ui_canvas_overlay(tmp_path, layout, target_kind="Overlay", target_name="cot-moderator")
     assert dest.name == "cot-moderator.yaml"
     spec_yaml = (
         "kind: Overlay\nmetadata: {name: cot-moderator}\n"
         "spec:\n  target: {kind: MAS}\n  patch: {agents: {moderator: {}}}\n"
     )
     (tmp_path / "cot-moderator.yaml").write_text(spec_yaml, encoding="utf-8")
-    dest = write_ui_canvas_overlay(
-        tmp_path, layout, target_kind="Overlay", target_name="cot-moderator"
-    )
+    dest = write_ui_canvas_overlay(tmp_path, layout, target_kind="Overlay", target_name="cot-moderator")
     assert dest.name == "cot-moderator-layout.yaml"
     projected, path = apply_ui_canvas_to_overlay_yaml(tmp_path, spec_yaml)
     assert path == dest
@@ -376,9 +370,7 @@ def test_apply_registered_overlays_skip_folder_scan(tmp_path: Path):
     }
     mas_yaml = "kind: MAS\nmetadata:\n  name: demo\n"
     agents = {"sre": "kind: Agent\nmetadata:\n  name: sre\n"}
-    empty_mas, _agents, empty_path = apply_ui_canvas_to_yaml(
-        mas_dir, mas_yaml, agents, overlays=[]
-    )
+    empty_mas, _agents, empty_path = apply_ui_canvas_to_yaml(mas_dir, mas_yaml, agents, overlays=[])
     assert empty_path is None
     assert "x-canvas-positions" not in empty_mas
     out_mas, _out_agents, path = apply_ui_canvas_to_yaml(

@@ -1,13 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for ApplicationRunner registry and controller API."""
+
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
-
-import pytest
 
 
 def test_application_runner_registry_mas_lab():
@@ -48,9 +47,7 @@ def test_controller_api_submit_benchmark_worker():
         fh.write("metadata:\n  name: dry\n")
         exp_path = fh.name
     try:
-        result = api.submit_benchmark(
-            {"experiment_yaml": exp_path, "dry_run": True, "progress": False}
-        )
+        result = api.submit_benchmark({"experiment_yaml": exp_path, "dry_run": True, "progress": False})
         assert "worker_id" in result
         assert api.get_worker(result["worker_id"]) is not None
     finally:

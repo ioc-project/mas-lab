@@ -6,9 +6,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 from jsonschema import Draft7Validator
 from mas.ctl.validate.schemas import load_schema
-import yaml
 
 
 def test_overlay_schema_rejects_global_design_pattern_params_on_mas_target() -> None:
@@ -216,13 +216,9 @@ def test_overlay_schema_rejects_non_string_grouped_override() -> None:
 
 def test_infra_overlay_fragment_covers_infra_spec_properties() -> None:
     root = Path(__file__).parents[1]
-    infra_schema = yaml.safe_load(
-        (root / "docs/schemas/runtime/infra.schema.yaml").read_text(encoding="utf-8")
-    )
+    infra_schema = yaml.safe_load((root / "docs/schemas/runtime/infra.schema.yaml").read_text(encoding="utf-8"))
     overlay_fragment = yaml.safe_load(
-        (
-            root / "docs/schemas/runtime/fragments/overlay-infra-patch.schema.yaml"
-        ).read_text(encoding="utf-8")
+        (root / "docs/schemas/runtime/fragments/overlay-infra-patch.schema.yaml").read_text(encoding="utf-8")
     )
 
     infra_properties = set(infra_schema["properties"]["spec"]["properties"])

@@ -42,6 +42,7 @@ tasks:
     dir: "{{.TASKFILE_DIR}}"
     cmds:
       - "test -d vendor/a2a-tck || git clone https://github.com/a2aproject/a2a-tck.git vendor/a2a-tck"
+      - "python3 {{.TASKFILE_DIR}}/pin_tck.py"
       - "UV_PROJECT_ENVIRONMENT={{.TCK_DIR}}/.venv uv sync --project {{.TCK_DIR}}"
 
   tck-positive:

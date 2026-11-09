@@ -7,7 +7,7 @@ resolution, and a governed tool call end to end (auto-approve vs auto-deny).
 from __future__ import annotations
 
 import pytest
-from conftest import T14, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from tutorial_support import T14, live_cli_env, live_tutorial_chat, load_yaml, run_cli
 
 OVERLAYS = [
     "tools.yaml",
@@ -149,11 +149,7 @@ def _hitl_resolutions(instance) -> list[str]:
     from mas.runtime.schema.observability import ObsEventKind
 
     sink = instance.driver.observability
-    return [
-        e.payload.get("resolution")
-        for e in (sink.events if sink else [])
-        if e.kind == ObsEventKind.HITL_RESOLVE
-    ]
+    return [e.payload.get("resolution") for e in (sink.events if sink else []) if e.kind == ObsEventKind.HITL_RESOLVE]
 
 
 class TestGovernedToolCallEndToEnd:

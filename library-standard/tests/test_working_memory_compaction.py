@@ -105,9 +105,7 @@ def test_llm_summarizer_wraps_then_engine_completes():
 
     plugin = LlmSummarizer()
     plugin.bind_engine(_Capture())
-    result = plugin.summarize(
-        [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
-    )
+    result = plugin.summarize([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}])
     assert result == "ok"
     assert seen[0][0]["content"] == SUMMARIZE_INSTRUCTIONS
     assert json.loads(seen[0][1]["content"]) == [
@@ -185,10 +183,7 @@ class _FakeEngineWithBudget(_FakeEngine):
 
     def summarize_messages(self, messages):
         if not self._budget.allow_llm():
-            raise RuntimeError(
-                "history summarizer: LLM call budget "
-                "exceeded (spec.budget.max_llm_calls)"
-            )
+            raise RuntimeError("history summarizer: LLM call budget exceeded (spec.budget.max_llm_calls)")
         self._budget.note_llm()
         return super().summarize_messages(messages)
 

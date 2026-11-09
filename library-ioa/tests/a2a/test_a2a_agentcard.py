@@ -137,10 +137,6 @@ def test_a2a_exposure_uses_application_endpoint_for_bind_and_card() -> None:
         8005,
         9006,
     )
-    assert app.state.a2a_agent_card.supported_interfaces[0].url == (
-        "http://agents.example.test:9005"
-    )
-    assert app.state.a2a_agent_card.supported_interfaces[2].url == (
-        "agents.example.test:9006"
-    )
+    assert app.state.a2a_agent_card.supported_interfaces[0].url == ("http://agents.example.test:9005")
+    assert app.state.a2a_agent_card.supported_interfaces[2].url == ("agents.example.test:9006")
     assert app.state.a2a_agent_card.capabilities.streaming

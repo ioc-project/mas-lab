@@ -357,3 +357,19 @@ def test_delegates_to_still_wires_the_same_tools(tmp_path: Path) -> None:
     assert "Alpha specialist" in by_name["delegate_to_alpha"]["function"]["description"]
     assert by_name["delegate_to_beta"]["function"]["description"] == "Delegate a sub-task to agent beta."
     assert engine.delegation._allowed == frozenset({"alpha", "beta"})
+
+
+def test_run_mas_prints_the_delegates_to_warning_once(tmp_path, capsys) -> None:
+    """compose validates the file and the merged MAS; the warning still prints once per run."""
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from mas.ctl.executor.run_mas import execute_run_mas
+    from mas.ctl.session.engine_factory import EngineSelection
+    from mas.runtime.engine.simulated import SimulatedEngine
+
+    mas = Path(__file__).resolve().parents[2] / "docs" / "tutorials" / "07-slim-link" / "mas.yaml"
+    engine = EngineSelection(engine=SimulatedEngine(llm_next_step=lambda _cid: "STOP", stop_text="hi"), mode="injected")
+    with patch("mas.ctl.session.bootstrap.build_engine", return_value=engine):
+        assert execute_run_mas(mas, prompt="hi", infra_refs=["standard:openai"]) == 0
+    assert capsys.readouterr().err.count("delegates_to is deprecated") == 1

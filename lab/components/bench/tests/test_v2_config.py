@@ -5,7 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from mas.lab.benchmark.pipeline.config import PipelineEngineSpec, pipeline_settings
-from mas.lab.lab.config.execution import EmulationSpec, PipelineEngineSpec as YamlPipelineEngineSpec
+from mas.lab.lab.config.execution import EmulationSpec
+from mas.lab.lab.config.execution import PipelineEngineSpec as YamlPipelineEngineSpec
 
 
 def test_v2_config_selects_engine() -> None:

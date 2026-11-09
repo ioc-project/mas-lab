@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from mas.ctl.testing.cli_helpers import mas_lab_root
 from mas.ctl.validate import validate_file
 

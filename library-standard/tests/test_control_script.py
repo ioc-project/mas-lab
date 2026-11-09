@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.ctl.session.controller import SessionController
 from mas.ctl.session.manager import SessionManager
 from mas.library.standard.plugins.control.script import (
@@ -113,7 +112,11 @@ def test_control_verbs_reach_native_observability_contract() -> None:
     payload_methods = {event.payload.get("method") for event in op.events if event.kind == ObsEventKind.CONTROL}
     assert "pause" in payload_methods
     assert "inspect" in payload_methods
-    assert all(event.payload.get("category", "").startswith("control.") for event in op.events if event.kind == ObsEventKind.CONTROL)
+    assert all(
+        event.payload.get("category", "").startswith("control.")
+        for event in op.events
+        if event.kind == ObsEventKind.CONTROL
+    )
 
 
 def test_debug_script_at_file_is_the_same_as_script_file() -> None:
@@ -139,7 +142,9 @@ def test_backtrack_records_a_sibling_on_the_snapshot_tree(tmp_path: Path) -> Non
     session = Session(
         session_id="s1",
         instance=instance,
-        controller=SimpleNamespace(_turn=1, agent_id="agent", restore_turn=lambda n: setattr(session.controller, "_turn", n)),
+        controller=SimpleNamespace(
+            _turn=1, agent_id="agent", restore_turn=lambda n: setattr(session.controller, "_turn", n)
+        ),
         working_memory=WorkingMemoryRegistry(),
         lineage=SessionLineage(session_id="s1"),
         manifest_ref=ManifestRef.from_content({"name": "agent"}),
@@ -193,9 +198,7 @@ def test_steer_enqueue_at_head_from_script() -> None:
     )
     texts = [item.text for item in control.inspect_queue("s1").items]
     assert texts == ["now", "mid", "later"]
-    chained = parse_control_chain(
-        ["steer", "--text", "x", "--enqueue", "enqueue", "--text", "y", "--at", "head"]
-    )
+    chained = parse_control_chain(["steer", "--text", "x", "--enqueue", "enqueue", "--text", "y", "--at", "head"])
     assert [item.verb for item in chained] == ["steer", "enqueue"]
     assert chained[0].kwargs["enqueue"] is True
     assert chained[1].kwargs["at"] == "head"

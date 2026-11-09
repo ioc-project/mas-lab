@@ -16,6 +16,7 @@ from mas.lab.controller.ui_stream.refs import DataSourceRef, envelope
 from mas.lab.controller.ui_stream.run_index import overlay_rel, resolve_run
 from mas.lab.controller.ui_stream.spec_load import snapshot_for_ref
 
+
 def test_live_tick_drops_html_shells_keeps_chart_data() -> None:
     assert live_tick({"kind": "custom.chat.plot", "html": "<html></html>"}) is None
     kept = live_tick({"kind": "custom.panel-a.plot", "html": "<html></html>", "data": {"agents": [1]}})
@@ -905,7 +906,10 @@ def test_ws_catchup_includes_chat_when_hello_get_is_spec(client: TestClient) -> 
             if any(name.startswith("custom.chat") for name in found):
                 break
         assert any(name.startswith("custom.chat") for name in found)
-        cards = list((found[next(name for name in found if name.startswith("custom.chat"))].get("payload") or {}).get("cards") or [])
+        cards = list(
+            (found[next(name for name in found if name.startswith("custom.chat"))].get("payload") or {}).get("cards")
+            or []
+        )
         assert any("triage the request" in str(row.get("text") or "") for row in cards)
 
 
@@ -1157,9 +1161,7 @@ def test_replay_flag_opens_ingest_when_view_is_closed(client: TestClient) -> Non
     assert body.get("job_id")
 
 
-def test_run_experiment_reopens_ingest_after_reset(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_experiment_reopens_ingest_after_reset(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     client.post("/api/commands", json={"verb": "reset-view", "ref": {"origin": "demo-ui"}})
 
     class FakeApi:

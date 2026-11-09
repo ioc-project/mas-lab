@@ -55,8 +55,7 @@ def test_importing_a2a_plugin_package_does_not_import_a2a_sdk() -> None:
         [
             sys.executable,
             "-c",
-            "import sys; import library_ioa.plugins.a2a; "
-            "print('loaded' if 'a2a' in sys.modules else 'lazy')",
+            "import sys; import library_ioa.plugins.a2a; print('loaded' if 'a2a' in sys.modules else 'lazy')",
         ],
         check=True,
         capture_output=True,
@@ -95,8 +94,7 @@ def test_importing_library_ioa_pins_a2a_telemetry_before_sdk_import() -> None:
         [
             sys.executable,
             "-c",
-            "import library_ioa; import a2a.utils.telemetry; "
-            "print(a2a.utils.telemetry.otel_enabled)",
+            "import library_ioa; import a2a.utils.telemetry; print(a2a.utils.telemetry.otel_enabled)",
         ],
         check=True,
         capture_output=True,
@@ -213,7 +211,14 @@ def test_a2a_routes_ignore_unknown_request_fields() -> None:
 
         assert jsonrpc.status_code == 200
         assert rest.status_code == 200
-        assert rest.headers["content-type"].split(";", 1)[0] == "application/json"
+        assert rest.headers["content-type"].split(";", 1)[0] == "application/a2a+json"
+        typed = client.post(
+            "/a2a/rest/message:send",
+            content='{"message":{"role":"ROLE_USER","parts":[{"text":"hello"}],"messageId":"message-2"}}',
+            headers={"Content-Type": "application/a2a+json", "A2A-Version": "1.0"},
+        )
+        assert typed.status_code == 200
+        assert typed.headers["content-type"].split(";", 1)[0] == "application/a2a+json"
 
 
 def test_proto_field_compatibility_does_not_read_legacy_label() -> None:
@@ -274,10 +279,7 @@ def test_executor_returns_input_required_task_state() -> None:
         )
 
     assert response.status_code == 200
-    assert (
-        response.json()["result"]["task"]["status"]["state"]
-        == "TASK_STATE_INPUT_REQUIRED"
-    )
+    assert response.json()["result"]["task"]["status"]["state"] == "TASK_STATE_INPUT_REQUIRED"
 
 
 def test_executor_marks_task_failed_when_handler_raises() -> None:
@@ -588,9 +590,24 @@ def test_a2a_routes_reject_unsupported_content_type() -> None:
 
         assert jsonrpc.status_code == 200
         assert jsonrpc.json()["error"]["code"] == -32005
-        assert rest.status_code == 415
-        assert rest.json()["error"]["status"] == "UNSUPPORTED_MEDIA_TYPE"
+        assert rest.status_code == 400
+        assert rest.headers["content-type"].split(";", 1)[0] == "application/a2a+json"
+        assert rest.json()["error"]["code"] == 400
+        assert rest.json()["error"]["status"] == "INVALID_ARGUMENT"
         assert rest.json()["error"]["details"][0]["reason"] == "CONTENT_TYPE_NOT_SUPPORTED"
+        unsupported_part = client.post(
+            "/a2a/rest/message:send",
+            json={
+                "message": {
+                    "role": "ROLE_USER",
+                    "parts": [{"raw": "dGNr", "mediaType": "application/x-unsupported-tck-type"}],
+                    "messageId": "message-unsupported",
+                }
+            },
+            headers={"A2A-Version": "1.0"},
+        )
+        assert unsupported_part.status_code == 400
+        assert unsupported_part.json()["error"]["details"][0]["reason"] == "CONTENT_TYPE_NOT_SUPPORTED"
 
 
 @pytest.mark.parametrize("transport", [None, "JSONRPC", "HTTP+JSON", "GRPC"])
@@ -608,14 +625,14 @@ def test_exposed_agent_can_delegate_outbound_over_a2a(transport: str | None) -> 
             grpc_port = listener.getsockname()[1]
     peer_url = f"http://127.0.0.1:{peer_port}"
     peer_manifest = {
-            "name": "remote-peer",
-            "description": "Remote A2A peer",
-            "url": peer_url,
-            "version": "1.0.0",
-            "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["text/plain"],
-            "skills": [],
-        }
+        "name": "remote-peer",
+        "description": "Remote A2A peer",
+        "url": peer_url,
+        "version": "1.0.0",
+        "defaultInputModes": ["text/plain"],
+        "defaultOutputModes": ["text/plain"],
+        "skills": [],
+    }
     peer_card = (
         agent_card_from_manifest(
             {
@@ -706,3 +723,43 @@ def test_exposed_agent_can_delegate_outbound_over_a2a(transport: str | None) -> 
         peer_server.should_exit = True
         peer_thread.join(timeout=10)
         assert not peer_thread.is_alive()
+
+
+def test_grpc_maps_an_unsupported_version_to_failed_precondition() -> None:
+    pytest.importorskip("grpc")
+    import grpc
+    from a2a.types import a2a_pb2
+    from a2a.types.a2a_pb2_grpc import A2AServiceStub
+    from a2a.utils.constants import VERSION_HEADER
+
+    app = build_app(
+        {
+            "name": "demo-agent",
+            "description": "Demo agent",
+            "url": "http://127.0.0.1:9003",
+            "version": "1.0.0",
+            "defaultInputModes": ["text/plain"],
+            "defaultOutputModes": ["text/plain"],
+            "skills": [],
+        },
+        MasLabAgentExecutor(lambda prompt, **_: {"text": f"echo:{prompt}"}),
+    )
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = listener.getsockname()[1]
+
+    async def _run() -> None:
+        server = await start_grpc_server(app.state.a2a_request_handler, host="127.0.0.1", port=port)
+        try:
+            async with grpc.aio.insecure_channel(f"127.0.0.1:{port}") as channel:
+                stub = A2AServiceStub(channel)
+                with pytest.raises(grpc.aio.AioRpcError) as version_error:
+                    await stub.GetTask(
+                        a2a_pb2.GetTaskRequest(id="missing"),
+                        metadata=((VERSION_HEADER.lower(), "0.1"),),
+                    )
+                assert version_error.value.code() == grpc.StatusCode.FAILED_PRECONDITION
+        finally:
+            await server.stop(grace=0)
+
+    asyncio.run(_run())

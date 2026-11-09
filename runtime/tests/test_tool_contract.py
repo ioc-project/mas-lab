@@ -205,7 +205,6 @@ def test_tool_fixture_reads_by_tool_then_wildcard():
     from types import SimpleNamespace
 
     import pytest
-
     from mas.runtime.contracts import tool_fixture
 
     ctx = SimpleNamespace(tool_fixtures={"by_tool": {"get_logs": {"a": 1}, "*": {"b": 2}}})

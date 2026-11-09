@@ -37,15 +37,7 @@ def test_telemetry_path_is_still_an_output_sink() -> None:
 
 def test_checkpoint_storage_path_is_a_runtime_directory_not_an_input_ref() -> None:
     refs = dict(
-        iter_ref_paths(
-            {
-                "spec": {
-                    "checkpoint": {
-                        "storage": {"kind": "hybrid", "path": ".mas/t06-checkpoints"}
-                    }
-                }
-            }
-        )
+        iter_ref_paths({"spec": {"checkpoint": {"storage": {"kind": "hybrid", "path": ".mas/t06-checkpoints"}}}})
     )
     assert "spec.checkpoint.storage.path" not in refs
 

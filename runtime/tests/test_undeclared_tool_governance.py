@@ -112,9 +112,7 @@ def test_undeclared_tool_block_is_fed_back_not_fatal() -> None:
         def invoke(self, io):
             ret = super().invoke(io)
             if io.op == "LLM_CALL":
-                return ret.model_copy(
-                    update={"offered_tools": ["get_metrics", "get_logs"]}
-                )
+                return ret.model_copy(update={"offered_tools": ["get_metrics", "get_logs"]})
             return ret
 
     engine = _Engine(
@@ -133,11 +131,7 @@ def test_undeclared_tool_block_is_fed_back_not_fatal() -> None:
     gov_ex = [ex for ex in trace.exchanges if ex.kind == "gov_block"]
     assert gov_ex, f"expected AGENT->GOV exchange, got {[ex.kind for ex in trace.exchanges]!r}"
     assert any("gov_no_undeclared_tool" in (ex.policy_name or "") for ex in gov_ex)
-    results = [
-        ev.text
-        for ev in inst.kernel.run.events
-        if ev.response_kind == "TOOL_RESULT"
-    ]
+    results = [ev.text for ev in inst.kernel.run.events if ev.response_kind == "TOOL_RESULT"]
     assert any("was not in the tools list offered to you" in (t or "") for t in results)
     assert any("get_metrics" in (t or "") for t in results)
     assert trace.client_responses
@@ -187,9 +181,7 @@ def test_undeclared_tool_block_is_in_native_events_jsonl(tmp_path: Path) -> None
         def invoke(self, io):
             ret = super().invoke(io)
             if io.op == "LLM_CALL":
-                return ret.model_copy(
-                    update={"offered_tools": ["get_metrics", "get_logs"]}
-                )
+                return ret.model_copy(update={"offered_tools": ["get_metrics", "get_logs"]})
             return ret
 
     events_path = tmp_path / "events.jsonl"
@@ -216,10 +208,7 @@ def test_undeclared_tool_block_is_in_native_events_jsonl(tmp_path: Path) -> None
     records = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
     gov = [r for r in records if r.get("kind") == "governance_decision"]
     blocked = [
-        r
-        for r in gov
-        if r.get("decision") == "BLOCK"
-        and "gov_no_undeclared_tool" in (r.get("policy_name") or "")
+        r for r in gov if r.get("decision") == "BLOCK" and "gov_no_undeclared_tool" in (r.get("policy_name") or "")
     ]
     assert blocked, f"no BLOCK from gov_no_undeclared_tool in {gov!r}"
     assert any("get_deployments" in (r.get("reason") or "") for r in blocked)

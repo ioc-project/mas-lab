@@ -28,10 +28,7 @@ def test_a2a_agent_comm_implements_the_peer_transport_contract() -> None:
 
     assert isinstance(plugin, AgentCommContract)
     assert plugin.send("worker", "task", headers={"traceparent": "00-aa-bb-01"}) == "remote response"
-    assert (
-        asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"}))
-        == "remote response"
-    )
+    assert asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"})) == "remote response"
     client.send_message.assert_called_with(
         "task",
         context_id="",

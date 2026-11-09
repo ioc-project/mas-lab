@@ -140,23 +140,6 @@ def delegation_targets(manifest: dict | None, *, agent_id: str | None = None) ->
     return seen
 
 
-def node_dispatch(manifest: dict | None, *, agent_id: str | None = None) -> str:
-    """Return ``workflow.nodes[].dispatch`` for one agent (empty if unset)."""
-    nodes = [n for n in (_workflow(manifest).get("nodes") or []) if isinstance(n, dict)]
-    aid = agent_id or entry_agent_id(manifest)
-    if not aid:
-        return ""
-    for node in nodes:
-        if str(node.get("id") or "") == aid:
-            return str(node.get("dispatch") or "").strip().lower()
-    return ""
-
-
-def uses_parallel_dispatch(manifest: dict | None, *, agent_id: str | None = None) -> bool:
-    """True when the node fans out to all ``delegates_to`` peers in one act."""
-    return node_dispatch(manifest, agent_id=agent_id) in {"parallel", "all"}
-
-
 def delegate_tool_name(agent_id: str) -> str:
     return f"{DELEGATE_TOOL_PREFIX}{agent_id}"
 

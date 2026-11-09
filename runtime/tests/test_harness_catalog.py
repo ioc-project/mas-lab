@@ -27,9 +27,7 @@ def test_builtin_harness_dag_closes_on_kernel_ops() -> None:
 def test_illegal_leaf_is_a_fourth_path() -> None:
     catalog = default_catalog()
     with pytest.raises(IllegalHarnessLeafError, match="fourth path"):
-        catalog.register(
-            HarnessComposition(name="sneaky", uses=("httpx",), description="nope")
-        )
+        catalog.register(HarnessComposition(name="sneaky", uses=("httpx",), description="nope"))
 
 
 def test_cycle_is_rejected() -> None:

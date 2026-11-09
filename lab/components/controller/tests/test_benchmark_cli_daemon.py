@@ -1,10 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Benchmark CLI always submits via controller daemon."""
+
 from __future__ import annotations
 
 import time
-import pytest
+
 from click.testing import CliRunner
 
 

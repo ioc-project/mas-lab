@@ -33,7 +33,7 @@ from mas.ctl.executor.run_mas import execute_run_mas
     "--flavour",
     default="local",
     show_default=True,
-    help="Deployment flavour from library-standard (only 'local' supported for now)",
+    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
 )
 @click.option("--infra-ref", "infra_refs", multiple=True)
 @middleware_option
@@ -153,6 +153,7 @@ def run_mas_cmd(
             verbose=verbose,
             manifest_dir=session.manifest_dir,
             obs_config=obs_cfg,
+            flavour_spec=flavour_spec,
             **trace.as_session_kwargs(),
         )
     raise SystemExit(rc)

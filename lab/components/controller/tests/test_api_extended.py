@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Extended ControllerAPI coverage."""
+
 from __future__ import annotations
 
 import tempfile
@@ -136,4 +137,3 @@ def test_api_tools_skills_and_step_types(sample_lab, monkeypatch):
     assert isinstance(api.list_skills("demo"), list)
     step_types = api.pipeline_step_types()
     assert "step_types" in step_types
-

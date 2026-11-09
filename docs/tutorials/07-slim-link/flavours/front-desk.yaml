@@ -1,0 +1,14 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: flavour/v1
+kind: Flavour
+metadata:
+  name: desk-front-desk
+  description: Triage is served here; billing and outage are served by another process on the node.
+spec:
+  bind:
+    agent_comm: [desk-node]
+    usage: [connect, listen]
+    agents:
+      billing: {usage: connect}
+      outage: {usage: connect}

@@ -73,6 +73,21 @@ def test_check_agent_comm_against_local_group() -> None:
     check_agent_comm(links, on_request=_on_request(links))
 
 
+def test_a_send_that_does_not_reply_in_time_fails() -> None:
+    import time
+
+    fabric = LocalGroupFabric()
+    a = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric, reply_timeout_s=0.1)
+
+    def hang(task: str, **_kw: Any) -> str:
+        time.sleep(2)
+        return task
+
+    LocalGroupAgentComm(name="acme/lab/mas/b", fabric=fabric, on_request=hang)
+    with pytest.raises(AgentCommError, match="reply timed out"):
+        a.send("b", "hi")
+
+
 @pytest.mark.asyncio
 async def test_check_agent_comm_async_against_local_group() -> None:
     _, links = _links(2)
@@ -249,7 +264,9 @@ def test_redaction_layer_can_drop_baggage() -> None:
     b._on_request = handler
     hop = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
     assert stacked.send(b.agent_id, "x", headers={"traceparent": hop, "baggage": "secret=1"}) == "ack:x"
-    assert seen[0].get("traceparent") == hop
+    # the stack mints a child span on the same trace
+    assert seen[0]["traceparent"].split("-")[1] == hop.split("-")[1]
+    assert seen[0]["traceparent"].split("-")[2] != hop.split("-")[2]
     assert "baggage" not in seen[0]
 
 
@@ -661,3 +678,36 @@ def test_local_agent_comm_stays_the_session_bus() -> None:
     assert local.send("peer", "x") == "bus:x"
     assert not hasattr(local, "create_channel")
     assert not hasattr(local, "publish")
+
+
+def test_a_local_group_stack_runs_the_turn_with_the_short_id() -> None:
+    from mas.library.standard.lib.stack import StackHandle
+
+    seen: list[str] = []
+
+    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+        seen.append(agent_id)
+        return f"ok:{agent_id}:{task}"
+
+    stack = StackHandle("room", [{"type": "local-group", "params": {"identity": "acme/lab/mas"}}], run_turn)
+    stack.link("moderator")
+    stack.link("schedule_agent")
+    try:
+        result = stack.link("moderator").send("schedule_agent", "quote")
+        assert result == "ok:schedule_agent:quote"
+        assert seen == ["schedule_agent"]
+    finally:
+        stack.close()
+
+
+def test_a_local_group_stack_shares_one_fabric_and_closes_it() -> None:
+    from mas.library.standard.lib.stack import StackHandle
+
+    stack = StackHandle("room", [{"type": "local-group", "params": {"identity": "acme/lab/mas", "inbox_limit": 3}}])
+    a, b = stack.link("a"), stack.link("b")
+    fabric = a._layers[0].link.fabric
+    assert fabric is b._layers[0].link.fabric
+    assert fabric.inbox_limit == 3
+    assert sorted(fabric.nodes) == ["acme/lab/mas/a", "acme/lab/mas/b"]
+    stack.close()
+    assert fabric.nodes == {}

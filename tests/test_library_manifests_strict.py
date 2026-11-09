@@ -54,23 +54,18 @@ def test_library_plugins_is_a_list_and_types_cover_entries(path: Path) -> None:
     plugins = doc.get("plugins")
     if plugins is None:
         return
-    assert isinstance(plugins, list), (
-        f"{path}: plugins: must be a list of declarations, not {type(plugins).__name__}"
-    )
+    assert isinstance(plugins, list), f"{path}: plugins: must be a list of declarations, not {type(plugins).__name__}"
     declared_types = {str(t) for t in (doc.get("types") or [])}
     for index, entry in enumerate(plugins):
         assert isinstance(entry, dict), f"{path}: plugins[{index}] must be a mapping"
         plugin_type = entry.get("type")
         assert plugin_type, f"{path}: plugins[{index}] missing type:"
-        assert plugin_type in declared_types, (
-            f"{path}: plugin type {plugin_type!r} is not listed in types:"
-        )
+        assert plugin_type in declared_types, f"{path}: plugin type {plugin_type!r} is not listed in types:"
         assert entry.get("name"), f"{path}: plugins[{index}] missing name:"
         factory = entry.get("factory") or (entry.get("attributes") or {}).get("factory")
         has_class = entry.get("module") and entry.get("class")
         assert has_class or factory, (
-            f"{path}: plugins[{index}] needs module+class, or factory: "
-            "(module:function returning metrics)"
+            f"{path}: plugins[{index}] needs module+class, or factory: (module:function returning metrics)"
         )
 
 
@@ -91,9 +86,7 @@ def test_packaged_library_plugin_classes_import(path: Path, monkeypatch) -> None
     monkeypatch.syspath_prepend(str(path.parent.parent))
     for entry in doc.get("plugins") or []:
         module = importlib.import_module(str(entry["module"]))
-        assert hasattr(module, str(entry["class"])), (
-            f"{path}: {entry['module']}:{entry['class']} is not importable"
-        )
+        assert hasattr(module, str(entry["class"])), f"{path}: {entry['module']}:{entry['class']} is not importable"
 
 
 def test_plugin_extras_are_bare_extra_names() -> None:
@@ -105,8 +98,7 @@ def test_plugin_extras_are_bare_extra_names() -> None:
             if not extra:
                 continue
             assert "[" not in str(extra), (
-                f"{path}: plugins[{index}].extra must be a bare extra name, "
-                f"not a pip spec ({extra!r})"
+                f"{path}: plugins[{index}].extra must be a bare extra name, not a pip spec ({extra!r})"
             )
 
 

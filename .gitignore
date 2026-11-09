@@ -59,6 +59,8 @@ tests/.tutorial-engine-cache/
 .demo-cache/
 # Local mas-ctl chat traces next to an agent (fixtures live under fixtures/ or T01 traces/)
 docs/tutorials/**/agents/**/traces/
+# run-mas events next to the Tutorial 7 desk
+docs/tutorials/07-slim-link/traces/
 
 # Backup files
 *.bak

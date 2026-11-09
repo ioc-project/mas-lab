@@ -58,7 +58,7 @@ With go-task installed, use these tasks:
 
 | Task | What it runs |
 | --- | --- |
-| `task verify-lint` | Lockfile, path literals, Ruff on changed Python. Run this before a push. |
+| `task verify-lint` | Lockfile, path literals, Ruff check and format on changed Python. Run this before a push. |
 | `task verify-unit` | Local sequential: runtime + ctl + lab core/bench + repo gates |
 | `task verify-runtime` | `runtime/tests` (CI job **Runtime**) |
 | `task verify-ctl` | `ctl/tests` (CI job **Ctl**) |
@@ -87,7 +87,9 @@ Before you push, run `task verify-lint` (`task install-hooks` installs that as a
 ## Code style
 
 - Use Python 3.11+ with type hints where practical.
-- Keep lines to 120 characters (ruff).
+- Keep lines to 120 characters (ruff). `task verify-lint` runs `ruff check` and
+  `ruff format --check` on the Python a branch changes. Format those files
+  before you commit.
 - Match the naming and module layout of each package.
 - Keep secrets in environment variables. Never commit credentials.
 

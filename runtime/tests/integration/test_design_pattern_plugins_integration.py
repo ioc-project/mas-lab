@@ -2,8 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Design-pattern plugins registered and expose protocol lines."""
 
-from mas.runtime.kernel.config import KernelConfig
-from mas.runtime.kernel.state import DpState, QProduct
 from mas.library.standard.plugins.design_patterns.cot import CotPlugin
 from mas.library.standard.plugins.design_patterns.introspection import IntrospectionPlugin
 from mas.library.standard.plugins.design_patterns.react import ReactPlugin
@@ -11,6 +9,8 @@ from mas.library.standard.plugins.design_patterns.tree_of_thoughts import (
     TreeOfThoughtsPlugin,
     _parse_thoughts,
 )
+from mas.runtime.kernel.config import KernelConfig
+from mas.runtime.kernel.state import QProduct
 from mas.runtime.registry import get_registry
 
 

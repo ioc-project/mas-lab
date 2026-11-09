@@ -19,8 +19,7 @@ def test_importing_library_ioa_pins_a2a_flag(monkeypatch: pytest.MonkeyPatch) ->
         [
             sys.executable,
             "-c",
-            "import os; import library_ioa; "
-            "print(os.environ['OTEL_INSTRUMENTATION_A2A_SDK_ENABLED'])",
+            "import os; import library_ioa; print(os.environ['OTEL_INSTRUMENTATION_A2A_SDK_ENABLED'])",
         ],
         check=True,
         capture_output=True,

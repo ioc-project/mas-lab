@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryRegistry,
     WorkingMemorySnapshot,
@@ -52,10 +51,7 @@ def test_session_checkpoint_captures_kernel_memory_manifest_and_lineage() -> Non
     assert session.checkpoint_history == [str(checkpoint_path)]
     assert store.payload["version"] == 2
     assert store.payload["turn"] == 3
-    assert any(
-        message["content"] == "hello"
-        for message in store.payload["working_memory"][0]["committed_messages"]
-    )
+    assert any(message["content"] == "hello" for message in store.payload["working_memory"][0]["committed_messages"])
     assert store.payload["working_memory"][0]["working_messages"][0]["tool_calls"][0]["id"] == "tool-call-current"
     assert store.payload["manifest"]["content"]["name"] == "agent-1"
     assert store.payload["lineage"]["root_session_id"] == "session-1"

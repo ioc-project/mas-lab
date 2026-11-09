@@ -1,13 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for Run Input Envelope (mas.lab.inputs)."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 import yaml
-
 from mas.lab.inputs import (
     RunInput,
     load_run_input,
@@ -164,9 +164,7 @@ def test_legacy_expectations_correct_action_folds_into_details(caplog):
             {
                 "id": "routing-policy-rollback",
                 "inputs": {"user": "Triage the edge-gateway regression."},
-                "expectations": {
-                    "correct_action": {"service": "edge-gateway", "action": "rollback"}
-                },
+                "expectations": {"correct_action": {"service": "edge-gateway", "action": "rollback"}},
             }
         )
     assert run.expectations["details"]["correct_action"] == {

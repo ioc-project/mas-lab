@@ -6,11 +6,11 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-
-from mas.ctl.compose.models import AgentBindSlice, EffectiveBindManifest, ResolvedInfra
-from mas.ctl.compose.models import PlacementPlan
+from mas.ctl.benchmark.runner_dispatch import is_mas_manifest_kind, mas_manifest_path
+from mas.ctl.compose.models import AgentBindSlice, EffectiveBindManifest, PlacementPlan, ResolvedInfra
 from mas.ctl.compose.runner import ComposeResult
 from mas.ctl.executor.mas_session import (
+    MaterializedMas,
     agent_manifest_label,
     entry_agent_id,
     make_workflow_send,
@@ -18,7 +18,7 @@ from mas.ctl.executor.mas_session import (
     resolve_entry_pattern_plugin_id,
     wire_peer_delegation,
 )
-from mas.ctl.benchmark.runner_dispatch import is_mas_manifest_kind, mas_manifest_path
+from mas.library.standard.lib.stack.handle import SessionTurn
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryConfig,
     reset_working_memory_registry,
@@ -109,7 +109,7 @@ def test_prepare_delegation_entry_session_sets_driver_agent_id(tmp_path: Path):
         ),
         plan=PlacementPlan(),
     )
-    materialized = SimpleNamespace(
+    materialized = MaterializedMas(
         compose=compose,
         materialized=SimpleNamespace(instances={"moderator": instance}),
         mas_base_dir=tmp_path,
@@ -149,7 +149,9 @@ def _materialized_with_agents(agent_ids: list[str], tmp_path: Path):
     # MagicMock() auto-vivifies a fresh child mock on every attribute access,
     # including `.inner` — so without this, leaf_engine() never terminates
     # and the process runs away (confirmed: unbounded memory growth).
-    instances = {aid: SimpleNamespace(driver=SimpleNamespace(agent_id=None, engine=MagicMock(inner=None))) for aid in agent_ids}
+    instances = {
+        aid: SimpleNamespace(driver=SimpleNamespace(agent_id=None, engine=MagicMock(inner=None))) for aid in agent_ids
+    }
     compose = ComposeResult(
         mas_id="demo",
         mas_config=_mas_config_two_level_delegation(),
@@ -166,7 +168,7 @@ def _materialized_with_agents(agent_ids: list[str], tmp_path: Path):
         ),
         plan=PlacementPlan(),
     )
-    return SimpleNamespace(
+    return MaterializedMas(
         compose=compose,
         materialized=SimpleNamespace(instances=instances),
         mas_base_dir=tmp_path,
@@ -179,9 +181,7 @@ def test_wire_peer_delegation_wires_non_entry_agent_with_own_peers(tmp_path: Pat
     engine too, not just the entry's. Regression for the "nested/multi-level
     delegation isn't a thing here" gap (mas_session.py's old from_agent-is-
     always-entry assumption)."""
-    materialized = _materialized_with_agents(
-        ["moderator", "schedule_agent", "concierge_agent"], tmp_path
-    )
+    materialized = _materialized_with_agents(["moderator", "schedule_agent", "concierge_agent"], tmp_path)
 
     def _fake_manifest(bind, agent_id):
         return {"metadata": {"name": agent_id}, "spec": {}}
@@ -206,12 +206,8 @@ def test_wire_peer_delegation_wires_non_entry_agent_with_own_peers(tmp_path: Pat
 
 def test_wire_peer_delegation_does_not_load_a2a_without_explicit_protocol(tmp_path: Path):
     """Used Application endpoints without protocol: a2a must not construct A2A."""
-    materialized = _materialized_with_agents(
-        ["moderator", "schedule_agent", "concierge_agent"], tmp_path
-    )
-    materialized.compose.mas_config.setdefault("spec", {})["agency"] = {
-        "agents": [{"id": "remote-peer"}]
-    }
+    materialized = _materialized_with_agents(["moderator", "schedule_agent", "concierge_agent"], tmp_path)
+    materialized.compose.mas_config.setdefault("spec", {})["agency"] = {"agents": [{"id": "remote-peer"}]}
     materialized.compose.resolved_infra = ResolvedInfra(
         applications={"remote-peer": {"url": "http://127.0.0.1:9", "usage": "use"}}
     )
@@ -234,15 +230,11 @@ def test_wire_peer_delegation_does_not_load_a2a_without_explicit_protocol(tmp_pa
     assert any(binding in (None, {}) for _, binding in created)
 
 
-def test_wire_peer_delegation_uses_spec_agent_comm_protocol(tmp_path: Path):
-    """spec.agent_comm.protocol names the in-process comm variant; ctl must
-    not ignore it and construct LocalAgentComm under a hardcoded ``local``."""
-    materialized = _materialized_with_agents(
-        ["moderator", "schedule_agent", "concierge_agent"], tmp_path
-    )
-    materialized.compose.mas_config.setdefault("spec", {})["agent_comm"] = {
-        "protocol": "probe"
-    }
+def test_wire_peer_delegation_uses_the_library_default_link_not_mas_agent_comm(tmp_path: Path):
+    """The in-process link is the registry default (``binding=None``); ctl names no
+    variant, and MAS ``spec.agent_comm`` (refused by the MAS schema) is not read."""
+    materialized = _materialized_with_agents(["moderator", "schedule_agent", "concierge_agent"], tmp_path)
+    materialized.compose.mas_config.setdefault("spec", {})["agent_comm"] = {"protocol": "probe"}
     created: list[tuple[str, dict | None]] = []
     probe = MagicMock(name="probe-comm")
 
@@ -262,11 +254,11 @@ def test_wire_peer_delegation_uses_spec_agent_comm_protocol(tmp_path: Path):
             with patch("mas.runtime.registry.get_registry", return_value=SimpleNamespace(create=_create)):
                 wire_peer_delegation(materialized, entry_id="moderator", already_wired=set())
 
-    assert created == [("agent_comm", {"type": "probe"})]
+    assert created == [("agent_comm", None)]
     assert wired_comms == [probe, probe]
 
 
-def test_prepare_delegation_entry_session_uses_spec_agent_comm_protocol(tmp_path: Path):
+def test_prepare_delegation_entry_session_uses_the_library_default_link(tmp_path: Path):
     driver = SimpleNamespace(agent_id=None, engine=MagicMock(inner=None))
     instance = SimpleNamespace(driver=driver)
     compose = ComposeResult(
@@ -290,7 +282,7 @@ def test_prepare_delegation_entry_session_uses_spec_agent_comm_protocol(tmp_path
         ),
         plan=PlacementPlan(),
     )
-    materialized = SimpleNamespace(
+    materialized = MaterializedMas(
         compose=compose,
         materialized=SimpleNamespace(instances={"moderator": instance}),
         mas_base_dir=tmp_path,
@@ -317,16 +309,14 @@ def test_prepare_delegation_entry_session_uses_spec_agent_comm_protocol(tmp_path
                         entry_manifest=entry_manifest,
                     )
 
-    assert created == [("agent_comm", {"type": "probe"})]
+    assert created == [("agent_comm", None)]
     assert wired_comms == [probe]
 
 
 def test_wire_peer_delegation_skips_agents_without_their_own_peers(tmp_path: Path):
     """concierge_agent has no delegates_to of its own — must not be wired,
     even though it's a valid, materialized agent in the workflow."""
-    materialized = _materialized_with_agents(
-        ["moderator", "schedule_agent", "concierge_agent"], tmp_path
-    )
+    materialized = _materialized_with_agents(["moderator", "schedule_agent", "concierge_agent"], tmp_path)
 
     def _fake_manifest(bind, agent_id):
         return {"metadata": {"name": agent_id}, "spec": {}}
@@ -353,9 +343,7 @@ def test_is_mas_manifest_kind_workflow_app(tmp_path: Path):
 
 
 def _fake_materialized_for_send(agent_ids: list[str]) -> SimpleNamespace:
-    instances = {
-        aid: SimpleNamespace(driver=SimpleNamespace(agent_id=None)) for aid in agent_ids
-    }
+    instances = {aid: SimpleNamespace(driver=SimpleNamespace(agent_id=None)) for aid in agent_ids}
     return SimpleNamespace(instances=instances, bus=None)
 
 
@@ -380,6 +368,7 @@ def test_send_gives_each_delegation_invocation_a_unique_turn_id():
     with patch("mas.ctl.executor.mas_session.SessionController.run_turn", _fake_run_turn):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
+            assert isinstance(send, SessionTurn)  # a chain link can await it (``asend``)
             send("schedule_agent", "turn 1", caller_call_id="deleg-call-aaa")
             send("schedule_agent", "turn 2", caller_call_id="deleg-call-bbb")
             send("schedule_agent", "turn 3", caller_call_id="deleg-call-ccc")
@@ -415,9 +404,7 @@ def test_send_reuses_session_controller_so_trace_plugins_do_not_stack():
     with patch.object(RealController, "__init__", _counting_init):
         with patch("mas.ctl.executor.mas_session.SessionController.run_turn", _fake_run_turn):
             with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
-                send = make_workflow_send(
-                    materialized, display=None, verbose=0, from_agent="moderator"
-                )
+                send = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
                 send("revenue_ops", "turn 1", caller_call_id="c1")
                 send("revenue_ops", "turn 2", caller_call_id="c2")
                 send("revenue_ops", "turn 3", caller_call_id="c3")
@@ -565,9 +552,7 @@ def test_send_passes_session_id_as_the_default_working_memory_key():
     reset_working_memory_registry()
     session_id = "session-xyz"
     captured: list[str] = []
-    materialized = SimpleNamespace(
-        instances={"schedule_agent": _fake_instance_with_ctx()}, bus=None
-    )
+    materialized = SimpleNamespace(instances={"schedule_agent": _fake_instance_with_ctx()}, bus=None)
 
     with patch(
         "mas.ctl.executor.mas_session.SessionController.run_turn",
@@ -590,9 +575,7 @@ def test_send_passes_context_id_as_the_working_memory_key_when_given():
     reset_working_memory_registry()
     session_id = "session-two-contexts"
     captured: list[str] = []
-    materialized = SimpleNamespace(
-        instances={"schedule_agent": _fake_instance_with_ctx()}, bus=None
-    )
+    materialized = SimpleNamespace(instances={"schedule_agent": _fake_instance_with_ctx()}, bus=None)
 
     with patch(
         "mas.ctl.executor.mas_session.SessionController.run_turn",
@@ -620,10 +603,13 @@ def test_workflow_send_closures_own_distinct_working_memory_registries():
         registries.append(self.working_memory_registry)
         return SimpleNamespace(text="ok", awaiting_hitl=False)
 
-    with patch(
-        "mas.ctl.executor.mas_session.SessionController.run_turn",
-        capture_registry,
-    ), patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
+    with (
+        patch(
+            "mas.ctl.executor.mas_session.SessionController.run_turn",
+            capture_registry,
+        ),
+        patch("mas.ctl.executor.mas_session.turn_failed", return_value=False),
+    ):
         first = make_workflow_send(
             materialized,
             display=None,
@@ -664,7 +650,7 @@ def test_prepare_delegation_entry_session_mints_session_id_when_none_given(tmp_p
         ),
         plan=PlacementPlan(),
     )
-    materialized = SimpleNamespace(
+    materialized = MaterializedMas(
         compose=compose,
         materialized=SimpleNamespace(instances={"moderator": instance}),
         mas_base_dir=tmp_path,
@@ -673,7 +659,9 @@ def test_prepare_delegation_entry_session_mints_session_id_when_none_given(tmp_p
     with patch("mas.ctl.executor.mas_session.enrich_entry_agent_for_delegation", return_value=entry_manifest):
         with patch("mas.ctl.executor.mas_session.wire_entry_engine_delegation"):
             prepared_no_session = prepare_delegation_entry_session(
-                materialized, entry_id="moderator", entry_manifest=entry_manifest,
+                materialized,
+                entry_id="moderator",
+                entry_manifest=entry_manifest,
             )
             prepared_with_session = prepare_delegation_entry_session(
                 materialized,
@@ -684,3 +672,58 @@ def test_prepare_delegation_entry_session_mints_session_id_when_none_given(tmp_p
 
     assert prepared_no_session.session_id  # minted, non-empty
     assert prepared_with_session.session_id == "given-session-id"
+
+
+def test_a_request_from_another_agent_to_the_entry_is_not_shown_as_the_user():
+    """A request that reaches the entry over a chain carries the caller's call id. It runs under the
+    agent's label: shown with the user's display it read "You: <request>" next to the input prompt."""
+    import io
+
+    from mas.ctl.session.controller import SessionController as RealController
+    from mas.ctl.ui.stdout import StdoutConversationDisplay
+
+    displays: list[object] = []
+    orig_init = RealController.__init__
+
+    def _init(self, *args, **kwargs):
+        displays.append(kwargs.get("display"))
+        return orig_init(self, *args, **kwargs)
+
+    class _Result:
+        text = "ok"
+        awaiting_hitl = False
+
+    user_display = StdoutConversationDisplay(out=io.StringIO(), agent_label="billing")
+    with patch.object(RealController, "__init__", _init):
+        with patch("mas.ctl.executor.mas_session.SessionController.run_turn", lambda self, *a, **k: _Result()):
+            with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
+                peer = make_workflow_send(
+                    _fake_materialized_for_send(["billing"]), display=user_display, verbose=0, from_agent="billing"
+                )
+                peer("billing", "refund?", 0, "triage-call-1")
+                own = make_workflow_send(
+                    _fake_materialized_for_send(["billing"]), display=user_display, verbose=0, from_agent="billing"
+                )
+                own("billing", "step one")
+    assert displays[0] is not user_display and displays[0]._user_prompt_echoed and displays[0]._agent_label == "billing"
+    assert displays[1] is user_display  # a sequential step of the entry itself keeps the session display
+
+
+def test_an_unknown_peer_on_a_non_entry_node_is_reported_when_the_session_is_wired(tmp_path: Path):
+    from mas.runtime.boundary.agentcomm import UnknownDelegationPeerError
+
+    materialized = _materialized_with_agents(["mod", "a"], tmp_path)
+    materialized.compose.mas_config["spec"] = {
+        "workflow": {
+            "entry": "mod",
+            "nodes": [{"id": "mod", "delegates_to": ["a"]}, {"id": "a", "delegates_to": ["ghost"]}],
+        }
+    }
+
+    def _fake_manifest(bind, agent_id):
+        return {"metadata": {"name": agent_id}, "spec": {}}
+
+    with patch("mas.ctl.executor.mas_session.load_agent_manifest_from_bind", side_effect=_fake_manifest):
+        with patch("mas.ctl.executor.mas_session.wire_entry_engine_delegation"):
+            with pytest.raises(UnknownDelegationPeerError, match="ghost"):
+                wire_peer_delegation(materialized, entry_id="mod", already_wired=set())

@@ -62,19 +62,25 @@ def test_effective_model_window_is_used_for_auto_budget() -> None:
             "models": [{"id": "main", "model": "any", "max_tokens": 12000}],
         }
     }
-    assert history_token_budget(
-        manifest,
-        resolved_model="vertex_ai/gemini-2.5-flash",
-    ) == 1048576 - 12000 - 104858
+    assert (
+        history_token_budget(
+            manifest,
+            resolved_model="vertex_ai/gemini-2.5-flash",
+        )
+        == 1048576 - 12000 - 104858
+    )
 
 
 def test_explicit_window_override_wins_over_resolved_model() -> None:
     manifest = {"spec": {"models": [{"model": "any", "max_tokens": 12000}]}}
-    assert history_token_budget(
-        manifest,
-        resolved_model="vertex_ai/gemini-2.5-flash",
-        context_window_override=256000,
-    ) == 256000 - 12000 - 25600
+    assert (
+        history_token_budget(
+            manifest,
+            resolved_model="vertex_ai/gemini-2.5-flash",
+            context_window_override=256000,
+        )
+        == 256000 - 12000 - 25600
+    )
 
 
 def test_auto_summary_trigger_and_hysteresis_stay_inside_hard_budget() -> None:
@@ -84,10 +90,13 @@ def test_auto_summary_trigger_and_hysteresis_stay_inside_hard_budget() -> None:
             "context_manager": {"type": "summarising"},
         }
     }
-    hard_budget = history_token_budget(
-        manifest,
-        resolved_model="vertex_ai/gemini-2.5-flash",
-    ) - 20000
+    hard_budget = (
+        history_token_budget(
+            manifest,
+            resolved_model="vertex_ai/gemini-2.5-flash",
+        )
+        - 20000
+    )
     trigger = context_manager_history_budget_hint(
         manifest,
         resolved_model="vertex_ai/gemini-2.5-flash",

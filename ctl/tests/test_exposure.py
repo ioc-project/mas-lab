@@ -74,29 +74,35 @@ def test_exposure_targets_binds_hosted_use_and_deploy_specialists() -> None:
 
 
 def test_exposure_targets_skips_use_only_remote_peer() -> None:
-    assert exposure_targets(
-        ["moderator", "schedule_agent"],
-        {
-            "schedule_agent": {
-                "protocol": "a2a",
-                "usage": "use",
-                "url": "http://127.0.0.1:9006",
-            }
-        },
-        conversation_ids=["moderator"],
-    ) == []
+    assert (
+        exposure_targets(
+            ["moderator", "schedule_agent"],
+            {
+                "schedule_agent": {
+                    "protocol": "a2a",
+                    "usage": "use",
+                    "url": "http://127.0.0.1:9006",
+                }
+            },
+            conversation_ids=["moderator"],
+        )
+        == []
+    )
 
 
 def test_exposure_targets_skips_use_only_and_missing_protocol() -> None:
-    assert exposure_targets(
-        ["assistant", "oracle", "weather"],
-        {
-            "assistant": {"protocol": "a2a", "usage": "use", "url": "http://127.0.0.1:9001"},
-            "oracle": {"url": "http://127.0.0.1:9005"},
-            "weather": {"protocol": "mcp", "usage": "deploy", "url": "http://127.0.0.1:9001/mcp"},
-        },
-        conversation_ids=["assistant"],
-    ) == []
+    assert (
+        exposure_targets(
+            ["assistant", "oracle", "weather"],
+            {
+                "assistant": {"protocol": "a2a", "usage": "use", "url": "http://127.0.0.1:9001"},
+                "oracle": {"url": "http://127.0.0.1:9005"},
+                "weather": {"protocol": "mcp", "usage": "deploy", "url": "http://127.0.0.1:9001/mcp"},
+            },
+            conversation_ids=["assistant"],
+        )
+        == []
+    )
 
 
 def _materialized(applications: dict, agent_ids: list[str]) -> SimpleNamespace:
@@ -200,12 +206,15 @@ def test_expose_agent_blocking_is_the_serve_path() -> None:
     endpoint = {"protocol": "a2a", "usage": "deploy", "url": "http://127.0.0.1:9005"}
 
     with patch("mas.runtime.registry.get_registry", return_value=SimpleNamespace(create=lambda *a, **k: exposure)):
-        assert expose_agent(
-            instance,
-            {"metadata": {"name": "qa-agent"}},
-            endpoint,
-            blocking=True,
-        ) is None
+        assert (
+            expose_agent(
+                instance,
+                {"metadata": {"name": "qa-agent"}},
+                endpoint,
+                blocking=True,
+            )
+            is None
+        )
 
     exposure.serve_blocking.assert_called_once()
     exposure.serve_background.assert_not_called()

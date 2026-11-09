@@ -1,9 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 """Prepare output directory and scenario configurations."""
+
+from __future__ import annotations
 
 import json as _json
 import logging
@@ -132,7 +132,7 @@ def preload_scenario_configs(
     infra_refs: list[str] | None = None,
 ) -> tuple[dict, dict, list[str]]:
     """Load scenario configs once per scenario."""
-    from mas.lab.lab.config import load_stacked_config, load_scenario_config
+    from mas.lab.lab.config import load_scenario_config, load_stacked_config
 
     exp = loaded.exp
     configs_dir = loaded.configs_dir
@@ -165,6 +165,7 @@ def preload_scenario_configs(
                 _scenario_overlay_stacks[_sid] = overlays
             elif (configs_dir is None or not overlays) and exp.mas and exp.mas.manifest:
                 from mas.lab.manifest.load import load_mas_config
+
                 _mas_man = load_mas_config(
                     exp.mas.manifest,
                     validate=False,
@@ -206,13 +207,14 @@ def resolve_scenario_flavours(
         if _sc_flavour_name and _sc_flavour_name != flavour_name:
             try:
                 from mas.lab.flavour.load import load_flavour as _load_flavour
+
                 _fl_filename = f"{_sc_flavour_name}.yaml"
                 _fl_candidates = [
                     experiment_yaml.parent / "flavours" / _fl_filename,
                 ]
                 _fl_path = next((p for p in _fl_candidates if p.exists()), None)
                 if _fl_path:
-                    _scenario_flavours[_sid] = _load_flavour(_fl_path)
+                    _scenario_flavours[_sid] = _load_flavour(_fl_path, warn_deprecated=True)
                     logger.info(f"Scenario '{_sid}' using flavour: {_sc_flavour_name} ({_fl_path})")
                 else:
                     logger.warning(f"Scenario '{_sid}' flavour '{_sc_flavour_name}' not found")
@@ -241,7 +243,7 @@ def extract_mas_provenance(loaded: LoadedExperiment) -> tuple[str, str, str]:
             _mas_app_version = str(_mas_meta_doc.get("version", ""))
             _mas_ref = workspace_relative_path(exp.mas.manifest, start=ws or loaded.experiment_yaml.parent)
         except Exception:
-            logger.debug('suppressed', exc_info=True)
+            logger.debug("suppressed", exc_info=True)
     return _mas_app, _mas_app_version, _mas_ref
 
 

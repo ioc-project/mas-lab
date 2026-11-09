@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.runtime.engine.llm_reasoning import (
     ReasoningSettings,
     ThinkTagStreamFilter,
@@ -62,18 +61,14 @@ def test_deprecated_spec_llm_nested_reasoning():
 
 
 def test_exclude_false_is_honored():
-    settings = reasoning_settings_from_manifest(
-        {"spec": {"models": [{"model": "m", "reasoning": {"exclude": False}}]}}
-    )
+    settings = reasoning_settings_from_manifest({"spec": {"models": [{"model": "m", "reasoning": {"exclude": False}}]}})
     assert settings.exclude is False
     assert settings.exclude_from_spec is True
 
 
 def test_unknown_effort_is_rejected():
     with pytest.raises(ValueError, match="unsupported reasoning.effort"):
-        reasoning_settings_from_manifest(
-            {"spec": {"models": [{"model": "m", "reasoning": {"effort": "ludicrous"}}]}}
-        )
+        reasoning_settings_from_manifest({"spec": {"models": [{"model": "m", "reasoning": {"effort": "ludicrous"}}]}})
 
 
 def test_apply_payload_effort_switches_to_max_completion_tokens():
@@ -240,6 +235,4 @@ def test_settings_from_matching_model_row():
 
 def test_unknown_mode_is_rejected():
     with pytest.raises(ValueError, match="unsupported reasoning.mode"):
-        reasoning_settings_from_manifest(
-            {"spec": {"models": [{"model": "m", "reasoning": {"mode": "turbo"}}]}}
-        )
+        reasoning_settings_from_manifest({"spec": {"models": [{"model": "m", "reasoning": {"mode": "turbo"}}]}})

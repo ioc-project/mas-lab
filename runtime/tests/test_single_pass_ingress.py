@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from mas.library.standard.plugins.design_patterns.single_pass import SinglePassPlugin
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.state import DpState, QProduct, RunLedger
-from mas.library.standard.plugins.design_patterns.single_pass import SinglePassPlugin
 from mas.runtime.schema.ingress import EngineIoReturn
 
 
@@ -23,7 +23,6 @@ def test_single_pass_engine_io_return_uses_apply_engine_io_return():
         text="done",
     )
     config = KernelConfig()
-    evaluate = MagicMock(return_value=[])
 
     with patch(
         "mas.library.standard.plugins.design_patterns.single_pass.apply_engine_io_return",

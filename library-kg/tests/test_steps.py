@@ -77,16 +77,28 @@ def minimal_kg_json(tmp_path) -> Path:
                 "sessionId": "sess-1",
             },
             {
-                "id": "st-in", "node_type": "State", "stateNodeId": "st-in",
-                "contentHash": "h1", "semanticType": "initial", "content": "hello",
+                "id": "st-in",
+                "node_type": "State",
+                "stateNodeId": "st-in",
+                "contentHash": "h1",
+                "semanticType": "initial",
+                "content": "hello",
             },
             {
-                "id": "st-out", "node_type": "State", "stateNodeId": "st-out",
-                "contentHash": "h2", "semanticType": "final", "content": "world",
+                "id": "st-out",
+                "node_type": "State",
+                "stateNodeId": "st-out",
+                "contentHash": "h2",
+                "semanticType": "final",
+                "content": "world",
             },
             {
-                "id": "t-1", "node_type": "Transition", "transitionId": "t-1",
-                "edgeType": "sequential", "fromState": "st-in", "toState": "st-out",
+                "id": "t-1",
+                "node_type": "Transition",
+                "transitionId": "t-1",
+                "edgeType": "sequential",
+                "fromState": "st-in",
+                "toState": "st-out",
             },
         ],
         "edges": [
@@ -226,6 +238,7 @@ class TestRunValidateKg:
 class TestRunNormalize:
     def test_dry_run_returns_counts_without_writing(self, minimal_events_jsonl, tmp_path):
         from mas.library.kg.steps.normalize import run_normalize
+
         artifact = run_normalize(
             minimal_events_jsonl, run_id="test-run", output_dir=tmp_path, dry_run=True
         )
@@ -235,15 +248,15 @@ class TestRunNormalize:
 
     def test_writes_kg_json_to_output_dir(self, minimal_events_jsonl, tmp_path):
         from mas.library.kg.steps.normalize import run_normalize
-        artifact = run_normalize(
-            minimal_events_jsonl, run_id="test-run", output_dir=tmp_path
-        )
+
+        artifact = run_normalize(minimal_events_jsonl, run_id="test-run", output_dir=tmp_path)
         assert artifact.node_count >= 0
         assert artifact.edge_count >= 0
         assert (tmp_path / "kg.jsonld").exists()
 
     def test_result_has_required_keys(self, minimal_events_jsonl, tmp_path):
         from mas.library.kg.steps.normalize import run_normalize
+
         artifact = run_normalize(
             minimal_events_jsonl, run_id="test-run", output_dir=tmp_path, dry_run=True
         )
@@ -388,6 +401,7 @@ class TestRunAnnotate:
 
     def test_writes_output_to_specified_path(self, minimal_kg_json, tmp_path):
         from mas.library.kg.steps.annotate import run_annotate
+
         out = tmp_path / "enriched_kg.jsonld"
         _result = run_annotate(
             minimal_kg_json,

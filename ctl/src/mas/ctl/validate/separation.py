@@ -43,7 +43,7 @@ class SeparationValidator(ABC):
 class FlavourSeparationValidator(SeparationValidator):
     kind = "flavour"
 
-    # FT4: a flavour is deployment posture only — these moved to kind: Agent
+    # A flavour links the logic spec to the infra; these belong to kind: Agent
     # (llm, skills). Offline LLM is llm_cache replay, not a Flavour field.
     # See docs/design/flavour-boundary.md.
     _FORBIDDEN_BLOCKS: ClassVar[dict[str, str]] = {

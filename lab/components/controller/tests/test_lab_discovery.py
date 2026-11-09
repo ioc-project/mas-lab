@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for nested lab artifact discovery and MAS schema validation."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 from mas.lab.controller.lab_registry import LabRegistry, reset_lab_registry
 from mas.lab.controller.manifest_store import ManifestStore
 
@@ -32,8 +32,7 @@ def nested_lab(tmp_path: Path) -> Path:
             encoding="utf-8",
         )
         (mod / "datasets" / f"{mod.name}-queries.yaml").write_text(
-            f"apiVersion: lab/v1\nkind: Dataset\nmetadata:\n  name: {mod.name}-queries\n"
-            f"spec:\n  items: []\n",
+            f"apiVersion: lab/v1\nkind: Dataset\nmetadata:\n  name: {mod.name}-queries\nspec:\n  items: []\n",
             encoding="utf-8",
         )
         (mod / "experiment.yaml").write_text(
@@ -243,9 +242,7 @@ def test_lab_library_includes_workspace_apps(nested_lab: Path, monkeypatch):
     monkeypatch.setattr(
         reg,
         "runtime_objects",
-        lambda kind: {"trip-planner": nested_lab / "apps" / "trip-planner"}
-        if kind == "app"
-        else {},
+        lambda kind: {"trip-planner": nested_lab / "apps" / "trip-planner"} if kind == "app" else {},
     )
     (nested_lab / "apps" / "trip-planner").mkdir(parents=True, exist_ok=True)
     (nested_lab / "apps" / "trip-planner" / "mas.yaml").write_text(
@@ -289,7 +286,6 @@ def test_config_files_include_workspace_infra(tmp_path: Path, monkeypatch):
     assert any(k.startswith("workspace/infra/") for k in configs["infra"])
     assert "config.yaml" not in configs["workspace"] or configs["workspace"] == {}
     reset_lab_registry()
-
 
 
 def test_list_all_experiments_across_libraries(tmp_path: Path):
@@ -377,9 +373,7 @@ def test_manifest_store_invalidate_delegates_to_registry(nested_lab: Path, monke
     registry._libraries = {"design-space": nested_lab}
 
     calls = {"n": 0}
-    monkeypatch.setattr(
-        registry, "invalidate_manifest_cache", lambda: calls.__setitem__("n", calls["n"] + 1)
-    )
+    monkeypatch.setattr(registry, "invalidate_manifest_cache", lambda: calls.__setitem__("n", calls["n"] + 1))
 
     store = ManifestStore(registry=registry)
     store._libraries = {"design-space": nested_lab}

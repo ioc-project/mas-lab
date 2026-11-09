@@ -131,7 +131,7 @@ const Pipelines = () => {
     };
 
     pollTimers.current[pipelineName] = setTimeout(poll, POLL_INTERVAL);
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     const recoverJobs = async () => {
@@ -353,7 +353,7 @@ const Pipelines = () => {
         },
       },
     ],
-    [runningJobs],
+    [],
   );
 
   const enrichedData = useMemo(

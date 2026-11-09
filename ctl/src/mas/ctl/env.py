@@ -72,6 +72,20 @@ def env_model_override(*, replaces: str = "the declared model") -> str | None:
     return None
 
 
+def env_named_secret(name: str) -> str:
+    """Read a secret from an environment variable named in a manifest.
+
+    Logs the variable name, never the value. Empty or malformed names raise.
+    """
+    token = str(name or "").strip()
+    if not token or any(ch in token for ch in " \n=/"):
+        raise ValueError("secret_env must be an environment variable name")
+    value = os.environ.get(token, "").strip()
+    if not value:
+        raise ValueError(f"missing secret in environment variable {token!r}")
+    return value
+
+
 def load_dotenv(
     *,
     cwd: Path | None = None,

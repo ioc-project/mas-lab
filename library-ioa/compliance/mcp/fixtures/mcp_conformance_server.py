@@ -106,9 +106,7 @@ def _input_required_elicitation(ctx: Context, key: str, message: str, model: typ
         return _text(f"Elicitation completed: action={action}, content={json.dumps(content, separators=(',', ':'))}")
 
     schema = model.model_json_schema()
-    return _input_required(
-        {key: _elicit_request(message, schema["properties"], schema.get("required", []))}
-    )
+    return _input_required({key: _elicit_request(message, schema["properties"], schema.get("required", []))})
 
 
 def _elicit_request(message: str, properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -467,9 +465,7 @@ def build_server() -> MCPToolServerFactory:
         requests: dict[str, dict[str, Any]] = {}
         capabilities = ctx.client_capabilities
         if capabilities and capabilities.elicitation is not None:
-            requests["elicit_input"] = _elicit_request(
-                "Elicitation input", {"value": {"type": "string"}}, ["value"]
-            )
+            requests["elicit_input"] = _elicit_request("Elicitation input", {"value": {"type": "string"}}, ["value"])
         if capabilities and capabilities.sampling is not None:
             requests["sample_input"] = _sampling_request("Sample request", 50)
         if not requests:

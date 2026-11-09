@@ -24,10 +24,7 @@ def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
     assert isinstance(plugin, AgentCommContract)
     assert plugin.send("worker", "task", headers={"traceparent": "00-aa-bb-01"}) == "remote response"
     assert plugin.send("worker", "task", context=SendContext(headers={"k": "v"}, sender="evil")) == "remote response"
-    assert (
-        asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"}))
-        == "remote response"
-    )
+    assert asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"})) == "remote response"
     client.send_message.assert_called_with(
         "task",
         context_id="",

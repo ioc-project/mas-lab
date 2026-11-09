@@ -1,11 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Tests for registry-backed library discovery."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 
@@ -46,8 +46,7 @@ def test_collect_mas_resources_versioned_app(tmp_path: Path):
     agents = app / "agents"
     agents.mkdir(parents=True)
     (lib / "library.yaml").write_text(
-        "apiVersion: mas/v1\nkind: Library\nname: mas-example-library\n"
-        "apps:\n  trip-planner: apps/trip-planner\n",
+        "apiVersion: mas/v1\nkind: Library\nname: mas-example-library\napps:\n  trip-planner: apps/trip-planner\n",
         encoding="utf-8",
     )
     (agents / "planner.yaml").write_text("metadata:\n  name: planner\nspec: {}\n", encoding="utf-8")

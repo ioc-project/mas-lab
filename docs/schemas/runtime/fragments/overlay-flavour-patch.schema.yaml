@@ -12,6 +12,8 @@ additionalProperties: false
 patternProperties:
   "^x-": {}
 properties:
+  bind:
+    $ref: "../flavour.schema.yaml#/properties/spec/properties/bind"
   agent_comm:
     $ref: "../flavour.schema.yaml#/properties/spec/properties/agent_comm"
   capabilities:

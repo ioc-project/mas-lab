@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Daemon IPC and lifecycle tests."""
+
 from __future__ import annotations
 
 import json
@@ -8,8 +9,8 @@ import threading
 import time
 
 import mas.lab.controller.daemon as daemon_mod
-from mas.lab.controller.api import ControllerAPI
 from mas.lab.controller import config as cfg
+from mas.lab.controller.api import ControllerAPI
 from mas.lab.controller.daemon import _handle_request, _serve_socket, main
 
 

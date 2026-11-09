@@ -11,6 +11,7 @@ import click
 import yaml
 from mas.ctl.cli.bind_flags import middleware_option
 from mas.ctl.libraries.bundles import list_bundles, list_manifest_libraries
+from mas.ctl.session.flavour import SUPPORTED_FLAVOURS
 
 INFRA_SHOW_EPILOG = """
 Examples:
@@ -61,6 +62,12 @@ def infra_list(verbose: bool) -> None:
     help="Schema-validated overlay override (repeatable; applied last).",
 )
 @middleware_option
+@click.option(
+    "--flavour",
+    default="local",
+    show_default=True,
+    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file; its bind chains are the comm column.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Print the stable JSON document.")
 def infra_show(
     manifest: str | None,
@@ -68,16 +75,21 @@ def infra_show(
     runtime_refs: tuple[str, ...],
     overrides: tuple[str, ...],
     middleware_refs: tuple[str, ...],
+    flavour: str,
     as_json: bool,
 ) -> None:
-    """Print each LLM and tool chain, and each agent's comm stack.
+    """Print each LLM and tool chain, each agent's comm stack, and its name on the chain.
 
     Same --infra-ref / --runtime-ref / --override / --middleware flags as
     chat and run-mas. Output is bounded (32 destinations, 16 steps each).
     """
-    from mas.ctl.infra.show import agents_from_manifest, infra_show_payload, render_infra_show
+    from mas.ctl.infra.bind import bind_flavour
+    from mas.ctl.infra.resolve import InfraResolveError
+    from mas.ctl.infra.show import agents_from_manifest, document_agent_ids, infra_show_payload, render_infra_show
+    from mas.ctl.session.flavour import resolve_flavour
     from mas.ctl.session.infra_resolve import resolve_session_infra
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.library.standard.lib.stack import StackError
 
     start = Path(manifest).expanduser().resolve().parent if manifest else Path.cwd()
     workspace = WorkspaceConfig.load(start)
@@ -87,32 +99,44 @@ def infra_show(
     if manifest:
         loaded = yaml.safe_load(Path(manifest).expanduser().read_text(encoding="utf-8"))
         document = loaded if isinstance(loaded, dict) else None
-    infra = resolve_session_infra(
-        document,
-        workspace,
-        user,
-        infra_refs_cli=infra_refs,
-        overrides=overrides,
-        runtime_refs_cli=runtime_refs,
-        middleware_refs=middleware_refs,
-        anchor=start,
-        with_interceptors=True,
-    )
-    payload = infra_show_payload(infra, agents=agents_from_manifest(document))
+    try:
+        flavour_spec = resolve_flavour(flavour, overrides=overrides)
+        infra = resolve_session_infra(
+            document,
+            workspace,
+            user,
+            infra_refs_cli=infra_refs,
+            overrides=overrides,
+            runtime_refs_cli=runtime_refs,
+            middleware_refs=middleware_refs,
+            anchor=start,
+            with_interceptors=True,
+        )
+        infra = bind_flavour(infra, flavour_spec, agent_ids=document_agent_ids(document) if document else None)
+        payload = infra_show_payload(infra, agents=agents_from_manifest(document, infra=infra))
+    except (ValueError, InfraResolveError, StackError) as exc:
+        raise click.ClickException(str(exc)) from exc
     if as_json:
         click.echo(json.dumps(payload, indent=2, sort_keys=True))
         return
     click.echo(render_infra_show(payload), nl=False)
 
 
+FLAVOUR_LIST_WARNING = (
+    "warning: mas-ctl flavour list is deprecated; pass --flavour PATH to a Flavour file, "
+    f"or one of the bundled names ({', '.join(SUPPORTED_FLAVOURS)})"
+)
+
+
 @click.group()
 def flavour_group() -> None:
-    """Flavour manifests (deprecated — prefer deployment/v1)."""
+    """Flavour manifests."""
 
 
 @flavour_group.command("list")
 def flavour_list() -> None:
-    """List flavour YAML files from installed libraries."""
+    """List flavour YAML files from installed libraries (deprecated: use --flavour PATH or a bundled name)."""
+    click.echo(FLAVOUR_LIST_WARNING, err=True)
     try:
         from importlib.resources import as_file, files
     except ImportError:

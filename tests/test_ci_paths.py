@@ -182,9 +182,7 @@ def test_format_outputs_filters_suite_and_library_matrices(paths):
     assert parsed["suite"] == "true"
     assert parsed["hitl"] == "true"
     assert parsed["golden"] == "true"
-    assert json.loads(parsed["unit_matrix"]) == {
-        "include": [{"name": "Runtime", "task": "verify-runtime"}]
-    }
+    assert json.loads(parsed["unit_matrix"]) == {"include": [{"name": "Runtime", "task": "verify-runtime"}]}
     assert json.loads(parsed["library_matrix"]) == {
         "include": [
             {

@@ -34,7 +34,7 @@ from mas.ctl.ui.curses_app import build_curses_controller, run_curses_session
     "--flavour",
     default="local",
     show_default=True,
-    help="Deployment flavour from library-standard (only 'local' supported for now)",
+    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
 )
 @click.option("--single-turn", is_flag=True)
 @click.option("--memory-seed", default=None, type=click.Path(exists=True))
@@ -100,6 +100,9 @@ def tui_cmd(
         overrides=(*max_tokens_overrides(max_tokens), *overrides),
     )
 
+    from mas.ctl.session.flavour import flavour_argument
+
+    flavour = flavour_argument(flavour)
     with manifest_cwd(manifest, overlay_paths=overlays) as session:
         load_dotenv(cwd=session.original_cwd, manifest_dir=session.manifest_dir)
         workspace = WorkspaceConfig.load(session.manifest_dir or session.original_cwd)
@@ -141,6 +144,9 @@ def tui_cmd(
             runtime_refs_cli=runtime_refs_cli,
             anchor=session.manifest_dir or session.original_cwd,
         )
+        from mas.ctl.cli.chains import bind_or_exit, single_agent_chains
+
+        resolved_infra = bind_or_exit(resolved_infra, flavour_spec, agent_id=require_agent_id_from_manifest(agent_data))
         obs_cfg = resolve_observability_config(
             events=events,
             events_file=events_file,
@@ -178,16 +184,19 @@ def tui_cmd(
         infra_lines = list(infra_refs_cli) or workspace.effective_infra_refs or ["local-inproc"]
         from mas.ctl.session.exposure import close_exposures, start_hosted_exposures
 
-        agent_name = str((agent_data or {}).get("metadata", {}).get("name") or "")
-        hosted = {agent_name: instance} if agent_name and agent_data else {}
-        handles = start_hosted_exposures(
-            hosted,
-            resolved_infra.applications,
-            conversation_ids=set(hosted),
-            manifests={agent_name: agent_data} if hosted else None,
-        )
-        try:
-            run_curses_session(controller, infra_lines=infra_lines)
-        finally:
-            close_exposures(handles)
-            close_observability(controller)
+        served_id = require_agent_id_from_manifest(agent_data)
+        with single_agent_chains(instance, served_id, resolved_infra) as chains:
+            controller.turn_guard = chains.turn_lock(served_id)  # a request over the chain waits for your turn
+            agent_name = str((agent_data or {}).get("metadata", {}).get("name") or "")
+            hosted = {agent_name: instance} if agent_name and agent_data else {}
+            handles = start_hosted_exposures(
+                hosted,
+                resolved_infra.applications,
+                conversation_ids=set(hosted),
+                manifests={agent_name: agent_data} if hosted else None,
+            )
+            try:
+                run_curses_session(controller, infra_lines=infra_lines)
+            finally:
+                close_exposures(handles)
+                close_observability(controller)

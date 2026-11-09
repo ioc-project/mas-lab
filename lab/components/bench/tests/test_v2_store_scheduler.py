@@ -6,10 +6,9 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
-
-from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
 from mas.lab.benchmark.pipeline.keys import RunKey
+from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.scheduler import Node, Scheduler
 from mas.lab.benchmark.pipeline.store import ArtifactStore, StoreManifest, compute_node_key
 from mas.library.lab.steps.extract.trace_stats import empty_trace_stats, fold_trace_event, public_trace_stats

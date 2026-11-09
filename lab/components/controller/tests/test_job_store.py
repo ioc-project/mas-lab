@@ -47,23 +47,27 @@ class TestSqliteJobStore:
 
     def test_upsert_updates_existing(self, tmp_path: Path):
         store = SqliteJobStore(tmp_path / "test.db")
-        store.save({
-            "id": "j1",
-            "endpoint": "test/run",
-            "command": "echo hello",
-            "status": "pending",
-            "created_at": "2026-01-01T00:00:00Z",
-            "request_body": {},
-        })
-        store.save({
-            "id": "j1",
-            "endpoint": "test/run",
-            "command": "echo hello",
-            "status": "running",
-            "created_at": "2026-01-01T00:00:00Z",
-            "started_at": "2026-01-01T00:00:01Z",
-            "request_body": {},
-        })
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "test/run",
+                "command": "echo hello",
+                "status": "pending",
+                "created_at": "2026-01-01T00:00:00Z",
+                "request_body": {},
+            }
+        )
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "test/run",
+                "command": "echo hello",
+                "status": "running",
+                "created_at": "2026-01-01T00:00:00Z",
+                "started_at": "2026-01-01T00:00:01Z",
+                "request_body": {},
+            }
+        )
 
         loaded = store.load_all()
         assert len(loaded) == 1
@@ -73,22 +77,26 @@ class TestSqliteJobStore:
 
     def test_get_single_job(self, tmp_path: Path):
         store = SqliteJobStore(tmp_path / "test.db")
-        store.save({
-            "id": "j1",
-            "endpoint": "test/run",
-            "command": "cmd",
-            "status": "completed",
-            "created_at": "2026-01-01T00:00:00Z",
-            "request_body": {},
-        })
-        store.save({
-            "id": "j2",
-            "endpoint": "test/run",
-            "command": "cmd2",
-            "status": "failed",
-            "created_at": "2026-01-01T00:00:01Z",
-            "request_body": {},
-        })
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "test/run",
+                "command": "cmd",
+                "status": "completed",
+                "created_at": "2026-01-01T00:00:00Z",
+                "request_body": {},
+            }
+        )
+        store.save(
+            {
+                "id": "j2",
+                "endpoint": "test/run",
+                "command": "cmd2",
+                "status": "failed",
+                "created_at": "2026-01-01T00:00:01Z",
+                "request_body": {},
+            }
+        )
 
         result = store.get("j1")
         assert result is not None
@@ -100,14 +108,16 @@ class TestSqliteJobStore:
 
     def test_delete(self, tmp_path: Path):
         store = SqliteJobStore(tmp_path / "test.db")
-        store.save({
-            "id": "j1",
-            "endpoint": "e",
-            "command": "c",
-            "status": "completed",
-            "created_at": "t",
-            "request_body": {},
-        })
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "e",
+                "command": "c",
+                "status": "completed",
+                "created_at": "t",
+                "request_body": {},
+            }
+        )
         store.delete("j1")
         assert store.get("j1") is None
         assert store.load_all() == []
@@ -122,14 +132,16 @@ class TestSqliteJobStore:
     def test_request_body_serialization(self, tmp_path: Path):
         store = SqliteJobStore(tmp_path / "test.db")
         body = {"app": "x", "overlays": ["a/b", "c/d"], "reps": 5}
-        store.save({
-            "id": "j1",
-            "endpoint": "e",
-            "command": "c",
-            "status": "pending",
-            "created_at": "t",
-            "request_body": body,
-        })
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "e",
+                "command": "c",
+                "status": "pending",
+                "created_at": "t",
+                "request_body": body,
+            }
+        )
         loaded = store.get("j1")
         assert loaded is not None
         assert loaded["request_body"] == body
@@ -137,15 +149,17 @@ class TestSqliteJobStore:
 
     def test_log_path_persisted(self, tmp_path: Path):
         store = SqliteJobStore(tmp_path / "test.db")
-        store.save({
-            "id": "j1",
-            "endpoint": "e",
-            "command": "c",
-            "status": "completed",
-            "created_at": "t",
-            "request_body": {},
-            "log_path": "/tmp/run.log",
-        })
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "e",
+                "command": "c",
+                "status": "completed",
+                "created_at": "t",
+                "request_body": {},
+                "log_path": "/tmp/run.log",
+            }
+        )
         loaded = store.get("j1")
         assert loaded is not None
         assert loaded["log_path"] == "/tmp/run.log"
@@ -282,25 +296,29 @@ class TestLoadJobsFromStore:
         store = SqliteJobStore(tmp_path / "test.db")
         monkeypatch.setattr(_store_mod, "_store", store)
 
-        store.save({
-            "id": "j1",
-            "endpoint": "test/run",
-            "command": "echo hello",
-            "status": "completed",
-            "created_at": "2026-01-01T00:00:00Z",
-            "exit_code": 0,
-            "request_body": {"app": "sre-triage"},
-        })
-        store.save({
-            "id": "j2",
-            "endpoint": "ioc/run",
-            "command": "python3 run_ioc.py",
-            "status": "failed",
-            "created_at": "2026-01-02T00:00:00Z",
-            "exit_code": 1,
-            "error": "Something went wrong",
-            "request_body": {},
-        })
+        store.save(
+            {
+                "id": "j1",
+                "endpoint": "test/run",
+                "command": "echo hello",
+                "status": "completed",
+                "created_at": "2026-01-01T00:00:00Z",
+                "exit_code": 0,
+                "request_body": {"app": "sre-triage"},
+            }
+        )
+        store.save(
+            {
+                "id": "j2",
+                "endpoint": "ioc/run",
+                "command": "python3 run_ioc.py",
+                "status": "failed",
+                "created_at": "2026-01-02T00:00:00Z",
+                "exit_code": 1,
+                "error": "Something went wrong",
+                "request_body": {},
+            }
+        )
 
         _jobs.clear()
         load_jobs_from_store()
@@ -319,14 +337,16 @@ class TestLoadJobsFromStore:
         store = SqliteJobStore(tmp_path / "test.db")
         monkeypatch.setattr(_store_mod, "_store", store)
 
-        store.save({
-            "id": "j-bad",
-            "endpoint": "test",
-            "command": "cmd",
-            "status": "unknown_status",
-            "created_at": "2026-01-01T00:00:00Z",
-            "request_body": {},
-        })
+        store.save(
+            {
+                "id": "j-bad",
+                "endpoint": "test",
+                "command": "cmd",
+                "status": "unknown_status",
+                "created_at": "2026-01-01T00:00:00Z",
+                "request_body": {},
+            }
+        )
 
         _jobs.clear()
         load_jobs_from_store()
@@ -400,21 +420,23 @@ class TestPersistenceAcrossRestart:
         db_path = tmp_path / "restart.db"
 
         store1 = SqliteJobStore(db_path)
-        store1.save({
-            "id": "survive-1",
-            "endpoint": "ioc/run",
-            "command": "python3 run_ioc.py --app sre-triage",
-            "status": "completed",
-            "created_at": "2026-08-19T10:00:00Z",
-            "started_at": "2026-08-19T10:00:01Z",
-            "finished_at": "2026-08-19T10:30:00Z",
-            "exit_code": 0,
-            "request_body": {
-                "app": "sre-triage",
-                "workspace": str(tmp_path / "ws"),
-            },
-            "log_path": str(tmp_path / "ws" / "out" / "run.log"),
-        })
+        store1.save(
+            {
+                "id": "survive-1",
+                "endpoint": "ioc/run",
+                "command": "python3 run_ioc.py --app sre-triage",
+                "status": "completed",
+                "created_at": "2026-08-19T10:00:00Z",
+                "started_at": "2026-08-19T10:00:01Z",
+                "finished_at": "2026-08-19T10:30:00Z",
+                "exit_code": 0,
+                "request_body": {
+                    "app": "sre-triage",
+                    "workspace": str(tmp_path / "ws"),
+                },
+                "log_path": str(tmp_path / "ws" / "out" / "run.log"),
+            }
+        )
         store1.close()
 
         store2 = SqliteJobStore(db_path)
@@ -438,15 +460,17 @@ class TestPersistenceAcrossRestart:
         db_path = tmp_path / "restart.db"
 
         store1 = SqliteJobStore(db_path)
-        store1.save({
-            "id": "running-1",
-            "endpoint": "ioc/run",
-            "command": "python3 run_ioc.py",
-            "status": "running",
-            "created_at": "2026-08-19T10:00:00Z",
-            "started_at": "2026-08-19T10:00:01Z",
-            "request_body": {"workspace": str(tmp_path / "no-results")},
-        })
+        store1.save(
+            {
+                "id": "running-1",
+                "endpoint": "ioc/run",
+                "command": "python3 run_ioc.py",
+                "status": "running",
+                "created_at": "2026-08-19T10:00:00Z",
+                "started_at": "2026-08-19T10:00:01Z",
+                "request_body": {"workspace": str(tmp_path / "no-results")},
+            }
+        )
         store1.close()
 
         store2 = SqliteJobStore(db_path)

@@ -48,9 +48,9 @@ def annotation_doc():
                 "to_id": "metric-1",
                 "edge_type": "hasMetric",
                 "from_type": "session",  # sess-1 isn't in this doc's own nodes;
-                                          # this role hint is how push resolves
-                                          # it to the real :Session label instead
-                                          # of leaving the match unlabeled.
+                # this role hint is how push resolves
+                # it to the real :Session label instead
+                # of leaving the match unlabeled.
             },
         ],
     }
@@ -185,14 +185,19 @@ class TestBuildMergeStatements:
         assert "(b:Metric " in has_metric_stmt
 
     def test_ambiguous_call_role_outside_batch_falls_back_unlabeled_not_guessed(self):
-        """"call" spans AgentCall/LLMCall/ToolCall/... -- when the endpoint
+        """ "call" spans AgentCall/LLMCall/ToolCall/... -- when the endpoint
         isn't in this batch, there's no single correct label to guess, so
         the match must stay unlabeled rather than assert a wrong class."""
         from mas.library.kg.neo4j.push import build_merge_statements
 
         doc_nodes = [{"id": "annotation-1", "node_type": "CallAnnotation"}]
         doc_edges = [
-            {"from_id": "some-call", "to_id": "annotation-1", "edge_type": "hasAnnotation", "from_type": "call"}
+            {
+                "from_id": "some-call",
+                "to_id": "annotation-1",
+                "edge_type": "hasAnnotation",
+                "from_type": "call",
+            }
         ]
         stmts = build_merge_statements(doc_nodes, doc_edges)
         stmt = next(s for s in stmts if '"some-call"' in s)
@@ -230,7 +235,10 @@ class TestUnwindBatches:
         id_to_type = {n["id"]: n["node_type"] for n in simple_kg_doc["nodes"]}
         batches = _edge_unwind_batches(simple_kg_doc["edges"], id_to_type)
         cyphers = [c for c, _ in batches]
-        assert any("(a:AgentCall {id: row.from_id})" in c and "(b:LLMCall {id: row.to_id})" in c for c in cyphers)
+        assert any(
+            "(a:AgentCall {id: row.from_id})" in c and "(b:LLMCall {id: row.to_id})" in c
+            for c in cyphers
+        )
         assert not any("KGNode" in c for c in cyphers)
 
     def test_edge_batch_falls_back_unlabeled_when_type_unknown(self):
@@ -241,7 +249,10 @@ class TestUnwindBatches:
         cyphers = [c for c, _ in batches]
         # Changed to MERGE to prevent silent edge deletion when endpoints don't exist
         # Note: unlabeled pattern uses {{id:}} in f-string which becomes single {id:} in output
-        assert any("MERGE (a {{id: row.from_id}})" in c and "MERGE (b:CallAnnotation {id: row.to_id})" in c for c in cyphers)
+        assert any(
+            "MERGE (a {{id: row.from_id}})" in c and "MERGE (b:CallAnnotation {id: row.to_id})" in c
+            for c in cyphers
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +312,7 @@ class TestDenormalize:
 
         original_nodes = [dict(n) for n in simple_kg_doc["nodes"]]
         denormalize(simple_kg_doc["nodes"], simple_kg_doc["edges"])
-        for orig, node in zip(original_nodes, simple_kg_doc["nodes"]):
+        for orig, node in zip(original_nodes, simple_kg_doc["nodes"], strict=False):
             assert orig == node  # unchanged
 
     def test_annotations_merged(self, simple_kg_doc):
@@ -334,7 +345,7 @@ class TestDenormalize:
         nodes1, edges1 = denormalize(simple_kg_doc["nodes"], simple_kg_doc["edges"])
         nodes2, edges2 = denormalize(nodes1, edges1)
         assert len(nodes1) == len(nodes2)
-        for n1, n2 in zip(nodes1, nodes2):
+        for n1, n2 in zip(nodes1, nodes2, strict=False):
             assert n1.get("sessionId") == n2.get("sessionId")
             assert n1.get("appName") == n2.get("appName")
 
@@ -599,6 +610,7 @@ class TestNeo4jWriter:
 class TestRunNeo4jPushStep:
     def test_dry_run(self, simple_kg_doc, tmp_path):
         from mas.library.kg.steps.neo4j_push import run_neo4j_push
+
         kg_path = tmp_path / "kg.jsonld"
         kg_path.write_text(json.dumps(simple_kg_doc))
         result = run_neo4j_push(

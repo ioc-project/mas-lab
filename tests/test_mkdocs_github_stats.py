@@ -50,32 +50,25 @@ def test_read_version_prefixes_v(tmp_path: Path) -> None:
     assert hook.read_version(tmp_path) == "v1.0.0"
 
 
-def test_github_facts_uses_version_when_api_fails(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_github_facts_uses_version_when_api_fails(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("0.2.0\n", encoding="utf-8")
+
     def boom(*_args, **_kwargs):
         raise TimeoutError("no network")
 
     monkeypatch.setattr(hook, "fetch_repo_stats", boom)
-    facts = hook.github_facts(
-        "https://github.com/ioc-project/mas-lab", tmp_path, token=None
-    )
+    facts = hook.github_facts("https://github.com/ioc-project/mas-lab", tmp_path, token=None)
     assert facts == {"version": "v0.2.0"}
 
 
-def test_github_facts_includes_stars_and_forks(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_github_facts_includes_stars_and_forks(tmp_path: Path, monkeypatch) -> None:
     (tmp_path / "VERSION").write_text("0.2.0\n", encoding="utf-8")
     monkeypatch.setattr(
         hook,
         "fetch_repo_stats",
         lambda *_args, **_kwargs: {"stars": "12", "forks": "3"},
     )
-    facts = hook.github_facts(
-        "https://github.com/ioc-project/mas-lab", tmp_path, token="x"
-    )
+    facts = hook.github_facts("https://github.com/ioc-project/mas-lab", tmp_path, token="x")
     assert facts == {"version": "v0.2.0", "stars": "12", "forks": "3"}
 
 
@@ -101,9 +94,7 @@ def test_on_config_injects_extra_github(tmp_path: Path, monkeypatch) -> None:
 def test_fetch_repo_stats_reads_github_payload(monkeypatch) -> None:
     class _Resp:
         def read(self) -> bytes:
-            return json.dumps(
-                {"stargazers_count": 1200, "forks_count": 3}
-            ).encode()
+            return json.dumps({"stargazers_count": 1200, "forks_count": 3}).encode()
 
         def __enter__(self):
             return self
@@ -115,9 +106,7 @@ def test_fetch_repo_stats_reads_github_payload(monkeypatch) -> None:
 
     def fake_urlopen(request, timeout):
         captured["url"] = request.full_url
-        captured["auth"] = request.headers.get("Authorization") or request.get_header(
-            "Authorization"
-        )
+        captured["auth"] = request.headers.get("Authorization") or request.get_header("Authorization")
         return _Resp()
 
     monkeypatch.setattr(hook.urllib.request, "urlopen", fake_urlopen)

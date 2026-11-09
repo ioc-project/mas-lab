@@ -46,11 +46,7 @@ def smoke_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MAS_LLM_CACHE", str(tmp_path / "llm_cache.json"))
     monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(_SAMPLE_WS))
     require_ci_cache()
-    preexisting = (
-        {p.name for p in _DEFAULT_GLOBAL_CACHE.iterdir()}
-        if _DEFAULT_GLOBAL_CACHE.exists()
-        else set()
-    )
+    preexisting = {p.name for p in _DEFAULT_GLOBAL_CACHE.iterdir()} if _DEFAULT_GLOBAL_CACHE.exists() else set()
     return out, trace_cache, preexisting
 
 
@@ -110,9 +106,7 @@ def test_lab_smoke_one_run_and_pipeline(
         path = output_dir / rel
         assert path.is_file(), f"missing pipeline artefact {rel} for {label}"
         body = path.read_text(encoding="utf-8").strip()
-        assert len(body.splitlines()) >= 2, (
-            f"pipeline artefact {rel} for {label} should have header + data"
-        )
+        assert len(body.splitlines()) >= 2, f"pipeline artefact {rel} for {label} should have header + data"
 
     _assert_isolated_cache(trace_cache_dir, preexisting)
 
@@ -138,9 +132,5 @@ def test_lab_smoke_experiment_dry_run(
         cwd=str(REPO_ROOT),
     )
     output = result.stdout + result.stderr
-    assert result.returncode == 0, (
-        f"dry-run failed for smoke {label}:\n{output}"
-    )
-    assert "Configuration valid" in output, (
-        f"dry-run did not validate smoke {label}:\n{output}"
-    )
+    assert result.returncode == 0, f"dry-run failed for smoke {label}:\n{output}"
+    assert "Configuration valid" in output, f"dry-run did not validate smoke {label}:\n{output}"

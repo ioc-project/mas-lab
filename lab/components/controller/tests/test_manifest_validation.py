@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from mas.lab.controller.manifest_validation import (
     validate_manifest_yaml_content,
     validate_overlay_yaml_content,

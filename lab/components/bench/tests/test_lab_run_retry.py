@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pytest
-
 from mas.lab.benchmark.schedule.run_batch.execute import (
     invoke_lab_run_with_retry,
     lab_run_error_is_retryable,
@@ -27,16 +26,10 @@ def test_lab_run_retry_defaults() -> None:
 
 
 def test_lab_run_error_is_retryable_for_llm_and_not_auth() -> None:
-    assert lab_run_error_is_retryable(
-        "LLM request failed: HTTP 500 from LLM provider", status="error"
-    )
+    assert lab_run_error_is_retryable("LLM request failed: HTTP 500 from LLM provider", status="error")
     assert lab_run_error_is_retryable("Connection refused", status="error")
-    assert not lab_run_error_is_retryable(
-        "LLM request failed: HTTP 401 (authentication/authorization)", status="error"
-    )
-    assert not lab_run_error_is_retryable(
-        "TLS certificate verification failed", status="error"
-    )
+    assert not lab_run_error_is_retryable("LLM request failed: HTTP 401 (authentication/authorization)", status="error")
+    assert not lab_run_error_is_retryable("TLS certificate verification failed", status="error")
     assert not lab_run_error_is_retryable("ok", status="ok")
 
 
@@ -76,9 +69,7 @@ async def test_invoke_lab_run_does_not_retry_fatal() -> None:
             "content": "LLM request failed: HTTP 401 (authentication/authorization). Check the API key",
         }
 
-    _, status, error, _output, used = await invoke_lab_run_with_retry(
-        fatal, max_attempts=3, backoff_s=0
-    )
+    _, status, error, _output, used = await invoke_lab_run_with_retry(fatal, max_attempts=3, backoff_s=0)
     assert status == "error"
     assert used == 1
     assert calls["n"] == 1
@@ -95,9 +86,7 @@ async def test_invoke_lab_run_retries_exceptions() -> None:
             raise ConnectionError("Connection refused")
         return {"status": "ok", "content": "recovered"}
 
-    _, status, error, output, used = await invoke_lab_run_with_retry(
-        boom, max_attempts=3, backoff_s=0
-    )
+    _, status, error, output, used = await invoke_lab_run_with_retry(boom, max_attempts=3, backoff_s=0)
     assert status == "ok"
     assert output == "recovered"
     assert used == 2

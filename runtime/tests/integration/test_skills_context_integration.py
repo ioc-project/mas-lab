@@ -2,7 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Skills context integration — fully in library-skills; no runtime skill imports."""
 
-
 import pytest
 from mas.library.skills.lib.resolver import resolve_skill_path
 from mas.library.skills.lib.spec import skill_refs_from_manifest
@@ -180,9 +179,7 @@ def test_activated_skill_body_survives_compaction_once(tmp_path, pin_activated):
         {
             "role": "assistant",
             "content": None,
-            "tool_calls": [
-                {"id": "c1", "type": "function", "function": {"name": "activate_skill", "arguments": "{}"}}
-            ],
+            "tool_calls": [{"id": "c1", "type": "function", "function": {"name": "activate_skill", "arguments": "{}"}}],
         },
         tool_msg,
         {"role": "assistant", "content": "a0"},

@@ -145,6 +145,7 @@ def test_get_working_dir_with_explicit_run_dir_does_not_register_atexit(tmp_path
 # Resource-path traversal guards -- shared by all 3 backends' read_resource()
 # ---------------------------------------------------------------------------
 
+
 def test_split_resource_category_accepts_known_categories():
     assert split_resource_category("references/doc.md") == ("references", "doc.md")
     assert split_resource_category("assets/logo.png") == ("assets", "logo.png")

@@ -1,7 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 import pytest
-
 from mas.ctl.executor.spawn_ledger import SpawnLedger
 
 
@@ -56,9 +55,7 @@ def test_spawn_ledger_siblings_stay_independent_under_asyncio_gather():
         return ledger.agent_depth("s", child_id)
 
     async def _run():
-        return await asyncio.gather(
-            spawn_one("root.worker.1"), spawn_one("root.worker.2")
-        )
+        return await asyncio.gather(spawn_one("root.worker.1"), spawn_one("root.worker.2"))
 
     depths = asyncio.run(_run())
     assert list(depths) == [1, 1]

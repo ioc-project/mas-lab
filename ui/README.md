@@ -17,7 +17,7 @@ schemas. **It does not read schema files from the repo filesystem.**
 ### Prerequisites
 
 - Python env with `mas-lab` installed (`uv sync` from repo root)
-- Node.js 20+ and Yarn
+- Node.js 22+ and Yarn
 
 ### 1. Start the controller (backend)
 
@@ -115,6 +115,7 @@ docker compose up --build
 
 | Document | Path |
 |----------|------|
+| Contributing to the UI | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | User guide | [docs/user-guide.md](../docs/user-guide.md) |
 | Controller / API | [lab/components/controller/README.md](../lab/components/controller/README.md) |
 | Manifest schemas | [docs/manifest-schemas.md](../docs/manifest-schemas.md) |

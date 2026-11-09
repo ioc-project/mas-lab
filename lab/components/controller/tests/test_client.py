@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Extended client tests with mocked socket."""
+
 from __future__ import annotations
 
 import json
 
 import pytest
-
 from mas.lab.controller.client import ControllerClient, start_daemon, wait_for_worker
 
 

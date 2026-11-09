@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-import contextlib
 
 import pytest
 
@@ -17,10 +17,10 @@ SMOKE_EXP = REPO_ROOT / "tests/fixtures/lab-smoke/experiment.yaml"
 @pytest.mark.asyncio
 async def test_finalize_batch_fails_when_post_pipeline_raises(tmp_path) -> None:
     from mas.lab.benchmark.schedule.pipeline import PipelineExecutionError
+    from mas.lab.benchmark.schedule.run_batch.execute import ExecutionResult
     from mas.lab.benchmark.schedule.run_batch.finalize import finalize_batch
     from mas.lab.benchmark.schedule.run_batch.load import load_experiment
     from mas.lab.benchmark.schedule.run_batch.prepare import prepare_batch
-    from mas.lab.benchmark.schedule.run_batch.execute import ExecutionResult
 
     loaded = load_experiment(SMOKE_EXP, single_run=True, max_runs=1)
     assert loaded is not None

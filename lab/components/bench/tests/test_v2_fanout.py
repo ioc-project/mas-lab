@@ -7,11 +7,10 @@ import time
 from pathlib import Path
 
 import pytest
-
-from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
 from mas.lab.benchmark.pipeline.channel import InprocChannel, set_channel
 from mas.lab.benchmark.pipeline.fanout import classify_edges, edge_kind
+from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.scheduler import Node, ResourcePool, Scheduler
 
 
@@ -186,8 +185,8 @@ def test_max_active_caps_concurrent_steps() -> None:
 async def test_executor_pumps_record_fold_when_run_is_set(tmp_path: Path) -> None:
     """Production PipelineExecutor.bind injects ``run=``; fold consumers must still pump."""
     from mas.lab.benchmark.pipeline import Pipeline, PipelineConfig, PipelineStep
-    from mas.lab.benchmark.pipeline.executor import PipelineExecutor
     from mas.lab.benchmark.pipeline.channel import InprocChannel, set_channel
+    from mas.lab.benchmark.pipeline.executor import PipelineExecutor
     from mas.lab.benchmark.pipeline.fanout import uses_record_fold
 
     channel = InprocChannel()
@@ -228,9 +227,7 @@ async def test_executor_pumps_record_fold_when_run_is_set(tmp_path: Path) -> Non
             raise AssertionError("record-fold consumers must not fall back to execute")
 
     prod = _Prod(name="a", config={})
-    left, right = _FoldStep(name="b", config={}, depends_on=["a"]), _FoldStep(
-        name="c", config={}, depends_on=["a"]
-    )
+    left, right = _FoldStep(name="b", config={}, depends_on=["a"]), _FoldStep(name="c", config={}, depends_on=["a"])
     assert uses_record_fold(left)
     pipeline = Pipeline(
         config=PipelineConfig(name="fold"),
@@ -249,8 +246,8 @@ async def test_executor_pumps_record_fold_when_run_is_set(tmp_path: Path) -> Non
 @pytest.mark.asyncio
 async def test_ctx_publish_during_execute_seals_without_redump(tmp_path: Path) -> None:
     from mas.lab.benchmark.pipeline import Pipeline, PipelineConfig, PipelineStep
-    from mas.lab.benchmark.pipeline.executor import PipelineExecutor
     from mas.lab.benchmark.pipeline.channel import InprocChannel, get_channel, set_channel
+    from mas.lab.benchmark.pipeline.executor import PipelineExecutor
 
     channel = InprocChannel()
     set_channel(channel)

@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Agent
+
+metadata:
+  name: triage
+
+spec:
+  description: "Route a support request to the right specialist and relay the answer."
+  context:
+    role: |
+      You are the front desk of a support team. Delegate a billing question
+      to billing and a service-outage question to outage. Relay the
+      specialist's answer in one or two sentences. Do not answer yourself.

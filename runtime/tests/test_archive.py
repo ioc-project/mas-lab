@@ -172,9 +172,7 @@ def test_configure_archive_store_ignores_spec_params() -> None:
         ctx,
         manifest={
             "spec": {
-                "context_manager": {
-                    "params": {"archive": {"path": "/tmp/from-spec", "memory_watermark_bytes": 99}}
-                }
+                "context_manager": {"params": {"archive": {"path": "/tmp/from-spec", "memory_watermark_bytes": 99}}}
             }
         },
     )
