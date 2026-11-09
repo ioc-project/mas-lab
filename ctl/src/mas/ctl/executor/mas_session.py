@@ -315,6 +315,10 @@ def prepare_delegation_entry_session(
         working_memory_registry=working_memory_registry,
         display=display,
         verbose=verbose,
+        flavour_spec=compose.bind.flavour_spec,
+        parent_spec=compose.mas_config,
+        entry_id=entry_id,
+        delegate_ids=tuple(peers or ()),
     )
     return PreparedEntrySession(
         instance=instance,
@@ -456,6 +460,9 @@ def wire_peer_delegation(
                     working_memory_registry=working_memory_registry,
                     display=display,
                     verbose=verbose,
+                    flavour_spec=compose.bind.flavour_spec,
+                    parent_spec=compose.mas_config,
+                    entry_id=entry_id,
                 )
             continue
         if instance is None:
@@ -481,6 +488,9 @@ def wire_peer_delegation(
             working_memory_registry=working_memory_registry,
             display=display,
             verbose=verbose,
+            flavour_spec=compose.bind.flavour_spec,
+            parent_spec=compose.mas_config,
+            entry_id=entry_id,
         )
         peers = delegation_targets(enriched, agent_id=agent_id)
         if not peers:

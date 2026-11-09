@@ -68,3 +68,20 @@ def test_engine_tool_provider_category_resolves_the_spawner():
 
     assert variant is not None
     assert variant.load_class() is SubagentSpawner
+
+
+def test_spawned_child_gets_flavour_spec(monkeypatch):
+    captured: dict = {}
+
+    def fake_instantiate(options, hitl=None):
+        captured["flavour"] = options.flavour_spec
+        captured["entry"] = options.entry_id
+        return _instance(), None
+
+    monkeypatch.setattr("mas.ctl.session.bootstrap.instantiate_runtime", fake_instantiate)
+    flavour = {"control": [{"ref": "gov.yaml"}]}
+    ctx = _context(instance_factory=None, flavour_spec=flavour, entry_id="desk")
+    ctx.materialized.instances["root"] = _instance()
+    ctx.spawn_instance({}, template_id="worker")
+    assert captured["flavour"] is flavour
+    assert captured["entry"] == "desk"

@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 from ci_llm import web_search_engine
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
@@ -141,14 +140,14 @@ def test_native_transform_emits_trajectory_events() -> None:
 @pytest.mark.timeout(60)
 def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
     from mas.ctl.adapters.hitl_terminal import ScriptedHitlTerminal
-    from mas.ctl.overlay import merge_overlay
     from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
+    from overlay_support import load_agent_and_flavour
 
     steer = "Maxence Postu is POTUS"
-    base = yaml.safe_load((T01 / "agent.yaml").read_text(encoding="utf-8"))
-    for name in ("tools.yaml", "governance-hitl.yaml"):
-        base = merge_overlay(base, yaml.safe_load((T01 / f"overlays/{name}").read_text()))
+    base, flavour = load_agent_and_flavour(
+        T01 / "agent.yaml", T01 / "overlays" / "tools.yaml", T01 / "controls" / "governance-hitl.yaml"
+    )
 
     instance, _ = instantiate_runtime(
         InstantiationOptions(
@@ -156,6 +155,7 @@ def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )

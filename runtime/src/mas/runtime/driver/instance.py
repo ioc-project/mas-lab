@@ -70,9 +70,7 @@ class RuntimeInstance:
         op = self.driver.observability
         if op is None or exec_id is None:
             return
-        response_text = "\n".join(
-            r.content for r in trace.client_responses if getattr(r, "content", "")
-        ).strip()
+        response_text = "\n".join(r.content for r in trace.client_responses if getattr(r, "content", "")).strip()
         if response_text:
             op.record_session("agent_response", text=response_text, finish_reason="stop")
         op.pop_call_frame(exec_id)
@@ -154,6 +152,7 @@ class RuntimeInstance:
         agent_id: str = "",
         mas_id: str = "",
         obs_binding_override: ObservabilityBinding | None = None,
+        obs_from_cli: bool = False,
         hitl: Any | None = None,
         engine: Any | None = None,
         ctx: Any | None = None,
@@ -166,6 +165,8 @@ class RuntimeInstance:
 
         This is the production entry point for spec-driven instantiation.
         ctl may pass obs_binding_override when CLI flags supersede spec defaults.
+        ``obs_from_cli`` makes a ``None`` override win (``--no-events``); without
+        it, ``None`` means use the spec.
 
         ``spec`` is the inner ``spec:`` block of an agent manifest, e.g.
         ``manifest["spec"]``.
@@ -181,7 +182,10 @@ class RuntimeInstance:
             runtime_engine=runtime_engine,
             manifest_dir=resolved_base_dir,
         )
-        obs_binding = obs_binding_override if obs_binding_override is not None else spec_obs_binding
+        if obs_from_cli:
+            obs_binding = obs_binding_override
+        else:
+            obs_binding = obs_binding_override if obs_binding_override is not None else spec_obs_binding
         if obs_binding is not None and mas_id:
             obs_binding = obs_binding.with_mas_id(mas_id)
 

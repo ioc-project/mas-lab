@@ -39,7 +39,6 @@ class KernelConfig:
     enable_envelope_observability: bool = True
     # gdb and checkpoint helpers. They observe; they never BLOCK.
     # Off unless config.yaml plugins / spec.debug enable them.
-    runtime_plugins: tuple = field(default=(), compare=False)
     # The agent manifest's own spec: block (manifest["spec"]), for governance
     # plugins that need to reason about the agent's declared tools/context/
     # models rather than just the live transition stream. None when built

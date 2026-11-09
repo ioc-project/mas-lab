@@ -86,7 +86,7 @@ These settings are independent of agency topology on purpose:
 
 `mas-ctl serve`, `chat`, `tui`, and `run-mas` share one exposure helper (`mas.ctl.session.exposure`). Listen URLs come from Application endpoints.
 
-- **Dedicated `serve`:** a blocking listener for that agent. It needs `usage: listen` or `[connect, listen]`. It advertises a control endpoint in the control directory unless you pass `--no-control`. It is the only path that starts the gRPC listener.
+- **Dedicated `serve`:** a blocking listener for that agent. It needs `usage: listen` or `[connect, listen]`. It advertises a control endpoint in the control directory unless you pass `--no-control-dir`. It is the only path that starts the gRPC listener.
 - **`chat` and `tui`:** the in-process agent owns the conversation. A deployed endpoint binds in the background for interrogation. Stdin or curses stays the conversation.
 - **`run-mas`:** the entry agent is always in-process. Every hosted agent whose A2A endpoint has `usage: listen` or `[connect, listen]` binds in this process. `usage: connect` peers are client routes. Another process, such as a separate `mas-ctl serve`, owns those ports.
 

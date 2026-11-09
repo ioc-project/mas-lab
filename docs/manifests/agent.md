@@ -6,7 +6,7 @@
 
 **Package:** `runtime/` · **Schema:** `agent.schema.yaml` · **apiVersion:** `mas/v1`
 
-An **agent** manifest (`agent.yaml`) declares one LLM actor. It sets the agent's models, context, tools, skills, design pattern, governance, and **observability** (trace output) settings.
+An **agent** manifest (`agent.yaml`) declares one LLM actor. It sets the agent's models, context, tools, skills, design pattern, and leftover governance and **observability** (trace output) settings that still apply when no matching [Control](control.md) names them.
 Write one for every agent you run alone or place in a **MAS** (multi-agent system).
 A MAS manifest references agents by name. **Overlays** (YAML patches) change an agent without copying its file.
 
@@ -30,7 +30,7 @@ Terms: [glossary.md](../glossary.md). Hub: [README.md](README.md).
 - Models: [ModelEntry](#modelentry), [Output-token limits](#output-token-limits), [LlmBinding](#llmbinding)
 - Behaviour: [DesignPattern](#designpattern), [Behavior](#behavior), [Delegation](#delegation), [Tool](#tool)
 - Memory: [MemorySeedEntry](#memoryseedentry), [MemoryConfig](#memoryconfig), [WorkingMemory](#workingmemory)
-- Control: [GovernanceBinding](#governancebinding), [Budget](#budget), [ControlBinding](#controlbinding), [ObservabilityBinding](#observabilitybinding), [Debug](#debug)
+- Control: [GovernanceBinding](#governancebinding), [Budget](#budget), [ControlBinding](#controlbinding), [ObservabilityBinding](#observabilitybinding)
 - [Schema source](#schema-source)
 
 ---
@@ -80,18 +80,17 @@ Extension properties (`x-*`) are allowed and ignored by the runtime.
 | `memory` | string \| string[] \| object | no | — | Memory backend configuration. Not used yet: the schema accepts it, the runtime ignores it. See [`MemoryConfig`](#memoryconfig). |
 | `working_memory` | object | no | — | Cross-turn history persistence for delegated agents. See [`WorkingMemory`](#workingmemory). |
 | `checkpoint` | object | no | `{mode: none}` | Session checkpoint (saved session state) cadence, retention, portability, and automatic resume. See [checkpoint.md](checkpoint.md). |
-| `debug` | object | no | — | Script for the `debug_script` runtime plugin (gdb-like). See [`Debug`](#debug). |
 | `skills` | `string[]` | no | `[]` | Skills to activate. A skill is a packaged instruction bundle the agent loads on demand. Use a bare name or `@library/name`. Resolution order: app-local, libraries, packages. See [system-tools.md](system-tools.md#implicit-enablement). |
 | `tools_ref` | `string` \| null | no | `null` | Logical tool-set name for an infra `ToolRegistry`: a lowercase id such as `web-tools`, with no paths or extensions. Not used yet: the schema validates it, and this release loads no tools from it. |
 | `tools` | `Tool[]` | no | `[]` | Per-agent tool declarations (a tool is a function the LLM can call), in four forms. See [`Tool`](#tool). |
 | `behavior` | object | no | — | Runtime capability flags. See [`Behavior`](#behavior). |
-| `governance` | `GovernanceBinding` | no | `[]` | Chain of plugins that allow, block, or modify calls. See [`GovernanceBinding`](#governancebinding). |
+| `governance` | `GovernanceBinding` | no | `[]` | Deprecated leftover. Still applied when no matching Control names governance. Live home is a Control set. See [governance.md](governance.md). |
 | `hitl_contract` | string \| object | no | `registry` | Human-in-the-loop (HITL) approval plugin. A plugin binding: a name or `{type, ref, params}`. An instance from the embedding host overrides it, which keeps interactive CLI adapters working. Shipped: `registry`, `auto_resolve`. |
 | `user_io_contract` | string \| object | no | `registry` | Plugin that sends progress updates to the user. The host overrides it the same way as `hitl_contract`. |
 | `llm` | `LlmBinding` | no | `{}` | **Deprecated** engine overrides (model, temperature, ...). Prefer `spec.models[]`. See [`LlmBinding`](#llmbinding). |
-| `budget` | object | no | `{}` | Call-count ceilings (`max_llm_calls`, `max_tool_calls`) that the engine enforces. Omitted means no limit. See [`Budget`](#budget). |
-| `control` | `ControlBinding` | no | `{}` | Retry, circuit-breaker, and rate-limit config. See [`ControlBinding`](#controlbinding). |
-| `observability` | `ObservabilityBinding` | no | `null` | List of trace sink plugins. See [`ObservabilityBinding`](#observabilitybinding). |
+| `budget` | object | no | `{}` | **Deprecated.** Call-count ceilings the engine still enforces; use the `budget` governance plugin in a Control. See [`Budget`](#budget). |
+| `control` | `ControlBinding` | no | `{}` | **Deprecated.** `retry` and `circuit_breaker` still apply and move to the infra pipeline; `budget` and `rate_limiter` are read by nothing. See [`ControlBinding`](#controlbinding). |
+| `observability` | `ObservabilityBinding` | no | `null` | Deprecated leftover. Still applied when no matching Control names observability. Live home is a Control set. See [`ObservabilityBinding`](#observabilitybinding). |
 | `context_sources` | `ContextSourcesBinding` | no | `null` | Context source plugins, including the skill engine. See [`ContextSourcesBinding`](#contextsourcesbinding). |
 
 #### Not used yet
@@ -924,8 +923,10 @@ llm:
 
 _Used by:_ `spec.budget`
 
+**Deprecated.** Call ceilings are the `budget` governance plugin (same two fields), named in a [Control](control.md)
+`spec.governance`. A leftover `spec.budget` is still enforced as before, and `mas-ctl validate` warns once.
+
 Call-count ceilings that the runtime engine (`LiveLlmEngine`, `BudgetTracker`) enforces during a run. Omit a field, or the whole object, for no limit. That is the default.
-Leave it unset in the agent manifest and set it through an overlay instead (see [`with-hardened`](../references/reliability.md#with-hardened)). `spec.control.budget` is different: it covers token and cost accounting, and the engine does not read it yet (see [`ControlBinding`](#controlbinding)).
 
 | Field | Type | Required | Default | Description |
 | ------- | ------ | ---------- | --------- | ------------- |
@@ -944,11 +945,13 @@ budget:
 
 _Used by:_ `spec.control`
 
+**Deprecated.** The destination of `retry` and `circuit_breaker` is the infra pipeline (where the LLM cache, scheduler and fault injection already are); they keep working here until the next release moves them. `budget` and `rate_limiter` are read by nothing, and `mas-ctl validate` warns about them.
+
 Control-plane knobs:
 
 - `retry` is applied by the runtime reliability layer (LLM HTTP and tool dispatch).
 - `circuit_breaker` loads a library plugin (default `threshold`).
-- `budget` and `rate_limiter` are accepted by the schema, but no shipped plugin enforces them in this release. Use [`spec.budget`](#budget) for call ceilings.
+- `budget` and `rate_limiter` are accepted by the schema, but no shipped plugin enforces them in this release. Call ceilings are the `budget` governance plugin in a [Control](control.md).
 
 Set a key to `null` to disable it. Full tables: [reliability.md](../references/reliability.md).
 
@@ -992,7 +995,7 @@ control:
 
 _Used by:_ `spec.observability`
 
-An ordered list of observability sink plugin ids. Every sink sees every event: it is a sequence, not a chain. Two sinks ship, and the schema accepts only these ids:
+Leftover Agent `spec.observability` is deprecated and still applied when no matching Control names observability. Live observability is a Control set. Every sink sees every event: it is a sequence, not a chain. Two sinks ship:
 
 - `native` writes `events.jsonl` (from `library-standard`).
 - `otel` exports OpenTelemetry spans (from `library-telemetry`).
@@ -1019,23 +1022,7 @@ observability:
 | `otel` | `app_name` / `mas_id` | Declared MAS name, used as the service identity (not a path). `service_name` is ignored. |
 | `otel` | `converter_profile`, `realtime`, `extensions` | Span conversion profile (default `observe_sdk`), live incremental export (default `false`), and MAS span extensions. |
 
-Unknown plugin ids fail at load time. `spec.observability` defaults to empty. The flavour or CLI usually attaches `native`. Walkthrough: [Tutorial 8](../tutorials/08-telemetry/README.md).
-
----
-
-### Debug
-
-_Used by:_ `spec.debug`
-
-Script configuration for the `debug_script` runtime plugin (alias `gdb`). The script is a gdb-like list of breakpoints on tool calls and results, each with commands such as `checkpoint`. Breakpoints observe and never block.
-Enable the plugin from workspace `config.yaml` `plugins:` or lab `enable_plugins`. This block only supplies the script. The CLI equivalent is `mas-ctl chat --debug-script`. Overlays cannot patch it.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `script_file` | `string` | Path to a debug script file. |
-| `script` | `string` | Inline debug script. |
-
-See [Tutorial 13](../tutorials/13-control-and-debug/README.md).
+Unknown plugin ids fail at load time. `spec.observability` is deprecated: a [Control](control.md) the Flavour attaches replaces it. A run that sets none records native events. `--no-events` turns recording off. Walkthrough: [Tutorial 8](../tutorials/08-telemetry/README.md).
 
 ---
 

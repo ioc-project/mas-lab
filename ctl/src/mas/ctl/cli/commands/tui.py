@@ -7,13 +7,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, connect_option, with_connects
+from mas.ctl.cli.bind_flags import bind_option, connect_option, control_option, events_sink_option, with_connects
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, close_observability
 from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
 from mas.ctl.session.manifest_config import require_agent_id_from_manifest
-from mas.ctl.session.observability import setup_observability
+from mas.ctl.session.observability import cli_replaced_plugin_set, obs_config_to_binding, setup_observability
 from mas.ctl.ui.curses_app import build_curses_controller, run_curses_session
 
 
@@ -29,12 +29,13 @@ from mas.ctl.ui.curses_app import build_curses_controller, run_curses_session
 )
 @connect_option
 @bind_option
+@control_option
+@events_sink_option
 @click.option("--pattern", default=None)
 @click.option(
     "--flavour",
-    default="local",
-    show_default=True,
-    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
+    default=None,
+    help="Flavour: bundled name local or prod, or a Flavour YAML path. Omitted: local.",
 )
 @click.option("--single-turn", is_flag=True)
 @click.option("--memory-seed", default=None, type=click.Path(exists=True))
@@ -72,8 +73,10 @@ def tui_cmd(
     overrides: tuple[str, ...],
     connects: tuple[str, ...],
     binds: tuple[str, ...],
+    controls: tuple[str, ...],
+    event_sinks: tuple[str, ...],
     pattern: str | None,
-    flavour: str,
+    flavour: str | None,
     single_turn: bool,
     memory_seed: str | None,
     infra_refs_cli: tuple[str, ...],
@@ -117,17 +120,45 @@ def tui_cmd(
             validate=not no_validate,
         )
 
-        from mas.ctl.session.flavour import FlavourError, resolve_flavour
+        from mas.ctl.session.flavour import FlavourError, resolve_session_flavour
 
         try:
-            flavour_spec = resolve_flavour(flavour, overrides=overrides)
+            flavour_spec = resolve_session_flavour(
+                flavour,
+                overrides=overrides,
+                controls=controls,
+                event_sinks=event_sinks,
+                search_dirs=[session.original_cwd, session.manifest_dir]
+                if session.manifest_dir
+                else [session.original_cwd],
+            )
         except FlavourError as exc:
             click.echo(f"error: {exc}", err=True)
             raise SystemExit(2) from None
 
+        from mas.ctl.session.flavour_control import ControlError, apply_flavour_controls, attach_overlay_controls
+
+        # Controls attach before anything reads the agent's governance (HITL mode).
+        try:
+            attach_overlay_controls(flavour_spec, overlay_strs)
+            controlled_id = require_agent_id_from_manifest(agent_data)
+            agent_data = apply_flavour_controls(
+                agent_data,
+                flavour_spec,
+                agent_id=controlled_id,
+                entry_id=controlled_id,
+                search_dirs=[session.manifest_dir] if session.manifest_dir else (),
+            )
+        except ControlError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise SystemExit(1) from None
+
         hitl_responder, _hitl_terminal = resolve_hitl_from_manifest(
             agent_data,
             session_interactive=True,
+            flavour_spec=flavour_spec,
+            agent_id=controlled_id,
+            entry_id=controlled_id,
         )
 
         def _opt_file(path: str | None) -> Path | None:
@@ -146,15 +177,22 @@ def tui_cmd(
         )
         from mas.ctl.cli.chains import bind_or_exit, single_agent_chains
 
-        resolved_infra = bind_or_exit(resolved_infra, flavour_spec, agent_id=require_agent_id_from_manifest(agent_data))
+        agent_id = require_agent_id_from_manifest(agent_data)
+        resolved_infra = bind_or_exit(
+            resolved_infra,
+            flavour_spec,
+            agent_id=agent_id,
+        )
         obs_cfg = resolve_observability_config(
             events=events,
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
-            agent_id=require_agent_id_from_manifest(agent_data),
+            agent_id=agent_id,
             manifest=agent_data,
             flavour_spec=flavour_spec,
+            resolved_infra=resolved_infra,
+            entry_id=agent_id,
         )
         instance, store = instantiate_runtime(
             InstantiationOptions(
@@ -168,6 +206,11 @@ def tui_cmd(
                 runtime_refs_cli=runtime_refs_cli,
                 model_override=model,
                 events_file=obs_cfg.events_file,
+                flavour_spec=flavour_spec,
+                obs_from_cli=cli_replaced_plugin_set(events, events_format),
+                obs_binding_override=(
+                    obs_config_to_binding(obs_cfg) if cli_replaced_plugin_set(events, events_format) else None
+                ),
             ),
             hitl=hitl_responder,
         )

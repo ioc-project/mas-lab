@@ -60,7 +60,6 @@ The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and ru
 | `aliases` | map | Runtime plugin alias to canonical URN |
 | `defaults` | object | Overrides for runtime `defaults.yaml` (`model`, `design_pattern`, `context_manager`, `assembler`) |
 | `paths` | object | `labs_dir`, `cache_dir`, `runs_dir` (else XDG / `MAS_*`) |
-| `plugins` | list of URNs or URN-to-bool map | Workspace overlay plugins. **Off unless listed.** Not agent spec slots. Uncomment a catalog line in the init template to enable one. Labs use `lab.enable_plugins`. |
 
 ---
 
@@ -140,21 +139,6 @@ Env overrides: [user-config.md](../user-config.md). Relative paths resolve from 
 
 ---
 
-## `plugins` (workspace overlays)
-
-Agent YAML still chooses `design_pattern`, tools, models, `spec.observability`, `spec.governance`, and checkpoint cadence. This list turns on gdb, checkpoint stores, and the control wire from the workspace. A *plugin* is a unit of behaviour selected by name.
-
-Omitted, `[]`, or a commented catalog means **nothing extra is on**. To enable a plugin, uncomment `plugins:` and any line in the [init template](https://github.com/ioc-project/mas-lab/blob/main/lab/components/core/src/mas/lab/templates/init/config.yaml). Specs that already name the same plugin keep their own config.
-
-Labs enable the same URNs under `lab.enable_plugins` in `lab-config.yaml`.
-
-```yaml
-# plugins:
-#   - mas.runtime.debug_script             # gdb breakpoints
-#   - mas.checkpoint_store.hybrid          # persist memory + disk
-#   - mas.control_protocol.rpc             # JSON-lines control wire
-```
-
 Put OTel (OpenTelemetry) settings, governance, design patterns, and system tools in agent YAML, not here.
 
 ---
@@ -190,8 +174,6 @@ mas_lab:
 # infra_refs:
 #   - standard:openai
 
-# plugins:
-#   - mas.runtime.debug_script
 ```
 
 Offline CI pairs `standard:openai` with `tests/fixtures/llm-cache/ci-replay.yaml` through `--infra-ref`. The YAML still holds no secrets.

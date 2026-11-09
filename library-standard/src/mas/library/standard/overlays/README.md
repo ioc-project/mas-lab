@@ -4,43 +4,53 @@
 -->
 # Overlays (MAS Library Standard)
 
-Index of every overlay shipped in this package. Each file is a `kind: Overlay`
-manifest (`apiVersion: mas/v1`) merged onto an agent with `-o`.
+Index of every overlay and Control shipped in this package. Overlay files are
+`kind: Overlay` (`apiVersion: mas/v1`) merged onto an agent with `-o`. Control
+files are `kind: Control` (`apiVersion: control/v1`); attach them with
+`--control`. A scenario's `overlays.control` attaches Control files the same way.
+Passing a Control with `-o`, or listing Controls under an Overlay's
+`spec.control`, is deprecated.
 
 Packaged URI: `pkg://mas.library.standard/overlays/<file>`.
 
 Checkout path: `library-standard/src/mas/library/standard/overlays/<file>`.
 
-| File | `metadata.name` | Target | What it does |
-|------|-----------------|--------|----------------|
-| `observability-native.yaml` | `observability-native` | Agent | Writes native `events.jsonl` (`spec.observability` → `native`). |
-| `with-hardened.yaml` | `with-hardened` | Agent | Production posture: appends `gov_no_undeclared_tool` and `retry_on_error` to the governance chain; merges `control.retry` + `circuit_breaker` (transient/unavailable retry, application errors stay in working memory); caps `spec.budget.max_llm_calls` / `max_tool_calls` and `design_pattern.params.max_steps` (512). |
-| `production-memory.yaml` | `production-memory` | Agent | Reviewed `keep_turns` / hysteresis / trimmer margin. Archive path lives in `config.yaml`, not this overlay. See [context-management.md](../../../../../../../docs/references/context-management.md). |
-| `cheap-summarizer.yaml` | `cheap-summarizer` | Agent | Sets `summarizer.params.model` to `gpt-4o-mini` (same `summarising` type; params merge). |
-| `openclaw.yaml` | `openclaw` | Agent | Enables LLM-call checkpoints, self-contained persistence, auto-resume, and repeated-error backtracking. |
+Governance, control-plane settings and event sinks are not patches of the agent: they are Controls, in
+`library-standard/src/mas/library/standard/controls/` and attached with `--control pkg://mas.library.standard/controls/<file>`:
 
-`spec.observability` is a sequence (every plugin sees every event).
-`spec.governance` is a chain: BLOCK stops and returns the error; ALLOW
-passes to the next plugin. `with-hardened` uses `$op.add`, so it keeps any
-governance plugins already on the agent, then merges reliability knobs
-under `spec.control`. Stack more overlays the same way — a future
-OpenClaw-like flavour would compose `with-hardened` + observability +
-checkpoint/backtrack overlays rather than inlining each plugin
+| File | `metadata.name` | What it does |
+|------|-----------------|--------------|
+| `observability-native.yaml` | `observability-native` | Writes native `events.jsonl`. |
+| `with-hardened.yaml` | `with-hardened` | Production guidelines, written once for every agent: `gov_no_undeclared_tool`, the `budget` call ceilings, and `retry_on_error`. |
+| `openclaw.yaml` | `openclaw` | Repeated-error backtracking. Pair it with the `openclaw` overlay. |
+
+The overlays below are patches of the agent spec.
+
+| File | `metadata.name` | Kind | What it does |
+|------|-----------------|------|----------------|
+| `openclaw.yaml` | `openclaw` | Overlay | Enables LLM-call checkpoints, self-contained persistence, auto-resume. |
+| `production-memory.yaml` | `production-memory` | Overlay | Reviewed `keep_turns` / hysteresis / trimmer margin. Archive path lives in `config.yaml`, not this overlay. See [context-management.md](../../../../../../docs/references/context-management.md). |
+| `cheap-summarizer.yaml` | `cheap-summarizer` | Overlay | Sets `summarizer.params.model` to `gpt-4o-mini` (same `summarising` type; params merge). |
+
+A Control's `observability` is a sequence (every plugin sees every event).
+A Control's `governance` is a chain: BLOCK stops and returns the error; ALLOW
+passes to the next plugin. `with-hardened` replaces the agent's governance. Stack more files the same way — a future OpenClaw-like flavour
+would compose `with-hardened` + observability + checkpoint/backtrack rather
+than inlining each plugin
 ([reliability.md](../../../../../../docs/references/reliability.md),
 [governance.md](../../../../../../docs/manifests/governance.md)).
 
 ```bash
 mas-ctl chat agent.yaml \
-  -o pkg://mas.library.standard/overlays/with-hardened.yaml \
-  -o pkg://mas.library.standard/overlays/observability-native.yaml
+  --control pkg://mas.library.standard/controls/with-hardened.yaml \
+  --control pkg://mas.library.standard/controls/observability-native.yaml
 ```
 
-CLI shortcut `--events` is equivalent to `observability-native` for one run.
+CLI shortcut `--events` records native events for one run.
 See [docs/cli/observability.md](../../../../../../docs/cli/observability.md).
 
-The `openclaw` control preset enables full LLM-call checkpointing, self-contained
-resume, and repeated-error backtracking. See
-[Session checkpoints](../../../../../../docs/manifests/checkpoint.md).
+The `openclaw` Control enables full LLM-call checkpointing, self-contained
+resume, and repeated-error backtracking. See [Session checkpoints](../../../../../../docs/manifests/checkpoint.md).
 
 `gov_no_undeclared_tool` example (not a sample app):
 [examples/governance/undeclared-tool/](../../../../../examples/governance/undeclared-tool/).

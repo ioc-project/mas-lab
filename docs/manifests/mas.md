@@ -313,7 +313,7 @@ _Used by:_ `spec.telemetry`
 |-------|------|---------|-------------|
 | `path` | `string` | `""` | Path to the event log file (JSONL), relative to `mas.yaml`. |
 
-`mas-ctl run-mas` does not read this block in this release. Set where events go with the agents' `spec.observability` (the `native` sink's `path` and `events_file`) or the released `telemetry` block of the flavour (kept for compatibility).
+`mas-ctl run-mas` does not read this block in this release. Set where events go with a Control's `observability`, Flavour `bind.events`, or `--events*`. Leftover Flavour `observability` and `telemetry` are unread.
 
 **Example:**
 

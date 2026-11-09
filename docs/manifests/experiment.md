@@ -56,6 +56,10 @@ mas-lab benchmark run experiment.yaml \
   --override 'experiment:experiment.dataset.limit=2'
 ```
 
+`--control REF[@SELECTOR]` attaches a `kind: Control` file the same way `mas-ctl chat` does.
+A scenario's `overlays.control` is the YAML bucket for that path. Quote a selector so the
+shell does not expand `*`.
+
 Put reusable selector and wildcard groups in an Overlay manifest under `spec.overrides`.
 The [Overlay manifest reference](overlay.md) defines the target, patch, precedence, and validation rules.
 
@@ -126,7 +130,7 @@ scenarios:
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `id` | yes | Unique scenario id; also the run directory name. |
-| `overlays` | no | Three overlay stacks applied in order `logic`, `control`, `infra`. Each entry is an overlay id (resolved in `configs_dir`) or `{ref: path}`. When `overlays` is present, all three keys are required; use `[]` for an empty stack. |
+| `overlays` | no | Three stacks applied in order `logic`, `control`, `infra`. `logic` and `infra` are Overlay patches. `control` attaches `kind: Control` files the same way `--control` does. Each entry is an id (resolved in `configs_dir`) or `{ref: path}`. When `overlays` is present, all three keys are required; use `[]` for an empty stack. |
 | `description` | no | Label shown in reports. |
 | `tags` | no | Grouping and filtering labels. |
 | `flavour` | no | Per-scenario flavour name or path. A **flavour** is the glue that links the logic spec to the infra (its `bind`); see [flavour.md](flavour.md). |

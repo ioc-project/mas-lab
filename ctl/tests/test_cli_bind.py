@@ -40,7 +40,9 @@ def test_expand_connects_a2a_is_infra_connect_not_a_flavour_switch() -> None:
     assert result["spec"]["endpoints"]["fraud_adjudicator"]["usage"] == "connect"
     assert all(item.startswith("infra:") for item in overrides)
     flavour = resolve_flavour("local", overrides=overrides)
-    assert flavour.get("agent_comm", {}).get("protocol") == "agent-local"
+    assert flavour == {}
+    assert "agent_comm" not in flavour
+    assert "tools" not in flavour
 
 
 def test_expand_connects_mcp_collapses_same_origin_into_one_tool_server() -> None:
@@ -56,8 +58,9 @@ def test_expand_connects_mcp_collapses_same_origin_into_one_tool_server() -> Non
     assert "analyze_transaction_risk" in overrides[0]
     assert "calculate_fraud_score" in overrides[0]
     flavour = resolve_flavour("local", overrides=overrides)
-    assert flavour.get("agent_comm", {}).get("protocol") == "agent-local"
-    assert flavour.get("tools", {}).get("remote_tools_enabled") is False
+    assert flavour == {}
+    assert "agent_comm" not in flavour
+    assert "tools" not in flavour
 
 
 def test_explicit_override_wins_over_connect() -> None:

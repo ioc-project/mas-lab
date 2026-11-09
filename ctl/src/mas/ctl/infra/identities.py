@@ -10,14 +10,26 @@ from mas.ctl.compose.models import ResolvedInfra
 from mas.runtime.boundary.delegation.policy import delegation_targets
 
 
-def entry_agent_id(mas_config: dict[str, Any] | None) -> str:
-    """Resolve the MAS entry agent id from mas config."""
+def declared_entry_id(mas_config: dict[str, Any] | None) -> str:
+    """The entry agent the MAS names: ``spec.entry_agent`` or ``workflow.entry``.
+
+    Omitted, Control ``$entry`` matches nobody. :func:`entry_agent_id` still falls
+    back to the first agency row when a session has to pick someone to run.
+    """
     spec = _spec(mas_config)
     if isinstance(spec.get("entry_agent"), str) and spec["entry_agent"].strip():
         return spec["entry_agent"].strip()
     workflow = spec.get("workflow") if isinstance(spec.get("workflow"), dict) else {}
-    if workflow.get("entry"):
-        return str(workflow["entry"])
+    entry = workflow.get("entry")
+    return str(entry).strip() if entry else ""
+
+
+def entry_agent_id(mas_config: dict[str, Any] | None) -> str:
+    """Resolve the MAS entry agent id from mas config."""
+    declared = declared_entry_id(mas_config)
+    if declared:
+        return declared
+    spec = _spec(mas_config)
     agency = spec.get("agency") if isinstance(spec.get("agency"), dict) else {}
     agents = agency.get("agents") or spec.get("agents") or []
     if agents and isinstance(agents[0], dict):

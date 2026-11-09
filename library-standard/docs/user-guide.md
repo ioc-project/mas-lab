@@ -8,7 +8,7 @@
 
 ```bash
 uv pip install -e library-standard
-mas-ctl chat agent.yaml -o pkg://mas.library.standard/overlays/with-hardened.yaml
+mas-ctl chat agent.yaml --control pkg://mas.library.standard/controls/with-hardened.yaml
 ```
 
 ## What you get
@@ -17,7 +17,7 @@ mas-ctl chat agent.yaml -o pkg://mas.library.standard/overlays/with-hardened.yam
 - Skills and tool providers (`sk_*`, `tool_*`)
 - Context and memory plugins (`ctx_*`, `memory_*`)
 - Observability and governance plugins (`obs_*`, `gov_*`)
-- Overlays (`observability-native`, `with-hardened`) — [index](../src/mas/library/standard/overlays/README.md)
+- Overlays and Controls (`observability-native`, `with-hardened`) — [index](../src/mas/library/standard/overlays/README.md)
 - Transport and integration plugins (`tp_*`, `tool_server_*`)
 
 ## Typical usage
@@ -41,30 +41,30 @@ Use these for tutorials and integration smoke tests. App-specific samples belong
 
 Use the standard memory plugins for workspace and session context and for compaction hooks.
 
-### Overlays
+### Overlays and Controls
 
-Index: [src/mas/library/standard/overlays/README.md](../src/mas/library/standard/overlays/README.md).
+Index: [src/mas/library/standard/overlays/README.md](../src/mas/library/standard/overlays/README.md). `-o` accepts both kinds.
 
-| Overlay | Apply |
-|---------|--------|
-| `observability-native` | native `events.jsonl` |
-| `with-hardened` | append `gov_no_undeclared_tool` + `retry_on_error`; merge retry/circuit knobs |
-| `cheap-summarizer` | `summarizer.params.model: gpt-4o-mini` |
+| File | Kind | Apply |
+|------|------|--------|
+| `observability-native.yaml` | Control | native `events.jsonl` |
+| `with-hardened.yaml` | Control | undeclared-tool BLOCK, call ceilings (`budget`), typed ingress retry |
+| `cheap-summarizer.yaml` | Overlay | `summarizer.params.model: gpt-4o-mini` |
 
 ```bash
 mas-ctl chat agent.yaml \
-  -o pkg://mas.library.standard/overlays/with-hardened.yaml \
-  -o pkg://mas.library.standard/overlays/observability-native.yaml
+  --control pkg://mas.library.standard/controls/with-hardened.yaml \
+  --control pkg://mas.library.standard/controls/observability-native.yaml
 ```
 
-CLI shortcut `--events` is equivalent to `observability-native` for one run.
+`--events` does not replace the plugin set; the `observability-native` Control does.
 Full flag matrix: [docs/cli/observability.md](../../docs/cli/observability.md).
 
 ### Add governance controls
 
 Enable budget and policy plugins to constrain calls, tokens or tool access.
 
-The `with-hardened` overlay refuses tool names the model was not given in this LLM call's `tools` list, even if they appear on the agent spec. You can also list the plugin on the governance chain: `spec.governance` is a chain (BLOCK stops, ALLOW continues), while `spec.observability` is a sequence. The overlay also installs `retry_on_error` and the `spec.control` retry and circuit knobs; see
+The `with-hardened` Control refuses tool names the model was not given in this LLM call's `tools` list, even if they appear on the agent spec. Call ceilings are the `budget` governance plugin. Retry and the circuit breaker stay on Agent `spec.control` (deprecated, still applied); see
 [reliability.md](../../docs/references/reliability.md),
 [governance.md](../../docs/manifests/governance.md).
 

@@ -15,6 +15,7 @@ handle — it never imports ``build_observability_plugins`` or constructs an
 plugin directly (that happens inside runtime's own
 ``mas.runtime.boundary.context.dp_inject``).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -32,6 +33,11 @@ from mas.runtime.boundary.obs.plugins import (
 
 if TYPE_CHECKING:
     from mas.runtime.driver.instance import RuntimeInstance
+
+
+def cli_replaced_plugin_set(events: bool | None, events_format: str | None) -> bool:
+    """True when ``--no-events`` or ``--events-format`` native/otel/both replace the plugin set."""
+    return events is False or events_format in {"native", "otel", "both"}
 
 
 def obs_config_to_binding(config: ObservabilityConfig) -> ObservabilityBinding | None:
@@ -96,13 +102,10 @@ def setup_shared_obs(
 def _is_default_native_plugin_set(plugin_set: ObsPluginSet) -> bool:
     """True when *plugin_set* is native-only writing the default traces/events.jsonl.
 
-    Agent overlays such as ``observability-native`` and ``with-guardrail``
-    declare ``observability: [native]`` (optionally with path
-    ``traces/events.jsonl``). After Agent-on-MAS fan-out that list lands on
-    every agency row, so materialization builds a private plugin set per
-    agent. That is "enable native for this run", not an isolated sink — the
-    ctl shared ``events.jsonl`` already covers it. A custom filename or an
-    extra plugin (otel, …) stays scoped.
+    A Control such as ``observability-native`` declares ``observability: [native]``
+    (optionally with path ``traces/events.jsonl``). That is "enable native for
+    this run", not an isolated sink — the ctl shared ``events.jsonl`` already
+    covers it. A custom filename or an extra plugin (otel, …) stays scoped.
     """
     if len(plugin_set.plugins) != 1:
         return False
@@ -209,14 +212,16 @@ def setup_run_observability(
     Returns ``(shared_plugin_set, scoped_recorders)``; both are empty/None
     when *obs_config* is ``None`` (observability disabled for this run).
     """
-    if obs_config is None:
+    if obs_config is None or not obs_config.enabled:
+        if obs_config is not None and not obs_config.enabled:
+            for instance in instances.values():
+                if _plugin_set_of(instance) is not None:
+                    _release_plugin_set(instance)
         return None, []
     shared_instances, scoped_instances = partition_instances_by_observability(instances)
     plugin_set = None
     if shared_instances:
-        plugin_set = setup_shared_obs(
-            shared_instances, obs_config, base_dir=base_dir, entry_agent_id=entry_agent_id
-        )
+        plugin_set = setup_shared_obs(shared_instances, obs_config, base_dir=base_dir, entry_agent_id=entry_agent_id)
     return plugin_set, finalize_scoped_observability(scoped_instances)
 
 
@@ -235,8 +240,13 @@ def setup_observability(
 
     If ``from_spec`` already built a plugin set from the agent overlay, reuse
     it. Subscribing a second set on the same operator duplicates every span.
+    ``--no-events`` (``config.enabled`` false) drops that leftover set.
     """
     existing = _plugin_set_of(instance)
+    if not config.enabled:
+        if existing is not None:
+            _release_plugin_set(instance)
+        return None
     if existing is not None and existing.plugins:
         return SessionObservabilityRecorder(plugin_set=existing)
     binding = obs_config_to_binding(config)

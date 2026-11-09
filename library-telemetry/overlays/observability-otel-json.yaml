@@ -1,17 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Replace flavour-default native JSONL with live OTel spans on disk.
-apiVersion: mas/v1
-kind: Overlay
+# Live OTel spans on disk.
+apiVersion: control/v1
+kind: Control
 metadata:
   name: observability-otel-json
 spec:
-  target:
-    kind: Agent
-  patch:
-    observability:
-      $op:
-        replace:
-          - otel:
-              output_path: traces/otel_sdk_spans.jsonl
-              converter_profile: observe_sdk
+  observability:
+  - otel:
+      output_path: traces/otel_sdk_spans.jsonl
+      converter_profile: observe_sdk

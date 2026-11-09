@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import click
+from mas.ctl.cli.bind_flags import control_option
 from mas.ctl.cli.help_text import COMPILE_EPILOG
 from mas.ctl.compile import (
     CompileError,
@@ -18,11 +19,19 @@ from mas.ctl.compile import (
     write_compiled,
 )
 from mas.ctl.paths import manifest_cwd
+from mas.ctl.session.flavour import FlavourError, flavour_argument, resolve_session_flavour
+from mas.ctl.session.flavour_control import ControlError, attach_overlay_controls
 
 
 @click.command("compile", epilog=COMPILE_EPILOG)
 @click.argument("manifest")
 @click.option("-o", "--overlay", "overlays", multiple=True, type=click.Path())
+@control_option
+@click.option(
+    "--flavour",
+    default=None,
+    help="Flavour: bundled name local or prod, or a Flavour YAML path. Omitted: local.",
+)
 @click.option(
     "--override",
     "overrides",
@@ -57,6 +66,8 @@ from mas.ctl.paths import manifest_cwd
 def compile_cmd(
     manifest: str,
     overlays: tuple[str, ...],
+    controls: tuple[str, ...],
+    flavour: str | None,
     overrides: tuple[str, ...],
     output_path: str | None,
     layout: str,
@@ -74,6 +85,16 @@ def compile_cmd(
     """
     try:
         with manifest_cwd(manifest, overlay_paths=overlays) as session:
+            search_dirs = (
+                [session.original_cwd, session.manifest_dir] if session.manifest_dir else [session.original_cwd]
+            )
+            flavour_spec = resolve_session_flavour(
+                flavour_argument(flavour),
+                overrides=overrides,
+                controls=controls,
+                search_dirs=search_dirs,
+            )
+            attach_overlay_controls(flavour_spec, session.overlays)
             compiled = compile_manifest(
                 session.manifest,
                 list(session.overlays),
@@ -81,6 +102,7 @@ def compile_cmd(
                 fill_defaults=not no_defaults,
                 validate=not no_validate,
                 schema_kind=schema_kind,
+                flavour_spec=flavour_spec,
             )
             dest = Path(output_path).expanduser() if output_path else None
             if dest is not None and not dest.is_absolute():
@@ -99,7 +121,7 @@ def compile_cmd(
                 layout=resolved,
                 header=not no_header,
             )
-    except (CompileError, FileNotFoundError, ValueError) as exc:
+    except (CompileError, ControlError, FileNotFoundError, FlavourError, ValueError) as exc:
         click.echo(str(exc), err=True)
         raise SystemExit(1) from exc
 

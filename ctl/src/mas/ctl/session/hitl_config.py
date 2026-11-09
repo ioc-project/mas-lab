@@ -27,8 +27,7 @@ def _load_hitl_responder(mode: str) -> HitlResponder | None:
     if variant is None:
         names = get_registry().list_names("hitl_responder")
         raise ValueError(
-            f"unsupported spec.governance.hitl_mode: {mode!r}; "
-            f"expected one of {sorted([*names, 'interactive'])}"
+            f"unsupported spec.governance.hitl_mode: {mode!r}; expected one of {sorted([*names, 'interactive'])}"
         )
     return variant.load_class()()
 
@@ -37,12 +36,25 @@ def resolve_hitl_from_manifest(
     manifest: dict[str, Any] | None,
     *,
     session_interactive: bool = False,
+    flavour_spec: dict[str, Any] | None = None,
+    agent_id: str = "",
+    entry_id: str = "",
+    delegate_ids: list[str] | tuple[str, ...] = (),
 ) -> tuple[Any | None, Any | None]:
     """Return (hitl_responder, hitl_terminal) for SessionController / RuntimeBuilder.
 
     ``hitl_terminal`` is always ``None`` — interactive HITL is owned by ctl surfaces.
     """
-    spec = (manifest or {}).get("spec") or {}
+    from mas.ctl.session.manifest_config import agent_id_from_manifest, spec_with_control_lists
+
+    who = agent_id or agent_id_from_manifest(manifest)
+    spec = spec_with_control_lists(
+        (manifest or {}).get("spec") or {},
+        flavour_spec,
+        agent_id=who,
+        entry_id=entry_id or who,
+        delegate_ids=delegate_ids,
+    )
     gov = parse_governance(spec.get("governance"))
     if not gov.hitl_on_tool and not gov.hitl_on_tool_result:
         return None, None

@@ -13,5 +13,5 @@ spec:
   engine:
     queue_depth: 32
     # No max_auto_steps — lab default is uncapped. Production overlay
-    # with-hardened sets design_pattern.params.max_steps: 512.
+    # Set design_pattern.params.max_steps (for example 512) in production.
   stream: false

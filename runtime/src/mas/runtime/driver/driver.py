@@ -63,7 +63,7 @@ def _within_auto_step_budget(auto_steps: int, max_auto_steps: int | None) -> boo
     """True while the driver may take another dispatch step.
 
     ``max_auto_steps is None`` means no cap (lab default). A production
-    overlay such as ``with-hardened`` sets an integer.
+    the agent or an overlay sets an integer.
     """
     return max_auto_steps is None or auto_steps < max_auto_steps
 
@@ -758,43 +758,6 @@ class KernelDriver:
             except Exception as exc:
                 apply_gov_error(self.kernel.q)
                 return gov_plugin_boundary_error(exc)
-        return self._notify_runtime_plugins(hook, symbol)
-
-    def _notify_runtime_plugins(
-        self, hook: Literal["ingress", "egress"], symbol: IngressSymbol | EgressSymbol
-    ) -> RaiseBoundaryError | None:
-        """gdb and other runtime plugins observe; they never BLOCK."""
-        from mas.runtime.boundary.gov.transition import build_gov_transition
-
-        plugins = tuple(getattr(getattr(self.kernel, "config", None), "runtime_plugins", ()) or ())
-        if not plugins:
-            return None
-        try:
-            transition = build_gov_transition(
-                hook,
-                symbol,
-                q=self.kernel.q,
-                agent_id=self.agent_id,
-                session_id=self.session_id,
-                task_id=self._current_task_id,
-                agent_spec=getattr(self.kernel.config, "agent_spec", None),
-            )
-        except Exception:
-            _logger.debug("runtime plugin transition build failed", exc_info=True)
-            return None
-        for plugin in plugins:
-            on_transition = getattr(plugin, "on_transition", None)
-            if not callable(on_transition):
-                continue
-            get_filters = getattr(plugin, "transition_filters", None)
-            if callable(get_filters):
-                filters = get_filters()
-                if filters and not any(f.matches(transition) for f in filters):
-                    continue
-            try:
-                on_transition(transition)
-            except Exception:
-                _logger.debug("runtime plugin failed", exc_info=True)
         return None
 
     def _invoke_engine(self, io: InvokeEngineIo) -> EngineIoReturn:

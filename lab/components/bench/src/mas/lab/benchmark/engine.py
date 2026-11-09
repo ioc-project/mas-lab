@@ -30,6 +30,7 @@ class BenchmarkRunOptions:
     output_dir: Path | None = None
     force_lock: bool = False
     flavour_name: str | None = None
+    controls: list[str] = field(default_factory=list)
     infra_name: str | None = None
     trace_cache_dir: Path | None = None
     data_cache_dir: Path | None = None
@@ -62,6 +63,7 @@ class BenchmarkRunOptions:
             data_cache_dir=_path("data_cache_dir"),
             force_lock=spec.get("force_lock", False),
             flavour_name=spec.get("flavour_name"),
+            controls=list(spec.get("controls") or []),
             infra_name=spec.get("infra_name"),
             strategy=spec.get("strategy"),
             step_overrides=spec.get("step_overrides") or [],
@@ -120,8 +122,7 @@ async def run_benchmark(
 
     if not _is_mas_experiment_yaml(experiment_yaml):
         logger.error(
-            "Unsupported experiment schema in %s — declare experiment.application "
-            "(see docs/manifests/experiment.md).",
+            "Unsupported experiment schema in %s — declare experiment.application (see docs/manifests/experiment.md).",
             experiment_yaml,
         )
         return False
@@ -140,6 +141,7 @@ async def run_benchmark(
         dataset_item=opts.dataset_item,
         single_run=opts.single_run,
         flavour_name=opts.flavour_name,
+        controls=opts.controls,
         infra_name=opts.infra_name,
         force=opts.force,
         trace_cache_dir=opts.trace_cache_dir,
@@ -167,10 +169,7 @@ async def restart_mas_run(
 
     match = re.match(r"^(.+)__item(.+)__r(\d+)$", run_id)
     if not match:
-        raise ValueError(
-            f"Invalid MAS run_id {run_id!r} — expected "
-            "'{{scenario}}__item{{id}}__r{{n}}'"
-        )
+        raise ValueError(f"Invalid MAS run_id {run_id!r} — expected '{{{{scenario}}}}__item{{{{id}}}}__r{{{{n}}}}'")
 
     scenario_id, item_id, run_num = match.groups()
     from mas.lab.lab.config import MASExperimentConfig

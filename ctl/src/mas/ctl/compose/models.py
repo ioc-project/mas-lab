@@ -101,3 +101,4 @@ class EffectiveBindManifest:
     experiment_default_model: str | None = None
     experiment_model_slots: dict[str, str] | None = None
     hitl_mode: Literal["block", "auto"] = "block"
+    flavour_spec: dict | None = None

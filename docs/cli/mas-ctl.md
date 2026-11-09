@@ -6,7 +6,7 @@
 
 `mas-ctl` runs, serves, and inspects a single agent or a multi-agent system (MAS) from YAML manifests. This page lists every flag. If this page and the code differ, `mas-ctl COMMAND --help` is correct.
 
-Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest. A *flavour* is the glue that links the logic spec to the infra (its `bind`). An *infra bundle* is a YAML file that says where services live. A *session* is one conversation with an agent. A *checkpoint* is a saved session state. See the [glossary](../glossary.md).
+Terms: a *manifest* is a YAML file that declares an agent or a MAS. An *overlay* is a small YAML file merged on top of a manifest (`-o`). A *Control* is a YAML file that holds observability and governance plugin lists; attach it with `--control`. A *flavour* is the glue that links the logic spec to the infra (its `bind`). An *infra bundle* is a YAML file that says where services live. A *session* is one conversation with an agent. A *checkpoint* is a saved session state. See the [glossary](../glossary.md).
 
 ## The three commands most people run
 
@@ -35,12 +35,13 @@ mas-ctl chat agent.yaml -i
 mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia"
 ```
 
-### Pass an overlay
+### Pass an overlay or a Control
 
-An overlay changes the manifest for one run, without editing the file.
+An Overlay (`-o`) patches the agent, MAS, Flavour, or Control. A Control (`--control`) attaches observability and governance sets.
 
 ```bash
 mas-ctl chat agent.yaml -o overlays/tools.yaml
+mas-ctl chat agent.yaml --control controls/governance-hitl.yaml
 mas-ctl chat agent.yaml --tool calculator
 ```
 
@@ -116,7 +117,7 @@ mas-ctl [-v] [--env FILE] COMMAND …
 | stdout | The conversation (`You:` and `Agent:`) | Always, for `chat` and `run-mas`. |
 | stderr | The exchange log: human-readable AGENT, LLM, TOOL, and GOV hops | `--trace` or `mas_ctl.trace`. |
 | stderr | `note: LLM response served from cache` | `-v` (cache hits and other internals; not on by default). |
-| `events.jsonl` | The machine run log | `--events`, an overlay, or the manifest. See [observability.md](observability.md). |
+| `events.jsonl` | The machine run log | `--events`, a Control, or the (deprecated) agent key. See [observability.md](observability.md). |
 
 Stdout always stays the conversation. Color is off unless you pass `--trace-color`.
 
@@ -159,7 +160,9 @@ mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
-| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or the path of a Flavour YAML file. |
+| `--flavour NAME\|PATH` | omitted (`local`) | Flavour: bundled name `local` or `prod`, or a Flavour YAML path. |
+| `--control REF[@SELECTOR]` | none | Attach a `kind: Control` file to the session (repeatable). `SELECTOR` is `$all`, `$entry`, `$not-entry`, `$delegates`, agent ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`). See [control.md](../manifests/control.md). |
+| `--events-sink ROW` | none | Send events to this infra Application row (adds it to `bind.events`). |
 | `--infra-ref REF` | workspace or user | Infra bundle. Repeatable. Wins over `config.yaml`. Deployed A2A endpoints for this agent bind in-process for interrogation. |
 | `--runtime-ref REF` | workspace or user | `RuntimeEngine` ref. Repeatable. |
 | `--model ID` | `spec.models`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model for this run. |
@@ -195,13 +198,15 @@ How the patching flags work:
 | `--load-checkpoint PATH` | none | Restore a checkpoint. |
 | `--save-checkpoint` / `--no-save-checkpoint` | off | Save a checkpoint after each turn. |
 
-### Control attach
+### Live session control
+
+These flags advertise a control endpoint so `mas-ctl control attach` can pause or steer a running session. They do not attach a `kind: Control` file; that is `--control` above.
 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the session id. |
-| `--no-control` | off | Do not advertise a control endpoint. |
-| `--debug-script` | none | gdb-like script: `@file` or inline (runtime plugin `spec.debug`). |
+| `--no-control-dir` | off | Do not advertise a control endpoint. Pair of `--control-dir`, not of `--control`. `--no-control` is the same flag. |
+| `--debug-script` | none | gdb-like script: `@file` or inline. Writes a Control that names the `gdb` governance plugin. |
 
 ### Exchange log
 
@@ -235,10 +240,10 @@ Field reference: [config.yaml](../references/config.yaml.md#mas_ctl).
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--events` / `--no-events` | manifest | Force native observability on or off. |
-| `--events-file PATH` | `traces/events.jsonl` | JSONL output path. |
-| `--events-stderr` / `--events-stdout` | off | Also stream JSONL on stderr. `--events-stdout` is a legacy alias. |
-| `--events-format` | manifest | One of `native`, `boundary`, `both`, `otel`. |
+| `--events` / `--no-events` | native on when none selected | `--no-events` turns recording off. `--events` does not replace the plugin set. |
+| `--events-file PATH` | `traces/events.jsonl` | Native JSONL output path. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
+| `--events-stderr` / `--events-stdout` | off | Also stream native JSONL on stderr. `--events-stdout` is a legacy alias. Adds `native` when it is not in the plugin set; never replaces a plugin. |
+| `--events-format` | manifest | `native`, `otel`, and `both` replace the plugin set. `boundary` is the transform chain only. |
 
 ### Interactive commands
 
@@ -252,7 +257,7 @@ Type these at the `You:` prompt. They are also listed in `mas-ctl chat --help`.
 | `/skills`, `/skill NAME` | List skills, or activate one. |
 | `/backtrack [N] [TEXT]` | Restore the checkpoint N steps back (default 1), with an optional steering note. Needs `--checkpoint-dir`. |
 
-With `spec.governance.hitl_on_tool` set, interactive mode prompts SCHEDULE, BLOCK, or SKIP on stderr. Batch `-q` runs auto-approve unless the overlay sets `hitl_mode: auto-deny`.
+With a Control that sets `hitl_on_tool`, interactive mode prompts SCHEDULE, BLOCK, or SKIP on stderr. Batch `-q` runs approve automatically unless the Control sets `hitl_mode: auto_deny`.
 
 ## `mas-ctl run-mas [MANIFEST]`
 
@@ -270,7 +275,9 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 | `--override PATH=VALUE` | none | Schema-backed MAS, infra, or flavour patch. Applies last. |
 | `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `-d` / `--deployment PATH` | workspace `mas_ctl.deployment` | Deployment manifest. |
-| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or a Flavour YAML file. |
+| `--flavour NAME\|PATH` | omitted (`local`) | Flavour: bundled name `local` or `prod`, or a Flavour YAML path. |
+| `--control REF[@SELECTOR]` | none | Attach a `kind: Control` file to the session (repeatable). `SELECTOR` is `$all`, `$entry`, `$not-entry`, `$delegates`, agent ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`). See [control.md](../manifests/control.md). |
+| `--events-sink ROW` | none | Send events to this infra Application row (adds it to `bind.events`). |
 | `--infra-ref REF` | none | Infra bundle. Repeatable. |
 | `--kernel ID` | `mas-runtime-py` | Runtime id. It is the only value today. |
 | `-i` / `--interactive` | off | Open an interactive session. |
@@ -305,9 +312,17 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `--listen NAME=a2a://HOST:PORT` | none | Shortcut for the agent's own Application endpoint with `usage: listen`. Expands to `--override infra:…`. |
 | `--infra-ref REF` | workspace or user | Infra bundle. It must include the agent's deployed Application endpoint. |
 | `--cache-read-only` | off | Exclusive replay (see `chat`): answer from the cache only, no API key needed. |
-| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or a Flavour YAML file. |
+| `--flavour NAME\|PATH` | omitted (`local`) | Flavour: bundled name `local` or `prod`, or a Flavour YAML path. |
+| `--control REF[@SELECTOR]` | none | Attach a `kind: Control` file to the session (repeatable). `SELECTOR` is `$all`, `$entry`, `$not-entry`, `$delegates`, agent ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`). See [control.md](../manifests/control.md). |
+| `--events-sink ROW` | none | Send events to this infra Application row (adds it to `bind.events`). |
+| `--events` / `--no-events` | native on when none selected | `--no-events` turns recording off. `--events` does not replace the plugin set. |
+| `--events-file PATH` | `traces/events.jsonl` | Native JSONL output path. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
+| `--events-stderr` / `--events-stdout` | off | Also stream native JSONL on stderr. `--events-stdout` is a legacy alias. |
+| `--events-format` | manifest | `native`, `otel`, and `both` replace the plugin set. `boundary` is the transform chain only. |
 | `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the A2A `contextId`. |
-| `--no-control` | off | Do not advertise a control endpoint. |
+| `--no-control-dir` | off | Do not advertise a control endpoint. Pair of `--control-dir`, not of `--control`. `--no-control` is the same flag. |
+
+`serve` also takes the `--events*` flags.
 
 ## `mas-ctl tui [MANIFEST]`
 
@@ -319,7 +334,9 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `--override PATH=VALUE` | none | Schema-backed session-tree patch. Applies last. |
 | `--connect NAME=URI` | none | Shortcut for infra `usage: connect` rows. Expands to `--override infra:…`. `--bind` is the hidden old name. |
 | `--pattern ID` | manifest | Design-pattern plugin id. |
-| `--flavour NAME\|PATH` | `local` | Flavour: the bundled name `local`, or a Flavour YAML file. |
+| `--flavour NAME\|PATH` | omitted (`local`) | Flavour: bundled name `local` or `prod`, or a Flavour YAML path. |
+| `--control REF[@SELECTOR]` | none | Attach a `kind: Control` file to the session (repeatable). `SELECTOR` is `$all`, `$entry`, `$not-entry`, `$delegates`, agent ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`). See [control.md](../manifests/control.md). |
+| `--events-sink ROW` | none | Send events to this infra Application row (adds it to `bind.events`). |
 | `--single-turn` | off | Exit after the first reply. |
 | `--memory-seed PATH` | none | Memory seed. |
 | `--infra-ref` / `--infra REF` | none | Infra bundle. Repeatable. |
@@ -336,12 +353,12 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | --- | --- | --- |
 | `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay` |
 | `mas-ctl schemas` | List registered schema kinds. | none |
-| `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
+| `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--control`, `--flavour`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
 | `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--connect`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
 | `mas-ctl plan MANIFEST` | Print the placement plan only. | `-d/--deployment`, `--kernel`, `--no-validate` |
-| `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: it prints a warning on stderr; pass `--flavour PATH`, or the bundled name `local`. | none |
+| `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: it prints a warning on stderr; pass `--flavour PATH`, or a bundled name (`local`, `prod`). | none |
 | `mas-ctl infra list` | List infra bundles. Alias: `mas-ctl list-bundles`. | `-v` |
-| `mas-ctl infra show` | Print each LLM and tool chain, and each agent's comm stack and its name on the Flavour's chain. | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--flavour`, `--json` |
+| `mas-ctl infra show` | Print each LLM and tool chain, and each agent's comm stack and its name on the Flavour's chain. | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--flavour`, `--control`, `--json` |
 | `mas-ctl list-bundles` | List infra bundles from installed libraries. | `-v` |
 | `mas-ctl registry list`, `registry query PREFIX` | List registered runtime machines, ctl registries, and schema kinds. | `query`: `-l/--layer`, `--json` |
 | `mas-ctl plugin list`, `doctor [MANIFEST …]`, `enable URN` | Show plugin availability from `library.yaml` `plugins:`. `enable` installs the missing extra. | `list`: `--type`, `--json`. `doctor`: `--json`. `enable`: `--dry-run`. |

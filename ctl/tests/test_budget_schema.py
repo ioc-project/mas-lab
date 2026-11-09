@@ -63,18 +63,11 @@ def test_budget_overlay_patch_unknown_field_is_rejected(tmp_path: Path) -> None:
     assert not result.ok
 
 
-def test_with_hardened_overlay_sets_budget_caps() -> None:
-    from mas.ctl.overlay.merge import merge_overlay
-
-    overlays_dir = (
-        Path(__file__).resolve().parents[2] / "library-standard" / "src" / "mas" / "library" / "standard" / "overlays"
+def test_with_hardened_control_names_the_budget_plugin() -> None:
+    controls_dir = (
+        Path(__file__).resolve().parents[2] / "library-standard" / "src" / "mas" / "library" / "standard" / "controls"
     )
-    overlay = yaml.safe_load((overlays_dir / "with-hardened.yaml").read_text(encoding="utf-8"))
-    base = {
-        "apiVersion": "mas/v1",
-        "kind": "Agent",
-        "metadata": {"name": "telemetry"},
-        "spec": {"description": "test agent"},
-    }
-    merged = merge_overlay(base, overlay)
-    assert merged["spec"]["budget"] == {"max_llm_calls": 50, "max_tool_calls": 100}
+    control = yaml.safe_load((controls_dir / "with-hardened.yaml").read_text(encoding="utf-8"))
+    assert "budget" not in control["spec"]
+    caps = next(item["budget"] for item in control["spec"]["governance"] if isinstance(item, dict) and "budget" in item)
+    assert caps == {"max_llm_calls": 50, "max_tool_calls": 100}

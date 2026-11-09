@@ -100,11 +100,12 @@ from the manifest, not from `mas.runtime`.
 
 | ID | Alias | Implementation |
 |----|-------|----------------|
-| `gov_no_undeclared_tool@v1` | `gov_no_undeclared_tool`, `no_undeclared_tool` | `NoUndeclaredToolPlugin` — BLOCK names not in this LLM call's `tools` list; chain rule (pass or stop) |
+| `gov_no_undeclared_tool` | `gov_no_undeclared_tool` | `NoUndeclaredToolPlugin` — BLOCK names not in this LLM call's `tools` list; chain rule (pass or stop) |
 | `retry_on_error@v1` | `retry_on_error` | `RetryOnErrorPlugin` — ingress `error_policy` classifier; egress PASSes |
 
-gdb `debug_script` is a **runtime** plugin (`mas.runtime.debug_script`), not
-governance. Card: [governance/debug-script.md](governance/debug-script.md).
+| `debug_script@v1` | `debug_script` | `DebugScriptPlugin` — gdb-like breakpoints on tool calls and results; observes, never blocks |
+
+Card: [governance/debug-script.md](governance/debug-script.md).
 Example: [examples/governance/debug-script/](../../../../../examples/governance/debug-script/).
 
 - Card: [governance/no-undeclared-tool.md](governance/no-undeclared-tool.md)

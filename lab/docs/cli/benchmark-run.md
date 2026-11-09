@@ -40,6 +40,7 @@ Execute an experiment YAML.
 | `--data-cache` | Override step-cache directory (CLI > MAS_DATA_CACHE > <output_dir>/.cache). Use a shared path to reuse computed pipeline outputs after benchmark import. |
 | `--force-lock` | Force break existing lock. |
 | `--flavour` | Runtime flavour name resolved to <experiment_dir>/flavours/<name>.yaml. Defaults to experiment's default_flavour, then 'local'. |
+| `--control` | Attach a kind: Control file (observability set and governance set) to the session, the way a Flavour spec.control row does. REF is a path, pkg://… or a library ref. SELECTOR is $all (default), $entry, $not-entry, $delegates, agent ids, or the same agent path as --override (.mas.agent[id] / .mas.agent[*]). |
 | `--infra` | Infra bundle name resolved to <experiment_dir>/infra/<name>.yaml. Selects which infrastructure services (OTel collector, storage, …) are provisioned by service_start / service_stop pipeline steps. Defaults to experiment's default_infra (opt-in, no default). |
 | `--strategy` | Execution ordering (overrides YAML schedule.ordering). coverage (default): breadth-first — every condition gets one run before any gets a second run, maximising coverage after partial execution. depth: depth-first — complete all runs for each condition before moving on. |
 | `--set` | Override a pipeline step config key from the CLI. Format: STEP_TYPE.key=value (e.g. --set export_otel.destination=mock). Value is auto-coerced: 'true'/'false' → bool, integers → int. Can be repeated for multiple overrides. |

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -64,37 +65,47 @@ def get_trace_cache_dir(explicit: Optional[Path] = None) -> Path:
     return _paths.trace_cache(explicit=explicit)
 
 
-def extract_flavour_info(flavour: Optional[Any]) -> dict:
+def extract_flavour_info(flavour: Optional[Any], *, search_dirs: Sequence[Path | str] = ()) -> dict:
     """Return all deterministic (non-secret) FlavourManifest fields for cache keying.
 
     Generic scrub — whatever fields a FlavourManifest happens to carry get
     captured (minus the exclusions below), so this doesn't need updating when
     the Flavour schema grows or shrinks a section.
 
-    Post-FT4 (docs/design/flavour-boundary.md), a Flavour is deployment
-    posture only: agent_comm (protocol, mode, emulation), tools
-    (remote_tools_enabled, allowed), observability/control (plugin
-    selection), config (free-form deployment config). llm, skills,
-    and prefer_local no longer live on the Flavour — they're on the agent
-    spec / workspace infra instead, and already flow into the cache key via
-    ``manifest`` (the materialized per-agent config passed into
-    :func:`compute_run_hash`), so removing them from the flavour side doesn't
-    lose any determinism: it removes a redundant second copy of the same
-    signal, not the signal itself.
+    A Flavour is glue: leftover unread keys stay out of the hash (bind,
+    observability, agent_comm, tools, telemetry, name). Control plugin lists
+    stay in. llm, skills, and prefer_local live on the agent spec / workspace
+    infra and already flow into the cache key via ``manifest``.
 
     Deliberately excluded:
       api_key_env, embed_api_key_env  — secrets
       _available                      — ProviderSpec cached probe result (runtime state)
       _raw                            — FlavourManifest forward-compat store
       name, description               — organisational, not computational
-      telemetry                       — logging backend doesn't affect LLM output
+      telemetry, observability, agent_comm, tools — leftover, unread
       bind                            — which infra rows calls ride: deployment, not logic
+      leftover control mapping        — unread; a Control-ref list is hashed as plugin lists
     """
     if flavour is None:
         return {}
 
     _SECRETS = frozenset({"api_key_env", "embed_api_key_env"})
-    _SKIP = frozenset({"_available", "_raw", "name", "description", "telemetry", "bind"})
+    _SKIP = frozenset(
+        {
+            "_available",
+            "_raw",
+            "name",
+            "description",
+            "telemetry",
+            "bind",
+            "observability",
+            "agent_comm",
+            "tools",
+        }
+    )
+
+    def _drop_leftover_control(key: Any, value: Any) -> bool:
+        return key == "control" and isinstance(value, dict)
 
     def _scrub(obj: Any) -> Any:
         import dataclasses as _dc
@@ -106,6 +117,7 @@ def extract_flavour_info(flavour: Optional[Any]) -> dict:
                 if f.name not in _SECRETS
                 and f.name not in _SKIP
                 and not f.name.startswith("_")
+                and not _drop_leftover_control(f.name, getattr(obj, f.name))
             }
         if isinstance(obj, dict):
             return {
@@ -114,28 +126,36 @@ def extract_flavour_info(flavour: Optional[Any]) -> dict:
                 if k not in _SECRETS
                 and k not in _SKIP
                 and not str(k).startswith("_")
+                and not _drop_leftover_control(k, v)
             }
         if isinstance(obj, (list, tuple)):
             return [_scrub(v) for v in obj]
         return obj
 
+    from mas.ctl.session.flavour_control import ControlError, control_body_for_hash
+
+    hashed: Any = flavour
     try:
         import dataclasses as _dc
 
-        # FlavourManifest dataclass (most common path)
         if _dc.is_dataclass(flavour) and not isinstance(flavour, type):
-            return _scrub(flavour)
-        # Plain dict (used in some tests / legacy callers)
-        if isinstance(flavour, dict):
-            return _scrub(flavour)
-        # Object with .spec attribute (e.g. FlavourSpec wrapper in experiment.py)
-        spec = getattr(flavour, "spec", None)
-        if spec is not None:
+            hashed = {f.name: getattr(flavour, f.name) for f in _dc.fields(flavour)}
+        elif not isinstance(flavour, dict):
+            spec = getattr(flavour, "spec", None)
             if _dc.is_dataclass(spec) and not isinstance(spec, type):
-                return _scrub(spec)
-            if isinstance(spec, dict):
-                return _scrub(spec)
-        # Last resort: pull llm attributes directly
+                hashed = {f.name: getattr(spec, f.name) for f in _dc.fields(spec)}
+            elif isinstance(spec, dict):
+                hashed = spec
+
+        if isinstance(hashed, dict):
+            body = control_body_for_hash(hashed, search_dirs=search_dirs)
+            if body is not None:
+                if isinstance(hashed.get("spec"), dict):
+                    hashed = {**hashed, "spec": {**hashed["spec"], "control": body}}
+                else:
+                    hashed = {**hashed, "control": body}
+            return _scrub(hashed)
+
         llm = getattr(flavour, "llm", None)
         if llm is None:
             return {}
@@ -147,6 +167,8 @@ def extract_flavour_info(flavour: Optional[Any]) -> dict:
             "model": getattr(llm, "model", "") or "",
             "api_base": getattr(llm, "api_base", "") or "",
         }
+    except ControlError:
+        raise  # a Control that cannot be read must not leave the cache key blind to it
     except Exception:
         return {}
 
@@ -206,11 +228,7 @@ def materialize_config(config: dict, base_path: "Path | None") -> dict:
                 pass
         return (anchor / p).resolve()
 
-    base_dir: "Path" = (
-        (base_path.parent if base_path.is_file() else base_path)
-        if base_path is not None
-        else Path(".")
-    )
+    base_dir: "Path" = (base_path.parent if base_path.is_file() else base_path) if base_path is not None else Path(".")
 
     mat = copy.deepcopy(config)
 
@@ -224,10 +242,7 @@ def materialize_config(config: dict, base_path: "Path | None") -> dict:
             for entry in agent["spec_tools"]:
                 if isinstance(entry, dict) and entry.get("ref"):
                     content = _load_yaml(_resolve(entry["ref"], agent_dir))
-                    inlined.append(
-                        {"_ref": entry["ref"], "_content": content}
-                        if content is not None else entry
-                    )
+                    inlined.append({"_ref": entry["ref"], "_content": content} if content is not None else entry)
                 else:
                     inlined.append(entry)
             agent["spec_tools"] = inlined
@@ -242,9 +257,7 @@ def materialize_config(config: dict, base_path: "Path | None") -> dict:
                     inlined_ctx = dict(ctx)
                     inlined_ctx["role"] = text
                     agent["context"] = inlined_ctx
-            elif isinstance(role, str) and (
-                role.startswith("./") or role.startswith("../")
-            ):
+            elif isinstance(role, str) and (role.startswith("./") or role.startswith("../")):
                 text = _read_text(_resolve(role, agent_dir))
                 if text is not None:
                     inlined_ctx = dict(ctx)
@@ -312,7 +325,9 @@ def compute_run_hash(
     import hashlib
     import json
 
-    manifest = materialize_config(config, base_path)
+    from mas.runtime.session.state import without_location_keys
+
+    manifest = without_location_keys(materialize_config(config, base_path))
 
     # Resolve the effective model from nested flavour llm config or agent manifest.
     _llm_section = flavour_info.get("llm") if isinstance(flavour_info.get("llm"), dict) else {}
@@ -510,13 +525,15 @@ def write_run_info(
         }
         if app or app_version or mas_ref or overlay_ref:
             info["mas"] = {
-                k: v for k, v in {
+                k: v
+                for k, v in {
                     "app": app,
                     "app_version": app_version,
                     "mas_ref": mas_ref,
                     "overlay": scenario_id,
                     "overlay_ref": overlay_ref,
-                }.items() if v
+                }.items()
+                if v
             }
         cache_path.write_text(json.dumps(info, indent=2))
 

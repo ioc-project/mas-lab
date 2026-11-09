@@ -25,7 +25,7 @@ class TestOverlays:
                 "validate",
                 str(REPO_ROOT / "docs/tutorials/01-building-an-agent/agent.yaml"),
                 "-o",
-                "pkg://mas.library.standard/overlays/observability-native.yaml",
+                "pkg://mas.library.standard/controls/observability-native.yaml",
             ],
             cwd=REPO_ROOT,
         )

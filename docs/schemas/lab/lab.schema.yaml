@@ -55,11 +55,3 @@ properties:
               anyOf:
                 - required: [path]
                 - required: [module]
-      enable_plugins:
-        type: array
-        description: >
-          Overlay plugin URNs this lab turns on (same catalog as workspace
-          config.yaml plugins). Off unless listed. Not agent spec slots.
-        items:
-          type: string
-          minLength: 1

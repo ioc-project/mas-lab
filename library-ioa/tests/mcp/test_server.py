@@ -165,6 +165,16 @@ def test_factory_preserves_explicit_mcp_input_schema() -> None:
     assert registered.parameters == schema
 
 
+def test_registered_wrapper_keeps_ctx_annotation() -> None:
+    def tool_fn(label: str, ctx: Context) -> str:
+        return label
+
+    factory = MCPToolServerFactory()
+    factory.add_tool({"name": "ctx-tool", "description": "Needs the SDK context", "fn": tool_fn})
+    registered = factory._server._tool_manager.get_tool("ctx-tool")
+    assert registered.context_kwarg == "ctx"
+
+
 def test_factory_registers_non_tool_capabilities() -> None:
     factory = MCPToolServerFactory(server_name="capability-server")
 

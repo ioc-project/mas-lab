@@ -106,9 +106,9 @@ def ruff_executable() -> list[str]:
 def ruff_command(mode: str, files: list[str]) -> list[str]:
     exe = ruff_executable()
     if mode == "check":
-        return [*exe, "check", *files]
+        return [*exe, "check", "--force-exclude", *files]
     if mode == "format-check":
-        return [*exe, "format", "--check", *files]
+        return [*exe, "format", "--check", "--force-exclude", *files]
     raise ValueError(f"Unsupported mode: {mode}")
 
 

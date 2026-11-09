@@ -4,11 +4,12 @@ apiVersion: mas/v1
 kind: Overlay
 metadata:
   name: governance-off
-# Governance OFF — no policies, baseline for Exp 2.3
 spec:
   target:
-    kind: Agent
+    kind: Control
   patch:
-    observability:
-      - native
     governance: []
+    observability:
+      $op:
+        replace:
+        - native

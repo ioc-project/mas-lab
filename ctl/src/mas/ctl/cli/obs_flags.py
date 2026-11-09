@@ -2,18 +2,21 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Shared CLI observability overrides.
 
-Precedence: agent/MAS manifest ``spec.observability`` (per-agent authored) >
-active flavour ``spec.observability`` (deployment-posture default) > these
-CLI flags, which override whichever of the above resolved.
+``--events*`` is a shortcut on the agent or MAS, not a Flavour overlay.
+``--no-events`` and ``--events-format`` ``native`` / ``otel`` / ``both``
+replace the plugin set. ``--events-stdout`` and ``--events-file`` add native
+when it is not selected; they do not replace a plugin. ``bind.events`` adds a
+sink and keeps native unless a Control named the observability list (including
+``[]``) or leftover agent observability named plugins.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
 
 import click
-
 from mas.ctl.adapters.obs.config import ObservabilityConfig
+from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.session.manifest_config import observability_config_from_manifest
 
 
@@ -22,13 +25,13 @@ def observability_options(fn: Callable) -> Callable:
     fn = click.option(
         "--events/--no-events",
         default=None,
-        help="Override manifest observability (on/off)",
+        help="Turn recording on or off. --no-events turns it off. --events does not replace the plugin set.",
     )(fn)
     fn = click.option(
         "--events-file",
         default=None,
         type=click.Path(),
-        help="Override JSONL path (default from manifest or traces/events.jsonl)",
+        help="Write the native JSONL log here. Adds native when it is not in the plugin set; never replaces a plugin.",
     )(fn)
     fn = click.option(
         "--events-stderr",
@@ -36,65 +39,16 @@ def observability_options(fn: Callable) -> Callable:
         "events_stdout",
         is_flag=True,
         default=False,
-        help="Override: also stream transformed events as JSONL on stderr "
-        "(keeps stdout clean for the answer). --events-stdout is a legacy alias.",
+        help="Also stream native JSONL on stderr (keeps stdout clean for the answer). "
+        "Adds native when it is not in the plugin set; never replaces a plugin. --events-stdout is a legacy alias.",
     )(fn)
     fn = click.option(
         "--events-format",
         default=None,
         type=click.Choice(["native", "boundary", "both", "otel"], case_sensitive=False),
-        help="Override transform chain",
+        help="native, otel, and both replace the plugin set. boundary only sets the transform chain.",
     )(fn)
     return fn
-
-
-def build_observability_flavour_overlay(
-    flavour_spec: dict | None,
-    *,
-    events: bool | None,
-    events_file: str | None,
-) -> dict | None:
-    """Express ``--events``/``--events-file`` as a ``mas/v1`` Overlay patch on the
-    active flavour's ``observability`` plugin list — FT7
-    (docs/design/flavour-boundary.md): one mechanism for the trace-file
-    location instead of two (plugin config vs a CLI-only field).
-
-    Returns ``None`` when neither flag was explicitly set — the flavour's own
-    ``observability`` declaration is left unpatched. ``--events-stdout`` and
-    ``--events-format=boundary`` have no representation in
-    ``observability-binding.schema.yaml`` (a stdout toggle and a plugin-internal
-    transform mode aren't "which plugins run") and stay pure runtime overrides
-    on :class:`ObservabilityConfig` — see the design doc's "scope what
-    overlays can express" section.
-    """
-    if events is None and events_file is None:
-        return None
-
-    from mas.ctl.manifest.spec_bindings import parse_observability
-
-    base_plugins = list(parse_observability((flavour_spec or {}).get("observability")).plugins)
-
-    if events is False:
-        plugins: list[str] = []
-    else:
-        plugins = list(base_plugins) or ["native"]
-        if events_file and "native" not in plugins:
-            plugins.append("native")
-
-    entries: list[Any] = [
-        {"native": {"path": events_file}} if (name == "native" and events_file) else name
-        for name in plugins
-    ]
-
-    return {
-        "apiVersion": "mas/v1",
-        "kind": "Overlay",
-        "metadata": {"name": "cli-observability-overlay"},
-        "spec": {
-            "target": {"kind": "Flavour"},
-            "patch": {"observability": entries},
-        },
-    }
 
 
 def resolve_observability_config(
@@ -108,30 +62,18 @@ def resolve_observability_config(
     manifest: dict | None = None,
     deployment: dict | None = None,
     flavour_spec: dict | None = None,
+    resolved_infra: ResolvedInfra | None = None,
+    entry_id: str = "",
+    delegate_ids: list[str] | tuple[str, ...] = (),
 ) -> ObservabilityConfig:
     """Resolve the effective observability config.
 
-    ``events``/``events_file`` are first folded into ``flavour_spec`` via
-    :func:`build_observability_flavour_overlay` + ``merge_flavour_overlay``,
-    so the flavour-fallback branch of :func:`observability_config_from_manifest`
-    sees a flavour spec that already reflects the CLI's choice. They're *also*
-    still passed through as ``cli_events``/``cli_events_file`` below —
-    preserved for callers (e.g. ``mas.ctl.benchmark.runner.bench_obs_config``)
-    that need an unconditional override regardless of what any manifest
-    declares, and for the case where the agent/MAS manifest (not the flavour)
-    is what declares ``spec.observability``, where the overlay-patched
-    flavour spec is correctly skipped by that function's existing
-    manifest-first precedence.
+    ``--events*`` is a shortcut on the agent or MAS. Leftover Flavour
+    ``observability`` is unread. ``bind.events`` rows add the plugins they name
+    and keep native unless a Control named the observability list (including
+    ``[]``) or leftover agent observability named plugins.
+    ``--events-file`` and ``--events-stdout`` add native when it is not selected.
     """
-    effective_flavour_spec = flavour_spec
-    cli_overlay = build_observability_flavour_overlay(flavour_spec, events=events, events_file=events_file)
-    if cli_overlay is not None:
-        from mas.ctl.overlay.merge import merge_overlay
-
-        effective_flavour_spec = (
-            merge_overlay({"kind": "Flavour", "spec": flavour_spec or {}}, cli_overlay).get("spec") or {}
-        )
-
     return observability_config_from_manifest(
         manifest,
         deployment=deployment,
@@ -141,5 +83,8 @@ def resolve_observability_config(
         cli_events_file=events_file,
         cli_events_stdout=events_stdout,
         cli_events_format=events_format,
-        flavour_spec=effective_flavour_spec,
+        flavour_spec=flavour_spec,
+        resolved_infra=resolved_infra,
+        entry_id=entry_id,
+        delegate_ids=delegate_ids,
     )

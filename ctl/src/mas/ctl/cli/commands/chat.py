@@ -8,7 +8,15 @@ import sys
 from pathlib import Path
 
 import click
-from mas.ctl.cli.bind_flags import bind_option, connect_option, middleware_option, with_connects
+from mas.ctl.cli.bind_flags import (
+    bind_option,
+    connect_option,
+    control_option,
+    events_sink_option,
+    middleware_option,
+    no_control_dir_option,
+    with_connects,
+)
 from mas.ctl.cli.help_text import CHAT_EPILOG
 from mas.ctl.cli.obs_flags import observability_options, resolve_observability_config
 from mas.ctl.cli.trace_flags import mas_ctl_from_configs, resolve_trace_settings, trace_options
@@ -24,7 +32,7 @@ from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
 from mas.ctl.session.interactive_hitl_contract import InteractiveHitlContract
 from mas.ctl.session.manager import SessionManager
 from mas.ctl.session.manifest_config import require_agent_id_from_manifest
-from mas.ctl.session.observability import setup_observability
+from mas.ctl.session.observability import cli_replaced_plugin_set, obs_config_to_binding, setup_observability
 from mas.ctl.session.protocol_hints import emit_session_protocol_hints
 from mas.ctl.ui.stdout import StdoutConversationDisplay
 from mas.runtime.session import ManifestRef
@@ -56,12 +64,13 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
 )
 @connect_option
 @bind_option
+@control_option
+@events_sink_option
 @click.option("--pattern", default=None, help="Design pattern plugin id (default from manifest)")
 @click.option(
     "--flavour",
-    default="local",
-    show_default=True,
-    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file.",
+    default=None,
+    help="Flavour: bundled name local or prod, or a Flavour YAML path. Omitted: local.",
 )
 @click.option(
     "--infra-ref",
@@ -87,11 +96,7 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
     help="Advertise ControlContract so mas-ctl control can attach by session id "
     "(default: $XDG_RUNTIME_DIR/mas-ctl, else /var/run/mas-ctl, else temp)",
 )
-@click.option(
-    "--no-control",
-    is_flag=True,
-    help="Do not advertise a control endpoint",
-)
+@no_control_dir_option
 @click.option(
     "--debug-script",
     default=None,
@@ -159,8 +164,10 @@ def chat_cmd(
     overrides: tuple[str, ...],
     connects: tuple[str, ...],
     binds: tuple[str, ...],
+    controls: tuple[str, ...],
+    event_sinks: tuple[str, ...],
     pattern: str | None,
-    flavour: str,
+    flavour: str | None,
     infra_refs_cli: tuple[str, ...],
     runtime_refs_cli: tuple[str, ...],
     middleware_refs: tuple[str, ...],
@@ -210,7 +217,6 @@ def chat_cmd(
         overrides=(*max_tokens_overrides(max_tokens), *overrides),
     )
     verbose = int(ctx.obj.get("verbose", 0) if ctx.obj else 0)
-
     hitl_responder, hitl_terminal = None, None
 
     from mas.ctl.paths import manifest_cwd, resolve_overlay_path, resolve_path
@@ -236,12 +242,6 @@ def chat_cmd(
             pattern=pattern,
             validate=not no_validate,
         )
-        if debug_script:
-            _apply_debug_script_option(
-                agent_data,
-                debug_script,
-                manifest_dir=session.manifest_dir or session.original_cwd,
-            )
         if not manifest and load_checkpoint:
             checkpoint_path = resolve_overlay_path(
                 load_checkpoint,
@@ -255,13 +255,18 @@ def chat_cmd(
 
                 plugin = parse_agent_spec(agent_data.get("spec") or {})[0].pattern_plugin_id
 
-        from mas.ctl.session.flavour import FlavourError, resolve_flavour
+        from mas.ctl.session.flavour import FlavourError, resolve_session_flavour
 
-        # Deployment flavour: resolve + validate (only `local` is supported).
-        # Surviving deployment concerns (currently: observability plugin
-        # selection) are folded in below — see docs/design/flavour-boundary.md.
         try:
-            flavour_spec = resolve_flavour(flavour, overrides=overrides)
+            flavour_spec = resolve_session_flavour(
+                flavour,
+                overrides=overrides,
+                controls=controls,
+                event_sinks=event_sinks,
+                search_dirs=[session.original_cwd, session.manifest_dir]
+                if session.manifest_dir
+                else [session.original_cwd],
+            )
         except FlavourError as exc:
             click.echo(f"error: {exc}", err=True)
             raise SystemExit(2) from None
@@ -278,9 +283,39 @@ def chat_cmd(
         if single_turn:
             interactive = False
 
+        from mas.ctl.session.flavour_control import (
+            ControlError,
+            apply_flavour_controls,
+            attach_controls,
+            attach_overlay_controls,
+        )
+
+        # Controls attach before anything reads the agent's governance (HITL mode, session flags).
+        try:
+            attach_overlay_controls(flavour_spec, overlay_strs)
+            if debug_script:
+                attach_controls(
+                    flavour_spec,
+                    [_debug_script_row(debug_script, manifest_dir=session.manifest_dir or session.original_cwd)],
+                )
+            controlled_id = require_agent_id_from_manifest(agent_data)
+            agent_data = apply_flavour_controls(
+                agent_data,
+                flavour_spec,
+                agent_id=controlled_id,
+                entry_id=controlled_id,
+                search_dirs=[session.manifest_dir] if session.manifest_dir else (),
+            )
+        except ControlError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise SystemExit(1) from None
+
         hitl_responder, hitl_terminal = resolve_hitl_from_manifest(
             agent_data,
             session_interactive=interactive,
+            flavour_spec=flavour_spec,
+            agent_id=controlled_id,
+            entry_id=controlled_id,
         )
 
         trace = resolve_trace_settings(
@@ -336,9 +371,7 @@ def chat_cmd(
         resolved_checkpoint_dir = _opt_dir(checkpoint_dir)
         if resolved_checkpoint_dir is None and checkpoint_policy.storage_path:
             resolved_checkpoint_dir = _opt_dir(checkpoint_policy.storage_path)
-        if resolved_checkpoint_dir is None and (
-            checkpoint_policy.uses_disk() or checkpoint_policy.auto_resume_latest
-        ):
+        if resolved_checkpoint_dir is None and (checkpoint_policy.uses_disk() or checkpoint_policy.auto_resume_latest):
             checkpoint_anchor = session.manifest_dir or session.original_cwd
             resolved_checkpoint_dir = checkpoint_anchor / ".mas" / "checkpoints"
 
@@ -372,15 +405,22 @@ def chat_cmd(
         )
         from mas.ctl.cli.chains import bind_or_exit, single_agent_chains
 
-        resolved_infra = bind_or_exit(resolved_infra, flavour_spec, agent_id=require_agent_id_from_manifest(agent_data))
+        agent_id = require_agent_id_from_manifest(agent_data)
+        resolved_infra = bind_or_exit(
+            resolved_infra,
+            flavour_spec,
+            agent_id=agent_id,
+        )
         obs_cfg = resolve_observability_config(
             events=events,
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
-            agent_id=require_agent_id_from_manifest(agent_data),
+            agent_id=agent_id,
             manifest=agent_data,
             flavour_spec=flavour_spec,
+            resolved_infra=resolved_infra,
+            entry_id=agent_id,
         )
         try:
             instance, store = instantiate_runtime(
@@ -388,9 +428,7 @@ def chat_cmd(
                     pattern_plugin_id=plugin,
                     memory_seed_path=_opt_file(memory_seed_path),
                     checkpoint_path=load_checkpoint_path,
-                    checkpoint_dir=(
-                        resolved_checkpoint_dir if checkpoint_policy.uses_disk() else None
-                    ),
+                    checkpoint_dir=(resolved_checkpoint_dir if checkpoint_policy.uses_disk() else None),
                     validate_manifests=not no_validate,
                     cache_read_override=cache_read,
                     cache_write_override=cache_write,
@@ -407,6 +445,11 @@ def chat_cmd(
                     enable_governance=not without_gov,
                     model_override=model,
                     events_file=obs_cfg.events_file,
+                    flavour_spec=flavour_spec,
+                    obs_from_cli=cli_replaced_plugin_set(events, events_format),
+                    obs_binding_override=(
+                        obs_config_to_binding(obs_cfg) if cli_replaced_plugin_set(events, events_format) else None
+                    ),
                 ),
                 hitl=hitl_responder,
             )
@@ -438,6 +481,9 @@ def chat_cmd(
             single_turn=single_turn,
             scripted_turns=scripted,
             manifest=agent_data,
+            flavour_spec=flavour_spec,
+            agent_id=agent_id,
+            entry_id=agent_id,
         )
 
         agent_name = agent_data.get("metadata", {}).get("name", "n/a") if agent_data else "n/a"
@@ -486,9 +532,7 @@ def chat_cmd(
 
             advertised = Path(control_dir) if control_dir else default_control_dir()
             control_host = ControlDirectoryHost(
-                session_manager.control(
-                    capability=ControlCapability(actor="admin", surface="admin")
-                ),
+                session_manager.control(capability=ControlCapability(actor="admin", surface="admin")),
                 advertised,
                 hub=exchange_hub,
             )
@@ -531,25 +575,24 @@ def chat_cmd(
             raise SystemExit(rc)
 
 
-def _apply_debug_script_option(agent_data: dict, value: str, *, manifest_dir) -> None:
-    """Install a gdb-like script from ``--debug-script`` (@file or inline)."""
+def _debug_script_row(value: str, *, manifest_dir) -> dict:
+    """The Control row ``--debug-script`` stands for: the ``gdb`` plugin in a governance set."""
+    from pathlib import Path
+
+    from mas.ctl.session.flavour_control.documents import row_from_data
     from mas.library.standard.plugins.control.script import resolve_curl_data
 
-    spec = agent_data.setdefault("spec", {})
-    debug: dict[str, str] = {}
     if str(value).startswith("@"):
-        debug["script_file"] = str(value)[1:]
+        params = {"script_file": str(value)[1:]}
     else:
-        debug["script"] = resolve_curl_data(value, base_dir=manifest_dir)
-    spec["debug"] = debug
-    gov = spec.get("governance")
-    if isinstance(gov, list):
-        spec["governance"] = [
-            item
-            for item in gov
-            if not (isinstance(item, dict) and "debug_script" in item)
-            and item not in {"debug_script", "gov_debug_script", "gdb"}
-        ]
+        params = {"script": resolve_curl_data(value, base_dir=manifest_dir)}
+    document = {
+        "apiVersion": "control/v1",
+        "kind": "Control",
+        "metadata": {"name": "debug-script"},
+        "spec": {"governance": [{"gdb": params}]},
+    }
+    return row_from_data(Path(manifest_dir) / "--debug-script", document, agents="$all")
 
 
 def _embedded_checkpoint_manifest(path: Path) -> dict | None:

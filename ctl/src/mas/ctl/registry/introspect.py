@@ -48,10 +48,7 @@ def list_kernel_backends() -> list[RegistryEntry]:
 def list_framework_adapters() -> list[RegistryEntry]:
     from mas.ctl.compose.framework_registry import list_registered_adapters
 
-    return [
-        RegistryEntry(id=k, layer="ctl.framework_adapter")
-        for k in list_registered_adapters()
-    ]
+    return [RegistryEntry(id=k, layer="ctl.framework_adapter") for k in list_registered_adapters()]
 
 
 def list_placement_backends() -> list[RegistryEntry]:

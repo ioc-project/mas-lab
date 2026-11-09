@@ -67,8 +67,6 @@ lab:
   description: "Lifecycle control and governance stacking"
   libraries:
     - lifecycle_control_lab/      # dir with library.yaml -> scheme "lifecycle_control_lab"
-  # enable_plugins:
-  #   - mas.checkpoint_store.hybrid
 ```
 
 | Field | Required | Meaning |
@@ -77,7 +75,6 @@ lab:
 | `description` | no | Free text. |
 | `libraries` | no | Library directories, relative to this file. A directory with `library.yaml` becomes a `name:path` library scheme (name = basename). A directory without it is only added to the Python import path. Lab-local libraries win over workspace and installed libraries of the same name. |
 | `plugins` | no | Lab-local plugins: a module name, or `{id, path \| module}`. |
-| `enable_plugins` | no | Plugin URNs this lab turns on from the workspace plugin catalog (the catalog behind `config.yaml` `plugins:`). Off unless listed. |
 
 ### Interactive lab config (`lab-config.schema.yaml`)
 

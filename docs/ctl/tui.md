@@ -21,8 +21,8 @@ You need an agent or MAS manifest first
 
 ```bash
 mas-ctl tui agent.yaml
-mas-ctl tui agent.yaml -o overlays/governance-hitl.yaml   # any overlay you have; here a HITL one
-mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.yaml
+mas-ctl tui agent.yaml --control controls/governance-hitl.yaml   # a Control; here a HITL one
+mas-ctl tui agent.yaml --control docs/schemas/examples/controls/observability-native.yaml
 ```
 
 ## Flags (parity with `mas-ctl chat`)
@@ -33,7 +33,7 @@ mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.ya
 | `--override PATH=VALUE` | Schema-backed patch, applied last ([overrides](../cli/overrides.md)) |
 | `--connect NAME=URI` | Shortcut for an A2A / MCP `usage: connect` infra row (`--bind` is the old name) |
 | `--pattern` | Design-pattern plugin id |
-| `--flavour` | Flavour (default `local`) |
+| `--flavour` | Flavour (omitted: `local`) |
 | `--infra-ref` / `--infra` | Infra bundle (`standard:openai`, …); repeatable |
 | `--runtime-ref` | RuntimeEngine manifest ref; repeatable |
 | `--model ID` · `--max-tokens N` | Force the model / output-token cap for this run |
@@ -45,10 +45,10 @@ mas-ctl tui agent.yaml -o docs/schemas/examples/overlays/observability-native.ya
 
 | Flag | Description |
 |------|-------------|
-| `--events` / `--no-events` | Override manifest **observability** |
-| `--events-file PATH` | **`events.jsonl`** output path |
+| `--events` / `--no-events` | `--no-events` turns recording off. `--events` does not replace the plugin set. |
+| `--events-file PATH` | **`events.jsonl`** output path. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
 | `--events-stderr` | Also stream JSONL on stderr (`--events-stdout` is a legacy alias) |
-| `--events-format` | `native` · `boundary` · `both` · `otel` |
+| `--events-format` | `native` · `otel` · `both` replace the plugin set; `boundary` is the transform chain |
 
 Full reference: [cli/observability.md](../cli/observability.md) ·
 [mas-ctl flags](../cli/mas-ctl.md).

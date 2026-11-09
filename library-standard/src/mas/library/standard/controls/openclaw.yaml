@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Recover repeated engine errors through the session checkpoint boundary.
+# Pass with --control, next to the openclaw overlay.
+apiVersion: control/v1
+kind: Control
+metadata:
+  name: openclaw
+spec:
+  governance:
+  - sample_governance:
+      error_recovery_plugin: backtrack_on_error
+      backtrack:
+        repeat_threshold: 2
+        max_backtracks_per_session: 3
+        steps: 1
+        on_cap_reached: hitl

@@ -12,7 +12,7 @@
 | **URN** | `mas.gov.no_undeclared_tool` |
 | **Implementation** | `NoUndeclaredToolPlugin` in `mas.library.standard.plugins.governance.no_undeclared_tool` |
 | **Manifest keys** | `spec.governance` |
-| **Overlay** | `pkg://mas.library.standard/overlays/with-hardened.yaml` |
+| **Control** | `pkg://mas.library.standard/controls/with-hardened.yaml` |
 | **Example** | [examples/governance/undeclared-tool/](../../../../../../examples/governance/undeclared-tool/) (Agent; not a sample app) |
 
 Blocks a `TOOL_CALL` whose name was not in the OpenAI `tools` array of the
@@ -73,8 +73,8 @@ Or apply the standard overlay (appends; does not replace existing plugins):
 
 ```bash
 mas-ctl chat agent.yaml \
-  -o pkg://mas.library.standard/overlays/with-hardened.yaml \
-  -o pkg://mas.library.standard/overlays/observability-native.yaml
+  --control pkg://mas.library.standard/controls/with-hardened.yaml \
+  --control pkg://mas.library.standard/controls/observability-native.yaml
 ```
 
 The example agent already lists `gov_no_undeclared_tool` on its chain and

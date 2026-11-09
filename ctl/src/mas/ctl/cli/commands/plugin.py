@@ -51,9 +51,7 @@ def list_cmd(plugin_type: str | None, as_json: bool) -> None:
             click.echo(f"  {item['urn']:<40} available")
             continue
         hint = _install_hint(item["urn"], item["missing"], item["extra"])
-        click.echo(
-            f"  {item['urn']:<40} disabled  (missing: {', '.join(item['missing'])}; {hint})"
-        )
+        click.echo(f"  {item['urn']:<40} disabled  (missing: {', '.join(item['missing'])}; {hint})")
 
 
 @plugin_group.command("enable")
@@ -84,9 +82,7 @@ def enable_cmd(urn: str, dry_run: bool) -> None:
     importlib.invalidate_caches()
     still_missing = info.missing_requires()
     if still_missing:
-        raise click.ClickException(
-            f"{entry.urn} still missing after install: {', '.join(still_missing)}"
-        )
+        raise click.ClickException(f"{entry.urn} still missing after install: {', '.join(still_missing)}")
     click.echo(f"{entry.urn} is now available.")
 
 

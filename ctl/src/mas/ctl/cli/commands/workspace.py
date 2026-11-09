@@ -9,7 +9,7 @@ from pathlib import Path
 
 import click
 import yaml
-from mas.ctl.cli.bind_flags import middleware_option
+from mas.ctl.cli.bind_flags import control_option, middleware_option
 from mas.ctl.libraries.bundles import list_bundles, list_manifest_libraries
 from mas.ctl.session.flavour import SUPPORTED_FLAVOURS
 
@@ -62,11 +62,11 @@ def infra_list(verbose: bool) -> None:
     help="Schema-validated overlay override (repeatable; applied last).",
 )
 @middleware_option
+@control_option
 @click.option(
     "--flavour",
-    default="local",
-    show_default=True,
-    help="Flavour: the bundled name 'local' or the path of a Flavour YAML file; its bind chains are the comm column.",
+    default=None,
+    help="Flavour: bundled name local or prod, or a Flavour YAML path. Omitted: local.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the stable JSON document.")
 def infra_show(
@@ -75,7 +75,8 @@ def infra_show(
     runtime_refs: tuple[str, ...],
     overrides: tuple[str, ...],
     middleware_refs: tuple[str, ...],
-    flavour: str,
+    controls: tuple[str, ...],
+    flavour: str | None,
     as_json: bool,
 ) -> None:
     """Print each LLM and tool chain, each agent's comm stack, and its name on the chain.
@@ -86,11 +87,12 @@ def infra_show(
     from mas.ctl.infra.bind import bind_flavour
     from mas.ctl.infra.resolve import InfraResolveError
     from mas.ctl.infra.show import agents_from_manifest, document_agent_ids, infra_show_payload, render_infra_show
-    from mas.ctl.session.flavour import resolve_flavour
+    from mas.ctl.session.flavour import flavour_argument, resolve_session_flavour
     from mas.ctl.session.infra_resolve import resolve_session_infra
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
     from mas.library.standard.lib.stack import StackError
 
+    flavour = flavour_argument(flavour)
     start = Path(manifest).expanduser().resolve().parent if manifest else Path.cwd()
     workspace = WorkspaceConfig.load(start)
     workspace = workspace.with_cli_overrides(overrides)
@@ -100,7 +102,7 @@ def infra_show(
         loaded = yaml.safe_load(Path(manifest).expanduser().read_text(encoding="utf-8"))
         document = loaded if isinstance(loaded, dict) else None
     try:
-        flavour_spec = resolve_flavour(flavour, overrides=overrides)
+        flavour_spec = resolve_session_flavour(flavour, overrides=overrides, controls=controls, search_dirs=[start])
         infra = resolve_session_infra(
             document,
             workspace,
@@ -112,7 +114,13 @@ def infra_show(
             anchor=start,
             with_interceptors=True,
         )
-        infra = bind_flavour(infra, flavour_spec, agent_ids=document_agent_ids(document) if document else None)
+        ids = document_agent_ids(document) if document else []
+        if document:
+            from mas.ctl.infra.bind import bind_session
+
+            infra = bind_session(infra, flavour_spec, agent_ids=ids)
+        else:
+            infra = bind_flavour(infra, flavour_spec, agent_ids=None)
         payload = infra_show_payload(infra, agents=agents_from_manifest(document, infra=infra))
     except (ValueError, InfraResolveError, StackError) as exc:
         raise click.ClickException(str(exc)) from exc

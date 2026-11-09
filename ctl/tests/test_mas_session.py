@@ -31,6 +31,14 @@ def test_entry_agent_id_from_workflow_entry():
     assert entry_agent_id(mas) == "moderator"
 
 
+def test_declared_entry_id_is_empty_without_a_named_entry():
+    from mas.ctl.infra.identities import declared_entry_id
+
+    mas = {"spec": {"agency": {"agents": [{"id": "desk"}, {"id": "bill"}]}}}
+    assert declared_entry_id(mas) == ""
+    assert entry_agent_id(mas) == "desk"
+
+
 def test_agent_manifest_label_from_loaded_runtime_dict(tmp_path: Path):
     agent_path = tmp_path / "agent.yaml"
     agent_path.write_text("kind: agent\nmetadata:\n  name: qa-agent\n", encoding="utf-8")

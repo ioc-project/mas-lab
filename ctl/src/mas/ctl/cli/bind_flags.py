@@ -44,14 +44,48 @@ bind_option = click.option(
     help="Old name for --connect.",
 )
 
+control_option = click.option(
+    "--control",
+    "controls",
+    multiple=True,
+    metavar="REF[@SELECTOR]",
+    help=(
+        "Attach a kind: Control file (observability set and governance set) to the session, the way a "
+        "Flavour spec.control row does. REF is a path, pkg://… or a library ref. SELECTOR is $all (default), "
+        "$entry, $not-entry, $delegates, agent ids, or the same agent path as --override "
+        "(.mas.agent[id] / .mas.agent[*])."
+    ),
+)
+
+events_sink_option = click.option(
+    "--events-sink",
+    "event_sinks",
+    multiple=True,
+    metavar="ROW",
+    help=(
+        "Send events to this infra Application row (adds it to the Flavour's bind.events). "
+        "Adds that sink; native events.jsonl still records unless a Control named the "
+        "observability list (including []) or leftover agent observability named plugins, "
+        "or --no-events / --events-format replaced the set."
+    ),
+)
+
+no_control_dir_option = click.option(
+    "--no-control-dir",
+    "--no-control",
+    "no_control",
+    is_flag=True,
+    help=(
+        "Do not advertise a control endpoint (mas-ctl control attach). "
+        "This is the pair of --control-dir, not of --control."
+    ),
+)
+
 middleware_option = click.option(
     "--middleware",
     "middleware_refs",
     multiple=True,
-    help=(
-        "Infra middleware ref (repeatable). Merged after workspace "
-        "middleware / infra_interceptors."
-    ),
+    help=("Infra middleware ref (repeatable). Merged after workspace middleware / infra_interceptors."),
 )
 
 

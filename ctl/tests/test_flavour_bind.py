@@ -327,7 +327,7 @@ def test_a_flavour_file_is_read_validated_and_patched(tmp_path: Path) -> None:
     assert resolve_flavour(str(path))["bind"]["agents"] == {"billing": {"usage": "connect"}}
     patched = resolve_flavour(str(path), overrides=['.flavour.spec.bind.agent_comm=["other"]'])
     assert patched["bind"]["agent_comm"] == ["other"]
-    assert resolve_flavour("local").get("observability") == ["native"]  # a bundled name still works
+    assert resolve_flavour("local") == {}  # a bundled name still works
 
 
 def test_a_row_holding_a_secret_is_refused_even_when_no_agent_rides_it() -> None:
@@ -396,7 +396,9 @@ def test_a_bad_flavour_file_is_a_flavour_error(tmp_path: Path) -> None:
         resolve_flavour(str(_flavour(tmp_path, {"bind": {"agents": {"billing": {"usage": "serve"}}}})))
     with pytest.raises(FlavourError, match="cannot be read"):
         resolve_flavour(str(tmp_path / "missing.yaml"))
-    with pytest.raises(FlavourError, match=r"bundled names: local\); pass --flavour PATH to a Flavour file") as exc:
+    with pytest.raises(
+        FlavourError, match=r"bundled names: local, prod\); pass --flavour PATH to a Flavour file"
+    ) as exc:
         resolve_flavour("nope")
     assert "flavour list" not in str(exc.value)
 
@@ -877,7 +879,7 @@ def test_flavour_list_still_works_and_warns_on_stderr() -> None:
     assert "standard:local" in result.stdout and FLAVOUR_LIST_WARNING not in result.stdout
     assert result.stderr.strip() == FLAVOUR_LIST_WARNING
     assert "deprecated" in FLAVOUR_LIST_WARNING and "--flavour PATH" in FLAVOUR_LIST_WARNING
-    assert "bundled names (local)" in FLAVOUR_LIST_WARNING
+    assert "bundled names (local, prod)" in FLAVOUR_LIST_WARNING
 
 
 # --- every entry point honours bind ------------------------------------------------------------------------------

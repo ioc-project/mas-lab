@@ -9,12 +9,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 import yaml
-
 from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
-from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.manifest.spec_bindings import SpecBindingError, parse_subagent_templates
 from mas.library.standard.plugins.tools.containment import containment_roots, resolve_under_roots
+from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.engine.tools import SPAWN_SUBAGENT_TOOL, spawn_subagent_params
 from mas.runtime.registry import get_registry
@@ -53,8 +52,8 @@ def load_subagent_templates(
     if manifest_dir is None:
         raise ValueError("manifest_dir is required when spawn_subagent templates are declared")
 
-    from mas.ctl.validate import validate_file
     from mas.ctl.manifest.spec_bindings import validate_agent_spec_bindings
+    from mas.ctl.validate import validate_file
 
     base_dir = Path(manifest_dir).resolve()
     roots = containment_roots(base_dir, base_dir)
@@ -91,6 +90,10 @@ def make_subagent_spawner(
     instance_factory: Callable[[SubagentTemplate, str], RuntimeInstance] | None = None,
     controller_factory: Callable[..., Any] | None = None,
     context: Any = None,
+    flavour_spec: dict[str, Any] | None = None,
+    parent_spec: dict[str, Any] | None = None,
+    entry_id: str = "",
+    delegate_ids: tuple[str, ...] = (),
 ) -> Any:
     """Build EngineToolContext, then instantiate the registered spawn plugin."""
     templates = dict(templates)
@@ -105,6 +108,10 @@ def make_subagent_spawner(
             verbose=verbose,
             instance_factory=_adapt_instance_factory(templates, instance_factory),
             controller_factory=controller_factory,
+            flavour_spec=flavour_spec,
+            parent_spec=parent_spec,
+            entry_id=entry_id,
+            delegate_ids=delegate_ids,
         )
     return _resolve_engine_tool_class(SPAWN_SUBAGENT_TOOL)(
         parent_agent_id=parent_agent_id,
@@ -142,6 +149,10 @@ def wire_subagent_spawning(
     verbose: int = 0,
     instance_factory: Callable[[SubagentTemplate, str], RuntimeInstance] | None = None,
     controller_factory: Callable[..., Any] | None = None,
+    flavour_spec: dict[str, Any] | None = None,
+    parent_spec: dict[str, Any] | None = None,
+    entry_id: str = "",
+    delegate_ids: tuple[str, ...] = (),
 ) -> Any | None:
     """Attach the spawner contract only when the tools entry declares it."""
     spec = manifest.get("spec") or {}
@@ -188,6 +199,10 @@ def wire_subagent_spawning(
         verbose=verbose,
         instance_factory=instance_factory,
         controller_factory=controller_factory,
+        flavour_spec=flavour_spec,
+        parent_spec=parent_spec,
+        entry_id=entry_id,
+        delegate_ids=delegate_ids,
     )
     contracts = list(getattr(leaf, "engine_tool_contracts", ()) or ())
     contracts.append(spawner)

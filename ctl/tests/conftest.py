@@ -20,6 +20,14 @@ def _isolate_user_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.fixture(autouse=True)
+def _fresh_notices() -> None:
+    """Each test sees the warnings it causes, not the ones an earlier test already printed."""
+    from mas.ctl.session.notices import reset_notices
+
+    reset_notices()
+
+
+@pytest.fixture(autouse=True)
 def _no_slim_settle_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """The fake node needs no time to propagate subscriptions."""
     try:
@@ -47,3 +55,25 @@ def _clear_library_discovery_caches():
     yield
     clear_catalog_discovery_cache()
     clear_library_discovery_cache()
+
+
+class _PathProbe:
+    """A governance plugin that takes a file path, to test how a Control's paths are read."""
+
+    def __init__(self, script_file: str = "", **_: object) -> None:
+        self.script_file = script_file
+
+    def evaluate_egress(self, intent, *, config):
+        from mas.runtime.kernel.coupling import GovDecision
+
+        return GovDecision.ALLOW, "path_probe", "probe"
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _path_probe_plugin():
+    from mas.runtime.registry import register_plugin, unregister_plugin
+
+    urn = "mas.gov.test_path_probe"
+    register_plugin(urn, _PathProbe, shortcuts=["path_probe"], attributes={"plugin_type": "governance"})
+    yield
+    unregister_plugin(urn)

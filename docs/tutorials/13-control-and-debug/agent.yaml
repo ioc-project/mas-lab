@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Tutorial 13 agent — gdb-like debug_script from a filename.
+# Tutorial 13 agent: control attach and checkpoints. flavour-debug.yaml attaches its gdb plugin.
 apiVersion: mas/v1
 kind: Agent
 
@@ -18,8 +18,3 @@ spec:
   tools:
     - ref: ./tools/web_search.tool.yaml
     - ref: ./tools/calc.tool.yaml
-  governance:
-    - debug_script:
-        script_file: ./debug.gdb
-  observability:
-    - native

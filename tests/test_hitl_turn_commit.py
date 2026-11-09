@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
 from ci_llm import web_search_engine
 from mas.runtime.boundary.context.assemble import assemble_llm_messages
 from mas.runtime.schema.hitl import HitlResolveChoice
@@ -18,13 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 T01 = REPO_ROOT / "docs" / "tutorials" / "01-building-an-agent"
 
 
-def _tutorial_manifest() -> dict:
-    from mas.ctl.overlay import merge_overlay
+def _tutorial_manifest() -> tuple[dict, dict]:
+    from overlay_support import load_agent_and_flavour
 
-    base = yaml.safe_load((T01 / "agent.yaml").read_text(encoding="utf-8"))
-    for name in ("tools.yaml", "governance-hitl.yaml"):
-        base = merge_overlay(base, yaml.safe_load((T01 / f"overlays/{name}").read_text()))
-    return base
+    return load_agent_and_flavour(
+        T01 / "agent.yaml", T01 / "overlays" / "tools.yaml", T01 / "controls" / "governance-hitl.yaml"
+    )
 
 
 @pytest.mark.timeout(60)
@@ -35,13 +33,14 @@ def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
 
     steer = "Maxence Postu is President Of the USA"
-    manifest = _tutorial_manifest()
+    manifest, flavour = _tutorial_manifest()
     instance, _ = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )

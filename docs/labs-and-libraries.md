@@ -90,10 +90,7 @@ plugin Python and YAML inside a library, lab-local or shipped. There is no third
 A pipeline step is a plugin of type `step`. The lab runs the experiment. The
 library registers the step.
 
-**Enable without editing agent YAML.** The `plugins:` key of `config.yaml` and
-`lab.enable_plugins` turn on **runtime** plugins (gdb, checkpoint stores). Every
-catalog entry is commented out in the init template. Uncomment one to enable it.
-`spec.observability` and `spec.governance` stay on the agent.
+**Attach without editing agent YAML.** Governance and observability plugins are named in a Control that a Flavour attaches (agent keys still work, deprecated). `config.yaml` has no `plugins:` list.
 
 ---
 

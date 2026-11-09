@@ -194,6 +194,8 @@ plugins:
     urn: mas.observability.native
     module: mas.library.standard.plugins.observability.native_plugin
     class: NativeObservabilityPlugin
+    attributes:
+      run_path_params: [path]
   # mas.observability.otel is registered by library-telemetry/.
 
   # Deterministic design patterns (OSS only)
@@ -296,8 +298,6 @@ plugins:
     class: ContextAssemblerPlugin
     shortcuts:
       - assembler
-      - context-assembler
-      - ctx-assembler
 
   # Memory plugins
   - type: memory
@@ -322,21 +322,28 @@ plugins:
     shortcuts:
       - gov_no_undeclared_tool
       - no_undeclared_tool
-  - type: runtime
-    name: debug_script
-    urn: mas.runtime.debug_script
+  - type: governance
+    name: budget
+    urn: mas.gov.budget
+    module: mas.library.standard.plugins.governance.budget
+    class: BudgetPlugin
+    description: >
+      Call ceilings: TERMINATE once a run issued max_llm_calls LLM calls or
+      max_tool_calls tool calls. Unset means no limit.
+    shortcuts:
+      - budget
+  - type: governance
+    name: gdb
+    urn: mas.gov.gdb
     module: mas.library.standard.plugins.governance.debug_script
     class: DebugScriptPlugin
     description: >
-      gdb-like debugger over snapshot/pause/resume. Observes tool-call and
-      tool-result. Enable from config.yaml plugins. spec.debug holds
-      script / script_file.
-    shortcuts:
-      - debug_script
-      - gdb
-      - gov_debug_script
+      gdb-like debugger. Breakpoints on tool-call and tool-result run commands
+      (checkpoint, info, pause, resume) through the ControlContract. It never
+      blocks. Name it in a Control spec.governance with script or script_file.
     attributes:
       expose_as_system_tool: false
+      path_params: [script_file]
   - type: governance
     name: backtrack_on_error
     urn: mas.gov.backtrack_on_error
@@ -419,10 +426,6 @@ plugins:
     class: LlmSchedulerMiddleware
     shortcuts:
       - llm_scheduler
-      - llm-scheduler
-      - rate_limit
-      - rate_limiter
-      - llm_pace
     attributes:
       per: destination
       call_kinds: [llm]
@@ -434,9 +437,6 @@ plugins:
     class: FaultInjectMiddleware
     shortcuts:
       - fault_inject
-      - fault-inject
-      - chaos_lite
-      - chaos-lite
     attributes:
       per: destination
       call_kinds: [llm]

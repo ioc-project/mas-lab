@@ -56,6 +56,10 @@ def execute_run_mas(
     verbose: int = 0,
     manifest_dir: Path | None = None,
     obs_config=None,
+    events: bool | None = None,
+    events_file: str | None = None,
+    events_stdout: bool = False,
+    events_format: str | None = None,
     trace: bool = False,
     trace_timestamps: bool = False,
     trace_engine: bool = False,
@@ -89,15 +93,40 @@ def execute_run_mas(
     )
     result = compose_run(req)
     from mas.ctl.infra.bind import BindError, bind_session
-    from mas.ctl.infra.identities import agency_ids
+    from mas.ctl.infra.identities import agency_ids, declared_entry_id, peers_of
+    from mas.ctl.session.flavour_control import ControlError, attach_overlay_controls
 
+    ids = agency_ids(result.mas_config)
+    declared = declared_entry_id(result.mas_config)
+    delegates = list(peers_of(result.mas_config, ids).get(declared) or [])
+    if not isinstance(flavour_spec, dict):
+        flavour_spec = {}
     try:
-        result.resolved_infra = bind_session(
-            result.resolved_infra, flavour_spec, agent_ids=agency_ids(result.mas_config)
-        )
-    except BindError as exc:
+        attach_overlay_controls(flavour_spec, overlay_paths or [])
+        result.resolved_infra = bind_session(result.resolved_infra, flavour_spec, agent_ids=ids)
+        result.bind.flavour_spec = flavour_spec
+    except (BindError, ControlError) as exc:
         logger.error("%s", exc)
         return 1
+    if obs_config is None:
+        from mas.ctl.cli.obs_flags import resolve_observability_config
+
+        deployment_doc = None
+        if deployment_path is not None:
+            import yaml
+
+            deployment_doc = yaml.safe_load(Path(deployment_path).read_text(encoding="utf-8"))
+        obs_config = resolve_observability_config(
+            events=events,
+            events_file=events_file,
+            events_stdout=events_stdout,
+            events_format=events_format,
+            manifest=result.mas_config,
+            deployment=deployment_doc,
+            flavour_spec=flavour_spec,
+            resolved_infra=result.resolved_infra,
+            entry_id=declared,
+        )
     result.bind.hitl_mode = "auto" if (auto_hitl and not interactive) else "block"
     from mas.ctl.session.params_sidecar import (
         apply_runtime_params_to_instance,
@@ -171,9 +200,24 @@ def execute_run_mas(
 
         for agent_instance in materialized.materialized.instances.values():
             apply_runtime_params_to_instance(runtime_params, agent_instance)
+        from mas.ctl.session.flavour_control import apply_flavour_controls
+
+        # The entry agent's governance as the Controls give it (warnings print once, at instantiation).
+        apply_flavour_controls(
+            enriched_manifest,
+            flavour_spec,
+            agent_id=entry,
+            entry_id=declared,
+            delegate_ids=delegates,
+            warn=False,
+        )
         hitl_responder, _ = resolve_hitl_from_manifest(
             enriched_manifest,
             session_interactive=interactive or not auto_hitl,
+            flavour_spec=flavour_spec,
+            agent_id=entry,
+            entry_id=declared,
+            delegate_ids=delegates,
         )
         if hitl_responder is not None:
             instance.driver.hitl = hitl_responder

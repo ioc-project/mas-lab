@@ -13,7 +13,6 @@ from typing import Any, Dict, Optional
 
 from mas.runtime.registry import PluginEntry, get_registry, register_plugin
 
-
 COORD_KEYS = ("library", "experiment", "scenario", "test", "run")
 UNSET = "-"
 ADDRESS_TEMPLATE = "/api/artefacts/{library}/{experiment}/{scenario}/{test}/{run}/{name}"
@@ -118,12 +117,7 @@ def _info_from_entry(entry: PluginEntry) -> dict[str, Any]:
     info: dict[str, Any] = {
         "path": attrs.get("path") or getattr(cls, "path", None) or "{level_dir}/{name}",
         "format": attrs.get("format") or getattr(cls, "format", None) or "",
-        "description": (
-            entry.description
-            or attrs.get("description")
-            or getattr(cls, "description", None)
-            or ""
-        ),
+        "description": (entry.description or attrs.get("description") or getattr(cls, "description", None) or ""),
     }
     schema = attrs.get("schema") or getattr(cls, "schema", None)
     if schema:

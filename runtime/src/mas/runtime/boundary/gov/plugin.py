@@ -34,9 +34,12 @@ class GovernancePlugin(Protocol):
 class GovernancePluginChain:
     """``spec.governance`` is an iptables-style chain, not a sequence.
 
-    Observability plugins are a *sequence*: every listed plugin sees every
-    event. Governance plugins are a *chain*: each plugin either passes and
-    the next rule runs, or it errors and the chain stops with that verdict.
+    The Control set is unordered. Plugins that attach to the same transition
+    run in ``priority`` order (higher first, default 0; same priority is the
+    plugin id). Callers pass that order in. Observability plugins are a
+    *sequence*: every listed plugin sees every event. Governance plugins are
+    a *chain*: each plugin either passes and the next rule runs, or it errors
+    and the chain stops with that verdict.
     Remaining plugins are not consulted.
 
     * ALLOW / LOG — pass. Continue to the next plugin.
@@ -75,10 +78,15 @@ class GovernancePluginChain:
                 log = (decision, name, reason)
             else:
                 allow = (decision, name, reason)
-        return hold or log or allow or (
-            GovDecision.ALLOW,
-            "governance-chain",
-            "all governance plugins passed this call",
+        return (
+            hold
+            or log
+            or allow
+            or (
+                GovDecision.ALLOW,
+                "governance-chain",
+                "all governance plugins passed this call",
+            )
         )
 
     def on_transition(self, transition: object) -> None:

@@ -21,6 +21,7 @@ from mas.ctl.deployment.load import load_deployment, resolve_runtime_id
 from mas.ctl.infra.resolve import resolve_infra_refs
 from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay
 from mas.ctl.overrides import apply_cli_overrides, overlay_for_session_agent, overrides_for_root
+from mas.ctl.session.flavour_control import is_control_document
 from mas.ctl.validate import validate_file, validation_enabled
 from mas.ctl.workspace.config import (
     UserConfig,
@@ -144,17 +145,20 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
     mas = load_yaml_mapping(req.manifest)
     agent_patches: dict[str, dict] = {}
     for ov_path in req.overlay_paths:
+        overlay = load_yaml_mapping(ov_path)
+        if is_control_document(overlay):
+            if req.validate and validation_enabled():
+                validate_file(ov_path, kind="control").raise_if_failed()
+            continue
         if req.validate and validation_enabled():
             validate_file(ov_path, kind="overlay").raise_if_failed()
-        overlay = load_yaml_mapping(ov_path)
         mas = merge_overlay(mas, overlay)
         agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
     if req.overrides:
         bare_agent = overrides_for_root(req.overrides, "agent")
         if bare_agent:
             raise ValueError(
-                f"{bare_agent[0]!r} addresses a standalone agent; a MAS session has several. "
-                "Use .mas.agent[id].spec…"
+                f"{bare_agent[0]!r} addresses a standalone agent; a MAS session has several. Use .mas.agent[id].spec…"
             )
         mas_overrides = overrides_for_root(req.overrides, "mas")
         if mas_overrides:
@@ -209,9 +213,7 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
     spec = deployment.setdefault("spec", {})
     spec["runtime_id"] = runtime_id
 
-    composed = compose_application(
-        mas, mas_id=mas_id, overlay_ids=req.overlay_ids, agent_patches=agent_patches
-    )
+    composed = compose_application(mas, mas_id=mas_id, overlay_ids=req.overlay_ids, agent_patches=agent_patches)
     plan = compose_placement_from_deployment(deployment, composed)
     validate_placement_strategy(plan.strategy)
     bind = compose_effective_bind(

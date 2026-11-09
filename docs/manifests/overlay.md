@@ -6,9 +6,9 @@
 
 **Package:** `runtime/` · **Schema:** `overlay.schema.yaml` · **apiVersion:** `mas/v1`
 
-An **overlay** (`kind: Overlay`) declares a patch to one **Agent**, **MAS**, **Infra**, **Flavour**, **Experiment**, or in-memory **Workspace** document. You change the base manifest without copying it.
+An **overlay** (`kind: Overlay`) declares a patch to one **Agent**, **MAS**, **Infra**, **Flavour**, **Control**, **Experiment**, or in-memory **Workspace** document. You change the base manifest without copying it.
 Write one to change a base manifest for a single run or a **scenario**. A scenario is a named variant in an experiment.
-An experiment lists overlays per scenario (`scenarios[].overlays`). The CLI applies them with `-o path/to/overlay.yaml`.
+An experiment lists overlays per scenario (`scenarios[].overlays`). The CLI applies them with `-o path/to/overlay.yaml`. Attach a Control with `--control`, a Flavour's `spec.control`, or a scenario's `overlays.control`. Passing a Control with `-o`, or listing Controls under an Overlay's `spec.control`, is deprecated. Observability and governance belong in those Controls, not in an Agent patch.
 
 Minimal working overlay:
 
@@ -27,7 +27,7 @@ spec:
 ```
 
 An overlay is a partial or full override of one target document. Benchmark scenarios, runtime overlays (`-o`), and the UI overlay builder all use this format.
-There is no `spec.contracts` list. A contract is a declared boundary the runtime checks, such as a tool call or a delegation. Express contract boundaries through schema fields such as `design_pattern`, `governance`, `observability`, `workflow`, and `tools`.
+There is no `spec.contracts` list. A contract is a declared boundary the runtime checks, such as a tool call or a delegation. Express contract boundaries through schema fields such as `design_pattern`, `workflow`, and `tools`. Observability and governance belong in a Control.
 
 ## Contents
 
@@ -130,7 +130,7 @@ spec:
 `spec.tools` (outside `patch`) is a separate, scenario-level tool injection field. It is a list of semantic tool names or `{ref: path}` objects, merged onto the target agents.
 
 `patch.agents.<id>` and the `$entry`-style keys accept a subset of Agent fields: `design_pattern`, `context_manager`, `assembler`, `llm`, `memory`, `tools`, `skills`, `context`, `description`, and `ref`.
-To patch other agent fields (`governance`, `models`, `control`, ...) on agents inside a MAS, use a `target.kind: Agent` overlay. Add `target.name` to select one agent.
+To patch `governance` and `observability`, use a `target.kind: Control` overlay. To patch other agent fields (`models`, `control`, ...) on agents inside a MAS, use a `target.kind: Agent` overlay. Add `target.name` to select one agent.
 
 ---
 
@@ -140,7 +140,7 @@ To patch other agent fields (`governance`, `models`, `control`, ...) on agents i
 
 | Field | Required | Semantics |
 | --- | --- | --- |
-| `kind` | yes | Target document kind: `Agent`, `MAS`, `Infra`, `Flavour`, `Experiment`, or `Workspace`. |
+| `kind` | yes | Target document kind: `Agent`, `MAS`, `Infra`, `Flavour`, `Control`, `Experiment`, or `Workspace`. |
 | `name` | no | For an `Agent` overlay applied to a MAS, selects one agency row by `id`, `name`, or `metadata.name`. For a standalone target, the command already selects the document. |
 
 The target kind must match the session type of every `spec.overrides` expression.
@@ -155,7 +155,8 @@ The overlay fails, rather than being ignored, when it has an unsupported kind, a
 | `Agent` | [`overlay-agent-patch.schema.yaml`](../schemas/runtime/fragments/overlay-agent-patch.schema.yaml) | Agent fields, `$op`, and `x-merge` metadata |
 | `MAS` | [`overlay-mas-patch.schema.yaml`](../schemas/runtime/fragments/overlay-mas-patch.schema.yaml) | `agency`, `workflow`, `agents`, `telemetry`, `params`, `capabilities`, `intent` |
 | `Infra` | [`overlay-infra-patch.schema.yaml`](../schemas/runtime/fragments/overlay-infra-patch.schema.yaml) | RFC 7396 merge of the Infra `spec` |
-| `Flavour` | [`overlay-flavour-patch.schema.yaml`](../schemas/runtime/fragments/overlay-flavour-patch.schema.yaml) | `bind`, leftover keys (`agent_comm`, `telemetry`, `observability`, `control`, `tools`, unread except the `observability` fallback), and plugin collection operators |
+| `Flavour` | [`overlay-flavour-patch.schema.yaml`](../schemas/runtime/fragments/overlay-flavour-patch.schema.yaml) | `bind`, `control` (Control refs), leftover keys (`agent_comm`, `telemetry`, `observability`, leftover `control` mapping, `tools`, unread), and plugin collection operators |
+| `Control` | [`overlay-control-patch.schema.yaml`](../schemas/runtime/fragments/overlay-control-patch.schema.yaml) | `observability` (set) and `governance` (set) |
 | `Experiment`, `Workspace` | none in the overlay schema (any mapping) | In-memory RFC 7396 merge |
 
 A plain value follows the field's declared merge strategy. Use an explicit `$op` mapping for collection operations: `replace`, `add`, `remove`, `clear`, or `merge`.
@@ -167,8 +168,8 @@ Merging follows RFC 7396 (JSON Merge Patch). A mapping merges key by key, any ot
 
 What each target can patch:
 
-- **Flavour** overlays cannot select models or API keys. They change the Flavour's `bind` and leftover keys only.
-- **Agent** overlays can patch every Agent `spec` field except `debug`. That includes `models[]` rows (sampling, `reasoning`, `extra`), `description`, `behavior`, and `tools_ref`.
+- **Flavour** overlays cannot select models or API keys. They change the Flavour's `bind`, `control` refs, and leftover keys only.
+- **Agent** overlays can patch every Agent `spec` field. That includes `models[]` rows (sampling, `reasoning`, `extra`), `description`, `behavior`, and `tools_ref`.
 - `spec.models[]` deep-merges by `id`, then `model`, then `main`.
 - Access fields (`api_base`, `api_key_env`) stay on infra.
 
@@ -240,7 +241,7 @@ Zero matches is an `OverlayTargetError`: the overlay must attach somewhere.
 
 This is how labs reuse an Agent overlay such as `with-guardrail` on trip-planner. Compose and `run-mas` keep each agency row as `{id, ref}` and merge the overlay onto each referenced Agent YAML when the file loads.
 
-- `governance` and `observability` union by plugin id. They do not replace the agent's existing lists.
+- Patch `governance` and `observability` on `target.kind: Control`. Both are sets: a raw list replaces, `$op.add` unions by plugin id (a later config for the same id wins), and `[]` or `$op.replace` / `$op.clear` clears. Governance order on a transition is each plugin's `priority`, not overlay order.
 - `skills` and `tools` follow one rule. A `{"$op": {"add": [...]}}` value appends to what the agent YAML declares. A raw list replaces it, and `[]` clears it.
 
 A base MAS cannot declare skills, tools, or context on an agency row. Those fields live in the agent manifest. To change them per agent in a scenario, target the agent with `$entry`, `$all`, `$not-entry`, `$delegates`, or a named id.

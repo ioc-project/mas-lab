@@ -5,6 +5,7 @@
 Runs agents via v2 ``SessionController`` (no subprocess / stdout capture) and
 returns structured interaction fields: user query in, agent response or error out.
 """
+
 from __future__ import annotations
 
 import logging
@@ -183,8 +184,13 @@ def run_agent_turn(
                 cli_interceptors=[],
             ),
         )
+        flavour_spec = None
+        if flavour:
+            from mas.ctl.session.flavour import resolve_session_flavour
+
+            flavour_spec = resolve_session_flavour(flavour, search_dirs=[base_dir])
         hitl_responder, hitl_terminal = resolve_hitl_from_manifest(
-            current_manifest, session_interactive=False
+            current_manifest, session_interactive=False, flavour_spec=flavour_spec
         )
         instance, _store = instantiate_runtime(
             InstantiationOptions(
@@ -194,6 +200,7 @@ def run_agent_turn(
                 resolved_infra=resolved_infra,
                 workspace=workspace,
                 validate_manifests=False,
+                flavour_spec=flavour_spec,
             ),
             hitl=hitl_responder,
         )

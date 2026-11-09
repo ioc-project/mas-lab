@@ -24,7 +24,7 @@ properties:
         default: null
         description: >
           Dispatch-loop cap. Null / omitted means no cap. Production
-          overlays (with-hardened) and RuntimeEngine manifests set an
+          agent specs and RuntimeEngine manifests set an
           integer when a runaway loop must stop.
       timeout:
         type: ["number", "null"]

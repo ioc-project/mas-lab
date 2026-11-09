@@ -1,0 +1,94 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#control"
+title: "Control Manifest"
+description: >
+  Schema for kind: Control. Observability and governance moved here from the
+  agent spec. Each list is a set of plugins named by id; every name must be
+  registered, under a type that list accepts, or the Control is refused. This
+  schema names no plugin. Call ceilings are the budget governance plugin.
+  Observability order does not matter. Governance order on a transition is
+  each plugin's priority (higher first, default 0). A Flavour's spec.control
+  lists Control files by ref and which agents they attach to. Overlay patches
+  that set these keys target kind: Control. Attach does not copy them onto
+  the agent. Agent leftover spec.governance / spec.observability are
+  deprecated and still applied when no matching Control names them.
+type: object
+required:
+  - apiVersion
+  - kind
+  - metadata
+  - spec
+additionalProperties: false
+patternProperties:
+  "^x-":
+    description: "Extension properties — ignored by the runtime."
+properties:
+  apiVersion:
+    type: string
+    description: "API version — 'control/v1'."
+  kind:
+    type: string
+    const: "Control"
+  metadata:
+    type: object
+    additionalProperties: true
+    properties:
+      name:
+        type: string
+      version:
+        type: string
+      description:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+  spec:
+    type: object
+    additionalProperties: false
+    description: >
+      Observability and governance (each a set of plugins) this Control attaches.
+      A Flavour row may override agents; when it omits agents, spec.agents
+      here is the default ($all).
+    properties:
+      agents:
+        description: >
+          Default attach set when a Flavour control row omits agents.
+          $all (every agent of the session), $entry (the entry agent),
+          $not-entry (every agent except the entry), $delegates (every agent
+          the entry delegates to), a list of ids, or the same agent path
+          as --override (.mas.agent[id] / .mas.agent[*]).
+        oneOf:
+          - type: string
+            minLength: 1
+            description: "$all, $entry, $not-entry, $delegates, one agent id, or the same agent path as --override"
+          - type: array
+            items:
+              type: string
+              minLength: 1
+            minItems: 1
+            uniqueItems: true
+      observability:
+        description: >
+          Set of observability plugins. Matching Controls union by plugin id;
+          a later Control's config for the same id wins. Order does not matter.
+        allOf:
+          - $ref: "./fragments/plugin-pipeline.schema.yaml"
+          - uniqueItems: true
+        x-merge:
+          strategy: plugin_list_ops
+          identity: plugin_id
+      governance:
+        description: >
+          Set of governance plugins. Matching Controls union by plugin id;
+          a later Control's config for the same id wins. Order on a
+          transition is each plugin's priority (higher first, default 0;
+          same-priority order is the plugin id).
+        allOf:
+          - $ref: "./fragments/plugin-pipeline.schema.yaml"
+          - uniqueItems: true
+        x-merge:
+          strategy: plugin_list_ops
+          identity: plugin_id

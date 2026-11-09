@@ -31,38 +31,35 @@ def test_derive_format_cli_override() -> None:
     assert derive_observability_format(["native"], cli_override="otel") == "otel"
 
 
-class TestFlavourObservabilityFallback:
-    """FT7 groundwork: flavour.spec.observability is the deployment-posture
-    default when the agent/MAS manifest doesn't declare its own — see
-    docs/design/flavour-boundary.md."""
-
-    def test_flavour_supplies_plugins_when_manifest_silent(self) -> None:
+class TestLeftoverFlavourObservabilityIsUnread:
+    def test_flavour_observability_does_not_supply_plugins(self) -> None:
         cfg = observability_config_from_manifest(
             {"spec": {}},
-            flavour_spec={"observability": ["native"]},
+            flavour_spec={"observability": ["otel"]},
         )
         assert cfg.plugins == ["native"]
         assert cfg.enabled is True
 
-    def test_manifest_observability_wins_over_flavour(self) -> None:
+    def test_leftover_agent_observability_still_applies(self) -> None:
         cfg = observability_config_from_manifest(
             {"spec": {"observability": ["otel"]}},
             flavour_spec={"observability": ["native"]},
         )
         assert cfg.plugins == ["otel"]
 
-    def test_no_flavour_no_manifest_observability_disabled(self) -> None:
+    def test_no_flavour_no_manifest_records_native(self) -> None:
         cfg = observability_config_from_manifest({"spec": {}}, flavour_spec=None)
-        assert cfg.plugins == []
-        assert cfg.enabled is False
+        assert cfg.plugins == ["native"]
+        assert cfg.enabled is True
 
-    def test_cli_events_file_overrides_flavour_native_path(self) -> None:
+    def test_cli_events_file_is_the_shortcut_path(self) -> None:
         cfg = observability_config_from_manifest(
             {"spec": {}},
             flavour_spec={"observability": [{"native": {"path": "traces/from-flavour.jsonl"}}]},
             cli_events_file="traces/from-cli.jsonl",
         )
         assert cfg.events_file == "traces/from-cli.jsonl"
+        assert cfg.plugins == ["native"]
 
 
 def test_resolve_mas_id_from_mas_manifest() -> None:

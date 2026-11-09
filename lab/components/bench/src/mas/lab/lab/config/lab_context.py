@@ -21,9 +21,7 @@ _LAB_DIR_SUFFIX = ".lab"
 
 def _discover_lab_name(yaml_path: Path) -> Optional[str]:
     """Infer the lab name for an experiment YAML from its surrounding context."""
-    lab_dir = find_ancestor_with_file(
-        yaml_path, LAB_CONFIG_FILENAME, stop_at_suffix=_LAB_DIR_SUFFIX
-    )
+    lab_dir = find_ancestor_with_file(yaml_path, LAB_CONFIG_FILENAME, stop_at_suffix=_LAB_DIR_SUFFIX)
     if lab_dir is not None:
         try:
             from mas.runtime.spec.source import load_yaml_file
@@ -34,7 +32,7 @@ def _discover_lab_name(yaml_path: Path) -> Optional[str]:
             if _name:
                 return str(_name)
         except Exception:
-            logger.debug('suppressed', exc_info=True)
+            logger.debug("suppressed", exc_info=True)
 
     for parent in [yaml_path.parent, *yaml_path.parents]:
         if parent.name.endswith(_LAB_DIR_SUFFIX):
@@ -52,7 +50,6 @@ class LabContext:
     lab_name: Optional[str] = None
     libraries: List[str] = field(default_factory=list)
     plugins: List[PluginSpec] = field(default_factory=list)
-    enable_plugins: List[str] = field(default_factory=list)
 
 
 def discover_lab_context(yaml_path: Path) -> LabContext:
@@ -66,8 +63,7 @@ def discover_lab_context(yaml_path: Path) -> LabContext:
     declared there are silently never applied.
     """
     lab_dir = (
-        find_ancestor_with_file(yaml_path, LAB_CONFIG_FILENAME, stop_at_suffix=_LAB_DIR_SUFFIX)
-        or yaml_path.parent
+        find_ancestor_with_file(yaml_path, LAB_CONFIG_FILENAME, stop_at_suffix=_LAB_DIR_SUFFIX) or yaml_path.parent
     )
     ctx = LabContext(lab_dir=lab_dir)
     lab_yaml = lab_dir / LAB_CONFIG_FILENAME
@@ -87,9 +83,6 @@ def discover_lab_context(yaml_path: Path) -> LabContext:
             ctx.libraries = [str(x) for x in raw_libs if x]
             raw_plugins = section.get("plugins") or []
             ctx.plugins = [p for p in raw_plugins if p]
-            from mas.runtime.workspace_plugins import parse_plugin_refs
-
-            ctx.enable_plugins = parse_plugin_refs(section.get("enable_plugins"))
     else:
         ctx.lab_name = _discover_lab_name(yaml_path)
     return ctx

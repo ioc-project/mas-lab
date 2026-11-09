@@ -260,6 +260,10 @@ def build_engine(
     stream_override: bool | None = None,
     runtime_refs_cli: list[str] | None = None,
     model_override: str | None = None,
+    flavour_spec: dict | None = None,
+    agent_id: str = "",
+    entry_id: str = "",
+    delegate_ids: list[str] | tuple[str, ...] = (),
 ) -> EngineSelection:
     pid = pattern_plugin_id or default_pattern_plugin_id()
     if not _requires_concrete_model(manifest, pattern_plugin_id):
@@ -271,7 +275,16 @@ def build_engine(
             reason="design_pattern scripted_response",
         )
     kernel_cfg = (
-        kernel_config if kernel_config is not None else kernel_config_from_manifest(manifest, pattern_plugin_id=pid)
+        kernel_config
+        if kernel_config is not None
+        else kernel_config_from_manifest(
+            manifest,
+            pattern_plugin_id=pid,
+            flavour_spec=flavour_spec,
+            agent_id=agent_id,
+            entry_id=entry_id,
+            delegate_ids=delegate_ids,
+        )
     )
     tool_loop = engine_use_tool_loop(manifest, kernel_cfg)
     ws = workspace or WorkspaceConfig.load(anchor)

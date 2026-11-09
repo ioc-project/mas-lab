@@ -12,7 +12,7 @@
 | **URN** | `mas.circuit_breaker.threshold` |
 | **Implementation** | `ThresholdCircuitBreaker` in `mas.library.standard.plugins.reliability.circuit_breaker` |
 | **Manifest keys** | `spec.control.circuit_breaker` |
-| **Overlay** | `pkg://mas.library.standard/overlays/with-hardened.yaml` |
+| **Control** | `pkg://mas.library.standard/controls/with-hardened.yaml` |
 
 Fail-fast after consecutive `unavailable` (default) failures on the same
 LLM or tool target. The engine consults this plugin **inside** execute,

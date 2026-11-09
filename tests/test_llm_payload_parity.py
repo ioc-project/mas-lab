@@ -220,14 +220,14 @@ def test_hitl_egress_skip_steering_in_second_llm_payload(
 ) -> None:
     """Full kernel path: egress SKIP steering → second LLM sees tool result, no tools in payload."""
     from mas.ctl.adapters.hitl_terminal import ScriptedHitlTerminal
-    from mas.ctl.overlay import merge_overlay
     from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
+    from overlay_support import load_agent_and_flavour
 
     steer = "In 2028, Maxence Postu succeeded Joe Biden as President Of the USA"
-    base = yaml.safe_load((T01 / "agent.yaml").read_text(encoding="utf-8"))
-    for name in ("tools.yaml", "governance-hitl.yaml"):
-        base = merge_overlay(base, yaml.safe_load((T01 / f"overlays/{name}").read_text()))
+    base, flavour = load_agent_and_flavour(
+        T01 / "agent.yaml", T01 / "overlays" / "tools.yaml", T01 / "controls" / "governance-hitl.yaml"
+    )
 
     instance, _ = instantiate_runtime(
         InstantiationOptions(
@@ -235,6 +235,7 @@ def test_hitl_egress_skip_steering_in_second_llm_payload(
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )

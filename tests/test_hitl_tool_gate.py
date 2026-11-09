@@ -24,13 +24,12 @@ def _load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
-def _merged_tutorial_agent() -> dict:
-    from mas.ctl.overlay import merge_overlay
+def _merged_tutorial_agent() -> tuple[dict, dict]:
+    from overlay_support import load_agent_and_flavour
 
-    base = _load_yaml(T01 / "agent.yaml")
-    for name in ("tools.yaml", "governance-hitl.yaml"):
-        base = merge_overlay(base, _load_yaml(T01 / "overlays" / name))
-    return base
+    return load_agent_and_flavour(
+        T01 / "agent.yaml", T01 / "overlays" / "tools.yaml", T01 / "controls" / "governance-hitl.yaml"
+    )
 
 
 def _event_kinds(events_path: Path) -> list[str]:
@@ -59,13 +58,14 @@ def test_scripted_hitl_terminal_allow_runs_tool(tmp_path: Path) -> None:
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
     from mas.ctl.ui.stdout import StdoutConversationDisplay
 
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -90,13 +90,14 @@ def test_scripted_hitl_block_skips_tool(tmp_path: Path) -> None:
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
     from mas.ctl.ui.stdout import StdoutConversationDisplay
 
-    manifest = _merged_tutorial_agent()
+    manifest, flavour = _merged_tutorial_agent()
     instance, _store = instantiate_runtime(
         InstantiationOptions(
             agent_manifest=manifest,
             manifest_dir=T01,
             validate_manifests=False,
             engine=web_search_engine(),
+            flavour_spec=flavour,
         ),
         hitl=None,
     )
@@ -134,8 +135,8 @@ def test_cli_batch_hitl_emits_hitl_gate(tmp_path: Path) -> None:
             str(CI_REPLAY_YAML),
             "-o",
             "overlays/tools.yaml",
-            "-o",
-            "overlays/governance-hitl.yaml",
+            "--control",
+            "controls/governance-hitl.yaml",
             "--events",
             "--events-file",
             str(events_file),

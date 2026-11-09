@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.spec.plugin_binding import plugin_binding_id
 
@@ -27,7 +26,9 @@ def resolve_design_pattern_registry_id(design_pattern: dict[str, Any] | str | No
     binding = (
         design_pattern
         if isinstance(design_pattern, dict)
-        else {"type": design_pattern} if isinstance(design_pattern, str) else {}
+        else {"type": design_pattern}
+        if isinstance(design_pattern, str)
+        else {}
     )
     if not plugin_binding_id(binding, field="spec.design_pattern"):
         return default_pattern_plugin_id()

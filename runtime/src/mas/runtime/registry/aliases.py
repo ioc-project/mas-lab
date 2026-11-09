@@ -11,7 +11,6 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
-
 from mas.runtime.workspace_config import RuntimeWorkspaceConfig
 
 _ALIAS_RESOURCE = "aliases.yaml"
@@ -27,7 +26,9 @@ def _load_resource_yaml(resource_name: str) -> dict[str, Any]:
 def _load_alias_mapping(raw: Any) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
-    return {str(alias).strip().lower(): str(urn) for alias, urn in raw.items() if str(alias).strip() and str(urn).strip()}
+    return {
+        str(alias).strip().lower(): str(urn) for alias, urn in raw.items() if str(alias).strip() and str(urn).strip()
+    }
 
 
 def _load_alias_manifest(raw: dict[str, Any]) -> dict[str, str]:
@@ -75,6 +76,14 @@ def load_default_aliases() -> dict[str, str]:
 def load_config_aliases(config: RuntimeWorkspaceConfig | None = None) -> dict[str, str]:
     ws = config or RuntimeWorkspaceConfig.load()
     return validate_alias_manifest(ws.aliases, name="workspace-aliases")
+
+
+def load_deprecated_aliases() -> dict[str, str]:
+    """Aliases that still resolve, with a one-time warning, until a later release removes them."""
+    raw = _load_resource_yaml(_ALIAS_RESOURCE)
+    spec = raw.get("spec") if isinstance(raw.get("spec"), dict) else {}
+    validate_alias_manifest(raw, name="runtime-default-aliases")
+    return _load_alias_mapping(spec.get("deprecated_aliases"))
 
 
 def load_aliases(config: RuntimeWorkspaceConfig | None = None) -> dict[str, str]:

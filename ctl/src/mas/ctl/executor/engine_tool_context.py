@@ -16,9 +16,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.runtime.boundary.engine_tools import EngineToolBudgetExceeded
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.runtime.driver.instance import RuntimeInstance
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,10 @@ class MaterializedEngineToolContext:
     verbose: int = 0
     instance_factory: Callable[[dict[str, Any], Path | None, str, str], RuntimeInstance] | None = None
     controller_factory: Callable[..., Any] | None = None
+    flavour_spec: dict[str, Any] | None = None
+    parent_spec: dict[str, Any] | None = None
+    entry_id: str = ""
+    delegate_ids: tuple[str, ...] = ()
     _children: dict[str, _Child] = field(default_factory=dict, init=False, repr=False)
 
     @property
@@ -68,7 +72,7 @@ class MaterializedEngineToolContext:
         if child_id in instances:
             raise RuntimeError(f"subagent id collision: {child_id}")
 
-        factory = self.instance_factory or _instantiate_child
+        factory = self.instance_factory or self._instantiate_child
         instance = factory(manifest, manifest_dir, child_id, template_id)
         instance.driver.agent_id = child_id
         driver_ctx = getattr(instance.driver, "ctx", None)
@@ -82,9 +86,7 @@ class MaterializedEngineToolContext:
         if shared_obs_plugin_set is not None and instance.obs_plugin_set is None:
             from mas.runtime.boundary.obs.plugins import attach_observability_plugin_set
 
-            attach_observability_plugin_set(
-                shared_obs_plugin_set, instance, agent_id=child_id, begin_run=False
-            )
+            attach_observability_plugin_set(shared_obs_plugin_set, instance, agent_id=child_id, begin_run=False)
         bus = getattr(self.materialized, "bus", None)
         if bus is not None:
             from mas.ctl.placement.bus.adapter import RuntimeCommEndpoint
@@ -105,11 +107,17 @@ class MaterializedEngineToolContext:
                 ledger=self.ledger,
                 display=self.display,
                 verbose=self.verbose,
+                flavour_spec=self.flavour_spec,
+                parent_spec=self.parent_spec,
+                entry_id=self.entry_id,
+                delegate_ids=self.delegate_ids,
             )
 
         self.ledger.enter(self.session_id, child_agent_id=child_id, parent_agent_id=self.parent_agent_id)
         self._children[child_id] = _Child(instance, shared_obs_plugin_set)
-        parent_ctx = getattr(getattr(parent_instance, "driver", None), "ctx", None) if parent_instance is not None else None
+        parent_ctx = (
+            getattr(getattr(parent_instance, "driver", None), "ctx", None) if parent_instance is not None else None
+        )
         spec_log = getattr(self, "spec_log", None) or getattr(parent_ctx, "spec_log", None)
         if spec_log is not None:
             latest = spec_log.latest(self.session_id)
@@ -149,9 +157,7 @@ class MaterializedEngineToolContext:
             working_memory_registry=self.working_memory_registry,
             caller_agent_id=self.parent_agent_id,
         )
-        result = controller.run_turn(
-            task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id
-        )
+        result = controller.run_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
         if turn_failed(result):
             raise EngineToolTurnFailed(f"turn failed for {agent_id!r}")
         return result.text
@@ -188,9 +194,7 @@ class MaterializedEngineToolContext:
         if callable(arun):
             result = await arun(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
         else:
-            result = controller.run_turn(
-                task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id
-            )
+            result = controller.run_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
         if turn_failed(result):
             raise EngineToolTurnFailed(f"turn failed for {agent_id!r}")
         return result.text
@@ -211,19 +215,22 @@ class MaterializedEngineToolContext:
             plugin_set.close()
         self.ledger.exit(self.session_id, child_agent_id=agent_id)
 
+    def _instantiate_child(
+        self, manifest: dict[str, Any], manifest_dir: Path | None, child_id: str, _template_id: str
+    ) -> RuntimeInstance:
+        from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 
-def _instantiate_child(
-    manifest: dict[str, Any], manifest_dir: Path | None, child_id: str, _template_id: str
-) -> RuntimeInstance:
-    from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
-
-    instance, _store = instantiate_runtime(
-        InstantiationOptions(
-            agent_manifest=copy.deepcopy(manifest),
-            manifest_dir=manifest_dir,
-            app_root=manifest_dir,
-            enable_observability=True,
+        instance, _store = instantiate_runtime(
+            InstantiationOptions(
+                agent_manifest=copy.deepcopy(manifest),
+                manifest_dir=manifest_dir,
+                app_root=manifest_dir,
+                enable_observability=True,
+                flavour_spec=self.flavour_spec,
+                parent_spec=self.parent_spec,
+                entry_id=self.entry_id or None,
+                delegate_ids=self.delegate_ids,
+            )
         )
-    )
-    instance.driver.agent_id = child_id
-    return instance
+        instance.driver.agent_id = child_id
+        return instance

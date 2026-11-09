@@ -284,6 +284,9 @@ class MCPToolServerFactory:
                 logger.info("MCP tool done name=%s", name)
                 return result
 
+        # ``wraps`` copies ``__annotate__`` on Python 3.14, not annotations assigned as a dict, and the SDK finds
+        # the Context parameter through ``get_type_hints``: copy them so the wrapper keeps its Context annotation.
+        logged.__annotations__ = dict(fn.__annotations__)
         self._server.add_tool(
             logged,
             name=name,

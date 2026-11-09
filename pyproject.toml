@@ -87,6 +87,8 @@ mas-lab-component-controller = { workspace = true }
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+# Written by scripts/gen_schema_artifacts.py, which does not emit ruff style.
+extend-exclude = ["**/*_generated.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I"]

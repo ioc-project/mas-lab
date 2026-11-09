@@ -5,6 +5,8 @@
 COMPILE_EPILOG = """
 Examples:
   mas-ctl compile agent.yaml -o overlays/tools.yaml -o overlays/skills.yaml
+  mas-ctl compile agent.yaml --control controls/governance-hitl.yaml
+  mas-ctl compile agent.yaml --flavour desk.yaml
   mas-ctl compile agent.yaml -o overlays/tools.yaml -O compiled-agent.yaml
   mas-ctl compile mas.yaml -o overlays/linear.yaml -O ./compiled/
   mas-ctl compile mas.yaml -o overlays/linear.yaml --layout bundle -O team.yaml
@@ -23,14 +25,15 @@ Interactive session commands (at the You: prompt):
   /reset               Clear working memory and turn history; restore system prompt
   /steer <text>        Inject operator steering mid-run (updates context)
 
-Session id (A2A contextId) is printed at start. Chat advertises control in
-the platform runtime directory; attach with: mas-ctl control attach SESSION_ID
-Use --no-control to skip. Override the directory with --control-dir or MAS_CONTROL_DIR.
+Session id (A2A contextId) is printed at start. Chat advertises a live control
+endpoint; attach with: mas-ctl control attach SESSION_ID
+Use --no-control-dir to skip advertising (the pair of --control-dir, not of --control).
+Override the directory with --control-dir or MAS_CONTROL_DIR.
 
-Governance / HITL (when spec.governance.hitl_on_tool is set):
+Governance / HITL (when a Control sets hitl_on_tool):
   Interactive mode (-i) prompts on stderr: SCHEDULE (allow), BLOCK, SKIP
-  Batch (-q) auto-approves unless hitl_mode: auto-deny in overlay
-  Full-screen HITL: mas-ctl tui (same overlays)
+  Batch (-q) auto-approves unless hitl_mode: auto-deny in the Control
+  Full-screen HITL: mas-ctl tui (same --control files)
 
 Context model (see docs/design/context-sources.md):
   Working memory  — τ ledger + ctx assembly for the current turn

@@ -39,55 +39,39 @@ class GovernanceBinding:
     ingress_plugins: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _merge_gov_plugin_config(existing: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
-    """Merge a second occurrence of the same plugin key (e.g. two stacked
-    overlays both using ``sample_governance``) into the first.
-
-    List-valued fields (``policies``, ``ingress_plugins``) concatenate — that
-    is the whole point of stacking two overlays that each add policies, and a
-    plain overwrite silently drops the first overlay's entire policy set.
-    Scalar fields (``hitl_on_tool``, ``gov_policy_profile``, …) follow the
-    same last-overlay-wins convention already used for every other config
-    field this module merges.
-    """
-    merged = dict(existing)
-    for key, value in new.items():
-        prior = merged.get(key)
-        if isinstance(prior, list) and isinstance(value, list):
-            merged[key] = prior + value
-        else:
-            merged[key] = value
-    return merged
+def plugin_priority(cfg: dict[str, Any]) -> int:
+    """A plugin attachment's ``priority`` (higher first, default 0). Anything but an integer is refused."""
+    raw = cfg.get("priority", 0)
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise SpecBindingError(f"priority must be an integer, got {raw!r}")
+    return raw
 
 
 def _parse_gov_plugin_list(
     items: list[Any],
 ) -> tuple[list[str], dict[str, dict[str, Any]]]:
-    plugins: list[str] = []
     configs: dict[str, dict[str, Any]] = {}
     for item in items:
         if isinstance(item, str):
             name = item.strip()
-            plugins.append(name)
-            configs.setdefault(name, {})
+            configs[name] = {}
         elif isinstance(item, dict):
             for raw_name, cfg in item.items():
                 name = str(raw_name).strip()
-                plugins.append(name)
-                new_cfg = dict(cfg) if isinstance(cfg, dict) else {}
-                if name in configs:
-                    configs[name] = _merge_gov_plugin_config(configs[name], new_cfg)
-                else:
-                    configs[name] = new_cfg
+                configs[name] = dict(cfg) if isinstance(cfg, dict) else {}
         else:
-            raise SpecBindingError(
-                f"governance list entries must be str or dict, got {type(item).__name__}"
-            )
+            raise SpecBindingError(f"governance list entries must be str or dict, got {type(item).__name__}")
+    plugins = sorted(configs, key=lambda name: (-plugin_priority(configs[name]), name))
     return plugins, configs
 
 
 def parse_gov_spec(raw: list | None) -> GovernanceBinding:
-    """Parse ``spec.governance`` — ordered chain of plugins (not a sequence)."""
+    """Parse ``spec.governance`` — a set of plugins.
+
+    Same-transition order is each attachment's ``priority`` (higher first,
+    default 0; same priority is the plugin id). A later stanza for the same
+    id replaces the earlier config.
+    """
     if raw is None:
         return GovernanceBinding()
 
@@ -128,9 +112,7 @@ def parse_gov_spec(raw: list | None) -> GovernanceBinding:
         policies=policies,
         active_profile=flat.get("active_profile"),
         error_recovery_plugin=(
-            str(flat["error_recovery_plugin"])
-            if flat.get("error_recovery_plugin") is not None
-            else None
+            str(flat["error_recovery_plugin"]) if flat.get("error_recovery_plugin") is not None else None
         ),
         backtrack=flat.get("backtrack"),
         error_policy=flat.get("error_policy") if isinstance(flat.get("error_policy"), dict) else None,
@@ -141,11 +123,13 @@ def parse_gov_spec(raw: list | None) -> GovernanceBinding:
 def _constructor_kwargs(plugin_cls: Any, cfg: dict[str, Any]) -> dict[str, Any]:
     """Drop config a plugin cannot accept.
 
-    ``spec.governance.backtrack`` mixes plugin tuning (``repeat_threshold``)
+    ``priority`` orders attachments on a transition; it is not a constructor
+    field. ``spec.governance.backtrack`` mixes plugin tuning (``repeat_threshold``)
     with session-level policy the controller enforces
     (``max_backtracks_per_session``, ``steps``, ``on_cap_reached``), so the
     whole dict cannot be splatted into every recovery plugin.
     """
+    cfg = {key: value for key, value in cfg.items() if key != "priority"}
     try:
         params = inspect.signature(plugin_cls).parameters
     except (TypeError, ValueError):
@@ -169,39 +153,29 @@ def build_kernel_config(
     observability. ctl/session/manifest_config.py::kernel_config_from_manifest
     (deprecated) delegates here rather than duplicating plugin resolution.
     """
+    from mas.runtime.agent_defaults import default_pattern_plugin_id
     from mas.runtime.boundary.gov.filter import GovTransitionFilter
     from mas.runtime.boundary.gov.ingress_chain import RegisteredIngressPlugin
     from mas.runtime.boundary.gov.plugin import GovernancePlugin, GovernancePluginChain
     from mas.runtime.boundary.gov.policy_engine import GovernancePolicyEngine
     from mas.runtime.kernel.config import KernelConfig
-    from mas.runtime.agent_defaults import default_pattern_plugin_id
     from mas.runtime.registry import get_registry
     from mas.runtime.schema.governance import GovIngressProfile, GovPolicyProfile
-
-    import logging as _logging
-    _gov_logger = _logging.getLogger(__name__)
 
     def _instantiate(name: str, cfg: dict[str, Any]) -> GovernancePlugin | None:
         """Resolve *name* to a registered governance plugin class and build it.
 
-        No plugin class is ever named directly here — every governance
-        plugin, built-in ("sample_governance") or third-party, goes through
-        the same registry lookup, so adding one never requires touching this
-        function.
+        No plugin is ever named here: every governance plugin goes through the same registry
+        lookup by the name the spec gives. A name that is not registered as a governance
+        plugin is an error.
         """
         variant = get_registry().resolve_by_type("governance", name)
         if variant is None:
-            _gov_logger.warning(
-                "governance plugin %r not found in registry; "
-                "ensure its library.yaml is discoverable (installed package, "
-                "MAS_LIBRARY_PATHS, or cwd anchor scan)",
-                name,
-            )
-            return None
+            raise SpecBindingError(f"governance plugin {name!r} is not registered as a governance plugin")
         plugin_cls = variant.load_class()
         return plugin_cls(**_constructor_kwargs(plugin_cls, cfg))
 
-    def _ingress_entry_for(plugin: GovernancePlugin) -> Any | None:
+    def _ingress_entry_for(plugin: GovernancePlugin, *, priority: int = 0) -> Any | None:
         # Ingress (tool-result) participation is opt-in and duck-typed via
         # .config.hitl_on_tool_result, not tied to any specific plugin class.
         plugin_cfg = getattr(plugin, "config", None)
@@ -210,14 +184,21 @@ def build_kernel_config(
                 plugin=plugin,
                 filter=GovTransitionFilter(hook="ingress", response_kind=("TOOL_RESULT",)),
                 chain="stop",
+                priority=priority,
             )
         return None
+
+    def _ingress_sort_key(entry: RegisteredIngressPlugin) -> tuple[int, str]:
+        name = getattr(entry.plugin, "plugin_id", None) or type(entry.plugin).__name__
+        return (-entry.priority, str(name))
 
     egress_plugins: list[GovernancePlugin] = []
     ingress_entries: list[RegisteredIngressPlugin] = []
 
     for name in binding.plugins:
         plugin_cfg = dict(binding.plugin_configs.get(name) or {})
+        priority = plugin_priority(plugin_cfg)
+        plugin_cfg.pop("priority", None)
         plugin_cfg.pop("error_recovery_plugin", None)
         plugin_cfg.pop("backtrack", None)
         plugin_cfg.pop("error_policy", None)
@@ -226,31 +207,7 @@ def build_kernel_config(
         plugin = _instantiate(name, plugin_cfg)
         if plugin is not None:
             egress_plugins.append(plugin)
-            entry = _ingress_entry_for(plugin)
-            if entry is not None:
-                ingress_entries.append(entry)
-
-    # Fallback: explicit flags without a named plugin — use the built-in
-    # sample_governance plugin, resolved via the registry like any other.
-    if not egress_plugins and (
-        binding.hitl_on_tool or binding.hitl_on_tool_result or binding.gov_trigger_destructive
-    ):
-        plugin_cfg = {
-            k: v
-            for k, v in {
-                "hitl_on_tool": binding.hitl_on_tool,
-                "hitl_on_tool_result": binding.hitl_on_tool_result,
-                "hitl_once_per_turn": binding.hitl_once_per_turn,
-                "gov_trigger_destructive": binding.gov_trigger_destructive,
-                "gov_block_destructive": binding.gov_block_destructive,
-                "gov_policy_profile": binding.gov_policy_profile,
-            }.items()
-            if v is not None
-        }
-        plugin = _instantiate("sample_governance", plugin_cfg)
-        if plugin is not None:
-            egress_plugins.append(plugin)
-            entry = _ingress_entry_for(plugin)
+            entry = _ingress_entry_for(plugin, priority=priority)
             if entry is not None:
                 ingress_entries.append(entry)
 
@@ -294,9 +251,7 @@ def build_kernel_config(
             raise SpecBindingError(f"spec.governance.backtrack: unknown field {sorted(unknown)[0]!r}")
         for key in ("repeat_threshold", "max_backtracks_per_session", "steps"):
             value = binding.backtrack.get(key)
-            if value is not None and (
-                not isinstance(value, int) or isinstance(value, bool) or value < 1
-            ):
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value < 1):
                 raise SpecBindingError(f"spec.governance.backtrack.{key} must be an integer >= 1")
         if binding.backtrack.get("on_cap_reached", "hitl") not in {
             "hitl",
@@ -326,36 +281,36 @@ def build_kernel_config(
             plugin=recovery_plugin,
             filter=GovTransitionFilter(hook="ingress", response_kind=("ERROR",)),
             chain="stop",
+            priority=plugin_priority(plugin_cfg),
         )
 
     if binding.policies:
         from mas.runtime.boundary.gov.policy_engine import PolicyParseError
 
         try:
-            kwargs["policy_engine"] = GovernancePolicyEngine.from_yaml(
-                {"policies": binding.policies}
-            )
+            kwargs["policy_engine"] = GovernancePolicyEngine.from_yaml({"policies": binding.policies})
         except PolicyParseError as exc:
             raise SpecBindingError(f"spec.governance: {exc}") from exc
 
     # Extend the ingress chain with explicitly declared ingress-only plugins.
+    # Same-transition order is priority (higher first), not recovery-first.
     chain = list(ingress_entries)
     if recovery_entry is not None:
-        chain.insert(0, recovery_entry)
+        chain.append(recovery_entry)
     for entry in binding.ingress_plugins:
         if not isinstance(entry, dict):
             raise SpecBindingError("spec.governance.ingress_plugins entries must be objects")
         name = str(entry.get("type") or entry.get("name") or "").strip()
         if not name:
-            raise SpecBindingError(
-                f"spec.governance.ingress_plugins entry missing type/name: {entry!r}"
-            )
+            raise SpecBindingError(f"spec.governance.ingress_plugins entry missing type/name: {entry!r}")
         chain_mode = str(entry.get("chain") or "stop")
         if chain_mode not in {"stop", "continue"}:
-            raise SpecBindingError(
-                "spec.governance.ingress_plugins.chain must be stop or continue"
-            )
-        plugin_cfg = {key: value for key, value in entry.items() if key not in {"type", "name", "chain", "response_kind"}}
+            raise SpecBindingError("spec.governance.ingress_plugins.chain must be stop or continue")
+        plugin_cfg = {
+            key: value
+            for key, value in entry.items()
+            if key not in {"type", "name", "chain", "response_kind", "priority"}
+        }
         plugin = _instantiate(name, plugin_cfg)
         if plugin is None:
             raise SpecBindingError(f"ingress governance plugin {name!r} was not found")
@@ -364,7 +319,11 @@ def build_kernel_config(
             kinds: tuple[str, ...] = ("TOOL_RESULT",)
         elif isinstance(raw_kinds, str) and raw_kinds.strip():
             kinds = (raw_kinds.strip(),)
-        elif isinstance(raw_kinds, (list, tuple)) and raw_kinds and all(isinstance(k, str) and k.strip() for k in raw_kinds):
+        elif (
+            isinstance(raw_kinds, (list, tuple))
+            and raw_kinds
+            and all(isinstance(k, str) and k.strip() for k in raw_kinds)
+        ):
             kinds = tuple(str(k).strip() for k in raw_kinds)
         else:
             raise SpecBindingError(
@@ -375,8 +334,10 @@ def build_kernel_config(
                 plugin=plugin,
                 filter=GovTransitionFilter(hook="ingress", response_kind=kinds),
                 chain=chain_mode,
+                priority=plugin_priority(entry),
             )
         )
+    chain.sort(key=_ingress_sort_key)
     if chain:
         kwargs["ingress_governance_plugins"] = chain
 

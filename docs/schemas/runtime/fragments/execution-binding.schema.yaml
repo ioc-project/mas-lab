@@ -43,7 +43,7 @@ properties:
       Maximum kernel dispatch-loop iterations (LLM/tool/HITL round-trips)
       the driver auto-advances through for one ingress event before giving
       up with items still queued. Null / omitted means no cap (lab default).
-      Set an integer in a production overlay (`with-hardened` uses 512) or
+      Set an integer in production (for example 512) or
       a RuntimeEngine manifest. See docs/manifests/execution.md.
   live:
     type: boolean

@@ -4,18 +4,18 @@
 
 A *flavour* (``kind: Flavour``) is the glue between the logic spec and the
 infra: its ``spec.bind`` links each agent to infra rows and says what this
-deployment does with it (:mod:`mas.ctl.infra.bind`). It defines nothing itself,
-and it is **not** a place for LLM parameters (those live in the agent spec) or
-infra coordinates — see ``docs/design/flavour-boundary.md``. Leftover keys
-(``agent_comm``, ``tools``, ``control``, ``telemetry``) are accepted and read
-by nothing. ``observability`` is a deprecated fallback when the agent declares
-none.
+deployment does with it (:mod:`mas.ctl.infra.bind`). ``spec.control`` attaches
+:class:`kind: Control` documents. It defines nothing itself, and it is **not**
+a place for LLM parameters (those live in the agent spec) or infra coordinates
+— see ``docs/design/flavour-boundary.md``. Leftover keys (``agent_comm``,
+``tools``, ``telemetry``, ``observability``, and a leftover ``control`` mapping)
+are accepted and read by nothing.
 
 ``--flavour`` takes a bundled name (``flavours/<name>.yaml`` in
 ``mas.library.standard``) or the path of a Flavour YAML file (a value that ends
-in ``.yaml`` / ``.yml`` or names an existing file). :func:`resolve_flavour`
-resolves, validates, and returns the flavour's ``spec`` dict; callers read
-its ``bind``, and ``observability`` as that fallback.
+in ``.yaml`` / ``.yml`` or names an existing file). Omitted, the name is
+``local``. :func:`resolve_flavour` resolves, validates, and returns the flavour's
+``spec`` dict. :func:`resolve_session_flavour` is the CLI entry.
 :func:`validate_flavour` is kept for callers that only need the validation side
 effect.
 """
@@ -26,15 +26,17 @@ import contextlib
 import importlib.resources
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import yaml
+from mas.runtime.spec.source import load_yaml_mapping
 
 _FLAVOUR_PACKAGE = "mas.library.standard"
 DEFAULT_FLAVOUR = "local"
 # Flavours wired into the interactive path today. Offline chat uses llm_cache replay.
-SUPPORTED_FLAVOURS = ("local",)
+SUPPORTED_FLAVOURS = ("local", "prod")
 
 
 class FlavourError(ValueError):
@@ -79,7 +81,41 @@ def resolve_flavour(name: str | None = None, *, overrides: tuple[str, ...] | lis
     data = _load_bundled_flavour(resolved)
     if not data:
         return {}
-    return _checked_spec(data, label=resolved, overrides=overrides)
+    spec = dict(_checked_spec(data, label=resolved, overrides=overrides))
+    _hydrate_controls(spec)
+    return spec
+
+
+def resolve_session_flavour(
+    name: str | None = None,
+    *,
+    overrides: tuple[str, ...] | list[str] = (),
+    controls: Sequence[str] = (),
+    event_sinks: Sequence[str] = (),
+    search_dirs: Sequence[Path | str] = (),
+) -> dict[str, Any]:
+    """The Flavour a CLI session runs: the one named, or ``local``, with the command line added to it.
+
+    ``--control REF[@SELECTOR]`` adds a Control the way a ``spec.control`` row does, and ``--events-sink ROW``
+    adds an Application row to ``bind.events``. Flags are another way to write the Flavour, not another mechanism:
+    everything downstream reads the one Flavour.
+    """
+    spec = resolve_flavour((name or "").strip() or DEFAULT_FLAVOUR, overrides=overrides)
+    if controls:
+        from mas.ctl.session.flavour_control import ControlError, attach_cli_controls
+
+        try:
+            attach_cli_controls(spec, controls, search_dirs=search_dirs)
+        except ControlError as exc:
+            raise FlavourError(str(exc)) from None
+    if event_sinks:
+        bind = spec.setdefault("bind", {})
+        named = list(bind.get("events") or [])
+        for row in event_sinks:
+            if row not in named:
+                named.append(row)
+        bind["events"] = named
+    return spec
 
 
 def _checked_spec(
@@ -155,12 +191,25 @@ def _flavour_path(value: str) -> Path | None:
 def _resolve_flavour_file(path: Path, *, overrides: tuple[str, ...] | list[str] = ()) -> dict[str, Any]:
     """Load, patch and validate a Flavour YAML file; return its ``spec``."""
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        data = load_yaml_mapping(path)
     except (OSError, yaml.YAMLError) as exc:
         raise FlavourError(f"flavour file {str(path)!r} cannot be read: {exc}") from None
-    if not isinstance(data, dict) or data.get("kind") != "Flavour":
+    except ValueError:
+        data = {}
+    if data.get("kind") != "Flavour":
         raise FlavourError(f"flavour file {str(path)!r} is not a kind: Flavour document")
-    return _checked_spec(data, label=str(path), overrides=overrides, warn_deprecated=True)
+    spec = dict(_checked_spec(data, label=str(path), overrides=overrides, warn_deprecated=True))
+    _hydrate_controls(spec, source_dir=path.parent.resolve())
+    return spec
+
+
+def _hydrate_controls(spec: dict[str, Any], *, source_dir: Path | None = None) -> None:
+    from mas.ctl.session.flavour_control import ControlError, hydrate_flavour_controls
+
+    try:
+        hydrate_flavour_controls(spec, source_dir=source_dir)
+    except ControlError as exc:
+        raise FlavourError(str(exc)) from exc
 
 
 def validate_flavour(name: str | None = None) -> None:

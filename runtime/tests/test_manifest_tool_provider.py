@@ -134,6 +134,7 @@ def test_system_tool_registry_supports_new_registered_tool_names(calculator_tool
         register_plugin(
             urn,
             _DynamicSystemTool,
+            shortcuts=["dynamic_system_tool"],
             attributes={"plugin_type": "system_tool", "default_enabled": False},
         )
         provider = build_manifest_tool_provider(
@@ -256,6 +257,7 @@ def test_system_tool_registry_default_enabled_is_effective_and_overridable(
         register_plugin(
             urn,
             _DefaultEnabledSystemTool,
+            shortcuts=["default_enabled_system_tool"],
             attributes={"plugin_type": "system_tool", "default_enabled": True},
         )
         default_provider = build_manifest_tool_provider([], calculator_tool_tree)

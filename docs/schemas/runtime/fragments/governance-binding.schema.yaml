@@ -4,8 +4,11 @@ $schema: "https://json-schema.org/draft-07/schema#"
 $id: "mas/v1#governance-binding"
 title: GovernanceBinding
 description: >
-  Governance plugin chain (ordered plugin stanzas, iptables-style). BLOCK
-  stops the chain and returns that error; ALLOW passes to the next plugin.
+  Leftover Agent spec.governance shape (deprecated and still applied when no
+  matching Control names governance). Live governance is Control
+  spec.governance: a set of plugins. Same-transition order is each
+  attachment's priority (higher first, default 0). BLOCK stops the chain
+  and returns that error; ALLOW passes to the next plugin.
   This is not an observability sequence — remaining plugins do not run
   after a BLOCK. Plugin ids are resolved at runtime from the plugin
   registry (see runtime/docs/plugin-registry-manifests.md) — this schema

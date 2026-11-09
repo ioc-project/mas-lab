@@ -111,7 +111,7 @@ Command index (pointers to man pages in the repo): [mas-lab.md](mas-lab.md).
 |--------|--------|----------------|
 | stdout | You | Conversation (`You:` / `Agent:`) |
 | stderr exchange log | You | `mas-ctl --trace` or `mas_ctl.trace` in `config.yaml` |
-| `events.jsonl` | Pipelines, plots, `mas-lab telemetry` | `--events`, overlay, or `spec.observability` |
+| `events.jsonl` | Pipelines, plots, `mas-lab telemetry` | Native default, a Control, `--events*`, or `--events-sink` |
 | Controller REST | Web UI, live dashboard | `mas-lab serve` |
 
 Score experiments from `events.jsonl`, never from the exchange log.

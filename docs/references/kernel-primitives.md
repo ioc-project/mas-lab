@@ -102,15 +102,15 @@ Preempt needs a cancellable decode. `ainvoke` uses `achat_completion_stream` whe
 3. `/var/run/mas-ctl`
 4. the process temp dir
 
-`MAS_CONTROL_DIR` overrides the list. `mas-ctl control attach SESSION_ID` uses the default. Pass `--no-control` to skip advertising.
+`MAS_CONTROL_DIR` overrides the list. `mas-ctl control attach SESSION_ID` uses the default. Pass `--no-control-dir` to skip advertising.
 
 `mas-ctl control` scripts (`pause`, `persist --auto-stop`, `steer`) use one language. It works chained on the CLI, passed as `-e`, `-f FILE`, or `--data @file`. Snapshot and persist require a paused session unless you pass `--auto-stop`.
 
 ## Debug scripts
 
-Gdb-like debug scripts are a `runtime`-type plugin (`debug_script`, shortcut `gdb`, in `library-standard`). They observe tool calls and tool results so the process acts as a debugger. `evaluate_egress` always returns ALLOW.
+Gdb-like debug scripts are a governance plugin (`gdb`, in `library-standard`). They observe tool calls and tool results so the process acts as a debugger. `evaluate_egress` always returns ALLOW.
 
-Enable the plugin from the workspace `config.yaml` `plugins:` or `lab.enable_plugins`. It is off unless listed. `spec.debug` holds `script_file` or an inline `script`. You can also load one with `mas-ctl chat --debug-script @file`.
+Name the plugin in a [Control](../manifests/control.md) `spec.governance` with `script_file` or an inline `script`, and attach that Control from a Flavour. `mas-ctl chat --debug-script @file` writes the same Control for one run.
 
 Commands:
 
@@ -123,7 +123,7 @@ Breakpoint hits emit native telemetry (`category: debug.breakpoint`). `checkpoin
 
 Checkpoint storage is a library `checkpoint_store` plugin (`memory`, `disk`, `hybrid`) behind `persist`. See [Session checkpoints](../manifests/checkpoint.md).
 
-Workspace `config.yaml` `plugins:` and `lab.enable_plugins` turn on gdb and checkpoint stores. Both are off unless listed. `spec.observability` and `spec.governance` stay on the agent.
+Governance and observability live in a Control (agent keys still work, deprecated). Checkpoint storage is the `checkpoint_store` plugin behind `persist`, not a workspace `config.yaml` list.
 
 ## Layers
 

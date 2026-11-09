@@ -12,33 +12,25 @@ exists). Its [`bind`](#bind) section links each agent to infra rows and says wha
 deployment does with it. It defines nothing itself: no endpoint, no protocol, no
 plugin of its own.
 
+`spec.control` attaches [`kind: Control`](control.md) documents. `bind.events`
+names Application rows of observability sinks. `spec.require_usage` refuses an
+agent with no bind chain or agent-keyed Application row (bundled `prod` sets it).
 Flavours also still accept leftover keys from before `bind` (`observability`,
-`telemetry`, `agent_comm`, `tools`, `control`). They are not what a Flavour is.
-`agent_comm`, `tools`, `control` and `telemetry` are accepted and read by nothing.
-`observability` is deprecated and still the fallback when an agent declares none.
-See [Leftover keys](#leftover-keys). Their target home is a later, optional Control
-manifest that references plugins.
+`telemetry`, `agent_comm`, `tools`, and a leftover `control` mapping). They are
+not what a Flavour is. Those leftover keys are accepted and read by nothing.
+See [Leftover keys](#leftover-keys).
 
 A flavour never holds model API URLs.
 Those live in **infra** manifests (the bundles that say where endpoints are; see [infra.md](infra.md)) and in agent `models`.
 
-This is the shipped `local` flavour. Its leftover keys are read by nothing, except
-`observability`, which is still the fallback:
+This is the shipped `local` flavour. It is empty glue: leftover keys are not set.
 
 ```yaml
 apiVersion: flavour/v1
 kind: Flavour
 metadata:
   name: local
-spec:
-  agent_comm:
-    protocol: agent-local
-  tools:
-    allowed: ["*"]
-  telemetry:
-    backend: file
-  observability:
-    - native
+spec: {}
 ```
 
 Shipped flavours use `apiVersion: flavour/v1`.
@@ -52,22 +44,22 @@ Back to the [manifest hub](README.md).
 
 These keys predate `bind`. The schema still accepts them. They are
 `deprecated: true`. Validation warns once, listing the keys that are set; a Flavour file you pass with `--flavour PATH` prints that warning, and the bundled flavours stay quiet.
-A new Flavour sets only `bind`.
+A new Flavour sets `bind` and, when it attaches Controls, `control`.
 
 | Key | What happens |
 |-----|------------------|
 | `agent_comm` | Accepted and read by nothing. The in-process link is the library default `agent_comm` plugin. How agents reach each other is `bind`. |
 | `tools` | Accepted and read by nothing. Tool exposure is configured through infra. |
-| `control` | Accepted and read by nothing. Control plugins are Agent `control`. |
+| leftover `control` mapping | Accepted and read by nothing. Live Flavour `control` is a list of Control refs. See [control.md](control.md). |
 | `telemetry` | Accepted and read by nothing. |
-| `observability` | Deprecated, still used: the observability plugins of an agent that declares no `spec.observability`. `--events*` still patches this key. |
+| `observability` | Accepted and read by nothing. Put it in a [Control](control.md). `--events*` is a shortcut on the run. `bind.events` names sink rows and adds those plugins. Native records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins. |
 
-Governance plugins that alter the agent's trajectory are declared in Agent `governance[]`, directly or through an **overlay**.
-Control-plane plugins use `control` on the Agent.
+Governance plugins that alter the agent's trajectory are declared in a Control the Flavour attaches, or on Agent `governance[]` (deprecated, still applied when no matching Control names that list).
+Retry and circuit_breaker stay on Agent `spec.control` (deprecated, still applied). They are not Control plugins.
 
-To mimic another product (for example an OpenClaw-like profile), compose overlays instead of copying every plugin into the flavour YAML.
-`with-hardened` adds an undeclared-tool BLOCK plus a typed retry and circuit breaker.
-Add observability overlays next, and later checkpoint and backtrack.
+To mimic another product (for example an OpenClaw-like profile), attach Controls instead of copying every plugin into the flavour YAML.
+`with-hardened` adds an undeclared-tool BLOCK, call ceilings and a typed ingress retry.
+Add an observability Control next, and later checkpoint and backtrack.
 See [governance.md](governance.md) and [reliability.md](../references/reliability.md#where-reliability-behaviour-goes).
 
 ## Schema fields
@@ -81,9 +73,10 @@ Its declared sections are:
 | `agent_comm` | Deprecated and ignored: the in-process link block (`protocol: agent-local`, `mode`, `emulation`). Nothing reads it. |
 | `capabilities` | Feature flags and capability overrides. |
 | `telemetry` | Deprecated and ignored: basic telemetry sink configuration. Nothing reads it. |
-| `observability` | Deprecated, still used: observability plugins of an agent that declares none. |
-| `control` | Deprecated and ignored: control-plane plugin selection. Nothing reads it. |
-| `tools` | Deprecated and ignored: tool exposure protocol, remote-tool policy, and allow-list. Nothing reads it. |
+| `observability` | Deprecated and ignored. Observability is a Control entry or `--events*`. `bind.events` names sink rows. Native records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins. |
+| `control` | Control manifests this Flavour attaches: a list of `{ref, agents}`. `agents` is `$all` (default), `$entry`, `$not-entry`, `$delegates`, one agent id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`) — the same idea as `bind.agents.<id>` for one agent and the default `bind.agent_comm` chain for every agent. A leftover mapping is unread. |
+| `require_usage` | When true, every agent of the session must have a bind chain or an agent-keyed Application row. Bundled `prod` sets this. A file named `prod.yaml` does not. |
+| `tools` | Deprecated and ignored: leftover tool-exposure block. Tool exposure is configured through infra. |
 | `config` | Free-form deployment configuration. Never store secret values. |
 | `operator` | Operator/provisioner metadata. |
 
@@ -111,6 +104,11 @@ spec:
         usage: connect
         params:                            # this agent's overrides of the row's params
           outage-server: {url: "https://outage.example.test/a2a"}
+  control:
+    - {ref: controls/company-baseline.yaml, agents: $all}   # every agent, like the default bind chain
+    - {ref: controls/hitl.yaml, agents: desk}               # one agent, like bind.agents.desk
+    - {ref: controls/delegates.yaml, agents: $not-entry}
+    - {ref: controls/desk.yaml, agents: .mas.agent[desk]}
 ```
 
 | Key | Meaning |
@@ -120,6 +118,9 @@ spec:
 | `bind.agents.<id>.agent_comm` | That agent's own chain, instead of the default. |
 | `bind.agents.<id>.usage` | `connect` (this deployment reaches the agent over its chain), `listen` (this deployment hosts it), or both. Omitted, it is `bind.usage`, else `connect`. It must be within the `usage` of every row of the chain. |
 | `bind.agents.<id>.params` | Overrides of a row's params for that agent: row name to `{param: value}`. A string value may hold `{agent}`. |
+| `bind.events` | Application row names of observability sinks this deployment uses. Each row adds the plugin its `protocol` names and gives it the row's own settings (not `url`, `secret_env` or the other endpoint keys). Native `events.jsonl` still records. `--no-events` and an explicit `--events-format` replace the set. |
+
+Bundled names: `local` (in-process, the default) and `prod` (`require_usage`: every agent must have a bind chain or an agent-keyed Application row). `--connect` / `--listen` / `--bind` write agent-keyed Application rows; they are not copied into Flavour `bind`.
 
 An agent with no entry rides the default chain with `connect`; with no default
 chain it keeps the in-process link. Set `listen` (on the agent, or as `bind.usage`)

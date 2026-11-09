@@ -3,21 +3,16 @@
 # Live OTel plugin, realtime mode: incremental topology.node.*/tool.*/
 # llm.* signal spans as each boundary crosses, instead of the single
 # end-of-run *.graph span (realtime replaces it). Same toggle as
-# $OBSERVE_REALTIME_OBSERVABILITY_ENABLED=true, as an overlay instead of
+# $OBSERVE_REALTIME_OBSERVABILITY_ENABLED=true, as a Control instead of
 # an env var.
-apiVersion: mas/v1
-kind: Overlay
+apiVersion: control/v1
+kind: Control
 metadata:
   name: observability-otel-realtime
 spec:
-  target:
-    kind: Agent
-  patch:
-    observability:
-      $op:
-        replace:
-          - otel:
-              output_path: traces/otel_sdk_spans.jsonl
-              converter_profile: observe_sdk
-              otlp_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT
-              realtime: true
+  observability:
+  - otel:
+      output_path: traces/otel_sdk_spans.jsonl
+      converter_profile: observe_sdk
+      otlp_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT
+      realtime: true

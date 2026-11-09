@@ -125,10 +125,7 @@ class AutoCtxAssembler:
             self.committed_messages.extend(self.working_memory.messages)
         if text.strip():
             last = self.committed_messages[-1] if self.committed_messages else {}
-            if not (
-                last.get("role") == "assistant"
-                and str(last.get("content") or "").strip() == text.strip()
-            ):
+            if not (last.get("role") == "assistant" and str(last.get("content") or "").strip() == text.strip()):
                 self.committed_messages.append({"role": "assistant", "content": text})
         turn_messages = list(self.committed_messages[committed_before:])
         if turn_messages:

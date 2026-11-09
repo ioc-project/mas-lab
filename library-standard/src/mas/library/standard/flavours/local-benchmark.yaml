@@ -6,24 +6,8 @@ kind: Flavour
 metadata:
   name: local-benchmark
   description: >
-    Benchmark flavour for mas-lab batch runs. Uses file telemetry and native
-    observability; LLM endpoint comes from workspace infra_refs. Inference
-    params (temperature, max_tokens) belong on the agent spec now — see
-    docs/design/flavour-boundary.md.
+    Benchmark flavour for mas-lab batch runs. LLM endpoint comes from
+    workspace infra_refs. Inference params (temperature, max_tokens)
+    belong on the agent spec now — see docs/design/flavour-boundary.md.
 
-spec:
-  agent_comm:
-    protocol: agent-local
-    mode: local
-    emulation: true
-
-  tools:
-    remote_tools_enabled: false
-    allowed: ["*"]
-
-  telemetry:
-    backend: file
-    path: logs/
-
-  observability:
-    - native
+spec: {}

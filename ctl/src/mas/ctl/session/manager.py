@@ -282,7 +282,6 @@ class SessionManager:
         gov = getattr(config, "egress_governance_plugin", None)
         plugins = getattr(gov, "plugins", None)
         chain = list(plugins) if plugins else ([gov] if gov is not None else [])
-        chain.extend(getattr(config, "runtime_plugins", ()) or ())
         control = self.control(
             capability=ControlCapability(
                 actor="debug_script",

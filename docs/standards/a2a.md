@@ -155,7 +155,7 @@ spec:
 - A2A `messageId` (or `taskId` when absent) becomes the MAS turn id.
 - A2A `message/send` queues a turn at the tail of the session's turn queue (`SessionTurnMailbox`). Concurrent messages on one context run in order.
 - A2A `tasks/cancel` marks the A2A task canceled. It does not call `ControlContract.cancel_inflight`. A turn already running in the runtime finishes in the background.
-- There is no A2A steer RPC. Preempt, replace, and after exist only in the control protocol. `mas-ctl serve` advertises a control endpoint (disable with `--no-control`), so `mas-ctl control <contextId> …` can attach.
+- There is no A2A steer RPC. Preempt, replace, and after exist only in the control protocol. `mas-ctl serve` advertises a control endpoint (disable with `--no-control-dir`), so `mas-ctl control <contextId> …` can attach.
 - MAS correlation and parent-call identifiers travel in A2A message metadata
   (`mas.correlation_id`, `mas.caller_call_id`).
 

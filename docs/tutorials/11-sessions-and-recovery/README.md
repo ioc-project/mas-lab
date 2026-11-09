@@ -99,7 +99,7 @@ under `spec.governance` (see [Session checkpoints](../../manifests/checkpoint.md
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
-  -o pkg://mas.library.standard/overlays/openclaw.yaml
+  -o pkg://mas.library.standard/overlays/openclaw.yaml --control pkg://mas.library.standard/controls/openclaw.yaml
 ```
 
 `/steer` injects operator text into the session. A paused session refuses

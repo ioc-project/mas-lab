@@ -12,7 +12,7 @@ Quick start, from the repository root:
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
-  -o library-samples/overlays/hitl-on-tool.yaml
+  --control library-samples/controls/hitl-on-tool.yaml
 ```
 
 ## What belongs here
@@ -23,7 +23,7 @@ mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
 | **datasets** | `datasets/trip-planner/benchmark.yaml` — complete pack for the app, tutorials, and CI |
 | **tools** | `tools/calc.py`, `tools/*.tool.yaml` (trip-planner domain tools: see [tools/README.md](tools/README.md)) |
 | **skills** | `skills/answer-formatting/` (shared); app-specific skills live under the app tree |
-| **overlays** | `overlays/cot-moderator.yaml`, `overlays/hitl-on-tool.yaml`, … |
+| **overlays**, **controls** | `overlays/cot-moderator.yaml`, … ; `controls/hitl-on-tool.yaml` (a Control, passed with `--control`) |
 | **infra** | `infra/tool-providers.yaml`, `infra/llm-cache-{write,replay}.yaml`, MCP / A2A deployment manifests |
 | **pipelines**, **experiments** | `pipelines/pipeline-test.yaml`, `experiments/moderator-design-patterns.yaml` (small reference files, not paper experiments) |
 | **sample-workspace** | `sample-workspace/config.yaml` — OSS dev/CI workspace default |
@@ -64,7 +64,7 @@ From the repository root, pass an overlay by path:
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
-  -o library-samples/overlays/hitl-on-tool.yaml
+  --control library-samples/controls/hitl-on-tool.yaml
 ```
 
 Tool refs inside manifests use the library scheme instead of a path, for example

@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import yaml
 from mas.library.standard.lib.observability.emit import JsonlFileEmitter
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.library.standard.plugins.governance.no_undeclared_tool import NoUndeclaredToolPlugin
@@ -20,7 +19,7 @@ from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.coupling import GovDecision
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-HARDENED_OVERLAY = REPO_ROOT / "library-standard/src/mas/library/standard/overlays/with-hardened.yaml"
+HARDENED_CONTROL = REPO_ROOT / "library-standard/src/mas/library/standard/controls/with-hardened.yaml"
 
 
 class _HitlAlways:
@@ -157,21 +156,29 @@ def test_build_kernel_config_wires_no_undeclared_tool() -> None:
     assert isinstance(aliased.egress_governance_plugin, NoUndeclaredToolPlugin)
 
 
-def test_with_hardened_overlay_adds_plugin() -> None:
-    from mas.ctl.overlay.merge import merge_overlay
+def test_with_hardened_control_does_not_copy_governance_onto_the_agent() -> None:
+    from mas.ctl.session.flavour_control import (
+        apply_overlay_controls_to_manifest,
+        control_lists_for_agent,
+        control_row_from_path,
+    )
 
-    overlay = yaml.safe_load(HARDENED_OVERLAY.read_text(encoding="utf-8"))
+    control = HARDENED_CONTROL
     base = {
         "apiVersion": "mas/v1",
         "kind": "Agent",
         "metadata": {"name": "telemetry"},
         "spec": {"governance": ["sample_governance"], "tools": ["get_metrics", "get_logs"]},
     }
-    merged = merge_overlay(base, overlay)
-    gov = merged["spec"]["governance"]
-    names = [g if isinstance(g, str) else next(iter(g)) for g in gov]
+    merged = apply_overlay_controls_to_manifest(base, [control], agent_id="telemetry", entry_id="telemetry", warn=False)
+    assert merged["spec"]["governance"] == ["sample_governance"]
+    names = [
+        g if isinstance(g, str) else next(iter(g))
+        for g in control_lists_for_agent([control_row_from_path(control)], agent_id="telemetry", entry_id="telemetry")[
+            "governance"
+        ]
+    ]
     assert "gov_no_undeclared_tool" in names
-    assert "sample_governance" in names
 
 
 def test_undeclared_tool_block_is_in_native_events_jsonl(tmp_path: Path) -> None:

@@ -127,6 +127,8 @@ practical examples.
 | Class                    | Full module path                                             | Library            |
 | ------------------------ | ------------------------------------------------------------ | ------------------ |
 | `BacktrackOnErrorPlugin` | `mas.library.standard.plugins.governance.backtrack_on_error` | `library-standard` |
+| `BudgetPlugin`           | `mas.library.standard.plugins.governance.budget`             | `library-standard` |
+| `DebugScriptPlugin`      | `mas.library.standard.plugins.governance.debug_script`       | `library-standard` |
 | `NoUndeclaredToolPlugin` | `mas.library.standard.plugins.governance.no_undeclared_tool` | `library-standard` |
 | `RetryOnErrorPlugin`     | `mas.library.standard.plugins.governance.retry_on_error`     | `library-standard` |
 | `SampleGovernancePlugin` | `mas.library.standard.plugins.governance.sample`             | `library-standard` |
@@ -179,12 +181,6 @@ practical examples.
 | ------------------------- | --------------------------------------------------------- | ------------------ |
 | `CopyDirRelatedState`     | `mas.library.standard.plugins.related_state.copy_dir`     | `library-standard` |
 | `GitWorktreeRelatedState` | `mas.library.standard.plugins.related_state.git_worktree` | `library-standard` |
-
-### Runtime
-
-| Class               | Full module path                                       | Library            |
-| ------------------- | ------------------------------------------------------ | ------------------ |
-| `DebugScriptPlugin` | `mas.library.standard.plugins.governance.debug_script` | `library-standard` |
 
 ### Skill_Catalog
 
@@ -291,6 +287,7 @@ practical examples.
 | `AutoDenyResponder`              | hitl_responder       | `library-standard`  |
 | `AutoResolveHitlContract`        | hitl_contract        | `library-standard`  |
 | `BacktrackOnErrorPlugin`         | governance           | `library-standard`  |
+| `BudgetPlugin`                   | governance           | `library-standard`  |
 | `CacheLLMProvider`               | llm_provider         | `library-standard`  |
 | `ClickhouseDumpStep`             | step                 | `library-telemetry` |
 | `CompareKgStep`                  | step                 | `library-kg`        |
@@ -300,7 +297,7 @@ practical examples.
 | `ControlTools`                   | system_tool          | `library-standard`  |
 | `CopyDirRelatedState`            | related_state        | `library-standard`  |
 | `CotPlugin`                      | design_pattern       | `library-standard`  |
-| `DebugScriptPlugin`              | runtime              | `library-standard`  |
+| `DebugScriptPlugin`              | governance           | `library-standard`  |
 | `DeterministicLinearPlugin`      | design_pattern       | `library-standard`  |
 | `DeterministicParallelPlugin`    | design_pattern       | `library-standard`  |
 | `DeterministicSingleAgentPlugin` | design_pattern       | `library-standard`  |
@@ -390,5 +387,6 @@ Flavour YAML files shipped inside library packages.
 | Name              | Description                                                                       | Library            |
 | ----------------- | --------------------------------------------------------------------------------- | ------------------ |
 | `local`           | Default local development flavour. Infra bundles are resolved via workspace refs… | `library-standard` |
-| `local-benchmark` | Benchmark flavour for mas-lab batch runs. Uses file telemetry and native observa… | `library-standard` |
+| `local-benchmark` | Benchmark flavour for mas-lab batch runs. LLM endpoint comes from workspace infr… | `library-standard` |
+| `prod`            | Production Flavour. require_usage is true: every agent of the session must have … | `library-standard` |
 

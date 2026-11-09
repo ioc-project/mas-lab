@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 _TOOL_MODULE_LOAD_LOCK = threading.RLock()
 
+
 def _containment_roots(
     manifest_dir: Path,
     app_root: Path | None,
@@ -259,17 +260,11 @@ def load_local_tool_provider(
     tools_dir = Path(tools_dir_raw).resolve() if tools_dir_raw else None
 
     if not tools_spec and tools_dir and tools_dir.is_dir():
-        tools_spec = [
-            {"ref": os.path.relpath(path, manifest_dir)}
-            for path in sorted(tools_dir.rglob("*.tool.yaml"))
-        ]
+        tools_spec = [{"ref": os.path.relpath(path, manifest_dir)} for path in sorted(tools_dir.rglob("*.tool.yaml"))]
 
     # request_human_input / inform_user stay opt-in: a model reaching for them
     # unprompted substitutes a non-answer the driving protocol cannot detect.
-    host_entries = [
-        {"kind": "system", "name": str(name), "_host": True}
-        for name in system_tools
-    ]
+    host_entries = [{"kind": "system", "name": str(name), "_host": True} for name in system_tools]
     system_spec = [*(tools_spec or []), *host_entries]
     requested = _requested_system_tools(system_spec)
     if requested:
@@ -370,9 +365,7 @@ def _requested_system_tools(tools_spec: list[Any]) -> set[str]:
     # tool the author believes they turned off and did not.
     unknown = sorted((enabled | disabled | host_requested) - known)
     if unknown:
-        raise ManifestToolLoadError(
-            f"unknown system tool(s) {unknown}; available: {sorted(known)}"
-        )
+        raise ManifestToolLoadError(f"unknown system tool(s) {unknown}; available: {sorted(known)}")
     return (default_enabled | enabled | host_requested) - disabled
 
 

@@ -1,0 +1,30 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#plugin-pipeline"
+title: PluginPipeline
+description: >
+  Plugin list shape for Control spec.observability and spec.governance
+  (both sets). Plugin ids are resolved at runtime from the plugin registry —
+  this schema validates shape only (bare id, or a single id-keyed config
+  object), not plugin identity. Any registered plugin is valid here without
+  editing this file. Governance config may set priority (integer, higher
+  runs first among plugins on the same transition, default 0).
+type: array
+items:
+  oneOf:
+    - type: string
+      minLength: 1
+    - type: object
+      minProperties: 1
+      maxProperties: 1
+      additionalProperties:
+        type: object
+        properties:
+          priority:
+            type: integer
+            description: >
+              Higher runs first among governance plugins that attach to the
+              same transition. Default 0. Same-priority order is the plugin id.
+            default: 0
+        additionalProperties: true

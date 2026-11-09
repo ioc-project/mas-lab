@@ -160,16 +160,6 @@ properties:
           type: string
           minLength: 1
 
-      enable_plugins:
-        type: array
-        description: >
-          Overlay plugin URNs this lab turns on (same catalog as workspace
-          config.yaml ``plugins:``). Off unless listed: gdb and checkpoint
-          stores.
-        items:
-          type: string
-          minLength: 1
-
       dataset:
         type: object
         required: [path]

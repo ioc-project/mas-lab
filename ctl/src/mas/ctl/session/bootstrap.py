@@ -116,18 +116,11 @@ class InstantiationOptions:
     experiment_default_model: str | None = None
     experiment_model_slots: dict[str, str] | None = None
     parent_spec: dict | None = None
-    extra_plugins: tuple[str, ...] = ()
-
-
-def _lab_enable_plugins(start: Path | None) -> list[str]:
-    """``lab.enable_plugins`` from the enclosing lab-config, if mas-lab is installed."""
-    if start is None:
-        return []
-    try:
-        from mas.lab.lab.config.lab_context import discover_lab_context
-    except ImportError:
-        return []
-    return list(discover_lab_context(start).enable_plugins)
+    flavour_spec: dict | None = None
+    obs_binding_override: Any | None = None
+    obs_from_cli: bool = False
+    entry_id: str | None = None
+    delegate_ids: tuple[str, ...] = ()
 
 
 def hitl_contract_for_mode(mode: str) -> object | None:
@@ -162,19 +155,27 @@ def instantiate_runtime(
 
     ws = options.workspace or WorkspaceConfig.load(options.manifest_dir)
     if options.agent_manifest is not None:
-        from mas.runtime.workspace_plugins import apply_workspace_plugins
+        if options.flavour_spec:
+            from mas.ctl.infra.identities import agency_ids, declared_entry_id, peers_of
+            from mas.ctl.session.flavour_control import apply_flavour_controls
+            from mas.ctl.session.manifest_config import agent_id_from_manifest
 
-        apply_workspace_plugins(
-            options.agent_manifest,
-            [
-                *ws.plugins,
-                *options.extra_plugins,
-                *_lab_enable_plugins(options.manifest_dir),
-            ],
-        )
-    policy = parse_checkpoint_policy(
-        ((options.agent_manifest or {}).get("spec") or {}).get("checkpoint")
-    )
+            agent_id = agent_id_from_manifest(options.agent_manifest)
+            parent = options.parent_spec
+            if parent:
+                entry = declared_entry_id(parent)
+                delegates = list(peers_of(parent, agency_ids(parent)).get(entry) or [])
+            else:
+                entry = agent_id
+                delegates = []
+            apply_flavour_controls(
+                options.agent_manifest,
+                options.flavour_spec,
+                agent_id=agent_id,
+                entry_id=entry,
+                delegate_ids=delegates,
+            )
+    policy = parse_checkpoint_policy(((options.agent_manifest or {}).get("spec") or {}).get("checkpoint"))
     store = build_checkpoint_store(policy, options.checkpoint_dir)
     if store is None and policy.resolved_storage() == "memory":
         store = InMemoryCheckpointStore()
@@ -220,6 +221,28 @@ def instantiate_runtime(
         ctx.skill_allow_unload = skill_cfg.allow_unload
     ctx.capture_baseline()
     spec = dict((options.agent_manifest or {}).get("spec") or {})
+    if options.flavour_spec:
+        from mas.ctl.infra.identities import agency_ids, declared_entry_id, peers_of
+        from mas.ctl.session.manifest_config import agent_id_from_manifest, spec_with_control_lists
+
+        agent_id = agent_id_from_manifest(options.agent_manifest)
+        parent = options.parent_spec
+        if options.entry_id:
+            entry = options.entry_id
+            delegates = list(options.delegate_ids)
+        elif parent:
+            entry = declared_entry_id(parent)
+            delegates = list(peers_of(parent, agency_ids(parent)).get(entry) or [])
+        else:
+            entry = agent_id
+            delegates = []
+        spec = spec_with_control_lists(
+            spec,
+            options.flavour_spec,
+            agent_id=agent_id,
+            entry_id=entry,
+            delegate_ids=delegates,
+        )
     spawn_params = spawn_subagent_params(spec)
     ctx.allow_subagent_spawning = is_spawn_subagent_enabled(spec)
     ctx.allow_control_tools = is_control_tools_enabled(spec)
@@ -277,6 +300,7 @@ def instantiate_runtime(
             model_override=options.model_override,
             parent_default_model=options.parent_default_model,
             experiment_default_model=options.experiment_default_model,
+            flavour_spec=options.flavour_spec,
         )
     engine_obj = selection.engine
     if engine_obj is not None:
@@ -309,6 +333,8 @@ def instantiate_runtime(
         enable_governance=options.enable_governance,
         enable_coordination=options.enable_coordination,
         runtime_engine=_runtime_engine,
+        obs_binding_override=options.obs_binding_override,
+        obs_from_cli=options.obs_from_cli,
     )
     working_memory_spec = spec.get("working_memory")
     if isinstance(working_memory_spec, dict):

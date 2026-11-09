@@ -66,7 +66,7 @@ line. More on native traces: [Tutorial 1](../01-building-an-agent/README.md#step
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \
-  -o pkg://mas.library.standard/overlays/observability-native.yaml \
+  --control pkg://mas.library.standard/controls/observability-native.yaml \
   -q "What is 15 * 23?" --flavour local
 ```
 

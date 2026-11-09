@@ -29,7 +29,7 @@ spec:
 
 *Boundary slots* are the plugin types that the kernel envelope calls at fixed points. See [Contracts](contracts.md). They form a closed set. `register_type(..., layer="boundary")` raises `UnknownBoundarySlotError` for a type outside that set.
 
-Library types are not envelope slots. Examples: `related_state`, `execute_sandbox`, `circuit_breaker`, `skill_*`, and lab steps.
+Library types are not envelope slots. Examples: `related_state`, `execute_sandbox`, `circuit_breaker`, `retry`, `skill_*`, and lab steps.
 
 ## Component catalog
 

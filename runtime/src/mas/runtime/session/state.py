@@ -63,6 +63,18 @@ class BacktrackCapReached(RuntimeError):
         super().__init__(f"automatic backtrack limit reached ({action})")
 
 
+LOCATION_KEYS = frozenset({"manifest_dir"})
+
+
+def without_location_keys(value: Any) -> Any:
+    """``value`` without the keys that say where a file lives. A hash taken over it does not depend on the checkout."""
+    if isinstance(value, dict):
+        return {key: without_location_keys(item) for key, item in value.items() if key not in LOCATION_KEYS}
+    if isinstance(value, list):
+        return [without_location_keys(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class ManifestRef:
     """Self-contained manifest content and its canonical SHA-256 digest."""
@@ -72,9 +84,13 @@ class ManifestRef:
 
     @classmethod
     def from_content(cls, content: dict[str, Any]) -> ManifestRef:
-        """Build an integrity reference without embedding external secrets."""
+        """Build an integrity reference without embedding external secrets.
+
+        The hash ignores where a plugin's files live (:func:`without_location_keys`), so it holds across checkouts.
+        """
         encoded = json.dumps(content, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        located = json.dumps(without_location_keys(content), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        digest = hashlib.sha256(located.encode("utf-8")).hexdigest()
         return cls(content=json.loads(encoded), content_hash=digest)
 
 

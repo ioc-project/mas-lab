@@ -30,11 +30,33 @@ properties:
     oneOf:
       - type: "null"
       - $ref: "./overlay-collection-ops-observability.schema.yaml"
+  require_usage:
+    $ref: "../flavour.schema.yaml#/properties/spec/properties/require_usage"
   control:
     x-merge:
       strategy: mapping_ops
     oneOf:
       - type: "null"
+      - type: array
+        items:
+          type: object
+          additionalProperties: false
+          required: [ref]
+          properties:
+            ref:
+              type: string
+              minLength: 1
+            agents:
+              oneOf:
+                - type: string
+                  minLength: 1
+                  description: "$all, $entry, $not-entry, $delegates, one agent id, or the same agent path as --override"
+                - type: array
+                  items:
+                    type: string
+                    minLength: 1
+                  minItems: 1
+                  uniqueItems: true
       - $ref: "./overlay-collection-ops-control.schema.yaml"
   tools:
     # Not a plain $ref: overlay context accepts {"$op": {replace|merge|clear}}

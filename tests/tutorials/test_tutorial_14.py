@@ -7,7 +7,7 @@ resolution, and a governed tool call end to end (auto-approve vs auto-deny).
 from __future__ import annotations
 
 import pytest
-from tutorial_support import T14, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from tutorial_support import T14, live_cli_env, live_tutorial_chat, load_yaml, run_cli, tutorial_file
 
 OVERLAYS = [
     "tools.yaml",
@@ -32,7 +32,7 @@ class TestManifestValidation:
                 "validate",
                 str(T14 / "agent.yaml"),
                 "--overlay",
-                str(T14 / "overlays" / overlay),
+                str(tutorial_file(T14, overlay)),
             ]
         )
         assert r.returncode == 0, r.stderr
@@ -46,7 +46,7 @@ class TestManifestValidation:
                 "--overlay",
                 str(T14 / "overlays" / "tools.yaml"),
                 "--overlay",
-                str(T14 / "overlays" / "governance-auto-approve.yaml"),
+                str(T14 / "controls" / "governance-auto-approve.yaml"),
             ]
         )
         assert r.returncode == 0, r.stderr
@@ -62,20 +62,17 @@ class TestManifestStructure:
         ],
     )
     def test_overlay_declares_hitl_on_tool_and_mode(self, overlay, expected_mode):
-        ov = load_yaml(T14 / "overlays" / overlay)
-        entry = ov["spec"]["patch"]["governance"]["$op"]["add"][0]["sample_governance"]
+        ov = load_yaml(tutorial_file(T14, overlay))
+        entry = ov["spec"]["governance"][0]["sample_governance"]
         assert entry["hitl_on_tool"] is True
         assert entry["hitl_on_tool_result"] is False
         assert entry["hitl_mode"] == expected_mode
 
 
-def _merged_agent(*overlay_names: str) -> dict:
-    from mas.ctl.overlay import merge_overlay
+def _merged_agent(*overlay_names: str) -> tuple[dict, dict]:
+    from overlay_support import load_agent_and_flavour
 
-    merged = load_yaml(T14 / "agent.yaml")
-    for name in overlay_names:
-        merged = merge_overlay(merged, load_yaml(T14 / "overlays" / name))
-    return merged
+    return load_agent_and_flavour(T14 / "agent.yaml", *[tutorial_file(T14, name) for name in overlay_names])
 
 
 class TestHitlModeResolution:
@@ -85,8 +82,8 @@ class TestHitlModeResolution:
         from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
         from mas.library.standard.plugins.hitl.responders import AutoApproveResponder
 
-        manifest = _merged_agent("tools.yaml", "governance-auto-approve.yaml")
-        responder, terminal = resolve_hitl_from_manifest(manifest, session_interactive=False)
+        manifest, flavour = _merged_agent("tools.yaml", "governance-auto-approve.yaml")
+        responder, terminal = resolve_hitl_from_manifest(manifest, session_interactive=False, flavour_spec=flavour)
         assert isinstance(responder, AutoApproveResponder)
         assert terminal is None
 
@@ -94,8 +91,8 @@ class TestHitlModeResolution:
         from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
         from mas.library.standard.plugins.hitl.responders import AutoDenyResponder
 
-        manifest = _merged_agent("tools.yaml", "governance-auto-deny.yaml")
-        responder, terminal = resolve_hitl_from_manifest(manifest, session_interactive=False)
+        manifest, flavour = _merged_agent("tools.yaml", "governance-auto-deny.yaml")
+        responder, terminal = resolve_hitl_from_manifest(manifest, session_interactive=False, flavour_spec=flavour)
         assert isinstance(responder, AutoDenyResponder)
         assert terminal is None
 
@@ -104,8 +101,8 @@ class TestHitlModeResolution:
         from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
         from mas.library.standard.plugins.hitl.responders import AutoApproveResponder
 
-        manifest = _merged_agent("tools.yaml", "governance-interactive.yaml")
-        responder, _terminal = resolve_hitl_from_manifest(manifest, session_interactive=False)
+        manifest, flavour = _merged_agent("tools.yaml", "governance-interactive.yaml")
+        responder, _terminal = resolve_hitl_from_manifest(manifest, session_interactive=False, flavour_spec=flavour)
         assert isinstance(responder, AutoApproveResponder)
 
 
@@ -161,14 +158,15 @@ class TestGovernedToolCallEndToEnd:
         from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
         from mas.ctl.ui.stdout import StdoutConversationDisplay
 
-        manifest = _merged_agent("tools.yaml", overlay)
-        responder, _terminal = resolve_hitl_from_manifest(manifest, session_interactive=False)
+        manifest, flavour = _merged_agent("tools.yaml", overlay)
+        responder, _terminal = resolve_hitl_from_manifest(manifest, session_interactive=False, flavour_spec=flavour)
         instance, _store = instantiate_runtime(
             InstantiationOptions(
                 agent_manifest=manifest,
                 manifest_dir=T14,
                 validate_manifests=False,
                 engine=_calc_engine(),
+                flavour_spec=flavour,
             ),
             hitl=responder,
         )
@@ -226,8 +224,8 @@ class TestLiveGovernedChat:
                 "agent.yaml",
                 "-o",
                 "overlays/tools.yaml",
-                "-o",
-                "overlays/governance-auto-approve.yaml",
+                "--control",
+                "controls/governance-auto-approve.yaml",
                 "--no-cache-read",
                 "--model",
                 "gpt-4o",
@@ -249,8 +247,8 @@ class TestLiveGovernedChat:
                 "agent.yaml",
                 "-o",
                 "overlays/tools.yaml",
-                "-o",
-                "overlays/governance-auto-deny.yaml",
+                "--control",
+                "controls/governance-auto-deny.yaml",
                 "--no-cache-read",
                 "--model",
                 "gpt-4o",
