@@ -1,7 +1,7 @@
 //  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 //  SPDX-License-Identifier: Apache-2.0
 import { PageWithTitle, DatasetEditor } from "@/components";
-import type { DatasetContent, DatasetItem } from "@/components/DatasetEditor/DatasetEditor";
+import type { DatasetContent } from "@/components/DatasetEditor/DatasetEditor";
 import { Alert } from "@mui/material";
 import { useNavigate, useParams } from "react-router";
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
@@ -12,8 +12,8 @@ import {
   useDeleteDataset,
 } from "@/api/apiCalls";
 import { useQueryClient } from "@tanstack/react-query";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { scopeHref, useScopeId } from "@/api/scope";
+import { editorContentToYaml, yamlToEditorContent } from "@/utils/datasets";
 import {
   Box,
   InputField,
@@ -28,69 +28,6 @@ import {
   DialogActions,
   DialogContentText,
 } from "@open-ui-kit/core";
-
-interface YamlDatasetItem {
-  id: string | number;
-  inputs?: { user?: Array<{ role: string; content: string }> };
-  expectations?: { ground_truth?: string };
-  group?: string;
-  target_agents?: string[];
-  category?: string;
-  tags?: string[];
-}
-
-function yamlToEditorContent(yamlStr: string): DatasetContent {
-  const doc = parseYaml(yamlStr);
-  const meta = doc?.metadata ?? {};
-  const items: YamlDatasetItem[] = doc?.spec?.items ?? doc?.items ?? [];
-  return {
-    name: meta.name ?? doc?.name,
-    version: meta.version ?? doc?.version,
-    description: meta.description ?? doc?.description,
-    items: items.map((it) => {
-      const userMsgs = it.inputs?.user ?? [];
-      const prompt = userMsgs.map((m) => m.content).join("\n") || "";
-      const result: DatasetItem = { id: it.id, prompt };
-      if (it.expectations?.ground_truth) result.ground_truth = it.expectations.ground_truth;
-      if (it.group) result.group = it.group;
-      if (it.target_agents?.length) result.target_agents = it.target_agents;
-      if (it.category) result.category = it.category;
-      if (it.tags?.length) result.tags = it.tags;
-      return result;
-    }),
-  };
-}
-
-function editorContentToYaml(
-  editorJson: DatasetContent,
-  name: string,
-  description: string,
-): string {
-  const items: YamlDatasetItem[] = editorJson.items.map((it) => {
-    const result: YamlDatasetItem = {
-      id: it.id,
-      inputs: { user: [{ role: "user", content: it.prompt }] },
-    };
-    if (it.ground_truth) result.expectations = { ground_truth: it.ground_truth };
-    if (it.group) result.group = it.group;
-    if (it.target_agents?.length) result.target_agents = it.target_agents;
-    if (it.category) result.category = it.category;
-    if (it.tags?.length) result.tags = it.tags;
-    return result;
-  });
-
-  const doc = {
-    apiVersion: "lab/v1",
-    kind: "Dataset",
-    metadata: {
-      name,
-      ...(editorJson.version ? { version: editorJson.version } : {}),
-      ...(description ? { description } : {}),
-    },
-    spec: { items },
-  };
-  return stringifyYaml(doc, { lineWidth: 0 });
-}
 
 const EMPTY_DATASET_CONTENT = JSON.stringify({ items: [] }, null, 2);
 
@@ -153,7 +90,12 @@ const Dataset = () => {
     let contentToSave = currentContent;
     try {
       const parsed: DatasetContent = JSON.parse(currentContent);
-      contentToSave = editorContentToYaml(parsed, saveName, saveDescription);
+      contentToSave = editorContentToYaml(
+        parsed,
+        saveName,
+        saveDescription,
+        isNew ? undefined : dataset?.content,
+      );
     } catch { /* send as-is */ }
 
     if (isNew) {
@@ -163,20 +105,23 @@ const Dataset = () => {
     }
   };
 
+  // Mark the list and the specific dataset detail query as stale so the next
+  // visit triggers a fresh GET.
+  const invalidateDatasetQueries = (name: string) => {
+    queryClient.invalidateQueries({ queryKey: ["datasets-list", library] });
+    queryClient.invalidateQueries({ queryKey: ["datasets", library], exact: true });
+    if (name) {
+      queryClient.invalidateQueries({
+        queryKey: ["datasets", library, name],
+        exact: true,
+      });
+    }
+  };
+
   const handleSaveSettled = useEffectEvent(() => {
     if (saveMutation.isSuccess) {
-      queryClient.removeQueries({ queryKey: ["datasets-list", library] });
-      if (lastSavedName && lastSavedName !== (id ?? "")) {
-        queryClient.removeQueries({ queryKey: ["dataset", library, id ?? ""] });
-        navigate(scopeHref(library, `/datasets/${lastSavedName}`), { replace: true });
-      } else {
-        queryClient.removeQueries({ queryKey: ["dataset", library, id ?? ""] });
-        setEditedContent(null);
-        setSaveAlert({
-          severity: "success",
-          message: "Dataset saved successfully",
-        });
-      }
+      invalidateDatasetQueries(id ?? "");
+      navigate(scopeHref(library, "/datasets"), { replace: true });
     }
     if (saveMutation.isError) {
       const err = saveMutation.error;
@@ -193,9 +138,8 @@ const Dataset = () => {
 
   const handleCreateSettled = useEffectEvent(() => {
     if (createMutation.isSuccess) {
-      queryClient.removeQueries({ queryKey: ["datasets-list", library] });
-      setSaveAlert({ severity: "success", message: "Dataset created successfully" });
-      navigate(scopeHref(library, `/datasets/${lastSavedName}`), { replace: true });
+      invalidateDatasetQueries(lastSavedName);
+      navigate(scopeHref(library, "/datasets"), { replace: true });
     }
     if (createMutation.isError) {
       const err = createMutation.error;

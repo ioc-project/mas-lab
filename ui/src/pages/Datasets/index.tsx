@@ -234,9 +234,15 @@ const Datasets = () => {
         kind="dataset"
         scopeId={library}
         onClose={() => setCreateOpen(false)}
-        onCreated={(sid, id) =>
-          navigate(scopeHref(sid, `/datasets/${encodeURIComponent(id)}`))
-        }
+        onCreated={(sid, id) => {
+          // The dialog may create the dataset in a different (writable) scope
+          // than the one being viewed, so invalidate the list for both.
+          queryClient.invalidateQueries({ queryKey: ["datasets-list", library] });
+          if (sid !== library) {
+            queryClient.invalidateQueries({ queryKey: ["datasets-list", sid] });
+          }
+          navigate(scopeHref(sid, `/datasets/${encodeURIComponent(id)}`));
+        }}
       />
     </Box>
   );
