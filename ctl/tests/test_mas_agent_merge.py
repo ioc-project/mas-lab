@@ -4,6 +4,7 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 from mas.ctl.manifest.mas_agent_merge import enrich_entry_agent_for_delegation, wire_entry_engine_delegation
 from mas.runtime.engine.llm_live import LiveLlmEngine
@@ -706,3 +707,39 @@ def test_create_agent_runtime_applies_mas_overlay_context(monkeypatch, tmp_path:
 
     leaf = leaf_engine(instance.driver.engine)
     assert leaf.manifest["spec"]["context"]["role"] == "from overlay"
+
+
+def _send_plugin_engine(*, wire_first: bool):
+    """A live engine whose manifest tools grant the ``send`` plugin, wired in either order."""
+    from mas.ctl.manifest.mas_agent_merge import wire_entry_engine_delegation
+    from mas.runtime.engine.llm_live import LiveLlmEngine
+    from mas.runtime.engine.manifest_tool_provider import attach_manifest_tools
+
+    engine = LiveLlmEngine(manifest=None, use_tool_loop=False, use_cache=False)
+    spec = {
+        "system_plugins": ["send"],
+        "workflow": {"entry": "entry", "nodes": [{"id": "entry", "delegates_to": ["peer"]}]},
+    }
+    manifest = {"metadata": {"name": "entry"}, "spec": spec}
+
+    def wire() -> None:
+        wire_entry_engine_delegation(engine, manifest, Path("."), comm=_StubComm(), entry_agent_id="entry")
+
+    def attach() -> None:
+        attach_manifest_tools(engine, manifest, Path("."))
+
+    for step in (wire, attach) if wire_first else (attach, wire):
+        step()
+    return engine
+
+
+@pytest.mark.parametrize("wire_first", [True, False])
+def test_delegation_is_the_send_plugin_instance_whichever_is_wired_first(wire_first: bool):
+    from mas.runtime.engine.leaf import leaf_engine
+
+    leaf = leaf_engine(_send_plugin_engine(wire_first=wire_first))
+    bound = leaf.tool_provider.system_plugins()
+    shared = bound.state_for_capability("delegation")
+    assert leaf.delegation is shared
+    assert shared._allowed == frozenset({"peer"})
+    assert bound.claims("delegate_to_peer") and not bound.claims("delegate_to_stranger")

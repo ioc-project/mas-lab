@@ -48,7 +48,7 @@ BOUNDARY_SLOTS = frozenset(
         "tool_provider",
         "llm_provider",
         "agent_comm",
-        "system_tool",
+        "system_plugin",
         "hitl_contract",
         "user_io_contract",
         "engine_tool_provider",
@@ -95,7 +95,7 @@ SPEC_IDENTITY_TYPES = frozenset(
         "user_io_contract",
         "governance",
         "observability",
-        "system_tool",
+        "system_plugin",
     }
 )
 

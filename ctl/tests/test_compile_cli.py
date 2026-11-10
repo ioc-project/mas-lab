@@ -214,9 +214,11 @@ def test_compile_cli_stdout_tutorial_1() -> None:
     assert doc["kind"] == "Agent"
     tools = doc["spec"]["tools"]
     refs = [t["ref"] for t in tools if isinstance(t, dict) and "ref" in t]
-    system_tools = {t["name"] for t in tools if isinstance(t, dict) and t.get("kind") == "system"}
+    plugins = {
+        item if isinstance(item, str) else next(iter(item)) for item in (doc["spec"].get("system_plugins") or [])
+    }
     assert "samples:tools/web-search.tool.yaml" in refs
-    assert system_tools == {"request_human_input", "inform_user"}
+    assert plugins == {"request_human_input", "inform_user"}
 
 
 def test_compile_cli_applies_override_after_file_overlay() -> None:

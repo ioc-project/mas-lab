@@ -1,0 +1,21 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#system-plugin-item"
+title: SystemPluginItem
+description: >
+  One system plugin grant: a plugin id, or a one-key {name: settings} object.
+  Settings may include enabled: false to turn a default off. Other keys are
+  plugin settings (timeout, templates, max_message_length, ...).
+oneOf:
+  - type: string
+    minLength: 1
+  - type: object
+    minProperties: 1
+    maxProperties: 1
+    additionalProperties:
+      type: object
+      additionalProperties: true
+      properties:
+        enabled:
+          type: boolean

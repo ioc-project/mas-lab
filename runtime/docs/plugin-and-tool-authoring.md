@@ -129,7 +129,20 @@ A tool that serves several call names overrides `list_tools()` and `call_tool()`
 
 `mas-runtime` ships no built-in tools. Tutorial and benchmark tools live in `library-samples/tools/` as `kind: Tool` manifests (`*.tool.yaml`) next to their Python classes. Examples: `calc`, `web-search`, `memory-search`, and the trip-planner tools (`get_fares`, `get_attractions`, `lookup_schedule`, `query_graph_database`). Agents reference them through `spec.tools[].ref` (for example `samples:tools/memory-search.tool.yaml`).
 
-`library-standard` provides the system tools (human input, user notification, subagent spawning) and the in-process tool provider; see its `library.yaml`.
+`library-standard` provides the system plugins (human input, user notification, subagent spawning) and the in-process tool provider; see its `library.yaml`.
+
+### System plugins
+
+A system plugin is a syscall the model may call. Register it as type `system_plugin`
+and derive from `mas.runtime.system_plugins.SystemPluginBase`. Implement `tools`
+(what it adds to the model's tool list), `bind` (the state, once per session) and
+`call`; `close`, `snapshot`, `restore`, `claims` and `should_load` have defaults.
+`InstanceSystemPlugin` covers the common case of one tool object with
+`on_collect_tools` / `on_execute_tool`: implement `make_instance`. Whether a plugin
+loads unnamed is the `default_enabled` attribute of its library row, or its
+`should_load` rule over the agent spec. Import `runtime/tests/system_plugins/conformance.py`
+in the plugin's tests. Agents grant the plugin in `spec.system_plugins`. See
+[system-plugins.md](../../docs/manifests/system-plugins.md).
 
 
 ## 5. Contract taxonomy

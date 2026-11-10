@@ -64,6 +64,8 @@ properties:
     $ref: "./overlay-collection-ops-memory-seed.schema.yaml"
   tools:
     $ref: "./overlay-collection-ops-tool.schema.yaml"
+  system_plugins:
+    $ref: "./overlay-collection-ops-system-plugins.schema.yaml"
   skills:
     $ref: "./overlay-collection-ops-string.schema.yaml"
   design_pattern:

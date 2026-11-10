@@ -45,7 +45,7 @@ The YAML kinds and how they compose.
 | Flavour & infra | [flavour.md](../manifests/flavour.md), [infra.md](../manifests/infra.md) |
 | Workspace file | [config.yaml](config.yaml.md), [user-config.md](../user-config.md) |
 | Compiled defaults | [What a minimal agent expands to](defaults.md) |
-| Tools | [ToolContract](tool-contract.md) · [ToolServerRegistry](tool-server-registry.md) · [System tools](system-tools.md) |
+| Tools | [ToolContract](tool-contract.md) · [ToolServerRegistry](tool-server-registry.md) · [System tools](system-tools.md) · [System plugins](../manifests/system-plugins.md) |
 | Schemas (all) | [Schema index](schemas.md) |
 | Contracts | [Contracts](contracts.md) |
 

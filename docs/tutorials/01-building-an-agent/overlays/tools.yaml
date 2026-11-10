@@ -15,7 +15,8 @@ spec:
         add:
           - ref: samples:tools/web-search.tool.yaml
           - ref: samples:tools/calc.tool.yaml
-          - kind: system
-            name: request_human_input
-          - kind: system
-            name: inform_user
+    system_plugins:
+      $op:
+        add:
+          - request_human_input
+          - inform_user

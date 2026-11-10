@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, create_model, field_validator
-
-from mas.runtime.contracts.tool_contract import ToolContract
 from mas.library.standard.plugins.system_tools._arg_coercion import coerce_json_string_to_dict
+from mas.library.standard.plugins.system_tools.wrappers import SystemToolHitlWrapper
+from mas.runtime.contracts.tool_contract import ToolContract
+from mas.runtime.system_plugins import InstanceSystemPlugin, SessionContext, ToolInstance
+from pydantic import BaseModel, Field, create_model, field_validator
 
 #: Default cap on ``question`` length — see ``max_question_length`` on __init__.
 DEFAULT_MAX_QUESTION_LENGTH = 20000
@@ -68,10 +69,7 @@ class RequestHumanInputTool(ToolContract):
         )
         context_data: dict[str, Any] = Field(
             default_factory=dict,
-            description=(
-                "Contextual data to display with the question "
-                "(e.g., account details, proposed values)"
-            ),
+            description=("Contextual data to display with the question (e.g., account details, proposed values)"),
         )
 
         _coerce_context_data = field_validator("context_data", mode="before")(coerce_json_string_to_dict)
@@ -88,11 +86,9 @@ class RequestHumanInputTool(ToolContract):
         )
 
     def __init__(self, *, max_question_length: int = DEFAULT_MAX_QUESTION_LENGTH) -> None:
-        """``max_question_length``: configurable via a ``spec.tools`` entry —
+        """``max_question_length``: configurable via ``spec.system_plugins``:
 
-            - kind: system
-              name: request_human_input
-              params: {max_question_length: 8000}
+            - request_human_input: {max_question_length: 8000}
 
         Default matches the class-level ``Input.question`` schema (2000); a
         non-default value rebuilds ``Input`` so the *advertised* tool schema
@@ -167,4 +163,40 @@ class RequestHumanInputTool(ToolContract):
             choices=list(args.choices) if args.choices else [],
             context_data=dict(args.context_data) if args.context_data else {},
             timeout=args.timeout,
+        )
+
+
+class RequestHumanInputPlugin(InstanceSystemPlugin):
+    """System plugin for ``request_human_input``.
+
+    Settings: ``max_question_length``, ``timeout``, ``auto_resolve_decision``.
+    """
+
+    name = "request_human_input"
+
+    def __init__(
+        self,
+        *,
+        max_question_length: int | None = None,
+        timeout: float | None = None,
+        auto_resolve_decision: str | None = None,
+        **_: Any,
+    ) -> None:
+        super().__init__()
+        self.max_question_length = max_question_length
+        self.timeout = timeout
+        self.auto_resolve_decision = auto_resolve_decision
+
+    def make_instance(self, session: SessionContext | None) -> ToolInstance:
+        kwargs = {}
+        if self.max_question_length is not None:
+            kwargs["max_question_length"] = int(self.max_question_length)
+        tool = RequestHumanInputTool(**kwargs)
+        if session is None:
+            return tool
+        return SystemToolHitlWrapper(
+            tool,
+            hitl_contract=session.hitl_contract,
+            default_timeout_seconds=self.timeout,
+            auto_resolve_decision=self.auto_resolve_decision,
         )

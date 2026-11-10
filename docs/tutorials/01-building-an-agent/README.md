@@ -159,10 +159,11 @@ spec:
         add:               # append to the list; a plain list would replace it
           - ref: samples:tools/web-search.tool.yaml
           - ref: samples:tools/calc.tool.yaml
-          - kind: system   # built-in: ask the operator / inform the user
-            name: request_human_input
-          - kind: system
-            name: inform_user
+    system_plugins:
+      $op:
+        add:
+          - request_human_input
+          - inform_user
 ```
 
 A `ref` points to a `kind: Tool` manifest that names the tool, describes its parameters, and points at its Python implementation.
@@ -193,7 +194,7 @@ patch:
 
 - `skills/answer-formatting/SKILL.md` must start with YAML frontmatter (`---`, then `name` and `description`).
   A comment before the frontmatter makes the file a body with no name.
-- Listing a skill makes the runtime add the `activate_skill` system tool ([System tools](../../manifests/system-tools.md)).
+- Listing a skill makes the runtime add the `activate_skill` system plugin ([System plugins](../../manifests/system-plugins.md)).
   The `description` is the when-to-use text in the catalog; the body loads on activation.
 
 ```bash

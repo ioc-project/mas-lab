@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, create_model, field_validator
-
-from mas.runtime.contracts.tool_contract import ToolContract
 from mas.library.standard.plugins.system_tools._arg_coercion import coerce_json_string_to_dict
+from mas.library.standard.plugins.system_tools.wrappers import SystemToolUserUpdateWrapper
+from mas.runtime.contracts.tool_contract import ToolContract
+from mas.runtime.system_plugins import InstanceSystemPlugin, SessionContext, ToolInstance
+from pydantic import BaseModel, Field, create_model, field_validator
 
 #: Default cap on ``message`` length — see ``max_message_length`` on __init__.
 DEFAULT_MAX_MESSAGE_LENGTH = 20000
@@ -69,11 +70,9 @@ class InformUserTool(ToolContract):
         _coerce_metadata = field_validator("metadata", mode="before")(coerce_json_string_to_dict)
 
     def __init__(self, *, max_message_length: int = DEFAULT_MAX_MESSAGE_LENGTH) -> None:
-        """``max_message_length``: configurable via a ``spec.tools`` entry —
+        """``max_message_length``: configurable via ``spec.system_plugins``:
 
-            - kind: system
-              name: inform_user
-              params: {max_message_length: 8000}
+            - inform_user: {max_message_length: 8000}
 
         Default matches the class-level ``Input.message`` schema (2000); a
         non-default value rebuilds ``Input`` so the *advertised* tool schema
@@ -126,3 +125,22 @@ class InformUserTool(ToolContract):
             involved_agents=list(args.involved_agents) if args.involved_agents else [],
             metadata=dict(args.metadata) if args.metadata else {},
         )
+
+
+class InformUserPlugin(InstanceSystemPlugin):
+    """System plugin for ``inform_user``. Settings: ``max_message_length``."""
+
+    name = "inform_user"
+
+    def __init__(self, *, max_message_length: int | None = None, **_: Any) -> None:
+        super().__init__()
+        self.max_message_length = max_message_length
+
+    def make_instance(self, session: SessionContext | None) -> ToolInstance:
+        kwargs = {}
+        if self.max_message_length is not None:
+            kwargs["max_message_length"] = int(self.max_message_length)
+        tool = InformUserTool(**kwargs)
+        if session is None:
+            return tool
+        return SystemToolUserUpdateWrapper(tool, user_io_contract=session.user_io_contract)

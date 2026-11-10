@@ -344,7 +344,8 @@ standard library registers a system tool named `send` with
 `default_enabled: false`. Declaring it does not add a tool named `send`
 to the model's list; `list_tools` still returns only `delegate_to_<id>`,
 with the same `task` and `context_id` arguments. A user tool named `send`
-stays that tool.
+stays that tool. A user tool named `delegate_to_<id>` stays that tool unless
+`list_tools` offered that name.
 Cards: [local-group](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/local-group.md),
 [stack](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/stack.md),
 [trace_context](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/trace-context.md),

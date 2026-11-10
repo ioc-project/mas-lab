@@ -315,7 +315,9 @@ class PluginRegistry:
     @staticmethod
     def _matches_name(entry: PluginEntry, name: str) -> bool:
         key = str(name).strip().lower()
-        return key == entry.urn.lower() or key in {str(sc).lower() for sc in entry.shortcuts}
+        if key == entry.urn.lower() or key in {str(sc).lower() for sc in entry.shortcuts}:
+            return True
+        return key in {str(old).lower() for old in entry.attributes.get("deprecated_names") or ()}
 
     def resolve_spec(
         self,

@@ -9,22 +9,21 @@ Implicit:
   - at least one of those skills has a ``scripts/`` file → ``run_skill_script``
 
 Explicit (manifest):
-  - ``{kind: system, name: activate_skill}``
-  - ``{kind: system, name: run_skill_script}``
+  - ``spec.system_plugins: [activate_skill]``
+  - ``spec.system_plugins: [run_skill_script]``
   - ``spec.context_sources: [{native: {auto_inject: true}}]`` (scripts)
 """
 
 from __future__ import annotations
 
-import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from mas.library.skills.lib.resolver import resolve_skill_path
 from mas.library.skills.plugins.sk_shell import RunSkillScriptPlugin
 from mas.library.skills.plugins.sk_tools import SkillToolsPlugin
-
-logger = logging.getLogger(__name__)
+from mas.runtime.system_plugins import InstanceSystemPlugin, SessionContext
 
 SKILL_ACCESS_REFS = frozenset(
     {
@@ -38,10 +37,6 @@ SKILL_SHELL_REFS = frozenset(
         "pkg://skills/tools/run-skill-script.tool.yaml",
     }
 )
-
-_ACTIVATE_NAMES = frozenset({"activate_skill", "skill-access", "skill_access"})
-_SCRIPT_NAMES = frozenset({"run_skill_script", "run-skill-script"})
-SKILL_SYSTEM_TOOL_NAMES: frozenset[str] = _ACTIVATE_NAMES | _SCRIPT_NAMES
 
 
 def skill_refs(skills_spec: Any) -> list[str]:
@@ -57,15 +52,6 @@ def skill_refs(skills_spec: Any) -> list[str]:
 def _tools_have_ref(tools_spec: list[Any] | None, refs: frozenset[str]) -> bool:
     for item in tools_spec or []:
         if isinstance(item, dict) and str(item.get("ref") or "").strip() in refs:
-            return True
-    return False
-
-
-def _explicit_system_tool(tools_spec: list[Any] | None, names: frozenset[str]) -> bool:
-    for item in tools_spec or []:
-        if not isinstance(item, dict) or item.get("kind") != "system":
-            continue
-        if str(item.get("name") or "").strip() in names:
             return True
     return False
 
@@ -94,9 +80,7 @@ def should_inject_activate_skill(
     """
     if _tools_have_ref(tools_spec, SKILL_ACCESS_REFS):
         return False
-    if skill_refs(skills_spec):
-        return True
-    return _explicit_system_tool(tools_spec, _ACTIVATE_NAMES)
+    return bool(skill_refs(skills_spec))
 
 
 def should_inject_run_skill_script(
@@ -108,7 +92,7 @@ def should_inject_run_skill_script(
 ) -> bool:
     if _tools_have_ref(tools_spec, SKILL_SHELL_REFS):
         return False
-    if _explicit_system_tool(tools_spec, _SCRIPT_NAMES) or auto_inject_scripts:
+    if auto_inject_scripts:
         return True
     refs = skill_refs(skills_spec)
     if not refs:
@@ -116,28 +100,32 @@ def should_inject_run_skill_script(
     return any_declared_skill_has_scripts(refs, base_dir=base_dir)
 
 
-def inject_skill_system_tools(
-    provider: Any,
-    *,
-    tools_spec: list[Any] | None,
-    skills_spec: Any,
-    base_dir: Path,
-    auto_inject_scripts: bool = False,
-) -> None:
-    """Add skill system-tool plugins onto a local tool provider when warranted."""
-    add = getattr(provider, "_add_instance", None)
-    if not callable(add):
-        return
+class ActivateSkillPlugin(InstanceSystemPlugin):
+    """System plugin wrapping ``SkillToolsPlugin`` (activate/list/read). Granted by ``spec.skills``."""
 
-    if should_inject_activate_skill(skills_spec=skills_spec, tools_spec=tools_spec):
-        add(SkillToolsPlugin(), None)
-        logger.debug("Injected activate_skill system tools")
+    name = "activate_skill"
 
-    if should_inject_run_skill_script(
-        skills_spec=skills_spec,
-        tools_spec=tools_spec,
-        base_dir=base_dir,
-        auto_inject_scripts=auto_inject_scripts,
-    ):
-        add(RunSkillScriptPlugin(), None)
-        logger.debug("Injected run_skill_script system tool")
+    @classmethod
+    def should_load(cls, spec: Mapping[str, Any], settings: Mapping[str, Any], *, session: SessionContext) -> bool:
+        return should_inject_activate_skill(skills_spec=spec.get("skills"), tools_spec=spec.get("tools"))
+
+    def make_instance(self, session: SessionContext | None) -> SkillToolsPlugin:
+        return SkillToolsPlugin()
+
+
+class RunSkillScriptSystemPlugin(InstanceSystemPlugin):
+    """System plugin wrapping ``RunSkillScriptPlugin``. Granted when a listed skill ships ``scripts/``."""
+
+    name = "run_skill_script"
+
+    @classmethod
+    def should_load(cls, spec: Mapping[str, Any], settings: Mapping[str, Any], *, session: SessionContext) -> bool:
+        return should_inject_run_skill_script(
+            skills_spec=spec.get("skills"),
+            tools_spec=spec.get("tools"),
+            base_dir=Path(session.skills_dir) if session.skills_dir else Path("."),
+            auto_inject_scripts=session.auto_inject_scripts,
+        )
+
+    def make_instance(self, session: SessionContext | None) -> RunSkillScriptPlugin:
+        return RunSkillScriptPlugin()

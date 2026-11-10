@@ -135,7 +135,7 @@ TOOL_CALL
         → execute_engine_tool
 ```
 
-A `tools: "*"` (or omitted / empty-string `tools`) destination wraps every name no other server lists, except runtime system tools (`request_human_input`, `inform_user`, `spawn_subagent`, `create_subagent`). Those stay on the local dispatch unless a server lists them. After the tool-provider registry has initialized, the dest router sees that star server's advertised names and wraps only those; leftover unknown names stay on the raw dispatch.
+A `tools: "*"` (or omitted / empty-string `tools`) destination wraps every name no other server lists, except runtime system tools (`request_human_input`, `inform_user`, `create_subagent`). Those stay on the local dispatch unless a server lists them. After the tool-provider registry has initialized, the dest router sees that star server's advertised names and wraps only those; leftover unknown names stay on the raw dispatch.
 
 How steps land there:
 

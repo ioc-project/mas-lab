@@ -15,10 +15,8 @@ spec:
   target:
     kind: Agent
   patch:
-    spec:
-      tools:
-        - $append:
-          - kind: system
-            name: activate_skill
-          - kind: system
-            name: run_skill_script
+    system_plugins:
+      $op:
+        add:
+          - activate_skill
+          - run_skill_script

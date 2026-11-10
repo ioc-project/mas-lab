@@ -119,6 +119,28 @@ class Session:
     lineage_events: list[dict[str, Any]] = field(default_factory=list)
     _capturing_snapshot: bool = field(default=False, repr=False, compare=False)
 
+    def _system_plugins(self) -> Any:
+        engine = getattr(getattr(self.instance, "driver", None), "engine", None)
+        if engine is None:
+            return None
+        from mas.runtime.engine.leaf import leaf_engine
+
+        leaf = leaf_engine(engine)
+        provider = getattr(leaf, "tool_provider", None)
+        getter = getattr(provider, "system_plugins", None)
+        return getter() if callable(getter) else None
+
+    def _system_plugin_snapshot(self) -> dict[str, Any]:
+        plugins = self._system_plugins()
+        return dict(plugins.snapshot()) if plugins is not None else {}
+
+    def _restore_system_plugins(self, snapshot: Any) -> None:
+        if not isinstance(snapshot, dict):
+            return
+        bound = self._system_plugins()
+        if bound is not None:
+            bound.restore(snapshot)
+
     def pause(self, *, reason: str = "") -> None:
         """Mark the session paused. User turns must refuse until ``resume``."""
         self.status = SessionStatus.PAUSED
@@ -175,6 +197,9 @@ class Session:
                 "content_hash": self.manifest_ref.content_hash,
             },
         }
+        plugins = self._system_plugin_snapshot()
+        if plugins:
+            payload["system_plugins"] = plugins
         try:
             turn_label = label or f"turn-{payload['turn']:04d}"
             store_label = f"{self.session_id}-{turn_label}"
@@ -224,6 +249,7 @@ class Session:
                 spec=self.manifest_ref.content if self.manifest_ref else None,
                 spec_revision=self.spec_revision,
                 related=list(payload.get("related") or []),
+                system_plugins=dict(payload.get("system_plugins") or {}),
             ),
             live=True,
         )
@@ -254,6 +280,7 @@ class Session:
             self.session_id,
             payload.get("working_memory") or [],
         )
+        self._restore_system_plugins(payload.get("system_plugins"))
         self.checkpoint_history = self.checkpoint_history[: target_index + 1]
         self.controller.restore_turn(int(payload.get("turn", 0)))
         if automatic:
@@ -315,6 +342,7 @@ class Session:
         if callable(freeze_session):
             wm_version = freeze_session(self.session_id)
         working_memory = self.working_memory.export_session(self.session_id)
+        system_plugins = self._system_plugin_snapshot()
         tree = self.snapshot_tree or SnapshotTree()
         parent = tree.live(self.session_id)
         seq = tree.next_seq(self.session_id) if hasattr(tree, "next_seq") else 0
@@ -338,6 +366,7 @@ class Session:
             wm_version=wm_version,
             seq=seq,
             related_fingerprints=[r.fingerprint for r in related],
+            system_plugins=system_plugins,
         )
         snap = Snapshot(
             ref=ref,
@@ -346,6 +375,7 @@ class Session:
             spec=self.manifest_ref.content if self.manifest_ref else None,
             spec_revision=self.spec_revision,
             related=related,
+            system_plugins=system_plugins,
         )
         self.lineage_events.append(
             {
@@ -427,6 +457,7 @@ class Session:
         from mas.runtime.boundary.related_state import restore_all
 
         restore_all(self.related_state, self.session_id, getattr(snapshot, "related", None))
+        self._restore_system_plugins(getattr(snapshot, "system_plugins", None))
 
     def persist_snapshot(self, snapshot: Any, store: CheckpointStore) -> Path:
         from mas.runtime.session.snapshot import persist

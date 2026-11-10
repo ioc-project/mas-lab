@@ -103,11 +103,9 @@ To declare the same tools explicitly:
 
 ```yaml
 spec:
-  tools:
-    - kind: system
-      name: activate_skill
-    - kind: system
-      name: run_skill_script   # even if no skill ships scripts yet
+  system_plugins:
+    - activate_skill
+    - run_skill_script   # even if no skill ships scripts yet
 ```
 
 The older explicit form, a YAML ref (`skills:tools/skill-access.tool.yaml`), still works. You can also use the overlay:
@@ -206,9 +204,8 @@ To opt in without shipping scripts, declare the system tool (or set
 
 ```yaml
 spec:
-  tools:
-    - kind: system
-      name: run_skill_script
+  system_plugins:
+    - run_skill_script
 ```
 
 Or use the shell overlay:
@@ -235,7 +232,7 @@ spec:
 
 | Overlay | What it adds |
 | --------- | ------------- |
-| `skills:overlays/skills.yaml` | Explicit `{kind: system, name: activate_skill}` (same tools are implicit if `spec.skills` is listed) |
+| `skills:overlays/skills.yaml` | Explicit `activate_skill` (same tools are implicit if `spec.skills` is listed) |
 | `skills:overlays/skills-shell.yaml` | Explicit `activate_skill` + `run_skill_script` |
 
 ## Quickstart example

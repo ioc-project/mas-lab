@@ -8,15 +8,16 @@
 |-------|--------|
 | **ID** | `send` |
 | **Alias** | `send` |
-| **Kind** | `system_tool` / `engine_tool_provider` (`delegation`) |
-| **URN** | `mas.system_tool.send` |
-| **Implementation** | `SendTool` in `mas.library.standard.plugins.system_tools.send` |
-| **Manifest keys** | `spec.tools` (`kind: system`, `name: send`) |
+| **Kind** | `system_plugin` |
+| **URN** | `mas.system_plugin.send` |
+| **Implementation** | `SendPlugin` / `SendTool` in `mas.library.standard.plugins.system_tools.send` |
+| **Manifest keys** | `spec.system_plugins` (`send`) |
 
-`default_enabled: false`. Declaring this system tool does not add a tool
+`default_enabled: false`. Naming this plugin does not add a tool
 named `send` to the model's list; `list_tools` still returns only
 `delegate_to_<id>`. A Python `send` call uses the same path.
-A user tool named `send` stays that tool.
+A user tool named `send` stays that tool. A user tool named `delegate_to_<id>`
+stays that tool unless `list_tools` offered that name.
 
 [Communication stack](../../../../../../../docs/references/comm-stack.md).
-[System tools](../../../../../../../docs/manifests/system-tools.md).
+[System plugins](../../../../../../../docs/manifests/system-plugins.md).

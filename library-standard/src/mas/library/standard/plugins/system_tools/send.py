@@ -10,7 +10,7 @@ calls. The target comes from the tool name; extra ``target`` or
 from __future__ import annotations
 
 import inspect
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 from weakref import WeakKeyDictionary
@@ -26,11 +26,10 @@ from mas.runtime.boundary.delegation.policy import (
     openai_delegation_tools,
     parse_delegate_tool_name,
 )
+from mas.runtime.system_plugins import CallContext, InstanceSystemPlugin, SessionContext, UnknownSystemToolError
 
 _Prepare = tuple[AgentCommContract, str, str, str]
-_SEND_OPTIONAL = frozenset(
-    {"correlation_id", "caller_call_id", "context_id", "headers", "context"}
-)
+_SEND_OPTIONAL = frozenset({"correlation_id", "caller_call_id", "context_id", "headers", "context"})
 
 
 class SendToolContext(Protocol):
@@ -133,13 +132,32 @@ class SendTool:
     ) -> None:
         self._comm = comm
         self._routes = dict(routes or {})
-        self._allowed = frozenset(
-            str(peer) for peer in (allowed_peers or ()) if str(peer).strip()
-        )
+        self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
         self._accepted: WeakKeyDictionary[Any, dict[str, frozenset[str]]] = WeakKeyDictionary()
 
     def set_routes(self, routes: dict[str, AgentCommRoute]) -> None:
         self._routes = dict(routes)
+
+    def configure(
+        self,
+        *,
+        comm: AgentCommContract | None,
+        routes: dict[str, AgentCommRoute] | None,
+        allowed_peers: Sequence[str] | None,
+    ) -> None:
+        """Wire the link, routes and offered peers into an instance built before they were known."""
+        self._comm = comm
+        self._routes = dict(routes or {})
+        self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
+
+    def adopt_wiring(self, other: SendTool) -> None:
+        """Take the wiring of another send tool, so one instance serves the engine and the plugin."""
+        self.configure(comm=other._comm, routes=other._routes, allowed_peers=other._allowed)
+
+    def offers(self, tool_name: str) -> bool:
+        """True for ``delegate_to_<peer>`` where *peer* was offered to the model."""
+        target = parse_delegate_tool_name(tool_name)
+        return bool(target) and target in self._allowed
 
     def reset_session(self) -> None:
         return None
@@ -239,9 +257,7 @@ class SendTool:
         asend_fn = getattr(communication, "asend", None)
         names = {
             "send": _accepted_kwargs(send_fn),
-            "asend": (
-                _accepted_kwargs(asend_fn) if callable(asend_fn) else _accepted_kwargs(send_fn)
-            ),
+            "asend": (_accepted_kwargs(asend_fn) if callable(asend_fn) else _accepted_kwargs(send_fn)),
         }
         try:
             self._accepted[communication] = names
@@ -296,9 +312,7 @@ class SendTool:
         if "context_id" in accepted:
             extra["context_id"] = context_id
         if "context" in accepted:
-            extra["context"] = SendContext(
-                intent=intent, headers=dict(headers or {}), mode=mode
-            )
+            extra["context"] = SendContext(intent=intent, headers=dict(headers or {}), mode=mode)
         if headers is not None and "headers" in accepted:
             extra["headers"] = dict(headers)
         return extra
@@ -418,9 +432,7 @@ class SendTool:
             context_id=context_id,
         )
 
-    def _args_to_send(
-        self, tool_name: str, arguments: dict[str, Any] | None
-    ) -> tuple[str, str, str, str] | str:
+    def _args_to_send(self, tool_name: str, arguments: dict[str, Any] | None) -> tuple[str, str, str, str] | str:
         args = dict(arguments or {})
         named = parse_delegate_tool_name(tool_name)
         if named:
@@ -543,4 +555,38 @@ class SendTool:
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
             ctx=ctx,
+        )
+
+
+class SendPlugin(InstanceSystemPlugin):
+    """System plugin for ``send``. The model still sees ``delegate_to_<id>``.
+
+    The bound :class:`SendTool` is the engine's delegation: ``configure`` (or ``adopt_wiring``) gives it
+    the link and the offered peers, and it claims exactly the ``delegate_to_<peer>`` names it offered.
+    """
+
+    name = "send"
+
+    def make_instance(self, session: SessionContext | None) -> SendTool:
+        return SendTool()
+
+    def claims(self, tool: str, *, state: object) -> bool:
+        return isinstance(state, SendTool) and state.offers(tool)
+
+    def call(
+        self,
+        tool: str,
+        args: Mapping[str, Any],
+        *,
+        state: object,
+        context: CallContext,
+    ) -> Any:
+        if not isinstance(state, SendTool) or not state.offers(tool):
+            raise UnknownSystemToolError(tool)
+        return state.call(
+            tool,
+            dict(args),
+            ctx=context.ctx,
+            correlation_id=context.correlation_id,
+            caller_call_id=context.caller_call_id,
         )

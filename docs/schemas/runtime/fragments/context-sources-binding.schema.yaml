@@ -33,7 +33,7 @@ items:
                 execution) even if no listed skill has a ``scripts/`` directory.
                 Off by default: listing skills only adds ``activate_skill``.
                 A skill that already ships scripts implies the tool. Explicit
-                alternative: ``{kind: system, name: run_skill_script}``.
+                alternative: name ``run_skill_script`` in ``spec.system_plugins``.
             pin_activated:
               type: boolean
               default: true
@@ -65,7 +65,7 @@ items:
                 execution) even if no listed skill has a ``scripts/`` directory.
                 Off by default: listing skills only adds ``activate_skill``.
                 A skill that already ships scripts implies the tool. Explicit
-                alternative: ``{kind: system, name: run_skill_script}``.
+                alternative: name ``run_skill_script`` in ``spec.system_plugins``.
             pin_activated:
               type: boolean
               default: true
@@ -97,7 +97,7 @@ items:
                 execution) even if no listed skill has a ``scripts/`` directory.
                 Off by default: listing skills only adds ``activate_skill``.
                 A skill that already ships scripts implies the tool. Explicit
-                alternative: ``{kind: system, name: run_skill_script}``.
+                alternative: name ``run_skill_script`` in ``spec.system_plugins``.
             pin_activated:
               type: boolean
               default: true

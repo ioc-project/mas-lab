@@ -16,8 +16,7 @@ spec:
         explain the result. Use the calculator when it is available. If a
         calculated total exceeds 400 dollars, call request_human_input to ask
         whether the user approves the total before presenting it as accepted.
-    tools:
+    system_plugins:
       $op:
         add:
-          - kind: system
-            name: request_human_input
+          - request_human_input

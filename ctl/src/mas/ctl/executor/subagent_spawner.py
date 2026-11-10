@@ -27,6 +27,26 @@ def _resolve_engine_tool_class(name: str) -> type:
     return variant.load_class()
 
 
+def subagents_state_from_engine(engine: Any) -> Any | None:
+    """The bind state of the granted orchestration plugin on this engine, if any."""
+    if engine is None:
+        return None
+    from mas.runtime.engine.leaf import leaf_engine
+
+    leaf = leaf_engine(engine)
+    provider = getattr(leaf, "tool_provider", None)
+    getter = getattr(provider, "system_plugins", None)
+    bound = getter() if callable(getter) else None
+    state = bound.state_for_capability("orchestration") if bound is not None else None
+    return state if isinstance(getattr(state, "ledger", None), SpawnLedger) else None
+
+
+def ledger_from_engine(engine: Any) -> SpawnLedger | None:
+    """The spawn ledger the subagents system plugin bound on this engine, if any."""
+    state = subagents_state_from_engine(engine)
+    return state.ledger if state is not None else None
+
+
 @dataclass(frozen=True)
 class SubagentTemplate:
     """Validated local agent manifest selected by a spawning tool call."""
@@ -168,26 +188,37 @@ def wire_subagent_spawning(
         if working_memory_registry is None:
             working_memory_registry = WorkingMemoryRegistry()
             materialized._session_working_memory_registry = working_memory_registry
+    state = subagents_state_from_engine(engine)
+    if ledger is None and state is not None:
+        ledger = state.ledger
     if ledger is None:
         ledger = getattr(materialized, "_subagent_spawn_ledger", None)
-        if ledger is None:
-            ledger = SpawnLedger(
-                max_depth=params.get("max_depth", 3),
-                max_spawns=params.get("max_spawns", 8),
-            )
-            materialized._subagent_spawn_ledger = ledger
+    if ledger is None:
+        ledger = SpawnLedger(
+            max_depth=params.get("max_depth", 3),
+            max_spawns=params.get("max_spawns", 8),
+        )
+    if materialized is not None:
+        materialized._subagent_spawn_ledger = ledger
 
     from mas.runtime.engine.leaf import leaf_engine
 
     leaf = leaf_engine(engine)
-    for existing in getattr(leaf, "engine_tool_contracts", ()) or ():
-        is_spawn = getattr(existing, "is_subagent_tool", None)
-        if (
-            callable(is_spawn)
-            and is_spawn(SPAWN_SUBAGENT_TOOL)
-            and getattr(existing, "parent_agent_id", None) == parent_agent_id
-        ):
+    if state is not None:
+        # the granted subagents plugin owns the call: hand it the spawner, add no second contract
+        existing = state.spawner
+        if existing is not None and getattr(existing, "parent_agent_id", None) == parent_agent_id:
             return existing
+        state.ledger = ledger
+    else:
+        for existing in getattr(leaf, "engine_tool_contracts", ()) or ():
+            is_spawn = getattr(existing, "is_subagent_tool", None)
+            if (
+                callable(is_spawn)
+                and is_spawn(SPAWN_SUBAGENT_TOOL)
+                and getattr(existing, "parent_agent_id", None) == parent_agent_id
+            ):
+                return existing
     spawner = make_subagent_spawner(
         materialized=materialized,
         parent_agent_id=parent_agent_id,
@@ -204,7 +235,10 @@ def wire_subagent_spawning(
         entry_id=entry_id,
         delegate_ids=delegate_ids,
     )
-    contracts = list(getattr(leaf, "engine_tool_contracts", ()) or ())
-    contracts.append(spawner)
-    leaf.engine_tool_contracts = tuple(contracts)
+    if state is not None:
+        state.spawner = spawner
+    else:  # a host with no manifest tool provider cannot dispatch plugin tools: keep the engine contract
+        contracts = list(getattr(leaf, "engine_tool_contracts", ()) or ())
+        contracts.append(spawner)
+        leaf.engine_tool_contracts = tuple(contracts)
     return spawner

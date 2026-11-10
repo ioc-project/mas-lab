@@ -190,6 +190,7 @@ nav:
           - Session checkpoints: manifests/checkpoint.md
           - Subagents: manifests/subagents.md
           - Tool: manifests/tool.md
+          - System plugins: manifests/system-plugins.md
           - System tools: manifests/system-tools.md
           - Plugin bindings: manifests/plugin-bindings.md
           - Context assembly: manifests/context-assembly.md

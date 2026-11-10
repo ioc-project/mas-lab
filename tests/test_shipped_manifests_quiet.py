@@ -41,6 +41,17 @@ def test_no_shipped_agent_or_mas_sets_a_deprecated_control_key() -> None:
     assert offenders == []
 
 
+def test_no_shipped_agent_uses_kind_system() -> None:
+    offenders = []
+    for path in _shipped_manifests():
+        for doc in _documents(path):
+            spec = doc.get("spec") if isinstance(doc.get("spec"), dict) else {}
+            for item in spec.get("tools") or []:
+                if isinstance(item, dict) and item.get("kind") == "system":
+                    offenders.append(str(path.relative_to(REPO)))
+    assert offenders == []
+
+
 @pytest.mark.parametrize("key", ["observability", "governance"])
 def test_the_collector_flags_each_deprecated_key(key: str) -> None:
     doc = {"kind": "Agent", "metadata": {"name": "a"}, "spec": {key: []}}

@@ -21,6 +21,7 @@ types:
   - skill_tools
   - skill_shell
   - skill_impl
+  - system_plugin
 
 plugins:
   - type: skill_catalog
@@ -50,6 +51,18 @@ plugins:
       scripts bundled in a skill's scripts/ directory.
     module: mas.library.skills.plugins.sk_shell
     class: RunSkillScriptPlugin
+  - type: system_plugin
+    name: activate_skill
+    urn: mas.system_plugin.activate_skill
+    module: mas.library.skills.plugins.system_tools
+    class: ActivateSkillPlugin
+    attributes: {default_enabled: false}
+  - type: system_plugin
+    name: run_skill_script
+    urn: mas.system_plugin.run_skill_script
+    module: mas.library.skills.plugins.system_tools
+    class: RunSkillScriptSystemPlugin
+    attributes: {default_enabled: false}
 
   - type: skill_impl
     name: native

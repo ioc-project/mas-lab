@@ -60,6 +60,14 @@ def test_context_policy_is_rejected_as_dead_field(tmp_path: Path):
     assert not result.ok
 
 
+def test_system_plugins_op_add_validates(tmp_path: Path):
+    result = validate_file(
+        _write(tmp_path, {"system_plugins": {"$op": {"add": ["request_human_input"]}}}),
+        kind="overlay",
+    )
+    assert result.ok, result.issues
+
+
 def test_tools_op_remove_wrapper_still_validates(tmp_path: Path):
     """Ops-wrapped fields (list_ops/plugin_list_ops) keep their own dedicated
     fragment -- their overlay-patch shape genuinely differs from the base

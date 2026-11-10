@@ -82,6 +82,16 @@ def test_spawn_ledger_rejects_invalid_bounds_and_underflow():
         ledger.exit("never-entered", child_agent_id="ghost")
 
 
+def test_spawn_ledger_snapshot_round_trips_counts_and_ids():
+    ledger = SpawnLedger(max_depth=2, max_spawns=4)
+    child = ledger.mint_agent_id("root", "w")
+    ledger.enter("s", child_agent_id=child, parent_agent_id="root")
+    restored = SpawnLedger.from_snapshot(ledger.snapshot())
+    assert restored.spawn_count("s") == 1
+    assert restored.agent_depth("s", child) == 1
+    assert restored.mint_agent_id("root", "w") == "root.w.2"
+
+
 def test_spawn_ledger_checks_child_depth_type_and_boundary_values():
     ledger = SpawnLedger(max_depth=3)
 

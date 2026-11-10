@@ -238,9 +238,7 @@ def apply_loaded_agent_patch(
     agent_patch = {key: value for key, value in patch.items() if key != _LOADED_AGENT_OVERRIDES}
     entry = find_agency_entry(mas_config, agent_id) if mas_config else None
     result = (
-        apply_agency_entry_overlay(
-            agent_manifest, entry or {"id": agent_id}, agent_patch=agent_patch
-        )
+        apply_agency_entry_overlay(agent_manifest, entry or {"id": agent_id}, agent_patch=agent_patch)
         if agent_patch
         else agent_manifest
     )
@@ -271,9 +269,7 @@ def _peer_manifests_for_ids(
         if peer_manifest is None:
             logger.warning("peer agent %r manifest not found: %s", peer_id, path)
             continue
-        out[peer_id] = apply_agency_entry_overlay(
-            peer_manifest, entry, mas_config=mas_config
-        )
+        out[peer_id] = apply_agency_entry_overlay(peer_manifest, entry, mas_config=mas_config)
     return out
 
 
@@ -342,13 +338,21 @@ def wire_entry_engine_delegation(
     # wanting a different delegation implementation registers a plugin under
     # the same ``delegation`` name; swapping job identifiers is not a
     # supported axis.
-    leaf.delegation = get_registry().instantiate_by_type(
-        "engine_tool_provider",
-        "delegation",
-        comm=comm,
-        routes=routes,
-        allowed_peers=peers,
-    )
+    plugins = getattr(getattr(leaf, "tool_provider", None), "system_plugins", None)
+    bound = plugins() if callable(plugins) else None
+    shared = bound.state_for_capability("delegation") if bound is not None else None
+    if shared is not None and callable(getattr(shared, "configure", None)):
+        # the granted delegation plugin is the engine's delegation: one instance, one set of peers
+        shared.configure(comm=comm, routes=routes, allowed_peers=peers)
+        leaf.delegation = shared
+    else:
+        leaf.delegation = get_registry().instantiate_by_type(
+            "engine_tool_provider",
+            "delegation",
+            comm=comm,
+            routes=routes,
+            allowed_peers=peers,
+        )
     if hasattr(leaf, "use_tool_loop"):
         if not leaf.use_tool_loop:
             logger.warning(

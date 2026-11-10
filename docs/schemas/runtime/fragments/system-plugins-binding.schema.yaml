@@ -1,0 +1,8 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#system-plugins-binding"
+title: SystemPluginsBinding
+type: array
+items:
+  $ref: "./system-plugin-item.schema.yaml"

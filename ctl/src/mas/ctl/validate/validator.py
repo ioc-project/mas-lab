@@ -143,6 +143,83 @@ def _explicit_path_ref_issue(value: str, path: str) -> ValidationIssue | None:
     return None
 
 
+def _check_system_plugin_name(name_or_item: Any, path: str, *, parse: bool, issues: list[ValidationIssue]) -> None:
+    from mas.runtime.registry.provider_protocol import ManifestToolLoadError
+    from mas.runtime.system_plugins import parse_system_plugin_item, require_entry
+
+    try:
+        name = parse_system_plugin_item(name_or_item)[0] if parse else str(name_or_item)
+        require_entry(name)
+    except ManifestToolLoadError as exc:
+        issues.append(ValidationIssue("error", str(exc), path=path))
+
+
+def _check_kind_system_item(item: Any, path: str, issues: list[ValidationIssue]) -> None:
+    if not isinstance(item, dict) or item.get("kind") != "system":
+        return
+    name = str(item.get("name") or "").strip()
+    if not name:
+        issues.append(
+            ValidationIssue(
+                "error",
+                "spec.tools {kind: system} entry needs a name; list the plugin in spec.system_plugins",
+                path=path,
+            )
+        )
+        return
+    _check_system_plugin_name(name, path, parse=False, issues=issues)
+
+
+def _validate_system_plugins(spec: dict[str, Any]) -> list[ValidationIssue]:
+    """Errors for a ``spec.system_plugins`` item (or deprecated ``{kind: system}`` entry) the loader would refuse."""
+    issues: list[ValidationIssue] = []
+    for index, item in enumerate(spec.get("system_plugins") or []):
+        _check_system_plugin_name(item, f"spec.system_plugins[{index}]", parse=True, issues=issues)
+    for index, item in enumerate(spec.get("tools") or []):
+        _check_kind_system_item(item, f"spec.tools[{index}]", issues)
+    return issues
+
+
+def _validate_overlay_system_plugins(data: dict[str, Any]) -> list[ValidationIssue]:
+    """Unknown plugin names in an Overlay patch of ``system_plugins`` or ``{kind: system}`` tools."""
+    spec = data.get("spec")
+    patch = spec.get("patch") if isinstance(spec, dict) else None
+    if not isinstance(patch, dict):
+        return []
+    issues: list[ValidationIssue] = []
+
+    def _kind_system_names(tools: Any, where: str) -> None:
+        if not isinstance(tools, list):
+            return
+        for index, item in enumerate(tools):
+            _check_kind_system_item(item, f"{where}[{index}]", issues)
+
+    raw = patch.get("system_plugins")
+    if isinstance(raw, list):
+        for index, item in enumerate(raw):
+            _check_system_plugin_name(item, f"spec.patch.system_plugins[{index}]", parse=True, issues=issues)
+    elif isinstance(raw, dict) and isinstance(raw.get("$op"), dict):
+        ops = raw["$op"]
+        for op_name in ("add", "replace"):
+            values = ops.get(op_name)
+            if isinstance(values, list):
+                for index, item in enumerate(values):
+                    _check_system_plugin_name(
+                        item, f"spec.patch.system_plugins.$op.{op_name}[{index}]", parse=True, issues=issues
+                    )
+        for index, name in enumerate(ops.get("remove") or []):
+            _check_system_plugin_name(
+                name, f"spec.patch.system_plugins.$op.remove[{index}]", parse=False, issues=issues
+            )
+
+    tools = patch.get("tools")
+    if isinstance(tools, list):
+        _kind_system_names(tools, "spec.patch.tools")
+    elif isinstance(tools, dict) and isinstance(tools.get("$op"), dict):
+        _kind_system_names((tools["$op"] or {}).get("add"), "spec.patch.tools.$op.add")
+    return issues
+
+
 def _validate_agent_tool_refs_semantics(
     spec: dict[str, Any],
     *,
@@ -311,6 +388,12 @@ def validate_data(
         for path, msg in collect_agent_control_keys_deprecation(data):
             result.issues.append(ValidationIssue("warning", msg, path=path))
 
+    if resolved_kind in {"agent", "overlay"}:
+        from mas.ctl.validate.deprecations import collect_system_tool_kind_deprecation
+
+        for path, msg in collect_system_tool_kind_deprecation(data):
+            result.issues.append(ValidationIssue("warning", msg, path=path))
+
     if resolved_kind == "infra":
         from mas.ctl.validate.deprecations import collect_endpoint_usage_deprecation
 
@@ -327,12 +410,16 @@ def validate_data(
     if resolved_kind == "agent":
         try:
             from mas.ctl.manifest.spec_bindings import validate_agent_spec_bindings
+            from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 
             validate_agent_spec_bindings(data.get("spec"))
+        except ManifestToolLoadError:
+            pass
         except Exception as exc:
             result.issues.append(ValidationIssue("error", str(exc), path="spec"))
             result.ok = False
         agent_spec = data.get("spec")
+        result.issues.extend(_validate_system_plugins(agent_spec if isinstance(agent_spec, dict) else {}))
         result.issues.extend(
             _validate_agent_tool_refs_semantics(
                 agent_spec if isinstance(agent_spec, dict) else {},
@@ -350,6 +437,7 @@ def validate_data(
                 source=Path(source) if source else None,
             )
         )
+        result.issues.extend(_validate_overlay_system_plugins(data))
 
     if resolved_kind == "deployment":
         spec = data.get("spec") or {}

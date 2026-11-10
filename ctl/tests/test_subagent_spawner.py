@@ -155,13 +155,7 @@ def test_wire_subagent_spawning_loads_validated_manifest_templates(tmp_path: Pat
     )
     manifest = {
         "spec": {
-            "tools": [
-                {
-                    "kind": "system",
-                    "name": "spawn_subagent",
-                    "params": {"templates": [{"id": "worker", "ref": "worker.yaml"}]},
-                }
-            ],
+            "system_plugins": [{"subagents": {"templates": [{"id": "worker", "ref": "worker.yaml"}]}}],
         }
     }
     engine = SimpleNamespace(engine_tool_contracts=())
@@ -194,6 +188,54 @@ def test_wire_subagent_spawning_loads_validated_manifest_templates(tmp_path: Pat
     assert engine.engine_tool_contracts == (spawner,)
 
 
+def test_wire_uses_the_subagents_plugin_ledger(tmp_path: Path):
+    from mas.library.standard.plugins.system_tools.spawn_subagent import SubagentsPlugin
+    from mas.runtime.system_plugins import BoundSystemPlugins, SessionContext
+    from mas.runtime.system_plugins.load import _Bound
+
+    worker = tmp_path / "worker.yaml"
+    worker.write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: worker}\nspec:\n  description: Worker agent\n",
+        encoding="utf-8",
+    )
+    plugin = SubagentsPlugin(max_spawns=1, max_depth=1, templates=[{"id": "worker", "ref": "worker.yaml"}])
+    bound = BoundSystemPlugins()
+    bound.add(
+        _Bound(
+            name="subagents",
+            urn="mas.system_plugin.subagents",
+            plugin=plugin,
+            state=plugin.bind(SessionContext()),
+            settings={"max_spawns": 1, "max_depth": 1},
+            capability="orchestration",
+        )
+    )
+    bound.state_for_capability("orchestration").ledger.enter(
+        "session", child_agent_id="root.w.1", parent_agent_id="root"
+    )
+    engine = SimpleNamespace(
+        engine_tool_contracts=(),
+        tool_provider=SimpleNamespace(system_plugins=lambda: bound),
+    )
+    materialized = SimpleNamespace(instances={}, bus=None)
+    spawner = wire_subagent_spawning(
+        engine,
+        materialized=materialized,
+        manifest={
+            "spec": {
+                "system_plugins": [{"subagents": {"templates": [{"id": "worker", "ref": "worker.yaml"}]}}],
+            }
+        },
+        manifest_dir=tmp_path,
+        parent_agent_id="root",
+        session_id="session",
+    )
+    ledger = bound.state_for_capability("orchestration").ledger
+    assert spawner.context.ledger is ledger
+    assert materialized._subagent_spawn_ledger is ledger
+    assert not ledger.allow_spawn("session", "root")
+
+
 def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
     worker = tmp_path / "worker.yaml"
     worker.write_text(
@@ -202,13 +244,7 @@ def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
     )
     manifest = {
         "spec": {
-            "tools": [
-                {
-                    "kind": "system",
-                    "name": "spawn_subagent",
-                    "params": {"templates": [{"id": "worker", "ref": "worker.yaml"}]},
-                }
-            ],
+            "system_plugins": [{"subagents": {"templates": [{"id": "worker", "ref": "worker.yaml"}]}}],
         }
     }
     bus = InProcessCommBus()
@@ -245,7 +281,7 @@ def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
     )
 
     result = execute_engine_tool(
-        "spawn_subagent",
+        "create_subagent",
         engine_contracts=engine.engine_tool_contracts,
         arguments={"template": "worker", "task": "review this"},
         caller_call_id="parent-call",
@@ -260,17 +296,7 @@ def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
 def test_template_loader_rejects_refs_outside_manifest_root(tmp_path: Path):
     with pytest.raises(Exception, match="escapes allowed roots"):
         load_subagent_templates(
-            {
-                "spec": {
-                    "tools": [
-                        {
-                            "kind": "system",
-                            "name": "spawn_subagent",
-                            "params": {"templates": [{"id": "escape", "ref": "../outside.yaml"}]},
-                        }
-                    ]
-                }
-            },
+            {"spec": {"system_plugins": [{"subagents": {"templates": [{"id": "escape", "ref": "../outside.yaml"}]}}]}},
             tmp_path,
         )
 
@@ -280,14 +306,135 @@ def test_template_loader_rejects_unknown_template_keys(tmp_path: Path):
         load_subagent_templates(
             {
                 "spec": {
-                    "tools": [
-                        {
-                            "kind": "system",
-                            "name": "spawn_subagent",
-                            "params": {"templates": [{"id": "w", "ref": "./w.yaml", "unexpected": True}]},
-                        }
+                    "system_plugins": [
+                        {"subagents": {"templates": [{"id": "w", "ref": "./w.yaml", "unexpected": True}]}}
                     ]
                 }
             },
             tmp_path,
         )
+
+
+@pytest.mark.parametrize(
+    "legacy_name",
+    ["spawn_subagent", "create_subagent"],
+)
+def test_deprecated_kind_system_spelling_grants_the_same_spawn_params(legacy_name: str):
+    from mas.runtime.engine.tools import is_spawn_subagent_enabled, spawn_subagent_params
+
+    params = {"templates": [{"id": "w", "ref": "w.yaml"}], "max_spawns": 2}
+    legacy = {"tools": [{"kind": "system", "name": legacy_name, "params": params}]}
+    modern = {"system_plugins": [{"subagents": params}]}
+    assert spawn_subagent_params(legacy) == spawn_subagent_params(modern) == params
+    off = {"tools": [{"kind": "system", "name": legacy_name, "enabled": False}]}
+    assert spawn_subagent_params(off) is None
+    assert not is_spawn_subagent_enabled(off)
+
+
+def _plugin_engine(tmp_path: Path, *, attach_first: bool):
+    """A live engine whose manifest grants the subagents plugin, wired in either order."""
+    from mas.runtime.engine.leaf import leaf_engine
+    from mas.runtime.engine.llm_live import LiveLlmEngine
+    from mas.runtime.engine.manifest_tool_provider import attach_manifest_tools
+
+    (tmp_path / "worker.yaml").write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: worker}\nspec:\n  description: Worker agent\n",
+        encoding="utf-8",
+    )
+    spec = {"system_plugins": [{"subagents": {"templates": [{"id": "worker", "ref": "worker.yaml"}]}}]}
+    manifest = {"metadata": {"name": "root"}, "spec": spec}
+    engine = LiveLlmEngine(manifest=None, use_tool_loop=True, use_cache=False)
+    bus = InProcessCommBus()
+    materialized = SimpleNamespace(instances={}, bus=bus)
+    turns: list[tuple[str, str]] = []
+
+    class Controller:
+        def __init__(self, **_kwargs):
+            pass
+
+        def run_turn(self, task, *, turn_id, parent_call_id):
+            turns.append((task, parent_call_id))
+            return TurnResult(trace=DriverTrace(), responses=[EmitClientResponse(content="child answer")])
+
+    instance = SimpleNamespace(
+        driver=SimpleNamespace(agent_id="", ctx=SimpleNamespace(session_id="", agent_id="")),
+        obs_plugin_set=None,
+    )
+
+    def attach() -> None:
+        attach_manifest_tools(engine, manifest, tmp_path)
+
+    def wire() -> None:
+        wire_subagent_spawning(
+            engine,
+            materialized=materialized,
+            manifest=manifest,
+            manifest_dir=tmp_path,
+            parent_agent_id="root",
+            session_id="session",
+            working_memory_registry=WorkingMemoryRegistry(),
+            instance_factory=lambda _template, _agent_id: instance,
+            controller_factory=Controller,
+        )
+
+    for step in (attach, wire) if attach_first else (wire, attach):
+        step()
+    return leaf_engine(engine), turns
+
+
+@pytest.mark.parametrize("attach_first", [True, False])
+def test_plugin_runs_the_child_whichever_is_wired_first(tmp_path: Path, attach_first: bool):
+    leaf, turns = _plugin_engine(tmp_path, attach_first=attach_first)
+    result = execute_engine_tool(
+        "create_subagent",
+        engine_contracts=leaf.engine_tool_contracts,
+        arguments={"template": "worker", "task": "review this"},
+        caller_call_id="parent-call",
+    )
+    assert result == "child answer"
+    assert turns == [("review this", "parent-call")]
+    # one owner: the plugin; no second contract competes for the tool
+    assert [c for c in leaf.engine_tool_contracts if getattr(c, "is_subagent_tool", None)] == []
+
+
+@pytest.mark.parametrize("attach_first", [True, False])
+def test_plugin_runs_the_child_on_the_async_path(tmp_path: Path, attach_first: bool):
+    import asyncio
+
+    from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
+
+    leaf, turns = _plugin_engine(tmp_path, attach_first=attach_first)
+    spawner = leaf.tool_provider.system_plugins().state_for_capability("orchestration").spawner
+
+    def _sync_spawn(*_a, **_k):
+        raise AssertionError("the async path ran the blocking spawn")
+
+    spawner.spawn = _sync_spawn
+    result = asyncio.run(
+        aexecute_engine_tool(
+            "create_subagent",
+            engine_contracts=leaf.engine_tool_contracts,
+            arguments={"template": "worker", "task": "async task"},
+            caller_call_id="pc",
+        )
+    )
+    assert result == "child answer"
+    assert turns[-1][0] == "async task"
+
+
+def test_restore_keeps_the_ledger_the_spawner_holds(tmp_path: Path):
+    leaf, _turns = _plugin_engine(tmp_path, attach_first=True)
+    bound = leaf.tool_provider.system_plugins()
+    state = bound.state_for_capability("orchestration")
+    ledger = state.ledger
+    assert state.spawner.context.ledger is ledger
+    saved = bound.snapshot()
+    execute_engine_tool(
+        "create_subagent",
+        engine_contracts=leaf.engine_tool_contracts,
+        arguments={"template": "worker", "task": "t"},
+    )
+    assert ledger.spawn_count("session") == 1
+    bound.restore(saved)
+    assert state.ledger is ledger and state.spawner.context.ledger is ledger
+    assert ledger.spawn_count("session") == 0  # spend rolled back on the object the spawner uses

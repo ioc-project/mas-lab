@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 from mas.runtime.boundary.engine_tools import EngineToolBudgetExceeded, SubagentContract
-from mas.runtime.engine.tools import SPAWN_SUBAGENT_NAMES, SPAWN_SUBAGENT_TOOL
+from mas.runtime.engine.tools import CREATE_SUBAGENT_TOOL, SPAWN_SUBAGENT_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,7 @@ class SubagentSpawner(SubagentContract):
         *,
         correlation_id: int = 0,
         caller_call_id: str = "",
-        tool_name: str = SPAWN_SUBAGENT_TOOL,
+        tool_name: str = CREATE_SUBAGENT_TOOL,
     ) -> str:
         template = self.templates.get(template_id)
         if template is None:
@@ -199,7 +199,7 @@ class SubagentSpawner(SubagentContract):
         *,
         correlation_id: int = 0,
         caller_call_id: str = "",
-        tool_name: str = SPAWN_SUBAGENT_TOOL,
+        tool_name: str = CREATE_SUBAGENT_TOOL,
     ) -> str:
         template = self.templates.get(template_id)
         if template is None:

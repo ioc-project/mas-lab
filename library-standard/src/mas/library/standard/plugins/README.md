@@ -67,13 +67,24 @@ Infra `spec.protocol` / agent `spec.models[].kind` select the wire protocol (def
 | `local-group` | Unicast, anycast, rooms | `LocalGroupAgentComm` |
 | `stack` | Bottom-up layer bind | `StackAgentComm` |
 | `trace_context` | Child `traceparent` | `TraceContextLayer` |
-| `send` | System tool, off by default | `SendTool` |
 
 - Card: [agentcomm/local-group.md](agentcomm/local-group.md)
 - Card: [agentcomm/stack.md](agentcomm/stack.md)
 - Card: [agentcomm/trace-context.md](agentcomm/trace-context.md)
-- Card: [system_tools/send.md](system_tools/send.md)
 - Docs: [comm-stack.md](../../../../../../docs/references/comm-stack.md)
+
+## System plugins (`spec.system_plugins`)
+
+| ID | Advertised tools | Implementation |
+|----|------------------|----------------|
+| `send` | `delegate_to_<id>` (not `send`) | `SendPlugin` |
+| `inform_user` | `inform_user` | `InformUserPlugin` |
+| `request_human_input` | `request_human_input` | `RequestHumanInputPlugin` |
+| `pause_session` | `pause_session` and the control bundle | `PauseSessionPlugin` |
+| `subagents` | `create_subagent` | `SubagentsPlugin` |
+
+- Card: [system_tools/send.md](system_tools/send.md)
+- Docs: [system-plugins.md](../../../../../../docs/manifests/system-plugins.md)
 
 ## Control protocol (`mas.library.standard.plugins.control`)
 

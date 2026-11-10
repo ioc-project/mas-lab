@@ -24,10 +24,8 @@ the templates its manifest declares.
 
 ```yaml
 spec:
-  tools:
-    - kind: system
-      name: spawn_subagent
-      params:
+  system_plugins:
+    - subagents:
         templates:
           - id: reviewer
             ref: ./reviewer.yaml
@@ -50,7 +48,7 @@ mas-ctl chat docs/tutorials/12-subagents/agent.yaml \
 ```
 
 Validation prints `OK`. In chat you should see the parent call
-`spawn_subagent`, then reply with the reviewer's findings. Calling the tool is
+`create_subagent`, then reply with the reviewer's findings. Calling the tool is
 the model's choice, and the answer wording varies. If the parent answers
 itself, name the reviewer in the request, as above. Add `--trace` to see the call and its result as a separate
 exchange. The reviewer runs as its own instance for this one call.
@@ -58,7 +56,7 @@ exchange. The reviewer runs as its own instance for this one call.
 ## Step 3 — How dispatch works
 
 - `SpawnSubagentTool` (`library-standard`) only advertises
-  `spawn_subagent`, with a schema built from the template ids. It fails
+  `create_subagent`, with a schema built from the template ids. It fails
   closed if executed.
 - `SubagentSpawner` (`engine_tools/subagent_spawner.py`) builds the child
   from the template, runs one turn and removes the instance, even when the
@@ -75,7 +73,7 @@ exchange. The reviewer runs as its own instance for this one call.
 
 ## What you learned
 
-1. `spawn_subagent` plus a template list gives the parent a bounded "ask a
+1. `create_subagent` plus a template list gives the parent a bounded "ask a
    specialist" capability with no tool code.
 2. A template is an ordinary Agent manifest.
 3. The runtime, not the model, enforces budgets and template paths.

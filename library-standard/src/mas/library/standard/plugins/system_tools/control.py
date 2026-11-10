@@ -5,7 +5,76 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from typing import Any
+
+from mas.runtime.engine.tools import CONTROL_TOOLS
+from mas.runtime.system_plugins import (
+    CallContext,
+    InstanceSystemPlugin,
+    SessionContext,
+    ToolDefinition,
+    UnknownSystemToolError,
+)
+
+
+def control_advertise_specs() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "pause_session",
+            "description": "Pause this session at the next turn boundary.",
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"reason": {"type": "string"}},
+                "required": ["reason"],
+            },
+        },
+        {
+            "name": "list_checkpoints",
+            "description": "List snapshot-tree nodes for this session.",
+            "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
+        },
+        {
+            "name": "inspect_session",
+            "description": "Inspect live vs debug-cursor snapshot ids for this session.",
+            "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
+        },
+        {
+            "name": "navigate_checkpoint",
+            "description": "Move the debug cursor. Does not change the live run until promote.",
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "to": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["to", "reason"],
+            },
+        },
+        {
+            "name": "cancel_inflight",
+            "description": "Cancel the in-flight LLM call. Tools are not rolled back.",
+            "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
+        },
+        {
+            "name": "run_control_script",
+            "description": (
+                "Run a gdb-like control script (pause, persist, inspect, steer). "
+                "Pass inline text or @path, same as mas-ctl control --data."
+            ),
+            "parameters": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "script": {"type": "string"},
+                    "auto_stop": {"type": "boolean"},
+                },
+                "required": ["script"],
+            },
+        },
+    ]
 
 
 class ControlTools:
@@ -26,62 +95,7 @@ class ControlTools:
         control, session_id = self._bound(ctx)
         if control is None or not session_id:
             return []
-        return [
-            {
-                "name": "pause_session",
-                "description": "Pause this session at the next turn boundary.",
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {"reason": {"type": "string"}},
-                    "required": ["reason"],
-                },
-            },
-            {
-                "name": "list_checkpoints",
-                "description": "List snapshot-tree nodes for this session.",
-                "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
-            },
-            {
-                "name": "inspect_session",
-                "description": "Inspect live vs debug-cursor snapshot ids for this session.",
-                "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
-            },
-            {
-                "name": "navigate_checkpoint",
-                "description": "Move the debug cursor. Does not change the live run until promote.",
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "to": {"type": "string"},
-                        "reason": {"type": "string"},
-                    },
-                    "required": ["to", "reason"],
-                },
-            },
-            {
-                "name": "cancel_inflight",
-                "description": "Cancel the in-flight LLM call. Tools are not rolled back.",
-                "parameters": {"type": "object", "additionalProperties": False, "properties": {}},
-            },
-            {
-                "name": "run_control_script",
-                "description": (
-                    "Run a gdb-like control script (pause, persist, inspect, steer). "
-                    "Pass inline text or @path, same as mas-ctl control --data."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "script": {"type": "string"},
-                        "auto_stop": {"type": "boolean"},
-                    },
-                    "required": ["script"],
-                },
-            },
-        ]
+        return control_advertise_specs()
 
     def on_execute_tool(self, tool_name: str, arguments: dict[str, Any], ctx: Any = None, **_: Any) -> str:
         control, session_id = self._bound(ctx)
@@ -123,3 +137,30 @@ class ControlTools:
             )
             return json.dumps(result, default=str)
         return f"[control] unsupported tool {tool_name!r}"
+
+
+class PauseSessionPlugin(InstanceSystemPlugin):
+    """System plugin named ``pause_session``. Advertises the control-tool bundle."""
+
+    name = "pause_session"
+
+    def make_instance(self, session: SessionContext | None) -> ControlTools:
+        return ControlTools(session_id=session.session_id if session is not None else "")
+
+    def tools(self, ctx: Any | None = None):
+        if ctx is None:
+            return tuple(ToolDefinition.from_advertise(spec) for spec in control_advertise_specs())
+        return super().tools(ctx)
+
+    def call(
+        self,
+        tool: str,
+        args: Mapping[str, Any],
+        *,
+        state: object,
+        context: CallContext,
+    ) -> Any:
+        if tool not in CONTROL_TOOLS:
+            raise UnknownSystemToolError(tool)
+        assert isinstance(state, ControlTools)
+        return state.on_execute_tool(tool, dict(args), ctx=context.ctx)
