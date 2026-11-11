@@ -43,6 +43,7 @@ class PeerConversations:
     def __init__(self) -> None:
         self._lock = Lock()
         self._relationships: dict[tuple[str, str, str, str], Relationship] = {}
+        self._closed = False
 
     def relationship(self, recipient: str, thread: str = "") -> Relationship:
         caller = current_conversation()
@@ -50,11 +51,17 @@ class PeerConversations:
             raise AgentCommError("Automatic A2A reuse requires an active caller conversation")
         key = (caller.session_id, caller.agent_id, recipient, thread)
         with self._lock:
+            self._ensure_open()
             return self._relationships.setdefault(key, Relationship())
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise AgentCommError("A2A conversations are closed")
 
     def send(self, client: Any, recipient: str, task: str, *, thread: str, metadata: dict[str, str]) -> dict[str, Any]:
         relation = self.relationship(recipient, thread)
         with relation.lock:
+            self._ensure_open()
             if relation.unresolved:
                 raise AgentCommError("A2A conversation context is unresolved; do not retry an ambiguous operation")
             try:
@@ -63,6 +70,7 @@ class PeerConversations:
                 if not relation.context_id:
                     relation.unresolved = True
                 raise
+            self._ensure_open()
             return self._capture(relation, response)
 
     @staticmethod
@@ -85,8 +93,10 @@ class PeerConversations:
         # One lock also protects synchronous callers. Never leave a worker
         # blocked on its acquisition after the async caller has been cancelled.
         while not relation.lock.acquire(blocking=False):
+            self._ensure_open()
             await asyncio.sleep(0.01)
         try:
+            self._ensure_open()
             if relation.unresolved:
                 raise AgentCommError("A2A conversation context is unresolved; do not retry an ambiguous operation")
             try:
@@ -95,10 +105,12 @@ class PeerConversations:
                 if not relation.context_id:
                     relation.unresolved = True
                 raise
+            self._ensure_open()
             return self._capture(relation, response)
         finally:
             relation.lock.release()
 
-    def clear(self) -> None:
+    def close(self) -> None:
         with self._lock:
+            self._closed = True
             self._relationships.clear()

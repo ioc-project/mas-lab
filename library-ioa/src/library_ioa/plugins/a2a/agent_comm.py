@@ -123,7 +123,12 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
         return self._result_text(response)
 
     def close(self) -> None:
-        self._client.close()
         conversations = getattr(self, "_conversations", None)
         if conversations is not None:
-            conversations.clear()
+            conversations.close()
+        self._client.close()
+
+    async def aclose(self) -> None:
+        """Stop dispatch and await native client cleanup on async callers."""
+        self.close()
+        await self._client.aclose()

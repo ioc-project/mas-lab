@@ -101,3 +101,5 @@ See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-
 - [ToolServerRegistry](../docs/references/tool-server-registry.md)
 
 Async A2A delegation awaits the native SDK transport. Cancelling a request queued behind another call to the same relationship prevents dispatch and leaves that relationship usable. Cancellation after dispatch may leave an ambiguous remote outcome. An unresolved initial context is not retried automatically.
+
+`A2AClient.close()` and `A2AAgentComm.close()` stop new and queued dispatch and request cancellation of active async operations. Relationship state cannot be recreated after closure. Outside an event loop, synchronous client work drains as before. Inside an event loop, use `await client.aclose()` or `await comm.aclose()` to await SDK/HTTP cleanup without blocking that loop. Cleanup is bounded by the configured client timeout and reports a timeout while admission stays closed. Already dispatched requests may have executed remotely; shutdown never retries them. Repeated close is safe.
