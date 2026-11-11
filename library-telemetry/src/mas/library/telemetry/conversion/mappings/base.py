@@ -92,6 +92,8 @@ class SpanEmitter(Protocol):
     Handlers depend only on this protocol, never on converter internals.
     """
 
+    def pop_assembled_llm_context(self, ev: Dict[str, Any]) -> Dict[str, Any]: ...
+
     def open_span(
         self,
         call_id: str,

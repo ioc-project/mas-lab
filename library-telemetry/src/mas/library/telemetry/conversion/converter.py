@@ -219,7 +219,7 @@ class MasOtelConverter:
         # call_id -> lightweight span metadata (for close-time profile overlays)
         self._span_meta: Dict[str, Dict[str, Any]] = {}
         # Context assembly can precede the LLM interval it describes.
-        self._pending_llm_contexts: Dict[str, Dict[str, Any]] = {}
+        self._pending_llm_contexts: Dict[tuple[str, str, str], Dict[str, Any]] = {}
         self._realtime = bool(realtime)
         self._extensions = default_extensions(self._converter_profile, extensions)
         # agent_id → OTel span id of the open/last AgentCall (SCOPE linkage).
@@ -278,6 +278,10 @@ class MasOtelConverter:
         self._ensure_trace_root(self.ts_ns(event))
         kind = str(event.get("kind") or "")
         if kind == "mas_call_end":
+            ended_run = self._context_run_id(event)
+            self._pending_llm_contexts = {
+                key: attrs for key, attrs in self._pending_llm_contexts.items() if key[0] != ended_run
+            }
             ts = event.get("timestamp")
             if isinstance(ts, (int, float)):
                 self._mas_call_end_ts = float(ts)
@@ -519,8 +523,6 @@ class MasOtelConverter:
         if not self._should_emit_span(str(attrs.get("mas.boundary") or "")):
             return None
         boundary_name = str(attrs.get("mas.boundary") or "")
-        if boundary_name == "LLMCall":
-            attrs = {**attrs, **self._pending_llm_contexts.pop(call_id, {})}
         if (
             self._converter_profile == "observe_sdk"
             and self._rewrite_tool_delegation
@@ -688,6 +690,14 @@ class MasOtelConverter:
         """Spec-declared model for *agent_id* (replay discovery / live overlay)."""
         return str(self._agent_llm_models.get(str(agent_id or "")) or "")
 
+    def _context_run_id(self, ev: Dict[str, Any]) -> str:
+        return str(ev.get("run_id") or (ev.get("context") or {}).get("run_id") or self._run_id)
+
+    def pop_assembled_llm_context(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """Consume only the prompt owned by this run, agent and LLM call."""
+        key = (self._context_run_id(ev), self.agent_id(ev), str(ev.get("call_id") or ""))
+        return self._pending_llm_contexts.pop(key, {})
+
     def attach_assembled_llm_context(self, ev: Dict[str, Any]) -> None:
         """Attach the assembled prompt, retaining it until its LLM span opens.
 
@@ -711,7 +721,7 @@ class MasOtelConverter:
             attrs[semconv.GEN_AI_USAGE_INPUT_TOKENS] = int(tokens)
         if call_id not in self._open_spans:
             if call_id not in self._closed_call_ids:
-                self._pending_llm_contexts[call_id] = attrs
+                self._pending_llm_contexts[(self._context_run_id(ev), self.agent_id(ev), call_id)] = attrs
             return
         self.annotate_open_span(call_id, attrs)
         meta = self._span_meta.get(call_id) or {}

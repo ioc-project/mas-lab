@@ -397,3 +397,5 @@ span whether context arrives before or after `llm_call_start`. It retains early
 context in memory until that call opens, using the existing agent-scoped call
 identity. Finishing or resetting a run discards unmatched context. This applies
 to both live export and file replay, with no change to the exported schema.
+
+Pending assembled prompts are owned by their native run and agent/call identity. A native `mas_call_end` discards only that run’s pending prompts, even when the end event is filtered from export. Explicit finish and reset still discard all pending prompts.

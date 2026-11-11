@@ -92,3 +92,30 @@ def test_late_context_does_not_reopen_a_completed_call(tmp_path):
     export.close()
     assert len(llm_spans(tmp_path)) == 1
     assert "late" not in json.dumps(llm_spans(tmp_path))
+
+
+@requires_otel
+@pytest.mark.parametrize("profile", ["raw", "observe_sdk"])
+@pytest.mark.parametrize("filtered", [False, True])
+def test_native_run_end_discards_only_its_pending_prompts(tmp_path, monkeypatch, profile, filtered):
+    export = exporter(tmp_path, profile)
+    if filtered:
+        import mas.library.telemetry.conversion.converter as module
+
+        native = module.should_export_event
+        monkeypatch.setattr(
+            module, "should_export_event", lambda ev, layers: ev["kind"] != "mas_call_end" and native(ev, layers)
+        )
+    for run in ("one", "two"):
+        export.process_event(event("context_assembled", run_id=run, messages=[{"role": "user", "content": run}]))
+    export.process_event(event("mas_call_end", agent="mas", call="run-one", run_id="one"))
+    export.process_event(event("llm_call_start", run_id="two"))
+    export.process_event(event("llm_call_end", run_id="two"))
+    export.process_event(event("llm_call_start", run_id="three"))
+    export.process_event(event("llm_call_end", run_id="three"))
+    export.close()
+    spans = llm_spans(tmp_path)
+    assert len(spans) == 2
+    assert json.loads(spans[0]["attributes"]["mas.llm.messages"])[0]["content"] == "two"
+    assert "one" not in spans[1]["attributes"].get("mas.llm.messages", "")
+    assert not export.converter._pending_llm_contexts
