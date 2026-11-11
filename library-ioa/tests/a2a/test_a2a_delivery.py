@@ -273,8 +273,8 @@ async def test_failures_never_release_payload_and_cleanup(failure):
     with pytest.raises((InvalidAgentResponseError, asyncio.CancelledError)) as error:
         await pending
     assert "private reply" not in str(error.value)
-    assert not delivery._pending
     await delivery.aclose()
+    assert not delivery._pending
     assert policy.closed == 1
     with pytest.raises(InvalidAgentResponseError):
         await delivery.release(task(), kind="send")
@@ -363,3 +363,63 @@ async def test_release_outcomes_withhold_denied_content_and_isolate_observer_err
     policy.on_release = broken
     assert (await delivery.release(task(), kind="send")).id == "task"
     await delivery.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["send", "get_task", "push"])
+@pytest.mark.parametrize("stop", ["timeout", "cancel", "close"])
+async def test_late_allow_cannot_release_or_notify_approval(kind, stop):
+    entered, cancelled, finish = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    outcomes = []
+
+    class Suppressing(Policy):
+        async def authorize(self, candidate):
+            entered.set()
+            while not finish.is_set():
+                try:
+                    await finish.wait()
+                except asyncio.CancelledError:
+                    cancelled.set()
+            return DeliveryDecision.ALLOW
+
+        on_release = staticmethod(outcomes.append)
+
+    policy = Suppressing()
+    controller = DeliveryController("worker", policy, timeout=0.02)
+    release = asyncio.create_task(controller.release(task(), kind=kind))
+    await entered.wait()
+    if stop == "cancel":
+        release.cancel()
+    elif stop == "close":
+        await asyncio.wait_for(controller.aclose(), timeout=1)
+    with pytest.raises(asyncio.CancelledError if stop == "cancel" else InvalidAgentResponseError):
+        await asyncio.wait_for(release, timeout=1)
+    await cancelled.wait()
+    assert len(outcomes) == 1
+    assert outcomes[0].status != "allowed"
+    assert outcomes[0].payload is None
+    pending = tuple(controller._pending)
+    finish.set()
+    await asyncio.gather(*pending)
+    assert len(outcomes) == 1
+    await controller.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_suppressing_cleanup_is_bounded():
+    entered, finish = asyncio.Event(), asyncio.Event()
+
+    class SlowClose(Policy):
+        async def aclose(self):
+            entered.set()
+            while not finish.is_set():
+                try:
+                    await finish.wait()
+                except asyncio.CancelledError:
+                    pass
+
+    controller = DeliveryController("worker", SlowClose(), timeout=0.02)
+    close = asyncio.create_task(controller.aclose())
+    await entered.wait()
+    await asyncio.wait_for(close, timeout=1)
+    finish.set()

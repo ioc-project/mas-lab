@@ -92,6 +92,7 @@ class DeliveryController:
         self.timeout = timeout
         self._pending: set[asyncio.Task[DeliveryDecision]] = set()
         self._closed = False
+        self._closing = asyncio.Event()
 
     async def release(
         self,
@@ -126,10 +127,22 @@ class DeliveryController:
         )
         status: DeliveryStatus = "error"
         pending = None
+        closing = asyncio.create_task(self._closing.wait())
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.timeout
         try:
             pending = asyncio.create_task(self.policy.authorize(candidate))
             self._pending.add(pending)
-            decision = await asyncio.wait_for(pending, timeout=self.timeout)
+            pending.add_done_callback(self._decision_done)
+            done, _ = await asyncio.wait((pending, closing), timeout=self.timeout, return_when=asyncio.FIRST_COMPLETED)
+            # Cancellation acknowledgement is not authorization. In particular a
+            # policy may catch CancelledError and return ALLOW after its deadline.
+            if self._closed:
+                status = "cancelled"
+                raise InvalidAgentResponseError(message="A2A delivery policy is closed")
+            if pending not in done or loop.time() >= deadline:
+                raise TimeoutError
+            decision = pending.result()
             if decision is DeliveryDecision.ALLOW:
                 status = "allowed"
                 return snapshot
@@ -148,8 +161,9 @@ class DeliveryController:
             # Policy exceptions can contain candidate content or credentials.
             raise InvalidAgentResponseError(message="A2A delivery policy failed") from None
         finally:
-            if pending is not None:
-                self._pending.discard(pending)
+            closing.cancel()
+            if pending is not None and not pending.done():
+                pending.cancel()
             observer = getattr(self.policy, "on_release", None)
             if callable(observer):
                 outcome = DeliveryOutcome(
@@ -166,12 +180,30 @@ class DeliveryController:
                 except Exception:
                     logger.warning("A2A release outcome observer failed")
 
+    def _decision_done(self, task: asyncio.Task) -> None:
+        self._pending.discard(task)
+        if not task.cancelled():
+            # Retrieve late exceptions without exposing policy data in logs.
+            task.exception()
+
     async def aclose(self) -> None:
         if self._closed:
             return
         self._closed = True
+        self._closing.set()
         pending = tuple(self._pending)
         for task in pending:
             task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
-        await self.policy.aclose()
+        cleanup = asyncio.create_task(self.policy.aclose())
+        cleanup.add_done_callback(self._decision_done)
+        tasks = (*pending, cleanup)
+        try:
+            _, unfinished = await asyncio.wait(tasks, timeout=self.timeout)
+            if cleanup.done() and not cleanup.cancelled():
+                cleanup.result()
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+        if unfinished:
+            logger.warning("A2A delivery policy cleanup exceeded its deadline")

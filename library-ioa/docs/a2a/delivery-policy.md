@@ -45,3 +45,5 @@ A policy that caches decisions must bind them to the candidate and recipient, in
 ## Release outcomes
 
 A policy may implement the optional synchronous `on_release(outcome: DeliveryOutcome)` callback. It receives the controller's final authorization outcome, including timeout and cancellation. Only an allowed outcome contains response bytes. This is an authorization notification, not a network-delivery receipt. Callback failures cannot change the decision. Consumers that display governed output can use these outcomes instead of raw execution events, which may contain unapproved content. Subscription management and presentation remain outside the protocol implementation.
+
+The controller enforces its own monotonic deadline and shutdown state, even if a policy suppresses cancellation and eventually returns ALLOW. Waiting and cleanup are bounded by `delivery_timeout`. Late results cannot authorize release. This does not forcibly terminate arbitrary in-process plugin code. Policies must cooperate with cancellation and release their own resources.
