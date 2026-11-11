@@ -1584,3 +1584,10 @@ def test_a_control_that_matches_no_agent_changes_nothing(tmp_path: Path) -> None
     out = spec_with_control_lists(agent, flavour, agent_id="desk")
     assert out["governance"] == ["no_undeclared_tool"]
     assert spec_with_control_lists(agent, flavour, agent_id="ghost")["governance"] == ["sample_governance"]
+
+
+def test_otel_control_declares_run_output_paths(tmp_path: Path) -> None:
+    for param in ("output_path", "otel_file"):
+        path = _write_control(tmp_path, spec={"observability": [{"otel": {param: "telemetry/worker.jsonl"}}]})
+        control = load_control(path)
+        assert control["spec"]["observability"] == [{"otel": {param: "telemetry/worker.jsonl"}}]

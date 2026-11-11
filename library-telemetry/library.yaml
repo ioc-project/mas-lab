@@ -12,6 +12,8 @@ plugins:
     urn: mas.observability.otel
     module: mas.library.telemetry.plugins.otel_plugin
     class: OtelObservabilityPlugin
+    attributes:
+      run_path_params: [output_path, otel_file]
     requires: [opentelemetry.sdk.trace]
     extra: convert
   - type: step
