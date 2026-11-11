@@ -395,3 +395,5 @@ Design rules:
 An OTel plugin may be shared by native multi-agent observability setup. It keeps transformation state separate for each agent and conversation, and serializes access to the shared converter. This preserves agent attribution when streams reuse correlation numbers while retaining cross-agent trace links. The owning plugin set drains operator queues before flushing and closing the exporter.
 
 Native Controls may configure `output_path` or `otel_file` as relative run output paths. The plugin resolves them against the runtime output base, while the owning plugin set handles queue draining and shutdown.
+
+Runtime turns resolve the incoming session before emitting their opening telemetry event. Generated session IDs, explicit IDs and follow-ups therefore use the same projection context for execution starts, model events and replies.

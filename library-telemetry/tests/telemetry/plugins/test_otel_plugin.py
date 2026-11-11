@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import pytest
 from mas.library.standard.lib.observability.native.transform import (
     NativeObservabilityTransform,
     TransformContext,
@@ -205,3 +206,48 @@ def test_shared_run_frame_is_inherited_and_flushed_on_close() -> None:
     empty = OtelObservabilityPlugin()
     empty.on_transition(TransitionEvent(contract_id="tool", mealy_symbol="TOOL_CALL", phase="start"))
     empty.close()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("explicit_session", [False, True])
+def test_runtime_turn_projection_keeps_effective_session(tmp_path, asynchronous, explicit_session):
+    import asyncio
+
+    from mas.library.telemetry.plugins.otel_plugin import create_otel_plugin
+    from mas.runtime.boundary.obs.plugins import ObsPluginSet
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.engine.simulated import SimulatedEngine
+
+    plugin = create_otel_plugin(
+        spans_path=tmp_path / "spans.jsonl", converter_profile="raw", app_name="test", context=TransformContext()
+    )
+    owner = ObsPluginSet(plugins=[plugin])
+    for agent in ("reader", "writer"):
+        instance = RuntimeInstance.from_parts(engine=SimulatedEngine(llm_next_step=lambda _: "STOP", stop_text=agent))
+        instance.driver.agent_id = agent
+        owner.subscribe_to(instance.driver.observability, agent_id=agent)
+        instance.obs_plugin_set = owner
+        owner.begin_run(instance.driver.observability)
+        for i, session in enumerate(("A" if explicit_session else "", "B", "A")):
+            kwargs = {"session_id": session, "turn_id": f"u{i}"}
+            if asynchronous:
+                asyncio.run(instance.arun_user_text("hello", **kwargs))
+            else:
+                instance.run_user_text("hello", **kwargs)
+    owner.flush()
+    records = plugin.converter._seen_events
+    starts = [ev for ev in records if ev["kind"] == "execution_start"]
+    ends = [ev for ev in records if ev["kind"] == "execution_end"]
+    responses = [ev for ev in records if ev["kind"] == "user_response"]
+    assert len(starts) == len(ends) == len(responses) == 6
+    ends_by_call = {ev["call_id"]: ev for ev in ends}
+    replies_by_parent = {ev["parent_call_id"]: ev for ev in responses}
+    for start in starts:
+        end = ends_by_call[start["call_id"]]
+        response = replies_by_parent[start["call_id"]]
+        assert start["call_id"] == end["call_id"] == response["parent_call_id"]
+        assert start["session_id"] == end["session_id"] == response["session_id"]
+        assert start["session_id"]
+        assert response["turn_id"] == start["turn_id"]
+        assert response["call_id"] != "-resp"
+    owner.close()
