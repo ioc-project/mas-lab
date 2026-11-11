@@ -16,7 +16,12 @@ from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.errors import InvalidAgentResponseError
 from a2a.utils.proto_utils import to_stream_response
 from google.protobuf.json_format import MessageToDict
-from mas.runtime.boundary.webserver import WebServerContract, WebServerHandle
+from mas.runtime.boundary.webserver import (
+    TransportValidatingWebServer,
+    WebServerContract,
+    WebServerHandle,
+    WebServerTransport,
+)
 from mas.runtime.spec.endpoint_usage import usage_listens
 
 from .agentcard import agent_card_from_manifest
@@ -114,9 +119,10 @@ class A2AExposure:
         if webserver is None:
             from mas.runtime.registry import get_registry
 
+            binding = ((endpoint or {}).get("a2a") or {}).get("webserver", {"type": "uvicorn"})
             webserver = get_registry().create(
                 "webserver",
-                binding={"type": "uvicorn"},
+                binding=binding,
             )
         self._webserver = webserver
 
@@ -156,7 +162,16 @@ class A2AExposure:
         )
         self.capabilities = dict(a2a_config.get("capabilities") or {})
 
+    def validate_transports(self) -> None:
+        """Validate every enabled transport before cards, resources or listeners."""
+        transports: set[WebServerTransport] = {"http"}
+        if self.grpc_port is not None or self.grpc_url:
+            transports.add("grpc")
+        if isinstance(self._webserver, TransportValidatingWebServer):
+            self._webserver.validate_transports(frozenset(transports))
+
     def build_app(self, manifest: dict[str, Any], handler: Callable[..., Any]) -> Any:
+        self.validate_transports()
         if not self.agent_card_enabled:
             raise ValueError("A2A exposure requires agentCard=true")
         url = self.public_url or f"http://{self.host}:{self.port}"
