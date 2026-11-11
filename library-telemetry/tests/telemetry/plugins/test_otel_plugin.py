@@ -142,3 +142,66 @@ def test_on_transition_falls_back_to_override_field_when_event_has_none() -> Non
 
     assert converter.processed
     assert all(rec.get("session_id") == "override-session-id" for rec in converter.processed)
+
+
+def test_shared_plugin_preserves_agents_with_reused_call_numbers() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    converter = _DummyConverter()
+    plugin = OtelObservabilityPlugin(converter=converter, context=TransformContext(agent_id="planner"))
+
+    def emit(agent):
+        for kind, phase in (("engine.io", "start"), ("engine.io.return", "end")):
+            plugin.on_transition(
+                TransitionEvent(
+                    contract_id="tool",
+                    mealy_symbol="TOOL_CALL",
+                    phase=phase,
+                    agent_id=agent,
+                    session_id="conversation",
+                    correlation_id=1,
+                    boundary_kind=kind,
+                    attributes={"op": "TOOL_CALL", "tool_name": "lookup_record"},
+                )
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(emit, ["reader", "writer"]))
+    starts = [record for record in converter.processed if record["kind"] == "tool_call_start"]
+    ends = [record for record in converter.processed if record["kind"] == "tool_call_end"]
+    assert {record["agent_id"] for record in starts} == {"reader", "writer"}
+    assert len(starts) == len(ends) == 2
+    assert {record["call_id"] for record in starts} == {record["call_id"] for record in ends}
+
+
+def test_shared_run_frame_is_inherited_and_flushed_on_close() -> None:
+    converter = _DummyConverter()
+    plugin = OtelObservabilityPlugin(converter=converter)
+    plugin.on_transition(
+        TransitionEvent(
+            contract_id="orchestrator",
+            mealy_symbol="mas_call_start",
+            phase="event",
+            agent_id="mas",
+            run_id="run",
+            boundary_kind="session",
+            attributes={"call_id": "mas-call"},
+        )
+    )
+    plugin.on_transition(
+        TransitionEvent(
+            contract_id="orchestrator",
+            mealy_symbol="user_input",
+            phase="event",
+            agent_id="worker",
+            session_id="conversation",
+            boundary_kind="session",
+            attributes={"text": "request"},
+        )
+    )
+    assert plugin._contexts[("worker", "conversation")].mas_call_id == "mas-call"
+    plugin.close()
+    assert converter.flush_count == 1
+    empty = OtelObservabilityPlugin()
+    empty.on_transition(TransitionEvent(contract_id="tool", mealy_symbol="TOOL_CALL", phase="start"))
+    empty.close()
