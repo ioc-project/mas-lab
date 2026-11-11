@@ -83,6 +83,7 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 ```
 
 For a MAS, declare remote dependencies as named endpoints in an `infra/v1` Application manifest, and keep `workflow.nodes[].delegates_to` as the topology.
+Optional [A2A delivery policies](docs/a2a/delivery-policy.md) authorize replies before delivery.
 See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-compliance.md).
 
 ## Development notes
