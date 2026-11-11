@@ -97,3 +97,9 @@ Tests:
 - [Context assembly](../manifests/context-assembly.md)
 - [Conversation summarization](../manifests/summarization.md)
 - [Compiled defaults](../references/defaults.md)
+
+## A2A receiver turns
+
+A2A receivers restore and commit working memory through the session controller. Reusing a context ID restores that receiver's earlier messages and tool results when `spec.working_memory.persistent` is enabled. Another context starts with separate history. Protocol messages are treated as user text, not terminal commands.
+
+The receiver serializes turns that share a runtime instance, including turns from different contexts. A failed turn leaves the last committed history available for the next request. This history is in memory and does not resume a previous A2A task or survive a process restart.

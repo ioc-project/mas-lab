@@ -31,7 +31,9 @@ def merge_send_context(
     mode = context.mode if context is not None else ""
     if sender is None:
         sender = context.sender if context is not None else ""
-    return SendContext(headers=outgoing, intent=intent, sender=sender, mode=mode)
+    return SendContext(
+        headers=outgoing, intent=intent, sender=sender, mode=mode, thread=context.thread if context else ""
+    )
 
 
 def align_send(
@@ -44,5 +46,5 @@ def align_send(
     ctx = merge_send_context(headers, context, sender=sender)
     outgoing = dict(ctx.headers)
     return outgoing, SendContext(
-        headers=outgoing, intent=ctx.intent, sender=ctx.sender, mode=ctx.mode
+        headers=outgoing, intent=ctx.intent, sender=ctx.sender, mode=ctx.mode, thread=ctx.thread
     )

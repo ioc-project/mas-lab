@@ -36,6 +36,11 @@ propertyNames: &no_secret_key
   not:
     pattern: "^((.*[_-])?([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy])|.*[a-z0-9](S[Ee][Cc][Rr][Ee][Tt]|P[Aa][Ss][Ss][Ww][Oo][Rr][Dd]|P[Aa][Ss][Ss][Ww][Dd]|P[Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|T[Oo][Kk][Ee][Nn]|A[Pp][Ii][_-]?[Kk][Ee][Yy]|A[Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|C[Oo][Oo][Kk][Ii][Ee]|C[Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|C[Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]|P[Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy]))$"
 properties:
+  conversation:
+    type: string
+    enum: [explicit, per_relationship]
+    description: Optional A2A peer conversation reuse policy.
+
   protocol:
     type: string
     minLength: 1

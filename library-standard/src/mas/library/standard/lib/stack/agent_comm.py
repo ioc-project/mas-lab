@@ -41,6 +41,7 @@ def to_envelope(
             "intent": ctx.intent,
             "sender": ctx.sender,
             "mode": ctx.mode,
+            "thread": ctx.thread,
         },
     )
 
@@ -97,5 +98,6 @@ def call_kwargs(envelope: Envelope) -> dict[str, Any]:
             intent=str(meta.get("intent") or ""),
             sender=str(meta.get("sender") or ""),
             mode=str(meta.get("mode") or ""),
+            thread=str(meta.get("thread") or ""),
         ),
     }

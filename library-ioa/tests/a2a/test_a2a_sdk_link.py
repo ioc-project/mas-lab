@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
@@ -18,6 +18,7 @@ def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
         "status": "completed",
         "result": "remote response",
     }
+    client.asend_message = AsyncMock(return_value=client.send_message.return_value)
     plugin = A2AAgentComm.__new__(A2AAgentComm)
     plugin._client = client
 
@@ -30,11 +31,15 @@ def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
         context_id="",
         metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
     )
-    assert client.send_message.call_count == 3
+    assert client.send_message.call_count == 2
+    client.asend_message.assert_awaited_once_with(
+        "task", context_id="", metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""}
+    )
 
 
 def test_a2a_refuses_inform_and_ask() -> None:
     client = Mock()
+    client.asend_message = AsyncMock(return_value=client.send_message.return_value)
     plugin = A2AAgentComm.__new__(A2AAgentComm)
     plugin._client = client
     assert plugin.honoured_send_intents() == frozenset({"task"})
@@ -46,6 +51,7 @@ def test_a2a_refuses_inform_and_ask() -> None:
 
 def test_a2a_asend_refuses_non_task_intent() -> None:
     client = Mock()
+    client.asend_message = AsyncMock(return_value=client.send_message.return_value)
     plugin = A2AAgentComm.__new__(A2AAgentComm)
     plugin._client = client
     for intent in ("inform", "ask", "steer"):

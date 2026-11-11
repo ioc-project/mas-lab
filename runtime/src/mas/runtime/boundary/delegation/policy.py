@@ -45,6 +45,10 @@ _DELEGATE_PARAMS = {
     "type": "object",
     "properties": {
         "task": {"type": "string", "description": "Task for the delegate agent."},
+        "thread": {
+            "type": "string",
+            "description": "Optional independent thread for automatic A2A reuse. Omit context_id when using thread.",
+        },
         "context_id": {
             "type": "string",
             "description": (
@@ -70,7 +74,7 @@ def _workflow(manifest: dict | None) -> dict[str, Any]:
 
 def delegation_style(manifest: dict | None) -> str:
     """Extract delegation_style from manifest behavior settings.
-    
+
     Returns:
         The delegation style ('typed', 'none', etc.). Defaults to 'typed'.
         Current OSS supports only 'typed' (delegate_to_<id> tools).
@@ -86,10 +90,10 @@ def delegation_style(manifest: dict | None) -> str:
 
 def uses_llm_peer_delegation(manifest: dict | None) -> bool:
     """Check if the manifest enables LLM-driven peer delegation.
-    
+
     Delegation is enabled when behavior.delegation_style is 'typed'.
     Delegation enablement is capability-driven (behavior.delegation_style).
-    
+
     Returns:
         True if typed delegation tools should be exposed, False otherwise.
     """
@@ -107,17 +111,17 @@ def entry_agent_id(manifest: dict | None) -> str | None:
 
 def delegation_targets(manifest: dict | None, *, agent_id: str | None = None) -> list[str]:
     """Get delegation peer targets for a specific agent from workflow topology.
-    
+
     Args:
         manifest: Agent or MAS manifest dict.
         agent_id: Optional agent ID. If None, returns all delegation targets
                   across the entire workflow.
-    
+
     Returns:
         List of agent IDs this agent can delegate to, based on:
         1. behavior.delegation_style == 'typed' (capability contract)
         2. workflow.nodes[].delegates_to (topology declaration)
-        
+
         Returns empty list if delegation is disabled or agent has no peers.
     """
     if not manifest or not uses_llm_peer_delegation(manifest):
@@ -165,8 +169,7 @@ def openai_delegation_tools(
             "type": "function",
             "function": {
                 "name": delegate_tool_name(peer),
-                "description": descriptions.get(peer)
-                or f"Delegate a sub-task to agent {peer}.",
+                "description": descriptions.get(peer) or f"Delegate a sub-task to agent {peer}.",
                 "parameters": _DELEGATE_PARAMS,
             },
         }

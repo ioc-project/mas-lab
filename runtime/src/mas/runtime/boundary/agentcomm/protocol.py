@@ -16,6 +16,7 @@ class SendContext:
     intent: str = ""
     sender: str = ""
     mode: str = ""
+    thread: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "headers", MappingProxyType(dict(self.headers)))
@@ -26,12 +27,36 @@ class SendContext:
             intent=self.intent,
             sender=self.sender,
             mode=self.mode,
+            thread=self.thread,
         )
         memo[id(self)] = copied
         return copied
 
-    def __reduce__(self) -> tuple[type[SendContext], tuple[dict[str, str], str, str, str]]:
-        return (type(self), (dict(self.headers), self.intent, self.sender, self.mode))
+    def __reduce__(self) -> tuple[type[SendContext], tuple[dict[str, str], str, str, str, str]]:
+        return (type(self), (dict(self.headers), self.intent, self.sender, self.mode, self.thread))
+
+
+@dataclass(frozen=True)
+class ConversationContext:
+    session_id: str
+    agent_id: str
+
+
+_conversation: ContextVar[ConversationContext | None] = ContextVar("mas_conversation", default=None)
+
+
+def current_conversation() -> ConversationContext | None:
+    """The caller's conversation, distinct from a remote peer's protocol context."""
+    return _conversation.get()
+
+
+@contextmanager
+def bound_conversation(session_id: str, agent_id: str) -> Iterator[None]:
+    token = _conversation.set(ConversationContext(session_id, agent_id))
+    try:
+        yield
+    finally:
+        _conversation.reset(token)
 
 
 _current_transport: ContextVar[str] = ContextVar(

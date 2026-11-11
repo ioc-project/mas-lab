@@ -27,3 +27,11 @@ the same as an agent-keyed row: ctl writes it as the agent's row, and
 
 [A2A internals](../../../../../docs/a2a/developer.md),
 [Communication stack](../../../../../docs/references/comm-stack.md#stack).
+
+## Automatic peer conversations
+
+Set `conversation: per_relationship` on a connecting A2A Application endpoint to retain recipient-issued contexts across delegations. The default is `explicit`, which preserves existing behavior. A first automatic call omits the outbound context, and later calls from the same caller conversation and agent to that peer reuse the returned ID. Each call is a new request, not a resumed task.
+
+An optional delegation `thread` names an independent conversation with that peer. It is local bookkeeping, not a protocol context ID. An explicit `context_id` still passes through unchanged and cannot be combined with `thread`. Missing caller context or an unresolved first response raises an error rather than silently restarting a conversation. Transport errors do not retry possible writes.
+
+Contexts remain in memory for the lifetime of the client route. Receiving agents need their own history support. Different relationship context IDs do not change native causal correlation metadata.

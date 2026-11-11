@@ -236,17 +236,19 @@ class RuntimeInstance:
         method's — it never mints one, only forwards or omits.
         """
         exec_id = self._begin_user_turn(text, turn_id, parent_call_id)
-        trace = self.feed(
-            self._user_input_event(
-                text,
-                turn_id,
-                session_id,
-                upstream_correlation_id,
-                source=source,
-                sender=sender,
-                intent=intent,
-            )
+        from mas.runtime.boundary.agentcomm.protocol import bound_conversation
+
+        event = self._user_input_event(
+            text,
+            turn_id,
+            session_id,
+            upstream_correlation_id,
+            source=source,
+            sender=sender,
+            intent=intent,
         )
+        with bound_conversation(event.session_id, self.driver.agent_id):
+            trace = self.feed(event)
         self._finish_user_turn(exec_id, trace)
         return trace
 
@@ -267,17 +269,19 @@ class RuntimeInstance:
     ) -> DriverTrace:
         """Async twin of :meth:`run_user_text` — awaits ``driver.afeed``."""
         exec_id = self._begin_user_turn(text, turn_id, parent_call_id)
-        trace = await self.afeed(
-            self._user_input_event(
-                text,
-                turn_id,
-                session_id,
-                upstream_correlation_id,
-                source=source,
-                sender=sender,
-                intent=intent,
-            )
+        from mas.runtime.boundary.agentcomm.protocol import bound_conversation
+
+        event = self._user_input_event(
+            text,
+            turn_id,
+            session_id,
+            upstream_correlation_id,
+            source=source,
+            sender=sender,
+            intent=intent,
         )
+        with bound_conversation(event.session_id, self.driver.agent_id):
+            trace = await self.afeed(event)
         self._finish_user_turn(exec_id, trace)
         return trace
 

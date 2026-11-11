@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import math
+from collections.abc import Awaitable, Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Lock
 from typing import Any
 
 import httpx
@@ -31,6 +34,10 @@ class A2AClient:
         self.transport = transport
         self._agent_card_cache: dict[str, Any] | None = None
         self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mas-a2a")
+        self._lifecycle_lock = Lock()
+        self._closed = False
+        self._async_calls: dict[asyncio.Task, tuple[asyncio.AbstractEventLoop, Future]] = {}
+        self._sync_calls: set[Future] = set()
 
     def _normalize_sdk_payload(self, payload: Any) -> dict[str, Any]:
         if hasattr(payload, "model_dump"):
@@ -123,7 +130,7 @@ class A2AClient:
             ) as httpx_client:
                 return await self._sdk_get_agent_card(httpx_client)
 
-        return self._run_sync(load())
+        return self._run_sync(load)
 
     def send_message(
         self,
@@ -134,7 +141,7 @@ class A2AClient:
         stream: bool = False,
     ) -> dict[str, Any]:
         return self._run_sync(
-            self._sdk_send_message(
+            lambda: self._sdk_send_message(
                 message,
                 context_id=context_id,
                 metadata=metadata,
@@ -142,10 +149,112 @@ class A2AClient:
             )
         )
 
-    def close(self) -> None:
-        self._executor.shutdown(wait=True)
+    async def asend_message(
+        self,
+        message: str,
+        *,
+        context_id: str = "",
+        metadata: dict[str, str] | None = None,
+        stream: bool = False,
+    ) -> dict[str, Any]:
+        """Send on the caller's loop so cancellation reaches the SDK transport."""
+        loop = asyncio.get_running_loop()
+        with self._lifecycle_lock:
+            self._ensure_open()
+            task = loop.create_task(
+                self._checked_operation(
+                    lambda: self._sdk_send_message(message, context_id=context_id, metadata=metadata, stream=stream)
+                )
+            )
+            self._async_calls[task] = (loop, Future())
+        task.add_done_callback(self._async_done)
+        return await task
 
-    def _run_sync(self, coroutine: Any) -> Any:
+    def close(self) -> None:
+        """Stop admission and cancel async calls; async owners await ``aclose``.
+
+        Never join a worker from a running event loop: it may be waiting for
+        that loop to release a relationship lock. Outside a loop, retain the
+        synchronous client's existing draining behavior.
+        """
+        with self._lifecycle_lock:
+            if self._closed:
+                return
+            self._closed = True
+            calls = tuple(self._async_calls.items())
+        for task, (loop, _) in calls:
+            try:
+                loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:
+                if not loop.is_closed():
+                    raise
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            wait = True
+        else:
+            wait = False
+        self._executor.shutdown(wait=wait, cancel_futures=True)
+
+    async def aclose(self) -> None:
+        """Await cancellation/SDK cleanup within the configured client timeout.
+
+        A timeout leaves admission closed. Cancellation cannot undo a request
+        already sent, and no operation is automatically replayed.
+        """
+        self.close()
+        with self._lifecycle_lock:
+            calls = [completion for _, completion in self._async_calls.values()]
+            calls.extend(self._sync_calls)
+        if not calls:
+            return
+        if not math.isfinite(self.timeout) or self.timeout <= 0:
+            raise ValueError("A2A cleanup timeout must be finite and positive")
+        pending = []
+        for call in calls:
+            completion = asyncio.wrap_future(call)
+            completion.add_done_callback(self._consume_completion)
+            pending.append(asyncio.shield(completion))
+        try:
+            _, unfinished = await asyncio.wait(pending, timeout=self.timeout)
+            if unfinished:
+                raise TimeoutError("A2A client cleanup exceeded its timeout")
+        finally:
+            for future in pending:
+                if not future.done():
+                    future.cancel()
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("A2A client is closed")
+
+    @staticmethod
+    def _consume_completion(future: asyncio.Future) -> None:
+        if not future.cancelled():
+            future.exception()
+
+    async def _checked_operation(self, operation: Callable[[], Awaitable[dict[str, Any]]]) -> dict[str, Any]:
+        with self._lifecycle_lock:
+            self._ensure_open()
+        return await operation()
+
+    def _async_done(self, task: asyncio.Task) -> None:
+        with self._lifecycle_lock:
+            _, completion = self._async_calls.pop(task)
+        if not task.cancelled():
+            task.exception()
+        if not completion.done():
+            completion.set_result(None)
+
+    def _sync_done(self, future: Future) -> None:
+        with self._lifecycle_lock:
+            self._sync_calls.discard(future)
+
+    def _run_sync(self, operation: Callable[[], Awaitable[dict[str, Any]]]) -> dict[str, Any]:
         """Run SDK I/O off the caller loop, including from an async executor."""
-        future = self._executor.submit(asyncio.run, coroutine)
+        with self._lifecycle_lock:
+            self._ensure_open()
+            future = self._executor.submit(lambda: asyncio.run(self._checked_operation(operation)))
+            self._sync_calls.add(future)
+        future.add_done_callback(self._sync_done)
         return future.result()

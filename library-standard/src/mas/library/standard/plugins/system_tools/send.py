@@ -28,9 +28,7 @@ from mas.runtime.boundary.delegation.policy import (
 )
 
 _Prepare = tuple[AgentCommContract, str, str, str]
-_SEND_OPTIONAL = frozenset(
-    {"correlation_id", "caller_call_id", "context_id", "headers", "context"}
-)
+_SEND_OPTIONAL = frozenset({"correlation_id", "caller_call_id", "context_id", "headers", "context"})
 
 
 class SendToolContext(Protocol):
@@ -133,9 +131,7 @@ class SendTool:
     ) -> None:
         self._comm = comm
         self._routes = dict(routes or {})
-        self._allowed = frozenset(
-            str(peer) for peer in (allowed_peers or ()) if str(peer).strip()
-        )
+        self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
         self._accepted: WeakKeyDictionary[Any, dict[str, frozenset[str]]] = WeakKeyDictionary()
 
     def set_routes(self, routes: dict[str, AgentCommRoute]) -> None:
@@ -239,9 +235,7 @@ class SendTool:
         asend_fn = getattr(communication, "asend", None)
         names = {
             "send": _accepted_kwargs(send_fn),
-            "asend": (
-                _accepted_kwargs(asend_fn) if callable(asend_fn) else _accepted_kwargs(send_fn)
-            ),
+            "asend": (_accepted_kwargs(asend_fn) if callable(asend_fn) else _accepted_kwargs(send_fn)),
         }
         try:
             self._accepted[communication] = names
@@ -286,6 +280,7 @@ class SendTool:
         headers: dict[str, str] | None,
         intent: str,
         mode: str = "",
+        thread: str = "",
     ) -> dict[str, Any]:
         accepted = self._inspect(communication)[method]
         extra: dict[str, Any] = {}
@@ -296,9 +291,7 @@ class SendTool:
         if "context_id" in accepted:
             extra["context_id"] = context_id
         if "context" in accepted:
-            extra["context"] = SendContext(
-                intent=intent, headers=dict(headers or {}), mode=mode
-            )
+            extra["context"] = SendContext(intent=intent, headers=dict(headers or {}), mode=mode, thread=thread)
         if headers is not None and "headers" in accepted:
             extra["headers"] = dict(headers)
         return extra
@@ -310,6 +303,7 @@ class SendTool:
         *,
         intent: str = "task",
         mode: str = "",
+        thread: str = "",
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
@@ -329,6 +323,7 @@ class SendTool:
             headers=headers,
             intent=kind,
             mode=mode,
+            thread=thread,
         )
         try:
             result = communication.send(target_agent_id, payload, **extra)
@@ -365,6 +360,7 @@ class SendTool:
         *,
         intent: str = "task",
         mode: str = "",
+        thread: str = "",
         correlation_id: int = 0,
         caller_call_id: str = "",
         context_id: str = "",
@@ -386,6 +382,7 @@ class SendTool:
             headers=headers,
             intent=kind,
             mode=mode,
+            thread=thread,
         )
         try:
             if method == "asend":
@@ -418,9 +415,7 @@ class SendTool:
             context_id=context_id,
         )
 
-    def _args_to_send(
-        self, tool_name: str, arguments: dict[str, Any] | None
-    ) -> tuple[str, str, str, str] | str:
+    def _args_to_send(self, tool_name: str, arguments: dict[str, Any] | None) -> tuple[str, str, str, str] | str:
         args = dict(arguments or {})
         named = parse_delegate_tool_name(tool_name)
         if named:
@@ -470,6 +465,7 @@ class SendTool:
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
             context_id=context_id,
+            thread=str((arguments or {}).get("thread") or ""),
             ctx=ctx,
         )
 
@@ -497,6 +493,7 @@ class SendTool:
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
             context_id=context_id,
+            thread=str((arguments or {}).get("thread") or ""),
             ctx=ctx,
         )
 
