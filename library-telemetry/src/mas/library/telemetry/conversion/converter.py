@@ -219,6 +219,8 @@ class MasOtelConverter:
         self._call_id_agents: Dict[str, str] = {}
         # call_id -> lightweight span metadata (for close-time profile overlays)
         self._span_meta: Dict[str, Dict[str, Any]] = {}
+        # Context assembly can precede the LLM interval it describes.
+        self._pending_llm_contexts: Dict[str, Dict[str, Any]] = {}
         self._realtime = bool(realtime)
         self._extensions = default_extensions(self._converter_profile, extensions)
         # agent_id → OTel span id of the open/last AgentCall (SCOPE linkage).
@@ -333,6 +335,7 @@ class MasOtelConverter:
         is decided in one place. ``session.end`` is emitted here as a
         fallback when the run never recorded ``mas_call_end``.
         """
+        self._pending_llm_contexts.clear()
         do_graph = (not self._realtime) if emit_graph is None else bool(emit_graph)
         if do_graph:
             self._emit_graph_bookend()
@@ -485,6 +488,7 @@ class MasOtelConverter:
     def reset_run(self) -> None:
         """Clear per-run span state before a new run."""
         self._open_spans.clear()
+        self._pending_llm_contexts.clear()
         self._closed_span_ctx.clear()
         self._call_id_agents.clear()
         self._closed_call_ids.clear()
@@ -539,6 +543,8 @@ class MasOtelConverter:
         if not self._should_emit_span(str(attrs.get("mas.boundary") or "")):
             return None
         boundary_name = str(attrs.get("mas.boundary") or "")
+        if boundary_name == "LLMCall":
+            attrs = {**attrs, **self._pending_llm_contexts.pop(call_id, {})}
         if (
             self._converter_profile == "observe_sdk"
             and self._rewrite_tool_delegation
@@ -720,16 +726,17 @@ class MasOtelConverter:
         return str(self._agent_llm_models.get(str(agent_id or "")) or "")
 
     def attach_assembled_llm_context(self, ev: Dict[str, Any]) -> None:
-        """Copy ``context_assembled`` messages onto the open ``LLMCall``.
+        """Attach the assembled prompt, retaining it until its LLM span opens.
 
-        Cached ``llm_call_start`` events often omit ``messages`` / ``model``.
-        The assembled prompt lives on ``context_assembled`` (same call_id).
-        Inspect's tree reads ``gen_ai.input.messages`` via the LLMCall State.
+        Live context assembly can arrive before ``llm_call_start``. Both orders
+        must populate the same exported input attributes. Closed calls are not
+        reopened, and unfinished pending context is discarded at run cleanup.
         """
         call_id = str(ev.get("llm_call_id") or ev.get("call_id") or "")
         messages = ev.get("messages")
         if not call_id or not messages:
             return
+        call_id = self._scope_call_id(call_id, self.agent_id(ev)) or call_id
         encoded = self.enc(messages)
         attrs: Dict[str, Any] = {
             "mas.llm.messages": encoded,
@@ -739,8 +746,12 @@ class MasOtelConverter:
         tokens = ev.get("total_tokens")
         if tokens not in (None, ""):
             attrs[semconv.GEN_AI_USAGE_INPUT_TOKENS] = int(tokens)
+        if call_id not in self._open_spans:
+            if call_id not in self._closed_call_ids:
+                self._pending_llm_contexts[call_id] = attrs
+            return
         self.annotate_open_span(call_id, attrs)
-        meta = self._span_meta.get(self._lookup_span_key(call_id) or call_id) or {}
+        meta = self._span_meta.get(call_id) or {}
         if meta.get("boundary") == "LLMCall":
             meta["llm_messages"] = encoded
 
@@ -1380,6 +1391,8 @@ class MasOtelConverter:
             return event
         scoped = dict(event)
         kind = str(scoped.get("kind") or "")
+        if kind == "context_assembled":
+            scoped["llm_call_id"] = self._scope_call_id(scoped.get("llm_call_id") or scoped.get("call_id"), agent_id)
         is_end = kind.endswith("_end") or kind == "user_response"
         if scoped.get("call_id") is not None:
             if is_end:

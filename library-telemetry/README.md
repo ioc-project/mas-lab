@@ -389,3 +389,11 @@ Design rules:
 - Conversion is the only path that needs the OpenTelemetry SDK. Importing `mas.library.telemetry.conversion` does not require it; `MasOtelConverter` is imported lazily and raises `OtelSdkUnavailableError` on construction.
 - Adding an event kind touches only a mapping module and the envelope table, never the converter (same design as `library-kg`).
 - Replay and live mode run the same handlers. Deterministic session ids make replays reproducible, so parity checks are meaningful.
+
+### Assembled LLM inputs
+
+The converter attaches `context_assembled` messages to the corresponding LLM
+span whether context arrives before or after `llm_call_start`. It retains early
+context in memory until that call opens, using the existing agent-scoped call
+identity. Finishing or resetting a run discards unmatched context. This applies
+to both live export and file replay, with no change to the exported schema.
