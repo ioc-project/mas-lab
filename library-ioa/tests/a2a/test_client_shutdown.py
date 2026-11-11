@@ -154,7 +154,7 @@ async def test_aclose_awaits_sdk_and_http_cleanup_from_another_thread(monkeypatc
 
 @pytest.mark.asyncio
 async def test_cleanup_timeout_and_cancelled_wait_do_not_reopen_or_lose_work(monkeypatch):
-    client = A2AClient(url="http://unused", timeout=0.01)
+    client = A2AClient(url="http://unused", timeout=5)
     entered, cleaning, finish = asyncio.Event(), asyncio.Event(), asyncio.Event()
 
     async def transport(*args, **kwargs):
@@ -173,6 +173,7 @@ async def test_cleanup_timeout_and_cancelled_wait_do_not_reopen_or_lose_work(mon
     closing.cancel()
     with pytest.raises(asyncio.CancelledError):
         await closing
+    client.timeout = 0.01
     with pytest.raises(TimeoutError, match="cleanup"):
         await client.aclose()
     assert not send.done() and client._async_calls
