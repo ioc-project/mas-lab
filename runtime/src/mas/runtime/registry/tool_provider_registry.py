@@ -217,7 +217,10 @@ class ToolProviderRegistry:
                 continue
             name = provider_name(provider)
             claim = getattr(provider, "tools_claim", "*")
-            if is_star_claim(claim):
+            if getattr(provider, "has_tool_selection", False):
+                advertised = self._discover_advertised(provider, name, ctx=ctx)
+                claim = advertised
+            elif is_star_claim(claim):
                 advertised = self._discover_advertised(provider, name, ctx=ctx)
             else:
                 advertised = tuple(
@@ -243,8 +246,10 @@ class ToolProviderRegistry:
                 advertised = tuple(n for n in local_names if n and n not in externally_claimed)
                 claim = advertised
             else:
-                advertised = tuple(n for n in local_names if n) if is_star_claim(claim) else tuple(
-                    str(n) for n in (claim if not isinstance(claim, str) else (claim,)) if n and n != "*"
+                advertised = (
+                    tuple(n for n in local_names if n)
+                    if is_star_claim(claim)
+                    else tuple(str(n) for n in (claim if not isinstance(claim, str) else (claim,)) if n and n != "*")
                 )
                 if not is_star_claim(getattr(provider, "tools_claim", "*")):
                     self._verify_explicit(provider, name, advertised, ctx=ctx)
@@ -390,6 +395,8 @@ def providers_from_manifest(
     index (id → item) or a ToolServerRegistry manifest.
     """
     specs = iter_provider_specs(manifest_content)
+    if specs and "mcp_tools" in ((manifest_content or {}).get("spec") or {}):
+        raise ValueError("spec.mcp_tools cannot be combined with legacy providers; use ToolServerRegistry")
     if specs:
         providers: list[Any] = []
         for spec in specs:
@@ -408,6 +415,37 @@ def providers_from_manifest(
         server_items = list(tool_servers.values())
     else:
         server_items = list(tool_servers or [])
+
+    agent_spec = (manifest_content or {}).get("spec") or {}
+    if "mcp_tools" in agent_spec:
+        selections = agent_spec["mcp_tools"]
+        if not isinstance(selections, list):
+            raise ValueError("spec.mcp_tools must be a list")
+        indexed = index_tool_servers(server_items)
+        selected = [
+            item for item in server_items if isinstance(item, dict) and str(item.get("protocol") or "").lower() != "mcp"
+        ]
+        seen: set[str] = set()
+        for selection in selections:
+            if not isinstance(selection, dict):
+                raise ValueError("spec.mcp_tools entries must be objects")
+            name = str(selection.get("server_ref") or "")
+            server = indexed.get(name)
+            if server is None or str(server.get("protocol") or "").lower() != "mcp":
+                raise ValueError(f"Unknown MCP server reference: {name!r}")
+            if not usage_connects(server.get("usage")):
+                raise ValueError(f"MCP server {name!r} is not configured for connections")
+            if name in seen:
+                raise ValueError(f"Duplicate MCP server selection: {name!r}")
+            seen.add(name)
+            include = selection.get("include")
+            if not isinstance(include, dict) or set(include) - {"names", "prefixes"}:
+                raise ValueError(f"MCP server {name!r} requires an include selection")
+            for key, values in include.items():
+                if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values):
+                    raise ValueError(f"MCP include.{key} must contain nonempty strings")
+            selected.append({**server, "tool_selection": include})
+        server_items = selected
 
     from mas.runtime.registry import get_registry
 
@@ -433,9 +471,7 @@ def providers_from_manifest(
         if protocol and protocol not in kinds:
             ident = str(server.get("id") or server.get("name") or "").strip()
             where = f"tool server {ident!r}" if ident else "tool server"
-            raise ValueError(
-                f"{where} protocol {protocol!r} has no registered provider"
-            )
+            raise ValueError(f"{where} protocol {protocol!r} has no registered provider")
     external = [item for item in collected if str(getattr(item, "kind", "") or "") != "local"]
     local_ones = [item for item in collected if str(getattr(item, "kind", "") or "") == "local"]
     if external:

@@ -62,6 +62,29 @@ properties:
     required: [description]
     additionalProperties: false
     properties:
+      mcp_tools:
+        type: array
+        description: Positive MCP tool selections from shared infra servers. Omit for existing behavior, or use an empty list for no MCP tools.
+        x-merge:
+          strategy: replace
+        items:
+          type: object
+          additionalProperties: false
+          required: [server_ref, include]
+          properties:
+            server_ref: {type: string, minLength: 1}
+            include:
+              type: object
+              additionalProperties: false
+              properties:
+                names:
+                  type: array
+                  items: {type: string, minLength: 1}
+                  uniqueItems: true
+                prefixes:
+                  type: array
+                  items: {type: string, minLength: 1}
+                  uniqueItems: true
       context:
         type: object
         description: >

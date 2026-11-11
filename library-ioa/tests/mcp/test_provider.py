@@ -258,3 +258,95 @@ def test_mcp_kind_binds_via_urn_registry() -> None:
 def test_invalidate_is_optional_on_duck_client() -> None:
     provider = MCPToolProvider(_Client())
     provider.invalidate()
+
+
+def test_per_agent_selection_preserves_schemas_and_rejects_before_transport(monkeypatch):
+    from library_ioa.plugins.mcp.contract import as_mas_tool_spec
+    from mas.runtime.engine.tool_routing import UnclaimedToolError
+
+    schema = {
+        "type": "object",
+        "required": ["record"],
+        "properties": {"record": {"type": "object", "properties": {"kind": {"enum": ["a", "b"]}}}},
+    }
+    tools = [
+        {"name": "records_get", "description": "Read record", "inputSchema": schema, "outputSchema": schema},
+        {"name": "records_update", "inputSchema": schema},
+    ]
+    clients = []
+
+    def create(_):
+        client = _Client(tools=tools)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(MCPClientFactory, "create_client", create)
+    servers = [{"id": "records", "protocol": "mcp", "command": "unused"}]
+    reader = providers_from_manifest(
+        {"spec": {"mcp_tools": [{"server_ref": "records", "include": {"names": ["records_get"]}}]}},
+        tool_servers=servers,
+    )[0]
+    editor = providers_from_manifest(
+        {"spec": {"mcp_tools": [{"server_ref": "records", "include": {"prefixes": ["records_"]}}]}},
+        tool_servers=servers,
+    )[0]
+    assert reader.list_tools() == [as_mas_tool_spec(tools[0])]
+    assert editor.list_tools() == [as_mas_tool_spec(tool) for tool in tools]
+    with pytest.raises(UnclaimedToolError):
+        reader.call_tool("records_update", {})
+    assert not hasattr(clients[0], "call_kwargs")
+    reader.call_tool("records_get", {})
+    assert clients[0].list_calls == 1
+    assert hasattr(clients[0], "call_kwargs")
+    registry = ToolProviderRegistry()
+    registry.register_provider(reader)
+    assert [tool["name"] for tool in registry.list_tools()] == ["records_get"]
+    with pytest.raises(UnclaimedToolError):
+        registry.call_tool("records_update", {})
+
+
+def test_empty_scope_removes_mcp_providers():
+    providers = providers_from_manifest(
+        {"spec": {"mcp_tools": []}}, tool_servers=[{"id": "records", "protocol": "mcp", "command": "unused"}]
+    )
+    assert not any(provider.kind == "mcp" for provider in providers)
+
+
+@pytest.mark.parametrize("include", [{"names": ["missing"]}, {"prefixes": ["missing_"]}])
+def test_unresolved_selection_is_an_error(include):
+    provider = MCPToolProvider(_Client(), tool_selection=include)
+    with pytest.raises(ValueError, match="did not resolve"):
+        provider.list_tools()
+
+
+def test_server_claim_is_an_upper_bound_and_empty_selection_is_valid():
+    provider = MCPToolProvider(_Client(), tools_claim=[], tool_selection={"names": ["calculator"]})
+    with pytest.raises(ValueError, match="did not resolve"):
+        provider.list_tools()
+    empty = MCPToolProvider(_Client(), tool_selection={})
+    registry = ToolProviderRegistry()
+    registry.register_provider(empty)
+    assert registry.list_tools() == []
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        None,
+        ["records"],
+        [{"server_ref": "missing", "include": {}}],
+        [{"server_ref": "records", "include": {"names": "calculator"}}],
+    ],
+)
+def test_invalid_selection_fails_clearly(selection):
+    with pytest.raises(ValueError):
+        providers_from_manifest(
+            {"spec": {"mcp_tools": selection}}, tool_servers=[{"id": "records", "protocol": "mcp", "command": "unused"}]
+        )
+
+
+def test_selection_cannot_be_bypassed_by_legacy_providers():
+    from mas.runtime.registry.tool_provider_registry import providers_from_manifest
+
+    with pytest.raises(ValueError, match="legacy providers"):
+        providers_from_manifest({"spec": {"mcp_tools": [], "providers": [{"kind": "mcp", "name": "server"}]}})

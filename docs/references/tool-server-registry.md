@@ -130,3 +130,18 @@ The registry requires `id` and `protocol`. URL and other connection fields depen
 - [tool-contract.md](tool-contract.md): `call_tool`.
 - [Tutorial 4: MCP tools](../tutorials/04-mcp-tools/README.md)
 - Schema: [`infra.schema.yaml`](../schemas/runtime/infra.schema.yaml)
+
+## Per-agent MCP selections
+
+An agent may select a subset of tools from shared MCP server definitions:
+
+```yaml
+spec:
+  mcp_tools:
+    - server_ref: records
+      include:
+        names: [records_get]
+        prefixes: [records_search_]
+```
+
+Names and prefixes form a union within the server's existing tool claim. Connection settings remain in the infra `ToolServerRegistry`. Discovery supplies the complete schemas for selected tools, and the same selection rejects excluded calls before transport. Unknown servers and unresolved names or prefixes are errors. Use `mcp_tools: []` for no MCP tools. Omitting the field preserves existing behavior. Non-MCP providers are unaffected.

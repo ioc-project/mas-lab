@@ -18,6 +18,8 @@ additionalProperties: false
 patternProperties:
   "^x-": {}
 properties:
+  mcp_tools:
+    $ref: "./overlay-agent-patch.schema.yaml#/properties/mcp_tools"
   design_pattern:
     $ref: "./overlay-agent-patch.schema.yaml#/properties/design_pattern"
   context_manager:
