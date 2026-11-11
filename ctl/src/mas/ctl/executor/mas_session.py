@@ -405,7 +405,7 @@ def wire_peer_delegation(
         if not isinstance(binding, dict) or not application_endpoint_is_used(binding):
             continue
         kind = str(binding.get("protocol") or binding.get("kind") or "").strip()
-        params = {key: binding[key] for key in ("url", "headers", "timeout") if key in binding}
+        params = {key: binding[key] for key in ("url", "headers", "timeout", "conversation") if key in binding}
         if "url" not in params:
             raise ValueError(f"infra Application endpoint for agent {name!r} requires url")
         handler = registry.create("agent_comm", binding={"type": kind, "params": params})

@@ -98,6 +98,12 @@ def test_delegate_to_schemas_match_openai_delegation_tools() -> None:
         "type": "object",
         "properties": {
             "task": {"type": "string", "description": "Task for the delegate agent."},
+            "thread": {
+                "type": "string",
+                "description": (
+                    "Optional independent thread for automatic A2A reuse. Omit context_id when using thread."
+                ),
+            },
             "context_id": {
                 "type": "string",
                 "description": (

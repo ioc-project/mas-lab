@@ -107,3 +107,92 @@ def test_a2a_agent_comm_reaches_an_in_process_peer() -> None:
     finally:
         comm.close()
         handle.close()
+
+
+def test_peer_followups_reuse_recipient_context_over_http() -> None:
+    from mas.runtime.boundary.agentcomm.protocol import bound_conversation
+
+    (port,) = _hold_ports(1)
+    url = f"http://127.0.0.1:{port}"
+    received = []
+
+    def respond(prompt, **metadata):
+        received.append((prompt, metadata))
+        return {"text": "answer"}
+
+    handle = A2AExposure(
+        endpoint={"protocol": "a2a", "usage": "listen", "url": url}, webserver=UvicornWebServer()
+    ).serve_background(
+        {"metadata": {"name": "peer"}, "spec": {"description": "peer"}},
+        respond,
+    )
+    comm = A2AAgentComm(url=url, timeout=10, conversation="per_relationship")
+    try:
+        _wait(port)
+        with bound_conversation("incoming", "caller"):
+            comm.send("peer", "assignment")
+            comm.send("peer", "follow up")
+        first, second = [metadata for _, metadata in received]
+        assert first["session_id"] == second["session_id"] != "incoming"
+        assert first["turn_id"] != second["turn_id"]
+    finally:
+        comm.close()
+        handle.close()
+
+
+def test_nested_runtime_followups_keep_separate_peer_histories() -> None:
+    import pytest
+    from mas.runtime.boundary.agentcomm.protocol import bound_conversation
+    from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryConfig
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.engine.simulated import SimulatedEngine
+    from mas.runtime.schema.ingress import EngineIoReturn
+
+    make_runtime_handler = pytest.importorskip("mas.ctl.session.exposure").make_runtime_handler
+    ports = _hold_ports(2)
+    handles, links, observed = [], {}, {"coordinator": [], "worker": []}
+
+    def receiver(name):
+        engine = SimulatedEngine(llm_next_step=lambda _: "STOP")
+        instance = RuntimeInstance.from_parts(engine=engine)
+        instance.driver.agent_id = name
+        instance.working_memory = WorkingMemoryConfig(persistent=True)
+        original = engine.invoke
+
+        def invoke(io):
+            if io.op != "LLM_CALL":
+                return original(io)
+            observed[name].append(list(instance.driver.ctx.committed_messages))
+            if name == "coordinator":
+                links["worker"].send("worker", "lookup" if len(observed[name]) == 1 else "additional detail")
+            return EngineIoReturn(
+                correlation_id=io.correlation_id, response_kind="MODEL_TEXT", next_step="STOP", text="answer"
+            )
+
+        engine.invoke = invoke
+        return make_runtime_handler(instance, manifest={"metadata": {"name": name}})
+
+    try:
+        for name, port in zip(("worker", "coordinator"), ports):
+            url = f"http://127.0.0.1:{port}"
+            handles.append(
+                A2AExposure(
+                    endpoint={"protocol": "a2a", "usage": "listen", "url": url},
+                    webserver=UvicornWebServer(),
+                ).serve_background({"metadata": {"name": name}}, receiver(name))
+            )
+            _wait(port)
+            links[name] = A2AAgentComm(url=url, timeout=10, conversation="per_relationship")
+        with bound_conversation("incoming", "planner"):
+            links["coordinator"].send("coordinator", "assignment")
+            links["coordinator"].send("coordinator", "detail")
+        assert any(m.get("content") == "assignment" for m in observed["coordinator"][1])
+        assert any(m.get("content") == "lookup" for m in observed["worker"][1])
+        assert not any(m.get("content") == "assignment" for m in observed["worker"][1])
+        contexts = [next(iter(link._conversations._relationships.values())).context_id for link in links.values()]
+        assert len(set(contexts)) == 2 and "incoming" not in contexts
+    finally:
+        for link in links.values():
+            link.close()
+        for handle in reversed(handles):
+            handle.close()
