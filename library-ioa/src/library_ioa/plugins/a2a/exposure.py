@@ -15,7 +15,12 @@ from a2a.server.tasks import (
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.proto_utils import to_stream_response
 from google.protobuf.json_format import MessageToDict
-from mas.runtime.boundary.webserver import WebServerContract, WebServerHandle
+from mas.runtime.boundary.webserver import (
+    TransportValidatingWebServer,
+    WebServerContract,
+    WebServerHandle,
+    WebServerTransport,
+)
 from mas.runtime.spec.endpoint_usage import usage_listens
 
 from .agentcard import agent_card_from_manifest
@@ -36,10 +41,7 @@ class A2APushNotificationSender(BasePushNotificationSender):
     ) -> bool:
         headers: dict[str, str] = {}
         if push_info.authentication.scheme and push_info.authentication.credentials:
-            headers["Authorization"] = (
-                f"{push_info.authentication.scheme} "
-                f"{push_info.authentication.credentials}"
-            )
+            headers["Authorization"] = f"{push_info.authentication.scheme} {push_info.authentication.credentials}"
         elif push_info.token:
             headers["X-A2A-Notification-Token"] = push_info.token
         try:
@@ -94,9 +96,10 @@ class A2AExposure:
         if webserver is None:
             from mas.runtime.registry import get_registry
 
+            binding = ((endpoint or {}).get("a2a") or {}).get("webserver", {"type": "uvicorn"})
             webserver = get_registry().create(
                 "webserver",
-                binding={"type": "uvicorn"},
+                binding=binding,
             )
         self._webserver = webserver
 
@@ -104,13 +107,9 @@ class A2AExposure:
         if endpoint.get("protocol") != "a2a":
             raise ValueError("A2A exposure requires an Application endpoint with protocol: a2a")
         usage = endpoint.get("usage")
-        deploys_endpoint = (
-            usage_listens(usage) if usage is not None else endpoint.get("expose") is True
-        )
+        deploys_endpoint = usage_listens(usage) if usage is not None else endpoint.get("expose") is True
         if not deploys_endpoint:
-            raise ValueError(
-                "A2A Application endpoint must set usage: listen or [connect, listen]"
-            )
+            raise ValueError("A2A Application endpoint must set usage: listen or [connect, listen]")
         public_url = str(endpoint.get("url") or "")
         parsed_url = urlsplit(public_url)
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
@@ -121,15 +120,9 @@ class A2AExposure:
         a2a_config = endpoint.get("a2a") or {}
         listen = a2a_config.get("listen") or {}
         if parsed_url.scheme == "https" and not listen:
-            raise ValueError(
-                "An HTTPS advertised url requires a2a.listen settings for the local HTTP server"
-            )
+            raise ValueError("An HTTPS advertised url requires a2a.listen settings for the local HTTP server")
         self.host = str(listen.get("host") or parsed_url.hostname)
-        self.port = int(
-            listen.get("port")
-            or parsed_url.port
-            or (443 if parsed_url.scheme == "https" else 80)
-        )
+        self.port = int(listen.get("port") or parsed_url.port or (443 if parsed_url.scheme == "https" else 80))
         self.public_url = public_url.rstrip("/")
         self.grpc_port = a2a_config.get("grpc_port")
         configured_grpc_url = a2a_config.get("grpc_url")
@@ -142,13 +135,20 @@ class A2AExposure:
         )
         self.capabilities = dict(a2a_config.get("capabilities") or {})
 
+    def validate_transports(self) -> None:
+        """Validate every enabled transport before cards, resources or listeners."""
+        transports: set[WebServerTransport] = {"http"}
+        if self.grpc_port is not None or self.grpc_url:
+            transports.add("grpc")
+        if isinstance(self._webserver, TransportValidatingWebServer):
+            self._webserver.validate_transports(frozenset(transports))
+
     def build_app(self, manifest: dict[str, Any], handler: Callable[..., Any]) -> Any:
+        self.validate_transports()
         if not self.agent_card_enabled:
             raise ValueError("A2A exposure requires agentCard=true")
         url = self.public_url or f"http://{self.host}:{self.port}"
-        grpc_url = self.grpc_url or (
-            f"{self.host}:{self.grpc_port}" if self.grpc_port is not None else None
-        )
+        grpc_url = self.grpc_url or (f"{self.host}:{self.grpc_port}" if self.grpc_port is not None else None)
         push_config_store = None
         push_sender = None
         if self.capabilities.get("pushNotifications"):
@@ -181,11 +181,7 @@ class A2AExposure:
             message = getattr(context, "message", None)
             metadata = getattr(message, "metadata", None)
             metadata = (
-                metadata
-                if isinstance(metadata, dict)
-                else MessageToDict(metadata)
-                if metadata is not None
-                else {}
+                metadata if isinstance(metadata, dict) else MessageToDict(metadata) if metadata is not None else {}
             )
             upstream_correlation_id: int | None = None
             try:
@@ -209,11 +205,7 @@ class A2AExposure:
                     pass
             result = handler(
                 prompt,
-                turn_id=(
-                    getattr(message, "message_id", "")
-                    or getattr(context, "task_id", "")
-                    or "u1"
-                ),
+                turn_id=(getattr(message, "message_id", "") or getattr(context, "task_id", "") or "u1"),
                 session_id=session_id,
                 **runtime_kwargs,
             )
@@ -238,9 +230,7 @@ class A2AExposure:
                 try:
                     serve_async = getattr(self._webserver, "serve_async", None)
                     if not callable(serve_async):
-                        raise RuntimeError(
-                            "The selected webserver plugin does not support shared-loop gRPC serving"
-                        )
+                        raise RuntimeError("The selected webserver plugin does not support shared-loop gRPC serving")
                     await serve_async(app, host=self.host, port=self.port)
                 finally:
                     await grpc_server.stop(grace=5)
