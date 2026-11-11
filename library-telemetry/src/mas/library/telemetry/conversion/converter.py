@@ -77,6 +77,7 @@ class SpanIdReuse:
     def reuse_span_id(self, span_id: int) -> None:
         raise NotImplementedError
 
+
 if OTEL_AVAILABLE:
     from opentelemetry import context as context_api
     from opentelemetry import trace
@@ -202,9 +203,7 @@ class MasOtelConverter:
         self._export_layers = export_layers or ExportLayers()
         self._converter_profile = normalize_converter_profile(converter_profile)
         self._annotation_enabled = (
-            self._converter_profile != "observe_sdk"
-            if annotation_enabled is None
-            else bool(annotation_enabled)
+            self._converter_profile != "observe_sdk" if annotation_enabled is None else bool(annotation_enabled)
         )
         self._run_id: str = ""
         self._session_uuid: str = str(session_uuid or uuid.uuid4())
@@ -248,9 +247,7 @@ class MasOtelConverter:
         self._rewritten_delegate_ids: Set[str] = set()
         self._orphan_call_end_total: int = 0
         self._agent_llm_models: Dict[str, str] = {
-            str(key): str(value)
-            for key, value in (agent_llm_models or {}).items()
-            if key and value
+            str(key): str(value) for key, value in (agent_llm_models or {}).items() if key and value
         }
         self._seen_events: list[Dict[str, Any]] = []
         self._graph_emitted: bool = False
@@ -291,22 +288,12 @@ class MasOtelConverter:
         if run_id and run_id not in self._SENTINEL_RUN_IDS:
             self._run_id = run_id
         explicit_session_id = str(
-            event.get("session_id")
-            or (event.get("context") or {}).get("session_id")
-            or ""
+            event.get("session_id") or (event.get("context") or {}).get("session_id") or ""
         ).strip()
-        if (
-            explicit_session_id
-            and explicit_session_id not in self._SENTINEL_RUN_IDS
-            and not self._session_uuid_pinned
-        ):
+        if explicit_session_id and explicit_session_id not in self._SENTINEL_RUN_IDS and not self._session_uuid_pinned:
             self._session_uuid = explicit_session_id
             self._session_uuid_pinned = True
-        if (
-            self._converter_profile == "observe_sdk"
-            and not self._session_start_emitted
-            and explicit_session_id
-        ):
+        if self._converter_profile == "observe_sdk" and not self._session_start_emitted and explicit_session_id:
             # Trigger only on the event that actually carries a session id,
             # never merely because replay pre-resolved _session_uuid from a
             # whole-file scan — otherwise replay fires session.start on
@@ -358,11 +345,7 @@ class MasOtelConverter:
         from mas.library.telemetry.conversion.topology import build_topology
 
         earliest_ts = next(
-            (
-                event.get("timestamp")
-                for event in self._seen_events
-                if isinstance(event.get("timestamp"), (int, float))
-            ),
+            (event.get("timestamp") for event in self._seen_events if isinstance(event.get("timestamp"), (int, float))),
             None,
         )
         graph_ts_ns = self._shifted_ts_ns(earliest_ts)
@@ -370,11 +353,7 @@ class MasOtelConverter:
             build_topology(self._seen_events),
             app_name=self._app_name,
             ts_ns=graph_ts_ns,
-            parent_call_id=(
-                None
-                if self._converter_profile == "observe_sdk"
-                else self._TRACE_ROOT_CALL_ID
-            ),
+            parent_call_id=(None if self._converter_profile == "observe_sdk" else self._TRACE_ROOT_CALL_ID),
         )
         self._graph_emitted = True
 
@@ -400,10 +379,7 @@ class MasOtelConverter:
         """
         if self._converter_profile == "observe_sdk":
             return
-        if (
-            self._TRACE_ROOT_CALL_ID in self._open_spans
-            or self._TRACE_ROOT_CALL_ID in self._closed_call_ids
-        ):
+        if self._TRACE_ROOT_CALL_ID in self._open_spans or self._TRACE_ROOT_CALL_ID in self._closed_call_ids:
             return
         self.open_span(
             self._TRACE_ROOT_CALL_ID,
@@ -560,11 +536,7 @@ class MasOtelConverter:
                 }
             )
         if attach_to_root:
-            ctx = (
-                self._observe_root_context()
-                if self._converter_profile == "observe_sdk"
-                else context_api.Context()
-            )
+            ctx = self._observe_root_context() if self._converter_profile == "observe_sdk" else context_api.Context()
         else:
             ctx = self._parent_ctx(
                 self._effective_parent_call_id(
@@ -581,15 +553,10 @@ class MasOtelConverter:
             # agent, as the service that produces telemetry. Agent names
             # stay on agent_id / mas.agent.id.
             overlay[semconv.APPLICATION_ID] = self._app_name
-            if not (
-                self._converter_profile == "observe_sdk"
-                and boundary_name in self._REAL_SDK_MIRRORED_BOUNDARIES
-            ):
+            if not (self._converter_profile == "observe_sdk" and boundary_name in self._REAL_SDK_MIRRORED_BOUNDARIES):
                 overlay[semconv.SESSION_NAME] = self._app_name
             if self._session_uuid:
-                overlay[semconv.SESSION_ID] = semconv.session_id_for(
-                    self._app_name, self._session_uuid
-                )
+                overlay[semconv.SESSION_ID] = semconv.session_id_for(self._app_name, self._session_uuid)
         attrs = {**attrs, **overlay}
         if set_call_id and call_id:
             attrs.setdefault("mas.call.id", call_id)
@@ -695,9 +662,7 @@ class MasOtelConverter:
                 span.end()
             if meta.get("boundary") == "AgentCall" and end_ns is not None:
                 prev = self._last_closed_agent_end_ns
-                self._last_closed_agent_end_ns = (
-                    end_ns if prev is None else max(prev, end_ns)
-                )
+                self._last_closed_agent_end_ns = end_ns if prev is None else max(prev, end_ns)
                 closed_agent = str(meta.get("agent") or "")
                 if closed_agent:
                     self._agent_end_ns[closed_agent] = end_ns
@@ -717,9 +682,7 @@ class MasOtelConverter:
         for attr_key, value in attrs.items():
             if value is None or value == "":
                 continue
-            span.set_attribute(
-                attr_key, value if not isinstance(value, (dict, list)) else self.enc(value)
-            )
+            span.set_attribute(attr_key, value if not isinstance(value, (dict, list)) else self.enc(value))
 
     def llm_model_for(self, agent_id: str) -> str:
         """Spec-declared model for *agent_id* (replay discovery / live overlay)."""
@@ -854,11 +817,7 @@ class MasOtelConverter:
         self.point_span(
             semconv.SPAN_NAME_SESSION_START,
             self._session_span_attrs(ts_s, ended=False),
-            parent_call_id=(
-                None
-                if self._converter_profile == "observe_sdk"
-                else self._TRACE_ROOT_CALL_ID
-            ),
+            parent_call_id=(None if self._converter_profile == "observe_sdk" else self._TRACE_ROOT_CALL_ID),
             ts_ns=ts_ns,
             attach_to_root=self._converter_profile == "observe_sdk",
         )
@@ -874,11 +833,7 @@ class MasOtelConverter:
         self.point_span(
             semconv.SPAN_NAME_SESSION_END,
             attrs,
-            parent_call_id=(
-                None
-                if self._converter_profile == "observe_sdk"
-                else self._TRACE_ROOT_CALL_ID
-            ),
+            parent_call_id=(None if self._converter_profile == "observe_sdk" else self._TRACE_ROOT_CALL_ID),
             ts_ns=ts_ns,
             attach_to_root=self._converter_profile == "observe_sdk",
         )
@@ -952,17 +907,13 @@ class MasOtelConverter:
 
     def _earliest_event_ts(self) -> float | None:
         times = [
-            float(event["timestamp"])
-            for event in self._seen_events
-            if isinstance(event.get("timestamp"), (int, float))
+            float(event["timestamp"]) for event in self._seen_events if isinstance(event.get("timestamp"), (int, float))
         ]
         return min(times) if times else None
 
     def _latest_event_ts(self) -> float | None:
         times = [
-            float(event["timestamp"])
-            for event in self._seen_events
-            if isinstance(event.get("timestamp"), (int, float))
+            float(event["timestamp"]) for event in self._seen_events if isinstance(event.get("timestamp"), (int, float))
         ]
         return max(times) if times else None
 
@@ -1067,9 +1018,7 @@ class MasOtelConverter:
         if self._app_name:
             attrs[semconv.APPLICATION_ID] = self._app_name
             if self._session_uuid:
-                attrs[semconv.SESSION_ID] = semconv.session_id_for(
-                    self._app_name, self._session_uuid
-                )
+                attrs[semconv.SESSION_ID] = semconv.session_id_for(self._app_name, self._session_uuid)
         reuse_id = self._realtime_span_ids.pop(call_id, None) if kind.endswith("_end") else None
         raw_span_id = self.point_span(
             name,
@@ -1144,9 +1093,7 @@ class MasOtelConverter:
             return cid
         return f"{cid}:{kind}"
 
-    _GENERIC_AGENT_IDS: ClassVar[frozenset[str]] = frozenset(
-        {"", "unknown", "agent", "mas"}
-    )
+    _GENERIC_AGENT_IDS: ClassVar[frozenset[str]] = frozenset({"", "unknown", "agent", "mas"})
 
     def _stable_call_id(self, ev: Dict[str, Any]) -> str:
         """Call id that start/end share even when the native event left it blank."""
@@ -1156,11 +1103,7 @@ class MasOtelConverter:
         parent = str(ev.get("parent_call_id") or "")
         agent = str(ev.get("agent_id") or "")
         extra = str(
-            ev.get("processing_type")
-            or ev.get("processing_name")
-            or ev.get("part_id")
-            or ev.get("kind")
-            or "anon"
+            ev.get("processing_type") or ev.get("processing_name") or ev.get("part_id") or ev.get("kind") or "anon"
         )
         return f"{agent}:{parent}:{extra}"
 
@@ -1251,9 +1194,7 @@ class MasOtelConverter:
                 continue
             meta = self._span_meta.get(call_id) or {}
             if meta.get("boundary") == "AgentCall" and (
-                not agent_id
-                or agent_id in self._GENERIC_AGENT_IDS
-                or meta.get("agent") == agent_id
+                not agent_id or agent_id in self._GENERIC_AGENT_IDS or meta.get("agent") == agent_id
             ):
                 return call_id
         for call_id in reversed(list(self._span_meta)):
@@ -1284,11 +1225,7 @@ class MasOtelConverter:
         as siblings under ``invoke_agent``, linked by
         ``ioa_observe.agent.previous`` — not as children of the caller.
         """
-        resolved = (
-            self._lookup_span_key(str(parent_call_id), agent_id)
-            if parent_call_id
-            else None
-        )
+        resolved = self._lookup_span_key(str(parent_call_id), agent_id) if parent_call_id else None
         if parent_call_id and str(parent_call_id) in self._rewritten_delegate_ids:
             resolved = None
         if resolved and resolved in self._rewritten_delegate_ids:
@@ -1297,9 +1234,7 @@ class MasOtelConverter:
             "LLMCall",
             "ToolCall",
         }:
-            agent_parent = self._open_agent_call_id(agent_id) or self._fallback_parent_call_id(
-                agent_id
-            )
+            agent_parent = self._open_agent_call_id(agent_id) or self._fallback_parent_call_id(agent_id)
             if agent_parent:
                 return agent_parent
         if self._converter_profile == "observe_sdk" and boundary == "AgentCall":
@@ -1336,9 +1271,7 @@ class MasOtelConverter:
         if not inherited or inherited in self._GENERIC_AGENT_IDS:
             fallback = self._fallback_parent_call_id(agent)
             if fallback:
-                inherited = str(
-                    (self._span_meta.get(fallback) or {}).get("agent") or ""
-                )
+                inherited = str((self._span_meta.get(fallback) or {}).get("agent") or "")
         if inherited and inherited not in self._GENERIC_AGENT_IDS:
             scoped = dict(event)
             scoped["agent_id"] = inherited
@@ -1373,9 +1306,7 @@ class MasOtelConverter:
     def _resolve_scoped_id(self, call_id: str, agent_id: str) -> str:
         """Apply agent ownership prefix for shared legacy ids (``*-exec``)."""
         prefixed = f"{agent_id}-{call_id}" if agent_id and not call_id.startswith(f"{agent_id}-") else ""
-        if prefixed and (
-            prefixed in self._open_spans or prefixed in self._closed_call_ids
-        ):
+        if prefixed and (prefixed in self._open_spans or prefixed in self._closed_call_ids):
             return prefixed
         owner = self._call_id_agents.get(call_id)
         if owner:
@@ -1397,9 +1328,7 @@ class MasOtelConverter:
         if scoped.get("call_id") is not None:
             if is_end:
                 cid = scoped.get("call_id")
-                scoped["call_id"] = (
-                    self._resolve_scoped_id(str(cid), agent_id) if cid else cid
-                )
+                scoped["call_id"] = self._resolve_scoped_id(str(cid), agent_id) if cid else cid
             else:
                 scoped["call_id"] = self._scope_call_id(scoped.get("call_id"), agent_id)
                 cid = str(scoped["call_id"])
@@ -1410,9 +1339,7 @@ class MasOtelConverter:
                     self._call_id_agents[str(scoped["call_id"])] = agent_id
         if scoped.get("parent_call_id") is not None:
             pcid = scoped.get("parent_call_id")
-            scoped["parent_call_id"] = (
-                self._resolve_scoped_id(str(pcid), agent_id) if pcid else pcid
-            )
+            scoped["parent_call_id"] = self._resolve_scoped_id(str(pcid), agent_id) if pcid else pcid
         if (
             scoped.get("call_id")
             and scoped.get("parent_call_id")
@@ -1464,9 +1391,7 @@ class MasOtelConverter:
                 return f"{agent}.{semconv.SPAN_SUFFIX_RAG}"
         return name
 
-    def _apply_profile_overlay_on_open(
-        self, attrs: Dict[str, Any], start_ns: int | None
-    ) -> Dict[str, Any]:
+    def _apply_profile_overlay_on_open(self, attrs: Dict[str, Any], start_ns: int | None) -> Dict[str, Any]:
         if self._converter_profile != "observe_sdk":
             return attrs
         out = dict(attrs)
@@ -1510,19 +1435,13 @@ class MasOtelConverter:
             value = out.get("mas.input")
             out.setdefault(
                 semconv.IOA_ENTITY_INPUT,
-                self._timeline_io(
-                    "input", agent or "agent", call_id, value, wrap=True
-                ),
+                self._timeline_io("input", agent or "agent", call_id, value, wrap=True),
             )
             out.setdefault(semconv.IOA_ENTITY_NAME, agent or "agent")
             pending = self._pending_delegations.pop(agent, None) if agent else None
             # Caller agent_id from the intercepted delegate_to_<id> tool
             # (or the previously opened AgentCall). Never a hardcoded name.
-            previous = (
-                str(pending.get("caller") or "")
-                if pending
-                else self._last_agent_id
-            )
+            previous = str(pending.get("caller") or "") if pending else self._last_agent_id
             if previous and previous != agent:
                 out.setdefault(semconv.IOA_AGENT_PREVIOUS, previous)
             self._agent_sequence += 1
@@ -1540,9 +1459,7 @@ class MasOtelConverter:
 
         if boundary == "LLMCall":
             messages = out.get("mas.llm.messages")
-            llm_input = self._timeline_io(
-                "llm-input", agent or "llm", call_id, messages
-            )
+            llm_input = self._timeline_io("llm-input", agent or "llm", call_id, messages)
             out.setdefault(semconv.IOA_ENTITY_INPUT, llm_input)
             provider, model = semconv.provider_and_model(str(out.get("mas.llm.model") or ""))
             out.setdefault(semconv.GEN_AI_PROVIDER, provider)
@@ -1568,9 +1485,7 @@ class MasOtelConverter:
                 out.setdefault("tool_name", str(tool_name))
                 out.setdefault(semconv.IOA_ENTITY_NAME, str(tool_name))
             value = out.get("mas.tool.input")
-            tool_input = self._timeline_io(
-                "tool-input", str(tool_name or agent or "tool"), call_id, value
-            )
+            tool_input = self._timeline_io("tool-input", str(tool_name or agent or "tool"), call_id, value)
             out.setdefault(semconv.IOA_ENTITY_INPUT, tool_input)
             out.setdefault(semconv.GEN_AI_TOOL_ARGUMENTS, str(value) if value else tool_input)
 
