@@ -399,3 +399,5 @@ identity. Finishing or resetting a run discards unmatched context. This applies
 to both live export and file replay, with no change to the exported schema.
 
 Pending assembled prompts are owned by their native run and agent/call identity. A native `mas_call_end` discards only that run’s pending prompts, even when the end event is filtered from export. Explicit finish and reset still discard all pending prompts.
+
+LLM lookup, duplicate detection and completed-call checks use the same run/agent/call ownership as pending prompts. Sequential or interleaved runs may reuse an LLM call label without dropping or overwriting another run's input. Internal disambiguation preserves exported native call identifiers and resolves LLM parent references within the owning run. Late context for a completed call in that run remains ignored.

@@ -220,6 +220,11 @@ class MasOtelConverter:
         self._span_meta: Dict[str, Dict[str, Any]] = {}
         # Context assembly can precede the LLM interval it describes.
         self._pending_llm_contexts: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+        # LLM labels can recur in another native run. Internal keys must not
+        # alias an open/completed call, while exported call ids stay native.
+        self._llm_call_keys: Dict[tuple[str, str, str], str] = {}
+        self._llm_wire_ids: Dict[str, str] = {}
+        self._span_runs: Dict[str, str] = {}
         self._realtime = bool(realtime)
         self._extensions = default_extensions(self._converter_profile, extensions)
         # agent_id → OTel span id of the open/last AgentCall (SCOPE linkage).
@@ -274,7 +279,16 @@ class MasOtelConverter:
         """Dispatch a single native event record to the appropriate handler."""
         event = self._scope_event_call_ids(event)
         event = self._inherit_agent_id(event)
-        self._seen_events.append(event)
+        self._seen_events.append(
+            {
+                **event,
+                **{
+                    key: self._llm_wire_ids.get(str(event[key]), event[key])
+                    for key in ("call_id", "llm_call_id", "parent_call_id")
+                    if key in event
+                },
+            }
+        )
         self._ensure_trace_root(self.ts_ns(event))
         kind = str(event.get("kind") or "")
         if kind == "mas_call_end":
@@ -470,6 +484,9 @@ class MasOtelConverter:
         self._open_spans.clear()
         self._pending_llm_contexts.clear()
         self._closed_span_ctx.clear()
+        self._llm_call_keys.clear()
+        self._llm_wire_ids.clear()
+        self._span_runs.clear()
         self._call_id_agents.clear()
         self._closed_call_ids.clear()
         self._run_id = ""
@@ -561,7 +578,7 @@ class MasOtelConverter:
                 overlay[semconv.SESSION_ID] = semconv.session_id_for(self._app_name, self._session_uuid)
         attrs = {**attrs, **overlay}
         if set_call_id and call_id:
-            attrs.setdefault("mas.call.id", call_id)
+            attrs.setdefault("mas.call.id", self._llm_wire_ids.get(call_id, call_id))
         attrs = self._apply_profile_overlay_on_open(attrs, start_ns)
         name = self._profile_span_name(name, attrs)
         export_attrs = self._observe_sdk_export_attrs(attrs)
@@ -571,6 +588,7 @@ class MasOtelConverter:
         span = self.tracer.start_span(name, **kwargs)
         token = context_api.attach(trace.set_span_in_context(span))
         self._open_spans[call_id] = (span, token)
+        self._span_runs[call_id] = self._run_id
         span_id = ""
         trace_id_hex = ""
         raw_span_id: int | None = None
@@ -791,7 +809,7 @@ class MasOtelConverter:
         span_key = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
         point_attrs = dict(attrs)
         if call_id:
-            point_attrs["mas.call.id"] = call_id
+            point_attrs["mas.call.id"] = self._llm_wire_ids.get(call_id, call_id)
         if reuse_span_id is not None and isinstance(self._id_generator, SpanIdReuse):
             self._id_generator.reuse_span_id(reuse_span_id)
         # set_call_id=False → the synthetic span_key is never written as an
@@ -1049,7 +1067,7 @@ class MasOtelConverter:
         logger.warning(
             "duplicate_call_start: kind=%s call_id=%s",
             kind,
-            ev.get("call_id"),
+            self._llm_wire_ids.get(str(ev.get("call_id")), ev.get("call_id")),
         )
         self.point_span(
             "CallAnnotation",
@@ -1166,20 +1184,23 @@ class MasOtelConverter:
         if agent_id and not cid.startswith(f"{agent_id}-"):
             candidates.append(f"{agent_id}-{cid}")
         for key in candidates:
-            if key in self._open_spans or key in self._closed_span_ctx:
+            if (key in self._open_spans or key in self._closed_span_ctx) and self._span_in_run(key):
                 return key
         for store in (self._open_spans, self._closed_span_ctx):
             for key in store:
-                if key.endswith(f"-{cid}") or key.endswith(cid) or cid in key.split(":"):
+                if self._span_in_run(key) and (key.endswith(f"-{cid}") or key.endswith(cid) or cid in key.split(":")):
                     return key
         return None
+
+    def _span_in_run(self, call_id: str) -> bool:
+        return call_id == self._TRACE_ROOT_CALL_ID or self._span_runs.get(call_id, "") == self._run_id
 
     def _open_agent_call_id(self, agent_id: str = "") -> str | None:
         """The live ``AgentCall`` for *agent_id*, or None (never another agent)."""
         if not agent_id or agent_id in self._GENERIC_AGENT_IDS:
             return None
         for call_id in reversed(list(self._span_meta)):
-            if call_id not in self._open_spans:
+            if call_id not in self._open_spans or not self._span_in_run(call_id):
                 continue
             meta = self._span_meta.get(call_id) or {}
             if meta.get("boundary") == "AgentCall" and meta.get("agent") == agent_id:
@@ -1200,7 +1221,7 @@ class MasOtelConverter:
         if agent_id and agent_id not in self._GENERIC_AGENT_IDS:
             return None
         for call_id in reversed(list(self._span_meta)):
-            if call_id not in self._open_spans:
+            if call_id not in self._open_spans or not self._span_in_run(call_id):
                 continue
             meta = self._span_meta.get(call_id) or {}
             if meta.get("boundary") == "AgentCall" and (
@@ -1208,12 +1229,13 @@ class MasOtelConverter:
             ):
                 return call_id
         for call_id in reversed(list(self._span_meta)):
-            if call_id not in self._open_spans:
+            if call_id not in self._open_spans or not self._span_in_run(call_id):
                 continue
             if (self._span_meta.get(call_id) or {}).get("boundary") == "AgentCall":
                 return call_id
-        if self._open_spans:
-            return next(reversed(self._open_spans))
+        for call_id in reversed(self._open_spans):
+            if self._span_in_run(call_id):
+                return call_id
         return None
 
     def _effective_parent_call_id(
@@ -1263,7 +1285,7 @@ class MasOtelConverter:
 
     def _open_boundary_call_id(self, boundary: str) -> str | None:
         for call_id in reversed(list(self._span_meta)):
-            if call_id not in self._open_spans:
+            if call_id not in self._open_spans or not self._span_in_run(call_id):
                 continue
             if (self._span_meta.get(call_id) or {}).get("boundary") == boundary:
                 return call_id
@@ -1329,7 +1351,7 @@ class MasOtelConverter:
     def _scope_event_call_ids(self, event: Dict[str, Any]) -> Dict[str, Any]:
         agent_id = str(event.get("agent_id") or "")
         if not agent_id:
-            return event
+            return self._scope_llm_call_ids(dict(event), event)
         scoped = dict(event)
         kind = str(scoped.get("kind") or "")
         if kind == "context_assembled":
@@ -1356,6 +1378,37 @@ class MasOtelConverter:
             and str(scoped["call_id"]) == str(scoped["parent_call_id"])
         ):
             scoped["parent_call_id"] = None
+        return self._scope_llm_call_ids(scoped, event)
+
+    def _scope_llm_call_ids(self, scoped: Dict[str, Any], native: Dict[str, Any]) -> Dict[str, Any]:
+        """Use one run/agent/call identity for all LLM lifecycle lookups."""
+        run = self._context_run_id(native)
+        agent = self.agent_id(native)
+        kind = str(native.get("kind") or "")
+        field = "llm_call_id" if kind == "context_assembled" else "call_id"
+        if kind in {"context_assembled", "llm_call_start", "llm_call_end"}:
+            label = str(native.get(field) or native.get("call_id") or "")
+            if label:
+                identity = (run, agent, label)
+                key = self._llm_call_keys.get(identity)
+                if key is None:
+                    wire_id = str(scoped.get(field) or label)
+                    key = wire_id
+                    while key in self._llm_wire_ids or key in self._open_spans or key in self._closed_call_ids:
+                        digest = hashlib.sha256(self.enc(identity).encode()).hexdigest()
+                        key = f"{key}:llm:{digest}"
+                    self._llm_call_keys[identity] = key
+                    self._llm_wire_ids[key] = wire_id
+                scoped[field] = key
+                if kind == "llm_call_start":
+                    scoped.pop("_duplicate_start_annotation", None)
+                    if key in self._open_spans:
+                        scoped["_duplicate_start_annotation"] = True
+        parent = str(native.get("parent_call_id") or "")
+        if parent:
+            key = self._llm_call_keys.get((run, agent, parent))
+            if key is not None:
+                scoped["parent_call_id"] = key
         return scoped
 
     def _profile_span_name(self, name: str, attrs: Dict[str, Any]) -> str:
@@ -1595,8 +1648,8 @@ class MasOtelConverter:
             span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
             span.set_attribute(semconv.GEN_AI_TOOL_RESULT, text)
 
-    @staticmethod
     def _timeline_io(
+        self,
         kind: str,
         identity: str,
         call_id: str,
@@ -1614,6 +1667,7 @@ class MasOtelConverter:
         distinct so the path stays connected. ``wrap=True`` keeps the real
         text but prefixes it so an Agent's I/O cannot equal a child's.
         """
+        call_id = self._llm_wire_ids.get(call_id, call_id)
         text = str(value or "").strip()
         if wrap:
             return f"{kind}:{identity or 'span'}:{text or call_id or 'anon'}"

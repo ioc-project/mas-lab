@@ -119,3 +119,100 @@ def test_native_run_end_discards_only_its_pending_prompts(tmp_path, monkeypatch,
     assert json.loads(spans[0]["attributes"]["mas.llm.messages"])[0]["content"] == "two"
     assert "one" not in spans[1]["attributes"].get("mas.llm.messages", "")
     assert not export.converter._pending_llm_contexts
+
+
+@requires_otel
+@pytest.mark.parametrize("profile", ["raw", "observe_sdk"])
+def test_completed_call_label_can_be_reused_in_another_run(tmp_path, profile):
+    export = exporter(tmp_path, profile)
+    for run in ("one", "two"):
+        export.process_event(event("context_assembled", run_id=run, messages=[{"role": "user", "content": run}]))
+        export.process_event(event("llm_call_start", run_id=run))
+        export.process_event(event("llm_call_end", run_id=run, output=f"result-{run}"))
+        export.process_event(event("mas_call_end", agent="mas", call=f"run-{run}", run_id=run))
+    export.close()
+    spans = llm_spans(tmp_path)
+    assert len(spans) == 2
+    assert [json.loads(s["attributes"]["mas.llm.messages"])[0]["content"] for s in spans] == ["one", "two"]
+    assert [s["attributes"]["mas.llm.response"] for s in spans] == ["result-one", "result-two"]
+    assert all(s["attributes"]["mas.call.id"] == "shared" for s in spans)
+
+
+@requires_otel
+@pytest.mark.parametrize("profile", ["raw", "observe_sdk"])
+@pytest.mark.parametrize("end_order", [("one", "two"), ("two", "one")])
+def test_context_for_another_run_does_not_annotate_an_open_call(tmp_path, profile, end_order):
+    export = exporter(tmp_path, profile)
+    for run in ("one", "two"):
+        export.process_event(event("execution_start", call=f"parent-{run}", run_id=run, input=run))
+        export.process_event(event("context_assembled", run_id=run, messages=[{"role": "user", "content": run}]))
+        export.process_event(event("llm_call_start", run_id=run, parent_call_id=f"parent-{run}"))
+        # A duplicate in this run must not open a third structural span.
+        export.process_event(event("llm_call_start", run_id=run, parent_call_id=f"parent-{run}"))
+    for run in end_order:
+        export.process_event(event("llm_call_end", run_id=run, output=f"result-{run}"))
+        export.process_event(event("execution_end", call=f"parent-{run}", run_id=run))
+    export.close()
+    spans = llm_spans(tmp_path)
+    assert len(spans) == 2
+    rows = [json.loads(line) for line in (tmp_path / "spans.jsonl").read_text().splitlines()]
+    for span in spans:
+        attrs = span["attributes"]
+        run = json.loads(attrs["mas.llm.messages"])[0]["content"]
+        assert attrs["mas.llm.response"] == f"result-{run}"
+        assert attrs["mas.call.id"] == "shared"
+        parent = next(row for row in rows if row["attributes"].get("mas.call.id") == f"parent-{run}")
+        assert span["parent_id"] == parent["context"]["span_id"]
+
+
+@requires_otel
+@pytest.mark.parametrize("profile", ["raw", "observe_sdk"])
+def test_child_of_reused_llm_call_uses_its_own_run_parent(tmp_path, profile):
+    export = exporter(tmp_path, profile)
+    for run in ("one", "two"):
+        export.process_event(event("llm_call_start", run_id=run, messages=[{"role": "user", "content": run}]))
+        export.process_event(event("tool_call_start", run_id=run, call=f"tool-{run}", parent_call_id="shared"))
+        export.process_event(event("tool_call_end", run_id=run, call=f"tool-{run}", output=run))
+    for run in ("two", "one"):
+        export.process_event(event("llm_call_end", run_id=run))
+    export.close()
+    rows = [json.loads(line) for line in (tmp_path / "spans.jsonl").read_text().splitlines()]
+    for span in llm_spans(tmp_path):
+        run = json.loads(span["attributes"]["mas.llm.messages"])[0]["content"]
+        child = next(row for row in rows if row["attributes"].get("mas.call.id") == f"tool-{run}")
+        assert child["parent_id"] == span["context"]["span_id"]
+
+
+@requires_otel
+@pytest.mark.parametrize("profile", ["raw", "observe_sdk"])
+def test_new_run_does_not_inherit_another_runs_open_agent(tmp_path, profile):
+    export = exporter(tmp_path, profile)
+    export.process_event(event("execution_start", call="first-parent", run_id="one"))
+    export.process_event(event("llm_call_start", run_id="one"))
+    export.process_event(event("llm_call_start", run_id="two", messages=[{"role": "user", "content": "second"}]))
+    export.process_event(event("llm_call_end", run_id="two"))
+    export.process_event(event("context_assembled", run_id="two", messages=[{"role": "user", "content": "late"}]))
+    export.process_event(event("llm_call_end", run_id="one"))
+    export.close()
+    rows = [json.loads(line) for line in (tmp_path / "spans.jsonl").read_text().splitlines()]
+    parent = next(row for row in rows if row["attributes"].get("mas.call.id") == "first-parent")
+    second = next(s for s in llm_spans(tmp_path) if "second" in s["attributes"]["mas.llm.messages"])
+    assert second["parent_id"] != parent["context"]["span_id"]
+    assert "late" not in json.dumps(llm_spans(tmp_path))
+    assert not export.converter._pending_llm_contexts
+
+
+@requires_otel
+@pytest.mark.parametrize("profile", ["raw", "observe_sdk"])
+def test_run_ownership_without_an_explicit_agent(tmp_path, profile):
+    export = exporter(tmp_path, profile)
+    for run in ("one", "two"):
+        for kind in ("context_assembled", "llm_call_start", "llm_call_end"):
+            row = event(kind, run_id=run, messages=[{"role": "user", "content": run}])
+            del row["agent_id"]
+            export.process_event(row)
+    export.close()
+    assert [json.loads(s["attributes"]["mas.llm.messages"])[0]["content"] for s in llm_spans(tmp_path)] == [
+        "one",
+        "two",
+    ]
