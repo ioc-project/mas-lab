@@ -394,7 +394,7 @@ Design rules:
 
 The converter attaches `context_assembled` messages to the corresponding LLM
 span whether context arrives before or after `llm_call_start`. It retains early
-context in memory until that call opens, using the existing agent-scoped call
+context in memory until that call opens, using its native run, agent and call
 identity. Finishing or resetting a run discards unmatched context. This applies
 to both live export and file replay, with no change to the exported schema.
 
