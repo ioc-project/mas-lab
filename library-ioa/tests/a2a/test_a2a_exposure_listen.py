@@ -173,7 +173,7 @@ def test_nested_runtime_followups_keep_separate_peer_histories() -> None:
         return make_runtime_handler(instance, manifest={"metadata": {"name": name}})
 
     try:
-        for name, port in zip(("worker", "coordinator"), ports):
+        for name, port in zip(("worker", "coordinator"), ports, strict=True):
             url = f"http://127.0.0.1:{port}"
             handles.append(
                 A2AExposure(
