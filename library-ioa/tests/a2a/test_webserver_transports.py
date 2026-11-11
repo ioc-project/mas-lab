@@ -59,3 +59,35 @@ def test_direct_configuration_and_optional_validation():
     server.validate_transports.assert_called_once_with(frozenset({"http"}))
     A2AExposure(webserver=server, grpc_port=9004).validate_transports()
     server.validate_transports.assert_called_with(frozenset({"http", "grpc"}))
+
+
+def test_selected_server_preserves_https_listen_validation():
+    with pytest.raises(ValueError, match="listen"):
+        A2AExposure(
+            endpoint={"protocol": "a2a", "usage": "listen", "url": "https://example.test"},
+            webserver=UvicornWebServer(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_push_retains_configured_authentication():
+    import httpx
+    from a2a.server.tasks import InMemoryPushNotificationConfigStore
+    from a2a.types import Task, TaskPushNotificationConfig
+    from library_ioa.plugins.a2a.exposure import A2APushNotificationSender
+
+    requests = []
+
+    async def receive(request):
+        requests.append(request)
+        return httpx.Response(200)
+
+    sender = A2APushNotificationSender(
+        httpx.AsyncClient(transport=httpx.MockTransport(receive)), InMemoryPushNotificationConfigStore()
+    )
+    config = TaskPushNotificationConfig(url="https://example.test/callback")
+    config.authentication.scheme = "Bearer"
+    config.authentication.credentials = "test-token"
+    assert await sender._dispatch_notification(Task(id="task"), config, "task")
+    assert requests[0].headers["Authorization"] == "Bearer test-token"
+    await sender.aclose()
