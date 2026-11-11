@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import socket
+import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -64,6 +65,8 @@ def make_runtime_handler(
     from mas.ctl.session.manager import SessionManager
     from mas.runtime.boundary.control.contract import ControlCapability, SessionPaused
 
+    execution_lock = threading.RLock()
+    agent_id = str(((manifest or {}).get("metadata") or {}).get("name") or "agent")
     manager = SessionManager(checkpoint_store=InMemoryCheckpointStore())
     mailbox = SessionTurnMailbox(queue=manager.turn_queue)
     host: ControlDirectoryHost | None = None
@@ -83,6 +86,7 @@ def make_runtime_handler(
             controller = SessionController(
                 instance=instance,
                 display=_SilentDisplay(),
+                agent_id=agent_id,
                 exchange_hub=exchange_hub,
             )
             manager.create(instance, controller, manifest or {}, session_id=session_id)
@@ -99,51 +103,46 @@ def make_runtime_handler(
         upstream_correlation_id: int | None = None,
         **_: Any,
     ) -> dict[str, Any]:
-        resolved_session = mailbox.resolve_session_id(session_id)
-        session = ensure_session(resolved_session)
+        # One runtime has one active context even when contexts have separate queues.
+        with execution_lock:
+            resolved_session = mailbox.resolve_session_id(session_id)
+            session = ensure_session(resolved_session)
 
-        def run(text: str) -> Any:
-            if session.status == SessionStatus.PAUSED:
-                raise SessionPaused(resolved_session, reason=session.pause_reason)
-            return instance.run_user_text(
-                text,
-                turn_id=turn_id or "u1",
-                session_id=resolved_session,
-                parent_call_id=parent_call_id or "",
-                upstream_correlation_id=upstream_correlation_id,
+            def run(text: str) -> Any:
+                if session.status == SessionStatus.PAUSED:
+                    raise SessionPaused(resolved_session, reason=session.pause_reason)
+                return session.controller.run_received_turn(
+                    text,
+                    turn_id=turn_id,
+                    parent_call_id=parent_call_id or "",
+                    upstream_correlation_id=upstream_correlation_id,
+                ).trace
+
+            trace = mailbox.submit(resolved_session, prompt, source="a2a", run=run)
+            text = "\n".join(
+                response.content for response in trace.client_responses if getattr(response, "content", "")
+            ).strip()
+            stream_chunks = tuple(
+                chunk for response in trace.client_responses for chunk in (getattr(response, "stream_chunks", ()) or ())
             )
-
-        trace = mailbox.submit(resolved_session, prompt, source="a2a", run=run)
-        text = "\n".join(
-            response.content
-            for response in trace.client_responses
-            if getattr(response, "content", "")
-        ).strip()
-        stream_chunks = tuple(
-            chunk
-            for response in trace.client_responses
-            for chunk in (getattr(response, "stream_chunks", ()) or ())
-        )
-        if stream_chunks:
-            return stream_chunks
-        result: dict[str, Any] = {"text": text, "context_id": resolved_session}
-        artifacts = [
-            artifact
-            for response in trace.client_responses
-            for artifact in (getattr(response, "artifacts", ()) or ())
-        ]
-        if artifacts:
-            result["artifacts"] = artifacts
-        task_states = [
-            response.task_state
-            for response in trace.client_responses
-            if getattr(response, "task_state", None)
-        ]
-        if task_states:
-            result["task_state"] = task_states[-1]
-        if getattr(trace, "awaiting_hitl", False):
-            result["task_state"] = "input_required"
-        return result
+            if stream_chunks:
+                return stream_chunks
+            result: dict[str, Any] = {"text": text, "context_id": resolved_session}
+            artifacts = [
+                artifact
+                for response in trace.client_responses
+                for artifact in (getattr(response, "artifacts", ()) or ())
+            ]
+            if artifacts:
+                result["artifacts"] = artifacts
+            task_states = [
+                response.task_state for response in trace.client_responses if getattr(response, "task_state", None)
+            ]
+            if task_states:
+                result["task_state"] = task_states[-1]
+            if getattr(trace, "awaiting_hitl", False):
+                result["task_state"] = "input_required"
+            return result
 
     handle.host = host
     handle.manager = manager
@@ -199,9 +198,7 @@ def start_hosted_exposures(
         if not isinstance(manifest, dict):
             manifest = {"metadata": {"name": agent_id}, "spec": {}}
         try:
-            handles.append(
-                expose_agent(instance, manifest, endpoint, blocking=False)
-            )
+            handles.append(expose_agent(instance, manifest, endpoint, blocking=False))
         except Exception:
             close_exposures(handles)
             raise

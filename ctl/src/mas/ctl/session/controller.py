@@ -244,15 +244,12 @@ class SessionController:
             fmt=self._trace_format_options(),
         )
 
-
     def _handle_list_skills(self) -> TurnResult:
         """Handle /skills command — list all available skills."""
         ctx = getattr(self.instance.driver, "ctx", None)
         registry = getattr(ctx, "skill_registry", None)
         if registry is None:
-            self.display.on_system(
-                "Skills are not configured for this agent (no SkillCatalogPlugin attached)."
-            )
+            self.display.on_system("Skills are not configured for this agent (no SkillCatalogPlugin attached).")
         elif not registry:
             self.display.on_system("No skills registered for this agent.")
         else:
@@ -320,13 +317,9 @@ class SessionController:
         # turn's sync_working_memory_in() would restore the pre-reset
         # history right back, silently undoing the reset the user just asked
         # for (see docs/design/working-memory-compaction.md).
-        (self.working_memory_registry or get_working_memory_registry()).drop(
-            self._working_memory_key(), self.agent_id
-        )
+        (self.working_memory_registry or get_working_memory_registry()).drop(self._working_memory_key(), self.agent_id)
         self.restore_turn(0)
-        self.display.on_system(
-            "session reset — working memory and turn history cleared; system prompt restored"
-        )
+        self.display.on_system("session reset — working memory and turn history cleared; system prompt restored")
         return True
 
     def _finalize_turn(self, result: TurnResult, *, trace: DriverTrace | None = None) -> None:
@@ -345,9 +338,7 @@ class SessionController:
         response_text = result.text
         ctx = getattr(self.instance.driver, "ctx", None)
         note_resp = getattr(ctx, "note_agent_response", None)
-        has_working_memory = bool(
-            getattr(getattr(ctx, "working_memory", None), "messages", None)
-        )
+        has_working_memory = bool(getattr(getattr(ctx, "working_memory", None), "messages", None))
         if callable(note_resp) and (response_text or has_working_memory):
             note_resp(response_text)
         sync_working_memory_out(
@@ -386,11 +377,7 @@ class SessionController:
         trigger = (
             (record.kind == "llm_response" and "after_llm_call" in policy.triggers)
             or (record.kind == "tool_result" and "after_tool_call" in policy.triggers)
-            or (
-                record.kind == "tool_call"
-                and record.destructive
-                and "before_destructive_tool" in policy.triggers
-            )
+            or (record.kind == "tool_call" and record.destructive and "before_destructive_tool" in policy.triggers)
         )
         if trigger:
             self._checkpoint_event_counter += 1
@@ -398,6 +385,42 @@ class SessionController:
                 self.checkpoint_store,
                 label=f"event-{self._turn:04d}-{self._checkpoint_event_counter:04d}",
             )
+
+    def run_received_turn(
+        self,
+        text: str,
+        *,
+        turn_id: str | None = None,
+        parent_call_id: str = "",
+        upstream_correlation_id: int | None = None,
+    ) -> TurnResult:
+        """Run a protocol message with working memory, without terminal commands.
+
+        The receiver owns serialization across controllers sharing an instance.
+        Keep transport correlation intact and commit only a successful turn.
+        """
+        self._reject_if_paused()
+        sync_working_memory_in(
+            self.instance,
+            memory_key=self._working_memory_key(),
+            agent_id=self.agent_id,
+            registry=self.working_memory_registry,
+        )
+        self._turn += 1
+        trace = self.instance.run_user_text(
+            text,
+            turn_id=turn_id or f"u{self._turn}",
+            session_id=self.session_id,
+            parent_call_id=parent_call_id,
+            upstream_correlation_id=upstream_correlation_id,
+        )
+        result = TurnResult(
+            trace=trace,
+            responses=list(trace.client_responses),
+            awaiting_hitl=bool(getattr(trace, "awaiting_hitl", False)),
+        )
+        self._finalize_turn(result, trace=trace)
+        return result
 
     def run_turn(
         self,
@@ -426,16 +449,14 @@ class SessionController:
             if stripped.lower() == "/skills":
                 return self._handle_list_skills()
             if stripped.lower() == "/skill" or stripped.lower().startswith("/skill "):
-                skill_name = stripped[len("/skill"):].strip()
+                skill_name = stripped[len("/skill") :].strip()
                 return self._handle_activate_skill(skill_name)
 
             self._reject_if_paused()
             text = self._take_queued_or_direct(text)
             if text.strip().lower().startswith("/steer "):
                 return self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
-            return self._run_user_turn(
-                text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id
-            )
+            return self._run_user_turn(text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id)
         finally:
             with self._turn_lock:
                 self.inflight = False
@@ -515,14 +536,12 @@ class SessionController:
         if stripped.lower() == "/skills":
             return self._handle_list_skills()
         if stripped.lower() == "/skill" or stripped.lower().startswith("/skill "):
-            skill_name = stripped[len("/skill"):].strip()
+            skill_name = stripped[len("/skill") :].strip()
             return self._handle_activate_skill(skill_name)
 
         self._reject_if_paused()
         text = self._take_queued_or_direct(text)
-        return await self._arun_user_turn(
-            text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id
-        )
+        return await self._arun_user_turn(text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id)
 
     def _handle_backtrack(self, text: str) -> TurnResult:
         """Restore retained session state and optionally inject a steering note."""
@@ -678,19 +697,13 @@ class SessionController:
         if session is None or self.checkpoint_store is None:
             return False
         error = next(
-            (
-                item
-                for item in trace.boundary_errors
-                if getattr(item, "code", "") == "INGRESS_BACKTRACK"
-            ),
+            (item for item in trace.boundary_errors if getattr(item, "code", "") == "INGRESS_BACKTRACK"),
             None,
         )
         if error is None:
             return False
         error_text = getattr(error, "message", "")
-        steering_text = (
-            f"A previous attempt failed with: {error_text}. Avoid repeating that approach."
-        )
+        steering_text = f"A previous attempt failed with: {error_text}. Avoid repeating that approach."
         try:
             session.backtrack(
                 self.checkpoint_store,

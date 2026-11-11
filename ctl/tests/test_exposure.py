@@ -245,6 +245,8 @@ def test_runtime_handler_forwards_turn_and_session_ids() -> None:
     calls: list[tuple[str, str, str, str, int | None]] = []
 
     class Runtime:
+        driver = SimpleNamespace(ctx=None)
+
         def run_user_text(
             self,
             text: str,
@@ -270,6 +272,8 @@ def test_runtime_handler_forwards_turn_and_session_ids() -> None:
 
 def test_runtime_handler_preserves_structured_artifacts() -> None:
     class Runtime:
+        driver = SimpleNamespace(ctx=None)
+
         def run_user_text(self, *_: Any, **__: Any) -> SimpleNamespace:
             return SimpleNamespace(
                 client_responses=[
@@ -300,6 +304,8 @@ def test_runtime_handler_preserves_structured_artifacts() -> None:
 
 def test_runtime_handler_marks_pending_hitl_as_input_required() -> None:
     class Runtime:
+        driver = SimpleNamespace(ctx=None)
+
         def run_user_text(self, *_: Any, **__: Any) -> SimpleNamespace:
             return SimpleNamespace(client_responses=[], awaiting_hitl=True)
 
