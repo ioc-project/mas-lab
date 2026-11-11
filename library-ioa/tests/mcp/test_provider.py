@@ -296,7 +296,7 @@ def test_per_agent_selection_preserves_schemas_and_rejects_before_transport(monk
         reader.call_tool("records_update", {})
     assert not hasattr(clients[0], "call_kwargs")
     reader.call_tool("records_get", {})
-    assert clients[0].list_calls == 1
+    assert clients[0].list_calls == 3
     assert hasattr(clients[0], "call_kwargs")
     registry = ToolProviderRegistry()
     registry.register_provider(reader)
@@ -350,3 +350,52 @@ def test_selection_cannot_be_bypassed_by_legacy_providers():
 
     with pytest.raises(ValueError, match="legacy providers"):
         providers_from_manifest({"spec": {"mcp_tools": [], "providers": [{"kind": "mcp", "name": "server"}]}})
+
+
+@pytest.mark.parametrize("ttl", [0, 100, None])
+def test_selection_respects_native_discovery_cache(monkeypatch, ttl):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from library_ioa.plugins.mcp.client import MCPClient
+    from mas.runtime.engine.tool_routing import UnclaimedToolError
+    from mcp.types import ListToolsResult, Tool
+
+    clock = [1.0]
+    monkeypatch.setattr("library_ioa.plugins.mcp.client.time.monotonic", lambda: clock[0])
+    client = MCPClient(command="unused", cache_scope="private", cache_ttl_ms=ttl)
+    schema = {"type": "object", "properties": {"alice": {"type": "string"}}}
+    session = SimpleNamespace(list_tools=AsyncMock())
+    session.list_tools.return_value = ListToolsResult(
+        ttl_ms=10000, tools=[Tool(name="records_get", inputSchema=schema)]
+    )
+
+    @asynccontextmanager
+    async def transport():
+        yield session
+
+    monkeypatch.setattr(client, "_ephemeral_session", transport)
+    client.call_tool = AsyncMock(return_value={})
+    provider = MCPToolProvider(client, tool_selection={"prefixes": ["records_"]})
+    alice, bob = SimpleNamespace(user="alice"), SimpleNamespace(user="bob")
+    assert provider.list_tools(ctx=alice)[0]["parameters"] == schema
+    schema_b = {"type": "object", "properties": {"bob": {"type": "integer"}}}
+    session.list_tools.return_value = ListToolsResult(
+        ttl_ms=10000, tools=[Tool(name="records_get", inputSchema=schema_b)]
+    )
+    assert provider.list_tools(ctx=bob)[0]["parameters"] == schema_b
+    assert session.list_tools.await_count == 2
+    assert provider.list_tools(ctx=alice)[0]["parameters"] == (schema_b if ttl == 0 else schema)
+    clock[0] += 1
+    assert provider.list_tools(ctx=alice)[0]["parameters"] == (schema if ttl is None else schema_b)
+    provider.invalidate()
+    session.list_tools.return_value = ListToolsResult(
+        ttl_ms=10000, tools=[Tool(name="records_list", inputSchema=schema_b)]
+    )
+    assert provider.list_tools(ctx=alice)[0]["name"] == "records_list"
+    with pytest.raises(UnclaimedToolError):
+        provider.call_tool("records_get", {}, ctx=alice)
+    with pytest.raises(UnclaimedToolError):
+        provider.call_tool("delete_all", {}, ctx=alice)
+    client.call_tool.assert_not_awaited()

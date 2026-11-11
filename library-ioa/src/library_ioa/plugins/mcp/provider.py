@@ -81,7 +81,6 @@ class MCPToolProvider(ToolProvider):
         self.provider_name = provider_name
         self.timeout = timeout
         self._selection = tool_selection
-        self._selected_specs: list[dict[str, Any]] | None = None
         if tools_claim is None or tools_claim == "*":
             self.tools_claim: str | tuple[str, ...] = "*"
         elif isinstance(tools_claim, str):
@@ -131,7 +130,6 @@ class MCPToolProvider(ToolProvider):
         return self._client is not None
 
     def invalidate(self) -> None:
-        self._selected_specs = None
         drop = getattr(self._client, "invalidate_list_cache", None)
         if callable(drop):
             drop()
@@ -149,8 +147,6 @@ class MCPToolProvider(ToolProvider):
 
     def discover_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
         """MCP ``tools/list`` advertisement. Called at runtime init for ``*`` claims."""
-        if self._selection is not None and self._selected_specs is not None:
-            return list(self._selected_specs)
         try:
             tools = run_sync(self._list_coro(ctx))
             specs = [as_mas_tool_spec(item) for item in (tools or []) if isinstance(item, dict)]
@@ -168,12 +164,11 @@ class MCPToolProvider(ToolProvider):
                     f"MCP selection for {self.provider_name!r} did not resolve: "
                     f"names={sorted(missing)}, prefixes={unmatched}"
                 )
-            self._selected_specs = [
+            return [
                 spec
                 for spec in specs
                 if spec["name"] in names or any(spec["name"].startswith(prefix) for prefix in prefixes)
             ]
-            return list(self._selected_specs)
         except Exception as exc:
             logger.error("Failed to list tools from MCP client: %s", exc, exc_info=True)
             raise
