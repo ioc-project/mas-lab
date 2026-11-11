@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
@@ -62,16 +63,41 @@ class PeerConversations:
                 if not relation.context_id:
                     relation.unresolved = True
                 raise
+            return self._capture(relation, response)
+
+    @staticmethod
+    def _capture(relation: Relationship, response: dict[str, Any]) -> dict[str, Any]:
+        try:
+            received = response_context(response)
+            if relation.context_id and received != relation.context_id:
+                raise AgentCommError("A2A response changed an established context")
+        except AgentCommError:
+            relation.unresolved = True
+            raise
+        # Capture before native conversion raises for a failed remote task.
+        relation.context_id = received
+        return response
+
+    async def asend(
+        self, client: Any, recipient: str, task: str, *, thread: str, metadata: dict[str, str]
+    ) -> dict[str, Any]:
+        relation = self.relationship(recipient, thread)
+        # One lock also protects synchronous callers. Never leave a worker
+        # blocked on its acquisition after the async caller has been cancelled.
+        while not relation.lock.acquire(blocking=False):
+            await asyncio.sleep(0.01)
+        try:
+            if relation.unresolved:
+                raise AgentCommError("A2A conversation context is unresolved; do not retry an ambiguous operation")
             try:
-                received = response_context(response)
-                if relation.context_id and received != relation.context_id:
-                    raise AgentCommError("A2A response changed an established context")
-            except AgentCommError:
-                relation.unresolved = True
+                response = await client.asend_message(task, context_id=relation.context_id, metadata=metadata)
+            except (Exception, asyncio.CancelledError):
+                if not relation.context_id:
+                    relation.unresolved = True
                 raise
-            # Capture before native conversion raises for a failed remote task.
-            relation.context_id = received
-            return response
+            return self._capture(relation, response)
+        finally:
+            relation.lock.release()
 
     def clear(self) -> None:
         with self._lock:

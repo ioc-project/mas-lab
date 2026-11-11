@@ -99,3 +99,5 @@ See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-
 - [ToolContract](../docs/references/tool-contract.md)
 - [kind: Tool](../docs/manifests/tool.md)
 - [ToolServerRegistry](../docs/references/tool-server-registry.md)
+
+Async A2A delegation awaits the native SDK transport. Cancelling a request queued behind another call to the same relationship prevents dispatch and leaves that relationship usable. Cancellation after dispatch may leave an ambiguous remote outcome. An unresolved initial context is not retried automatically.

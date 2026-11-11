@@ -142,6 +142,17 @@ class A2AClient:
             )
         )
 
+    async def asend_message(
+        self,
+        message: str,
+        *,
+        context_id: str = "",
+        metadata: dict[str, str] | None = None,
+        stream: bool = False,
+    ) -> dict[str, Any]:
+        """Send on the caller's loop so cancellation reaches the SDK transport."""
+        return await self._sdk_send_message(message, context_id=context_id, metadata=metadata, stream=stream)
+
     def close(self) -> None:
         self._executor.shutdown(wait=True)
 

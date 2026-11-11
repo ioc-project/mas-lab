@@ -32,6 +32,9 @@ class Client:
             }
         }
 
+    async def asend_message(self, task, **kwargs):
+        return self.send_message(task, **kwargs)
+
     def close(self):
         pass
 
@@ -135,3 +138,112 @@ def test_async_route_and_causal_metadata(comm):
     asyncio.run(send())
     assert client.calls[1][1]
     assert client.calls[0][2] == {"mas.correlation_id": "7", "mas.caller_call_id": "parent"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("synchronous_first", [False, True])
+async def test_cancelled_queued_write_never_dispatches(comm, synchronous_first):
+    from threading import Event, Lock
+
+    link, client = comm
+    entered, queued = asyncio.Event(), asyncio.Event()
+    proceed = Event()
+    loop = asyncio.get_running_loop()
+    original = client.send_message
+
+    def first_send(task, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert proceed.wait(5)
+        return original(task, **kwargs)
+
+    async def first_asend(task, **kwargs):
+        entered.set()
+        await asyncio.to_thread(proceed.wait, 5)
+        return original(task, **kwargs)
+
+    class ObservedLock:
+        def __init__(self):
+            self.inner = Lock()
+
+        def acquire(self, blocking=True):
+            result = self.inner.acquire(blocking=blocking)
+            if not result:
+                queued.set()
+            return result
+
+        def release(self):
+            self.inner.release()
+
+        def __enter__(self):
+            self.acquire()
+
+        def __exit__(self, *args):
+            self.release()
+
+    client.send_message = first_send
+    client.asend_message = first_asend
+    with bound_conversation("incoming", "caller"):
+        relation = link._conversations.relationship("peer")
+        relation.lock = ObservedLock()
+        first = asyncio.create_task(
+            asyncio.to_thread(link.send, "peer", "first") if synchronous_first else link.asend("peer", "first")
+        )
+        await entered.wait()
+        second = asyncio.create_task(link.asend("peer", "cancelled write"))
+        await queued.wait()
+        second.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await second
+        proceed.set()
+        await first
+        assert not relation.unresolved
+        client.send_message = original
+        await link.asend("peer", "follow up")
+    assert [call[0] for call in client.calls] == ["first", "follow up"]
+    assert client.calls[1][1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("established", [False, True])
+async def test_cancellation_after_dispatch_preserves_ambiguity(comm, established):
+    link, client = comm
+    entered = asyncio.Event()
+
+    async def interrupted(*args, **kwargs):
+        entered.set()
+        await asyncio.Event().wait()
+
+    with bound_conversation("incoming", "caller"):
+        if established:
+            link.send("peer", "establish")
+        original = client.asend_message
+        client.asend_message = interrupted
+        pending = asyncio.create_task(link.asend("peer", "possible write"))
+        await entered.wait()
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+        client.asend_message = original
+        if established:
+            await link.asend("peer", "inspect outcome")
+            assert client.calls[-1][1]
+        else:
+            with pytest.raises(AgentCommError, match="unresolved"):
+                await link.asend("peer", "do not replay")
+            assert not client.calls
+
+
+@pytest.mark.asyncio
+async def test_sdk_async_send_uses_native_coroutine(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from library_ioa.plugins.a2a.client import A2AClient
+
+    client = A2AClient(url="http://unused")
+    native = AsyncMock(return_value={"result": "answer"})
+    monkeypatch.setattr(client, "_sdk_send_message", native)
+    assert await client.asend_message("hello", context_id="context", metadata={"parent": "call"}) == {
+        "result": "answer"
+    }
+    native.assert_awaited_once_with("hello", context_id="context", metadata={"parent": "call"}, stream=False)
+    client.close()
