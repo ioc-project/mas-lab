@@ -277,6 +277,9 @@ class MasOtelConverter:
 
     def process_event(self, event: Dict[str, Any]) -> None:
         """Dispatch a single native event record to the appropriate handler."""
+        run_id = event.get("run_id") or (event.get("context") or {}).get("run_id", "")
+        if run_id and run_id not in self._SENTINEL_RUN_IDS:
+            self._run_id = run_id
         event = self._scope_event_call_ids(event)
         event = self._inherit_agent_id(event)
         self._seen_events.append(
@@ -302,9 +305,6 @@ class MasOtelConverter:
         if not should_export_event(event, self._export_layers):
             self._maybe_end_session(kind)
             return
-        run_id = event.get("run_id") or (event.get("context") or {}).get("run_id", "")
-        if run_id and run_id not in self._SENTINEL_RUN_IDS:
-            self._run_id = run_id
         explicit_session_id = str(
             event.get("session_id") or (event.get("context") or {}).get("session_id") or ""
         ).strip()
