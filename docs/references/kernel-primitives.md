@@ -35,7 +35,7 @@ Example: a what-if run uses three operations in order.
 | Navigate | Move a debug cursor on the snapshot tree. The live run does not change until promote. |
 | Branch / promote | Fork a what-if run from a snapshot. Promote replaces the live run with the branch. |
 | Pause / resume / steer / undo | Control the run. Pause blocks the next user turn. |
-| Spec revision | Record a change to the live spec, such as disabling a tool or switching a pattern. |
+| Spec revision | Record a change to the live spec, such as disabling a tool, switching a pattern or a layer's state. The session's spec machine decides each one (apply, busy while checkpointing, conflict when the state changed). |
 
 The canonical names are the frozen set `KERNEL_OPS` in `mas.runtime.harness.catalog`: `materialize`, `teardown`, `step`, `spawn`, `snapshot`, `persist`, `navigate`, `pause`, `resume`, `steer`, `undo`, `spec_delta`, `branch`, `promote`.
 

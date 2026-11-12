@@ -17,6 +17,7 @@ from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.engine.simulated import SimulatedEngine
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.orchestrator import RuntimeKernel
+from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.schema.ingress import (
     IngressSymbol,
     LifecycleAbort,
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class RuntimeInstance:
+class RuntimeInstance(Lifecycle):
     """Wraps kernel + driver; exposes pause/resume/abort and user feed."""
 
     kernel: RuntimeKernel
@@ -203,6 +204,9 @@ class RuntimeInstance:
             enable_coordination=enable_coordination,
             enable_observability=enable_observability,
         )
+
+    def stop(self) -> None:
+        self.driver.stop()
 
     def pause(self, *, reason: str = "") -> DriverTrace:
         return self.driver.feed(LifecyclePause(reason=reason))

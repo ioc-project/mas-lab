@@ -15,8 +15,8 @@ reconciling the release notes with the code and docs currently on that branch.
 - `with-hardened` is one Control, written once for every agent you deploy: pass it with
   `--control pkg://mas.library.standard/controls/with-hardened.yaml` (or attach it from a Flavour with `agents: $all`).
   The `with-hardened` overlay is gone. It had set `design_pattern.params.max_steps: 512` (set it in the agent or a
-  RuntimeEngine manifest), and agent `spec.control` retry and circuit breaker (retry already defaults to 4 LLM and
-  2 tool attempts; the breaker returns, switched on for every agent, when the infra pipeline takes it).
+  RuntimeEngine manifest). Retry defaults to 4 LLM and 2 tool attempts as documented pipeline steps.
+  The circuit breaker is `standard:llm-proxy-hardened` (and `standard:tool-server-hardened`), not this Control.
   `-o openclaw` no longer attaches governance: its governance is the Control of the same name.
   `observability-native.yaml` moved from the overlays directory to `controls/` and is passed with `--control`.
 - Control `spec.observability` and `spec.governance` are sets of plugins. Matching
@@ -38,9 +38,9 @@ reconciling the release notes with the code and docs currently on that branch.
 - A Control lists `observability` and `governance` plugins only. Every item in a Control list is looked up by
   its name among the plugin types that list takes, and is refused when it is unknown, ambiguous within those types,
   or of another type. Delay, drop, fail, corrupt and replay are not Control plugins: they belong on the infra
-  pipelines with retry and the circuit breaker, and land there in a later release. `spec.impair`, `spec.plugins`,
-  and `spec.control` on a Control are leftover and refused. Retry and the circuit breaker keep their agent
-  `spec.control` settings (deprecated, still applied) until the infra pipeline takes them in the next release.
+  pipelines with retry and the circuit breaker. `spec.impair`, `spec.plugins`,
+  and `spec.control` on a Control are leftover and refused. Agent `spec.control.retry` and
+  `.circuit_breaker` still apply (deprecated, one warning) and become pipeline steps.
 - A Flavour `spec.control` row takes `settings`, merged over the named plugins of the Control it attaches, so one
   Control file gives different settings to different agents. The same file on the same agents with the same settings
   is one attachment.
@@ -106,6 +106,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- An explicit pipeline retry keeps the params it named.
+- Session close stops the llm and tool call layers.
 - A governance plugin name that is not registered as a governance plugin is now an error. It was a logged warning
   and the plugin was skipped, so a typo in a Control disabled it silently. The runtime names no fallback plugin.
 - The Agent deprecation warning printed a literal `{whom}`.
@@ -138,7 +140,7 @@ reconciling the release notes with the code and docs currently on that branch.
   two models on one connection get separate pacing buckets.
 - A middleware step with no `for` wraps llm calls only, same as before
   this branch. An empty `for` list is llm, not every kind.
-- `mas-ctl infra show` prints `api_base` / tool `url` without userinfo or
+- `mas-ctl infra resolved` prints `api_base` / tool `url` without userinfo or
   query.
 - Destination tool steps wrap the server that claims the tool name,
   with the same explicit-over-star rules as tool routing. A star
@@ -152,6 +154,26 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- Move retry, the circuit breaker, cache, scheduler, fault inject, delay,
+  drop, fail, corrupt, and replay off separate plugin types and onto
+  steps around llm, tool, and send calls.
+  `standard:llm-proxy-hardened` and `standard:tool-server-hardened`
+  list retry outside the breaker (`failure_threshold` 5, `reset_timeout_s` 30,
+  `on: [unavailable]`). `standard:retry-llm`, `standard:retry-tool`, and
+  `standard:circuit-breaker` are the same steps as standalone refs. The breaker
+  keeps its state in the running spec (`spec.layer_state`); after
+  `reset_timeout_s` exactly one call is let through as the probe. A tool that
+  declares a `probe` leaves the running spec when its circuit opens and
+  returns when that probe succeeds.
+- Stop retrying inside the engine; when a run omits retry, insert one
+  (LLM 4 times, tool twice when the tool says it is safe to retry),
+  marked `(default)`. `mas-ctl infra list`, `show`, and `resolved` print
+  those steps and mark the default.
+- `with-hardened` was an overlay that patched the agent spec; it is now a
+  Control for call ceilings and error policy. The circuit breaker moves
+  to `standard:llm-proxy-hardened` and `standard:tool-server-hardened`.
+- Give each of those steps a name (`retry-llm`, `breaker-llm`, ...) and an
+  off switch. A name the runtime does not know is an error at start.
 - Agent `spec.system_plugins` grants runtime syscalls (`inform_user`,
   `request_human_input`, `send`, `pause_session`, `subagents`, `activate_skill`,
   `run_skill_script`). A plugin owns session state and may expose several tools.
@@ -186,7 +208,7 @@ reconciling the release notes with the code and docs currently on that branch.
   Control are refused. A relative path in a plugin setting must be listed in
   `path_params` (a file next to the Control) or `run_path_params` (a path the run
   writes); an unlisted one is refused.
-- `--control REF[@SELECTOR]` (`chat`, `tui`, `serve`, `run-mas`, `compile`, `infra show`, `mas-lab benchmark`) attaches a
+- `--control REF[@SELECTOR]` (`chat`, `tui`, `serve`, `run-mas`, `compile`, `infra resolved`, `mas-lab benchmark`) attaches a
   Control to the session's Flavour from the command line; the run hash includes it. `--events-sink ROW` adds a row to `bind.events`.
   `serve` takes `--no-events` and `--events-format` the way `chat` does.
   A scenario's `overlays.control` attaches Control files the same way. The flags are another way to write
@@ -230,10 +252,20 @@ reconciling the release notes with the code and docs currently on that branch.
 - `design_pattern: moderated_rounds`: a preset of `state_machine` for a group
   that must agree on one plan. Fixed-order rounds, a decider's JSON action
   after each, and a confirmation round per proposed plan.
-- `mas-ctl infra show` prints each LLM and tool chain (`for` / `per` on
-  every step) and each agent's comm stack. `--json` is a stable document.
-  `--infra-ref`, `--runtime-ref`, `--override`, and `--middleware` match
-  chat and run-mas.
+- `mas-ctl infra list` prints installed refs (`--type` filters kind).
+  `mas-ctl infra show REF` prints that catalog entry (connection and pipeline,
+  with params). A middleware ref prints its listed steps. A RuntimeEngine ref
+  prints the kernel fields it applies (`queue_depth`, `stream`), not a call
+  pipeline.
+  Destinations that are not on the ref or the merged run are omitted.
+  `mas-ctl infra resolved` prints the steps a session actually runs around
+  llm and tool calls (same as chat and run-mas). Each LLM and tool chain
+  (`for` / `per` / `max_attempts` on every step) and each agent's comm stack.
+  A default retry is listed and marked `(default)` when the run does not
+  list one.
+  `--connections` / `--pipeline` print one view.
+  `--json` is a stable document. `--infra-ref`, `--runtime-ref`, `--override`,
+  and `--middleware` on `resolved` match chat and run-mas.
 - Several `LLMProxy` refs stay separate leaves. The model name (and
   `models.mappings` aliases) selects which leaf provides the call —
   same shape as tool-name routing. Eval uses `experiment.models.judge`.
@@ -365,6 +397,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- Stop retrying inside the engine. Retry is a step around the call. When a
+  run omits one, insert it (LLM 4 times, tool twice when the tool says it
+  is safe to retry; `retry_on: [transient, unavailable]`).
 - Syscalls are granted in `spec.system_plugins`, not `spec.tools`. A plugin loads
   when named, when its library row is `default_enabled`, or when its own rule over
   the spec grants it; `enabled: false` turns off all three.
@@ -389,7 +424,7 @@ reconciling the release notes with the code and docs currently on that branch.
 - A SLIM link reconnects after five read failures.
 - A local-group send waits at most `reply_timeout_s`.
 - A2A REST uses `application/a2a+json`; an unsupported type is 400.
-- `mas-ctl infra show` prints each agent's comm column from its Flavour
+- `mas-ctl infra resolved` prints each agent's comm column from its Flavour
   chain, the `protocol` of the row that reaches it, or the library default
   `agent_comm` plugin.
 - Application rows: the schema requires `protocol` but no longer `url`,
@@ -448,6 +483,14 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Deprecated
 
+- `mas-ctl infra show` as a merged run: use `infra resolved`. `infra show REF` is
+  the catalog entry. The old invocation still works and warns.
+- Deprecate agent `spec.control.retry` and `.circuit_breaker`: they still
+  apply, warn once, and become steps around the call. Prefer a `retry` /
+  `circuit_breaker` step.
+- Deprecate plugin types `infra_middleware`, `stack_layer`, and
+  `circuit_breaker`, and the pipeline key `middleware:`: each still loads,
+  warns once, and names `layer`.
 - `{kind: system, name, params}` in `spec.tools`: list the plugin in `spec.system_plugins`.
   It grants the same plugin (`params` become its settings, `enabled: false` turns it off) and
   warns once; `mas-ctl validate` warns per entry. When both name one plugin, `spec.system_plugins`
@@ -503,6 +546,12 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Removed
 
+- Drop LLMProxy `spec.proxy.retry`. Retry is a step around the call. The
+  schema accepted the field; the resolver never applied it.
+- Drop `request_with_retries` and `arequest_with_retries` in
+  `mas.library.standard.plugins.llm.http`, and the `plugins.reliability`
+  package with `ThresholdCircuitBreaker`. A provider calls `request_once`;
+  retry and the breaker are steps around the call.
 - `node_dispatch` and `uses_parallel_dispatch` in
   `mas.runtime.boundary.delegation.policy`, and ctl's
   `fanout_workflow_delegates`: they read `workflow.nodes[].dispatch` and

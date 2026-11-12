@@ -2,8 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Shared reliability helpers for LLM HTTP and tool dispatch.
 
-Circuit-breaker implementations are library plugins (duck-typed at
-engine I/O). Ingress ``error_policy`` lives on ``retry_on_error``.
+The circuit breaker is a layer plugin (``circuit_breaker``). Ingress ``error_policy`` lives on ``retry_on_error``.
 """
 
 from mas.runtime.reliability.classes import (
@@ -23,7 +22,6 @@ from mas.runtime.reliability.log import LOGGER as RELIABILITY_LOGGER
 from mas.runtime.reliability.policy import (
     ReliabilitySettings,
     RetryPolicy,
-    apply_llm_retry_env,
     llm_retry_policy,
 )
 from mas.runtime.reliability.retry import acall_with_retry, call_with_retry
@@ -36,7 +34,6 @@ __all__ = [
     "ReliabilitySettings",
     "RetryPolicy",
     "acall_with_retry",
-    "apply_llm_retry_env",
     "call_with_retry",
     "classify_http_exception",
     "classify_llm_failure",

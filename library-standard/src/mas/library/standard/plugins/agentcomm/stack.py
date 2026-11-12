@@ -19,7 +19,7 @@ from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 
 
 def _declared_layer_capabilities(layer: Any, registry: Any) -> dict[str, bool] | None:
-    """The flags one layer entry declares; a ``{type, params}`` id resolves as a link, then a ``stack_layer``."""
+    """The flags one layer entry declares; a ``{type, params}`` id resolves as a link, then a ``layer``."""
     if not isinstance(layer, Mapping):
         return declared_capabilities(layer, registry=registry)
     binding = layer_binding(dict(layer))

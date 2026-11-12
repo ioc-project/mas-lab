@@ -23,6 +23,43 @@ class BundleInfo:
     name: str = ""
 
 
+_LIST_KINDS = frozenset(
+    {
+        "LLMProxy",
+        "LLMLocal",
+        "InfraBundle",
+        "InfraMiddleware",
+        "ToolServerRegistry",
+    }
+)
+_TYPE_ALIASES: dict[str, frozenset[str]] = {
+    "llm": frozenset({"LLMProxy", "LLMLocal"}),
+    "tool": frozenset({"ToolServerRegistry"}),
+    "bundle": frozenset({"InfraBundle"}),
+    "middleware": frozenset({"InfraMiddleware"}),
+    "runtime": frozenset({"RuntimeEngine"}),
+}
+_KIND_TOKENS = _LIST_KINDS | frozenset({"RuntimeEngine"})
+TYPE_HELP = (
+    "llm, tool, bundle, middleware, runtime, or a kind "
+    "(LLMProxy, LLMLocal, InfraBundle, InfraMiddleware, ToolServerRegistry, RuntimeEngine)"
+)
+
+
+def catalog_kinds(type_token: str | None) -> frozenset[str]:
+    """Kinds ``infra list`` prints. Empty token is the default infra set (not RuntimeEngine)."""
+    if not type_token or not str(type_token).strip():
+        return _LIST_KINDS
+    key = str(type_token).strip()
+    alias = _TYPE_ALIASES.get(key.lower())
+    if alias is not None:
+        return alias
+    for kind in _KIND_TOKENS:
+        if kind.lower() == key.lower():
+            return frozenset({kind})
+    raise ValueError(f"unknown type {key!r}; one of {TYPE_HELP}")
+
+
 def list_manifest_libraries() -> dict[str, str]:
     try:
         eps = metadata.entry_points(group="mas.runtime.manifest_libraries")

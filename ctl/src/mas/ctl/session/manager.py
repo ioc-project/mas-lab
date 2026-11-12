@@ -244,6 +244,16 @@ class SessionManager:
 
             # A2A message/send is not an LLM tool. Steer (preempt / replace /
             # after) stays on this control surface; A2A has no steer RPC.
+            # Call layers (circuit breaker) keep what they learn in the running spec, through this handle only.
+            ctx.layer_control = SessionControl(
+                self,
+                capability=ControlCapability(
+                    actor="layers",
+                    surface="plugin",
+                    session_ids=frozenset({session.session_id}),
+                    methods=frozenset({"layer_state", "swap_layer_state", "disable_tool", "enable_tool"}),
+                ),
+            )
             ctx.control = SessionControl(
                 self,
                 capability=ControlCapability(

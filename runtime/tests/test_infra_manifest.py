@@ -35,3 +35,23 @@ spec:
     assert infra.models.allowed == ["qwen2.5:latest", "nomic-embed-text:latest"]
     assert infra.models.defaults.llm == "qwen2.5:latest"
     assert infra.models.defaults.embed == "nomic-embed-text:latest"
+
+
+def test_llm_proxy_yaml_retry_is_not_a_proxy_field() -> None:
+    infra = InfraManifest.from_document(
+        {
+            "apiVersion": "infra/v1",
+            "kind": "LLMProxy",
+            "metadata": {"name": "retry-leaf"},
+            "spec": {
+                "proxy": {
+                    "api_base": "https://x.example/v1",
+                    "api_key_env": "X_KEY",
+                    "retry": {"max_attempts": 9, "jitter": False},
+                }
+            },
+        }
+    )
+    proxy = infra.to_llm_proxy_dict()
+    assert "retry" not in proxy
+    assert "retry" not in infra.to_document()["spec"]["proxy"]

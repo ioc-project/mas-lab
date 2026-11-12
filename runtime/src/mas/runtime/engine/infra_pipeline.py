@@ -6,31 +6,63 @@
 Every other LLM step is instantiated in front of each routed provider.
 Tool steps use the same ``for`` / ``per`` stamps beside ``PipedLLMProvider``.
 
-Implementations register as ``type: infra_middleware``. This module owns the
-protocol, registry dispatch, and the bidirectional reply facade — no plugin
-class names.
+Implementations register as ``type: layer``.
+The composer lives in ``mas.runtime.layers``. This module keeps the
+bidirectional reply facade and the leaf wrappers — no plugin class names.
 """
 
 from __future__ import annotations
 
 import contextvars
-import inspect
-import logging
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Protocol
 
-from mas.runtime.engine.call_kinds import (
-    normalize_call_kind,
-    normalize_call_kinds,
-    read_aliased_field,
+from mas.runtime.layers.compose import (
+    apply_layer as apply_middleware,
 )
+from mas.runtime.layers.compose import (
+    filter_pipeline_for_kind,
+    split_pipeline_layers,
+    wrap_call_stack,
+)
+from mas.runtime.layers.compose import (
+    is_cache_layer as is_cache_middleware,
+)
+from mas.runtime.layers.compose import (
+    is_scheduler_layer as is_scheduler_middleware,
+)
+from mas.runtime.layers.compose import (
+    is_shared_layer as is_shared_middleware,
+)
+from mas.runtime.layers.compose import (
+    layer_call_kinds as middleware_call_kinds,
+)
+from mas.runtime.layers.compose import (
+    layer_id as middleware_id,
+)
+from mas.runtime.layers.compose import (
+    layer_per as middleware_per,
+)
+from mas.runtime.layers.compose import (
+    stamp_layer_step as stamp_middleware_step,
+)
+from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
-logger = logging.getLogger(__name__)
-
-_SHARED_PER = "all"
-_DESTINATION_PER = "destination"
+__all__ = [
+    "apply_middleware",
+    "filter_pipeline_for_kind",
+    "is_cache_middleware",
+    "is_scheduler_middleware",
+    "is_shared_middleware",
+    "middleware_call_kinds",
+    "middleware_id",
+    "middleware_per",
+    "split_pipeline_layers",
+    "stamp_middleware_step",
+    "wrap_call_stack",
+]
 
 _PROVIDER_CALL: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "mas_infra_provider_call",
@@ -74,139 +106,6 @@ class InfraMiddleware(Protocol):
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str: ...
 
 
-def middleware_id(spec: dict[str, Any] | None) -> str:
-    raw = spec or {}
-    return str(raw.get("middleware") or raw.get("id") or "").strip().lower()
-
-
-def _middleware_class(mid: str) -> type | None:
-    if not mid:
-        return None
-    from mas.runtime.registry import get_registry
-
-    variant = get_registry().resolve_by_type("infra_middleware", mid)
-    if variant is None:
-        return None
-    try:
-        return variant.load_class()
-    except (ImportError, AttributeError, TypeError):
-        return None
-
-
-def _middleware_entry_attributes(mid: str) -> dict[str, Any]:
-    if not mid:
-        return {}
-    from mas.runtime.registry import get_registry
-
-    entry = get_registry().get_entry(mid)
-    if entry is None:
-        return {}
-    return dict(entry.attributes or {})
-
-
-def middleware_per(spec: dict[str, Any] | None) -> str:
-    """``all`` (one shared copy) or ``destination`` (one copy per leaf).
-
-    The step may set ``per``; otherwise the plugin class attribute ``per``
-    (or ``library.yaml`` ``attributes.per``) is used. Unknown plugins
-    default to ``destination``.
-    """
-    raw = spec or {}
-    explicit = str(raw.get("per") or "").strip().lower()
-    if explicit in {_SHARED_PER, _DESTINATION_PER}:
-        return explicit
-    cls = _middleware_class(middleware_id(spec))
-    if cls is not None:
-        try:
-            attr = str(cls.per or "").strip().lower()
-        except AttributeError:
-            attr = ""
-        if attr in {_SHARED_PER, _DESTINATION_PER}:
-            return attr
-    attr = str(_middleware_entry_attributes(middleware_id(spec)).get("per") or "").strip().lower()
-    if attr in {_SHARED_PER, _DESTINATION_PER}:
-        return attr
-    return _DESTINATION_PER
-
-
-def middleware_call_kinds(spec: dict[str, Any] | None) -> tuple[str, ...]:
-    """Canonical ``for`` kinds for a step (``llm``, ``tool``). Undeclared is ``llm``."""
-    raw = spec or {}
-    if "for" in raw:
-        kinds = normalize_call_kinds(raw.get("for"))
-        return kinds or ("llm",)
-    cls = _middleware_class(middleware_id(spec))
-    if cls is not None:
-        try:
-            declared = cls.call_kinds
-        except AttributeError:
-            declared = None
-        kinds = normalize_call_kinds(declared)
-        if kinds:
-            return kinds
-    kinds = normalize_call_kinds(_middleware_entry_attributes(middleware_id(spec)).get("call_kinds"))
-    if kinds:
-        return kinds
-    return ("llm",)
-
-
-def stamp_middleware_step(spec: dict[str, Any] | None, *, where: str = "") -> dict[str, Any]:
-    """Copy a step, resolve leftover keys, and fill ``for`` / ``per``."""
-    step = dict(spec or {})
-    mid = middleware_id(step) or "middleware"
-    label = where or mid
-    raw_for = read_aliased_field(step, "for", "applies_to", where=label)
-    step.pop("applies_to", None)
-    if raw_for is not None:
-        step["for"] = list(normalize_call_kinds(raw_for))
-    step["for"] = list(middleware_call_kinds(step))
-    step["per"] = middleware_per(step)
-    return step
-
-
-def filter_pipeline_for_kind(
-    pipeline: list[dict[str, Any]] | None,
-    kind: str,
-) -> list[dict[str, Any]]:
-    """Keep steps whose ``for`` includes *kind*. Empty ``for`` is ``llm`` only."""
-    want = normalize_call_kind(kind)
-    if not want:
-        return [dict(step) for step in (pipeline or []) if isinstance(step, dict)]
-    out: list[dict[str, Any]] = []
-    for step in pipeline or []:
-        if not isinstance(step, dict):
-            continue
-        if want in middleware_call_kinds(step):
-            out.append(dict(step))
-    return out
-
-
-def is_shared_middleware(spec: dict[str, Any] | None) -> bool:
-    return middleware_per(spec) == _SHARED_PER
-
-
-def is_cache_middleware(spec: dict[str, Any] | None) -> bool:
-    """True when this step stores LLM responses (``llm_cache`` plugin)."""
-    cls = _middleware_class(middleware_id(spec))
-    if cls is not None:
-        try:
-            return bool(cls.stores_llm_responses)
-        except AttributeError:
-            pass
-    return bool(_middleware_entry_attributes(middleware_id(spec)).get("stores_llm_responses"))
-
-
-def is_scheduler_middleware(spec: dict[str, Any] | None) -> bool:
-    """True when this step paces live LLM calls (``llm_scheduler`` plugin)."""
-    cls = _middleware_class(middleware_id(spec))
-    if cls is not None:
-        try:
-            return bool(cls.paces_llm_calls)
-        except AttributeError:
-            pass
-    return bool(_middleware_entry_attributes(middleware_id(spec)).get("paces_llm_calls"))
-
-
 def infra_has_cache_step(
     pipeline: list[dict[str, Any]] | None,
     leaves: dict[str, dict[str, Any]] | None = None,
@@ -220,61 +119,6 @@ def infra_has_cache_step(
             if isinstance(step, dict) and is_cache_middleware(step):
                 return True
     return False
-
-
-def split_pipeline_layers(
-    pipeline: list[dict[str, Any]] | None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Split merged steps into common (``per: all``) vs per-destination.
-
-    Cache declares ``per = "all"`` so one instance sits on the engine's
-    LLM call. Scheduler and fault_inject declare ``per = "destination"``
-    so each leaf gets its own copy. ``PipedLLMProvider`` is that leaf call.
-    """
-    common: list[dict[str, Any]] = []
-    per_leaf: list[dict[str, Any]] = []
-    for step in pipeline or []:
-        if not isinstance(step, dict):
-            continue
-        stamped = dict(step)
-        stamped["per"] = middleware_per(stamped)
-        target = common if stamped["per"] == _SHARED_PER else per_leaf
-        target.append(stamped)
-    cache_steps = [step for step in common if is_cache_middleware(step)]
-    if len(cache_steps) > 1:
-        logger.warning(
-            "infra pipeline has %s llm_cache steps; extra copies share one file and overwrite keys",
-            len(cache_steps),
-        )
-    return common, per_leaf
-
-
-def apply_middleware(engine: Any, spec: dict[str, Any]) -> Any:
-    """Wrap engine with one registered infra middleware, or leave it unchanged."""
-    mid = str(spec.get("middleware") or spec.get("id") or "").strip().lower()
-    if not mid:
-        return engine
-    params = dict(spec.get("params") or {})
-    from mas.runtime.registry import get_registry
-
-    variant = get_registry().resolve_by_type("infra_middleware", mid)
-    if variant is None:
-        return engine
-    plugin_cls = variant.load_class()
-    wrap = getattr(plugin_cls, "wrap", None)
-    if not callable(wrap):
-        raise TypeError(f"infra middleware {mid!r} must define a wrap(inner, params, *, call_kinds=) classmethod")
-    kinds = middleware_call_kinds(spec)
-    try:
-        sig = inspect.signature(wrap)
-    except (TypeError, ValueError):
-        sig = None
-    if sig is None or (
-        "call_kinds" not in sig.parameters
-        and not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-    ):
-        raise TypeError(f"infra middleware {mid!r} wrap(inner, params) must accept call_kinds=")
-    return wrap(engine, params, call_kinds=kinds)
 
 
 def innermost_call(engine: Any) -> Any:
@@ -338,16 +182,6 @@ def call_ctx(engine: Any) -> Any:
     return getattr(source, "ctx", None)
 
 
-def wrap_call_stack(body: Any, pipeline: list[dict[str, Any]]) -> Any:
-    """Run *pipeline* around one invoke body. The public engine is not replaced."""
-    if not pipeline:
-        return body
-    wrapped = body
-    for spec in reversed(pipeline):
-        wrapped = apply_middleware(wrapped, spec)
-    return BidirectionalPipelineEngine(inner=wrapped, pipeline_steps=list(pipeline))
-
-
 def wrap_llm_provider_pipeline(provider: Any, pipeline: list[dict[str, Any]] | None) -> Any:
     """Instantiate *pipeline* in front of one routed protocol plugin.
 
@@ -376,11 +210,26 @@ def wrap_tool_pipeline(body: Any, pipeline: list[dict[str, Any]] | None) -> Any:
 
 
 @dataclass
-class BidirectionalPipelineEngine:
+class BidirectionalPipelineEngine(Lifecycle):
     """Engine facade aligned with ctl ``BidirectionalInfraPipeline`` reply pass."""
 
     inner: Any
     pipeline_steps: list[dict[str, Any]]
+
+    def start(self) -> None:
+        from mas.runtime.layers.lifecycle import call_start
+
+        call_start(self.inner)
+
+    def tick(self) -> None:
+        from mas.runtime.layers.lifecycle import call_tick
+
+        call_tick(self.inner)
+
+    def stop(self) -> None:
+        from mas.runtime.layers.lifecycle import call_stop
+
+        call_stop(self.inner)
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         return str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
@@ -485,7 +334,7 @@ class _ProviderCallEngine:
 
 
 @dataclass
-class PipedLLMProvider:
+class PipedLLMProvider(Lifecycle):
     """One leaf's infra pipeline wrapping a protocol plugin.
 
     The registry routes ``model=`` here; ``chat_completion`` runs that leaf's
@@ -515,6 +364,11 @@ class PipedLLMProvider:
         )
         self._stack = wrap_call_stack(self._leaf, list(self.pipeline))
 
+    def stop(self) -> None:
+        from mas.runtime.layers.lifecycle import call_stop
+
+        call_stop(self._stack)
+
     def chat_completion(self, **kwargs: Any) -> dict[str, Any]:
         return self._run_sync(dict(kwargs))
 
@@ -539,7 +393,7 @@ class PipedLLMProvider:
 
 
 @dataclass
-class PipedToolCall:
+class PipedToolCall(Lifecycle):
     """One destination's infra pipeline wrapping a tool invoke body.
 
     Same shape as :class:`PipedLLMProvider`, for ``for: tool`` steps. The
@@ -553,6 +407,16 @@ class PipedToolCall:
 
     def __post_init__(self) -> None:
         self._stack = wrap_call_stack(self.inner, list(self.pipeline))
+
+    def tick(self) -> None:
+        from mas.runtime.layers.lifecycle import call_tick
+
+        call_tick(self._stack)
+
+    def stop(self) -> None:
+        from mas.runtime.layers.lifecycle import call_stop
+
+        call_stop(self._stack)
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         return self._stack.invoke(io)

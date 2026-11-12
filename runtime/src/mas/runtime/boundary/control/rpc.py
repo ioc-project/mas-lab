@@ -97,6 +97,9 @@ class ControlRpcServer:
             "navigate",
             "enqueue_input",
             "disable_tool",
+            "enable_tool",
+            "layer_state",
+            "swap_layer_state",
         }:
             return fn(session_id, **args)
         if method in {"cancel_queued"}:

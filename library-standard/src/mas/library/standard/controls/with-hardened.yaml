@@ -2,8 +2,8 @@
 #  SPDX-License-Identifier: Apache-2.0
 # Production guidelines, written once and attached to every agent you deploy (--control, or a Flavour's
 # spec.control with agents: $all): cap LLM/tool call counts, refuse undeclared tool names, and classify typed
-# failures at ingress, retrying transient/unavailable ones. The circuit breaker joins it when the infra
-# pipeline takes retry and the breaker.
+# failures at ingress, retrying transient/unavailable ones. The circuit breaker is not this Control:
+# include standard:llm-proxy-hardened (or standard:tool-server-hardened) on the infra pipeline.
 apiVersion: control/v1
 kind: Control
 metadata:

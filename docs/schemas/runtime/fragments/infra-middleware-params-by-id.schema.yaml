@@ -34,3 +34,39 @@ allOf:
       properties:
         params:
           $ref: "./infra-fault-inject-params.schema.yaml"
+  - if:
+      properties:
+        layer:
+          enum: [retry]
+      required: [layer]
+    then:
+      properties:
+        params:
+          $ref: "./retry-policy.schema.yaml"
+  - if:
+      properties:
+        middleware:
+          enum: [retry]
+      required: [middleware]
+    then:
+      properties:
+        params:
+          $ref: "./retry-policy.schema.yaml"
+  - if:
+      properties:
+        layer:
+          enum: [circuit_breaker, threshold]
+      required: [layer]
+    then:
+      properties:
+        params:
+          $ref: "./control-binding.schema.yaml#/properties/circuit_breaker"
+  - if:
+      properties:
+        middleware:
+          enum: [circuit_breaker, threshold]
+      required: [middleware]
+    then:
+      properties:
+        params:
+          $ref: "./control-binding.schema.yaml#/properties/circuit_breaker"

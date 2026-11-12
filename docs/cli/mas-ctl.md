@@ -357,8 +357,9 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--connect`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |
 | `mas-ctl plan MANIFEST` | Print the placement plan only. | `-d/--deployment`, `--kernel`, `--no-validate` |
 | `mas-ctl flavour list` | List flavour manifests from installed libraries. Deprecated: it prints a warning on stderr; pass `--flavour PATH`, or a bundled name (`local`, `prod`). | none |
-| `mas-ctl infra list` | List infra bundles. Alias: `mas-ctl list-bundles`. | `-v` |
-| `mas-ctl infra show` | Print each LLM and tool chain, and each agent's comm stack and its name on the Flavour's chain. | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--flavour`, `--control`, `--json` |
+| `mas-ctl infra list` | List installed infra refs. Alias: `mas-ctl list-bundles`. | `-v`, `--type KIND` |
+| `mas-ctl infra show REF` | Print one catalog ref: connection and/or pipeline (with params). | `--connections`, `--pipeline`, `--json` |
+| `mas-ctl infra resolved [MANIFEST]` | Print the pipeline a session wraps (same wrap as chat / run-mas). | `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--flavour`, `--control`, `--type llm\|tool\|agents`, `--connections`, `--pipeline`, `--json` |
 | `mas-ctl list-bundles` | List infra bundles from installed libraries. | `-v` |
 | `mas-ctl registry list`, `registry query PREFIX` | List registered runtime machines, ctl registries, and schema kinds. | `query`: `-l/--layer`, `--json` |
 | `mas-ctl plugin list`, `doctor [MANIFEST …]`, `enable URN` | Show plugin availability from `library.yaml` `plugins:`. `enable` installs the missing extra. | `list`: `--type`, `--json`. `doctor`: `--json`. `enable`: `--dry-run`. |

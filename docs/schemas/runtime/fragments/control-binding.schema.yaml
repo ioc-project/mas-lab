@@ -5,10 +5,10 @@ $id: "mas/v1#control-binding"
 title: ControlBinding
 description: >
   Control-plane knobs keyed by id. Set a key to null to disable.
-  ``retry`` is applied by the runtime reliability layer (LLM HTTP + tool
-  dispatch). ``circuit_breaker`` loads a library plugin
-  (default ``threshold``). ``budget`` and ``rate_limiter`` remain plugin
-  configs.
+  ``retry`` and ``circuit_breaker`` are deprecated: they still load and
+  become pipeline steps, with a one-time warning. Prefer a ``retry`` /
+  ``circuit_breaker`` layer on the infra pipeline. ``budget`` and
+  ``rate_limiter`` remain plugin configs.
 type: object
 additionalProperties: false
 properties:
@@ -26,14 +26,16 @@ properties:
             minimum: 0
   retry:
     type: object
+    deprecated: true
     additionalProperties: false
-    description: Infra retry budgets for LLM HTTP and tool dispatch.
+    description: Deprecated. Still applied as a retry pipeline step (one warning).
     properties:
       llm:
         $ref: "./retry-policy.schema.yaml"
       tools:
         $ref: "./retry-policy.schema.yaml"
   circuit_breaker:
+    deprecated: true
     oneOf:
       - type: "null"
       - type: object
@@ -57,7 +59,8 @@ properties:
             type: string
             description: >
               Library plugin name (default ``threshold``). Implementations
-              register as ``type: circuit_breaker``; not a kernel slot.
+              register as ``type: layer`` (``circuit_breaker`` still loads);
+              not a kernel slot.
   rate_limiter:
     oneOf:
       - type: "null"

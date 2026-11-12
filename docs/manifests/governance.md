@@ -79,7 +79,7 @@ The `with-hardened` Control sets this up for you:
 
 1. It names `gov_no_undeclared_tool`, `budget` and `retry_on_error` in `spec.governance`.
 2. The `budget` plugin is set to `max_llm_calls: 50` and `max_tool_calls: 100`.
-3. The infra retry and the circuit breaker stay agent `spec.control` settings until the infra pipeline takes them (next release).
+3. Infra retry defaults to 4 LLM and 2 tool attempts. The circuit breaker is `standard:llm-proxy-hardened` (and `standard:tool-server-hardened`), not this Control.
 
 Details: [reliability.md](../references/reliability.md#with-hardened).
 

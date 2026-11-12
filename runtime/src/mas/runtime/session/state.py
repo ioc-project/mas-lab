@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -178,6 +179,23 @@ class Session:
 
         previous_status = self.status
         self.status = SessionStatus.CHECKPOINTING
+        seal = ExitStack()
+        try:
+            return self._write_checkpoint(store, label, previous_status, seal)
+        finally:
+            seal.close()
+            if self.status is SessionStatus.CHECKPOINTING:  # building the payload failed
+                self.status = (
+                    previous_status
+                    if previous_status in {SessionStatus.PAUSED, SessionStatus.TERMINATED}
+                    else SessionStatus.ACTIVE
+                )
+
+    def _write_checkpoint(
+        self, store: CheckpointStore, label: str, previous_status: SessionStatus, seal: ExitStack
+    ) -> Path:
+        # the spec is read with the log sealed: no write lands while this checkpoint is being taken
+        self._pin_spec(seal)
         payload: dict[str, Any] = {
             "version": 2,
             "label": label,
@@ -205,6 +223,7 @@ class Session:
             store_label = f"{self.session_id}-{turn_label}"
             path = store.save(payload, label=store_label)
         finally:
+            seal.close()
             if previous_status in {SessionStatus.PAUSED, SessionStatus.TERMINATED}:
                 self.status = previous_status
             else:
@@ -223,6 +242,23 @@ class Session:
             self.checkpoint_history = self.checkpoint_history[-self.checkpoint_policy.retention_n :]
         self._record_snapshot(payload, label=label)
         return path
+
+    def _pin_spec(self, seal: ExitStack | None = None) -> None:
+        """Bring ``manifest_ref`` and ``spec_revision`` to what the spec log holds, read as one.
+
+        With *seal* the log stays sealed until the stack closes. Without it the pair is read once, which is
+        the point in the log the snapshot is taken at.
+        """
+        log = self.spec_log
+        if log is None or not log.has(self.session_id):
+            return
+        if seal is not None:
+            manifest, revision = seal.enter_context(log.sealed(self.session_id))
+        else:
+            with log.sealed(self.session_id) as (manifest, revision):
+                pass
+        self.manifest_ref = ManifestRef.from_content(manifest)
+        self.spec_revision = revision
 
     def _record_snapshot(self, payload: dict[str, Any], *, label: str) -> None:
         tree = self.snapshot_tree
@@ -323,6 +359,7 @@ class Session:
         from mas.runtime.session.cow import capture_kernel
         from mas.runtime.session.snapshot import Snapshot, SnapshotRef, SnapshotTree
 
+        self._pin_spec()
         sync_working_memory_out(
             self.instance,
             memory_key=self.session_id,

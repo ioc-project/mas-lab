@@ -28,6 +28,14 @@ properties:
     $ref: "../infra.schema.yaml#/properties/spec/properties/runtime_engine"
   middleware:
     $ref: "../infra.schema.yaml#/properties/spec/properties/middleware"
+  layer:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/layer"
+  priority:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/priority"
+  id:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/id"
+  enabled:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/enabled"
   for:
     $ref: "../infra.schema.yaml#/properties/spec/properties/for"
   per:

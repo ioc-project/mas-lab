@@ -77,10 +77,10 @@ def normalize_layers(entries: Any) -> list[dict[str, Any]]:
     for entry in entries:
         if not isinstance(entry, Mapping):
             raise StackError(f"a layer is a {{type, params}} map, got {type(entry).__name__}")
-        unknown = set(entry) - {"type", "params"}
+        unknown = set(entry) - {"type", "params", "priority", "per", "layer"}
         if unknown:
-            raise StackError(f"layer {entry.get('type')!r}: unknown keys {sorted(unknown)}")
-        name = str(entry.get("type") or "").strip()
+            raise StackError(f"layer {entry.get('type') or entry.get('layer')!r}: unknown keys {sorted(unknown)}")
+        name = str(entry.get("type") or entry.get("layer") or "").strip()
         if not name:
             raise StackError("a layer type cannot be empty")
         params = entry.get("params")
@@ -88,8 +88,27 @@ def normalize_layers(entries: Any) -> list[dict[str, Any]]:
             params = {}
         if not isinstance(params, Mapping):
             raise StackError(f"layer {name!r}: params must be a map")
-        out.append({"type": name, "params": dict(params)})
+        item = {"type": name, "params": dict(params)}
+        if "priority" in entry:
+            item["priority"] = entry["priority"]
+        if "per" in entry:
+            item["per"] = entry["per"]
+        out.append(item)
     return out
+
+
+def _order_by_priority(layers: list[dict[str, Any]], classes: list[type]) -> tuple[list[dict[str, Any]], list[type]]:
+    """Keep the transport at the bottom; higher priority wraps outside (top)."""
+    if len(layers) < 2:
+        return layers, classes
+    from mas.runtime.layers.compose import layer_priority
+
+    rest = list(zip(layers[1:], classes[1:], strict=True))
+    # Same order as compose.order_steps, then reversed so the transport stays
+    # bottom and higher priority is last (outer). Ties break by name.
+    rest.sort(key=lambda item: (-layer_priority(item[0]), str(item[0].get("type") or "")))
+    rest.reverse()
+    return [layers[0], *[pair[0] for pair in rest]], [classes[0], *[pair[1] for pair in rest]]
 
 
 def is_transport(cls: type) -> bool:
@@ -223,6 +242,7 @@ class StackHandle:
         self.layers = normalize_layers(layers)
         self._registry = registry
         self._classes = layer_classes(self.layers, registry)
+        self.layers, self._classes = _order_by_priority(self.layers, self._classes)
         self._run_turn = run_turn
         self.plugin_id = str(self.layers[0]["type"])
         self.fabric_id = uuid.uuid4().int  # not id(self): an id can be reused once the object is freed

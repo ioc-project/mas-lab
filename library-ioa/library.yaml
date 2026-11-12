@@ -20,6 +20,7 @@ types:
   - tool_provider
   - agent_comm
   - agent_expose
+  - layer
   - stack_layer
   - webserver
 
@@ -41,7 +42,7 @@ plugins:
     urn: mas.agent_expose.a2a
     module: library_ioa.plugins.a2a.exposure
     class: A2AExposure
-  - type: stack_layer
+  - type: layer
     name: slim
     urn: mas.stack_layer.slim
     module: library_ioa.plugins.slim.agent_comm
@@ -51,7 +52,8 @@ plugins:
     attributes:
       default_enabled: false
       semantic: stack_layer
-  - type: stack_layer
+      deprecated_types: [stack_layer]
+  - type: layer
     name: a2a-framing
     urn: mas.stack_layer.a2a-framing
     module: library_ioa.plugins.a2a.layer
@@ -59,7 +61,8 @@ plugins:
     attributes:
       default_enabled: false
       semantic: stack_layer
-  - type: stack_layer
+      deprecated_types: [stack_layer]
+  - type: layer
     name: http
     urn: mas.stack_layer.http
     module: library_ioa.plugins.http_layer.transport
@@ -69,6 +72,7 @@ plugins:
     attributes:
       default_enabled: false
       semantic: stack_layer
+      deprecated_types: [stack_layer]
   - type: webserver
     name: uvicorn
     urn: mas.webserver.uvicorn

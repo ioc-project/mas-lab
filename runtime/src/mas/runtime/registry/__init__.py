@@ -310,7 +310,17 @@ class PluginRegistry:
 
     def _entries_for_type(self, plugin_type: str) -> list[PluginEntry]:
         canonical = _canonical_type_name(plugin_type)
-        return list(self._by_type.get(canonical, ()))
+        found = list(self._by_type.get(canonical, ()))
+        seen = {id(entry) for entry in found}
+        for entries in self._by_type.values():
+            for entry in entries:
+                if id(entry) in seen:
+                    continue
+                legacy = {_canonical_type_name(token) for token in (entry.attributes.get("deprecated_types") or ())}
+                if canonical in legacy:
+                    found.append(entry)
+                    seen.add(id(entry))
+        return found
 
     @staticmethod
     def _matches_name(entry: PluginEntry, name: str) -> bool:
@@ -383,16 +393,40 @@ class PluginRegistry:
         return None
 
     def resolve_by_type(self, plugin_type: str, name: str) -> VariantInfo | None:
+        wanted = _canonical_type_name(plugin_type)
         urn = self.urn_for(name)
         if urn:
             entry = self._entries.get(urn)
-            if entry and self._entry_type(entry) == _canonical_type_name(plugin_type):
+            if entry and self._type_matches(entry, wanted):
                 self._note_alias_use(name.lower())
+                self._warn_deprecated_type(entry, wanted)
                 return entry.resolve()
         for entry in self._entries_for_type(plugin_type):
             if self._matches_name(entry, name):
+                self._warn_deprecated_type(entry, wanted)
                 return entry.resolve()
         return None
+
+    @staticmethod
+    def _type_matches(entry: PluginEntry, wanted: str) -> bool:
+        if PluginRegistry._entry_type(entry) == wanted:
+            return True
+        return wanted in {_canonical_type_name(token) for token in (entry.attributes.get("deprecated_types") or ())}
+
+    def _warn_deprecated_type(self, entry: PluginEntry, wanted: str) -> None:
+        actual = self._entry_type(entry)
+        if actual == wanted:
+            return
+        key = f"deprecated-type:{wanted}:{entry.urn}"
+        if key in self._warned:
+            return
+        self._warned.add(key)
+        _logger.warning(
+            "plugin type %s is deprecated (%s): register it as a %s",
+            wanted,
+            entry.urn,
+            actual or "layer",
+        )
 
     def get(
         self,

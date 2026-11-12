@@ -32,6 +32,7 @@ from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.kernel.run_event import max_event_seq, new_run_events
 from mas.runtime.kernel.runtime_context import runtime_binding
 from mas.runtime.kernel.state import RunLedger
+from mas.runtime.layers.lifecycle import Lifecycle, call_stop
 from mas.runtime.machines.gov import gov_is_hitl_pending
 from mas.runtime.schema.egress import (
     EgressKind,
@@ -254,7 +255,7 @@ class DriverTrace:
 
 
 @dataclass
-class KernelDriver:
+class KernelDriver(Lifecycle):
     """Feed ingress, auto-dispatch egress to mock HITL/engine/ctx until quiescent."""
 
     kernel: RuntimeKernel
@@ -323,6 +324,9 @@ class KernelDriver:
                 bound_manifest = engine_manifest(self.engine)
                 if bound_manifest is not None:
                     self.ctx.manifest = bound_manifest
+
+    def stop(self) -> None:
+        call_stop(self.engine)
 
     def feed(self, event: IngressSymbol) -> DriverTrace:
         with runtime_binding(self.coordination, self.observability), _inbound_scope(event):

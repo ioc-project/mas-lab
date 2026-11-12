@@ -303,8 +303,10 @@ def build_engine(
     if reliability is None:
         from mas.runtime.reliability.policy import ReliabilitySettings
 
-        reliability = ReliabilitySettings.from_spec(spec, llm_proxy=llm_proxy)
-    llm_proxy["retry"] = reliability.llm_retry.to_mapping()
+        reliability = ReliabilitySettings.from_spec(spec)
+    from mas.ctl.session.llm_retry_env import llm_http_retry_overrides
+
+    retry_overlay = llm_http_retry_overrides() or None
     if cache_read_only:
         # Exclusive replay: answer from the cache only, never write, never call the provider.
         cache_read_override, cache_write_override = True, False
@@ -362,6 +364,7 @@ def build_engine(
         cache_read=cache_read,
         cache_write=cache_write,
         cache_raise_on_miss=cache_read_only,
+        retry_overlay=retry_overlay,
     )
     engine = LiveLlmEngine(
         ctx=ctx,
@@ -390,9 +393,12 @@ def build_engine(
         llm_provider=llm_provider,
         reliability=reliability,
     )
+    from mas.runtime.layers.control import resolve_call_pipeline
+
     common, _destination = split_pipeline_layers(llm_proxy.get("pipeline") or [])
     engine.install_infra_pipeline(filter_pipeline_for_kind(common, "llm"))
-    tool_common, _tool_dest = split_pipeline_layers(list(resolved.tool_pipeline or []))
+    tool_steps = resolve_call_pipeline(spec, list(resolved.tool_pipeline or []), kind="tool")
+    tool_common, _tool_dest = split_pipeline_layers(tool_steps)
     engine.install_tool_pipeline(tool_common, destinations=resolved.tool_server_registry)
     return EngineSelection(engine=engine, mode=mode, reason=reason)
 

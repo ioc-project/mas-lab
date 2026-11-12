@@ -30,13 +30,13 @@ def _chat(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-@pytest.mark.parametrize("command", ["chat", "tui", "serve", "run-mas", "compile", "infra show"])
+@pytest.mark.parametrize("command", ["chat", "tui", "serve", "run-mas", "compile", "infra resolved"])
 def test_the_control_flag_exists_on_every_session_command(command: str) -> None:
     if not MAS_CTL.is_file():
         pytest.skip("mas-ctl CLI not in venv")
     out = subprocess.run([str(MAS_CTL), *command.split(), "--help"], capture_output=True, text=True, timeout=60).stdout
     assert "--control REF[@SELECTOR]" in out
-    if command not in {"compile", "infra show"}:
+    if command not in {"compile", "infra resolved"}:
         assert "--events-sink ROW" in out
     if command in {"chat", "tui", "serve", "run-mas"}:
         assert "--events / --no-events" in out

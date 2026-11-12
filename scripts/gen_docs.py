@@ -56,6 +56,7 @@ class Plugin:
     full_module: str  # absolute Python module path
     category: str
     library: str  # checkout directory (stable across PyPI renames)
+    deprecated_types: tuple[str, ...] = ()  # old plugin types that still resolve to this row
 
 
 @dataclass
@@ -158,6 +159,7 @@ def _plugins_from_library_yaml(path: Path, library_name: str) -> list[Plugin]:
                         full_module=full_module,
                         category=category,
                         library=library_name,
+                        deprecated_types=tuple((entry.get("attributes") or {}).get("deprecated_types") or ()),
                     )
                 )
     return plugins
@@ -432,6 +434,27 @@ def generate_plugins_reference(
                 ]
             )
         lines.append(_md_table(["Class", "Full module path", "Library"], rows))
+        lines.append("\n\n")
+
+    deprecated = [p for p in plugins if p.deprecated_types]
+    if deprecated:
+        lines.append("### Deprecated plugin types\n\n")
+        lines.append(
+            "A plugin type listed here is a retired spelling. Lookups under it still resolve to the "
+            "current row and warn once; a library that registers under it keeps loading. "
+            "It will be dropped in a later release.\n\n"
+        )
+        rows_dep = [
+            [
+                f"`{t}`",
+                f"`{p.category}`",
+                f"`{p.class_name}`",
+                f"`{p.library}`",
+            ]
+            for p in sorted(deprecated, key=lambda x: x.class_name)
+            for t in p.deprecated_types
+        ]
+        lines.append(_md_table(["Deprecated type", "Use type", "Class", "Library"], rows_dep))
         lines.append("\n\n")
 
     lines.append("---\n\n")

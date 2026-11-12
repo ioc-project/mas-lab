@@ -8,17 +8,19 @@ import random
 from dataclasses import dataclass, field
 from typing import Any
 
+from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
 
 @dataclass
-class FaultInjectMiddleware:
+class FaultInjectMiddleware(LayerLifecycle):
     """Inject random LLM failures — chaos-lite in front of any provider."""
 
     per = "destination"
     call_kinds = ("llm",)
+    priority = 20
     stores_llm_responses = False
 
     inner: Any
@@ -26,6 +28,8 @@ class FaultInjectMiddleware:
     rate: float = 0.0
     status_codes: list[int] = field(default_factory=lambda: [503])
     message: str = "injected fault"
+    seed: int | None = None
+    _rng: Any = field(default=None, init=False, repr=False)
 
     @classmethod
     def wrap(
@@ -40,15 +44,23 @@ class FaultInjectMiddleware:
         codes_raw = params.get("status_codes") or params.get("errors") or [503]
         codes = [int(c) for c in codes_raw] if isinstance(codes_raw, list) else [503]
         msg = str(params.get("message") or "injected fault")
+        seed = params.get("seed")
         wrapped = cls(
             inner=inner,
             rate=max(0.0, min(1.0, rate)),
             status_codes=codes,
             message=msg,
+            seed=None if seed is None else int(seed),
         )
         if call_kinds is not None:
             wrapped.call_kinds = call_kinds
         return wrapped
+
+    def __post_init__(self) -> None:
+        self._rng = random.Random(self.seed) if self.seed is not None else None
+
+    def _draw(self) -> float:
+        return self._rng.random() if self._rng is not None else random.random()
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
@@ -56,7 +68,7 @@ class FaultInjectMiddleware:
         return f"{label}\n{head}".strip() if head else label
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and random.random() < self.rate:
+        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and self._draw() < self.rate:
             code = self.status_codes[0] if self.status_codes else 503
             return EngineIoReturn(
                 correlation_id=io.correlation_id,
@@ -67,7 +79,7 @@ class FaultInjectMiddleware:
         return self.inner.invoke(io)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and random.random() < self.rate:
+        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and self._draw() < self.rate:
             code = self.status_codes[0] if self.status_codes else 503
             return EngineIoReturn(
                 correlation_id=io.correlation_id,

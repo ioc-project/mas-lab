@@ -54,7 +54,7 @@ mas-ctl validate agent.yaml
 | `compile` / `compose` / `plan` | Resolved spec, bind, placement |
 | `checkpoint …` | List, show, fork, resume |
 | `control …` | Attach, pause, steer a live session |
-| `plugin …` / `registry …` / `infra list` | Introspect plugins and bundles |
+| `plugin …` / `registry …` / `infra list` / `show` / `resolved` | Introspect plugins and bundles |
 
 Flag tables: [mas-ctl.md](mas-ctl.md). Compile walkthrough: [compile.md](compile.md).
 `--override` syntax: [overrides.md](overrides.md). `events.jsonl` and the

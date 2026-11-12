@@ -224,7 +224,7 @@ def test_star_dest_with_advertised_names_does_not_wrap_unknown() -> None:
 def test_star_dest_uses_provider_advertised_names() -> None:
     engine = _engine()
     engine.tool_provider = SimpleNamespace(
-        _routes={"a_tool": SimpleNamespace(provider_name="a")},
+        advertised_names_by_provider=lambda: {"a": ("a_tool",)},
     )
     engine.install_tool_pipeline(
         [],
@@ -429,9 +429,9 @@ def test_llm_call_does_not_run_tool_stack() -> None:
 
 def test_is_cache_middleware_false_when_registry_empty(monkeypatch) -> None:
     class _Empty:
-        def get_entry(self, urn: str) -> None:
-            del urn
-            return None
+        def entries_named(self, *args: object, **kwargs: object) -> list:
+            del args, kwargs
+            return []
 
         def resolve_by_type(self, *args: object, **kwargs: object) -> None:
             del args, kwargs

@@ -576,17 +576,17 @@ def apply_merge_patch(target: Any, patch: Any) -> Any:
 
 
 def _merge_identity_list(existing: list[Any], incoming: list[Any]) -> list[Any]:
-    from mas.ctl.overrides.model import identity_pair
+    from mas.ctl.overrides.model import identity_match
 
     result = [deepcopy(item) for item in existing]
     index: dict[tuple[str, Any], int] = {}
     for position, item in enumerate(result):
-        ident = identity_pair(item)
+        ident = identity_match(item)
         if ident is not None:
             index[ident] = position
     for item in incoming:
         copied = deepcopy(item)
-        ident = identity_pair(copied)
+        ident = identity_match(copied)
         if ident is not None and ident in index:
             current = result[index[ident]]
             if isinstance(current, dict) and isinstance(copied, dict):

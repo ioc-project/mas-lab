@@ -7,7 +7,7 @@
 | Field | Value |
 |-------|-------|
 | **ID** | `slim` |
-| **Kind** | `stack_layer` (a transport: the bottom layer of a chain) |
+| **Kind** | `layer` (a transport: the bottom layer of a chain) |
 | **URN** | `mas.stack_layer.slim` |
 | **Implementation** | `SlimAgentComm` in `library_ioa.plugins.slim.agent_comm`; shared service `SlimService` in `library_ioa.plugins.slim.service` |
 | **Extra** | `slim` of `library-ioa/` (`slim-bindings>=2.2,<3`) |

@@ -31,7 +31,10 @@ def resolve_layer_class(kind: str, binding: dict[str, Any], registry: Any = None
     try:
         info = registry.resolve_spec(kind, binding)
     except KeyError:
-        info = registry.resolve_spec("stack_layer", binding)
+        try:
+            info = registry.resolve_spec("layer", binding)
+        except KeyError:
+            info = registry.resolve_spec("stack_layer", binding)
     return info.load_class()
 
 

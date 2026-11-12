@@ -22,11 +22,16 @@ def _providers_from_document(raw: Any) -> dict[str, dict[str, Any]]:
 
 def _pipeline_from_spec(spec: dict[str, Any], *, where: str) -> list[dict[str, Any]]:
     from mas.runtime.engine.call_kinds import read_aliased_field
+    from mas.runtime.layers.compose import stamp_layer_step
 
     raw = read_aliased_field(spec, "pipeline", "interceptors", where=where)
     if not isinstance(raw, list):
         return []
-    return [dict(item) for item in raw if isinstance(item, dict)]
+    out: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, dict):
+            out.append(stamp_layer_step(item, where=where))
+    return out
 
 
 @dataclass

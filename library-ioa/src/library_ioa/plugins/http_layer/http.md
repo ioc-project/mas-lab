@@ -7,7 +7,7 @@
 | Field | Value |
 |-------|--------|
 | **ID** | `http` |
-| **Kind** | `stack_layer` (a transport: the bottom layer of a chain) |
+| **Kind** | `layer` (a transport: the bottom layer of a chain) |
 | **URN** | `mas.stack_layer.http` |
 | **Implementation** | `HttpLayer` in `library_ioa.plugins.http_layer.transport` |
 | **Manifest keys** | an infra row a Flavour binds at the bottom of `bind.agent_comm`: `{protocol: http, url: ..., headers: {...}, timeout: 30, dev: false}` |

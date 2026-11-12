@@ -17,7 +17,7 @@ from tutorial_support import T07, load_yaml, run_cli
 
 INFRA = T07 / "infra"
 FLAVOURS = T07 / "flavours"
-SHOW = ["mas-ctl", "infra", "show", str(T07 / "mas.yaml")]
+SHOW = ["mas-ctl", "infra", "resolved", str(T07 / "mas.yaml")]
 
 
 def _show(*refs: str, flavour: str = "", json_out: bool = False):
@@ -127,7 +127,7 @@ class TestNames:
 
     def test_specialists_serve_both(self):
         r = run_cli(
-            ["mas-ctl", "infra", "show", str(T07 / "specialists.yaml"), "--json"]
+            ["mas-ctl", "infra", "resolved", str(T07 / "specialists.yaml"), "--json"]
             + ["--flavour", str(FLAVOURS / "slim.yaml")]
             + ["--infra-ref", str(INFRA / "slim-node.yaml")]
         )

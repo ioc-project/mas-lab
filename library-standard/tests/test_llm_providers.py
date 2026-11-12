@@ -10,6 +10,8 @@ import httpx
 import pytest
 from mas.library.standard.plugins.llm.cache import CacheLLMProvider
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
+from mas.runtime.engine.infra_pipeline import wrap_llm_provider_pipeline
+from mas.runtime.layers.defaults import merge_default_retry
 from mas.runtime.registry.llm_provider_registry import (
     LLMProviderRegistry,
     iter_model_provider_specs,
@@ -19,6 +21,21 @@ from mas.runtime.registry.llm_provider_registry import (
     llm_providers_from_manifest,
     protocol_kind_from_infra,
 )
+
+
+def _retrying(provider):
+    return wrap_llm_provider_pipeline(provider, merge_default_retry([], "llm"))
+
+
+def _protocol(provider):
+    current = provider
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, OpenAILLMProvider):
+            return current
+        current = getattr(current, "inner", None)
+    return provider
 
 
 class _StubInner:
@@ -219,9 +236,21 @@ def test_llm_providers_from_manifest_wraps_per_leaf_pipeline():
     assert isinstance(arm, PipedLLMProvider)
     assert isinstance(judge, PipedLLMProvider)
     assert arm is not judge
-    assert [step["middleware"] for step in arm.pipeline] == ["fault_inject"]
-    assert [step["middleware"] for step in judge.pipeline] == ["llm_scheduler"]
-    assert judge._stack.inner.policy.max_in_flight == 2
+    from mas.runtime.layers.compose import layer_id
+
+    assert [layer_id(step) for step in arm.pipeline] == ["retry", "fault_inject"]
+    assert [layer_id(step) for step in judge.pipeline] == ["retry", "llm_scheduler"]
+    scheduler = judge._stack
+    seen: set[int] = set()
+    while scheduler is not None and id(scheduler) not in seen:
+        seen.add(id(scheduler))
+        policy = getattr(scheduler, "policy", None)
+        if policy is not None and hasattr(policy, "max_in_flight"):
+            assert policy.max_in_flight == 2
+            break
+        scheduler = getattr(scheduler, "inner", None)
+    else:
+        raise AssertionError("scheduler layer missing")
 
 
 def test_llm_providers_from_manifest_uses_models_kind():
@@ -229,6 +258,7 @@ def test_llm_providers_from_manifest_uses_models_kind():
         {"spec": {"models": [{"model": "gpt-4o-mini", "kind": "openai"}]}},
         llm_proxy={"api_base": "https://example.test/v1", "api_key_env": "CUSTOM_KEY"},
     )
+    provider = _protocol(provider)
     assert isinstance(provider, OpenAILLMProvider)
     assert provider.api_base == "https://example.test/v1"
     assert provider.api_key_env == "CUSTOM_KEY"
@@ -318,7 +348,7 @@ def test_llm_provider_from_infra_wraps_cache(tmp_path) -> None:
         cache_write=True,
     )
     assert isinstance(provider, CacheLLMProvider)
-    assert isinstance(provider.inner, OpenAILLMProvider)
+    assert isinstance(_protocol(provider.inner), OpenAILLMProvider)
 
 
 class _FakeStreamResponse:
@@ -485,6 +515,7 @@ def test_openai_from_manifest_binds_nested_reasoning():
         },
         llm_proxy={"api_base": "https://example.test/v1", "api_key_env": "CUSTOM_KEY"},
     )
+    provider = _protocol(provider)
     assert isinstance(provider, OpenAILLMProvider)
     assert provider.reasoning.effort == "high"
     assert provider.reasoning.budget_tokens == 64
@@ -622,7 +653,6 @@ class _FlakyPostClient:
 
 
 def _silence_retry_sleep(monkeypatch) -> None:
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
     monkeypatch.setattr("mas.runtime.reliability.retry.time.sleep", lambda _s: None)
 
     async def _no_sleep(_s):
@@ -635,7 +665,9 @@ def test_openai_provider_retries_dropped_connection_then_succeeds(monkeypatch) -
     _silence_retry_sleep(monkeypatch)
     client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=2)
     monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
-    out = OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    out = _retrying(OpenAILLMProvider()).chat_completion(
+        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+    )
     assert out["content"] == "ok"
     assert client.calls == 3
 
@@ -645,7 +677,9 @@ def test_openai_provider_gives_up_after_max_attempts(monkeypatch) -> None:
     client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=10)
     monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
     with pytest.raises(RuntimeError):
-        OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+        _retrying(OpenAILLMProvider()).chat_completion(
+            model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        )
     assert client.calls == 4
 
 
@@ -661,7 +695,9 @@ def test_openai_provider_recreates_client_after_transport_failure(monkeypatch) -
         return client
 
     monkeypatch.setattr("httpx.Client", factory)
-    out = OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    out = _retrying(OpenAILLMProvider()).chat_completion(
+        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+    )
     assert out["content"] == "ok"
     assert len(created) == 2
     assert created[0].calls == 1
@@ -688,7 +724,9 @@ def test_openai_provider_keeps_client_after_http_429(monkeypatch) -> None:
 
     client = _StatusThenOkClient()
     monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
-    out = OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    out = _retrying(OpenAILLMProvider()).chat_completion(
+        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+    )
     assert out["content"] == "ok"
     assert client.calls == 2
     assert client.closed == 0
@@ -705,7 +743,9 @@ def test_openai_provider_does_not_retry_auth_error(monkeypatch) -> None:
     client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=1, exc_factory=_auth_error)
     monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
     with pytest.raises(RuntimeError):
-        OpenAILLMProvider().chat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k")
+        _retrying(OpenAILLMProvider()).chat_completion(
+            model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        )
     assert client.calls == 1
 
 
@@ -742,7 +782,7 @@ def test_openai_provider_retries_stream_connect_failure(monkeypatch) -> None:
     client = _FlakyStreamClient(lines, fail_times=2)
     monkeypatch.setattr("httpx.Client", lambda **kwargs: client)
     received: list[str] = []
-    provider = OpenAILLMProvider(stream=True)
+    provider = _retrying(OpenAILLMProvider(stream=True))
     message = provider.chat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
@@ -901,7 +941,7 @@ async def test_openai_provider_recreates_async_client_after_transport_failure(mo
         return client
 
     monkeypatch.setattr("httpx.AsyncClient", factory)
-    out = await OpenAILLMProvider().achat_completion(
+    out = await _retrying(OpenAILLMProvider()).achat_completion(
         model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
     )
     assert out["content"] == "ok"
@@ -982,7 +1022,7 @@ async def test_openai_provider_keeps_async_client_after_http_429(monkeypatch) ->
 
     client = _StatusThenOkAsyncClient()
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
-    out = await OpenAILLMProvider().achat_completion(
+    out = await _retrying(OpenAILLMProvider()).achat_completion(
         model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
     )
     assert out["content"] == "ok"
@@ -1032,7 +1072,7 @@ async def test_openai_provider_retries_async_stream_connect_failure(monkeypatch)
     client = _FlakyAsyncStreamClient()
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
     received: list[str] = []
-    message = await OpenAILLMProvider(stream=True).achat_completion(
+    message = await _retrying(OpenAILLMProvider(stream=True)).achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
         api_key="k",

@@ -1,10 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tests for LLM HTTP retry classification and the retrying request helper.
-
-Live LLM calls go through an LLMProvider plugin which uses these helpers
-(``request_with_retries`` / ``call_with_retry``) on the OpenAI-compatible path.
-"""
+"""Tests for LLM HTTP retry classification. Retry itself is a layer around the provider."""
 
 from __future__ import annotations
 
@@ -13,11 +9,41 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 from mas.library.standard.plugins.llm.http import (
-    arequest_with_retries,
+    arequest_once,
     llm_status_is_retryable,
-    request_with_retries,
+    request_once,
 )
-from mas.runtime.reliability.classify import is_retryable_llm_http_error, is_tls_verify_failure
+from mas.runtime.reliability.classify import classify_llm_failure, is_retryable_llm_http_error, is_tls_verify_failure
+from mas.runtime.reliability.policy import RetryPolicy
+from mas.runtime.reliability.retry import acall_with_retry, call_with_retry
+
+
+def _fast_retry(*, max_attempts: int = 4):
+    return RetryPolicy.from_mapping(
+        {"max_attempts": max_attempts, "backoff_s": 0.001, "jitter": False},
+        field_name="retry",
+        default=RetryPolicy.llm_default(),
+    )
+
+
+def _retrying_request(client, method, url, **kwargs):
+    policy = kwargs.pop("retry_policy", _fast_retry())
+    return call_with_retry(
+        lambda: request_once(client, method, url, **kwargs),
+        policy=policy,
+        classify=classify_llm_failure,
+        idempotent=True,
+    )
+
+
+async def _aretrying_request(client, method, url, **kwargs):
+    policy = kwargs.pop("retry_policy", _fast_retry())
+    return await acall_with_retry(
+        lambda: arequest_once(client, method, url, **kwargs),
+        policy=policy,
+        classify=classify_llm_failure,
+        idempotent=True,
+    )
 
 
 def test_is_retryable_for_connect_and_timeout_errors():
@@ -58,27 +84,23 @@ def ssl_cert_error() -> Exception:
     return ssl.SSLCertVerificationError("certificate verify failed")
 
 
-def test_request_with_retries_succeeds_after_transient_failures(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+def test_retrying_request_succeeds_after_transient_failures():
     ok_response = MagicMock(status_code=200)
     client = MagicMock()
     client.request.side_effect = [httpx.ConnectError("boom"), httpx.ConnectError("boom"), ok_response]
 
-    result = request_with_retries(client, "POST", "https://x")
+    result = _retrying_request(client, "POST", "https://x", retry_policy=_fast_retry())
 
     assert result is ok_response
     assert client.request.call_count == 3
 
 
-def test_request_with_retries_gives_up_on_non_retryable_error(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+def test_retrying_request_gives_up_on_non_retryable_error():
     client = MagicMock()
     client.request.side_effect = ValueError("not retryable")
 
     with pytest.raises(Exception) as caught:
-        request_with_retries(client, "POST", "https://x")
+        _retrying_request(client, "POST", "https://x", retry_policy=_fast_retry())
 
     from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 
@@ -87,14 +109,12 @@ def test_request_with_retries_gives_up_on_non_retryable_error(monkeypatch):
     assert client.request.call_count == 1
 
 
-def test_request_with_retries_exhausts_budget_and_raises_last_error(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "2")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+def test_retrying_request_exhausts_budget_and_raises_last_error():
     client = MagicMock()
     client.request.side_effect = httpx.TimeoutException("boom")
 
     with pytest.raises(Exception) as caught:
-        request_with_retries(client, "POST", "https://x")
+        _retrying_request(client, "POST", "https://x", retry_policy=_fast_retry(max_attempts=3))
 
     from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 
@@ -103,37 +123,31 @@ def test_request_with_retries_exhausts_budget_and_raises_last_error(monkeypatch)
     assert client.request.call_count == 3
 
 
-def test_request_with_retries_retries_http_500(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+def test_retrying_request_retries_http_500():
     req = httpx.Request("POST", "https://x")
     fail = httpx.Response(500, request=req)
     ok = httpx.Response(200, request=req)
     client = MagicMock()
     client.request.side_effect = [fail, ok]
 
-    result = request_with_retries(client, "POST", "https://x")
+    result = _retrying_request(client, "POST", "https://x", retry_policy=_fast_retry())
 
     assert result is ok
     assert client.request.call_count == 2
 
 
-def test_request_with_retries_retries_connection_refused(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+def test_retrying_request_retries_connection_refused():
     ok = MagicMock(status_code=200)
     client = MagicMock()
     client.request.side_effect = [httpx.ConnectError("Connection refused"), ok]
 
-    result = request_with_retries(client, "POST", "https://x")
+    result = _retrying_request(client, "POST", "https://x", retry_policy=_fast_retry())
 
     assert result is ok
     assert client.request.call_count == 2
 
 
-def test_request_with_retries_get_client_and_on_failure(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+def test_retrying_request_get_client_and_on_failure():
     created: list[object] = []
     failures: list[BaseException] = []
 
@@ -148,12 +162,13 @@ def test_request_with_retries_get_client_and_on_failure(monkeypatch):
         created.append(client)
         return client
 
-    result = request_with_retries(
+    result = _retrying_request(
         None,
         "POST",
         "https://x",
         get_client=factory,
         on_failure=failures.append,
+        retry_policy=_fast_retry(),
     )
 
     assert result.status_code == 200
@@ -163,9 +178,7 @@ def test_request_with_retries_get_client_and_on_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_arequest_with_retries_retries_timeout(monkeypatch):
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "3")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.001")
+async def test_aretrying_request_retries_timeout():
     ok = MagicMock(status_code=200)
     calls = {"n": 0}
     seq: list[object] = [httpx.TimeoutException("boom"), ok]
@@ -180,7 +193,7 @@ async def test_arequest_with_retries_retries_timeout(monkeypatch):
     client = MagicMock()
     client.request = request
 
-    result = await arequest_with_retries(client, "POST", "https://x")
+    result = await _aretrying_request(client, "POST", "https://x", retry_policy=_fast_retry())
 
     assert result is ok
     assert calls["n"] == 2

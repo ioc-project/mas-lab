@@ -12,7 +12,7 @@ Calls fail for different reasons. A dropped socket is worth a retry. A bad API k
 
 Example: the infra layer retries a dropped socket. A tool `ValueError` goes back to the model as a tool result.
 
-This is a runtime topic, not a YAML kind. Agent field lists are in [agent.md](../manifests/agent.md). The governance chain and its plugins are in [governance.md](../manifests/governance.md). Infra proxy retry is in [infra.md](../manifests/infra.md).
+This is a runtime topic, not a YAML kind. Agent field lists are in [agent.md](../manifests/agent.md). The governance chain and its plugins are in [governance.md](../manifests/governance.md). Infra retry is a pipeline layer ([infra.md](../manifests/infra.md#llm-retry)).
 
 Terms: *infra* is the layer that says where things are and how to reach them (LLM endpoint, tool servers). *Governance* is the policy layer that approves, blocks, or retries calls. A *plugin* is a unit of behaviour that a manifest selects by name. A *flavour* is the glue that links the logic spec to the infra (its `bind`). A *run* is one execution of an agent or MAS.
 
@@ -22,7 +22,7 @@ Two layers share one taxonomy: `transient`, `unavailable`, `application`, `fatal
 
 | Layer | Where | What it does |
 |-------|--------|----------------|
-| **Infra** | LLM HTTP client and tool dispatch | Re-issues the same call (`RetryPolicy`). After the budget is spent, an optional **circuit breaker** plugin acts on `unavailable`. |
+| **Infra** | retry layer around llm and tool calls | Re-issues the same call (`RetryPolicy`). After the budget is spent, an optional **circuit breaker** layer acts on `unavailable`. |
 | **Governance** | Ingress, after the call returns (the `_end` hook) | `error_policy` maps the typed failure onto `allow`, `retry`, `block`, or `skip`. Plugin: `retry_on_error`. |
 | **Lab** | `mas-lab benchmark run` | Re-issues a failed scenario, item, and run (`schedule.max_attempts`, default 3). Independent of `n_runs`. |
 
@@ -35,8 +35,8 @@ Schemas: [`control-binding.schema.yaml`](../schemas/runtime/fragments/control-bi
 Code:
 
 - Engine helpers: `mas.runtime.reliability` (taxonomy, classify, infra retry).
-- LLM HTTP POST: the `llm_provider` plugin (`mas.library.standard.plugins.llm.http`).
-- Circuit breaker plugin: `mas.library.standard.plugins.reliability.circuit_breaker`.
+- LLM HTTP POST: the `llm_provider` plugin (`mas.library.standard.plugins.llm.http`); retry wraps that call, it is not a loop inside the client.
+- Circuit breaker layer: `mas.library.standard.plugins.layers.circuit_breaker`; its rules, state and probe all live in that one plugin. Its state lives in the running spec (`spec.layer_state`), changed only through the session's control handle and decided by its spec machine (no lock in the plugin); a tool that declares a `probe` is taken out of the spec while its circuit is open and put back when the probe passes.
 - Logger: `mas.runtime.reliability`.
 
 ---
@@ -47,7 +47,7 @@ For ordinary chat and LLM HTTP, the runtime retries a dropped socket, connect-re
 
 | Knob | Default |
 |------|---------|
-| LLM `max_attempts` | `4` (env `MAS_LLM_HTTP_RETRIES` default `3` extra retries → 4 attempts) |
+| LLM `max_attempts` | `4` (documented default pipeline) |
 | LLM `retry_on` | `[transient, unavailable]` |
 | LLM `backoff_s` / `backoff_multiplier` / `jitter` | `0.5` / `2.0` / `true` |
 | LLM `require_idempotent` | `false` (HTTP POST of the same payload is treated as idempotent) |
@@ -81,9 +81,32 @@ mas-ctl chat agent.yaml \
 ```
 
 Two production settings are not governance, so they are not in it. The infra retry already defaults to 4 LLM and 2
-tool attempts. The circuit breaker is off unless an agent's `spec.control.circuit_breaker` turns it on, and the
-dispatch-loop cap is `design_pattern.params.max_steps` (or a RuntimeEngine manifest). The breaker moves to the infra
-pipeline in the next release, and `with-hardened` is where it will be switched on for every agent.
+tool attempts (documented in `runtime/layers/defaults.yaml`). The circuit breaker is off unless the infra pipeline lists it.
+`standard:llm-proxy-hardened` (and `standard:tool-server-hardened`) turn the breaker on for those leaves:
+`failure_threshold` 5, `reset_timeout_s` 30, `on: [unavailable]`, with retry outside the breaker. The dispatch-loop
+cap is `design_pattern.params.max_steps` (or a RuntimeEngine manifest). `with-hardened` was an overlay that
+patched the agent spec; it is now a Control for call ceilings and error policy.
+
+### Testing one setting against another
+
+Every retry or breaker step around an llm, tool, or send call has a name (`retry-llm`, `retry-tool`, `breaker-llm`,
+`breaker-tool` in the defaults and the hardened bundles; otherwise `<layer>-<for>`). An overlay, or an experiment
+factor, addresses one step by that name and leaves the others alone. `enabled: false` switches a step off without
+removing it, and for `retry` it also keeps the documented default from coming back:
+
+```yaml
+kind: Overlay
+spec:
+  target: {kind: Infra}
+  patch:
+    pipeline:
+      - id: breaker-llm
+        enabled: false             # arm B: no breaker
+      - id: retry-llm
+        params: {max_attempts: 1}  # and one attempt
+```
+
+`mas-ctl infra resolved` prints each step with its `id` and marks a disabled one, so the arm that ran is on record.
 
 ---
 
@@ -104,7 +127,7 @@ To make a provider trip the breaker, declare a tool as down with `ExplicitToolUn
 
 ### `spec.control.retry.llm` / `.tools`
 
-`spec.control` is deprecated: `retry` and `circuit_breaker` still apply, and move to the infra pipeline (next to the LLM cache, scheduler and fault injection) in the next release. Its `budget` and `rate_limiter` keys are read by nothing; call ceilings are the `budget` governance plugin.
+`spec.control` is deprecated: `retry` and `circuit_breaker` still apply (one warning) and become pipeline steps. Prefer a `retry` / `circuit_breaker` layer on the infra pipeline (next to the LLM cache, scheduler and fault injection). Its `budget` and `rate_limiter` keys are read by nothing; call ceilings are the `budget` governance plugin.
 
 | Field | Type | LLM default | Tools default |
 |-------|------|-------------|----------------|
@@ -116,13 +139,13 @@ To make a provider trip the breaker, declare a tool as down with `ExplicitToolUn
 | `require_idempotent` | boolean | `false` | `true` |
 | `max_backoff_s` | number ≥ 0 or omit | unlimited | unlimited |
 
-When both are set, `spec.control.retry.llm` overrides infra `LLMProxy.spec.proxy.retry`.
+`spec.control.retry.llm` becomes a pipeline step. Prefer a `retry` layer on the infra pipeline.
 
 ### `spec.control.circuit_breaker`
 
-Omit the key (or set `null`) to leave the breaker off. If the key is present, the runtime loads the library plugin (`type: circuit_breaker`, default `threshold`). It is not a kernel operation and not a governance plugin.
+Omit the key (or set `null`) to leave the breaker off. If the key is present, it becomes a `circuit_breaker` pipeline step (default `threshold`). Prefer `standard:llm-proxy-hardened`. It is not a kernel operation and not a governance plugin.
 
-Card: [circuit-breaker.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/reliability/circuit-breaker.md).
+Card: [circuit-breaker.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/layers/circuit-breaker.md).
 
 | Field | Type | Default when present |
 |-------|------|----------------------|
@@ -147,14 +170,14 @@ These YAML fields are flattened from any plugin stanza. The runtime installs the
 Ingress `retry` re-issues the scheduled LLM or tool call up to
 `max_gov_retries` (default 2).
 
-### Environment (last resort)
+### Environment (last resort, interactive sessions only)
 
 | Variable | Effect |
 |----------|--------|
 | `MAS_LLM_HTTP_RETRIES` | Extra LLM HTTP retries (`attempts = retries + 1`). Default `3`. |
 | `MAS_LLM_HTTP_RETRY_BACKOFF` | Base backoff seconds (minimum `0.05`); also disables jitter. |
 
-Do not put these in `.env` profiles. They apply to every process, including the controller. Prefer `spec.control.retry.llm`. See [user-config.md](../user-config.md).
+ctl reads these for one interactive session and passes the values down. The runtime does not read them. They fill keys the pipeline retry did not set. An explicit pipeline param wins. Do not put them in `.env` profiles or in a spec. Prefer a `retry` layer on the infra pipeline. See [user-config.md](../user-config.md).
 
 ---
 
@@ -174,7 +197,7 @@ The logger name is **`mas.runtime.reliability`**. Filter JSON logs on `mas.relia
 
 Each record also carries `mas.target`, `mas.failure_class`, `mas.failure_code`, `mas.attempt`, `mas.max_attempts`, and `mas.delay_s` when they apply.
 
-Native `events.jsonl` `governance_decision` rows for ingress include `failure_class`, `failure_code`, and `retry_attempts` when the engine set them. Infra re-attempts appear in logs only. They happen inside the HTTP client, before `_end`.
+Native `events.jsonl` `governance_decision` rows for ingress include `failure_class`, `failure_code`, and `retry_attempts` when the engine set them. Infra re-attempts appear in logs only. They happen in the retry layer around the provider call, before `_end`.
 
 ---
 
@@ -185,7 +208,7 @@ A flavour is the glue between the logic spec and the infra (`bind`). It is not a
 | Concern | Overlay / plugin | Notes |
 |---------|------------------|--------|
 | Undeclared tools | `with-hardened` → `gov_no_undeclared_tool` | Egress chain BLOCK |
-| Typed retry / breaker | `with-hardened` → `retry_on_error` (Control); infra retry and `circuit_breaker` are agent `spec.control` for now | Infra then ingress |
+| Typed retry / breaker | `with-hardened` → `retry_on_error` (Control); infra retry defaults and `standard:llm-proxy-hardened` for the breaker | Infra then ingress |
 | Native traces | `observability-native` | Sequence, not chain |
 | Checkpoints / resume | separate overlay | Compose it. The flavour does not carry it. |
 | Backtrack on application errors | `error_policy.application` or a dedicated plugin | The default is `allow` (stored in working memory). |

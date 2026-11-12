@@ -77,7 +77,7 @@ workflow:
 link; with none, there is no link. Now ask infra how these agents talk:
 
 ```bash
-mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml
+mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml
 ```
 
 ```text
@@ -135,10 +135,10 @@ spec:
 `bind` in a Flavour is unrelated to the deprecated `--bind` CLI flag, which is an
 alias of `--connect`.
 
-Pass the Flavour and the row to `infra show`, then run the desk again:
+Pass the Flavour and the row to `infra resolved`, then run the desk again:
 
 ```bash
-mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml \
+mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
   --flavour docs/tutorials/07-slim-link/flavours/in-process.yaml \
   --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/in-process.yaml"
 
@@ -257,10 +257,10 @@ spec:
       outage: {usage: connect}
 ```
 
-`infra show` confirms it: only `triage` has a name in this process.
+`infra resolved` confirms it: only `triage` has a name in this process.
 
 ```bash
-mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml \
+mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
   --flavour docs/tutorials/07-slim-link/flavours/front-desk.yaml \
   --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
 ```
@@ -419,10 +419,10 @@ default). Set `usage: listen` to host `billing` there, which is refused:
 Flavour bind.agents.billing: usage listen is not a capability of row 'agent-hub' (its usage is ['connect'])
 ```
 
-The hosts above are placeholders; `infra show` prints the chains without dialling:
+The hosts above are placeholders; `infra resolved` prints the chains without dialling:
 
 ```bash
-mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml \
+mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
   --flavour docs/tutorials/07-slim-link/flavours/hub.yaml \
   --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" \
   --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/agent-hub.yaml"
@@ -449,7 +449,7 @@ spec:
 same name twice.
 
 ```bash
-mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml \
+mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
   --flavour docs/tutorials/07-slim-link/flavours/billing-over-a2a.yaml \
   --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
 ```
@@ -476,7 +476,7 @@ Everything is checked before anything connects. Each case exits 1 with one line:
 | `infra/broken/bad-identity.yaml`: `acme/desk`, two parts | `identity must be a three-part org/ns/service name, got 'acme/desk'` |
 
 ```bash
-mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml \
+mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
   --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-agent.yaml \
   --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
 ```
@@ -517,7 +517,7 @@ same MAS, same agents, in one process.
 - The tests in the repository (`tests/support/slim_node_fake.py`) use an in-process fake of the SLIM
   bindings. Real-node tests run with the pytest marker `slim` (`slim-bindings` 2.2
   and the Step 3 node).
-- **Every entry point reads `bind`.** `run-mas`, `chat`, `tui`, `serve`, `infra show`
+- **Every entry point reads `bind`.** `run-mas`, `chat`, `tui`, `serve`, `infra resolved`
   and benchmark runs apply the same Flavour the same way. A one-agent `chat` or `tui`
   session joins a chain only when the Flavour serves it there (`listen`).
 - **Two chains, two bottom rows.** Chains that share a bottom row are refused.

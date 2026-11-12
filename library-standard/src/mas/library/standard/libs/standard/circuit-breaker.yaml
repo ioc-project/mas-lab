@@ -1,0 +1,22 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: InfraMiddleware
+
+metadata:
+  name: circuit-breaker
+  description: >
+    Fail fast after consecutive unavailable failures on a target, then probe it. State lives in the
+    running spec. A tool that declares a probe leaves the spec while its circuit is open and returns
+    when the probe succeeds. Off unless listed (standard:llm-proxy-hardened and
+    standard:tool-server-hardened list it).
+
+spec:
+  id: circuit-breaker
+  layer: circuit_breaker
+  for: [llm, tool]
+  per: destination
+  params:
+    failure_threshold: 5
+    reset_timeout_s: 30
+    "on": [unavailable]

@@ -1,12 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Spec-driven infra retry settings (engine I/O). Circuit breaker is a plugin."""
+"""Spec-driven retry settings (engine I/O). The circuit breaker is a layer plugin."""
 
 from __future__ import annotations
 
-import os
 import random
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from mas.runtime.reliability.classes import FailureClass
@@ -16,6 +15,7 @@ def _binding_error(message: str) -> Exception:
     from mas.runtime.spec.gov import SpecBindingError
 
     return SpecBindingError(message)
+
 
 _FAILURE_CLASSES = {item.value: item for item in FailureClass}
 
@@ -31,10 +31,7 @@ def _parse_classes(raw: Any, *, field_name: str, default: tuple[FailureClass, ..
     for item in raw:
         key = str(item).strip().lower()
         if key not in _FAILURE_CLASSES:
-            raise _binding_error(
-                f"{field_name}: unknown failure class {item!r} "
-                f"(expected {sorted(_FAILURE_CLASSES)})"
-            )
+            raise _binding_error(f"{field_name}: unknown failure class {item!r} (expected {sorted(_FAILURE_CLASSES)})")
         out.append(_FAILURE_CLASSES[key])
     return tuple(out) or default
 
@@ -128,9 +125,7 @@ class RetryPolicy:
             raise _binding_error(f"{field_name}.backoff_multiplier must be a number >= 1")
         jitter = base.jitter if raw.get("jitter") is None else bool(raw.get("jitter"))
         require_idempotent = (
-            base.require_idempotent
-            if raw.get("require_idempotent") is None
-            else bool(raw.get("require_idempotent"))
+            base.require_idempotent if raw.get("require_idempotent") is None else bool(raw.get("require_idempotent"))
         )
         max_backoff = base.max_backoff_s if raw.get("max_backoff_s") is None else raw.get("max_backoff_s")
         if max_backoff is not None and (
@@ -142,104 +137,33 @@ class RetryPolicy:
             backoff_s=float(backoff_s),
             backoff_multiplier=float(multiplier),
             jitter=jitter,
-            retry_on=_parse_classes(
-                raw.get("retry_on"), field_name=f"{field_name}.retry_on", default=base.retry_on
-            ),
+            retry_on=_parse_classes(raw.get("retry_on"), field_name=f"{field_name}.retry_on", default=base.retry_on),
             require_idempotent=require_idempotent,
             max_backoff_s=None if max_backoff is None else float(max_backoff),
         )
 
 
 def llm_retry_policy(**overrides: Any) -> RetryPolicy:
-    """RetryPolicy for live LLM HTTP, including ``MAS_LLM_HTTP_*`` env overrides."""
+    """RetryPolicy for live LLM HTTP."""
     policy = RetryPolicy.llm_default()
     if overrides:
         policy = RetryPolicy.from_mapping(overrides, field_name="llm.retry", default=policy)
-    return apply_llm_retry_env(policy)
-
-
-def apply_llm_retry_env(policy: RetryPolicy) -> RetryPolicy:
-    """``MAS_LLM_HTTP_RETRIES`` is extra retries (attempts = retries + 1)."""
-    updates: dict[str, Any] = {}
-    if "MAS_LLM_HTTP_RETRIES" in os.environ:
-        raw = os.environ.get("MAS_LLM_HTTP_RETRIES") or "3"
-        updates["max_attempts"] = max(1, int(raw) + 1)
-    if "MAS_LLM_HTTP_RETRY_BACKOFF" in os.environ:
-        raw = os.environ.get("MAS_LLM_HTTP_RETRY_BACKOFF") or "0.5"
-        updates["backoff_s"] = max(0.05, float(raw))
-        updates["jitter"] = False
-    return replace(policy, **updates) if updates else policy
-
-
-_CIRCUIT_KEYS = frozenset({"failure_threshold", "reset_timeout_s", "on", "enabled", "plugin"})
-
-
-def _library_plugin_from_mapping(
-    raw: Any,
-    *,
-    plugin_type: str,
-    field_name: str,
-    allowed: frozenset[str],
-) -> Any:
-    """Instantiate a registered library plugin, or None when the spec omits it.
-
-    No plugin class is named here — same registry lookup as governance.
-    """
-    import inspect
-
-    from mas.runtime.registry import get_registry
-
-    if raw is None:
-        return None
-    if not isinstance(raw, Mapping):
-        raise _binding_error(f"{field_name} must be an object or null")
-    data = dict(raw)
-    if True in data and "on" not in data:
-        data["on"] = data.pop(True)
-    unknown = set(data) - allowed
-    if unknown:
-        raise _binding_error(f"{field_name}: unknown field {sorted(str(k) for k in unknown)[0]!r}")
-    if data.get("enabled") is False:
-        return None
-    plugin_name = str(data.pop("plugin", "") or "").strip()
-    registry = get_registry()
-    if not plugin_name:
-        plugin_name = registry.default_for(plugin_type) or plugin_type
-    variant = registry.resolve_by_type(plugin_type, plugin_name)
-    if variant is None:
-        raise _binding_error(f"{field_name}: {plugin_type} plugin {plugin_name!r} was not found")
-    plugin_cls = variant.load_class()
-    try:
-        params = inspect.signature(plugin_cls).parameters
-    except (TypeError, ValueError):
-        kwargs = dict(data)
-    else:
-        if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
-            kwargs = dict(data)
-        else:
-            kwargs = {key: value for key, value in data.items() if key in params}
-    return plugin_cls(**kwargs)
+    return policy
 
 
 @dataclass(frozen=True)
 class ReliabilitySettings:
     """Engine knobs parsed from ``spec.control``.
 
-    Circuit breaker is a library plugin (duck-typed). Ingress ``error_policy``
-    lives on ``retry_on_error``. Neither is kernel state.
+    Retry and the circuit breaker are call layers; this only reads and checks the deprecated
+    ``spec.control`` spelling. Ingress ``error_policy`` lives on ``retry_on_error``.
     """
 
     llm_retry: RetryPolicy = field(default_factory=RetryPolicy.llm_default)
     tool_retry: RetryPolicy = field(default_factory=RetryPolicy.tools_default)
-    circuit_breaker: Any = field(default=None)
 
     @classmethod
-    def from_spec(
-        cls,
-        spec: Mapping[str, Any] | None,
-        *,
-        llm_proxy: Mapping[str, Any] | None = None,
-    ) -> ReliabilitySettings:
+    def from_spec(cls, spec: Mapping[str, Any] | None) -> ReliabilitySettings:
         control = (spec or {}).get("control") if isinstance(spec, Mapping) else None
         control = control if isinstance(control, Mapping) else {}
         retry_raw = control.get("retry")
@@ -251,25 +175,19 @@ class ReliabilitySettings:
             unknown_retry = set(retry_raw) - {"llm", "tools"}
             if unknown_retry:
                 raise _binding_error(f"spec.control.retry: unknown field {sorted(unknown_retry)[0]!r}")
-        proxy = llm_proxy if isinstance(llm_proxy, Mapping) else {}
         llm = RetryPolicy.from_mapping(
-            retry_raw.get("llm") if retry_raw.get("llm") is not None else proxy.get("retry"),
+            retry_raw.get("llm"),
             field_name="spec.control.retry.llm",
             default=RetryPolicy.llm_default(),
         )
-        llm = apply_llm_retry_env(llm)
         tools = RetryPolicy.from_mapping(
             retry_raw.get("tools"),
             field_name="spec.control.retry.tools",
             default=RetryPolicy.tools_default(),
         )
-        return cls(
-            llm_retry=llm,
-            tool_retry=tools,
-            circuit_breaker=_library_plugin_from_mapping(
-                control.get("circuit_breaker"),
-                plugin_type="circuit_breaker",
-                field_name="spec.control.circuit_breaker",
-                allowed=_CIRCUIT_KEYS,
-            ),
-        )
+        breaker = control.get("circuit_breaker")
+        if breaker is not None:
+            if not isinstance(breaker, Mapping):
+                raise _binding_error("spec.control.circuit_breaker must be an object or null")
+            # its params are checked by the circuit_breaker layer when the layer is built
+        return cls(llm_retry=llm, tool_retry=tools)

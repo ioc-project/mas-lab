@@ -97,7 +97,7 @@ class Registry:
     classes = {"wire": Wire, "plain": Plain, "upper": Upper}
 
     def resolve_spec(self, kind: str, binding: dict[str, Any]) -> Any:
-        if kind == "stack_layer" and binding["type"] != "upper":
+        if kind == "layer" and binding["type"] != "upper":
             raise KeyError(binding["type"])
         cls = self.classes.get(binding["type"])
         if cls is None:

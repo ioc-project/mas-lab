@@ -161,6 +161,16 @@ class ToolProviderRegistry:
     def providers(self) -> List[ToolProvider]:
         return list(self._providers)
 
+    def advertised_names_by_provider(self) -> dict[str, tuple[str, ...]]:
+        """Tool names each provider currently routes, grouped by provider name."""
+        buckets: dict[str, list[str]] = {}
+        for name, route in (self._routes or {}).items():
+            sid = str(route.provider_name or "")
+            token = str(name or "").strip()
+            if sid and token:
+                buckets.setdefault(sid, []).append(token)
+        return {sid: tuple(names) for sid, names in buckets.items()}
+
     def local_provider(self) -> Any | None:
         for provider in self._providers:
             if provider_origin(provider) == "local":
@@ -243,8 +253,10 @@ class ToolProviderRegistry:
                 advertised = tuple(n for n in local_names if n and n not in externally_claimed)
                 claim = advertised
             else:
-                advertised = tuple(n for n in local_names if n) if is_star_claim(claim) else tuple(
-                    str(n) for n in (claim if not isinstance(claim, str) else (claim,)) if n and n != "*"
+                advertised = (
+                    tuple(n for n in local_names if n)
+                    if is_star_claim(claim)
+                    else tuple(str(n) for n in (claim if not isinstance(claim, str) else (claim,)) if n and n != "*")
                 )
                 if not is_star_claim(getattr(provider, "tools_claim", "*")):
                     self._verify_explicit(provider, name, advertised, ctx=ctx)
@@ -433,9 +445,7 @@ def providers_from_manifest(
         if protocol and protocol not in kinds:
             ident = str(server.get("id") or server.get("name") or "").strip()
             where = f"tool server {ident!r}" if ident else "tool server"
-            raise ValueError(
-                f"{where} protocol {protocol!r} has no registered provider"
-            )
+            raise ValueError(f"{where} protocol {protocol!r} has no registered provider")
     external = [item for item in collected if str(getattr(item, "kind", "") or "") != "local"]
     local_ones = [item for item in collected if str(getattr(item, "kind", "") or "") == "local"]
     if external:

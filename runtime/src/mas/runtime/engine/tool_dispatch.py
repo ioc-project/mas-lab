@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from mas.runtime.engine.manifest_tool_provider import ManifestToolLoadError
@@ -14,6 +16,25 @@ if TYPE_CHECKING:
     from mas.runtime.boundary.delegation.protocol import DelegationContract
     from mas.runtime.boundary.engine_tools import EngineToolContract
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
+
+
+@dataclass(frozen=True)
+class InFlightTool:
+    """The tool call one engine is dispatching, so layers around it can name its target.
+
+    ``owner`` is the dispatching engine (``id(engine)``): an engine run by a tool (a delegated child)
+    sets its own and never reads its parent's.
+    """
+
+    owner: int
+    name: str
+    arguments: dict[str, Any]
+
+
+IN_FLIGHT_TOOL: contextvars.ContextVar[InFlightTool | None] = contextvars.ContextVar(
+    "mas_engine_tool_call",
+    default=None,
+)
 
 
 class ToolExecutionError(RuntimeError):
@@ -101,7 +122,8 @@ def _sandbox_for(ctx: Any, sandbox: Any) -> Any:
     return PassthroughSandbox()
 
 
-def _idempotent_from_spec(tool: str, spec: dict[str, Any] | None) -> bool:
+def tool_is_idempotent(tool: str, spec: dict[str, Any] | None) -> bool:
+    """True when *spec* declares tool *tool* ``idempotent``. A tool the spec does not list is not."""
     tools = (spec or {}).get("tools") if isinstance(spec, dict) else None
     if not isinstance(tools, list):
         return False
@@ -154,29 +176,6 @@ def _dispatch_once(
     return format_tool_result(result, ctx=ctx, call_id=caller_call_id)
 
 
-def _call_with_tool_retry(
-    once,
-    *,
-    tool: str,
-    retry_policy: Any | None,
-    circuit_breaker: Any | None,
-    agent_spec: dict[str, Any] | None,
-):
-    from mas.runtime.reliability.classify import classify_tool_exception
-    from mas.runtime.reliability.policy import RetryPolicy
-    from mas.runtime.reliability.retry import call_with_retry
-
-    policy = retry_policy or RetryPolicy.tools_default()
-    return call_with_retry(
-        once,
-        policy=policy,
-        classify=classify_tool_exception,
-        breaker=circuit_breaker,
-        target=f"tool:{tool}",
-        idempotent=_idempotent_from_spec(tool, agent_spec),
-    )
-
-
 def execute_engine_tool(
     tool: str,
     *,
@@ -189,32 +188,31 @@ def execute_engine_tool(
     correlation_id: int = 0,
     caller_call_id: str = "",
     sandbox: Any = None,
-    retry_policy: Any | None = None,
-    circuit_breaker: Any | None = None,
-    agent_spec: dict[str, Any] | None = None,
 ) -> str:
+    from mas.runtime.reliability.classes import ClassifiedFailure
+    from mas.runtime.reliability.classify import classify_tool_exception
+
     box = _sandbox_for(ctx, sandbox)
 
     def _body() -> str:
-        return _call_with_tool_retry(
-            lambda: _dispatch_once(
-                tool,
-                delegation=delegation,
-                engine_contracts=engine_contracts,
-                ctx=ctx,
-                user=user,
-                arguments=arguments,
-                tool_provider=tool_provider,
-                correlation_id=correlation_id,
-                caller_call_id=caller_call_id,
-            ),
-            tool=tool,
-            retry_policy=retry_policy,
-            circuit_breaker=circuit_breaker,
-            agent_spec=agent_spec,
+        return _dispatch_once(
+            tool,
+            delegation=delegation,
+            engine_contracts=engine_contracts,
+            ctx=ctx,
+            user=user,
+            arguments=arguments,
+            tool_provider=tool_provider,
+            correlation_id=correlation_id,
+            caller_call_id=caller_call_id,
         )
 
-    return box.run(_body, tool_name=tool)
+    try:
+        return box.run(_body, tool_name=tool)
+    except ClassifiedFailure:
+        raise
+    except Exception as exc:
+        raise classify_tool_exception(exc) from exc
 
 
 async def aexecute_engine_tool(
@@ -229,18 +227,18 @@ async def aexecute_engine_tool(
     correlation_id: int = 0,
     caller_call_id: str = "",
     sandbox: Any = None,
-    retry_policy: Any | None = None,
-    circuit_breaker: Any | None = None,
-    agent_spec: dict[str, Any] | None = None,
 ) -> str:
     """Async twin of :func:`execute_engine_tool`.
 
     Routes to ``acall`` / ``adelegate`` / ``aspawn`` when present so nested
     agent turns can overlap. Local manifest tools stay on the sync
     ``call_tool`` path — they are not network I/O. ExecuteSandbox wraps the
-    body after ALLOW; it is not a new envelope symbol. Infra retries are
-    engine I/O inside that body, not a kernel op.
+    body after ALLOW; it is not a new envelope symbol. Retry is a layer
+    around this invoke, not a loop in the engine.
     """
+    from mas.runtime.reliability.classes import ClassifiedFailure
+    from mas.runtime.reliability.classify import classify_tool_exception
+
     box = _sandbox_for(ctx, sandbox)
 
     async def _body() -> str:
@@ -259,22 +257,21 @@ async def aexecute_engine_tool(
                         caller_call_id=caller_call_id,
                     )
                 break
-        return _call_with_tool_retry(
-            lambda: _dispatch_once(
-                tool,
-                delegation=delegation,
-                engine_contracts=engine_contracts,
-                ctx=ctx,
-                user=user,
-                arguments=arguments,
-                tool_provider=tool_provider,
-                correlation_id=correlation_id,
-                caller_call_id=caller_call_id,
-            ),
-            tool=tool,
-            retry_policy=retry_policy,
-            circuit_breaker=circuit_breaker,
-            agent_spec=agent_spec,
+        return _dispatch_once(
+            tool,
+            delegation=delegation,
+            engine_contracts=engine_contracts,
+            ctx=ctx,
+            user=user,
+            arguments=arguments,
+            tool_provider=tool_provider,
+            correlation_id=correlation_id,
+            caller_call_id=caller_call_id,
         )
 
-    return await box.arun(_body, tool_name=tool)
+    try:
+        return await box.arun(_body, tool_name=tool)
+    except ClassifiedFailure:
+        raise
+    except Exception as exc:
+        raise classify_tool_exception(exc) from exc
