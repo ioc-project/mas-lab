@@ -117,10 +117,17 @@ governance:
       hitl_on_tool: true
 ```
 
-`BLOCK` (and `hitl_mode: auto_deny`) refuses the tool and ends the turn with
-that denial as the user-visible answer. Optional steering is appended to the
-denial. `SKIP` injects optional steering as the tool result and lets the model
-continue. Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
+Egress `BLOCK` on a tool call writes the policy reason as that call's tool
+result and returns the agent to evaluate. The next model call is its own
+envelope; it is not started from inside the blocked tool. In a parallel batch
+each call is authorized on its own: a denied sibling goes back to the model as
+its result, and the allowed calls still run. HITL and `TERMINATE` still stop
+the batch.
+
+`hitl_mode: auto_deny` refuses the tool and ends the turn with that denial as
+the user-visible answer. Optional steering is appended to the denial. `SKIP`
+injects optional steering as the tool result and lets the model continue.
+Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
 
 ## See also
 

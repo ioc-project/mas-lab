@@ -122,6 +122,21 @@ ToolContract.call_tool(name, arguments)   -> validates arguments, then
     ToolContract.execute(**arguments)     -> dict result
 ```
 
+#### Sync tools and async tools
+
+A tool is either **async** (it implements `on_aexecute_tool`, or its provider implements `acall_tool`) or **sync** (only `execute` / `on_execute_tool`).
+
+| Kind | Where it runs | What a slow call does |
+| --- | --- | --- |
+| Async | Awaited on the event loop, no thread | Nothing. Other calls, tools and sessions keep running while it waits on I/O |
+| Sync, `engine.tool_worker: thread` (default) | One worker thread per call | The loop stays free; the thread is held for the call |
+| Sync, `engine.tool_worker: inline` | On the event loop | Blocks everything on that loop until it returns, including the other tools of the batch |
+| `kernel_state = True` | Inline in the kernel, always | Blocks, by design. Reserved for tools that read or change session state (skills) |
+
+A blocking call (HTTP, MCP, a subprocess, a file read) is only a problem in a sync tool. Written as an async tool it overlaps with no thread, so `inline` costs nothing. Moving sync tools to async is the planned way to make `inline` the default. The runtime flags each sync tool class once in the log: a warning under `inline`, a note under `thread`.
+
+Every tool gets the same frozen `ToolCallContext`, never the kernel ctx, so placement cannot change its result. `engine.tool_concurrency` bounds how many sync tools run at once. Delegation and other engine-tool contracts already expose `acall`.
+
 A tool that serves several call names overrides `list_tools()` and `call_tool()`. Optional hints (`is_idempotent()`, `is_read_only()`, `is_destructive()`, `get_timeout_seconds()`, ...) are advertised with the schema. See [dev/schemas/tool-definition.md](dev/schemas/tool-definition.md).
 
 

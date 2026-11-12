@@ -34,6 +34,8 @@ _MAX_TIMEOUT = 120
 class RunSkillScriptPlugin(ToolContract):
     """ToolContract providing run_skill_script — executes bundled skill scripts."""
 
+    kernel_state = True  # reads the session's skill state: needs the live ctx
+
     def __init__(
         self,
         impl: str = "native",
@@ -96,9 +98,7 @@ class RunSkillScriptPlugin(ToolContract):
             }
         ]
 
-    def on_execute_tool(
-        self, tool_name: str, arguments: dict[str, Any], **kwargs: Any
-    ) -> Any:
+    def on_execute_tool(self, tool_name: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
         if tool_name != "run_skill_script":
             return None
         ctx = kwargs.get("ctx")
@@ -151,9 +151,7 @@ class RunSkillScriptPlugin(ToolContract):
         record = registry.get(skill) if registry else None
         if record is None:
             available = registry.names() if registry else []
-            return {
-                "error": f"Skill {skill!r} not found in registry. Available: {available}"
-            }
+            return {"error": f"Skill {skill!r} not found in registry. Available: {available}"}
 
         if backend_plugin is not None:
             try:
@@ -192,9 +190,7 @@ class RunSkillScriptPlugin(ToolContract):
         # Path traversal guard
         script_path = guard_path_traversal(script, scripts_dir)
         if script_path is None:
-            return {
-                "error": f"Invalid script name: {script!r} (must be plain filename, no path separators)"
-            }
+            return {"error": f"Invalid script name: {script!r} (must be plain filename, no path separators)"}
 
         if not script_path.is_file():
             available = sorted(p.name for p in scripts_dir.iterdir() if p.is_file())
@@ -205,7 +201,10 @@ class RunSkillScriptPlugin(ToolContract):
 
         logger.info(
             "RunSkillScriptPlugin: executing skill=%r script=%r args=%r timeout=%ds",
-            skill, script, args, timeout,
+            skill,
+            script,
+            args,
+            timeout,
         )
 
         # Use sandbox.run_script(). Defensive try/except: args/env are
@@ -259,4 +258,3 @@ def _backend_plugin_from_ctx(
         plugin.discover(resolved_base)
         local_cache._local_backend_plugin = plugin
     return local_cache._local_backend_plugin
-

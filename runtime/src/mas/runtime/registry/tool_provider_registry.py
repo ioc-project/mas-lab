@@ -17,6 +17,7 @@ claim; local YAML is still listed to confirm those names exist.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any, Dict, List
 
@@ -338,10 +339,50 @@ class ToolProviderRegistry:
                     "Claim it on a provider plugin, or reintroduce in-process with a kind: local overlay."
                 )
             raise UnclaimedToolError(f"Tool {tool_name!r} is not registered with any provider")
+        from mas.runtime.engine.tool_workers import provider_ctx
+
         return invoke_call_tool(
             route.handler.call_tool,
             tool_name,
             arguments,
+            ctx=provider_ctx(route.handler, ctx),
+            user=user,
+            **kwargs,
+        )
+
+    async def acall_tool(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        *,
+        ctx: Any = None,
+        user: str = "",
+        **kwargs: Any,
+    ) -> Any:
+        """Async twin of :meth:`call_tool`. Prefers ``acall_tool`` on the owner."""
+        self.initialize(ctx=ctx)
+        route = (self._routes or {}).get(tool_name)
+        if route is None or route.handler is None:
+            if self.has_external_providers():
+                raise UnclaimedToolError(
+                    f"using tools not claimed by any provider: {tool_name!r}. "
+                    "Claim it on a provider plugin, or reintroduce in-process with a kind: local overlay."
+                )
+            raise UnclaimedToolError(f"Tool {tool_name!r} is not registered with any provider")
+        from mas.runtime.engine.tool_workers import arun_sync_tool, provider_ctx
+
+        acall = getattr(route.handler, "acall_tool", None)
+        if callable(acall):
+            result = acall(tool_name, arguments, ctx=provider_ctx(route.handler, ctx), user=user, **kwargs)
+            if inspect.isawaitable(result):
+                return await result
+            return result
+        return await arun_sync_tool(
+            invoke_call_tool,
+            route.handler.call_tool,
+            tool_name,
+            arguments,
+            owner=route.handler,
             ctx=ctx,
             user=user,
             **kwargs,

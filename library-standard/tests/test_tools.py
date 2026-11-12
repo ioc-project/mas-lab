@@ -2,12 +2,15 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Manifest tool loading via Tool YAML refs."""
 
+import asyncio
 from pathlib import Path
 
 import pytest
 import yaml
+from mas.library.standard.plugins.tools.local import LocalToolProvider
 from mas.runtime.engine.manifest_tool_provider import build_manifest_tool_provider
 from mas.runtime.engine.tool_dispatch import execute_engine_tool
+from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 
 
 def _provider_with_calculator(tmp_path: Path):
@@ -141,8 +144,6 @@ class MemorySearchTool:
 
 
 def test_local_execute_failure_propagates():
-    from mas.library.standard.plugins.tools.local import LocalToolProvider
-
     class Boom:
         def on_collect_tools(self, **_):
             return [{"name": "boom"}]
@@ -171,3 +172,86 @@ def test_from_tool_servers_skips_non_local_and_keeps_the_last_local() -> None:
     assert len(providers) == 1
     assert providers[0].provider_name == "local-last"
     assert providers[0].tools_claim == ("search",)
+
+
+class _AsyncEcho:
+    def on_collect_tools(self, **_):
+        return [{"name": "echo"}]
+
+    async def on_aexecute_tool(self, name, args, **_):
+        await asyncio.sleep(0)
+        return {"async": name, **args}
+
+    def on_execute_tool(self, name, args, **_):
+        raise AssertionError("sync on_execute_tool must not run when on_aexecute_tool is present")
+
+
+class _NoneAsync:
+    def on_collect_tools(self, **_):
+        return [{"name": "empty"}]
+
+    def on_aexecute_tool(self, name, args, **_):
+        return None
+
+
+class _LegacySync:
+    def on_collect_tools(self, **_):
+        raise NotImplementedError
+
+    def get_name(self):
+        return "legacy"
+
+    def on_execute_tool(self, name, args, **_):
+        return {"sync": name}
+
+
+class _Blind:
+    def on_collect_tools(self, **_):
+        return [{"name": "other"}]
+
+    def get_name(self):
+        raise RuntimeError("no name")
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_prefers_on_aexecute_tool():
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncEcho(), {"name": "echo"})
+    out = await provider.acall_tool("echo", {"q": 1})
+    assert out == {"async": "echo", "q": 1}
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_none_from_on_aexecute_tool_is_empty_string():
+    provider = LocalToolProvider()
+    provider._add_instance(_NoneAsync(), {"name": "empty"})
+    assert await provider.acall_tool("empty", {}) == ""
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_runs_sync_owner_in_a_worker():
+    provider = LocalToolProvider()
+    provider._add_instance(_LegacySync(), {"name": "legacy"})
+    assert await provider.acall_tool("legacy", {}) == {"sync": "legacy"}
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_falls_back_when_no_owner():
+    provider = LocalToolProvider()
+    provider._add_instance(_Blind(), {"name": "other"})
+    with pytest.raises(ManifestToolLoadError, match="not found"):
+        await provider.acall_tool("missing", {})
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_system_plugin_uses_call_tool():
+    class _Sys:
+        def claims(self, name):
+            return name == "sys"
+
+        def call(self, name, arguments, context=None):
+            return {"via": "system", "name": name, "args": arguments}
+
+    provider = LocalToolProvider()
+    provider.system_plugins = _Sys()
+    assert await provider.acall_tool("sys", {"k": 2}) == {"via": "system", "name": "sys", "args": {"k": 2}}

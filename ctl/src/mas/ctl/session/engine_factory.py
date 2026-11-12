@@ -22,6 +22,7 @@ from mas.runtime.engine.llm_live import LiveLlmEngine
 from mas.runtime.engine.llm_output_limits import resolve_output_limits
 from mas.runtime.engine.llm_reasoning import reasoning_settings_from_manifest
 from mas.runtime.engine.llm_request import model_entry_from_manifest
+from mas.runtime.engine.tool_workers import ToolPlacement
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.spec.model_ref import concrete_model, first_concrete, primary_model_binding
 
@@ -386,7 +387,7 @@ def build_engine(
         cache_write=cache_write,
         stream=stream,
         use_tool_loop=tool_loop,
-        parallel_tool_calls=kernel_cfg.parallel_tool_calls,
+        tool_placement=ToolPlacement(worker=kernel_cfg.tool_worker, concurrency=kernel_cfg.tool_concurrency),
         llm_proxy=llm_proxy,
         llm_proxies=llm_proxies or None,
         http_timeout=http_timeout,

@@ -31,6 +31,10 @@ class KernelConfig:
     enable_transport_egress: bool = False
     max_cot_pass: int = 1
     parallel_tool_calls: bool = True
+    # Where sync plugin tools run on the async path (RuntimeEngine engine.tool_worker /
+    # engine.tool_concurrency). Placement only: results and order are the same.
+    tool_worker: str = "thread"
+    tool_concurrency: int | None = None
     engine_queue_depth: int = DEFAULT_ENGINE_QUEUE_DEPTH
     max_auto_steps: int | None = DEFAULT_MAX_AUTO_STEPS
     policy_engine: GovernancePolicyEngine | None = field(default=None, compare=False)

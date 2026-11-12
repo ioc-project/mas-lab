@@ -42,13 +42,15 @@ For offline CI, replay responses recorded against a live provider with [llm_cach
 
 | Field | Default | Effect |
 |-------|---------|--------|
-| `engine.queue_depth` | `32` | Kernel engine queue depth (integer >= 1) |
+| `engine.queue_depth` | `32` | How many engine calls are staged before they run (integer >= 1). A larger batch runs in chunks of this size, in order |
 | `engine.max_auto_steps` | `null` (no cap) | Dispatch-loop step cap; stops a runaway loop |
 | `engine.timeout` | none | Accepted by the schema; the current kernel does not apply it |
+| `engine.tool_worker` | `thread` | Where sync plugin tools run when a batch overlaps: `thread` or `inline`. Placement only: same context, same results, same order. Async tools (`on_aexecute_tool`) never use it; they run on the event loop. Each sync tool class is logged once (warning under `inline`) |
+| `engine.tool_concurrency` | none | How many sync plugin tools run at once. No cap other than the batch size |
 | `cache.enabled` | none | `false` turns built-in cache read and write off |
 | `cache.read` / `cache.write` | `true` / `true` | Built-in engine disk cache lookup / store |
 | `stream` | `false` | Stream LLM responses |
-| `parallel` | none | Overrides the design pattern's `parallel_tool_calls` for agents on this deployment |
+| `parallel` | none | Overrides the design pattern's `parallel_tool_calls` for agents on this deployment. `false` runs every call of a reply one at a time, in order, then asks the model once. |
 
 The built-in cache stores responses in `$XDG_CACHE_HOME/mas/llm_cache.json`.
 The default is `~/.cache/mas/llm_cache.json`; `cache_dir` in the user `config.yaml` moves it.

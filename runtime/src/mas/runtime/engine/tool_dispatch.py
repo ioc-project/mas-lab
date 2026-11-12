@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import contextvars
+import inspect
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -165,12 +166,50 @@ def _dispatch_once(
     if tool_provider is None:
         raise ToolExecutionError(f"No manifest tool provider configured; cannot execute {tool!r}")
     try:
+        from mas.runtime.engine.tool_workers import provider_ctx
+
         result = tool_provider.call_tool(
             tool,
             arguments or {},
-            ctx=ctx,
+            ctx=provider_ctx(tool_provider, ctx),
             user=user,
         )
+    except (ManifestToolLoadError, UnclaimedToolError, ExplicitToolUnavailableError) as exc:
+        raise ToolExecutionError(str(exc)) from exc
+    return format_tool_result(result, ctx=ctx, call_id=caller_call_id)
+
+
+async def _acall_provider(
+    provider: Any,
+    tool: str,
+    arguments: dict[str, Any] | None,
+    *,
+    ctx: Any,
+    user: str,
+    caller_call_id: str,
+) -> str:
+    from mas.runtime.contracts.tool_contract import invoke_call_tool
+
+    try:
+        acall_tool = getattr(provider, "acall_tool", None)
+        if callable(acall_tool):
+            from mas.runtime.engine.tool_workers import provider_ctx
+
+            result = acall_tool(tool, arguments or {}, ctx=provider_ctx(provider, ctx), user=user)
+            if inspect.isawaitable(result):
+                result = await result
+        else:
+            from mas.runtime.engine.tool_workers import arun_sync_tool
+
+            result = await arun_sync_tool(
+                invoke_call_tool,
+                provider.call_tool,
+                tool,
+                arguments or {},
+                owner=provider,
+                ctx=ctx,
+                user=user,
+            )
     except (ManifestToolLoadError, UnclaimedToolError, ExplicitToolUnavailableError) as exc:
         raise ToolExecutionError(str(exc)) from exc
     return format_tool_result(result, ctx=ctx, call_id=caller_call_id)
@@ -227,24 +266,47 @@ async def aexecute_engine_tool(
     correlation_id: int = 0,
     caller_call_id: str = "",
     sandbox: Any = None,
+    placement: Any | None = None,
 ) -> str:
     """Async twin of :func:`execute_engine_tool`.
 
     Routes to ``acall`` / ``adelegate`` / ``aspawn`` when present so nested
-    agent turns can overlap. Local manifest tools stay on the sync
-    ``call_tool`` path — they are not network I/O. ExecuteSandbox wraps the
-    body after ALLOW; it is not a new envelope symbol. Retry is a layer
-    around this invoke, not a loop in the engine.
+    agent turns can overlap. Plugin tools use ``acall_tool`` /
+    ``on_aexecute_tool`` when present; otherwise ``call_tool`` runs where the
+    deployment says (``tool_workers``: inline or thread). The tool sees the same
+    sealed context either way. ExecuteSandbox wraps the body after ALLOW; it is
+    not a new envelope symbol. Retry is a layer around this invoke, not a loop
+    in the engine.
     """
     from mas.runtime.reliability.classes import ClassifiedFailure
     from mas.runtime.reliability.classify import classify_tool_exception
 
     box = _sandbox_for(ctx, sandbox)
+    if placement is not None:
+        from mas.runtime.engine.tool_workers import bind_placement, unbind_placement
+
+        token = bind_placement(placement)
+        try:
+            return await aexecute_engine_tool(
+                tool,
+                delegation=delegation,
+                engine_contracts=engine_contracts,
+                ctx=ctx,
+                user=user,
+                arguments=arguments,
+                tool_provider=tool_provider,
+                correlation_id=correlation_id,
+                caller_call_id=caller_call_id,
+                sandbox=sandbox,
+            )
+        finally:
+            unbind_placement(token)
 
     async def _body() -> str:
         contracts = list(engine_contracts)
         if delegation is not None:
             contracts.insert(0, _DelegationEngineTool(delegation))
+        claimed_sync = False
         for contract in contracts:
             if contract.claims(tool):
                 acall = getattr(contract, "acall", None)
@@ -256,16 +318,26 @@ async def aexecute_engine_tool(
                         correlation_id=correlation_id,
                         caller_call_id=caller_call_id,
                     )
+                claimed_sync = True
                 break
-        return _dispatch_once(
+        if claimed_sync or tool_provider is None:
+            return _dispatch_once(
+                tool,
+                delegation=delegation,
+                engine_contracts=engine_contracts,
+                ctx=ctx,
+                user=user,
+                arguments=arguments,
+                tool_provider=tool_provider,
+                correlation_id=correlation_id,
+                caller_call_id=caller_call_id,
+            )
+        return await _acall_provider(
+            tool_provider,
             tool,
-            delegation=delegation,
-            engine_contracts=engine_contracts,
+            arguments,
             ctx=ctx,
             user=user,
-            arguments=arguments,
-            tool_provider=tool_provider,
-            correlation_id=correlation_id,
             caller_call_id=caller_call_id,
         )
 

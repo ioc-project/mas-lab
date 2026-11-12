@@ -29,6 +29,23 @@ properties:
       timeout:
         type: ["number", "null"]
         minimum: 0
+      tool_worker:
+        type: string
+        enum: [inline, thread]
+        default: thread
+        description: >
+          Where sync plugin tools run when a batch of tool calls overlaps.
+          `thread` runs each in its own thread; `inline` runs them one after
+          another on the event loop. Placement only: a tool sees the same
+          frozen context and the results come back in the same order.
+          A tool that declares `kernel_state` always runs inline.
+      tool_concurrency:
+        type: ["integer", "null"]
+        minimum: 1
+        default: null
+        description: >
+          How many sync plugin tools may run at once. Null means no cap other
+          than the number of calls in the batch.
   cache:
     type: object
     additionalProperties: false

@@ -27,6 +27,7 @@ from mas.library.standard.plugins.tools.containment import (
 )
 from mas.runtime.contracts.tool_contract import ToolContract, overlay_tool_advertise
 from mas.runtime.contracts.user_communication_contract import HITLContract, UserIOContract
+from mas.runtime.engine.tool_workers import arun_sync_tool, ctx_for_tool
 from mas.runtime.manifest.schema import ToolDocument
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 from mas.runtime.system_plugins import (
@@ -104,6 +105,8 @@ class LocalToolProvider:
 
     Same plugin contract as MCP: ``discover_tools`` / ``list_tools`` / ``call_tool``.
     """
+
+    seals_own_ctx = True  # each tool instance is sealed or live by its own ``kernel_state``
 
     origin = "local"
     kind = "local"
@@ -233,7 +236,9 @@ class LocalToolProvider:
             if not owns and not legacy_match:
                 continue
             try:
-                result = instance.on_execute_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+                result = instance.on_execute_tool(
+                    tool_name, arguments, ctx=ctx_for_tool(instance, ctx), user=user, **kwargs
+                )
                 if result is not None:
                     return result
                 if owns:
@@ -253,6 +258,52 @@ class LocalToolProvider:
                 except NotImplementedError:
                     continue
         raise ManifestToolLoadError(f"Tool {tool_name!r} not found in local provider")
+
+    async def acall_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        ctx: Any = None,
+        user: str = "",
+        **kwargs: Any,
+    ) -> Any:
+        """Async twin of :meth:`call_tool`.
+
+        Prefers ``on_aexecute_tool`` so I/O overlaps on the event loop.
+        Otherwise ``call_tool`` runs where the deployment says (inline or in a
+        thread). The tool sees the same sealed context either way, except a
+        ``kernel_state`` tool, which gets the live ctx and runs inline.
+        """
+        if self.system_plugins is not None and self.system_plugins.claims(tool_name):
+            return self.call_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+        owner = self._owner_of(tool_name, ctx)
+        if owner is None:
+            return self.call_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+        aexec = getattr(owner, "on_aexecute_tool", None)
+        if callable(aexec):
+            result = aexec(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+            return "" if result is None else result
+        return await arun_sync_tool(self.call_tool, tool_name, arguments, owner=owner, ctx=ctx, user=user, **kwargs)
+
+    def _owner_of(self, tool_name: str, ctx: Any) -> Any | None:
+        for instance in self._tool_instances:
+            owns = False
+            try:
+                specs = instance.on_collect_tools(ctx=ctx)
+                owns = any(s.get("name") == tool_name for s in (specs or []))
+            except NotImplementedError:
+                pass
+            if not owns:
+                try:
+                    owns = instance.get_name() == tool_name
+                except Exception:
+                    owns = False
+            if owns:
+                return instance
+        return None
 
     def _add_instance(
         self,

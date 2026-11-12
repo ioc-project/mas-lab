@@ -46,19 +46,16 @@ def q_product_to_dict(q: QProduct) -> dict:
         "hitl_tools_approved_turn": q.hitl_tools_approved_turn,
         "control_phase": q.control_phase,
         "pending_engine_correlation_id": q.pending_engine_correlation_id,
-        "outbound_waits": [
-            {"correlation_id": w.correlation_id, "kind": w.kind, "op": w.op}
-            for w in q.outbound_waits
-        ],
+        "outbound_waits": [{"correlation_id": w.correlation_id, "kind": w.kind, "op": w.op} for w in q.outbound_waits],
         "inflight_correlation_ids": list(q.inflight_correlation_ids),
         "offered_tools": list(q.offered_tools) if q.offered_tools is not None else None,
         "pending_tool_name": q.pending_tool_name,
         "pending_tool_args": dict(q.pending_tool_args),
         "pending_tools_by_cid": {
-            str(k): {"tool_name": v[0], "tool_arguments": dict(v[1])}
-            for k, v in q.pending_tools_by_cid.items()
+            str(k): {"tool_name": v[0], "tool_arguments": dict(v[1])} for k, v in q.pending_tools_by_cid.items()
         },
         "parallel_tool_batch": list(q.parallel_tool_batch),
+        "queued_tools": list(q.queued_tools),
     }
 
 
@@ -105,14 +102,8 @@ def q_product_from_dict(data: dict) -> QProduct:
             )
             for row in (data.get("outbound_waits") or [])
         ],
-        inflight_correlation_ids=[
-            int(x) for x in (data.get("inflight_correlation_ids") or [])
-        ],
-        offered_tools=(
-            tuple(data["offered_tools"])
-            if data.get("offered_tools") is not None
-            else None
-        ),
+        inflight_correlation_ids=[int(x) for x in (data.get("inflight_correlation_ids") or [])],
+        offered_tools=(tuple(data["offered_tools"]) if data.get("offered_tools") is not None else None),
         pending_tool_name=data.get("pending_tool_name", ""),
         pending_tool_args=dict(data.get("pending_tool_args") or {}),
         pending_tools_by_cid={
@@ -123,6 +114,7 @@ def q_product_from_dict(data: dict) -> QProduct:
             for k, v in (data.get("pending_tools_by_cid") or {}).items()
         },
         parallel_tool_batch=list(data.get("parallel_tool_batch") or []),
+        queued_tools=list(data.get("queued_tools") or []),
     )
 
 
@@ -137,8 +129,7 @@ def run_to_dict(run: RunLedger) -> dict:
                 "tool_name": r.tool_name,
                 "tool_arguments": dict(r.tool_arguments or {}),
                 "parallel_tools": [
-                    {"tool_name": name, "tool_arguments": dict(args or {})}
-                    for name, args in (r.parallel_tools or ())
+                    {"tool_name": name, "tool_arguments": dict(args or {})} for name, args in (r.parallel_tools or ())
                 ],
                 "finish_reason": r.finish_reason,
                 **({"placeholder": True} if r.placeholder else {}),

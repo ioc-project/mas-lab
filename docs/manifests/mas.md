@@ -382,9 +382,11 @@ spec:
 ### Concurrency model
 
 The runtime is synchronous by default. Single-agent CLI chat, unit tests, and the benchmark harness call `invoke`, `feed`, and `run_turn`.
-Concurrent fan-out uses async twins of those calls (`ainvoke`, `afeed`, `arun_turn`, `adelegate`, `aspawn`) on one cooperative event loop. Fan-out means parallel tool calls and concurrent `spawn_subagent`.
+Concurrent fan-out uses async twins of those calls (`ainvoke`, `afeed`, `arun_turn`, `adelegate`, `aspawn`) on one cooperative event loop. Fan-out means parallel tool calls and concurrent `spawn_subagent`. Embed a multi-conversation service on that async path (`arun_turn` / `afeed`).
 
 LLM providers must implement `achat_completion` as the async twin of `chat_completion`. A missing implementation fails at plugin load. The runtime does not run it on a worker thread, because OS-thread parallelism would break the lock-free run state (`SpawnLedger`, `InProcessCommBus`, `WorkingMemoryRegistry`).
+
+A plugin tool sees the same thing wherever it runs: a frozen `ToolCallContext` (session, agent, user, turn, a copy of the spec). It cannot reach or change run state, so running it inline, in a thread or elsewhere gives the same result in the same order; only timing differs. An engine-tool contract already has `acall` (delegation, `spawn_subagent`). A plugin tool that implements `on_aexecute_tool` (or a provider `acall_tool`) awaits on the loop and overlaps with its siblings. A sync tool overlaps when the deployment runs it in a thread. That is set in the RuntimeEngine manifest, not on the tool: `engine.tool_worker` (`thread`, the default, or `inline`) and `engine.tool_concurrency` (default none: only the size of the batch limits it). A tool that must read or change session state (the skill tools) declares `kernel_state = True`; it gets the live ctx and always runs inline in the kernel.
 
 OSS has no `WorkflowContract.register_impl()`. Topology and workflow are declarative YAML. ctl composes and runs them.
 

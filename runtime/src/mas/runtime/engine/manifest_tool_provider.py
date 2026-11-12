@@ -40,6 +40,8 @@ def _default_local_provider() -> Any:
 class ManifestToolProvider:
     """Name → provider dispatcher. Execution stays in the owning plugin."""
 
+    seals_own_ctx = True  # the registry seals per provider; each tool gets the same ctx anywhere
+
     def __init__(self, overlay_providers: Optional[list[ToolProvider]] = None) -> None:
         self._registry = ToolProviderRegistry()
         providers = [_default_local_provider()] if overlay_providers is None else list(overlay_providers)
@@ -138,6 +140,26 @@ class ManifestToolProvider:
         try:
             return self._registry.call_tool(tool_name, arguments, ctx=ctx, user="")
         except UnclaimedToolError:
+            raise ManifestToolLoadError(f"Tool {tool_name!r} not found in manifest or overlays") from None
+
+    async def acall_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        ctx: Any = None,
+        user: str = "",
+        **kwargs: Any,
+    ) -> Any:
+        from mas.runtime.engine.tools import current_spec_for_advertise, disabled_tool_names
+
+        if tool_name in disabled_tool_names(current_spec_for_advertise(ctx)):
+            raise ManifestToolLoadError(f"tool {tool_name!r} is disabled in the current spec revision")
+        try:
+            return await self._registry.acall_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+        except UnclaimedToolError:
+            if self._registry.has_external_providers():
+                raise
             raise ManifestToolLoadError(f"Tool {tool_name!r} not found in manifest or overlays") from None
 
 

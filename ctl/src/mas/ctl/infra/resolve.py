@@ -412,7 +412,7 @@ def _bundle_path_in_package(pkg: str, lib_name: str, bundle_name: str) -> Path |
 
 _RUNTIME_ENGINE_SPEC_KEYS = frozenset({"engine", "cache", "stream", "parallel"})
 _RUNTIME_ENGINE_CACHE_KEYS = frozenset({"enabled", "read", "write"})
-_RUNTIME_ENGINE_ENGINE_KEYS = frozenset({"queue_depth", "max_auto_steps", "timeout"})
+_RUNTIME_ENGINE_ENGINE_KEYS = frozenset({"queue_depth", "max_auto_steps", "timeout", "tool_worker", "tool_concurrency"})
 
 
 def _validate_runtime_engine_spec(spec: dict[str, Any]) -> None:
@@ -426,6 +426,12 @@ def _validate_runtime_engine_spec(spec: dict[str, Any]) -> None:
         for key in engine:
             if key not in _RUNTIME_ENGINE_ENGINE_KEYS:
                 raise ValueError(f"RuntimeEngine spec.engine: unknown field {key!r}")
+        from mas.runtime.engine.tool_workers import ToolPlacement
+
+        ToolPlacement(
+            worker=str(engine.get("tool_worker", "thread")),
+            concurrency=engine.get("tool_concurrency"),
+        )  # validates the pair at load, not at the first tool call
     for block, allowed in (("cache", _RUNTIME_ENGINE_CACHE_KEYS),):
         raw = spec.get(block)
         if raw is None:
