@@ -145,6 +145,10 @@ Runtime engine manifests (`kind: RuntimeEngine`) resolve via optional
 declared on Agent or MAS manifests. Omit `runtime_refs` to use package defaults
 only. See [runtime-engine.md](manifests/runtime-engine.md).
 
+Middleware (the LLM cache, pacing, and similar steps) resolves via workspace
+`middleware`, `--middleware`, or user `default_pipeline` when the workspace
+lists none — the same rule as `default_infra`.
+
 Model override for a single `mas-ctl chat` / `mas-ctl tui` run (overrides manifest
 `spec.models`): `--model ID`, e.g. `gpt-4o-mini` on direct OpenAI, or a
 provider-prefixed id (e.g. `azure/gpt-4o-mini`) through an OpenAI-compatible

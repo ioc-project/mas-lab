@@ -152,6 +152,7 @@ Put OTel (OpenTelemetry) settings, governance, design patterns, and system tools
 | `apiVersion` / `kind` | `mas.config/v1` / `UserConfig` header in the Tutorial 0 example |
 | `default_infra` | Infra used when no `--infra-ref` or workspace `infra_refs` is set |
 | `default_runtime` | Default `RuntimeEngine` when no `--runtime-ref` or `runtime_refs` is set |
+| `default_pipeline` | Middleware refs (for example `standard:llm-cache`) used when the workspace lists no `middleware`. Same rule as `default_infra`. |
 | `cache_dir` | Top-level alias for `paths.cache_dir` |
 | `runs_dir` / `labs_dir` | Top-level path aliases in the Tutorial 0 user example |
 

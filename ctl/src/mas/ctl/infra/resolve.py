@@ -129,6 +129,7 @@ def resolve_infra_refs(
     else:
         merged_interceptors = merge_infra_interceptors(
             workspace_interceptors=list(ws.infra_interceptors),
+            user_refs=list(usr.default_pipeline),
             cli_interceptors=list(interceptors or []),
         )
         runtime_effective = merge_runtime_refs(
