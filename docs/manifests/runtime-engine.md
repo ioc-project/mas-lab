@@ -48,7 +48,7 @@ For offline CI, replay responses recorded against a live provider with [llm_cach
 | `engine.tool_worker` | `thread` | Where sync plugin tools run when a batch overlaps: `thread` or `inline`. Placement only: same context, same results, same order. Async tools (`on_aexecute_tool`) never use it; they run on the event loop. Each sync tool class is logged once (warning under `inline`) |
 | `engine.tool_concurrency` | none | How many sync plugin tools run at once. No cap other than the batch size |
 | `cache.enabled` | none | `false` turns built-in cache read and write off |
-| `cache.read` / `cache.write` | `true` / `true` | Built-in engine disk cache lookup / store |
+| `cache.read` / `cache.write` | `false` / `false` | Turn the `llm_cache` infra step on for this deployment |
 | `stream` | `false` | Stream LLM responses |
 | `parallel` | none | Overrides the design pattern's `parallel_tool_calls` for agents on this deployment. `false` runs every call of a reply one at a time, in order, then asks the model once. |
 
@@ -94,7 +94,7 @@ List it in `runtime_refs` or pass it with `--runtime-ref`.
 The loader builds `KernelConfig` (the kernel's resolved settings) and the LLM cache and stream behaviour in layers.
 Later layers win:
 
-1. Package defaults: `DEFAULT_ENGINE_QUEUE_DEPTH = 32`, no step cap, cache read and write on, streaming off.
+1. Package defaults: `DEFAULT_ENGINE_QUEUE_DEPTH = 32`, no step cap, cache read and write off, streaming off.
 2. Env vars `MAS_LLM_CACHE_READ`, `MAS_LLM_CACHE_WRITE`, `MAS_LLM_STREAM`. They apply only to keys that no RuntimeEngine manifest sets.
 3. Merged `RuntimeEngine` manifests from the resolution table above.
 4. CLI flags on `mas-ctl chat`: `--cache-read/--no-cache-read`, `--cache-write/--no-cache-write`, `--stream/--no-stream`.

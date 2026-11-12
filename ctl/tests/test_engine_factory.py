@@ -28,16 +28,37 @@ def test_build_engine_errors_without_infra(monkeypatch, tmp_path):
 
     monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
     monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
     ctx = AutoCtxAssembler()
     manifest = {"spec": {"models": [{"model": "gpt-4o"}]}}
 
-    with pytest.raises(RuntimeError, match="No LLM configured"):
+    with pytest.raises(RuntimeError, match="OPENAI_BASE_URL"):
         build_engine(
             ctx,
             manifest,
             ResolvedInfra(refs=[], llm_proxy={}),
             anchor=tmp_path,
         )
+
+
+def test_build_engine_uses_openai_base_url_when_infra_has_no_api_base(monkeypatch, tmp_path):
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    sel = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        ResolvedInfra(refs=[], llm_proxy={}),
+        anchor=tmp_path,
+    )
+    assert sel.mode == "live"
+    assert sel.engine.api_base == "http://127.0.0.1:11434/v1"
+    # The provider that makes the calls is built from the infra dicts, so it has to use it too.
+    assert sel.engine.llm_provider.api_base == "http://127.0.0.1:11434/v1"
 
 
 def test_build_engine_live_requires_api_key(monkeypatch, tmp_path):
@@ -59,6 +80,7 @@ def test_build_engine_cache_read_only_needs_no_api_key(monkeypatch, tmp_path):
     from mas.ctl.infra.resolve import resolve_infra_refs
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
     from mas.library.standard.plugins.llm.cache import CacheLLMProvider
+    from mas.runtime.engine.infra_pipeline import is_cache_middleware
 
     monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
     monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
@@ -73,10 +95,39 @@ def test_build_engine_cache_read_only_needs_no_api_key(monkeypatch, tmp_path):
         anchor=tmp_path,
         cache_read_only=True,
     )
-    provider = sel.engine.llm_provider
+    steps = [s for s in (sel.engine.llm_proxy or {}).get("pipeline") or [] if is_cache_middleware(s)]
     assert sel.mode == "replay"
-    assert isinstance(provider, CacheLLMProvider)
-    assert provider.raise_on_miss is True and provider.allow_write is False
+    assert steps
+    assert steps[0]["params"]["raise_on_miss"] is True
+    assert steps[0]["params"]["allow_write"] is False
+    assert sel.engine._infra_stack is not None
+    assert not isinstance(sel.engine.llm_provider, CacheLLMProvider)
+
+
+def test_build_engine_cache_read_flag_inserts_llm_cache_step(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.library.standard.plugins.llm.cache import CacheLLMProvider
+    from mas.runtime.engine.infra_pipeline import is_cache_middleware
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+
+    sel = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+        cache_read_override=True,
+        cache_write_override=False,
+    )
+    steps = [s for s in (sel.engine.llm_proxy or {}).get("pipeline") or [] if is_cache_middleware(s)]
+    assert steps
+    assert steps[0]["params"]["allow_read"] is True
+    assert steps[0]["params"]["allow_write"] is False
+    assert not isinstance(sel.engine.llm_provider, CacheLLMProvider)
 
 
 def test_build_engine_live_with_cache_still_requires_api_key(monkeypatch, tmp_path):
@@ -470,3 +521,51 @@ def test_strict_replay_false_when_registry_empty(monkeypatch):
         )
         is False
     )
+
+
+def test_build_engine_warns_when_openai_base_url_is_ignored(monkeypatch, tmp_path, caplog):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
+    with caplog.at_level("WARNING"):
+        build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+    assert any("OPENAI_BASE_URL" in r.getMessage() and "ignored" in r.getMessage() for r in caplog.records)
+
+
+def test_runtime_engine_cache_kill_switch_turns_off_an_infra_llm_cache_step():
+    from mas.ctl.session.engine_factory import _ensure_llm_cache_pipeline
+
+    proxy = {"pipeline": [{"middleware": "llm_cache", "params": {"allow_read": True, "allow_write": True}}]}
+    _ensure_llm_cache_pipeline(
+        proxy,
+        cache_read=False,
+        cache_write=False,
+        cache_read_only=False,
+        cache_path=None,
+        cache_read_override=None,
+        cache_write_override=None,
+        cache_disabled=True,
+    )
+    params = proxy["pipeline"][0]["params"]
+    assert params["allow_read"] is False and params["allow_write"] is False
+
+
+def test_no_cache_step_is_inserted_by_default():
+    from mas.ctl.session.engine_factory import _ensure_llm_cache_pipeline
+
+    proxy: dict = {"api_base": "http://x/v1"}
+    _ensure_llm_cache_pipeline(
+        proxy,
+        cache_read=False,
+        cache_write=False,
+        cache_read_only=False,
+        cache_path=None,
+        cache_read_override=None,
+        cache_write_override=None,
+    )
+    assert not proxy.get("pipeline")

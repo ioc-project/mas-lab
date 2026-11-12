@@ -12,6 +12,12 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- LLM answers are stored only by the `llm_cache` infra step. `--cache-read` /
+  `--cache-write` / `--cache-read-only` turn that step on or change its flags.
+  The old provider wrap on the chat path is gone. A cache file written by that
+  wrap may not hit. Default read and write stay off until you turn them on.
+- `default_pipeline` in the user config attaches middleware when the workspace
+  lists none, the same way `default_infra` attaches an LLM endpoint.
 - `with-hardened` is one Control, written once for every agent you deploy: pass it with
   `--control pkg://mas.library.standard/controls/with-hardened.yaml` (or attach it from a Flavour with `agents: $all`).
   The `with-hardened` overlay is gone. It had set `design_pattern.params.max_steps: 512` (set it in the agent or a
@@ -108,6 +114,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - An explicit pipeline retry keeps the params it named.
 - Session close stops the llm and tool call layers.
+- When no LLMProxy `api_base` is set, `OPENAI_BASE_URL` (or `OPENAI_API_BASE`) is
+  used. The missing-address error names the infra manifest and that env var. The address reaches the LLM
+  provider too, not only the engine's own label.
 - A denied tool is that call's result. The next model call is a later step, not
   started from inside the denial. In a parallel batch the allowed siblings still
   run, and the model sees every denial.

@@ -182,8 +182,8 @@ How the patching flags work:
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--cache-read` / `--no-cache-read` | RuntimeEngine, true | Look up the cache before the LLM call. |
-| `--cache-write` / `--no-cache-write` | RuntimeEngine, true | Persist the result after the LLM call. |
+| `--cache-read` / `--no-cache-read` | RuntimeEngine, false | Look up the cache before the LLM call. |
+| `--cache-write` / `--no-cache-write` | RuntimeEngine, false | Persist the result after the LLM call. |
 | `--cache-read-only` | off | Exclusive replay: answer from the cache only, never write, fail at once on an unrecorded prompt; needs no API key. `mas_ctl.cache: read-only` in `config.yaml` makes it the workspace default. |
 | `--stream` / `--no-stream` | RuntimeEngine, false | Stream responses over SSE. |
 | `--without-obs` | off | Disable the observability summand (`M_obs`) and event recording. |

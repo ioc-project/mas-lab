@@ -95,11 +95,13 @@ def merge_infra_interceptors(
     *,
     workspace_interceptors: list[str],
     cli_interceptors: list[str],
+    user_refs: list[str] | None = None,
 ) -> list[str]:
-    """Merge interceptor refs: workspace < CLI (additive, de-duplicated)."""
+    """Merge interceptor refs: workspace first, then user ``default_pipeline`` if the workspace sets none, then CLI."""
     seen: set[str] = set()
     ordered: list[str] = []
-    for ref in workspace_interceptors + cli_interceptors:
+    user_part = [] if workspace_interceptors else list(user_refs or [])
+    for ref in workspace_interceptors + user_part + cli_interceptors:
         if ref and ref not in seen:
             seen.add(ref)
             ordered.append(ref)
@@ -284,10 +286,19 @@ class WorkspaceConfig:
         return None
 
 
+def _ref_list(raw: Any) -> list[str]:
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        return [raw] if raw.strip() else []
+    return [str(item) for item in raw if item]
+
+
 @dataclass
 class UserConfig:
     default_infra: str | None = None
     default_runtime: str | None = None
+    default_pipeline: list[str] = field(default_factory=list)
     cache_dir: Path = field(default_factory=mas_cache_root)
     _data: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -317,6 +328,7 @@ class UserConfig:
         return cls(
             default_infra=data.get("default_infra"),
             default_runtime=data.get("default_runtime"),
+            default_pipeline=_ref_list(data.get("default_pipeline")),
             cache_dir=cache_dir,
             _data=data,
         )

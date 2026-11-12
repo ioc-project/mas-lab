@@ -29,6 +29,8 @@ spec:
     api_key_env: OPENAI_API_KEY
 ```
 
+If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. Prefer an LLMProxy file so the address is in the manifest.
+
 The runtime resolves infra from deployment configuration, in this order of source:
 
 - workspace `config.yaml` `infra_refs`

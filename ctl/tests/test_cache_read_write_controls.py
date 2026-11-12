@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """_cache_read_enabled/_cache_write_enabled: precedence is CLI override ->
 RuntimeEngine cache.enabled (hard kill-switch) -> cache read/write ->
-MAS_LLM_CACHE_READ/MAS_LLM_CACHE_WRITE env var -> default true."""
+MAS_LLM_CACHE_READ/MAS_LLM_CACHE_WRITE env var -> default false."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ def _runtime(cache: dict) -> dict:
     return {"cache": cache}
 
 
-def test_defaults_to_true_with_no_runtime_or_env():
-    assert _cache_read_enabled({}) is True
-    assert _cache_write_enabled({}) is True
+def test_defaults_to_false_with_no_runtime_or_env():
+    assert _cache_read_enabled({}) is False
+    assert _cache_write_enabled({}) is False
 
 
 def test_runtime_read_write_fields_are_independent():

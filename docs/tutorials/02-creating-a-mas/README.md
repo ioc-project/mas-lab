@@ -183,8 +183,8 @@ In the default topology the moderator typically calls `schedule_agent`, `itinera
 then assembles the itinerary with prices. Order and wording are the LLM's choice and vary between runs.
 If a specialist reports no path or an unknown city, that failure belongs in the final answer.
 
-Repeat runs can return from the LLM response cache. Pass `-v` to log a cache
-hit. Disable with `--no-cache-read` or `MAS_LLM_CACHE_READ=false`. See
+The LLM response cache is off by default. With `--cache-read` a repeat run can
+return from it; pass `-v` to log a cache hit. See
 [Tutorial 0](../00-environment-setup/README.md) and
 [llm-cache.md](../../manifests/llm-cache.md).
 

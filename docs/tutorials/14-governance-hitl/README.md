@@ -166,9 +166,9 @@ mas-ctl chat docs/tutorials/14-governance-hitl/agent.yaml \
   --trace -q "Calculate 125 * 3 + 42."
 ```
 
-Repeat runs can return from the LLM response cache. Pass `-v` to log a cache
-hit. Disable with `--no-cache-read` or `MAS_LLM_CACHE_READ=false` (a cached
-ALLOW can replay `417` after a denial). See
+The LLM response cache is off by default. If you turn it on, a repeat run can
+return from it (a cached ALLOW can replay `417` after a denial); pass
+`--no-cache-read` to bypass it and `-v` to log a hit. See
 [Tutorial 0](../00-environment-setup/README.md) and
 [llm-cache.md](../../manifests/llm-cache.md).
 
@@ -272,8 +272,8 @@ passes to the next rule, and `BLOCK` stops at once.
 - **You still see 417 after a denial.** `BLOCK` / auto-deny ends the turn
   with the operator denial. `417` means the call was allowed, you used
   `SKIP`, or a cached allow was replayed. Use `--no-cache-read`.
-- **A repeat run returned in tens of milliseconds.** The LLM response cache is
-  on by default. Use `--no-cache-read` or `MAS_LLM_CACHE_READ=false`.
+- **A repeat run returned in tens of milliseconds.** The LLM response cache was
+  turned on. Use `--no-cache-read` or `MAS_LLM_CACHE_READ=false`.
 - **Trace file missing.** Pass `--events --events-file PATH` to choose a
   location, and do not pass `--no-events`.
 

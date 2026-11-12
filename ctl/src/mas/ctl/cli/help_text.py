@@ -45,10 +45,11 @@ Examples:
   mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace full
   mas-ctl chat agent.yaml -i -o overlays/tools.yaml --trace --trace-color
 
-LLM response cache is on by default (read and write). A repeat run can return
-in tens of milliseconds with identical wording. Pass -v to log cache hits
-(and other internals such as summarization). Disable reads with
---no-cache-read or MAS_LLM_CACHE_READ=false.
+LLM response cache is off by default. Turn reads and writes on with
+--cache-read / --cache-write, MAS_LLM_CACHE_READ / MAS_LLM_CACHE_WRITE, or
+RuntimeEngine spec.cache. A repeat run can then return in tens of milliseconds
+with identical wording. Pass -v to log cache hits (and other internals such
+as summarization).
 
 Trace (--trace, or mas_ctl.trace in config.yaml):
   Human exchange log on stderr (stdout stays the conversation). Bare --trace is

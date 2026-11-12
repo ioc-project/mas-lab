@@ -21,10 +21,10 @@ properties:
           read/write each control their own default independently.
       read:
         type: boolean
-        description: "Look up a cached response before calling the LLM. Default: true."
+        description: "Look up a cached response before calling the LLM. Default: false."
       write:
         type: boolean
-        description: "Persist a response to the cache after calling the LLM. Default: true."
+        description: "Persist a response to the cache after calling the LLM. Default: false."
   parallel:
     type: boolean
   engine_queue_depth:
