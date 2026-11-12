@@ -239,6 +239,15 @@ def test_unload_param_not_advertised_by_default(tmp_path):
     assert names == {"activate_skill", "list_skill_files", "read_skill_file"}
 
 
+def test_unload_unknown_skill_names_the_miss(tmp_path):
+    _, ctx = _make_registry_and_ctx(tmp_path)
+    ctx.skill_allow_unload = True
+    plugin = SkillToolsPlugin()
+    result = plugin.on_execute_tool("activate_skill", {"name": "does-not-exist", "unload": True}, ctx=ctx)
+    assert "not found" in result["error"]
+    assert "does-not-exist" in result["error"]
+
+
 def test_unload_rejected_when_disabled(tmp_path):
     _, ctx = _make_registry_and_ctx(tmp_path)
     ctx.skill_allow_unload = False

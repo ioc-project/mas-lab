@@ -180,7 +180,7 @@ class LiveLlmEngine(Lifecycle):
     cache_write: bool = True
     stream: bool = False
     use_tool_loop: bool = False
-    parallel_tool_calls: bool = True
+    tool_placement: Any | None = None  # ToolPlacement from the RuntimeEngine; None = defaults
     llm_proxy: dict[str, Any] | None = None
     llm_proxies: dict[str, dict[str, Any]] | None = None
     http_timeout: float | None = None
@@ -599,6 +599,7 @@ class LiveLlmEngine(Lifecycle):
                 engine_contracts=self.engine_tool_contracts,
                 correlation_id=io.correlation_id,
                 caller_call_id=io.call_id,
+                placement=self.tool_placement,
             )
             return EngineIoReturn(
                 correlation_id=io.correlation_id,
@@ -898,7 +899,7 @@ class LiveLlmEngine(Lifecycle):
                 if isinstance(args, dict):
                     args = repair_merged_arg_keys(args)
                 parsed.append((name, args))
-            if len(parsed) > 1 and self.parallel_tool_calls:
+            if len(parsed) > 1:
                 from mas.runtime.schema.ingress import ToolCallSpec
 
                 return EngineIoReturn(

@@ -850,6 +850,7 @@ class KernelDriver(Lifecycle):
         if len(ios) > 1 and all(sym.op == "TOOL_CALL" for sym in ios):
             parallel_group_id = str(uuid.uuid4())
             self._record_parallel_group_obs(ios, q, boundary="start", group_id=parallel_group_id)
+        staged: list[IngressSymbol] = []
         for sym in ios:
             ts_mono, ts_wall = _exchange_timestamp()
             engine_raw = _engine_payload_json(sym) if self.capture_engine_io else ""
@@ -937,6 +938,9 @@ class KernelDriver(Lifecycle):
                         updates["parent_call_id"] = parent_call_id
                     sym = sym.model_copy(update=updates)
             if pool is not None:
+                if pool.pending_outbound() >= pool.max_depth:
+                    # The queue stages calls; a bigger batch runs in chunks, in order.
+                    staged.extend(pool.drain())
                 pool.submit(sym)
             else:
                 ret = self._invoke_engine(sym)
@@ -947,7 +951,7 @@ class KernelDriver(Lifecycle):
             if parallel_group_id is not None:
                 self._record_parallel_group_obs(ios, q, boundary="end", group_id=parallel_group_id)
             return self._with_pending_steer(direct)
-        results = pool.drain()
+        results = [*staged, *pool.drain()]
         out: list[IngressSymbol] = []
         for sym, ret in zip(ios, results, strict=True):
             self._record_engine_return(trace, sym, ret)

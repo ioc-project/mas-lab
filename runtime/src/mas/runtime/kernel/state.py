@@ -180,6 +180,8 @@ class QProduct:
     pending_tool_args: dict = field(default_factory=dict)
     pending_tools_by_cid: dict[int, tuple[str, dict]] = field(default_factory=dict)
     parallel_tool_batch: list[dict] = field(default_factory=list)
+    # Calls from one model reply still to run, one at a time, when parallel is off.
+    queued_tools: list[dict] = field(default_factory=list)
     # Last LLM call's OpenAI ``tools`` names (EngineIoReturn.offered_tools).
     # None until an LLM return records them; kept across tool results so
     # egress governance can compare the pending tool to what the model saw.

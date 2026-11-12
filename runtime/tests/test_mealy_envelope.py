@@ -170,9 +170,10 @@ def test_composer_continues_after_machine_failure() -> None:
 def test_egress_block_closes_contract_envelope() -> None:
     from mas.runtime.kernel.coupling import GovDecision
     from mas.runtime.kernel.egress_gate import emit_scheduled_egress
+    from mas.runtime.kernel.inflight import pending_for_validate
     from mas.runtime.kernel.runtime_context import runtime_binding
-    from mas.runtime.kernel.state import RunLedger
-    from mas.runtime.schema.egress import RaiseBoundaryError
+    from mas.runtime.kernel.state import DpState, RunLedger
+    from mas.runtime.schema.egress import NoOp
 
     class _BlockPlugin:
         def evaluate_egress(self, intent, *, config):  # noqa: ANN001
@@ -186,12 +187,14 @@ def test_egress_block_closes_contract_envelope() -> None:
     config = KernelConfig(hitl_on_tool=False, egress_governance_plugin=_BlockPlugin())
     with runtime_binding(None, ctx_obs):
         out = emit_scheduled_egress(q, run, config)
-    assert isinstance(out[0], RaiseBoundaryError)
-    assert out[0].code == "GOV_BLOCK"
+    assert isinstance(out[0], NoOp)
+    assert pending_for_validate(q) == []
+    assert q.dp == DpState.EVALUATING
+    assert run.events[-1].placeholder
+    assert "blocked for test" in (run.events[-1].text or "")
     symbols = [e.payload.get("symbol") for e in ctx_obs.events if e.kind == ObsEventKind.ENVELOPE_ACTIVITY]
     assert EnvelopeSymbol.CONTRACT_START.value in symbols
     assert EnvelopeSymbol.CONTRACT_END.value in symbols
-    assert symbols[-len(INGRESS_ENVELOPE_SYMBOLS) :] == [s.value for s in INGRESS_ENVELOPE_SYMBOLS]
 
 
 def test_envelope_works_without_governance_plugins() -> None:

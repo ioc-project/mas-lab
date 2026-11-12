@@ -309,6 +309,10 @@ def _build_args_model(schema: Dict[str, Any]) -> "type[BaseModel] | None":
 
 class ToolContract(CapabilityContract):
     contract_id = "tool"
+    #: True only for a tool that reads or changes session state (skills). It gets
+    #: the live ctx and runs inline in the kernel. Every other tool gets a frozen
+    #: ``ToolCallContext`` and may run anywhere. See ``mas.runtime.engine.tool_workers``.
+    kernel_state = False
     """Base interface for tool execution using hooks.
 
     Two implementation styles are supported:
@@ -595,7 +599,13 @@ class ToolContract(CapabilityContract):
             return self.list_tools()
 
     def on_execute_tool(self, tool_name: str, arguments: Dict[str, Any], **kwargs) -> Dict[str, Any] | None:
-        """Hook: Execute tool if this plugin owns it."""
+        """Hook: Execute tool if this plugin owns it.
+
+        On the async engine path a batch of plugin tools overlaps when the tool
+        implements ``on_aexecute_tool`` (awaitable I/O), or when the deployment
+        runs sync tools in threads (RuntimeEngine ``engine.tool_worker``). The
+        tool sees the same frozen ``ToolCallContext`` either way.
+        """
         is_supported = False
         try:
             tools = self.list_tools()

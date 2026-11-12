@@ -84,6 +84,8 @@ class SkillToolsPlugin(ToolContract):
     the model avoid hallucinating nonexistent skill names.
     """
 
+    kernel_state = True  # activates skills in the session: needs the live ctx
+
     def __init__(
         self,
         registry: SkillRegistry | None = None,
@@ -143,9 +145,7 @@ class SkillToolsPlugin(ToolContract):
             )
             properties["unload"] = {
                 "type": "boolean",
-                "description": (
-                    "When true, unpin the named skill instead of loading it."
-                ),
+                "description": ("When true, unpin the named skill instead of loading it."),
                 "default": False,
             }
         else:
@@ -208,9 +208,7 @@ class SkillToolsPlugin(ToolContract):
             },
         ]
 
-    def on_execute_tool(
-        self, tool_name: str, arguments: dict[str, Any], **kwargs: Any
-    ) -> Any:
+    def on_execute_tool(self, tool_name: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
         """Route to the appropriate handler; extract ctx from kwargs."""
         ctx = kwargs.get("ctx")
         registry = _registry_from_ctx(ctx)
@@ -270,12 +268,7 @@ class SkillToolsPlugin(ToolContract):
         record = registry.get(name) if registry else None
         if record is None:
             available = registry.names() if registry else []
-            return {
-                "error": (
-                    f"Skill {name!r} not found in registry. "
-                    f"Available: {available}"
-                )
-            }
+            return {"error": (f"Skill {name!r} not found in registry. Available: {available}")}
 
         backend_plugin = _backend_plugin_from_ctx(
             ctx,
@@ -380,9 +373,7 @@ class SkillToolsPlugin(ToolContract):
             result["compatibility"] = record.compatibility
         return result
 
-    def _deactivate_skill(
-        self, name: str, registry: SkillRegistry | None, ctx: Any = None
-    ) -> dict[str, Any]:
+    def _deactivate_skill(self, name: str, registry: SkillRegistry | None, ctx: Any = None) -> dict[str, Any]:
         """Unpin a previously activated skill. Catalog listing is unchanged.
 
         Prior tool results that still sit in the transcript are not rewritten.
@@ -393,12 +384,7 @@ class SkillToolsPlugin(ToolContract):
         record = registry.get(name) if registry else None
         if record is None:
             available = registry.names() if registry else []
-            return {
-                "error": (
-                    f"Skill {name!r} not found in registry. "
-                    f"Available: {available}"
-                )
-            }
+            return {"error": (f"Skill {name!r} not found in registry. Available: {available}")}
 
         allow_unload = bool(getattr(ctx, "skill_allow_unload", False)) if ctx is not None else False
         if not allow_unload:
@@ -534,6 +520,7 @@ class SkillToolsPlugin(ToolContract):
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
 
 def _registry_from_ctx(ctx: Any) -> SkillRegistry | None:
     """Extract SkillRegistry from the assembly context object, if present."""

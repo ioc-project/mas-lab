@@ -94,6 +94,8 @@ def test_parallel_tool_dispatch_strict_zip_raises_on_length_mismatch():
     driver = KernelDriver(kernel=kernel, engine=MagicMock())
     pool = MagicMock()
     pool.submit = MagicMock()
+    pool.pending_outbound.return_value = 0
+    pool.max_depth = 32
     pool.drain.return_value = [
         EngineIoReturn(
             correlation_id=1,

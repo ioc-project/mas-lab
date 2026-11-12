@@ -36,6 +36,10 @@ def normalize_runtime_engine_spec(spec: dict[str, Any]) -> dict[str, Any]:
             out["max_auto_steps"] = engine["max_auto_steps"]
         if engine.get("timeout") is not None:
             out["timeout"] = engine["timeout"]
+        if "tool_worker" in engine:
+            out["tool_worker"] = engine["tool_worker"]
+        if "tool_concurrency" in engine:
+            out["tool_concurrency"] = engine["tool_concurrency"]
     for key in ("stream", "parallel", "cache"):
         if key in spec:
             out[key] = spec[key]
@@ -55,6 +59,11 @@ def apply_runtime_engine_to_kernel(
     if "max_auto_steps" in runtime_engine:
         raw = runtime_engine["max_auto_steps"]
         cfg = replace(cfg, max_auto_steps=None if raw is None else int(raw))
+    if "tool_worker" in runtime_engine:
+        cfg = replace(cfg, tool_worker=str(runtime_engine["tool_worker"]))
+    if "tool_concurrency" in runtime_engine:
+        raw = runtime_engine["tool_concurrency"]
+        cfg = replace(cfg, tool_concurrency=None if raw is None else int(raw))
     if "parallel" in runtime_engine:
         cfg = replace(cfg, parallel_tool_calls=bool(runtime_engine["parallel"]))
     return cfg

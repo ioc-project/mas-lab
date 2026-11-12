@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from mas.runtime.boundary.gov.policy import EgressIntentView, apply_egress_modify
 from mas.runtime.boundary.gov.telemetry import get_bound_observability
 from mas.runtime.kernel.config import KernelConfig
@@ -73,22 +75,24 @@ def _append_synthetic_skip(
     control_on_idle(q)
 
 
-def _feed_blocked_tool_to_model(
+def _record_blocked_tool(
     q: QProduct,
     run: RunLedger,
-    config: KernelConfig,
     *,
     cid: int,
     text: str,
-) -> list[EgressSymbol]:
-    """BLOCK on TOOL_CALL → synthetic tool observation, then another LLM call."""
+) -> None:
+    """Write the denial as this tool's result. The call does not run.
+
+    The model is asked again after this step (or after the rest of the batch),
+    the same as after a tool that did run.
+    """
     q.scheduled_egress = "NONE"
     q.inflight_kind = "NONE"
     q.tool = tool_on_abort(q.tool)
     run.append_placeholder(cid=cid, text=text, next_step="LLM_CALL")
-    q.scheduled_egress = "LLM_CALL"
-    q.dp = DpState.EGRESS_PENDING
-    return emit_scheduled_egress(q, run, config)
+    q.dp = DpState.EVALUATING
+    control_on_idle(q)
 
 
 def _apply_engine_allow(q: QProduct, view: EgressIntentView) -> None:
@@ -133,7 +137,39 @@ def _envelope_context(
     )
 
 
-def emit_scheduled_egress(q: QProduct, run: RunLedger, config: KernelConfig) -> list[EgressSymbol]:
+@dataclass
+class AuthorizedEgress:
+    """One call that passed the egress chokepoint and is not yet committed.
+
+    Nothing outbound is registered for it. Either ``commit_egress`` turns it
+    into an ``InvokeEngineIo`` with its wait, or ``abandon_egress`` closes its
+    envelope. A batch holds these until every call has been decided, so an
+    abort on a later call cannot strand an earlier one.
+    """
+
+    env_ctx: EnvelopeContext
+    cid: int
+    view: EgressIntentView
+    decision: GovDecision
+
+
+def emit_scheduled_egress(
+    q: QProduct,
+    run: RunLedger,
+    config: KernelConfig,
+) -> list[EgressSymbol]:
+    outcome = authorize_scheduled_egress(q, run, config)
+    if isinstance(outcome, AuthorizedEgress):
+        return commit_egress(q, outcome)
+    return outcome
+
+
+def authorize_scheduled_egress(
+    q: QProduct,
+    run: RunLedger,
+    config: KernelConfig,
+) -> list[EgressSymbol] | AuthorizedEgress:
+    """Run the chokepoint. A list is the final answer; ``AuthorizedEgress`` still needs a commit."""
     if q.scheduled_egress == "NONE":
         return [NoOp()]
     if q.tool_blacklisted and q.scheduled_egress == "TOOL_CALL":
@@ -220,17 +256,12 @@ def emit_scheduled_egress(q: QProduct, run: RunLedger, config: KernelConfig) -> 
         block_reason = env_ctx.gov_reason or (f"Tool '{q.pending_tool_name}' is not allowed.")
         close_envelope(env_ctx, error="GOV_BLOCK")
         if op == "TOOL_CALL":
-            # Same recovery path as HITL BLOCK: do not run the tool, put the
-            # policy reason in a tool observation, and let the same agent
-            # pick a name it was actually given.
+            # This tool did not run. Do not ask the model again from here:
+            # that left a wait open while other tools in the same reply were
+            # still starting. Ask the model after the batch, as for a result.
             coord_on_egress_blocked(q)
-            return _feed_blocked_tool_to_model(
-                q,
-                run,
-                config,
-                cid=cid,
-                text=block_reason,
-            )
+            _record_blocked_tool(q, run, cid=cid, text=block_reason)
+            return [NoOp()]
         apply_gov_block(q)
         coord_on_egress_blocked(q)
         return [
@@ -265,6 +296,17 @@ def emit_scheduled_egress(q: QProduct, run: RunLedger, config: KernelConfig) -> 
         return [NoOp()]
 
     view = apply_egress_modify(view, GovernanceAction(decision.value))
+    return AuthorizedEgress(env_ctx=env_ctx, cid=cid, view=view, decision=decision)
+
+
+def abandon_egress(authorized: AuthorizedEgress, *, error: str = "BATCH_ABORTED") -> None:
+    """Close the envelope of a call that will not run, so start/end stay paired."""
+    close_envelope(authorized.env_ctx, error=error)
+
+
+def commit_egress(q: QProduct, authorized: AuthorizedEgress) -> list[EgressSymbol]:
+    """Register the wait and emit the engine call for an authorized egress."""
+    cid, view, decision = authorized.cid, authorized.view, authorized.decision
     q.hitl_gov_override = False
     _apply_engine_allow(q, view)
     egress_kind: InflightKind = "MODEL" if view.op == "LLM_CALL" else "TOOL"

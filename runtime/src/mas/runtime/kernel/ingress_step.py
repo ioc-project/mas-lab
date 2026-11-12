@@ -109,9 +109,17 @@ def commit_engine_io_return(
         apply_control_valid(q)
         coord_after_ingress(q)
         return [NoOp()]
+    if q.queued_tools and event.response_kind != "TOOL_RESULT":
+        q.queued_tools.clear()  # an error or a stop ends the one-at-a-time run
     q.dp = DpState.EVALUATING
     apply_control_valid(q)
     coord_after_ingress(q)
+    if q.queued_tools:
+        from mas.runtime.kernel.parallel_tools import advance_tool_queue
+
+        queued = advance_tool_queue(q, run, config)
+        if queued is not None:
+            return queued
     return evaluate(q, run, config=config)
 
 

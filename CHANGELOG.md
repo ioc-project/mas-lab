@@ -108,6 +108,26 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - An explicit pipeline retry keeps the params it named.
 - Session close stops the llm and tool call layers.
+- A denied tool is that call's result. The next model call is a later step, not
+  started from inside the denial. In a parallel batch the allowed siblings still
+  run, and the model sees every denial.
+- A batch with more calls than `engine.queue_depth` runs in chunks of that size, in
+  order. It no longer fails with "engine outbound queue full".
+- Plugin tools on the async path overlap in a parallel batch. `on_aexecute_tool`
+  or provider `acall_tool` runs on the event loop. A sync tool runs in a thread by
+  default; `engine.tool_worker` (`thread` or `inline`) and `engine.tool_concurrency`
+  in the RuntimeEngine manifest set where and how many. A plugin tool gets the same
+  frozen `ToolCallContext` wherever it runs, so placement changes timing only. A tool
+  that must change session state (skills) declares `kernel_state` and runs inline.
+  Each sync tool class is logged once (a warning under `inline`, which blocks the
+  event loop); the authoring guide explains how to write the async version.
+- A parallel batch commits as a unit. Every call is decided first; a HITL pause,
+  TERMINATE or plugin error stops the batch with no call left waiting and no
+  envelope left open. Checked over every combination of decisions for 2 and 3 calls.
+- With `parallel: false` every call of a reply runs, one at a time in order, and
+  the model is asked once after the last result. Before, only the first ran and
+  the model had to ask again for the rest. A denial is that call's result; a HITL
+  pause keeps the rest queued.
 - A governance plugin name that is not registered as a governance plugin is now an error. It was a logged warning
   and the plugin was skipped, so a typo in a Control disabled it silently. The runtime names no fallback plugin.
 - The Agent deprecation warning printed a literal `{whom}`.

@@ -162,3 +162,27 @@ spec:
         runtime_refs=["a.yaml", "b.yaml"],
     )
     assert infra.runtime_engine["cache"] == {"read": True, "write": True}
+
+
+def _runtime_file(tmp_path: Path, engine_block: str) -> None:
+    (tmp_path / "runtime.yaml").write_text(
+        "apiVersion: infra/v1\nkind: RuntimeEngine\nmetadata:\n  name: r\nspec:\n  engine:\n" + engine_block,
+        encoding="utf-8",
+    )
+
+
+def test_tool_placement_comes_from_the_runtime_engine_manifest(tmp_path: Path):
+    from mas.runtime.spec.runtime_engine import apply_runtime_engine_to_kernel
+
+    _runtime_file(tmp_path, "    tool_worker: inline\n    tool_concurrency: 6\n")
+    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path, runtime_refs=["runtime.yaml"])
+    cfg = apply_runtime_engine_to_kernel(KernelConfig(), infra.runtime_engine)
+    assert (cfg.tool_worker, cfg.tool_concurrency) == ("inline", 6)
+    default = KernelConfig()
+    assert (default.tool_worker, default.tool_concurrency) == ("thread", None)
+
+
+def test_a_bad_tool_worker_fails_when_the_manifest_loads(tmp_path: Path):
+    _runtime_file(tmp_path, "    tool_worker: process\n")
+    with pytest.raises(Exception, match="tool_worker"):
+        resolve_infra_refs(["standard:openai"], anchor=tmp_path, runtime_refs=["runtime.yaml"])
