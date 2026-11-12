@@ -9,6 +9,7 @@ differ only in ``ControlCapability.surface``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal
 
 from mas.runtime.boundary.control.contract import (
@@ -27,6 +28,7 @@ from mas.runtime.engine.llm_output_limits import estimate_model_cost_usd
 from mas.runtime.schema.observability import ObsEventKind
 from mas.runtime.session import SessionStatus
 from mas.runtime.session.snapshot import SnapshotRef, SnapshotTree
+from mas.runtime.session.spec_revision import LAYER_STATE_KEY
 
 
 class SessionControl:
@@ -176,9 +178,7 @@ class SessionControl:
         session_id: str,
         *,
         text: str,
-        mode: Literal[
-            "preempt", "replace", "after", "amend", "enqueue", "inject_now"
-        ] = "preempt",
+        mode: Literal["preempt", "replace", "after", "amend", "enqueue", "inject_now"] = "preempt",
         at: QueueAt = "head",
     ) -> None:
         """Control-protocol injection into a working generation. A2A has no steer RPC.
@@ -543,9 +543,7 @@ class SessionControl:
         self._ensure_stopped(session, session_id, auto_stop=auto_stop, method="persist")
         store = self._manager.checkpoint_store
         if store is None:
-            raise RuntimeError(
-                "persist requires a checkpoint store; start chat with --checkpoint-dir"
-            )
+            raise RuntimeError("persist requires a checkpoint store; start chat with --checkpoint-dir")
         if snapshot_id:
             body = self._manager.snapshot_tree.body(snapshot_id)
             if body is None:
@@ -580,9 +578,7 @@ class SessionControl:
         self._require("run_script", session_id)
         body = str(text or "")
         if script_file:
-            body = resolve_curl_data(
-                script_file if str(script_file).startswith("@") else f"@{script_file}"
-            )
+            body = resolve_curl_data(script_file if str(script_file).startswith("@") else f"@{script_file}")
         statements = parse_control_script(body)
         results = run_control_script(
             self,
@@ -769,9 +765,7 @@ class SessionControl:
         revision: int | None = None,
     ) -> None:
         self._require("set_queued_action", session_id)
-        new_revision = self._manager.turn_queue.set_action(
-            session_id, input_id, action=action, revision=revision
-        )
+        new_revision = self._manager.turn_queue.set_action(session_id, input_id, action=action, revision=revision)
         self._trace(
             "set_queued_action",
             session_id,
@@ -809,32 +803,125 @@ class SessionControl:
         )
         return child.ref.snapshot_id
 
-    def disable_tool(self, session_id: str, *, name: str, reason: str) -> int:
-        session = self._require("disable_tool", session_id)
-        from mas.runtime.session.spec_revision import SpecDelta
+    def _revise_spec(
+        self,
+        session: Any,
+        session_id: str,
+        delta: Any,
+        *,
+        reason: str,
+        observe: Callable[[dict[str, Any]], Any] | None = None,
+        expected: Any = None,
+        guarded: bool = False,
+    ) -> Any:
+        """Ask the spec machine whether *delta* applies; if so apply it and bring the session up to date.
+
+        The machine (``spec_on_delta``) is the only thing that orders spec writes: it refuses while the
+        session is being checkpointed or is over, and refuses a guarded delta whose expected state is no
+        longer the state. Both refusals are traced. The machine decides against the very spec the log then
+        appends to (*observe* reads the state from it), so two writers never both pass.
+        """
+        from mas.runtime.session.spec_machine import SpecConflict, SpecVerdict, spec_on_delta
         from mas.runtime.session.state import ManifestRef
 
-        rev = self._manager.spec_log.apply(
-            session_id,
-            SpecDelta("disable_tool", {"name": name}),
-            actor=self.capability.actor,
-            reason=reason,
-        )
-        session.spec_revision = rev.revision
-        session.manifest_ref = ManifestRef.from_content(self._manager.spec_log.current_manifest(session_id))
-        ctx = getattr(getattr(session.instance, "driver", None), "ctx", None)
-        if ctx is not None:
-            from mas.runtime.engine.tools import is_spawn_subagent_enabled, spawn_subagent_params
+        def decide(spec: dict[str, Any]) -> None:
+            current = observe(spec) if observe is not None else None
+            verdict = spec_on_delta(session.status, current, expected, guarded=guarded)
+            if verdict is SpecVerdict.APPLY:
+                return
+            why = f"session is {session.status.value}" if verdict is SpecVerdict.BUSY else "state changed since read"
+            self._trace("spec_delta", session_id, kind="control_denied", denied=True, reason=why)
+            if verdict is SpecVerdict.BUSY:
+                raise ControlDenied("spec_delta", session_id, reason=why)
+            raise SpecConflict(why)
 
-            spec = self._manager.spec_log.current_spec(session_id)
-            ctx.current_spec = spec
-            ctx.allow_subagent_spawning = is_spawn_subagent_enabled(spec)
-            ctx.subagent_templates = list((spawn_subagent_params(spec) or {}).get("templates") or [])
+        log = self._manager.spec_log
+        rev = log.apply(session_id, delta, actor=self.capability.actor, reason=reason, decide=decide)
+        while True:  # a later revision may land meanwhile; the session ends on the newest
+            head = log.latest(session_id)
+            manifest = log.current_manifest(session_id)
+            session.spec_revision = head.revision
+            session.manifest_ref = ManifestRef.from_content(manifest)
+            ctx = getattr(getattr(session.instance, "driver", None), "ctx", None)
+            if ctx is not None:
+                from mas.runtime.engine.tools import is_spawn_subagent_enabled, spawn_subagent_params
+
+                spec = manifest.get("spec") if isinstance(manifest.get("spec"), dict) else {}
+                ctx.current_spec = spec
+                ctx.allow_subagent_spawning = is_spawn_subagent_enabled(spec)
+                ctx.subagent_templates = list((spawn_subagent_params(spec) or {}).get("templates") or [])
+            if log.latest(session_id).revision == head.revision:
+                return rev
+
+    @staticmethod
+    def _tool_disabled_by(spec: dict[str, Any], name: str) -> str | None:
+        for tool in spec.get("tools") or []:
+            if isinstance(tool, dict) and str(tool.get("name") or tool.get("id") or "") == name:
+                return str(tool["disabled_by"]) if tool.get("disabled_by") else None
+        return None
+
+    def _spec_tool_delta(self, method: str, session_id: str, *, name: str, reason: str, by: str) -> int:
+        session = self._require(method, session_id)
+        from mas.runtime.session.spec_revision import SpecDelta
+
+        payload = {"name": name, **({"by": by} if by else {})}
+        # a tool is put back only by whoever took it away
+        undo_by = method == "enable_tool" and bool(by)
+        rev = self._revise_spec(
+            session,
+            session_id,
+            SpecDelta(method, payload),
+            reason=reason,
+            observe=(lambda spec: self._tool_disabled_by(spec, name)) if undo_by else None,
+            expected=by if undo_by else None,
+            guarded=undo_by,
+        )
         self._trace(
-            "disable_tool",
+            method,
             session_id,
             kind="spec_revised",
             reason=reason,
             payload={"revision": rev.revision, "hash": rev.content_hash, "tool": name},
+        )
+        return rev.revision
+
+    def disable_tool(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        return self._spec_tool_delta("disable_tool", session_id, name=name, reason=reason, by=by)
+
+    def enable_tool(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        return self._spec_tool_delta("enable_tool", session_id, name=name, reason=reason, by=by)
+
+    def layer_state(self, session_id: str, *, layer: str) -> dict:
+        self._require("layer_state", session_id)
+        return self._manager.spec_log.layer_state(session_id, layer)
+
+    def swap_layer_state(
+        self,
+        session_id: str,
+        *,
+        layer: str,
+        target: str,
+        expected: dict,
+        state: dict | None,
+        reason: str,
+    ) -> int:
+        session = self._require("swap_layer_state", session_id)
+        from mas.runtime.session.spec_revision import SpecDelta
+
+        rev = self._revise_spec(
+            session,
+            session_id,
+            SpecDelta("swap_layer_state", {"layer": layer, "target": target, "state": state}),
+            reason=reason,
+            observe=lambda spec: ((spec.get(LAYER_STATE_KEY) or {}).get(layer) or {}).get(target),
+            expected=expected,
+            guarded=True,
+        )
+        self._trace(
+            "swap_layer_state",
+            session_id,
+            kind="spec_revised",
+            reason=reason,
+            payload={"revision": rev.revision, "hash": rev.content_hash, "layer": layer, "target": target},
         )
         return rev.revision

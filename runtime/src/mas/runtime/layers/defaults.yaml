@@ -1,0 +1,26 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Documented default infra pipeline steps. The engine loads this file; it is
+# not a hidden retry loop.
+pipeline:
+  - id: retry-llm
+    layer: retry
+    for: [llm]
+    per: destination
+    params:
+      max_attempts: 4
+      backoff_s: 0.5
+      backoff_multiplier: 2.0
+      jitter: true
+      retry_on: [transient, unavailable]
+  - id: retry-tool
+    layer: retry
+    for: [tool]
+    per: all
+    params:
+      max_attempts: 2
+      backoff_s: 0.5
+      backoff_multiplier: 2.0
+      jitter: true
+      retry_on: [transient, unavailable]
+      require_idempotent: true

@@ -105,7 +105,19 @@ properties:
 
       middleware:
         type: string
-        description: "InfraMiddleware/InfraInterceptor: registry id (e.g. llm_cache, fault_inject)."
+        description: "Deprecated spelling of layer on an InfraMiddleware leaf."
+      layer:
+        type: string
+        description: "InfraMiddleware leaf: registry id of the call layer."
+      priority:
+        type: integer
+        description: Higher wraps outside. Ties break by name.
+      id:
+        type: string
+        description: Name of this step, so an overlay or an experiment can address it.
+      enabled:
+        type: boolean
+        description: "false keeps the step listed and does not wrap the call."
 
       for:
         description: >
@@ -136,8 +148,10 @@ properties:
       pipeline:
         type: array
         description: >
-          Ordered middleware steps (canonical on LLMProxy / InfraBundle).
-          interceptors is a read-only alias; mixing both is an error.
+          Ordered call-layer steps (canonical on LLMProxy / InfraBundle /
+          Application / ToolServerRegistry). interceptors is a read-only
+          alias; mixing both is an error. middleware on a step is the
+          deprecated spelling of layer.
         items:
           oneOf:
             - type: string
@@ -174,12 +188,6 @@ properties:
             type: number
             description: >
               HTTP request timeout in seconds for LLM API calls. Defaults to 120.
-          retry:
-            $ref: "./fragments/retry-policy.schema.yaml"
-            description: >
-              Infra retry for this proxy. Agent ``spec.control.retry.llm``
-              overrides when both are set. ``MAS_LLM_HTTP_RETRIES`` is extra
-              retries (attempts = retries + 1).
 
       server:
         type: object

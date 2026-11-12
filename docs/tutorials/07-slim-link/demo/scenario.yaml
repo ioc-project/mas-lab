@@ -38,7 +38,7 @@ sections:
       - type: command
         title: "Every agent has the in-process link and no name"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml 
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml 
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "triage  local"
@@ -57,7 +57,7 @@ sections:
       - type: command
         title: "The Flavour links every agent to the in-process row"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/in-process.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/in-process.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/in-process.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/in-process.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "billing  local-group  acme/lab/desk/billing"
@@ -76,7 +76,7 @@ sections:
       - type: command
         title: "The names stay; the channel is slim"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "billing  slim  acme/lab/desk/billing"
@@ -95,7 +95,7 @@ sections:
       - type: command
         title: "The front desk serves only triage"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/front-desk.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/front-desk.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "triage  slim  acme/lab/desk/triage"
@@ -106,28 +106,28 @@ sections:
       - type: command
         title: "Outage is reached at its own A2A server"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/mixed.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/outage-server.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/mixed.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/outage-server.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "outage  a2a\n"
       - type: command
         title: "A2A framing above the node"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/a2a-over-slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/a2a-over-slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "billing  slim, a2a-framing  acme/lab/desk/billing"
       - type: command
         title: "Billing alone on its own A2A chain"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/billing-over-a2a.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/billing-over-a2a.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "billing  slim, a2a-framing  acme/lab/desk-a2a/billing"
       - type: command
         title: "One hub row for many agents, with a url override for outage"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/hub.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/agent-hub.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/hub.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml" --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/agent-hub.yaml"
         allowed_modes: [offline]
         expected_exit_code: 0
         expected_output: "billing  http, a2a-framing"
@@ -138,28 +138,28 @@ sections:
       - type: command
         title: "A Flavour that names an agent the desk does not have"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-agent.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-agent.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 1
         expected_output: "bind.agents names 'billng', which is no agent"
       - type: command
         title: "A Flavour that names a row nobody declared"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-row.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/unknown-row.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 1
         expected_output: "names 'desk-nod', which is no Application row"
       - type: command
         title: "A chain that starts with a framing row"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/wrong-first-layer.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/broken/wrong-first-layer.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/slim-node.yaml"
         allowed_modes: [offline]
         expected_exit_code: 1
         expected_output: "the first layer must be a transport; 'a2a-framing' needs a layer below it"
       - type: command
         title: "An identity with two parts"
         command: >-
-          mas-ctl infra show docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/broken/bad-identity.yaml"
+          mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml --flavour docs/tutorials/07-slim-link/flavours/slim.yaml --infra-ref "$PWD/docs/tutorials/07-slim-link/infra/broken/bad-identity.yaml"
         allowed_modes: [offline]
         expected_exit_code: 1
         expected_output: "identity must be a three-part org/ns/service name, got 'acme/desk'"

@@ -142,7 +142,9 @@ def test_build_engine_replay_does_not_require_api_key(monkeypatch, tmp_path):
     assert isinstance(sel.engine, LiveLlmEngine)
     leaf = leaf_engine(sel.engine)
     assert leaf is sel.engine
-    assert isinstance(leaf.llm_provider, OpenAILLMProvider)
+    provider = leaf.llm_provider
+    inner = getattr(provider, "inner", provider)
+    assert isinstance(inner, OpenAILLMProvider) or isinstance(provider, OpenAILLMProvider)
 
 
 def test_resolve_sampling_param_prefers_spec_models():
@@ -449,9 +451,9 @@ def test_build_engine_installs_tool_pipeline(monkeypatch, tmp_path):
 
 def test_strict_replay_false_when_registry_empty(monkeypatch):
     class _Empty:
-        def get_entry(self, urn: str):
-            del urn
-            return None
+        def entries_named(self, *args, **kwargs):
+            del args, kwargs
+            return []
 
         def resolve_by_type(self, *args, **kwargs):
             del args, kwargs

@@ -115,7 +115,7 @@ class _Registry:
 
     def resolve_spec(self, kind: str, binding: dict):
         if binding.get("type") == "failing":
-            if kind != "stack_layer":
+            if kind != "layer":
                 raise KeyError("failing")
             return SimpleNamespace(load_class=lambda: FailingLayer)
         from mas.runtime.registry import get_registry

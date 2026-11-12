@@ -18,7 +18,7 @@ transport (a link with `send(target, task, ...)`, or a `Layer` with
 `needs_lower = False`); the layers above are generic layers such as the
 `a2a-framing` layer, or `BoundLayer` decorators (deprecated, still work).
 `{type, params}` entries resolve as an `agent_comm` link first, then as a
-`stack_layer` (`resolve_layer_class`). So `a2a` is the A2A SDK link, which can
+`layer` (`resolve_layer_class`). So `a2a` is the A2A SDK link, which can
 only be the first entry, and `a2a-framing` is the framing layer, which cannot
 be. Start is bottom
 first; stop is top first. Capabilities OR-merge. Every send gets a child

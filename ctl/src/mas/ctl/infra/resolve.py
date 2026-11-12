@@ -86,8 +86,13 @@ def resolve_infra_refs(
     user: UserConfig | None = None,
     interceptors: list[str] | None = None,
     runtime_refs: list[str] | None = None,
+    catalog: bool = False,
 ) -> ResolvedInfra:
-    """Load and merge infra manifests; populate ``ResolvedInfra.llm_proxy``."""
+    """Load and merge infra manifests; populate ``ResolvedInfra.llm_proxy``.
+
+    ``catalog=True`` loads only ``refs`` (bundle leaves expand). It does not
+    prepend ``standard:local-tools`` or merge workspace interceptors / runtime.
+    """
     from mas.ctl.workspace.config import (
         merge_infra_interceptors,
         merge_runtime_refs,
@@ -109,32 +114,35 @@ def resolve_infra_refs(
 
     merged = InfraManifest(name="merged")
     errors: list[tuple[str, Exception]] = []
-    implicit_refs = ["standard:local-tools"]
+    implicit_refs = [] if catalog else ["standard:local-tools"]
     refs_to_load = implicit_refs + [ref for ref in effective if ref not in implicit_refs]
     for ref in refs_to_load:
         try:
-            part = _load_ref(ref, anchor=root, workspace=ws)
+            part = _load_ref(ref, anchor=root, workspace=ws, allow_runtime_engine=catalog)
             merged = _merge(merged, part)
         except Exception as exc:
             errors.append((ref, exc))
 
-    merged_interceptors = merge_infra_interceptors(
-        workspace_interceptors=list(ws.infra_interceptors),
-        cli_interceptors=list(interceptors or []),
-    )
+    if catalog:
+        merged_interceptors = list(interceptors or [])
+        runtime_effective = list(runtime_refs or [])
+    else:
+        merged_interceptors = merge_infra_interceptors(
+            workspace_interceptors=list(ws.infra_interceptors),
+            cli_interceptors=list(interceptors or []),
+        )
+        runtime_effective = merge_runtime_refs(
+            workspace_refs=ws.effective_runtime_refs,
+            user_refs=[usr.default_runtime] if usr.default_runtime else [],
+            cli_refs=list(runtime_refs or []),
+            workspace_found=ws.found,
+        )
     for ref in merged_interceptors:
         try:
             part = _load_ref(ref, anchor=root, workspace=ws)
             merged.pipeline = _merge_pipeline(merged.pipeline, part.pipeline)
         except Exception as exc:
             errors.append((ref, exc))
-
-    runtime_effective = merge_runtime_refs(
-        workspace_refs=ws.effective_runtime_refs,
-        user_refs=[usr.default_runtime] if usr.default_runtime else [],
-        cli_refs=list(runtime_refs or []),
-        workspace_found=ws.found,
-    )
     runtime_engine: dict[str, Any] = dict(merged.runtime_engine)
     for ref in runtime_effective:
         try:
@@ -178,7 +186,8 @@ def resolve_infra_refs(
     stamped = [stamp_middleware_step(step) for step in (llm.get("pipeline") or []) if isinstance(step, dict)]
     llm_shared = filter_pipeline_for_kind(stamped, "llm")
     tool_shared = filter_pipeline_for_kind(stamped, "tool")
-    _hydrate_pipeline_cache_paths(llm_shared, cache_path=cache_path)
+    if not catalog:
+        _hydrate_pipeline_cache_paths(llm_shared, cache_path=cache_path)
 
     tool_server_registry = {
         str(item["id"]): dict(item) for item in merged.tool_servers if isinstance(item, dict) and item.get("id")
@@ -190,15 +199,13 @@ def resolve_infra_refs(
         leaf = {k: v for k, v in llm.items() if k not in {"pipeline", "cache_path", "tool_pipeline"}}
         leaves = {name: leaf}
 
-    llm["pipeline"], leaves = _layer_pipelines(llm_shared, leaves, cache_path=cache_path)
+    llm["pipeline"], leaves = _layer_pipelines(llm_shared, leaves, cache_path=cache_path, hydrate=not catalog)
+    if catalog and not leaves:
+        llm["pipeline"] = list(llm_shared)  # a listed ref has no leaf to clone its destination steps onto
     tool_common, tool_cloned = split_pipeline_layers(tool_shared)
     if tool_server_registry:
         for server in tool_server_registry.values():
-            own = [
-                stamp_middleware_step(step)
-                for step in (server.get("pipeline") or [])
-                if isinstance(step, dict)
-            ]
+            own = [stamp_middleware_step(step) for step in (server.get("pipeline") or []) if isinstance(step, dict)]
             server["pipeline"] = tool_cloned + filter_pipeline_for_kind(own, "tool")
     else:
         tool_common = _merge_pipeline(tool_common, tool_cloned)
@@ -243,7 +250,13 @@ def _load_runtime_ref(ref: str, *, anchor: Path, workspace: WorkspaceConfig) -> 
     return manifest
 
 
-def _load_ref(ref: str, *, anchor: Path, workspace: WorkspaceConfig) -> InfraManifest:
+def _load_ref(
+    ref: str,
+    *,
+    anchor: Path,
+    workspace: WorkspaceConfig,
+    allow_runtime_engine: bool = False,
+) -> InfraManifest:
     if ref.startswith(("http://", "https://")):
         is_local = "localhost" in ref or "127.0.0.1" in ref
         return InfraManifest(
@@ -253,7 +266,7 @@ def _load_ref(ref: str, *, anchor: Path, workspace: WorkspaceConfig) -> InfraMan
         )
 
     path = _resolve_ref_path(ref, anchor=anchor, workspace=workspace)
-    return _load_file(path, workspace=workspace)
+    return _load_file(path, workspace=workspace, allow_runtime_engine=allow_runtime_engine)
 
 
 def resolution_anchor(anchor: Path | None, workspace: WorkspaceConfig) -> Path:
@@ -543,9 +556,14 @@ def _load_file(
         spec = data.get("spec") or {}
         params = _resolve_pipeline_param_paths(dict(spec.get("params") or {}), anchor=path.parent)
         step = {
-            "middleware": spec.get("middleware") or path.stem.replace("-", "_"),
+            "layer": spec.get("layer") or spec.get("middleware") or path.stem.replace("-", "_"),
             "params": params,
         }
+        if spec.get("middleware") and not spec.get("layer"):
+            step["middleware"] = spec.get("middleware")
+        for key in ("id", "enabled", "priority"):
+            if key in spec:
+                step[key] = spec[key]
         if "for" in spec:
             step["for"] = spec["for"]
         if "applies_to" in spec:
@@ -735,10 +753,16 @@ def _resolve_pipeline_entry(
     if isinstance(entry, dict):
         if "ref" in entry:
             return _resolve_pipeline_entry(str(entry["ref"]), anchor=anchor, workspace=workspace)
-        mid = entry.get("middleware") or entry.get("id")
+        mid = entry.get("layer") or entry.get("middleware") or entry.get("id")
         params = _resolve_pipeline_param_paths(dict(entry.get("params") or {}), anchor=anchor)
-        step = {"middleware": mid, "params": params}
-        for key in ("for", "per", "applies_to"):
+        step: dict[str, Any] = {"params": params}
+        if entry.get("layer"):
+            step["layer"] = entry.get("layer")
+        elif entry.get("middleware"):
+            step["middleware"] = entry.get("middleware")
+        elif mid:
+            step["layer"] = mid
+        for key in ("id", "enabled", "for", "per", "applies_to", "priority"):
             if key in entry:
                 step[key] = entry[key]
         return stamp_middleware_step(step, where=str(mid or "pipeline"))
@@ -754,6 +778,7 @@ def _layer_pipelines(
     leaves: dict[str, dict[str, Any]],
     *,
     cache_path: Path,
+    hydrate: bool = True,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
     """Cache is common; remaining steps instantiate in front of each leaf."""
     from mas.runtime.engine.infra_pipeline import (
@@ -771,7 +796,8 @@ def _layer_pipelines(
             [stamp_middleware_step(step) for step in (stored.get("pipeline") or []) if isinstance(step, dict)],
             "llm",
         )
-        _hydrate_pipeline_cache_paths(own, cache_path=cache_path)
+        if hydrate:
+            _hydrate_pipeline_cache_paths(own, cache_path=cache_path)
         own_common, own_rest = split_pipeline_layers(own)
         if own_common and not any(is_cache_middleware(step) for step in common):
             common = _merge_pipeline(common, own_common)

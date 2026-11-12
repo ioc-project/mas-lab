@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.llm_scheduler import (
     SchedulerPolicy,
@@ -21,7 +22,7 @@ from mas.runtime.schema.ingress import EngineIoReturn
 
 
 @dataclass
-class LlmSchedulerMiddleware:
+class LlmSchedulerMiddleware(LayerLifecycle):
     """Acquire a shared live-LLM slot, then call ``inner``.
 
     Stack this *inside* ``llm_cache`` (cache outermost in the infra pipeline)
@@ -31,6 +32,7 @@ class LlmSchedulerMiddleware:
 
     per = "destination"
     call_kinds = ("llm",)
+    priority = 40
     stores_llm_responses = False
     paces_llm_calls = True
 

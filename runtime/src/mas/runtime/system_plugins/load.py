@@ -16,6 +16,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from mas.runtime.deprecation import warn_deprecated_once
 from mas.runtime.registry import PluginEntry, PluginUnavailable, construct_plugin, get_registry
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 from mas.runtime.system_plugins.contract import (
@@ -29,15 +30,6 @@ from mas.runtime.system_plugins.legacy import LEGACY_SYSTEM_TOOL, adapt_system_t
 logger = logging.getLogger(__name__)
 
 SYSTEM_PLUGIN = "system_plugin"
-
-_warned: set[str] = set()
-
-
-def warn_deprecated_once(key: str, message: str) -> None:
-    """Log a deprecation warning once per process for *key*."""
-    if key not in _warned:
-        _warned.add(key)
-        logger.warning(message)
 
 
 def parse_system_plugin_item(item: Any) -> tuple[str, dict[str, Any]]:

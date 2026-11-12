@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from mas.runtime.contracts.tool_semantics import existing_attr
+from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.registry.llm_provider_protocol import require_achat_completion
 
 _NON_PROTOCOL_KINDS = frozenset({"cache", "llm_cache", "mock"})
@@ -296,7 +297,7 @@ def iter_model_provider_specs(
     return specs or [apply_llm_endpoint_defaults({"kind": default_kind, "models": "*"}, proxy)]
 
 
-class LLMProviderRegistry:
+class LLMProviderRegistry(Lifecycle):
     """Registry mapping model names to the protocol plugin that owns them.
 
     Same calling shape as :class:`ToolProviderRegistry`: register plugins, then
@@ -368,6 +369,12 @@ class LLMProviderRegistry:
     def providers(self) -> list[Any]:
         return [binding[0] for binding in self._bindings]
 
+    def stop(self) -> None:
+        from mas.runtime.layers.lifecycle import call_stop
+
+        for provider in self.providers():
+            call_stop(provider)
+
     @property
     def kind(self) -> str:
         if self._routes is None:
@@ -402,6 +409,7 @@ def llm_providers_from_manifest(
     stream: bool = False,
     reasoning_effort: str | None = None,
     reasoning: dict[str, Any] | None = None,
+    retry_overlay: dict[str, Any] | None = None,
 ) -> Any:
     """Instantiate protocol plugins from ``spec.models[]`` + infra, like tools.
 
@@ -429,6 +437,14 @@ def llm_providers_from_manifest(
         pipeline = list(payload.pop("pipeline", None) or [])
         if not pipeline:
             pipeline = list((payload.get("llm_proxy") or {}).get("pipeline") or [])
+        from mas.runtime.layers.control import resolve_call_pipeline
+
+        pipeline = resolve_call_pipeline(
+            manifest.get("spec") if isinstance(manifest, dict) else None,
+            pipeline,
+            kind="llm",
+            retry_overlay=retry_overlay if isinstance(retry_overlay, dict) else None,
+        )
         _, per_leaf = split_pipeline_layers(pipeline)
         provider = wrap_llm_provider_pipeline(
             instantiate_llm_provider(kind, payload),
@@ -485,6 +501,7 @@ def llm_provider_from_infra(
     cache_write: bool = True,
     cache_raise_on_miss: bool = False,
     manifest: dict[str, Any] | None = None,
+    retry_overlay: dict[str, Any] | None = None,
 ) -> Any:
     """Build the routed protocol provider, optionally wrapping it with cache."""
     inner = llm_providers_from_manifest(
@@ -494,6 +511,7 @@ def llm_provider_from_infra(
         stream=stream,
         reasoning_effort=reasoning_effort,
         reasoning=reasoning,
+        retry_overlay=retry_overlay,
     )
     if not wrap_cache:
         return inner

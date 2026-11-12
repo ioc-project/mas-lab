@@ -1355,7 +1355,7 @@ def test_a_control_list_takes_only_the_plugins_it_names_a_type_for(tmp_path: Pat
     from mas.ctl.session.flavour_control import load_control
 
     cases = [
-        ("governance", "circuit_breaker", "registered as type circuit_breaker; this list takes"),
+        ("governance", "circuit_breaker", "registered as type layer; this list takes"),
         ("governance", "mas.observability.native", "registered as type observability; this list takes"),
         ("observability", "budget", "registered as type governance; this list takes"),
     ]

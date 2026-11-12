@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from mas.runtime.deprecation import reset_deprecation_warnings
 from mas.runtime.registry import register_plugin, unregister_plugin
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 from mas.runtime.system_plugins import (
@@ -19,7 +20,6 @@ from mas.runtime.system_plugins import (
     UnknownSystemToolError,
     load_system_plugins,
 )
-from mas.runtime.system_plugins import load as load_module
 
 
 class _Probe(SystemPluginBase):
@@ -84,7 +84,7 @@ def _registered(cls: type, **attributes: Any) -> Iterator[str]:
 
 @pytest.fixture(autouse=True)
 def _fresh_warnings() -> None:
-    load_module._warned.clear()
+    reset_deprecation_warnings()
 
 
 def test_unnamed_does_not_load_opt_in_plugins() -> None:

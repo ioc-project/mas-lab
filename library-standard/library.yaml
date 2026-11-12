@@ -27,6 +27,7 @@ types:
   - tool_provider
   - llm_provider
   - agent_comm
+  - layer
   - stack_layer
   - system_plugin
   - hitl_contract
@@ -358,17 +359,35 @@ plugins:
       decision; this plugin owns the policy table.
     shortcuts:
       - retry_on_error
-  - type: circuit_breaker
-    name: threshold
+  - type: layer
+    name: circuit_breaker
     urn: mas.circuit_breaker.threshold
-    module: mas.library.standard.plugins.reliability.circuit_breaker
-    class: ThresholdCircuitBreaker
+    module: mas.library.standard.plugins.layers.circuit_breaker
+    class: CircuitBreakerLayer
     description: >
-      Engine I/O wrapper: fail-fast after consecutive matching failures
-      (spec.control.circuit_breaker). Not a kernel op or governance plugin.
+      Fail-fast after consecutive matching failures on a call. Per target.
     shortcuts:
       - circuit_breaker
       - threshold
+    attributes:
+      per: destination
+      call_kinds: [llm, tool]
+      priority: 60
+      deprecated_types: [circuit_breaker]
+  - type: layer
+    name: retry
+    urn: mas.layer.retry
+    module: mas.library.standard.plugins.layers.retry
+    class: RetryLayer
+    description: >
+      Re-issue an llm or tool call. Defaults: LLM 4 attempts, tools 2
+      (idempotent only), retry_on transient and unavailable.
+    shortcuts:
+      - retry
+    attributes:
+      per: destination
+      call_kinds: [llm, tool]
+      priority: 80
   - type: hitl_contract
     name: registry
     urn: mas.hitl_contract.registry
@@ -405,7 +424,7 @@ plugins:
     shortcuts:
       - workdir
       - git_worktree
-  - type: infra_middleware
+  - type: layer
     name: llm_cache
     urn: mas.infra_middleware.llm_cache
     module: mas.library.standard.plugins.infra.llm_cache
@@ -416,8 +435,10 @@ plugins:
     attributes:
       per: all
       call_kinds: [llm]
+      priority: 100
       stores_llm_responses: true
-  - type: infra_middleware
+      deprecated_types: [infra_middleware]
+  - type: layer
     name: llm_scheduler
     urn: mas.infra_middleware.llm_scheduler
     module: mas.library.standard.plugins.infra.llm_scheduler
@@ -427,8 +448,10 @@ plugins:
     attributes:
       per: destination
       call_kinds: [llm]
+      priority: 40
       paces_llm_calls: true
-  - type: infra_middleware
+      deprecated_types: [infra_middleware]
+  - type: layer
     name: fault_inject
     urn: mas.infra_middleware.fault_inject
     module: mas.library.standard.plugins.infra.fault_inject
@@ -438,6 +461,68 @@ plugins:
     attributes:
       per: destination
       call_kinds: [llm]
+      priority: 20
+      deprecated_types: [infra_middleware]
+  - type: layer
+    name: delay
+    urn: mas.layer.delay
+    module: mas.library.standard.plugins.stack.impair
+    class: DelayLayer
+    shortcuts:
+      - delay
+    attributes:
+      per: destination
+      call_kinds: [send, llm, tool]
+      priority: 10
+      deprecated_types: [stack_layer]
+  - type: layer
+    name: drop
+    urn: mas.layer.drop
+    module: mas.library.standard.plugins.stack.impair
+    class: DropLayer
+    shortcuts:
+      - drop
+    attributes:
+      per: destination
+      call_kinds: [send, llm, tool]
+      priority: 10
+      deprecated_types: [stack_layer]
+  - type: layer
+    name: fail
+    urn: mas.layer.fail
+    module: mas.library.standard.plugins.stack.impair
+    class: FailLayer
+    shortcuts:
+      - fail
+    attributes:
+      per: destination
+      call_kinds: [send, llm, tool]
+      priority: 10
+      deprecated_types: [stack_layer]
+  - type: layer
+    name: corrupt
+    urn: mas.layer.corrupt
+    module: mas.library.standard.plugins.stack.impair
+    class: CorruptLayer
+    shortcuts:
+      - corrupt
+    attributes:
+      per: destination
+      call_kinds: [send]
+      priority: 10
+      deprecated_types: [stack_layer]
+  - type: layer
+    name: replay
+    urn: mas.layer.replay
+    module: mas.library.standard.plugins.stack.impair
+    class: ReplayLayer
+    shortcuts:
+      - replay
+    attributes:
+      per: destination
+      call_kinds: [send]
+      priority: 10
+      deprecated_types: [stack_layer]
   - type: hitl_responder
     name: auto_approve
     urn: mas.hitl_responder.auto_approve

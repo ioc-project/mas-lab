@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""stack_layer/a2a-framing: A2A JSON-RPC framing above any transport of a stack.
+"""layer/a2a-framing: A2A JSON-RPC framing above any transport of a stack.
 
 A send becomes one A2A ``SendMessage`` JSON-RPC request (A2A 1.0, the method
 the SDK client sends and the ``a2a`` exposure accepts); the transport below

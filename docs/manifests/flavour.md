@@ -164,7 +164,7 @@ row (an agent on both would join it twice under one name: give the second chain 
 own row, for example a second connection to the same node with its own `identity`);
 a row that declares `usage: listen` on a transport that only connects (`http`).
 
-`run-mas`, `chat`, `tui`, `serve`, `infra show` and benchmark runs all apply `bind`
+`run-mas`, `chat`, `tui`, `serve`, `infra resolved` and benchmark runs all apply `bind`
 with the same code. A one-agent session (`chat`, `tui`, a one-agent benchmark run)
 delegates to no one, so it joins a chain only when the Flavour serves it there. The
 lab run hash leaves `bind` out: which rows a run rides is deployment, not logic.

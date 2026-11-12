@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 from mas.runtime.boundary.control.contract import ControlDenied, SessionNotStopped, SessionPaused
-from mas.runtime.session.snapshot import SnapshotRef
 
 _KWARGS_METHODS = frozenset(
     {
@@ -28,6 +27,9 @@ _KWARGS_METHODS = frozenset(
         "enqueue_input",
         "send_message",
         "disable_tool",
+        "enable_tool",
+        "layer_state",
+        "swap_layer_state",
         "set_queued_action",
         "snapshot",
         "persist",
@@ -389,9 +391,7 @@ class ControlRpcClient:
         text: str,
         source: str = "user",
     ) -> str:
-        return str(
-            await self.call("send_message", session_id, text=text, source=source)
-        )
+        return str(await self.call("send_message", session_id, text=text, source=source))
 
     async def asteer(
         self,
@@ -417,9 +417,7 @@ class ControlRpcClient:
         return list(result or [])
 
     async def asnapshot(self, session_id: str, *, label: str = "", auto_stop: bool = False) -> dict[str, Any]:
-        return dict(
-            await self.call("snapshot", session_id, label=label, auto_stop=auto_stop) or {}
-        )
+        return dict(await self.call("snapshot", session_id, label=label, auto_stop=auto_stop) or {})
 
     async def apersist(
         self,

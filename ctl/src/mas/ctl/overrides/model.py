@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-IDENTITY_KEYS = ("id", "middleware", "name")
+IDENTITY_KEYS = ("id", "layer", "middleware", "name")
 
 
 def identity_pair(item: Any) -> tuple[str, Any] | None:
@@ -17,6 +17,14 @@ def identity_pair(item: Any) -> tuple[str, Any] | None:
         if value not in (None, ""):
             return key, value
     return None
+
+
+def identity_match(item: Any) -> tuple[str, Any] | None:
+    """The identity two rows are compared on. ``middleware`` is the old spelling of ``layer``: same row."""
+    pair = identity_pair(item)
+    if pair is not None and pair[0] == "middleware":
+        return "layer", pair[1]
+    return pair
 
 
 @dataclass(frozen=True)

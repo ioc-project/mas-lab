@@ -71,6 +71,8 @@ LIBRARY_TYPES = frozenset(
         "execute_sandbox",
         "circuit_breaker",
         "retry",
+        "layer",
+        "stack_layer",
         "infra_middleware",
         "hitl_responder",
         "control_protocol",

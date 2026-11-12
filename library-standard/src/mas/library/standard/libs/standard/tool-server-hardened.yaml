@@ -1,0 +1,34 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: ToolServerRegistry
+
+metadata:
+  name: tool-server-hardened
+  description: >
+    Local tool server with retry outside the circuit breaker
+    (failure_threshold 5, reset_timeout_s 30, on unavailable).
+
+spec:
+  tool_servers:
+    - id: local
+      protocol: local
+      tools_dir: tools
+      skills_dir: skills
+      pipeline:
+        - id: retry-tool
+          layer: retry
+          for: [tool]
+          per: all
+          params:
+            max_attempts: 2
+            retry_on: [transient, unavailable]
+            require_idempotent: true
+        - id: breaker-tool
+          layer: circuit_breaker
+          for: [tool]
+          per: destination
+          params:
+            failure_threshold: 5
+            reset_timeout_s: 30
+            "on": [unavailable]

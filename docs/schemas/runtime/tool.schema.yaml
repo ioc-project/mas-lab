@@ -138,6 +138,19 @@ properties:
           True if calling with the same args always gives the same result.
           Used by the governance layer for safe retries.
 
+      probe:
+        type: object
+        additionalProperties: false
+        description: >
+          A safe, repeatable call that shows whether the tool works. A tool that declares one is taken out of
+          the running spec when its circuit breaker opens, and put back when the probe succeeds. Without it
+          the breaker only fails calls fast and the tool stays offered.
+        properties:
+          arguments:
+            type: object
+            description: Arguments of the probe call.
+            default: {}
+
       timeout_seconds:
         type: integer
         minimum: 1

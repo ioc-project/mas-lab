@@ -65,6 +65,9 @@ class ManifestToolProvider:
     def has_tools(self) -> bool:
         return self._registry.has_tools()
 
+    def advertised_names_by_provider(self) -> dict[str, tuple[str, ...]]:
+        return self._registry.advertised_names_by_provider()
+
     def system_plugins(self) -> BoundSystemPlugins | None:
         """System plugins the local provider bound, or ``None`` when it is not selected or binds none."""
         local = self._local_provider()
@@ -124,6 +127,17 @@ class ManifestToolProvider:
         except UnclaimedToolError:
             if self._registry.has_external_providers():
                 raise
+            raise ManifestToolLoadError(f"Tool {tool_name!r} not found in manifest or overlays") from None
+
+    def probe_tool(self, tool_name: str, arguments: dict[str, Any], *, ctx: Any = None) -> Any:
+        """Call a tool even though the running spec disabled it, to see whether it works again.
+
+        Not a model call. The disabled-tool gate of :meth:`call_tool` is for the model; a layer that took the
+        tool away is the one that may try it.
+        """
+        try:
+            return self._registry.call_tool(tool_name, arguments, ctx=ctx, user="")
+        except UnclaimedToolError:
             raise ManifestToolLoadError(f"Tool {tool_name!r} not found in manifest or overlays") from None
 
 

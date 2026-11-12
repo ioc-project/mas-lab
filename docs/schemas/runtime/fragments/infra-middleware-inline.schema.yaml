@@ -13,8 +13,25 @@ properties:
     type: string
   middleware:
     type: string
+    description: Deprecated spelling of layer.
+  layer:
+    type: string
+    description: Registry name of the call layer.
+  priority:
+    type: integer
+    description: Higher wraps outside. Ties break by name.
+  id:
+    type: string
+    description: >
+      Name of this step, so an overlay or an experiment can address it (``pipeline[id=retry-llm]``).
+      Default ``<layer>-<for>``.
+  enabled:
+    type: boolean
+    description: >
+      ``false`` keeps the step listed and does not wrap the call. For ``retry`` it also keeps the
+      documented default retry of that call kind from being added.
   for:
-    description: Call kinds this step wraps (llm, tool). Alias of leftover applies_to.
+    description: Call kinds this step wraps (llm, tool, send). Alias of leftover applies_to.
     oneOf:
       - type: string
       - type: array

@@ -25,7 +25,7 @@ def test_urn_registry_resolves_mcp_shortcut() -> None:
     assert info.load_class() is MCPToolProvider
 
 
-def test_every_new_transport_and_framing_layer_is_a_stack_layer() -> None:
+def test_every_new_transport_and_framing_layer_is_a_layer() -> None:
     from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
     from library_ioa.plugins.a2a.layer import A2ALayer
     from library_ioa.plugins.http_layer import HttpLayer
@@ -34,7 +34,7 @@ def test_every_new_transport_and_framing_layer_is_a_stack_layer() -> None:
 
     registry = get_registry()
     for name, cls in (("slim", SlimAgentComm), ("http", HttpLayer), ("a2a-framing", A2ALayer)):
-        info = registry.resolve_by_type("stack_layer", name)
+        info = registry.resolve_by_type("layer", name)
         assert info is not None and info.load_class() is cls, name
     assert is_transport(SlimAgentComm) and is_transport(HttpLayer) and not is_transport(A2ALayer)
     assert callable(SlimAgentComm.shared_service) and callable(SlimAgentComm.agent_name)

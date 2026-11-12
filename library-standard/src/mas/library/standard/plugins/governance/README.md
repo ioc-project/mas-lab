@@ -16,7 +16,7 @@ Manifest `spec.governance.hitl_mode` selects the operator plugin at ctl bootstra
 | `backtrack_on_error` | `ErrorRecoveryPlugin` | ingress chain via `spec.governance[].error_recovery_plugin` | Retry an identical engine error, then request session-level rollback at the configured repeat threshold. Overlay: `openclaw`. |
 
 Retry and circuit_breaker stay on Agent `spec.control` (deprecated, still applied). They are not Control plugins.
-The circuit breaker plugin (`threshold`) is loaded from that agent key. Card: [circuit-breaker.md](../reliability/circuit-breaker.md).
+The circuit breaker plugin (`threshold`) is loaded from that agent key. Card: [circuit-breaker.md](../layers/circuit-breaker.md).
 
 Plugin cards: [no-undeclared-tool.md](no-undeclared-tool.md), [retry-on-error.md](retry-on-error.md).
 Overlay index: [../../overlays/README.md](../../overlays/README.md).

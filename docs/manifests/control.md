@@ -78,8 +78,7 @@ Control loads and by `mas-ctl validate`. Call ceilings are the `budget` governan
 
 `spec.plugins`, `spec.control`, and `spec.impair` on a Control are leftover and refused.
 Delay, drop, fail, corrupt and replay are not Control plugins: they belong on the infra
-pipelines with retry, the circuit breaker, cache, scheduler and fault injection, and land
-there in a later release.
+pipelines with retry, the circuit breaker, cache, scheduler and fault injection.
 
 A run records events once, from the entry agent's plugins: `$all`, `$entry`,
 `.mas.agent[*]`, or a list naming it (`$not-entry` and `$delegates` never
@@ -136,7 +135,7 @@ mas-lab benchmark run experiment.yaml --control controls/governance-hitl.yaml
 `--events-sink ROW` adds an infra Application row to `bind.events`. `--control` and
 `--events-sink` work on `chat`, `tui`, `serve` and `run-mas`; `--no-events` and
 `--events-format` replace the plugin set on those four; `--control` also works on
-`compile`, `infra show`, and `mas-lab benchmark`. Passing a Control with `-o`, or
+`compile`, `infra resolved`, and `mas-lab benchmark`. Passing a Control with `-o`, or
 listing Controls under an Overlay's `spec.control`, still works and warns once: use `--control`.
 A scenario's `overlays.control` attaches Control files the same way `--control` does.
 A stacked lab Control overlay copies the lists onto agent spec from that file
@@ -148,7 +147,7 @@ nobody.
 Control composes explicitly. Matching Controls union as one set.
 Nothing is added because an infra row exists; a Flavour with no Control,
 and a Control that names no such plugin, add none. Only what `bind` and a Control name is used. Retry,
-circuit breaker, cache, scheduler and fault injection are not Control entries; they move into the infra pipelines later.
+circuit breaker, cache, scheduler and fault injection are not Control entries; they are layers on the infra pipeline (`standard:llm-proxy-hardened` turns the breaker on).
 
 The agent and MAS spec keys `observability` and `governance` are deprecated and still
 applied, each on its own, when no matching Control names that key: a Control that names
@@ -157,8 +156,8 @@ and still enforced; name the `budget` plugin instead. `mas-ctl validate` warns o
 them into a Control. Agent `spec.control` is deprecated too: `retry` and `circuit_breaker`
 in it still apply, and `budget` and `rate_limiter` in it are read by nothing (validate warns).
 
-Retry and the circuit breaker are not Control plugins. They wrap the engine's LLM and tool calls, as the LLM
-cache, the scheduler and fault injection do, so they belong with the infra pipeline; until the next release moves
-them they stay agent `spec.control` settings (deprecated).
+Retry and the circuit breaker are not Control plugins. They wrap LLM and tool calls as layers on the infra
+pipeline, as the LLM cache, the scheduler and fault injection do. Agent `spec.control.retry` and `.circuit_breaker`
+still apply (deprecated, one warning) and become those steps.
 
 See [flavour.md](flavour.md) and [governance.md](governance.md).

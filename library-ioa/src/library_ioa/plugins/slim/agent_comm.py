@@ -53,7 +53,7 @@ def _refuse_dots(parts: tuple[str, str, str, str]) -> None:
 
 
 class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
-    """stack_layer/slim: the SLIM transport, the bottom layer of a stack.
+    """layer/slim: the SLIM transport, the bottom layer of a stack.
 
     A stack builds one per local agent. ``shared_service`` gives every agent
     on the stack one ``SlimService`` (one ``ConnectionActor``), passed back as

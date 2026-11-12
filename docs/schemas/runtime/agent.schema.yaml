@@ -1000,11 +1000,10 @@ properties:
           strategy: mapping_ops
         description: >
           Deprecated. Control-plane knobs keyed by id. `retry` and
-          `circuit_breaker` are still applied by the engine; they move to the
-          infra pipeline (where the LLM cache, scheduler and fault injection
-          already are) in the next release. `budget` (tokens/cost) and
-          `rate_limiter` are read by nothing. Call ceilings are the `budget`
-          plugin in a Control spec.governance.
+          `circuit_breaker` still become pipeline steps (one warning). Prefer a
+          `retry` / `circuit_breaker` layer on the infra pipeline. `budget`
+          (tokens/cost) and `rate_limiter` are read by nothing. Call ceilings
+          are the `budget` plugin in a Control spec.governance.
         default: {}
 
       observability:

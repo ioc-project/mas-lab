@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Build a bounded view of resolved infra chains for ``mas-ctl infra show``."""
+"""Bounded view of infra chains for ``mas-ctl infra show`` / ``infra resolved``."""
 
 from __future__ import annotations
 
@@ -42,14 +42,77 @@ def _redact_url(value: Any, *, limit: int = _MAX_CHARS) -> str:
     return _clip(urlunsplit((parts.scheme, host, parts.path, "", "")), limit=limit)
 
 
+def _effective_steps(pipeline: list[dict[str, Any]] | None, kind: str) -> list[dict[str, Any]]:
+    """Listed steps plus the documented default retry when that kind has none."""
+    from mas.runtime.layers.defaults import merge_default_retry
+
+    return merge_default_retry(list(pipeline or []), kind)
+
+
+def _session_steps(
+    pipeline: list[dict[str, Any]] | None,
+    kind: str,
+    *,
+    spec: dict[str, Any] | None,
+    retry_overlay: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """The wrap chat and run-mas install: default retry pipeline, leftover spec.control."""
+    from mas.runtime.layers.control import resolve_call_pipeline
+
+    return resolve_call_pipeline(spec, list(pipeline or []), kind=kind, retry_overlay=retry_overlay)
+
+
 def _describe_step(step: dict[str, Any]) -> dict[str, Any]:
-    stamped = stamp_middleware_step(step)
+    from mas.runtime.layers.compose import layer_id, layer_priority, step_enabled, step_id
+    from mas.runtime.layers.defaults import drop_default_stamp
+
+    raw = dict(step)
+    inserted = drop_default_stamp(raw)
+    stamped = stamp_middleware_step(raw)
     kinds = list(middleware_call_kinds(stamped))
-    return {
-        "middleware": middleware_id(stamped),
+    name = layer_id(stamped) or middleware_id(stamped)
+    params = _public_params(stamped.get("params") if isinstance(stamped.get("params"), dict) else {})
+    out: dict[str, Any] = {
+        "id": step_id(stamped),
+        "layer": name,
+        "middleware": name,
         "for": kinds,
         "per": middleware_per(stamped),
+        "priority": layer_priority(stamped),
     }
+    if not step_enabled(stamped):
+        out["enabled"] = False
+    if params:
+        out["params"] = params
+    if inserted:
+        out["default"] = True
+    return out
+
+
+def _public_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Scalar pipeline params. Keys that name a secret are omitted."""
+    from mas.ctl.infra.bind import secret_keys
+
+    out: dict[str, Any] = {}
+    for key, value in params.items():
+        token = str(key)
+        if secret_keys({token: value}):
+            continue
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            out[token] = value
+        elif isinstance(value, int) and not isinstance(value, bool):
+            out[token] = value
+        elif isinstance(value, float):
+            out[token] = value
+        elif isinstance(value, str):
+            out[token] = _clip(value)
+        elif isinstance(value, list) and all(
+            isinstance(item, (str, int, float, bool)) or item is None for item in value
+        ):
+            out[token] = value
+    return out
 
 
 def _describe_steps(pipeline: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -57,53 +120,159 @@ def _describe_steps(pipeline: list[dict[str, Any]] | None) -> list[dict[str, Any
     return [_describe_step(step) for step in steps[:_MAX_STEPS]]
 
 
+def catalog_show_payload(
+    infra: ResolvedInfra,
+    *,
+    connections: bool = True,
+    pipeline: bool = True,
+) -> dict[str, Any]:
+    """One listed ref. Destinations if the ref has them; else listed steps or kernel fields."""
+    sections: list[str] = []
+    if infra.llm_proxies or infra.llm_proxy.get("api_base"):
+        sections.append("llm")
+    if infra.tool_server_registry:
+        sections.append("tool")
+    if sections:
+        return infra_show_payload(
+            infra,
+            agents=[],
+            sections=tuple(sections),
+            connections=connections,
+            pipeline=pipeline,
+        )
+    out: dict[str, Any] = {}
+    if pipeline:
+        described = _describe_steps(_listed_catalog_steps(infra))
+        if described:
+            out["pipeline"] = described
+    engine = _runtime_engine_view(infra)
+    if engine and connections and pipeline:
+        out["runtime"] = engine
+    return out
+
+
+def _runtime_engine_view(infra: ResolvedInfra) -> dict[str, Any]:
+    """Kernel fields a RuntimeEngine ref actually applies. No invented call pipeline."""
+    raw = infra.runtime_engine or {}
+    out: dict[str, Any] = {}
+    if "engine_queue_depth" in raw:
+        out["queue_depth"] = raw["engine_queue_depth"]
+    for key in ("max_auto_steps", "timeout", "stream", "parallel", "cache"):
+        if key in raw and raw[key] is not None:
+            out[key] = raw[key]
+    return out
+
+
+def _listed_catalog_steps(infra: ResolvedInfra) -> list[dict[str, Any]]:
+    """Pipeline as listed on the ref — not wrap-time default retry."""
+    steps: list[dict[str, Any]] = []
+    for src in (infra.llm_proxy.get("pipeline"), infra.tool_pipeline):
+        for step in src or []:
+            if isinstance(step, dict):
+                steps.append(step)
+        if steps:
+            return steps[:_MAX_STEPS]
+    return []
+
+
 def infra_show_payload(
     infra: ResolvedInfra,
     *,
     agents: list[dict[str, Any]] | None = None,
+    sections: tuple[str, ...] | list[str] | None = None,
+    connections: bool = True,
+    pipeline: bool = True,
+    session: bool = False,
+    spec: dict[str, Any] | None = None,
+    retry_overlay: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Stable JSON document for ``mas-ctl infra show --json``."""
+    """Stable JSON document for ``mas-ctl infra show`` / ``infra resolved``."""
+    want = {str(item).strip().lower() for item in (sections or ()) if str(item).strip()}
+    if not want:
+        want = {"llm", "tool", "agents"}
     common = list(infra.llm_proxy.get("pipeline") or [])
     leaves = dict(infra.llm_proxies or {})
+    wrap = {"session": session, "spec": spec, "retry_overlay": retry_overlay}
     llm: list[dict[str, Any]] = []
-    for name, leaf in list(leaves.items())[:_MAX_DESTINATIONS]:
-        steps = common + list((leaf or {}).get("pipeline") or [])
-        llm.append(
-            {
-                "name": _clip(name, limit=64),
-                "api_base": _redact_url((leaf or {}).get("api_base") or ""),
-                "steps": _describe_steps(steps),
-            }
-        )
-    if not llm and infra.llm_proxy.get("api_base"):
-        llm.append(
-            {
-                "name": _clip(infra.llm_proxy.get("name") or "default", limit=64),
-                "api_base": _redact_url(infra.llm_proxy.get("api_base") or ""),
-                "steps": _describe_steps(common),
-            }
-        )
+    if "llm" in want:
+        for name, leaf in list(leaves.items())[:_MAX_DESTINATIONS]:
+            if not str(name).strip():
+                continue
+            llm.append(
+                _destination_view(name, leaf, common, kind="llm", connections=connections, pipeline=pipeline, **wrap)
+            )
+        if not llm and infra.llm_proxy.get("api_base"):
+            name = str(infra.llm_proxy.get("name") or "").strip() or _redact_url(infra.llm_proxy.get("api_base") or "")
+            if name:
+                llm.append(
+                    _destination_view(
+                        name,
+                        infra.llm_proxy,
+                        common,
+                        kind="llm",
+                        connections=connections,
+                        pipeline=pipeline,
+                        **wrap,
+                    )
+                )
 
-    tool_common = list(infra.tool_pipeline or [])
     tool: list[dict[str, Any]] = []
-    servers = dict(infra.tool_server_registry or {})
-    for name, server in list(servers.items())[:_MAX_DESTINATIONS]:
-        steps = tool_common + list((server or {}).get("pipeline") or [])
-        tool.append(
-            {
-                "name": _clip(name, limit=64),
-                "url": _redact_url((server or {}).get("url") or (server or {}).get("base_url") or ""),
-                "steps": _describe_steps(steps),
-            }
-        )
-    if not tool and tool_common:
-        tool.append({"name": "tool", "url": "", "steps": _describe_steps(tool_common)})
+    if "tool" in want:
+        tool_common = list(infra.tool_pipeline or [])
+        servers = dict(infra.tool_server_registry or {})
+        for name, server in list(servers.items())[:_MAX_DESTINATIONS]:
+            if not str(name).strip():
+                continue
+            tool.append(
+                _destination_view(
+                    name,
+                    server,
+                    tool_common,
+                    kind="tool",
+                    connections=connections,
+                    pipeline=pipeline,
+                    **wrap,
+                )
+            )
 
-    return {
-        "llm": llm,
-        "tool": tool,
-        "agents": list(agents or [])[:_MAX_AGENTS],
-    }
+    out: dict[str, Any] = {}
+    if "llm" in want:
+        out["llm"] = llm
+    if "tool" in want:
+        out["tool"] = tool
+    if "agents" in want:
+        out["agents"] = list(agents or [])[:_MAX_AGENTS]
+    return out
+
+
+def _destination_view(
+    name: Any,
+    leaf: dict[str, Any] | None,
+    common: list[dict[str, Any]],
+    *,
+    kind: str,
+    connections: bool,
+    pipeline: bool,
+    session: bool = False,
+    spec: dict[str, Any] | None = None,
+    retry_overlay: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = dict(leaf or {})
+    row: dict[str, Any] = {"name": _clip(name, limit=64)}
+    if connections:
+        if kind == "llm":
+            row["api_base"] = _redact_url(payload.get("api_base") or "")
+        else:
+            row["url"] = _redact_url(payload.get("url") or payload.get("base_url") or "")
+    if pipeline:
+        listed = common + list(payload.get("pipeline") or [])
+        steps = (
+            _session_steps(listed, kind, spec=spec, retry_overlay=retry_overlay)
+            if session
+            else _effective_steps(listed, kind)
+        )
+        row["steps"] = _describe_steps(steps)
+    return row
 
 
 def document_agent_ids(document: dict[str, Any] | None) -> list[str]:
@@ -120,7 +289,7 @@ def document_agent_ids(document: dict[str, Any] | None) -> list[str]:
                 ids.append(agent_id)
         return ids
     name = str((document.get("metadata") or {}).get("name") or "").strip()
-    return [name or "agent"] if (name or spec) else []
+    return [name] if name else []
 
 
 def agents_from_manifest(
@@ -176,33 +345,91 @@ def render_infra_show(payload: dict[str, Any]) -> str:
     if llm:
         lines.append("llm")
         for leaf in llm:
-            lines.append(f"  {leaf.get('name') or '?'}  {leaf.get('api_base') or ''}".rstrip())
+            dest = _dest_line(leaf, "api_base")
+            if dest:
+                lines.append(dest)
             lines.extend(_step_lines(leaf.get("steps") or []))
     tool = payload.get("tool") or []
     if tool:
         lines.append("tool")
         for server in tool:
-            label = f"  {server.get('name') or '?'}"
-            url = server.get("url") or ""
-            lines.append(f"{label}  {url}".rstrip() if url else label)
+            dest = _dest_line(server, "url")
+            if dest:
+                lines.append(dest)
             lines.extend(_step_lines(server.get("steps") or []))
+    listed = payload.get("pipeline") or []
+    if listed:
+        lines.append("pipeline")
+        lines.extend(_step_lines(listed))
+    runtime = payload.get("runtime") if isinstance(payload.get("runtime"), dict) else {}
+    if runtime:
+        lines.append("runtime")
+        for key, value in runtime.items():
+            lines.append(f"  {key}  {value}")
     agents = payload.get("agents") or []
     if agents:
         lines.append("agents")
         for agent in agents:
+            agent_id = str(agent.get("id") or "").strip()
+            if not agent_id:
+                continue
             parts = [", ".join(agent.get("comm") or []) or "(none)"]
             identity = str(agent.get("identity") or "").strip()
             if identity:
                 parts.append(identity)
-            lines.append(f"  {agent.get('id') or '?'}  {'  '.join(parts)}")
+            lines.append(f"  {agent_id}  {'  '.join(parts)}")
     if not lines:
         lines.append("(no llm, tool, or agent destinations)")
     return "\n".join(lines) + "\n"
 
 
+def _dest_line(row: dict[str, Any], url_key: str) -> str:
+    name = str(row.get("name") or "").strip()
+    if not name:
+        return ""
+    label = f"  {name}"
+    if url_key not in row:
+        return label
+    url = row.get(url_key) or ""
+    return f"{label}  {url}".rstrip() if url else label
+
+
 def _step_lines(steps: list[dict[str, Any]]) -> list[str]:
     out: list[str] = []
     for step in steps:
-        kinds = ",".join(step.get("for") or []) or "*"
-        out.append(f"    {step.get('middleware') or '?'}  for={kinds}  per={step.get('per') or '?'}")
+        name = step.get("middleware") or step.get("layer")
+        if not name:
+            continue
+        kinds = ",".join(step.get("for") or [])
+        line = f"    {name}"
+        if kinds:
+            line += f"  for={kinds}"
+        per = step.get("per")
+        if per:
+            line += f"  per={per}"
+        params = step.get("params") if isinstance(step.get("params"), dict) else {}
+        extra = _param_text(params)
+        if extra:
+            line += f"  {extra}"
+        if step.get("default"):
+            line += "  (default)"
+        if step.get("enabled") is False:
+            line += "  (disabled)"
+        if step.get("id"):
+            line += f"  id={step['id']}"
+        out.append(line)
     return out
+
+
+def _param_text(params: dict[str, Any]) -> str:
+    keys = list(params)
+    if "max_attempts" in params:
+        keys = ["max_attempts", *[key for key in keys if key != "max_attempts"]]
+    parts: list[str] = []
+    for key in keys:
+        value = params[key]
+        if isinstance(value, list):
+            parts.append(f"{key}={','.join(str(item) for item in value)}")
+        else:
+            parts.append(f"{key}={value}")
+    return "  ".join(parts)

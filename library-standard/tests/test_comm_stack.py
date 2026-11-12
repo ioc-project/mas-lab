@@ -698,8 +698,8 @@ def test_check_agent_comm_fails_a_link_that_never_raises() -> None:
         check_agent_comm([Silent("a"), Silent("b"), Silent("c")])
 
 
-def test_a_link_is_found_before_a_stack_layer_wherever_the_entry_sits() -> None:
-    """The lookup order is always the plugin kind first, then ``stack_layer``; no position is involved."""
+def test_a_link_is_found_before_a_layer_wherever_the_entry_sits() -> None:
+    """The lookup order is always the plugin kind first, then ``layer``; no position is involved."""
     from types import SimpleNamespace
 
     from mas.library.standard.lib.comm.compose import instantiate_layers, resolve_layer_class
@@ -712,7 +712,7 @@ def test_a_link_is_found_before_a_stack_layer_wherever_the_entry_sits() -> None:
 
     class Registry:
         def resolve_spec(self, kind: str, binding: dict) -> SimpleNamespace:
-            table = {"agent_comm": {"link": Link}, "stack_layer": {"link": Frame, "frame": Frame}}[kind]
+            table = {"agent_comm": {"link": Link}, "layer": {"link": Frame, "frame": Frame}}[kind]
             if binding["type"] not in table:
                 raise KeyError(binding["type"])
             return SimpleNamespace(load_class=lambda: table[binding["type"]])

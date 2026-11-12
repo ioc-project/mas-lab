@@ -61,6 +61,10 @@ class AutoCtxAssembler:
     correlation_id: int = 0
     allow_subagent_spawning: bool = False
     subagent_templates: list[dict[str, Any]] = field(default_factory=list)
+    # Running-spec handle for call layers: ControlContract narrowed to ``layer_state`` / ``set_layer_state``.
+    layer_control: Any | None = None
+    # The running spec (copied from the agent spec at start, then revised); set by the session manager.
+    current_spec: dict[str, Any] | None = None
 
     def capture_baseline(self) -> None:
         """Snapshot manifest-derived system context for /reset."""

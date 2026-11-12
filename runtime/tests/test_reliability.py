@@ -11,7 +11,6 @@ from mas.runtime.reliability.classify import classify_http_exception, classify_t
 from mas.runtime.reliability.policy import (
     ReliabilitySettings,
     RetryPolicy,
-    apply_llm_retry_env,
 )
 from mas.runtime.reliability.retry import call_with_retry
 from mas.runtime.spec.gov import SpecBindingError, build_kernel_config, parse_gov_spec
@@ -46,17 +45,6 @@ def test_retry_policy_unknown_field_raises() -> None:
         RetryPolicy.from_mapping({"retries": 3}, field_name="retry")
 
 
-def test_llm_env_retries_are_extra_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRIES", "2")
-    monkeypatch.setenv("MAS_LLM_HTTP_RETRY_BACKOFF", "0.25")
-    policy = apply_llm_retry_env(RetryPolicy.llm_default())
-    assert policy.max_attempts == 3
-    assert policy.backoff_s == 0.25
-    assert policy.jitter is False
-    assert FailureClass.UNAVAILABLE in policy.retry_on
-    assert FailureClass.TRANSIENT in policy.retry_on
-
-
 def test_llm_default_retries_unavailable() -> None:
     policy = RetryPolicy.llm_default()
     assert policy.retry_on == (FailureClass.TRANSIENT, FailureClass.UNAVAILABLE)
@@ -74,9 +62,11 @@ def test_kernel_config_does_not_own_reliability() -> None:
     assert "error_recovery_plugin" not in fields
 
 
-def test_circuit_breaker_absent_is_disabled() -> None:
-    settings = ReliabilitySettings.from_spec({"control": {}})
-    assert settings.circuit_breaker is None
+def test_circuit_breaker_absent_adds_no_layer() -> None:
+    from mas.runtime.layers.control import pipeline_from_agent_spec
+
+    steps = pipeline_from_agent_spec({"control": {}}, [], kind="llm")
+    assert [step["layer"] for step in steps] == ["retry"]
 
 
 def test_error_policy_every_class() -> None:
@@ -103,21 +93,15 @@ def test_error_policy_rejects_unknown_action() -> None:
         ErrorPolicy.from_mapping({"transient": "explode"})
 
 
-def test_from_spec_llm_overrides_proxy() -> None:
-    settings = ReliabilitySettings.from_spec(
-        {"control": {"retry": {"llm": {"max_attempts": 9}}}},
-        llm_proxy={"retry": {"max_attempts": 2}},
-    )
+def test_from_spec_reads_the_llm_retry_slot() -> None:
+    settings = ReliabilitySettings.from_spec({"control": {"retry": {"llm": {"max_attempts": 9}}}})
     assert settings.llm_retry.max_attempts == 9
     assert settings.tool_retry.max_attempts == 2  # tools default
 
 
-def test_from_spec_proxy_retry_when_control_omits_llm() -> None:
-    settings = ReliabilitySettings.from_spec(
-        {"control": {}},
-        llm_proxy={"retry": {"max_attempts": 7, "jitter": False}},
-    )
-    assert settings.llm_retry.max_attempts == 7
+def test_from_spec_omitted_llm_retry_is_default() -> None:
+    settings = ReliabilitySettings.from_spec({"control": {}})
+    assert settings.llm_retry.max_attempts == RetryPolicy.llm_default().max_attempts
 
 
 def test_from_spec_rejects_unknown_retry_slot() -> None:
@@ -218,10 +202,10 @@ def test_build_kernel_config_wires_error_policy_and_plugin() -> None:
     settings = ReliabilitySettings.from_spec(spec)
     assert settings.llm_retry.max_attempts == 5
     assert settings.tool_retry.max_attempts == 3
-    from mas.library.standard.plugins.reliability.circuit_breaker import ThresholdCircuitBreaker
+    from mas.runtime.layers.control import pipeline_from_agent_spec
 
-    assert isinstance(settings.circuit_breaker, ThresholdCircuitBreaker)
-    assert settings.circuit_breaker.failure_threshold == 2
+    breaker = next(s for s in pipeline_from_agent_spec(spec, [], kind="llm") if s["layer"] == "circuit_breaker")
+    assert breaker["params"]["failure_threshold"] == 2
     recovery = [
         entry.plugin
         for entry in config.ingress_governance_plugins

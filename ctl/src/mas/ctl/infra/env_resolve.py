@@ -67,7 +67,7 @@ def resolve_manifest_values(data: Any) -> Any:
 
 
 def _resolve_field(key: str, value: Any) -> Any:
-    if key.endswith(_SECRET_KEY_SUFFIX):
+    if isinstance(key, str) and key.endswith(_SECRET_KEY_SUFFIX):  # a bare YAML `on:` key is a bool
         # _env fields hold an env-var NAME (secretKeyRef style), not the secret
         # value itself.  Allow env: indirection so the key name is itself
         # configurable at deploy time:

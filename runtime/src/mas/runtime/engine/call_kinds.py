@@ -20,6 +20,8 @@ _CALL_KIND_ALIASES: dict[str, str] = {
     "tool": "tool",
     "tool_http": "tool",
     "TOOL_HTTP": "tool",
+    "send": "send",
+    "SEND": "send",
 }
 
 _SEEN_ALIAS_WARNINGS: set[tuple[str, str, str]] = set()

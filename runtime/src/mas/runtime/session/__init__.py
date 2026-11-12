@@ -4,6 +4,7 @@
 
 from mas.runtime.boundary.control.contract import SessionPaused
 from mas.runtime.session.snapshot import Snapshot, SnapshotRef, SnapshotTree
+from mas.runtime.session.spec_machine import SpecConflict, SpecVerdict, spec_on_delta
 from mas.runtime.session.spec_revision import SpecDelta, SpecRevision, SpecRevisionLog
 from mas.runtime.session.state import (
     BacktrackCapReached,
@@ -25,5 +26,8 @@ __all__ = [
     "SnapshotTree",
     "SpecDelta",
     "SpecRevision",
+    "SpecConflict",
+    "SpecVerdict",
     "SpecRevisionLog",
+    "spec_on_delta",
 ]

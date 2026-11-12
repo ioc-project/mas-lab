@@ -208,7 +208,7 @@ other attribute.
 
 A layer id resolves in one order (`resolve_layer_class` in
 `mas.library.standard.lib.comm.compose`): an `agent_comm` link first, then a
-`stack_layer`. The ids are distinct: `a2a` is the A2A SDK client reaching a url,
+`layer`. The ids are distinct: `a2a` is the A2A SDK client reaching a url,
 a transport that can only be first, and `a2a-framing` is the A2A framing layer,
 which needs a layer below it. A chain that starts with `a2a-framing`, or that
 puts `a2a` above another transport, is refused. Above the bottom only a layer

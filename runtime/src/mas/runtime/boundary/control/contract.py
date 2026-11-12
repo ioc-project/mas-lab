@@ -47,9 +47,7 @@ class SessionBusy(RuntimeError):
     def __init__(self, session_id: str, *, method: str = "run_turn") -> None:
         self.session_id = session_id
         self.method = method
-        super().__init__(
-            f"{method} refused for session {session_id!r}: a turn is in flight"
-        )
+        super().__init__(f"{method} refused for session {session_id!r}: a turn is in flight")
 
 
 class SessionNotStopped(RuntimeError):
@@ -59,8 +57,7 @@ class SessionNotStopped(RuntimeError):
         self.session_id = session_id
         self.method = method
         super().__init__(
-            f"{method} refused for session {session_id!r}: session is not stopped "
-            "(pause first, or pass --auto-stop)"
+            f"{method} refused for session {session_id!r}: session is not stopped (pause first, or pass --auto-stop)"
         )
 
 
@@ -70,9 +67,7 @@ class QueueConflict(RuntimeError):
     def __init__(self, *, expected: int, actual: int) -> None:
         self.expected = expected
         self.actual = actual
-        super().__init__(
-            f"queue revision {expected} is stale (now {actual}); peek and retry"
-        )
+        super().__init__(f"queue revision {expected} is stale (now {actual}); peek and retry")
 
 
 class QueueItemGone(KeyError):
@@ -226,9 +221,7 @@ class ControlContract(Protocol):
         session_id: str,
         *,
         text: str,
-        mode: Literal[
-            "preempt", "replace", "after", "amend", "enqueue", "inject_now"
-        ] = "preempt",
+        mode: Literal["preempt", "replace", "after", "amend", "enqueue", "inject_now"] = "preempt",
         at: QueueAt = "head",
     ) -> None: ...
     def steer_modes(self, session_id: str) -> frozenset[str]: ...
@@ -292,4 +285,28 @@ class ControlContract(Protocol):
     ) -> None: ...
     def cancel_inflight(self, session_id: str) -> bool: ...
     def fork_investigation(self, session_id: str) -> str: ...
-    def disable_tool(self, session_id: str, *, name: str, reason: str) -> int: ...
+    def disable_tool(self, session_id: str, *, name: str, reason: str, by: str = "") -> int: ...
+    def enable_tool(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        """Undo a ``disable_tool``. With ``by``, only a disable made by that actor is undone."""
+        ...
+
+    def layer_state(self, session_id: str, *, layer: str) -> dict[str, Any]:
+        """What call layer *layer* has recorded in the running spec, per target."""
+        ...
+
+    def swap_layer_state(
+        self,
+        session_id: str,
+        *,
+        layer: str,
+        target: str,
+        expected: dict[str, Any],
+        state: dict[str, Any] | None,
+        reason: str,
+    ) -> int:
+        """Compare-and-set *layer*'s state for *target* in the running spec; ``None`` clears it.
+
+        Applies only if the state is still *expected* (``{}`` for none); otherwise raises ``SpecConflict``.
+        Returns the new spec revision.
+        """
+        ...

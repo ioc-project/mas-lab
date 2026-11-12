@@ -22,7 +22,7 @@ always PASSes, so this plugin can sit on the same chain as
 
 Retry and circuit_breaker stay on Agent `spec.control` (deprecated, still applied). They are not Control plugins.
 This plugin is the *governance* half: what to do once the envelope sees a
-typed failure. Card: [circuit-breaker.md](../reliability/circuit-breaker.md). Full reference (defaults, knobs, logging):
+typed failure. Card: [circuit-breaker.md](../layers/circuit-breaker.md). Full reference (defaults, knobs, logging):
 [reliability.md](../../../../../../../docs/references/reliability.md).
 Chain: [governance.md](../../../../../../../docs/manifests/governance.md).
 

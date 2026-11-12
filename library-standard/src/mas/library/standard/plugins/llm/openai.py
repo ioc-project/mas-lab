@@ -16,8 +16,8 @@ from typing import Any, Callable
 
 import httpx
 from mas.library.standard.plugins.llm.http import (
-    arequest_with_retries,
-    request_with_retries,
+    arequest_once,
+    request_once,
     resolve_ssl_verify,
 )
 from mas.runtime.boundary.context.assemble import llm_tool_choice
@@ -39,7 +39,6 @@ from mas.runtime.reliability.classify import (
     classify_llm_failure,
     classify_llm_http_error,
 )
-from mas.runtime.reliability.policy import llm_retry_policy
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +72,6 @@ class OpenAILLMProvider:
         self.http_timeout = http_timeout
         self._client: httpx.Client | None = None
         self._aclient: httpx.AsyncClient | None = None
-        retry_raw = (llm_proxy or {}).get("retry") if isinstance(llm_proxy, dict) else None
-        self._retry_policy = llm_retry_policy(**retry_raw) if isinstance(retry_raw, dict) else llm_retry_policy()
-        raw_breaker = (llm_proxy or {}).get("circuit_breaker") if isinstance(llm_proxy, dict) else None
-        self._circuit_breaker = raw_breaker if hasattr(raw_breaker, "before_call") else None
 
     def _timeout(self) -> float:
         proxy = self.llm_proxy if isinstance(self.llm_proxy, dict) else {}
@@ -217,11 +212,16 @@ class OpenAILLMProvider:
                 tool_choice=tool_choice,
                 stream_options=stream_options,
             )
-        except RuntimeError:
+        except ClassifiedFailure:
             raise
         except Exception as exc:
             logger.debug("OpenAI-compatible LLM call failed", exc_info=True)
-            raise RuntimeError(classify_llm_http_error(exc)) from exc
+            classified = classify_llm_failure(exc)
+            raise ClassifiedFailure(
+                classify_llm_http_error(exc),
+                failure_class=classified.failure_class,
+                code=classified.code,
+            ) from exc
 
     async def achat_completion(
         self,
@@ -271,11 +271,16 @@ class OpenAILLMProvider:
                 tool_choice=tool_choice,
                 stream_options=stream_options,
             )
-        except RuntimeError:
+        except ClassifiedFailure:
             raise
         except Exception as exc:
             logger.debug("OpenAI-compatible LLM call failed", exc_info=True)
-            raise RuntimeError(classify_llm_http_error(exc)) from exc
+            classified = classify_llm_failure(exc)
+            raise ClassifiedFailure(
+                classify_llm_http_error(exc),
+                failure_class=classified.failure_class,
+                code=classified.code,
+            ) from exc
 
     def _build_chat_request(
         self,
@@ -389,33 +394,21 @@ class OpenAILLMProvider:
             stream_options=stream_options,
         )
         if stream:
-            from mas.runtime.reliability.retry import call_with_retry
-
-            return call_with_retry(
-                lambda: self._chat_completion_streamed(
-                    url,
-                    payload,
-                    headers,
-                    on_stream_chunk=on_stream_chunk,
-                    reasoning=reasoning,
-                    params=query,
-                ),
-                policy=self._retry_policy,
-                classify=classify_llm_failure,
-                breaker=self._circuit_breaker,
-                target=f"llm:{self.api_base}",
-                idempotent=True,
+            return self._chat_completion_streamed(
+                url,
+                payload,
+                headers,
+                on_stream_chunk=on_stream_chunk,
+                reasoning=reasoning,
+                params=query,
             )
-        resp = request_with_retries(
+        resp = request_once(
             self._get_client(),
             "POST",
             url,
             json=payload,
             headers=headers,
             params=query,
-            retry_policy=self._retry_policy,
-            circuit_breaker=self._circuit_breaker,
-            retry_target=f"llm:{self.api_base}",
             get_client=self._get_client,
             on_failure=self._discard_client_after_transport_failure,
         )
@@ -459,33 +452,21 @@ class OpenAILLMProvider:
             stream_options=stream_options,
         )
         if stream:
-            from mas.runtime.reliability.retry import acall_with_retry
-
-            return await acall_with_retry(
-                lambda: self._achat_completion_streamed(
-                    url,
-                    payload,
-                    headers,
-                    on_stream_chunk=on_stream_chunk,
-                    reasoning=reasoning,
-                    params=query,
-                ),
-                policy=self._retry_policy,
-                classify=classify_llm_failure,
-                breaker=self._circuit_breaker,
-                target=f"llm:{self.api_base}",
-                idempotent=True,
+            return await self._achat_completion_streamed(
+                url,
+                payload,
+                headers,
+                on_stream_chunk=on_stream_chunk,
+                reasoning=reasoning,
+                params=query,
             )
-        resp = await arequest_with_retries(
+        resp = await arequest_once(
             self._get_async_client(),
             "POST",
             url,
             json=payload,
             headers=headers,
             params=query,
-            retry_policy=self._retry_policy,
-            circuit_breaker=self._circuit_breaker,
-            retry_target=f"llm:{self.api_base}",
             get_client=self._get_async_client,
             on_failure=self._adiscard_client_after_transport_failure,
         )

@@ -181,8 +181,8 @@ ref overrides log a warning when applied.
 | `MAS_DATA_ROOT` / `MAS_LAB_DATA` | Data root (derived from `paths.labs_dir`) |
 | `MAS_TRACE_CACHE`, `MAS_DATA_CACHE` | Trace / pipeline step cache (use `--trace-cache` / `--data-cache`) |
 | `MAS_LLM_CACHE`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | Built-in engine cache — [llm-cache.md](manifests/llm-cache.md) |
-| `MAS_LLM_HTTP_RETRIES` | Extra LLM HTTP retries (`attempts = retries + 1`). Prefer Agent `spec.control.retry.llm` — [reliability.md](references/reliability.md) |
-| `MAS_LLM_HTTP_RETRY_BACKOFF` | LLM HTTP base backoff seconds (also disables jitter) |
+| `MAS_LLM_HTTP_RETRIES` | Last-resort interactive override of extra LLM HTTP retries (`attempts = retries + 1`). Prefer a `retry` layer on the infra pipeline — [reliability.md](references/reliability.md) |
+| `MAS_LLM_HTTP_RETRY_BACKOFF` | Last-resort interactive override of LLM HTTP base backoff seconds (also disables jitter) |
 | `MAS_HOME`, `MAS_CONTROLLER_SOCKET` | Controller data root / socket |
 
 Secrets (`OPENAI_API_KEY`, proxy credentials) are the exception: they belong

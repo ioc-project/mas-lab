@@ -1,9 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""HTTP client helpers for LLM provider plugins — TLS and retried POST.
+"""HTTP client helpers for LLM provider plugins — TLS and one POST.
 
 This is engine-execute I/O for ``llm_provider`` plugins. The kernel never
-imports this module.
+imports this module. Retry is a layer around the provider call.
 """
 
 from __future__ import annotations
@@ -105,17 +105,13 @@ def _raise_if_retryable_status(resp: Any) -> Any:
     return resp
 
 
-def request_with_retries(client: Any, method: str, url: str, **kwargs: Any) -> Any:
-    """POST/GET with retries on dropped TLS sockets, timeouts, connect-refused, and 429/5xx."""
-    from mas.runtime.reliability.classify import classify_llm_failure
-    from mas.runtime.reliability.policy import llm_retry_policy
-    from mas.runtime.reliability.retry import call_with_retry
-
-    policy = kwargs.pop("retry_policy", None) or llm_retry_policy()
-    breaker = kwargs.pop("circuit_breaker", None)
-    target = kwargs.pop("retry_target", None) or f"LLM HTTP {method} {url}"
+def request_once(client: Any, method: str, url: str, **kwargs: Any) -> Any:
+    """One POST/GET. 429/5xx raise so a retry layer can re-issue the call."""
     get_client = kwargs.pop("get_client", None)
     on_failure = kwargs.pop("on_failure", None)
+    kwargs.pop("retry_policy", None)
+    kwargs.pop("circuit_breaker", None)
+    kwargs.pop("retry_target", None)
 
     def _once() -> Any:
         c = get_client() if get_client is not None else client
@@ -126,27 +122,16 @@ def request_with_retries(client: Any, method: str, url: str, **kwargs: Any) -> A
                 on_failure(exc)
             raise
 
-    return call_with_retry(
-        _once,
-        policy=policy,
-        classify=classify_llm_failure,
-        breaker=breaker,
-        target=target,
-        idempotent=True,
-    )
+    return _once()
 
 
-async def arequest_with_retries(client: Any, method: str, url: str, **kwargs: Any) -> Any:
-    """Async twin of :func:`request_with_retries` for ``ainvoke``."""
-    from mas.runtime.reliability.classify import classify_llm_failure
-    from mas.runtime.reliability.policy import llm_retry_policy
-    from mas.runtime.reliability.retry import acall_with_retry
-
-    policy = kwargs.pop("retry_policy", None) or llm_retry_policy()
-    breaker = kwargs.pop("circuit_breaker", None)
-    target = kwargs.pop("retry_target", None) or f"LLM HTTP {method} {url}"
+async def arequest_once(client: Any, method: str, url: str, **kwargs: Any) -> Any:
+    """Async twin of :func:`request_once`."""
     get_client = kwargs.pop("get_client", None)
     on_failure = kwargs.pop("on_failure", None)
+    kwargs.pop("retry_policy", None)
+    kwargs.pop("circuit_breaker", None)
+    kwargs.pop("retry_target", None)
 
     async def _once() -> Any:
         c = get_client() if get_client is not None else client
@@ -159,11 +144,4 @@ async def arequest_with_retries(client: Any, method: str, url: str, **kwargs: An
                     await result
             raise
 
-    return await acall_with_retry(
-        _once,
-        policy=policy,
-        classify=classify_llm_failure,
-        breaker=breaker,
-        target=target,
-        idempotent=True,
-    )
+    return await _once()

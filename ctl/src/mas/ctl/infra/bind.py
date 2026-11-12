@@ -340,7 +340,7 @@ def bind_flavour(
     ``bind.usage``, else ``connect``. ``listen`` is opt-in: an agent with no
     usage is reached, not hosted. Every layer of the chain must accept the agent id
     (``agent_id_refusal``) whether or not its row uses ``{agent}``. A row
-    resolves to an ``agent_comm`` link, else a ``stack_layer``
+    resolves to an ``agent_comm`` link, else a ``layer``
     (``resolve_layer_class``); a one-row agent chain whose row resolves to a direct link
     (``is_direct_link``: the A2A SDK client at a url) becomes that agent's
     released agent-keyed row.

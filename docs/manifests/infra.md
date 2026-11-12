@@ -208,11 +208,14 @@ spec:
 `per` is `all` or `destination`. Cache is `all`; scheduler and fault injection are `destination`.
 `applies_to` is a read-only alias of `for` on middleware and of `wraps` on bundle entries. Mixing the old name with the new name in one mapping is an error.
 
-`mas-ctl infra show` prints each LLM and tool chain (and each agent's comm row when a MAS or Agent file is passed). The comm column is how the agent is reached: the layers of the agent's Flavour [chain](#rows-a-flavour-binds) (`bind.agents.<id>.agent_comm`, else `bind.agent_comm`), bottom first, for an agent on a chain; the `protocol` of an agent reached at an A2A server; the row `protocol` for an agent at its own `url`; else the library default `agent_comm` plugin (`local`). An agent linked on chains also shows its name on the bottom layer of each one it joins. `--flavour NAME|PATH` selects the Flavour, as on `run-mas`. `api_base` and tool `url` print scheme, host, and path only:
+`mas-ctl infra list` prints installed refs (`--type llm` / `tool` / `bundle` / `middleware` / `runtime`, or a YAML kind). `mas-ctl infra show REF` prints one of those refs: connection fields and its pipeline, with params (`max_attempts`). A middleware ref prints its listed steps (no destinations, and no injected default retry). A RuntimeEngine ref prints the kernel fields it applies (`queue_depth`, `stream`), not a call pipeline. Missing destinations are omitted, not invented. `--connections` or `--pipeline` prints only that part. A `retry` step the runtime inserts when the pipeline omits one is marked `(default)`; an explicit retry is listed without that mark.
+
+`mas-ctl infra resolved` prints the pipeline a session wraps (workspace refs, `--infra-ref`, Flavour bind, leftover `spec.control`) — the same wrap as `chat` / `run-mas`, including the default retry when the pipeline omits one. Each LLM and tool chain, and each agent's comm row when a MAS or Agent file is passed. `--type llm` / `tool` / `agents` hides the other sections. The comm column is how the agent is reached: the layers of the agent's Flavour [chain](#rows-a-flavour-binds) (`bind.agents.<id>.agent_comm`, else `bind.agent_comm`), bottom first, for an agent on a chain; the `protocol` of an agent reached at an A2A server; the row `protocol` for an agent at its own `url`; else the library default `agent_comm` plugin (`local`). An agent linked on chains also shows its name on the bottom layer of each one it joins. `--flavour NAME|PATH` selects the Flavour, as on `run-mas`. `api_base` and tool `url` print scheme, host, and path only:
 
 ```bash
-mas-ctl infra show --infra-ref arm.yaml --infra-ref standard:llm-cache
-mas-ctl infra show --json
+mas-ctl infra show standard:openai --pipeline
+mas-ctl infra resolved --infra-ref arm.yaml --infra-ref standard:llm-cache
+mas-ctl infra resolved --json
 ```
 
 ## LLMProxy models
@@ -253,19 +256,11 @@ For example: `api_base: env:LLM_PROXY_API_BASE|https://api.openai.com/v1`.
 `env:VAR` without a default is for secrets.
 It resolves to an empty string when the variable is unset.
 
-### LLMProxy retry
+### LLM retry
 
-`spec.proxy.retry` uses the same RetryPolicy object as Agent `spec.control.retry.llm`.
-Its fields are `max_attempts`, `backoff_s`, `backoff_multiplier`, `jitter`, `retry_on`, `require_idempotent`, and `max_backoff_s`.
-The agent spec wins when both are set.
-`MAS_LLM_HTTP_RETRIES` adds extra retries (`attempts = retries + 1`).
-See [reliability.md](../references/reliability.md).
-
-!!! warning "Not used yet"
-    The schema accepts `spec.proxy.retry`, but the current `mas-ctl` infra
-    resolver does not forward it to the engine, so it has no effect. Use
-    Agent `spec.control.retry` (deprecated, still applied) until the infra
-    pipeline takes it.
+Retry is a `retry` layer on the infra pipeline, not a field on `spec.proxy`
+(`api_base`, `api_key_env`, `timeout`). Default steps load when the pipeline
+omits retry. Prefer listing the layer. See [reliability.md](../references/reliability.md).
 
 ## Bundles
 
@@ -416,7 +411,7 @@ A key named `secret`, `password`, `passwd`, `passphrase`, `token`, `api_key`,
 `_` or `-` (`access_token`, `X-Api-Key`), or capitalized after a lower-case letter
 (`accessToken`, `clientSecret`), is refused: by `mas-ctl validate` for a row's own keys
 and its `headers`, and by ctl at any depth of a bound row when it applies the Flavour, and so is an agent-keyed row that names no protocol. A row
-resolves to an `agent_comm` link first, then a `stack_layer`
+resolves to an `agent_comm` link first, then a `layer`
 ([the rule](../references/comm-stack.md#stack)). So `a2a` (a one-row chain on an A2A
 server) is the A2A SDK client at its url, the same as an agent-keyed `a2a` row, and
 `a2a-framing` is the A2A framing layer above a transport. A missing secret stops the
