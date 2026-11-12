@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import yaml
+
 LIBRARY_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(LIBRARY_ROOT))
 
@@ -76,3 +78,18 @@ def test_prompt_constraint_and_default_are_deterministic() -> None:
     matched = _run(params, turn_id="history-1", prompt="second")
     assert matched.content == "matched"
     assert matched.task_state == "input_required"
+
+
+def test_history_fixture_avoids_user_message_markers_and_completes() -> None:
+    manifest = yaml.safe_load((LIBRARY_ROOT / "agents" / "a2a-tck-agent.yaml").read_text())
+    params = manifest["spec"]["design_pattern"]["params"]
+    history_prompts = ("TCK history message 1", "TCK history message 2")
+
+    for index, prompt in enumerate(history_prompts, start=1):
+        response = _run(params, turn_id=f"tck-input-required-history-{index}", prompt=prompt)
+        assert response.content
+        assert response.content not in history_prompts
+        assert response.task_state == "input_required"
+
+    completed = _run(params, turn_id="tck-complete-task-history", prompt="TCK complete after history")
+    assert completed.task_state == "completed"

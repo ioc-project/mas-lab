@@ -47,7 +47,7 @@ spec:
         - turn_id_prefix: tck-input-required
           prompt: TCK history message 2
           response:
-            text: TCK history message 2
+            text: Waiting for the next input
             task_state: input_required
         - turn_id_prefix: tck-input-required
           response:
