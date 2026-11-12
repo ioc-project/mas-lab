@@ -75,6 +75,10 @@ Named overlay for A/B configuration without duplicating manifests.
 `$XDG_CONFIG_HOME/mas/config.yaml` and optional project `config.yaml` — see
 [docs/user-config.md](../docs/user-config.md) for the full XDG layout.
 
+### Session activation
+
+`SessionManager.get(session_id)` looks up a session without changing runtime bindings. `SessionManager.activate(session_id)` also binds its managed session, control capability and associated callbacks to the runtime. Activation does not resume a paused session or restore conversation history. Served turns serialize session creation, activation and execution on their shared runtime so switching back to an existing context restores the correct control identity.
+
 ---
 
 ## CLI reference

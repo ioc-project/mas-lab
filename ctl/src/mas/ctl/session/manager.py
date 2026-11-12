@@ -93,6 +93,15 @@ class SessionManager:
         except KeyError as exc:
             raise KeyError(f"unknown session {session_id!r}") from exc
 
+    def activate(self, session_id: str) -> Session:
+        """Bind an existing session to its runtime without restoring or resuming it.
+
+        Callers sharing a runtime must serialize activation with execution.
+        """
+        session = self.get(session_id)
+        self._attach_controller(session)
+        return session
+
     def checkpoint(self, session_id: str, *, label: str = "") -> Path:
         """Persist a managed session through its configured checkpoint store."""
         if self.checkpoint_store is None:
