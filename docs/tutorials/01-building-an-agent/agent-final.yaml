@@ -47,11 +47,10 @@ spec:
   tools:
     - ref: samples:tools/web-search.tool.yaml
     - ref: samples:tools/calc.tool.yaml
-    - kind: system
-      name: request_human_input
-    - kind: system
-      name: inform_user
     - ref: samples:tools/memory-search.tool.yaml
+  system_plugins:
+    - request_human_input
+    - inform_user
 
   # ── Memory (from memory overlay) ─── ephemeral (in-memory, no filesystem)
   memory: semantic

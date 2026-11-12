@@ -50,7 +50,7 @@ Governance ingress plugins register under the `governance` category. Select them
 
 ### `engine_tool_provider` and `EngineToolContext`
 
-Orchestration-level tools run another agent instead of calling a function. They register under `engine_tool_provider`. `library-standard` ships two variants: `delegation` (existing peers) and `spawn_subagent` (new children from pre-authored templates).
+Orchestration-level tools run another agent instead of calling a function. They register under `engine_tool_provider`. `library-standard` ships two variants: `delegation` (existing peers) and `spawn_subagent` (new children from pre-authored templates). Peer send is also the `send` system plugin.
 
 A plugin in this category never receives the materialized run or the comm bus. It receives an `EngineToolContext`. The context exposes three operations and three read-only properties:
 

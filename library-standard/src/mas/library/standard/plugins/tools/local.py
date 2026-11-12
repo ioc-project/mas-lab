@@ -29,10 +29,36 @@ from mas.runtime.contracts.tool_contract import ToolContract, overlay_tool_adver
 from mas.runtime.contracts.user_communication_contract import HITLContract, UserIOContract
 from mas.runtime.manifest.schema import ToolDocument
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
+from mas.runtime.system_plugins import (
+    BoundSystemPlugins,
+    CallContext,
+    SessionContext,
+    load_system_plugins,
+    warn_deprecated_once,
+)
 
 logger = logging.getLogger(__name__)
 
 _TOOL_MODULE_LOAD_LOCK = threading.RLock()
+
+
+def _wrap_legacy_communication(
+    tool: Any,
+    communication: str | None,
+    *,
+    hitl_contract: HITLContract | None,
+    user_io_contract: UserIOContract | None,
+) -> Any:
+    """Apply a leftover ``system_tool`` row's ``communication`` attribute."""
+    if communication == "hitl":
+        from mas.library.standard.plugins.system_tools.wrappers import SystemToolHitlWrapper
+
+        return SystemToolHitlWrapper(tool, hitl_contract=hitl_contract)
+    if communication == "user_io":
+        from mas.library.standard.plugins.system_tools.wrappers import SystemToolUserUpdateWrapper
+
+        return SystemToolUserUpdateWrapper(tool, user_io_contract=user_io_contract)
+    return tool
 
 
 def _containment_roots(
@@ -99,6 +125,7 @@ class LocalToolProvider:
             self.tools_claim = tuple(str(n) for n in tools_claim)
         self._tool_instances: list[Any] = []
         self._tool_contracts: dict[str, dict[str, Any]] = {}
+        self.system_plugins: BoundSystemPlugins | None = None
 
     @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "LocalToolProvider":
@@ -133,12 +160,23 @@ class LocalToolProvider:
         return load_local_tool_provider(tools_spec, manifest_dir, provider=self, **kwargs)
 
     def has_tools(self) -> bool:
+        if self.system_plugins is not None and (self.system_plugins.tool_names() or list(self.system_plugins)):
+            return True
         return bool(self._tool_instances)
 
     def discover_tools(self, *, ctx: Any = None) -> list[dict[str, Any]]:
         return self.list_tools(ctx=ctx)
 
     def list_tools(self, *, ctx: Any = None) -> list[dict[str, Any]]:
+        application = self._application_specs(ctx)
+        if self.system_plugins is None:
+            return application
+        system = [spec for spec in self.system_plugins.advertise(ctx=ctx) if str(spec.get("name") or "")]
+        seen = {str(spec["name"]) for spec in system}
+        return system + [spec for spec in application if str(spec.get("name") or "") not in seen]
+
+    def _application_specs(self, ctx: Any = None) -> list[dict[str, Any]]:
+        """Advertise entries of the application tools (not the system plugins')."""
         result: list[dict[str, Any]] = []
         for instance in self._tool_instances:
             try:
@@ -175,6 +213,8 @@ class LocalToolProvider:
         user: str = "",
         **kwargs: Any,
     ) -> Any:
+        if self.system_plugins is not None and self.system_plugins.claims(tool_name):
+            return self.system_plugins.call(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
         for instance in self._tool_instances:
             owns = False
             legacy_match = False
@@ -239,6 +279,7 @@ def load_local_tool_provider(
     manifest_dir: Path,
     *,
     app_root: Path | None = None,
+    system_plugins: Iterable[str] = (),
     system_tools: Iterable[str] = (),
     hitl_contract: HITLContract | None = None,
     user_io_contract: UserIOContract | None = None,
@@ -247,9 +288,10 @@ def load_local_tool_provider(
 ) -> LocalToolProvider:
     """Load ``spec.tools`` Python implementations into the local plugin.
 
-    Enabled system tools = ``{kind: system, name}`` entries in ``tools_spec``
-    + host-requested ``system_tools`` + implicit skill tools (``activate_skill``
-    when skills are listed, ``run_skill_script`` when one ships ``scripts/``).
+    Enabled system plugins = ``spec.system_plugins`` + host-requested
+    ``system_plugins`` + implicit skill plugins (``activate_skill`` when
+    skills are listed, ``run_skill_script`` when one ships ``scripts/``).
+    ``system_tools`` is the deprecated name of the host-requested ``system_plugins``.
     """
     local = provider or LocalToolProvider()
     skills_spec = containment_kw.pop("skills_spec", None)
@@ -264,25 +306,30 @@ def load_local_tool_provider(
 
     # request_human_input / inform_user stay opt-in: a model reaching for them
     # unprompted substitutes a non-answer the driving protocol cannot detect.
-    host_entries = [{"kind": "system", "name": str(name), "_host": True} for name in system_tools]
-    system_spec = [*(tools_spec or []), *host_entries]
-    requested = _requested_system_tools(system_spec)
-    if requested:
-        _inject_system_tools(
-            local,
-            names=requested,
-            tools_spec=tools_spec,
+    spec = dict(containment_kw.pop("spec", None) or {})
+    spec.setdefault("tools", list(tools_spec or []))
+    if skills_spec is not None:
+        spec.setdefault("skills", skills_spec)
+    host_plugins = list(system_plugins)
+    if system_tools:
+        warn_deprecated_once("host-system-tools", "the system_tools= argument is deprecated: pass system_plugins=")
+        host_plugins.extend(system_tools)
+    local.system_plugins = load_system_plugins(
+        spec,
+        host_requested=host_plugins,
+        session=SessionContext(
+            spec=spec,
             hitl_contract=hitl_contract,
             user_io_contract=user_io_contract,
-        )
-    _inject_skill_system_tools(
-        local,
-        tools_spec=system_spec,
-        skills_spec=skills_spec,
-        manifest_dir=manifest_dir,
-        app_root=app_root,
-        skills_dir=skills_dir,
-        auto_inject_scripts=auto_inject_scripts,
+            skills_dir=skills_dir,
+            auto_inject_scripts=auto_inject_scripts,
+            wrap_system_tool=lambda tool, communication: _wrap_legacy_communication(
+                tool,
+                communication,
+                hitl_contract=hitl_contract,
+                user_io_contract=user_io_contract,
+            ),
+        ),
     )
 
     if not tools_spec:
@@ -296,12 +343,7 @@ def load_local_tool_provider(
     )
     for index, raw in enumerate(tools_spec):
         if isinstance(raw, dict) and raw.get("kind") == "system":
-            logger.debug(
-                "spec.tools[%d]: skipping redundant system-tool declaration %r",
-                index,
-                raw.get("name"),
-            )
-            continue
+            continue  # the deprecated spelling of a system plugin grant; load_system_plugins read it
         tool_def, mdir, manifest_contract = _normalize_tool_entry(
             raw,
             manifest_dir,
@@ -322,347 +364,13 @@ def load_local_tool_provider(
             containment_roots=roots,
         )
         local._add_instance(instance, manifest_contract)
+    system_names = local.system_plugins.tool_names() if local.system_plugins is not None else frozenset()
+    if system_names:
+        names = {str(spec.get("name") or "") for spec in local._application_specs()}
+        overlap = names & set(system_names)
+        if overlap:
+            raise ManifestToolLoadError(f"application tools collide with system plugin tools {sorted(overlap)}")
     return local
-
-
-def _skill_system_tool_names() -> frozenset[str]:
-    try:
-        from mas.library.skills.plugins.system_tools import SKILL_SYSTEM_TOOL_NAMES
-    except ImportError:
-        return frozenset()
-    return SKILL_SYSTEM_TOOL_NAMES
-
-
-def _requested_system_tools(tools_spec: list[Any]) -> set[str]:
-    """Names of ``{kind: system}`` entries; unknown names are a load error."""
-    enabled: set[str] = set()
-    disabled: set[str] = set()
-    host_requested: set[str] = set()
-    for raw in tools_spec:
-        if not isinstance(raw, dict) or raw.get("kind") != "system":
-            continue
-        name = str(raw.get("name") or "").strip()
-        if not name:
-            continue
-        if raw.get("_host"):
-            host_requested.add(name)
-        elif raw.get("enabled") is False:
-            disabled.add(name)
-        else:
-            enabled.add(name)
-    from mas.runtime.registry import get_registry
-
-    registry = get_registry()
-    known: set[str] = set(_skill_system_tool_names())
-    default_enabled: set[str] = set()
-    for entry in registry.get_by_category("system_tool"):
-        canonical_name = entry.urn.rsplit(".", 1)[-1]
-        known.add(canonical_name)
-        known.update(str(alias) for alias in entry.shortcuts)
-        if entry.attributes.get("default_enabled") is True:
-            default_enabled.add(canonical_name)
-    # Validate every declared name, including disabled ones: a typo there is a
-    # tool the author believes they turned off and did not.
-    unknown = sorted((enabled | disabled | host_requested) - known)
-    if unknown:
-        raise ManifestToolLoadError(f"unknown system tool(s) {unknown}; available: {sorted(known)}")
-    return (default_enabled | enabled | host_requested) - disabled
-
-
-def _system_tool_params(tools_spec: list[Any], name: str) -> dict[str, Any]:
-    """Extract ``params`` from a ``{kind: system, name: <name>}`` entry in
-    ``spec.tools``, if declared -- the manifest-level config for a system
-    tool (e.g. request_human_input's timeout/auto_resolve_decision/
-    max_question_length, or inform_user's max_message_length)."""
-    for raw in tools_spec or []:
-        if isinstance(raw, dict) and raw.get("kind") == "system" and raw.get("name") == name:
-            return dict(raw.get("params") or {})
-    return {}
-
-
-def _inject_system_tools(
-    provider: LocalToolProvider,
-    *,
-    names: set[str] | frozenset[str] = frozenset(),
-    tools_spec: list[Any] | None = None,
-    hitl_contract: HITLContract | None = None,
-    user_io_contract: UserIOContract | None = None,
-) -> None:
-    """Add built-in system tools to the provider.
-
-    System tools are runtime-level capabilities exposed as tools:
-    - request_human_input: blocking agent-initiated HITL
-    - inform_user: non-blocking user progress updates
-    """
-    from mas.runtime.registry import get_registry
-
-    registry = get_registry()
-    entries = registry.get_by_category("system_tool")
-    ordered_names = [name for name in ("request_human_input", "inform_user") if name in names]
-    ordered_set = set(ordered_names)
-    for entry in entries:
-        for name in (entry.urn.rsplit(".", 1)[-1], *entry.shortcuts):
-            if name in names and name not in ordered_set:
-                ordered_names.append(name)
-                ordered_set.add(name)
-    ordered_names.extend(sorted(names - ordered_set))
-    for name in ordered_names:
-        variant = registry.resolve_by_type("system_tool", name)
-        if variant is None:
-            if name in _skill_system_tool_names():
-                continue
-            raise ManifestToolLoadError(f"system tool {name!r} is not registered")
-        entry = registry.get_entry(registry.urn_for(name) or "")
-        attributes = entry.attributes if entry is not None else {}
-        tool_cls = variant.load_class()
-        if attributes.get("communication") == "hitl":
-            params = _system_tool_params(tools_spec or [], name)
-            tool_kwargs = {}
-            if params.get("max_question_length") is not None:
-                tool_kwargs["max_question_length"] = int(params["max_question_length"])
-            tool = tool_cls(**tool_kwargs)
-            instance = _SystemToolHitlWrapper(
-                tool,
-                hitl_contract=hitl_contract,
-                default_timeout_seconds=params.get("timeout"),
-                auto_resolve_decision=params.get("auto_resolve_decision"),
-            )
-        elif attributes.get("communication") == "user_io":
-            params = _system_tool_params(tools_spec or [], name)
-            tool_kwargs = {}
-            if params.get("max_message_length") is not None:
-                tool_kwargs["max_message_length"] = int(params["max_message_length"])
-            tool = tool_cls(**tool_kwargs)
-            instance = _SystemToolUserUpdateWrapper(tool, user_io_contract=user_io_contract)
-        else:
-            # Params of other system tools are manifest config read by their own
-            # wiring (spawn_subagent's templates/bounds), not constructor kwargs.
-            instance = tool_cls()
-        provider._add_instance(instance, manifest_contract=None)
-
-
-def _inject_skill_system_tools(
-    provider: LocalToolProvider,
-    *,
-    tools_spec: list[Any] | None,
-    skills_spec: Any,
-    manifest_dir: Path,
-    app_root: Path | None,
-    skills_dir: Path,
-    auto_inject_scripts: bool,
-) -> None:
-    """Optional skill system tools — no-op when the skills library is absent."""
-    try:
-        from mas.library.skills.plugins.system_tools import inject_skill_system_tools
-    except ImportError:
-        return
-    inject_skill_system_tools(
-        provider,
-        tools_spec=tools_spec,
-        skills_spec=skills_spec,
-        base_dir=skills_dir,
-        auto_inject_scripts=auto_inject_scripts,
-    )
-
-
-class _SystemToolWrapperBase:
-    """Shared boilerplate for system-tool wrappers that catch a control-flow signal.
-
-    `request_human_input` (blocking HITL) and `inform_user` (non-blocking status
-    update) both wrap a plain `ToolContract` instance, forward tool collection
-    and normal execution unchanged, and only diverge once their tool raises its
-    own sentinel signal. That common plumbing lives here so the two wrappers
-    only need to implement their signal-handling branch.
-    """
-
-    def __init__(self, tool_instance: Any) -> None:
-        self._tool = tool_instance
-
-    def on_collect_tools(self, **kwargs: Any) -> list[dict[str, Any]]:
-        """Forward tool collection to wrapped instance.
-
-        Accepts and forwards arbitrary kwargs (e.g. ``ctx``) so a wrapped
-        tool that needs runtime context to build its schema (see
-        SkillToolsPlugin.on_collect_tools) still gets it through this
-        wrapper -- LocalToolProvider.list_tools/call_tool always pass
-        ``ctx=`` now.
-        """
-        if hasattr(self._tool, "on_collect_tools"):
-            return self._tool.on_collect_tools(**kwargs)
-        # Fallback to legacy API
-        try:
-            return [
-                {
-                    "name": self._tool.get_name(),
-                    "description": self._tool.get_description(),
-                    "parameters": self._tool.get_parameters_schema(),
-                }
-            ]
-        except (AttributeError, NotImplementedError):
-            return []
-
-    def _execute_wrapped(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any,
-        user: str,
-    ) -> Any:
-        """Run the wrapped tool's normal (non-signal) execution path."""
-        return self._tool.execute(**arguments)
-
-    @staticmethod
-    def _extract_context(ctx: Any) -> tuple[str, str, int]:
-        """Pull (session_id, agent_id, correlation_id) off the call context."""
-        return (
-            getattr(ctx, "session_id", "unknown"),
-            getattr(ctx, "agent_id", "unknown"),
-            getattr(ctx, "correlation_id", 0),
-        )
-
-
-class _SystemToolHitlWrapper(_SystemToolWrapperBase):
-    """Wrapper for system tools that emit HITL signals.
-
-    Catches RequestHitlSignal and resolves it through ``hitl_contract`` --
-    ``RegistryHitlContract`` by default (register in the shared
-    HitlResolverRegistry and BLOCK until an external resolver provides the
-    user's response), or ``AutoResolveHitlContract`` when the host runs
-    unattended (batch CLI, benchmarks).
-
-    Timeout handling (RegistryHitlContract path):
-    - The call's own `timeout` argument wins; otherwise `default_timeout_seconds`
-      (the manifest-configured default, if any) applies; with neither set, the
-      wait has no timeout at all.
-    - If a timeout is set and elapses before resolution → raises TimeoutError
-    - No auto-approval (user must explicitly respond)
-    """
-
-    def __init__(
-        self,
-        tool_instance: Any,
-        hitl_contract: HITLContract | None = None,
-        *,
-        default_timeout_seconds: float | None = None,
-        auto_resolve_decision: str | None = None,
-    ) -> None:
-        super().__init__(tool_instance)
-        from mas.library.standard.plugins.hitl.contracts import (
-            AutoResolveHitlContract,
-            RegistryHitlContract,
-        )
-
-        if hitl_contract is None:
-            hitl_contract = RegistryHitlContract()
-        elif isinstance(hitl_contract, AutoResolveHitlContract) and auto_resolve_decision:
-            hitl_contract = AutoResolveHitlContract(auto_resolve_decision)
-        self._hitl_contract: HITLContract = hitl_contract
-        self._default_timeout_seconds = default_timeout_seconds
-
-    def on_execute_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any = None,
-        user: str = "",
-    ) -> Any:
-        """Execute tool and catch HITL signal.
-
-        If the tool raises RequestHitlSignal, resolve it via
-        self._hitl_contract.request_approval().
-        """
-        from mas.runtime.system_tools.signal import RequestHitlSignal
-
-        try:
-            return self._execute_wrapped(tool_name, arguments, ctx=ctx, user=user)
-        except RequestHitlSignal as signal:
-            session_id, agent_id, correlation_id = self._extract_context(ctx)
-
-            timeout_seconds = signal.timeout if signal.timeout is not None else self._default_timeout_seconds
-            logger.info(
-                f"Agent {agent_id} awaiting HITL resolution "
-                f"(timeout={timeout_seconds if timeout_seconds is not None else 'none'}s): "
-                f"{signal.question}"
-            )
-            result = self._hitl_contract.request_approval(
-                question=signal.question,
-                session_id=session_id,
-                requesting_user_id=user,
-                agent_id=agent_id,
-                correlation_id=correlation_id,
-                question_type=signal.question_type.value,
-                choices=signal.choices,
-                context_data=signal.context_data,
-                timeout=timeout_seconds,
-            )
-            logger.info("Agent %s HITL resolved: user chose '%s'", agent_id, result.get("choice"))
-            return result
-
-
-class _SystemToolUserUpdateWrapper(_SystemToolWrapperBase):
-    """Wrapper for system tools that emit non-blocking user status updates.
-
-    Catches InformUserSignal and routes it through
-    user_io_contract.send_progress_update() -- defaults to RegistryUserIOContract
-    (register in the shared HitlResolverRegistry's user-update channel, e.g.
-    polled by an external integration) unless a different UserIOContract was supplied.
-
-    Unlike `_SystemToolHitlWrapper`, this never blocks: the tool call returns
-    immediately regardless of which implementation consumes the update.
-    """
-
-    def __init__(self, tool_instance: Any, user_io_contract: UserIOContract | None = None) -> None:
-        super().__init__(tool_instance)
-        if user_io_contract is None:
-            from mas.library.standard.plugins.hitl.contracts import (
-                RegistryUserIOContract,
-            )
-
-            user_io_contract = RegistryUserIOContract()
-        self._user_io_contract: UserIOContract = user_io_contract
-
-    def on_execute_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any = None,
-        user: str = "",
-    ) -> Any:
-        """Execute tool and catch the non-blocking update signal."""
-        from mas.runtime.system_tools.signal import InformUserSignal
-
-        try:
-            return self._execute_wrapped(tool_name, arguments, ctx=ctx, user=user)
-        except InformUserSignal as signal:
-            session_id, agent_id, correlation_id = self._extract_context(ctx)
-
-            receipt = self._user_io_contract.send_progress_update(
-                message=signal.message,
-                session_id=session_id,
-                requesting_user_id=signal.user_name or user,
-                agent_id=agent_id,
-                correlation_id=correlation_id,
-                involved_agents=signal.involved_agents,
-                metadata=signal.metadata,
-            )
-            logger.info(
-                "Agent %s sent progress update for session=%s: %s",
-                agent_id,
-                session_id,
-                signal.message,
-            )
-            return {
-                "status": "sent",
-                "message": signal.message,
-                "user_name": signal.user_name or user,
-                "involved_agents": list(signal.involved_agents),
-                "metadata": dict(signal.metadata),
-                "blocking": False,
-                "receipt": receipt,
-            }
 
 
 def _normalize_tool_entry(

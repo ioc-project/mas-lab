@@ -137,6 +137,33 @@ def test_undeclared_tool_block_is_fed_back_not_fatal() -> None:
     assert "used listed tools only" in (trace.client_responses[-1].content or "")
 
 
+def test_block_on_a_system_plugin_call_is_a_tool_observation() -> None:
+    """BLOCK on a system-plugin tool name reaches the model as a tool observation."""
+
+    class _Engine(SimulatedEngine):
+        def invoke(self, io):
+            ret = super().invoke(io)
+            if io.op == "LLM_CALL":
+                return ret.model_copy(update={"offered_tools": ["get_metrics"]})
+            return ret
+
+    engine = _Engine(
+        llm_next_step=lambda cid: "TOOL_CALL" if cid == 1 else "STOP",
+        llm_tool_intent=lambda cid: ("inform_user", {"message": "working"}),
+        stop_text="noted",
+    )
+    inst = RuntimeInstance.from_parts(
+        engine=engine,
+        config=KernelConfig(egress_governance_plugin=NoUndeclaredToolPlugin()),
+    )
+    inst.capture_session_baseline()
+    trace = inst.run_user_text("status")
+    results = [ev.text for ev in inst.kernel.run.events if ev.response_kind == "TOOL_RESULT"]
+    assert any("was not in the tools list offered to you" in (t or "") for t in results)
+    assert any("inform_user" in (t or "") for t in results)
+    assert trace.client_responses
+
+
 def test_build_kernel_config_wires_no_undeclared_tool() -> None:
     from mas.runtime.registry import get_registry, register_plugin
     from mas.runtime.spec.gov import build_kernel_config, parse_gov_spec

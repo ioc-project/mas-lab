@@ -35,11 +35,6 @@ def test_activate_skill_implicit_when_skills_listed() -> None:
     assert should_inject_activate_skill(skills_spec=["answer-formatting"], tools_spec=[]) is True
 
 
-def test_activate_skill_explicit_kind_system() -> None:
-    tools = [{"kind": "system", "name": "activate_skill"}]
-    assert should_inject_activate_skill(skills_spec=[], tools_spec=tools) is True
-
-
 def test_activate_skill_skipped_when_yaml_ref_present() -> None:
     tools = [{"ref": "skills:tools/skill-access.tool.yaml"}]
     assert should_inject_activate_skill(skills_spec=["answer-formatting"], tools_spec=tools) is False
@@ -63,19 +58,6 @@ def test_run_skill_script_implicit_when_skill_has_scripts(tmp_path: Path) -> Non
         should_inject_run_skill_script(
             skills_spec=["with-scripts"],
             tools_spec=[],
-            base_dir=tmp_path,
-        )
-        is True
-    )
-
-
-def test_run_skill_script_explicit_kind_system(tmp_path: Path) -> None:
-    _skill(tmp_path, "plain")
-    tools = [{"kind": "system", "name": "run_skill_script"}]
-    assert (
-        should_inject_run_skill_script(
-            skills_spec=["plain"],
-            tools_spec=tools,
             base_dir=tmp_path,
         )
         is True

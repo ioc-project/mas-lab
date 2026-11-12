@@ -68,21 +68,21 @@ def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
 
     class EngineTool:
         def claims(self, tool_name):
-            return tool_name == "spawn_subagent"
+            return tool_name == "create_subagent"
 
         def call(self, tool_name, arguments, **kwargs):
             calls.append((tool_name, arguments, kwargs["caller_call_id"]))
             return "spawned"
 
     result = execute_engine_tool(
-        "spawn_subagent",
+        "create_subagent",
         engine_contracts=[EngineTool()],
         arguments={"template": "worker", "task": "review"},
         caller_call_id="parent-call",
     )
 
     assert result == "spawned"
-    assert calls == [("spawn_subagent", {"template": "worker", "task": "review"}, "parent-call")]
+    assert calls == [("create_subagent", {"template": "worker", "task": "review"}, "parent-call")]
 
 
 def test_execute_engine_tool_uses_manifest_provider(tmp_path):

@@ -11,7 +11,7 @@ This page lists what was built for agent-initiated HITL. HITL means human in the
 | `RequestHumanInputTool` | `library-standard/src/mas/library/standard/plugins/system_tools/request_human_input.py` | System tool `request_human_input`; validates arguments and raises `RequestHitlSignal`. |
 | `InformUserTool` | `library-standard/src/mas/library/standard/plugins/system_tools/inform_user.py` | Non-blocking `inform_user` progress update (raises `InformUserSignal`). |
 | `RequestHitlSignal`, `InformUserSignal` | `runtime/src/mas/runtime/system_tools/signal.py` | Control-flow signals. |
-| `_SystemToolHitlWrapper`, `_SystemToolUserUpdateWrapper` | `library-standard/src/mas/library/standard/plugins/tools/local.py` | Catch the signals and call the `HITLContract` / `UserIOContract`. |
+| `SystemToolHitlWrapper`, `SystemToolUserUpdateWrapper` | `library-standard/src/mas/library/standard/plugins/system_tools/wrappers.py` | Catch the signals and call the `HITLContract` / `UserIOContract`. |
 | `HITLContract`, `UserIOContract` | `runtime/src/mas/runtime/contracts/user_communication_contract.py` | Protocols. |
 | `RegistryHitlContract`, `AutoResolveHitlContract`, `RegistryUserIOContract` | `library-standard/src/mas/library/standard/plugins/hitl/contracts.py` | Default and unattended contracts. |
 | `InteractiveHitlContract` | `ctl/src/mas/ctl/session/interactive_hitl_contract.py` | Terminal prompt for `mas-ctl chat -i`. |

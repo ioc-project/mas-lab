@@ -10,10 +10,8 @@ spec:
   target:
     kind: Agent
   patch:
-    tools:
+    system_plugins:
       $op:
         add:
-          - kind: system
-            name: request_human_input
-          - kind: system
-            name: inform_user
+          - request_human_input
+          - inform_user

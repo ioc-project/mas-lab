@@ -25,6 +25,14 @@ class _FakeCtx:
 USER_IO = ("request_human_input", "inform_user")
 
 
+def _plugin_state(provider, name: str):
+    local = provider._local_provider()
+    for row in local.system_plugins:
+        if row.name == name or row.urn.endswith(f".{name}"):
+            return row.state
+    raise AssertionError(f"system plugin {name!r} was not loaded")
+
+
 @pytest.fixture()
 def empty_tool_tree(tmp_path: Path) -> Path:
     return tmp_path
@@ -38,13 +46,13 @@ def test_system_tools_excluded_by_default(empty_tool_tree: Path):
 
 
 def test_system_tools_included_when_host_requests_them(empty_tool_tree: Path):
-    provider = build_manifest_tool_provider([], empty_tool_tree, system_tools=USER_IO)
+    provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=USER_IO)
     names = {t["function"]["name"] for t in provider.list_openai_tools()}
     assert names == {"request_human_input", "inform_user"}
 
 
 def test_manifest_declaration_enables_only_the_listed_system_tool(empty_tool_tree: Path):
-    provider = build_manifest_tool_provider([{"kind": "system", "name": "inform_user"}], empty_tool_tree)
+    provider = build_manifest_tool_provider([], empty_tool_tree, spec={"system_plugins": ["inform_user"]})
     names = {t["function"]["name"] for t in provider.list_openai_tools()}
     assert names == {"inform_user"}
 
@@ -52,17 +60,18 @@ def test_manifest_declaration_enables_only_the_listed_system_tool(empty_tool_tre
 def test_unknown_system_tool_is_rejected(empty_tool_tree: Path):
     from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 
-    with pytest.raises(ManifestToolLoadError, match="unknown system tool"):
-        build_manifest_tool_provider([{"kind": "system", "name": "infrom_user"}], empty_tool_tree)
+    with pytest.raises(ManifestToolLoadError, match="unknown system plugin"):
+        build_manifest_tool_provider([], empty_tool_tree, spec={"system_plugins": ["infrom_user"]})
 
 
 def test_unknown_system_tool_is_rejected_even_when_disabled(empty_tool_tree: Path):
     from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 
-    with pytest.raises(ManifestToolLoadError, match="unknown system tool"):
+    with pytest.raises(ManifestToolLoadError, match="unknown system plugin"):
         build_manifest_tool_provider(
-            [{"kind": "system", "name": "rqeuest_human_input", "enabled": False}],
+            [],
             empty_tool_tree,
+            spec={"system_plugins": [{"rqeuest_human_input": {"enabled": False}}]},
         )
 
 
@@ -83,7 +92,7 @@ def test_inform_user_tool_raises_signal_with_expected_fields():
 
 
 def test_inform_user_wrapper_registers_update_in_registry_fallback(empty_tool_tree: Path, monkeypatch):
-    provider = build_manifest_tool_provider([], empty_tool_tree, system_tools=USER_IO)
+    provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=USER_IO)
     ctx = _FakeCtx()
 
     result = provider.call_tool(
@@ -116,7 +125,7 @@ def test_inform_user_wrapper_routes_through_user_io_contract(empty_tool_tree: Pa
     provider = build_manifest_tool_provider(
         [],
         empty_tool_tree,
-        system_tools=USER_IO,
+        system_plugins=USER_IO,
         user_io_contract=_FakeUserIOContract(),
     )
     ctx = _FakeCtx()
@@ -143,7 +152,7 @@ def test_request_human_input_still_auto_resolves_in_batch_mode(empty_tool_tree: 
     from mas.library.standard.plugins.hitl.contracts import AutoResolveHitlContract
 
     provider = build_manifest_tool_provider(
-        [], empty_tool_tree, system_tools=USER_IO, hitl_contract=AutoResolveHitlContract()
+        [], empty_tool_tree, system_plugins=USER_IO, hitl_contract=AutoResolveHitlContract()
     )
     ctx = _FakeCtx()
 
@@ -182,12 +191,11 @@ def test_manifest_params_configure_max_message_length(empty_tool_tree: Path):
     cap (e.g. a more verbose model's longer synthesis) must pass once
     max_message_length is raised via the manifest's spec.tools entry."""
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "inform_user", "params": {"max_message_length": 8000}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"inform_user": {"max_message_length": 8000}}]},
     )
-    wrapper = next(
-        t for t in provider._tool_instances if getattr(t, "_tool", None).__class__.__name__ == "InformUserTool"
-    )
+    wrapper = _plugin_state(provider, "inform_user")
     assert wrapper._tool.max_message_length == 8000
     with pytest.raises(InformUserSignal):
         wrapper._tool.execute(message="x" * 3000)
@@ -195,12 +203,11 @@ def test_manifest_params_configure_max_message_length(empty_tool_tree: Path):
 
 def test_configured_max_message_length_still_rejects_beyond_it(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "inform_user", "params": {"max_message_length": 100}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"inform_user": {"max_message_length": 100}}]},
     )
-    wrapper = next(
-        t for t in provider._tool_instances if getattr(t, "_tool", None).__class__.__name__ == "InformUserTool"
-    )
+    wrapper = _plugin_state(provider, "inform_user")
     with pytest.raises(ValueError):
         wrapper._tool.execute(message="x" * 101)
 

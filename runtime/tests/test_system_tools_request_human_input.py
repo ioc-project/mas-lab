@@ -26,6 +26,14 @@ class _FakeCtx:
 HITL = ("request_human_input",)
 
 
+def _plugin_state(provider, name: str = "request_human_input"):
+    local = provider._local_provider()
+    for row in local.system_plugins:
+        if row.name == name or row.urn.endswith(f".{name}"):
+            return row.state
+    raise AssertionError(f"system plugin {name!r} was not loaded")
+
+
 @pytest.fixture()
 def empty_tool_tree(tmp_path: Path) -> Path:
     return tmp_path
@@ -48,21 +56,18 @@ def test_input_schema_defaults_timeout_to_none():
 
 
 def test_default_wrapper_has_no_timeout_when_nothing_configured(empty_tool_tree: Path):
-    provider = build_manifest_tool_provider([], empty_tool_tree, system_tools=HITL)
-    wrapper = next(
-        t for t in provider._tool_instances if getattr(t, "_tool", None).__class__.__name__ == "RequestHumanInputTool"
-    )
+    provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=HITL)
+    wrapper = _plugin_state(provider)
     assert wrapper._default_timeout_seconds is None
 
 
 def test_manifest_params_set_the_default_timeout(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "request_human_input", "params": {"timeout": 5}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"request_human_input": {"timeout": 5}}]},
     )
-    wrapper = next(
-        t for t in provider._tool_instances if getattr(t, "_tool", None).__class__.__name__ == "RequestHumanInputTool"
-    )
+    wrapper = _plugin_state(provider)
     assert wrapper._default_timeout_seconds == 5
 
 
@@ -71,7 +76,7 @@ def test_no_timeout_configured_blocks_until_resolved(empty_tool_tree: Path):
     must wait indefinitely for resolution -- not silently apply some other
     default. Resolved promptly from another thread here so the test itself
     doesn't hang."""
-    provider = build_manifest_tool_provider([], empty_tool_tree, system_tools=HITL)
+    provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=HITL)
     ctx = _FakeCtx(session_id="sess-block")
     registry = get_hitl_resolver_registry()
     result: dict = {}
@@ -95,7 +100,7 @@ def test_no_timeout_configured_blocks_until_resolved(empty_tool_tree: Path):
 
 
 def test_call_time_timeout_raises_after_configured_seconds(empty_tool_tree: Path):
-    provider = build_manifest_tool_provider([], empty_tool_tree, system_tools=HITL)
+    provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=HITL)
     ctx = _FakeCtx(session_id="sess-timeout")
 
     with pytest.raises(TimeoutError):
@@ -115,8 +120,9 @@ def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
     """A longer manifest default must not stop a call from asking for a
     shorter timeout for that one request."""
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "request_human_input", "params": {"timeout": 60}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"request_human_input": {"timeout": 60}}]},
     )
     ctx = _FakeCtx(session_id="sess-override")
 
@@ -142,7 +148,7 @@ def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
 
 def test_auto_resolve_defaults_to_approve(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [], empty_tool_tree, system_tools=HITL, hitl_contract=AutoResolveHitlContract()
+        [], empty_tool_tree, system_plugins=HITL, hitl_contract=AutoResolveHitlContract()
     )
     ctx = _FakeCtx(session_id="sess-auto-default")
 
@@ -157,7 +163,7 @@ def test_auto_resolve_defaults_to_approve(empty_tool_tree: Path):
 def test_auto_resolve_ignores_process_environment(empty_tool_tree: Path, monkeypatch):
     monkeypatch.setenv("MAS_HITL_AUTO_RESOLVE", "1")
     monkeypatch.setenv("MAS_HITL_AUTO_RESOLVE_DECISION", "reject")
-    provider = build_manifest_tool_provider([], empty_tool_tree, system_tools=HITL)
+    provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=HITL)
     ctx = _FakeCtx(session_id="sess-auto-env")
 
     with pytest.raises(TimeoutError):
@@ -175,8 +181,9 @@ def test_auto_resolve_ignores_process_environment(empty_tool_tree: Path, monkeyp
 
 def test_auto_resolve_decision_configurable_via_manifest_params(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "request_human_input", "params": {"auto_resolve_decision": "reject"}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"request_human_input": {"auto_resolve_decision": "reject"}}]},
         hitl_contract=AutoResolveHitlContract(),
     )
     ctx = _FakeCtx(session_id="sess-auto-manifest")
@@ -200,12 +207,11 @@ def test_default_max_question_length_matches_schema_constant():
 
 def test_manifest_params_configure_max_question_length(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "request_human_input", "params": {"max_question_length": 8000}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"request_human_input": {"max_question_length": 8000}}]},
     )
-    wrapper = next(
-        t for t in provider._tool_instances if getattr(t, "_tool", None).__class__.__name__ == "RequestHumanInputTool"
-    )
+    wrapper = _plugin_state(provider)
     assert wrapper._tool.max_question_length == 8000
     # A question that would fail the default 2000-char cap must pass under the
     # manifest-configured 8000-char cap (issue #65 follow-up: a more verbose
@@ -219,12 +225,11 @@ def test_manifest_params_configure_max_question_length(empty_tool_tree: Path):
 
 def test_configured_max_question_length_still_rejects_beyond_it(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "request_human_input", "params": {"max_question_length": 100}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"request_human_input": {"max_question_length": 100}}]},
     )
-    wrapper = next(
-        t for t in provider._tool_instances if getattr(t, "_tool", None).__class__.__name__ == "RequestHumanInputTool"
-    )
+    wrapper = _plugin_state(provider)
     with pytest.raises(ValueError):
         wrapper._tool.execute(question="x" * 101)
 
@@ -237,8 +242,9 @@ def test_advertised_schema_reflects_configured_max_question_length():
 
 def test_manifest_auto_resolve_decision_wins_over_host_default(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
-        [{"kind": "system", "name": "request_human_input", "params": {"auto_resolve_decision": "escalate"}}],
+        [],
         empty_tool_tree,
+        spec={"system_plugins": [{"request_human_input": {"auto_resolve_decision": "escalate"}}]},
         hitl_contract=AutoResolveHitlContract("reject"),
     )
     ctx = _FakeCtx(session_id="sess-auto-precedence")

@@ -28,7 +28,7 @@ types:
   - llm_provider
   - agent_comm
   - stack_layer
-  - system_tool
+  - system_plugin
   - hitl_contract
   - user_io_contract
   - engine_tool_provider
@@ -52,42 +52,40 @@ plugins:
     urn: mas.engine_tool_provider.spawn_subagent
     module: mas.library.standard.plugins.engine_tools.subagent_spawner
     class: SubagentSpawner
-  - type: system_tool
+
+  - type: system_plugin
     name: send
-    urn: mas.system_tool.send
+    urn: mas.system_plugin.send
     module: mas.library.standard.plugins.system_tools.send
-    class: SendTool
-    attributes: {default_enabled: false, semantic: agent_comm.send}
-  - type: system_tool
+    class: SendPlugin
+    attributes: {default_enabled: false, semantic: agent_comm.send, capability: delegation}
+  - type: system_plugin
     name: request_human_input
-    urn: mas.system_tool.request_human_input
+    urn: mas.system_plugin.request_human_input
     module: mas.library.standard.plugins.system_tools.request_human_input
-    class: RequestHumanInputTool
+    class: RequestHumanInputPlugin
     attributes: {default_enabled: false, communication: hitl}
-  - type: system_tool
+  - type: system_plugin
     name: inform_user
-    urn: mas.system_tool.inform_user
+    urn: mas.system_plugin.inform_user
     module: mas.library.standard.plugins.system_tools.inform_user
-    class: InformUserTool
+    class: InformUserPlugin
     attributes: {default_enabled: false, communication: user_io}
-  - type: system_tool
-    name: spawn_subagent
-    urn: mas.system_tool.spawn_subagent
-    module: mas.library.standard.plugins.system_tools.spawn_subagent
-    class: SpawnSubagentTool
-    attributes: {default_enabled: false, capability: orchestration}
-  - type: system_tool
-    name: create_subagent
-    urn: mas.system_tool.create_subagent
-    module: mas.library.standard.plugins.system_tools.spawn_subagent
-    class: SpawnSubagentTool
-    attributes: {default_enabled: false, capability: orchestration}
-  - type: system_tool
+  - type: system_plugin
     name: pause_session
-    urn: mas.system_tool.pause_session
+    urn: mas.system_plugin.pause_session
     module: mas.library.standard.plugins.system_tools.control
-    class: ControlTools
+    class: PauseSessionPlugin
     attributes: {default_enabled: false, capability: control}
+  - type: system_plugin
+    name: subagents
+    urn: mas.system_plugin.subagents
+    module: mas.library.standard.plugins.system_tools.spawn_subagent
+    class: SubagentsPlugin
+    shortcuts:
+      - subagents
+      - create_subagent
+    attributes: {default_enabled: false, capability: orchestration, deprecated_names: [spawn_subagent]}
 
   # Wire protocols (routed by spec.models[].kind / infra spec.protocol)
   - type: llm_provider

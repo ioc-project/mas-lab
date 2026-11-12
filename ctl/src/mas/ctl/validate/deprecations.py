@@ -305,6 +305,43 @@ def collect_agent_control_keys_deprecation(data: dict[str, Any]) -> list[tuple[s
     return out
 
 
+def collect_system_tool_kind_deprecation(data: dict[str, Any]) -> list[tuple[str, str]]:
+    """Warn for each ``{kind: system, name}`` entry of an Agent's (or an Overlay patch's) ``spec.tools``.
+
+    The entry still grants the plugin; ``spec.system_plugins`` is its replacement.
+    """
+    if not isinstance(data, dict):
+        return []
+    spec = data.get("spec")
+    if not isinstance(spec, dict):
+        return []
+    kind = str(data.get("kind") or "").strip().lower()
+    if kind == "agent":
+        tools, where = spec.get("tools"), "spec.tools"
+    elif kind == "overlay":
+        patch = spec.get("patch")
+        tools, where = (patch.get("tools") if isinstance(patch, dict) else None), "spec.patch.tools"
+        if isinstance(tools, dict):  # collection ops: {$op: {add: [...]}}
+            ops = tools.get("$op")
+            tools, where = (ops.get("add") if isinstance(ops, dict) else None), "spec.patch.tools.$op.add"
+    else:
+        return []
+    if not isinstance(tools, list):
+        return []
+    out: list[tuple[str, str]] = []
+    for index, item in enumerate(tools):
+        if isinstance(item, dict) and item.get("kind") == "system":
+            name = str(item.get("name") or "").strip() or "<name>"
+            out.append(
+                (
+                    f"{where}[{index}]",
+                    f"{{kind: system, name: {name}}} is deprecated and still grants the plugin: "
+                    f"list {name!r} in spec.system_plugins (params become the plugin settings)",
+                )
+            )
+    return out
+
+
 def collect_endpoint_usage_deprecation(
     data: Any = None,
     *,

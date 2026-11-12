@@ -650,6 +650,21 @@ properties:
             Skill name (resolved from default locator chain) or
             @library/name (explicit library source).
 
+      system_plugins:
+        type: array
+        x-merge:
+          strategy: plugin_list_ops
+          identity: plugin_id
+        description: >
+          System plugins this agent is granted (inform_user, request_human_input,
+          send, pause_session, subagents, activate_skill, run_skill_script).
+          A plugin loads when named here. Unknown names are a load error. Two
+          plugins that expose the same tool name in one agent are a load error.
+          activate_skill and run_skill_script also load implicitly from spec.skills.
+        default: []
+        items:
+          $ref: "./fragments/system-plugin-item.schema.yaml"
+
       tools_ref:
         type: [string, "null"]
         x-merge:
@@ -680,20 +695,15 @@ properties:
               - module_path: library-samples/tools/calc.py
                 class_name: CalcTool
 
-          Form D — system tools (runtime-owned; exposed only when declared
-          here or implied by the manifest):
-            tools:
-              - kind: system
-                name: request_human_input
-                params: {timeout: 300}
-              - kind: system
-                name: run_skill_script
+          Form C — semantic name (bare string).
 
+          Syscalls are spec.system_plugins. The old ``{kind: system, name}``
+          entry still works (deprecated, warns once).
           ``activate_skill`` is implicit when ``spec.skills`` lists at
           least one skill. ``run_skill_script`` is implicit when a listed
           skill has a ``scripts/`` directory. ``request_human_input`` and
           ``inform_user`` are never implicit. Unknown names are rejected.
-          See docs/manifests/system-tools.md.
+          See docs/manifests/system-plugins.md.
 
           Additive with tools_ref — both may be set simultaneously.
         default: []
@@ -733,16 +743,16 @@ properties:
                   additionalProperties: true
                   default: {}
 
-            # ── Form D: system tool ──────────────────────────────────────
+            # ── Form D: system tool (deprecated spelling of spec.system_plugins) ──
             - type: object
               required: [kind, name]
               additionalProperties: false
+              deprecated: true
               description: >
-                Runtime-owned system tool. request_human_input and inform_user
-                are injected by default. activate_skill is implicit when
-                spec.skills is non-empty; declare it here to opt in explicitly.
-                run_skill_script is implicit when a listed skill has scripts/;
-                declare it here to opt in without shipping scripts yet.
+                Deprecated: list the plugin in spec.system_plugins instead. A
+                {kind: system, name, params} entry grants the same system plugin
+                (params become its settings; enabled: false turns it off) and warns
+                once. When spec.system_plugins names the same plugin, that entry wins.
               properties:
                 kind:
                   type: string
@@ -753,7 +763,6 @@ properties:
                 enabled:
                   type: boolean
                   default: true
-                  description: Explicit per-tool opt-in/out. `false` overrides host requests.
                 params:
                   type: object
                   additionalProperties: true

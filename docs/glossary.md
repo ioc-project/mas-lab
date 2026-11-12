@@ -48,6 +48,7 @@ up here when another page uses it without explanation.
 | **MCP / A2A** | Model Context Protocol (remote tools) and Agent2Agent (remote agents). Both are infra adapters. See [Open standards](standards/index.md). |
 | **HITL** | Human in the loop: a person approves a tool call before it runs. See [Tutorial 14](tutorials/14-governance-hitl/README.md). |
 | **MCE** | Metrics Computation Engine, an open-source set of metrics that score a session with an LLM judge. See [Tutorial 10](tutorials/10-evaluation-metrics/README.md). |
+| **System plugin** | A runtime-owned syscall the model may call (`inform_user`, `request_human_input`, `send`, `subagents`, …), listed in Agent `spec.system_plugins`. See [system plugins](manifests/system-plugins.md). |
 | **Skill** | A reusable instruction pack for an agent: a procedure, reference files and optional scripts, in a `SKILL.md` folder. See [Tutorial 6](tutorials/06-agent-skills/README.md). |
 | **Trace** | The record of one run: the ordered events of the agent, its tools and its delegations. MAS Lab stores it as `events.jsonl`. |
 | **Span** | One timed step in a trace, with a start, an end and a parent. OpenTelemetry (OTel) is the standard format for spans. See [Tutorial 8](tutorials/08-telemetry/README.md). |

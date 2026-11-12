@@ -35,7 +35,7 @@ def _manager_with_session(manifest: dict | None = None) -> tuple[SessionManager,
     controller = SessionController(instance=instance, display=_Display())
     doc = manifest or {
         "name": "agent",
-        "spec": {"tools": [{"kind": "system", "name": "lookup", "enabled": True}]},
+        "spec": {"tools": [{"name": "lookup", "enabled": True}]},
     }
     manager.create(instance, controller, doc, session_id="s1")
     return manager, "s1"
@@ -131,9 +131,6 @@ def test_three_surfaces_same_event_kinds() -> None:
 
 def test_spawn_llm_tool_is_advertisement_not_a_second_implementation() -> None:
     tool = SpawnSubagentTool()
-    assert tool.on_execute_tool("spawn_subagent", {"template": "worker", "task": "x"}) == (
-        "[spawn_subagent] unavailable: orchestration contract is not wired"
-    )
     assert tool.on_execute_tool("create_subagent", {"template": "worker", "task": "x"}) == (
         "[spawn_subagent] unavailable: orchestration contract is not wired"
     )

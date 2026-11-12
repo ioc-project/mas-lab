@@ -71,7 +71,7 @@ Legend: ✅ implemented, ⚠️ partial, ❌ not implemented, 🔲 out of scope.
 | No catalog when no skills available | ✅ | Empty catalog → nothing injected, no empty block |
 | Skill filtering (disabled/permission) | ✅ | `disabled: true` in frontmatter skips the skill entirely |
 | `activate_skill` enum of valid skill names | ✅ | `SkillToolsPlugin(registry=…)` adds JSON Schema `enum` to name parameter; description lists names |
-| Don't register tool when no skills | ✅ | `SkillToolsPlugin.on_collect_tools()` returns `[]` when no registry / empty registry; plugin is not injected unless `spec.skills` or `{kind: system, name: activate_skill}` |
+| Don't register tool when no skills | ✅ | `SkillToolsPlugin.on_collect_tools()` returns `[]` when no registry / empty registry; plugin is not injected unless `spec.skills` or `spec.system_plugins` names `activate_skill` |
 
 ---
 

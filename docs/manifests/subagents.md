@@ -5,7 +5,7 @@
 # Spawned subagents
 
 A **subagent** is a temporary child agent that a parent agent creates during one turn.
-`create_subagent` (alias `spawn_subagent`) is a **system tool** (a tool the runtime provides, declared with `kind: system`; see [system-tools.md](system-tools.md)).
+`create_subagent` is advertised by the **`subagents` system plugin** (see [system-plugins.md](system-plugins.md)).
 The parent LLM calls it to start one pre-authored Agent manifest for a single task.
 The child's final response becomes the tool result.
 
@@ -16,10 +16,8 @@ Add this declaration under an Agent manifest:
 
 ```yaml
 spec:
-  tools:
-    - kind: system
-      name: create_subagent
-      params:
+  system_plugins:
+    - subagents:
         templates:
           - id: reviewer
             ref: ./agents/reviewer.yaml
@@ -30,11 +28,11 @@ spec:
 
 ## Enablement
 
-Declaring the system tool is the whole contract.
+Declaring the plugin is the whole contract.
 There is no separate capability flag.
 An agent without this entry cannot spawn.
 
-The runtime advertises both `create_subagent` and `spawn_subagent` to the model, and either name works.
+The runtime advertises `create_subagent` to the model.
 Each call takes two arguments:
 
 - `template`: one of the declared template IDs.
@@ -57,7 +55,7 @@ Set `enabled: false` on the entry to turn the tool off.
 ## Bounds and lifecycle
 
 The default session budget allows eight child runs at a nesting depth of three.
-`SpawnLedger`, the per-session counter in `mas-ctl`, enforces both limits.
+`subagents` owns the spawn ledger that enforces both limits.
 A call over budget returns the tool result `blocked: depth or spawn-count budget exceeded` instead of failing the turn.
 
 Each call follows the same steps:
@@ -85,5 +83,5 @@ Declare `create_subagent` in the agent manifest.
 
 - [Tutorial 12](../tutorials/12-subagents/README.md): an incident coordinator that creates researcher and reviewer specialists
 - Runnable manifest pair: [coordinator](../schemas/examples/subagent-agent.yaml) and [reviewer template](../schemas/examples/subagent-reviewer.yaml)
-- [system-tools.md](system-tools.md): every system tool
-- [agent.md](agent.md#tool): the `kind: system` tool form
+- [system-plugins.md](system-plugins.md): the `subagents` bundle
+- [agent.md](agent.md): `spec.system_plugins`

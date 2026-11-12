@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
-
 from mas.runtime.boundary.delegation import openai_delegation_tools
 
 logger = logging.getLogger(__name__)
@@ -117,11 +116,7 @@ def tool_entry_name(item: Any, *, base_dir: Path | None = None) -> str | None:
     if n := item.get("name") or item.get("id"):
         return str(n)
     ref = item.get("ref")
-    return (
-        tool_name_from_ref(ref, base_dir=base_dir)
-        if isinstance(ref, str) and ref and base_dir
-        else None
-    )
+    return tool_name_from_ref(ref, base_dir=base_dir) if isinstance(ref, str) and ref and base_dir else None
 
 
 def tools_with_resolved_names(tools: list[Any], base_dir: Path) -> list[Any]:
@@ -215,39 +210,24 @@ def disabled_tool_names(spec: dict[str, Any] | None) -> frozenset[str]:
 
 
 def is_spawn_subagent_enabled(spec: dict[str, Any] | None) -> bool:
-    """True when the bound spec advertises ``spawn_subagent`` or ``create_subagent``."""
+    """True when the bound spec grants the subagents system plugin."""
     return spawn_subagent_params(spec) is not None
 
 
 def spawn_subagent_params(spec: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Params of the enabled spawn/create-subagent system-tool entry, or ``None``.
+    """Settings of the granted subagents plugin, or ``None``.
 
-    The ``tools`` entry is the capability gate, exactly as it is for
-    ``request_human_input``. Declare ``spawn_subagent`` or ``create_subagent``;
-    both names enable the same bounded template runner. No entry means the
-    agent cannot spawn. Every subagent setting (``templates``, ``max_spawns``,
-    ``max_depth``) lives under that one entry's ``params``.
+    Name ``subagents`` (or its ``create_subagent`` shortcut) in
+    ``spec.system_plugins``. No grant means the agent cannot spawn.
+    Settings (``templates``, ``max_spawns``, ``max_depth``) live on that grant.
     """
-    for tool in (spec or {}).get("tools") or []:
-        if (
-            isinstance(tool, dict)
-            and tool.get("kind") == "system"
-            and tool.get("name") in SPAWN_SUBAGENT_NAMES
-            and tool.get("enabled") is not False
-        ):
-            params = tool.get("params")
-            return params if isinstance(params, dict) else {}
-    return None
+    from mas.runtime.system_plugins.load import settings_for_capability
+
+    return settings_for_capability(spec, "orchestration")
 
 
 def is_control_tools_enabled(spec: dict[str, Any] | None) -> bool:
-    """True when the bound spec advertises an enabled ``pause_session`` system tool."""
-    for tool in (spec or {}).get("tools") or []:
-        if (
-            isinstance(tool, dict)
-            and tool.get("kind") == "system"
-            and tool.get("name") in CONTROL_TOOLS
-            and tool.get("enabled") is not False
-        ):
-            return True
-    return False
+    """True when the bound spec grants the control system plugin."""
+    from mas.runtime.system_plugins.load import settings_for_capability
+
+    return settings_for_capability(spec, "control") is not None

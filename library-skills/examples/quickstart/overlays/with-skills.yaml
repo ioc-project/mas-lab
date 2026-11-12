@@ -4,9 +4,8 @@
 # activate_skill is injected as a system tool; the catalog lists frontmatter.
 #
 # Explicit alternative (same effect):
-#   tools:
-#     - kind: system
-#       name: activate_skill
+#   system_plugins:
+#     - activate_skill
 apiVersion: mas/v1
 kind: Overlay
 

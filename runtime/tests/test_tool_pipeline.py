@@ -189,7 +189,7 @@ def test_star_dest_does_not_wrap_system_tools() -> None:
             }
         },
     )
-    for name in ("request_human_input", "inform_user", "spawn_subagent", "create_subagent"):
+    for name in ("request_human_input", "inform_user", "create_subagent"):
         engine.set_scheduled_tool(name, {})
         ret = engine.invoke(_tool_io())
         assert "A-FAULT" not in (ret.text or ""), name

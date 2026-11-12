@@ -66,21 +66,23 @@ class SnapshotRef:
         wm_version: int = 0,
         seq: int = 0,
         related_fingerprints: list[str] | tuple[str, ...] | None = None,
+        system_plugins: Any = None,
     ) -> SnapshotRef:
         taken_at = datetime.now(UTC).isoformat()
         from mas.runtime.session.cow import CowKernel
 
         if isinstance(kernel, CowKernel):
             kernel_version = kernel.version
-        state_digest = _canonical_hash(
-            {
-                "kernel_version": kernel_version,
-                "wm_version": wm_version,
-                "spec_revision": spec_revision,
-                "turn": turn,
-                "related": list(related_fingerprints or ()),
-            }
-        )
+        digest_fields: dict[str, Any] = {
+            "kernel_version": kernel_version,
+            "wm_version": wm_version,
+            "spec_revision": spec_revision,
+            "turn": turn,
+            "related": list(related_fingerprints or ()),
+        }
+        if system_plugins:  # absent without plugins, so existing snapshot ids do not change
+            digest_fields["system_plugins"] = _canonical_hash(dict(system_plugins))
+        state_digest = _canonical_hash(digest_fields)
         snapshot_id = _canonical_hash(
             {
                 "session_id": session_id,
@@ -123,6 +125,7 @@ class Snapshot:
     spec: dict[str, Any] | None = None
     spec_revision: int | None = None
     related: list[Any] = field(default_factory=list)
+    system_plugins: dict[str, Any] = field(default_factory=dict)
 
     def kernel_dict(self) -> dict[str, Any]:
         from mas.runtime.session.cow import CowKernel
@@ -289,7 +292,9 @@ def _event_payload(event: Any) -> dict[str, Any]:
     return payload
 
 
-def persist(snapshot: Snapshot, store: Any, *, manifest: dict[str, Any], lineage: dict[str, Any], backtrack_count: int = 0) -> Any:
+def persist(
+    snapshot: Snapshot, store: Any, *, manifest: dict[str, Any], lineage: dict[str, Any], backtrack_count: int = 0
+) -> Any:
     """Write a Snapshot through CheckpointStore. Disk is optional."""
     from mas.runtime.session.state import ManifestRef
 
@@ -314,10 +319,10 @@ def persist(snapshot: Snapshot, store: Any, *, manifest: dict[str, Any], lineage
         "lineage": lineage,
         "kernel": snapshot.kernel_dict(),
         "working_memory": working_memory,
-        "related": [
-            r.as_payload() if hasattr(r, "as_payload") else r for r in (snapshot.related or [])
-        ],
+        "related": [r.as_payload() if hasattr(r, "as_payload") else r for r in (snapshot.related or [])],
         "manifest": {"content": ref.content, "content_hash": ref.content_hash},
     }
+    if snapshot.system_plugins:
+        payload["system_plugins"] = dict(snapshot.system_plugins)
     label = snapshot.ref.label or f"turn-{snapshot.ref.turn:04d}"
     return store.save(payload, label=f"{snapshot.ref.session_id}-{label}")

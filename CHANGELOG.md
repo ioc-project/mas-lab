@@ -152,6 +152,18 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- Agent `spec.system_plugins` grants runtime syscalls (`inform_user`,
+  `request_human_input`, `send`, `pause_session`, `subagents`, `activate_skill`,
+  `run_skill_script`). A plugin owns session state and may expose several tools.
+  `subagents` advertises `create_subagent`, owns the spawn ledger and runs the call (the
+  session executor binds the spawner that builds the child; sync and async); a session
+  checkpoint or in-memory snapshot restores system plugin state, and a restore keeps the
+  ceilings the spec sets and the spend the snapshot saved. `send` is the engine's delegation
+  and claims only the `delegate_to_<id>` names the model was offered. An empty list loads none, except
+  skill plugins implied by `spec.skills`. Unknown names, `enabled: false` of an
+  unknown name, and two plugins exposing one tool name in one agent are load
+  errors. Overlay `$op.add` / `$op.remove` patches `system_plugins` by plugin id
+  and `mas-ctl validate` errors on an unknown name there too.
 - Flavour `spec.control` attaches `kind: Control` documents (observability and
   governance sets) to agents by `$all`, `$entry`, `$not-entry`, `$delegates`, one
   id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` /
@@ -353,6 +365,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- Syscalls are granted in `spec.system_plugins`, not `spec.tools`. A plugin loads
+  when named, when its library row is `default_enabled`, or when its own rule over
+  the spec grants it; `enabled: false` turns off all three.
 - `--events*` is a shortcut on the run. `--no-events` and
   `--events-format` `native` / `otel` / `both` replace the plugin set.
   `--events` only forces recording; `--events-file` and `--events-stdout`
@@ -433,6 +448,16 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Deprecated
 
+- `{kind: system, name, params}` in `spec.tools`: list the plugin in `spec.system_plugins`.
+  It grants the same plugin (`params` become its settings, `enabled: false` turns it off) and
+  warns once; `mas-ctl validate` warns per entry. When both name one plugin, `spec.system_plugins`
+  wins. The Agent schema marks the entry deprecated.
+- The `spawn_subagent` plugin name (use `subagents`; its tool is `create_subagent`), the
+  `system_tools=` argument of the host tool-provider loaders (use `system_plugins=`), and the
+  `system_tool` plugin type (use `system_plugin`). Each still loads and warns once.
+  Overlay `$op.remove` of `spawn_subagent` removes `subagents`. `mas-ctl validate` on an Overlay
+  errors on an unknown plugin name in `$op.add` / `$op.remove`. A leftover `system_tool` row
+  still receives its named settings and still wraps `hitl` / `user_io`.
 - Passing a Control with `-o`, and listing Controls under an Overlay's `spec.control`, still work and warn
   once per run: attach Controls with `--control` or a Flavour. A scenario's `overlays.control` attaches
   Control files the same way `--control` does.

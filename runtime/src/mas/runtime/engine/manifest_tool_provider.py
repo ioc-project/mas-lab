@@ -21,6 +21,8 @@ from mas.runtime.registry.tool_provider_registry import (
     provider_origin,
     tool_provider_class,
 )
+from mas.runtime.system_plugins import BoundSystemPlugins
+from mas.runtime.system_plugins.dispatch import SystemPluginDispatcher
 
 __all__ = [
     "ManifestToolLoadError",
@@ -62,6 +64,11 @@ class ManifestToolProvider:
 
     def has_tools(self) -> bool:
         return self._registry.has_tools()
+
+    def system_plugins(self) -> BoundSystemPlugins | None:
+        """System plugins the local provider bound, or ``None`` when it is not selected or binds none."""
+        local = self._local_provider()
+        return getattr(local, "system_plugins", None)
 
     def _add_instance(self, instance: Any, manifest_contract: dict[str, Any] | None) -> None:
         local = self._local_provider()
@@ -125,7 +132,8 @@ def build_manifest_tool_provider(
     manifest_dir: Path,
     *,
     app_root: Path | None = None,
-    system_tools: Iterable[str] = (),
+    system_plugins: Iterable[str] = (),
+    spec: dict[str, Any] | None = None,
     hitl_contract: HITLContract | None = None,
     user_io_contract: UserIOContract | None = None,
     overlay_providers: Optional[list[ToolProvider]] = None,
@@ -143,7 +151,8 @@ def build_manifest_tool_provider(
             tools_spec,
             manifest_dir,
             app_root=app_root,
-            system_tools=system_tools,
+            system_plugins=system_plugins,
+            spec=spec,
             hitl_contract=hitl_contract,
             user_io_contract=user_io_contract,
             **containment_kw,
@@ -191,16 +200,14 @@ def attach_manifest_tools(
     has_local = overlay_providers is None or any(provider_origin(p) == "local" for p in active_providers)
     tools_dir = provider_kw.get("tools_dir")
     discovers_local_tools = bool(
-        has_local
-        and tools_dir
-        and Path(tools_dir).is_dir()
-        and any(Path(tools_dir).rglob("*.tool.yaml"))
+        has_local and tools_dir and Path(tools_dir).is_dir() and any(Path(tools_dir).rglob("*.tool.yaml"))
     )
     skills = list(spec.get("skills") or [])
     provider_kw.setdefault("skills_spec", skills)
-    if not tools and not has_external and not skills and not discovers_local_tools:
+    if not tools and not spec.get("system_plugins") and not has_external and not skills and not discovers_local_tools:
         return None
 
+    provider_kw.setdefault("spec", spec)
     provider = build_manifest_tool_provider(
         tools,
         manifest_dir or Path("."),
@@ -208,6 +215,28 @@ def attach_manifest_tools(
         overlay_providers=overlay_providers,
         **provider_kw,
     )
+    bound = provider.system_plugins()
+    if bound is not None:
+        leaf = leaf_engine(engine)
+        # a host contract that was on the engine before the plugins were bound moves under the plugin that owns it
+        adopters = [adopt for row in bound if callable(adopt := getattr(row.state, "adopt", None))]
+        contracts = tuple(
+            contract
+            for contract in getattr(leaf, "engine_tool_contracts", ())
+            if not any(adopt(contract) for adopt in adopters)
+        )
+        leaf.engine_tool_contracts = (*contracts, SystemPluginDispatcher(bound))
+        shared = bound.state_for_capability("delegation")
+        wired = getattr(leaf, "delegation", None)
+        if (
+            shared is not None
+            and wired is not None
+            and wired is not shared
+            and callable(getattr(shared, "adopt_wiring", None))
+        ):
+            # delegation was wired before the plugins were bound: the plugin's instance takes over
+            shared.adopt_wiring(wired)
+            leaf.delegation = shared
     provider.initialize(ctx=ctx)
     leaf = leaf_engine(engine)
     leaf.tool_provider = provider
@@ -228,6 +257,4 @@ def attach_manifest_tools_to_instance(
     if engine is None:
         return None
     ctx = getattr(getattr(instance, "driver", None), "ctx", None)
-    return attach_manifest_tools(
-        engine, manifest, manifest_dir, app_root=app_root, ctx=ctx, **provider_kw
-    )
+    return attach_manifest_tools(engine, manifest, manifest_dir, app_root=app_root, ctx=ctx, **provider_kw)

@@ -6,10 +6,8 @@ metadata:
   name: bounded-reviewer
 spec:
   description: Coordinates a bounded review.
-  tools:
-    - kind: system
-      name: spawn_subagent
-      params:
+  system_plugins:
+    - subagents:
         templates:
           - id: reviewer
             ref: ./subagent-reviewer.yaml

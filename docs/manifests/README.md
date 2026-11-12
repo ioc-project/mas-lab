@@ -46,7 +46,7 @@ config.yaml       <- project defaults (flavour, infra_refs, .env path)
 |-------|----------------|-----------|
 | **Agent** | `Agent` | [agent.md](agent.md) · [governance.md](governance.md) · [checkpoint.md](checkpoint.md) · [subagents.md](subagents.md) |
 | **Agent internals** (fields, not kinds) | `spec.models[].reasoning`, `spec.assembler`, `spec.context_manager`, plugin slots | [llm-reasoning.md](llm-reasoning.md) · [context-assembly.md](context-assembly.md) · [summarization.md](summarization.md) · [plugin-bindings.md](plugin-bindings.md) |
-| **Tools** | `Tool`, `ToolBundle`; runtime-owned system tools | [tool.md](tool.md) · [system-tools.md](system-tools.md) |
+| **Tools** | `Tool`, `ToolBundle`; runtime-owned system plugins | [tool.md](tool.md) · [system-plugins.md](system-plugins.md) |
 | **MAS** | `MAS`, `Workflow` | [mas.md](mas.md) |
 | **Override** | `Overlay` | [overlay.md](overlay.md) |
 | **Environment** | `Flavour`, `Control`; infra kinds (`InfraBundle`, `LLMProxy`, `InfraMiddleware`, …) | [flavour.md](flavour.md) · [control.md](control.md) · [infra.md](infra.md) · [llm-cache.md](llm-cache.md) |

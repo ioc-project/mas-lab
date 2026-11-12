@@ -267,13 +267,18 @@ def prepare_delegation_entry_session(
         mas_base_dir=materialized.mas_base_dir,
     )
     from mas.ctl.executor.spawn_ledger import SpawnLedger
+    from mas.ctl.executor.subagent_spawner import ledger_from_engine
     from mas.runtime.engine.tools import spawn_subagent_params
 
     spawn_params = spawn_subagent_params(enriched.get("spec")) or {}
-    materialized.materialized._subagent_spawn_ledger = SpawnLedger(
-        max_depth=spawn_params.get("max_depth", 3),
-        max_spawns=spawn_params.get("max_spawns", 8),
-    )
+    engine = getattr(getattr(instance, "driver", None), "engine", None)
+    ledger = ledger_from_engine(engine)
+    if ledger is None:
+        ledger = SpawnLedger(
+            max_depth=spawn_params.get("max_depth", 3),
+            max_spawns=spawn_params.get("max_spawns", 8),
+        )
+    materialized.materialized._subagent_spawn_ledger = ledger
     from mas.runtime.registry import get_registry
 
     registry = get_registry()

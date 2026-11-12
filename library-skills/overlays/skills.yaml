@@ -1,8 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Skills overlay — explicit opt-in for activate_skill as a system tool.
+# Skills overlay — explicit opt-in for activate_skill as a system plugin.
 # Listing spec.skills already injects this implicitly; use this overlay when
-# you want the tool declared in the manifest.
+# you want the plugin declared in the manifest.
 #
 # Usage:
 #   mas-ctl chat agents/my-agent.yaml \
@@ -16,8 +16,7 @@ spec:
   target:
     kind: Agent
   patch:
-    spec:
-      tools:
-        - $append:
-          - kind: system
-            name: activate_skill
+    system_plugins:
+      $op:
+        add:
+          - activate_skill

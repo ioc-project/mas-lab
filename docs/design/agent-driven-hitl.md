@@ -24,10 +24,8 @@ A built-in system tool, not an app-local plugin. Each agent opts in:
 
 ```yaml
 spec:
-  tools:
-    - kind: system
-      name: request_human_input
-      params:
+  system_plugins:
+    - request_human_input:
         timeout: 300               # optional default wait, seconds
         max_question_length: 8000  # optional
 ```
@@ -39,7 +37,7 @@ The companion `inform_user` system tool sends a non-blocking progress update thr
 ### Control flow
 
 1. `RequestHumanInputTool.execute()` (`mas.library.standard.plugins.system_tools.request_human_input`) validates its arguments. It raises `RequestHitlSignal` (`mas.runtime.system_tools.signal`). The signal is control flow, not an error.
-2. The local tool provider (`mas.library.standard.plugins.tools.local`) wraps every system tool whose registry entry has `communication: hitl` in `_SystemToolHitlWrapper`. The wrapper catches the signal. It reads `session_id`, `agent_id`, and `correlation_id` from the tool context. It calls `HITLContract.request_approval(...)`.
+2. The `request_human_input` system plugin (`mas.library.standard.plugins.system_tools.request_human_input`) wraps its tool in `SystemToolHitlWrapper` (`mas.library.standard.plugins.system_tools.wrappers`) when it binds. The wrapper catches the signal. It reads `session_id`, `agent_id`, and `correlation_id` from the tool context. It calls `HITLContract.request_approval(...)`.
 3. The contract returns `{"choice", "steering", ...}`. The wrapper returns that as the tool result. The agent's turn continues.
 
 The tool call **blocks** while the contract waits. In a delegation chain, the delegating agent waits for the delegate's turn as usual.

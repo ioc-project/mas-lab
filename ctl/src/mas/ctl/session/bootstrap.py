@@ -614,9 +614,9 @@ def _entry_skill_base_dir(entry: dict[str, Any]) -> str | None:
 def _auto_inject_skill_tools(manifest: dict[str, Any] | None, *, auto_inject_scripts: bool = False) -> None:
     """Deprecated no-op.
 
-    Skill tools are system tools now: listing ``spec.skills`` injects
+    Skill tools are system plugins now: listing ``spec.skills`` injects
     ``activate_skill``; a skill with ``scripts/`` (or an explicit
-    ``kind: system`` / ``auto_inject`` opt-in) injects ``run_skill_script``.
+    ``spec.system_plugins`` / ``auto_inject`` opt-in) injects ``run_skill_script``.
     Kept so older tests/callers do not break.
     """
     _ = (manifest, auto_inject_scripts)

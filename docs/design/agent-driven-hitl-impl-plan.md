@@ -31,8 +31,8 @@ Moderator never learns that the question is pending.
 
 | Planned | Shipped |
 | --- | --- |
-| Tool returns a `__hitl_request__` marker; the runtime pauses the turn and resumes on resolution | The wrapper (`_SystemToolHitlWrapper` in `mas.library.standard.plugins.tools.local`) **blocks** on an `HITLContract` and returns the answer as the tool result. No marker, no turn suspension. |
-| System tools auto-injected into every agent | Opt-in: list `{kind: system, name: request_human_input}` in `spec.tools`. |
+| Tool returns a `__hitl_request__` marker; the runtime pauses the turn and resumes on resolution | The wrapper (`SystemToolHitlWrapper` in `mas.library.standard.plugins.system_tools.wrappers`) **blocks** on an `HITLContract` and returns the answer as the tool result. No marker, no turn suspension. |
+| System plugins auto-injected into every agent | Opt-in: list `request_human_input` in `spec.system_plugins`. |
 | Tool lives in the runtime | Tool lives in `library-standard` (`plugins/system_tools/request_human_input.py`); the runtime keeps only the signal (`mas.runtime.system_tools.signal`) and the registry (`mas.runtime.boundary.hitl.registry`). |
 | Single resolution path through the registry | Pluggable `HITLContract`: `RegistryHitlContract` (default), `AutoResolveHitlContract` (unattended), `InteractiveHitlContract` (`mas-ctl chat -i`). |
 | Delegation tracks pending delegates | `mas_session.send()` adds them to `state["pending_hitl_agents"]`. |

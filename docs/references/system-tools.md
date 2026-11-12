@@ -4,7 +4,7 @@
 -->
 # System tools reference
 
-This page lists every system tool implemented in MAS-Lab. A *system tool* is a tool the runtime provides to the model, as opposed to a tool you declare in a tool server. For the rules that enable each tool, see [System tools](../manifests/system-tools.md).
+This page lists every tool a system plugin advertises. A *system plugin* is a runtime syscall the model may call, listed in `spec.system_plugins`. For the rules that enable each plugin, see [System plugins](../manifests/system-plugins.md).
 
 | Tool | Package | Enablement | Declaration aliases |
 | --- | --- | --- | --- |
@@ -15,19 +15,22 @@ This page lists every system tool implemented in MAS-Lab. A *system tool* is a t
 | [`request_human_input`](#request_human_input) | `library-standard` | declared only | — |
 | [`inform_user`](#inform_user) | `library-standard` | declared only | — |
 | [`send`](#send) | `library-standard` | declared only (`default_enabled: false`) | — |
-| [`create_subagent`](#create_subagent) | `library-standard` | declared only | `spawn_subagent` |
+| [`pause_session`](#pause_session) | `library-standard` | declared only (`pause_session`); advertised when the session has a control channel | — |
+| [`list_checkpoints`](#pause_session) | `library-standard` | with `pause_session` | — |
+| [`inspect_session`](#pause_session) | `library-standard` | with `pause_session` | — |
+| [`navigate_checkpoint`](#pause_session) | `library-standard` | with `pause_session` | — |
+| [`cancel_inflight`](#pause_session) | `library-standard` | with `pause_session` | — |
+| [`run_control_script`](#pause_session) | `library-standard` | with `pause_session` | — |
+| [`create_subagent`](#create_subagent) | `library-standard` | declared only (`subagents`) | — |
 
-The skill tools require `library-skills`. Without it, declaring one fails with an unknown system tool error.
+The skill tools require `library-skills`. Without it, declaring one fails with an unknown system plugin error.
 
-Example: declare a system tool on an agent.
+Example: grant a system plugin on an agent.
 
 ```yaml
 spec:
-  tools:
-    - kind: system
-      name: request_human_input
-      params:
-        timeout: 300
+  system_plugins:
+    - request_human_input: {timeout: 300}
 ```
 
 ## Skill tools
@@ -118,23 +121,45 @@ Implementation: `mas.library.standard.plugins.system_tools.inform_user.InformUse
 
 ### `send`
 
-Registered in the standard library with `default_enabled: false`. Declaring
-`{kind: system, name: send}` does not put a tool named `send` in the
+Registered in the standard library with `default_enabled: false`. Naming
+`send` in `spec.system_plugins` does not put a tool named `send` in the
 model's list; `list_tools` still returns only `delegate_to_<id>`. A user
-tool with that name stays that tool.
+tool named `send` stays that tool. A user tool named `delegate_to_<id>`
+stays that tool unless `list_tools` offered that name.
 
 See [Communication stack](comm-stack.md). Card:
 [send.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/system_tools/send.md).
 
 Implementation: `mas.library.standard.plugins.system_tools.send.SendTool`.
 
+## Session-control tools
+
+### `pause_session`
+
+Name `pause_session` in `spec.system_plugins`. The model sees this bundle only
+when the session has a control channel: `pause_session`, `list_checkpoints`,
+`inspect_session`, `navigate_checkpoint`, `cancel_inflight`, `run_control_script`.
+
+| Tool | Arguments | Notes |
+| --- | --- | --- |
+| `pause_session` | `reason` (string, required) | Pause at the next turn boundary |
+| `list_checkpoints` | none | Snapshot-tree nodes for this session |
+| `inspect_session` | none | Live vs debug-cursor snapshot ids |
+| `navigate_checkpoint` | `to`, `reason` (strings, required) | Moves the debug cursor; does not change the live run until promote |
+| `cancel_inflight` | none | Cancels the in-flight LLM call; tools are not rolled back |
+| `run_control_script` | `script` (string, required), `auto_stop` (boolean) | Inline text or `@path`, same as `mas-ctl control --data` |
+
+See [Tutorial 13](../tutorials/13-control-and-debug/README.md).
+
+Implementation: `mas.library.standard.plugins.system_tools.control.PauseSessionPlugin`.
+
 ## Orchestration tools
 
 ### `create_subagent`
 
 Creates a bounded subagent from a **declared template**, runs it for one
-turn, and returns the child's text. Alias advertised to the model:
-`spawn_subagent`. Declare either name on the parent manifest.
+turn, and returns the child's text. Name `subagents` (or the `create_subagent`
+shortcut) on the parent manifest.
 
 | Argument | Type | Required | Notes |
 | --- | --- | --- | --- |
@@ -155,7 +180,7 @@ Implementation: `mas.library.standard.plugins.system_tools.spawn_subagent.SpawnS
 
 ## See also
 
-- [System tools (manifest rules)](../manifests/system-tools.md)
+- [System plugins (manifest rules)](../manifests/system-plugins.md)
 - [Spawned subagents](../manifests/subagents.md)
 - [Tutorial 14: governance and HITL](../tutorials/14-governance-hitl/README.md)
 - [Tutorial 6: agent skills](../tutorials/06-agent-skills/README.md)

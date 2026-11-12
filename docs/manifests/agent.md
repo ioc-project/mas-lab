@@ -80,9 +80,10 @@ Extension properties (`x-*`) are allowed and ignored by the runtime.
 | `memory` | string \| string[] \| object | no | — | Memory backend configuration. Not used yet: the schema accepts it, the runtime ignores it. See [`MemoryConfig`](#memoryconfig). |
 | `working_memory` | object | no | — | Cross-turn history persistence for delegated agents. See [`WorkingMemory`](#workingmemory). |
 | `checkpoint` | object | no | `{mode: none}` | Session checkpoint (saved session state) cadence, retention, portability, and automatic resume. See [checkpoint.md](checkpoint.md). |
-| `skills` | `string[]` | no | `[]` | Skills to activate. A skill is a packaged instruction bundle the agent loads on demand. Use a bare name or `@library/name`. Resolution order: app-local, libraries, packages. See [system-tools.md](system-tools.md#implicit-enablement). |
+| `skills` | `string[]` | no | `[]` | Skills to activate. A skill is a packaged instruction bundle the agent loads on demand. Use a bare name or `@library/name`. Resolution order: app-local, libraries, packages. See [system-plugins.md](system-plugins.md#implicit-enablement). |
 | `tools_ref` | `string` \| null | no | `null` | Logical tool-set name for an infra `ToolRegistry`: a lowercase id such as `web-tools`, with no paths or extensions. Not used yet: the schema validates it, and this release loads no tools from it. |
-| `tools` | `Tool[]` | no | `[]` | Per-agent tool declarations (a tool is a function the LLM can call), in four forms. See [`Tool`](#tool). |
+| `tools` | `Tool[]` | no | `[]` | Per-agent application tool declarations (a tool is a function the LLM can call), in three forms. See [`Tool`](#tool). Syscalls are `spec.system_plugins`; a `{kind: system, name}` entry is its deprecated spelling. |
+| `system_plugins` | list | no | `[]` | System plugins this agent is granted. A name, or `{name: settings}`. See [system-plugins.md](system-plugins.md). |
 | `behavior` | object | no | — | Runtime capability flags. See [`Behavior`](#behavior). |
 | `governance` | `GovernanceBinding` | no | `[]` | Deprecated leftover. Still applied when no matching Control names governance. Live home is a Control set. See [governance.md](governance.md). |
 | `hitl_contract` | string \| object | no | `registry` | Human-in-the-loop (HITL) approval plugin. A plugin binding: a name or `{type, ref, params}`. An instance from the embedding host overrides it, which keeps interactive CLI adapters working. Shipped: `registry`, `auto_resolve`. |
@@ -790,7 +791,7 @@ working_memory:
 
 _Used by:_ `spec.tools[]`
 
-A tool is a function the LLM can call. Four forms are accepted. You can mix them in one list.
+A tool is a function the LLM can call. Three forms are accepted. You can mix them in one list.
 
 #### Form A: manifest reference (recommended)
 
@@ -818,18 +819,7 @@ Declares a Python class, remote tool, or OpenAPI endpoint inline.
 
 A bare string that the active infra or local tool catalog resolves (`web-search`, `calculator`, `memory-search`).
 
-#### Form D: system tool
-
-A tool the runtime owns, such as `request_human_input`, `inform_user`, `run_skill_script`, or `create_subagent`.
-
-| Field | Type | Required | Default | Description |
-| ------- | ------ | ---------- | --------- | ------------- |
-| `kind` | `"system"` | **yes** | — | Marks the entry as a system tool. |
-| `name` | `string` | **yes** | — | System tool name. An unknown name fails at load time. |
-| `enabled` | `boolean` | no | `true` | `false` turns the tool off, even when the host requests it. |
-| `params` | `object` | no | `{}` | Tool-specific configuration. |
-
-[system-tools.md](system-tools.md) lists which system tools other fields imply and what each does.
+[system-plugins.md](system-plugins.md) lists which plugins other fields imply and what each does.
 
 **Example:**
 
@@ -839,9 +829,8 @@ tools:
   - module_path: library-samples/tools/calc.py  # Form B
     class_name: CalcTool
   - web-search                                  # Form C
-  - kind: system                                # Form D
-    name: request_human_input
-    params: {timeout: 300}
+system_plugins:
+  - request_human_input: {timeout: 300}
 ```
 
 ---
@@ -850,7 +839,7 @@ tools:
 
 _Used by:_ `spec.behavior`
 
-Flags that set which system tools and capabilities the agent's LLM sees at run time.
+Flags that set which system plugins and capabilities the agent's LLM sees at run time.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|

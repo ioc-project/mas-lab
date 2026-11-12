@@ -243,16 +243,17 @@ practical examples.
 | `DropSummarizer` | `mas.library.standard.plugins.context.summarizer` | `library-standard` |
 | `LlmSummarizer`  | `mas.library.standard.plugins.context.summarizer` | `library-standard` |
 
-### System_Tool
+### System_Plugin
 
-| Class                   | Full module path                                                | Library            |
-| ----------------------- | --------------------------------------------------------------- | ------------------ |
-| `ControlTools`          | `mas.library.standard.plugins.system_tools.control`             | `library-standard` |
-| `InformUserTool`        | `mas.library.standard.plugins.system_tools.inform_user`         | `library-standard` |
-| `RequestHumanInputTool` | `mas.library.standard.plugins.system_tools.request_human_input` | `library-standard` |
-| `SendTool`              | `mas.library.standard.plugins.system_tools.send`                | `library-standard` |
-| `SpawnSubagentTool`     | `mas.library.standard.plugins.system_tools.spawn_subagent`      | `library-standard` |
-| `SpawnSubagentTool`     | `mas.library.standard.plugins.system_tools.spawn_subagent`      | `library-standard` |
+| Class                        | Full module path                                                | Library            |
+| ---------------------------- | --------------------------------------------------------------- | ------------------ |
+| `ActivateSkillPlugin`        | `mas.library.skills.plugins.system_tools`                       | `library-skills`   |
+| `InformUserPlugin`           | `mas.library.standard.plugins.system_tools.inform_user`         | `library-standard` |
+| `PauseSessionPlugin`         | `mas.library.standard.plugins.system_tools.control`             | `library-standard` |
+| `RequestHumanInputPlugin`    | `mas.library.standard.plugins.system_tools.request_human_input` | `library-standard` |
+| `RunSkillScriptSystemPlugin` | `mas.library.skills.plugins.system_tools`                       | `library-skills`   |
+| `SendPlugin`                 | `mas.library.standard.plugins.system_tools.send`                | `library-standard` |
+| `SubagentsPlugin`            | `mas.library.standard.plugins.system_tools.spawn_subagent`      | `library-standard` |
 
 ### Tool_Provider
 
@@ -282,6 +283,7 @@ practical examples.
 | `A2AAgentComm`                   | agent_comm           | `library-ioa`       |
 | `A2AExposure`                    | agent_expose         | `library-ioa`       |
 | `A2ALayer`                       | stack_layer          | `library-ioa`       |
+| `ActivateSkillPlugin`            | system_plugin        | `library-skills`    |
 | `ADKSkillPlugin`                 | skill_impl           | `library-skills`    |
 | `AutoApproveResponder`           | hitl_responder       | `library-standard`  |
 | `AutoDenyResponder`              | hitl_responder       | `library-standard`  |
@@ -294,7 +296,6 @@ practical examples.
 | `CompareOtelSpansStep`           | step                 | `library-telemetry` |
 | `ContextAssemblerPlugin`         | assembler            | `library-standard`  |
 | `ControlRpcProtocol`             | control_protocol     | `library-standard`  |
-| `ControlTools`                   | system_tool          | `library-standard`  |
 | `CopyDirRelatedState`            | related_state        | `library-standard`  |
 | `CotPlugin`                      | design_pattern       | `library-standard`  |
 | `DebugScriptPlugin`              | governance           | `library-standard`  |
@@ -309,7 +310,7 @@ practical examples.
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |
 | `HttpLayer`                      | stack_layer          | `library-ioa`       |
 | `HybridCheckpointStore`          | checkpoint_store     | `library-standard`  |
-| `InformUserTool`                 | system_tool          | `library-standard`  |
+| `InformUserPlugin`               | system_plugin        | `library-standard`  |
 | `InMemoryCheckpointStore`        | checkpoint_store     | `library-standard`  |
 | `IntrospectionPlugin`            | design_pattern       | `library-standard`  |
 | `JsonCheckpointStore`            | checkpoint_store     | `library-standard`  |
@@ -333,29 +334,30 @@ practical examples.
 | `NoUndeclaredToolPlugin`         | governance           | `library-standard`  |
 | `OpenAILLMProvider`              | llm_provider         | `library-standard`  |
 | `OtelObservabilityPlugin`        | observability        | `library-telemetry` |
+| `PauseSessionPlugin`             | system_plugin        | `library-standard`  |
 | `PlanExecutePlugin`              | design_pattern       | `library-standard`  |
 | `PlotMultilevelTrajectoryKGStep` | step                 | `library-kg`        |
 | `ReactPlugin`                    | design_pattern       | `library-standard`  |
 | `RegistryHitlContract`           | hitl_contract        | `library-standard`  |
 | `RegistryUserIOContract`         | user_io_contract     | `library-standard`  |
-| `RequestHumanInputTool`          | system_tool          | `library-standard`  |
+| `RequestHumanInputPlugin`        | system_plugin        | `library-standard`  |
 | `RetryOnErrorPlugin`             | governance           | `library-standard`  |
 | `RunSkillScriptPlugin`           | skill_shell          | `library-skills`    |
+| `RunSkillScriptSystemPlugin`     | system_plugin        | `library-skills`    |
 | `SampleGovernancePlugin`         | governance           | `library-standard`  |
 | `SemanticMemoryPlugin`           | memory               | `library-standard`  |
+| `SendPlugin`                     | system_plugin        | `library-standard`  |
 | `SendTool`                       | engine_tool_provider | `library-standard`  |
-| `SendTool`                       | system_tool          | `library-standard`  |
 | `SinglePassPlugin`               | design_pattern       | `library-standard`  |
 | `SkillCatalogPlugin`             | skill_catalog        | `library-skills`    |
 | `SkillToolsPlugin`               | skill_tools          | `library-skills`    |
 | `SlidingWindowConversation`      | context_manager      | `library-standard`  |
 | `SlimAgentComm`                  | stack_layer          | `library-ioa`       |
-| `SpawnSubagentTool`              | system_tool          | `library-standard`  |
-| `SpawnSubagentTool`              | system_tool          | `library-standard`  |
 | `StackAgentComm`                 | agent_comm           | `library-standard`  |
 | `StackConversation`              | context_manager      | `library-standard`  |
 | `StateMachinePlugin`             | design_pattern       | `library-standard`  |
 | `SubagentSpawner`                | engine_tool_provider | `library-standard`  |
+| `SubagentsPlugin`                | system_plugin        | `library-standard`  |
 | `SummarizingConversation`        | context_manager      | `library-standard`  |
 | `ThresholdCircuitBreaker`        | circuit_breaker      | `library-standard`  |
 | `ToyEchoMetric`                  | eval_metric          | `library-eval`      |

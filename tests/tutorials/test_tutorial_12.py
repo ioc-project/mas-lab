@@ -26,10 +26,9 @@ class TestManifestValidation:
 class TestManifestStructure:
     def test_parent_declares_spawn_subagent_with_budgets(self):
         m = load_yaml(T12 / "agent.yaml")
-        tool = m["spec"]["tools"][0]
-        assert tool["name"] == "spawn_subagent"
-        params = tool["params"]
-        assert params["templates"][0]["id"] == "reviewer"
+        plugins = m["spec"]["system_plugins"]
+        assert plugins[0]["subagents"]["templates"][0]["id"] == "reviewer"
+        params = plugins[0]["subagents"]
         assert params["templates"][0]["ref"] == "./reviewer.yaml"
         assert params["max_spawns"] == 8
         assert params["max_depth"] == 3
@@ -58,12 +57,8 @@ class TestTemplateLoading:
 
         manifest = {
             "spec": {
-                "tools": [
-                    {
-                        "kind": "system",
-                        "name": "spawn_subagent",
-                        "params": {"templates": [{"id": "escape", "ref": "../../etc/passwd", "description": "x"}]},
-                    }
+                "system_plugins": [
+                    {"subagents": {"templates": [{"id": "escape", "ref": "../../etc/passwd", "description": "x"}]}}
                 ]
             }
         }
@@ -123,7 +118,7 @@ class TestSpawnDispatch:
         )
 
         result = execute_engine_tool(
-            "spawn_subagent",
+            "create_subagent",
             engine_contracts=engine.engine_tool_contracts,
             arguments={"template": "reviewer", "task": "Review the new pagination code."},
             caller_call_id="parent-call",

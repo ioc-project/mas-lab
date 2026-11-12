@@ -64,6 +64,7 @@ def lookup_plugin(name: str, types: frozenset[str] | None = None) -> tuple[str, 
 LIST_TYPES: dict[str, frozenset[str]] = {
     OBSERVABILITY: frozenset({"observability"}),
     GOVERNANCE: frozenset({"governance"}),
+    "system_plugins": frozenset({"system_plugin", "system_tool"}),
 }
 
 
@@ -124,7 +125,7 @@ def canonical_plugin_id(name: str, key: str | None = None) -> str:
         return text
     from mas.runtime.registry import get_registry
 
-    types = LIST_TYPES[key] if key else (OBSERVABILITY, GOVERNANCE)
+    types = LIST_TYPES[key] if key else frozenset().union(*LIST_TYPES.values())
     hits = get_registry().entries_named(text, tuple(types))
     if len(hits) == 1:
         return hits[0].urn
