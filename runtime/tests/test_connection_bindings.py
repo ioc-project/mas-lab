@@ -233,3 +233,45 @@ def test_closed_binding_cannot_be_replaced_and_metadata_is_read_only():
     owner.close()
     with pytest.raises(BindingUnavailable):
         owner.replace("mcp", "stdio", ConnectionTarget(command=("other",)), lambda *_: Invocation(lambda: None))
+
+
+@pytest.mark.parametrize("kernel_state", [False, True])
+def test_preparation_preserves_native_provider_context_sealing(kernel_state):
+    from types import SimpleNamespace
+
+    from mas.runtime.engine.tool_workers import ToolCallContext
+    from mas.runtime.registry.tool_provider_registry import ToolProviderRegistry
+
+    captured = []
+    owner = ConnectionBinding(
+        "mcp",
+        "stdio",
+        ConnectionTarget(command=("records",)),
+        lambda name, args, ctx: Invocation(lambda: ctx.user),
+        binding_ref="mcp:records",
+    )
+
+    class Provider:
+        origin = "external"
+        provider_name = "records"
+        tools_claim = ("write",)
+
+        def list_tools(self, **kwargs):
+            return [{"name": "write"}]
+
+        def call_tool(self, *args, **kwargs):
+            raise AssertionError("preparation must not execute")
+
+        def prepare_call(self, name, args, *, ctx):
+            captured.append(ctx)
+            return owner.prepare(name, args, ctx=ctx)
+
+    provider = Provider()
+    provider.kernel_state = kernel_state
+    registry = ToolProviderRegistry()
+    registry.register_provider(provider)
+    context = SimpleNamespace(user="original", session_id="session", agent_id="worker", turn_index=1, current_spec={})
+    operation = registry.prepare_call("write", {}, ctx=context)
+    assert isinstance(captured[0], ToolCallContext) is not kernel_state
+    context.user = "changed"
+    assert operation.invoke() == ("changed" if kernel_state else "original")

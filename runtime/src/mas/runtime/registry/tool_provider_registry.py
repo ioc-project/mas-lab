@@ -338,7 +338,9 @@ class ToolProviderRegistry:
         prepare = getattr(handler, "prepare_call", None)
         if not callable(prepare):
             raise BindingUnavailable("The selected tool provider does not expose a resolved connection")
-        return prepare(tool_name, arguments, ctx=ctx)
+        from mas.runtime.engine.tool_workers import provider_ctx
+
+        return prepare(tool_name, arguments, ctx=provider_ctx(handler, ctx))
 
     def call_tool(
         self,
