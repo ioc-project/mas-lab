@@ -275,3 +275,32 @@ def test_preparation_preserves_native_provider_context_sealing(kernel_state):
     assert isinstance(captured[0], ToolCallContext) is not kernel_state
     context.user = "changed"
     assert operation.invoke() == ("changed" if kernel_state else "original")
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_prepared_business_tool_with_delegation_prefix_keeps_execution_scope_guard(asynchronous):
+    from mas.runtime.engine.manifest_tool_provider import ManifestToolLoadError
+    from mas.runtime.engine.tool_dispatch import aexecute_engine_tool, execute_engine_tool
+    from mas.runtime.reliability.classes import ClassifiedFailure
+
+    effects = []
+    operation = binding(effects).prepare("delegate_to_records", {})
+
+    class Delegation:
+        def offers(self, name):
+            return False
+
+        def is_delegate_tool(self, name):
+            return True
+
+    class ScopedProvider:
+        def assert_call_allowed(self, name, **kwargs):
+            raise ManifestToolLoadError("tool is disabled")
+
+    options = {"delegation": Delegation(), "tool_provider": ScopedProvider(), "prepared": operation}
+    with pytest.raises(ClassifiedFailure, match="disabled"):
+        if asynchronous:
+            asyncio.run(aexecute_engine_tool("delegate_to_records", **options))
+        else:
+            execute_engine_tool("delegate_to_records", **options)
+    assert effects == []

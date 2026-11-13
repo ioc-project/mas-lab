@@ -159,7 +159,7 @@ def _dispatch_once(
     if prepared is not None:
         if (
             tool_provider is not None
-            and not (delegation is not None and delegation.is_delegate_tool(tool))
+            and not (delegation is not None and _DelegationEngineTool(delegation).claims(tool))
             and not any(c.claims(tool) for c in engine_contracts)
         ):
             tool_provider.assert_call_allowed(tool, ctx=ctx)
@@ -328,7 +328,7 @@ async def aexecute_engine_tool(
         if prepared is not None:
             if (
                 tool_provider is not None
-                and not (delegation is not None and delegation.is_delegate_tool(tool))
+                and not (delegation is not None and _DelegationEngineTool(delegation).claims(tool))
                 and not any(c.claims(tool) for c in engine_contracts)
             ):
                 tool_provider.assert_call_allowed(tool, ctx=ctx)
