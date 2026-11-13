@@ -124,7 +124,9 @@ ToolContract.call_tool(name, arguments)   -> validates arguments, then
 
 #### Sync tools and async tools
 
-A tool is either **async** (it implements `on_aexecute_tool`, or its provider implements `acall_tool`) or **sync** (only `execute` / `on_execute_tool`).
+Write **one** method, and write it async: `async def on_execute_tool` (or `async def execute` on `ToolContract`). That is the way to write a new tool. You do not need `on_aexecute_tool`. The async path awaits it on the event loop; there is no worker thread. The sync path (`call_tool`) runs it to completion on a loop of its own. Call `acall_tool` from async code. A sync `on_execute_tool` / `execute` still works for existing plugins: the engine may run that call in a worker thread (`engine.tool_worker`). The tool does not start a thread. `on_aexecute_tool` still wins when present.
+
+A tool is **async** when that one method is a coroutine, or when it still implements `on_aexecute_tool` / provider `acall_tool`. It is **sync** when it only has a blocking `execute` / `on_execute_tool`.
 
 | Kind | Where it runs | What a slow call does |
 | --- | --- | --- |

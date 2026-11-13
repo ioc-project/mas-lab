@@ -45,7 +45,7 @@ For offline CI, replay responses recorded against a live provider with [llm_cach
 | `engine.queue_depth` | `32` | How many engine calls are staged before they run (integer >= 1). A larger batch runs in chunks of this size, in order |
 | `engine.max_auto_steps` | `null` (no cap) | Dispatch-loop step cap; stops a runaway loop |
 | `engine.timeout` | none | Accepted by the schema; the current kernel does not apply it |
-| `engine.tool_worker` | `thread` | Where sync plugin tools run when a batch overlaps: `thread` or `inline`. Placement only: same context, same results, same order. Async tools (`on_aexecute_tool`) never use it; they run on the event loop. Each sync tool class is logged once (warning under `inline`) |
+| `engine.tool_worker` | `thread` | Where sync plugin tools run when a batch overlaps: `thread` or `inline`. Placement only: same context, same results, same order. An async `on_execute_tool` / `execute` (or `on_aexecute_tool`) never uses it; it runs on the event loop. Each sync tool class is logged once (warning under `inline`) |
 | `engine.tool_concurrency` | none | How many sync plugin tools run at once. No cap other than the batch size |
 | `cache.enabled` | none | `false` turns cache read and write off, even when a flag asks for them |
 | `cache.read` / `cache.write` | `false` / `false` | Turn the `llm_cache` infra step on for this deployment |

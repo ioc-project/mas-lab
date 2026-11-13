@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import copy
+import inspect
 import logging
 import threading
 from collections.abc import Callable, Mapping
@@ -168,14 +169,36 @@ def _flag_sync_tool(owner: Any, placement: ToolPlacement) -> None:
     if placement.worker == WORKER_INLINE:
         logger.warning(
             "sync tool %s runs inline and blocks the event loop for each call; "
-            "implement on_aexecute_tool, or set engine.tool_worker: thread",
+            "write async def on_execute_tool (or execute), or set engine.tool_worker: thread",
             cls.__name__,
         )
     else:
         logger.info(
-            "sync tool %s runs in a worker thread; implement on_aexecute_tool to run it on the event loop",
+            "sync tool %s runs in a worker thread; write async def on_execute_tool "
+            "(or execute) to run it on the event loop",
             cls.__name__,
         )
+
+
+def run_awaitable(awaitable: Any) -> Any:
+    """Finish an awaitable from the sync tool path (``call_tool``).
+
+    That path has no loop, so this starts one with ``asyncio.run``. It does
+    not start a thread. The async path (``acall_tool``) awaits on the loop
+    that is already running. Calling ``call_tool`` from that loop is the
+    wrong path: use ``acall_tool``.
+    """
+
+    async def _finish() -> Any:
+        return await awaitable
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_finish())
+    if inspect.iscoroutine(awaitable):
+        awaitable.close()
+    raise RuntimeError("call_tool cannot finish an async tool while an event loop is running; use acall_tool")
 
 
 async def arun_sync_tool(call: Callable[..., Any], *args: Any, owner: Any, ctx: Any, **kwargs: Any) -> Any:

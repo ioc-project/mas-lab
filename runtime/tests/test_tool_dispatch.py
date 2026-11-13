@@ -67,6 +67,57 @@ def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
     assert not delegator.is_delegate_tool("send")
 
 
+def test_execute_engine_tool_runs_async_on_execute_tool_to_completion():
+    from mas.library.standard.plugins.tools.local import LocalToolProvider
+
+    class _AsyncOnExecute:
+        def on_collect_tools(self, **_):
+            return [{"name": "echo"}]
+
+        async def on_execute_tool(self, name, args, **_):
+            return {"one-method": name, **args}
+
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
+    out = execute_engine_tool("echo", tool_provider=provider, arguments={"q": 1})
+    assert '"one-method": "echo"' in out
+    assert '"q": 1' in out
+
+
+@pytest.mark.asyncio
+async def test_execute_engine_tool_from_a_running_loop_tells_you_to_use_aexecute():
+    from mas.library.standard.plugins.tools.local import LocalToolProvider
+
+    class _AsyncOnExecute:
+        def on_collect_tools(self, **_):
+            return [{"name": "echo"}]
+
+        async def on_execute_tool(self, name, args, **_):
+            return {"one-method": name, **args}
+
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
+    with pytest.raises(Exception, match="use acall_tool"):
+        execute_engine_tool("echo", tool_provider=provider, arguments={"q": 1})
+
+
+@pytest.mark.asyncio
+async def test_aexecute_engine_tool_awaits_async_on_execute_tool():
+    from mas.library.standard.plugins.tools.local import LocalToolProvider
+
+    class _AsyncOnExecute:
+        def on_collect_tools(self, **_):
+            return [{"name": "echo"}]
+
+        async def on_execute_tool(self, name, args, **_):
+            return {"one-method": name, **args}
+
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
+    out = await aexecute_engine_tool("echo", tool_provider=provider, arguments={"q": 1})
+    assert '"one-method": "echo"' in out
+
+
 def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
     calls = []
 

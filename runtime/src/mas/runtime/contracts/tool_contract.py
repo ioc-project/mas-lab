@@ -601,10 +601,11 @@ class ToolContract(CapabilityContract):
     def on_execute_tool(self, tool_name: str, arguments: Dict[str, Any], **kwargs) -> Dict[str, Any] | None:
         """Hook: Execute tool if this plugin owns it.
 
-        On the async engine path a batch of plugin tools overlaps when the tool
-        implements ``on_aexecute_tool`` (awaitable I/O), or when the deployment
-        runs sync tools in threads (RuntimeEngine ``engine.tool_worker``). The
-        tool sees the same frozen ``ToolCallContext`` either way.
+        On the async engine path a batch of plugin tools overlaps when
+        ``on_execute_tool`` (or ``execute``) is async, when ``on_aexecute_tool``
+        is present, or when the deployment runs sync tools in threads
+        (RuntimeEngine ``engine.tool_worker``). The tool sees the same frozen
+        ``ToolCallContext`` either way.
         """
         is_supported = False
         try:
