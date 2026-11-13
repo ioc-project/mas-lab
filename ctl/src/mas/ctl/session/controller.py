@@ -386,6 +386,42 @@ class SessionController:
                 label=f"event-{self._turn:04d}-{self._checkpoint_event_counter:04d}",
             )
 
+    def run_received_turn(
+        self,
+        text: str,
+        *,
+        turn_id: str | None = None,
+        parent_call_id: str = "",
+        upstream_correlation_id: int | None = None,
+    ) -> TurnResult:
+        """Run a protocol message with working memory, without terminal commands.
+
+        The receiver owns serialization across controllers sharing an instance.
+        Keep transport correlation intact and commit only a successful turn.
+        """
+        self._reject_if_paused()
+        sync_working_memory_in(
+            self.instance,
+            memory_key=self._working_memory_key(),
+            agent_id=self.agent_id,
+            registry=self.working_memory_registry,
+        )
+        self._turn += 1
+        trace = self.instance.run_user_text(
+            text,
+            turn_id=turn_id or f"u{self._turn}",
+            session_id=self.session_id,
+            parent_call_id=parent_call_id,
+            upstream_correlation_id=upstream_correlation_id,
+        )
+        result = TurnResult(
+            trace=trace,
+            responses=list(trace.client_responses),
+            awaiting_hitl=bool(getattr(trace, "awaiting_hitl", False)),
+        )
+        self._finalize_turn(result, trace=trace)
+        return result
+
     def run_turn(
         self,
         text: str,
