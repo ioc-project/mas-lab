@@ -67,61 +67,56 @@ class WorkingMemoryConfig:
 
 
 class WorkingMemoryRegistry:
-    """In-memory ``(session_id, agent_id) -> WorkingMemorySnapshot`` store.
+    """In-memory ``session_id -> agent_id -> WorkingMemorySnapshot`` store.
 
-    Concurrent turns never share a key, so no lock is needed — but no method
-    here may ``await``, or a compound get/modify/put would interleave.
+    Each session owns its own dict, so a turn only ever reads or writes its
+    own session's entries. No method walks another session's data, which is
+    why sessions can run on separate threads without a lock. Within one
+    session the kernel runs one turn at a time. No method here may ``await``,
+    or a compound get/modify/put would interleave.
     """
 
     def __init__(self) -> None:
-        self._store: dict[tuple[str, str], WorkingMemorySnapshot] = {}
+        self._sessions: dict[str, dict[str, WorkingMemorySnapshot]] = {}
 
     def get(self, session_id: str, agent_id: str) -> WorkingMemorySnapshot | None:
         if not session_id or not agent_id:
             return None
-        return self._store.get((session_id, agent_id))
+        return self._sessions.get(session_id, {}).get(agent_id)
 
     def put(self, session_id: str, agent_id: str, snapshot: WorkingMemorySnapshot) -> None:
         if not session_id or not agent_id:
             return
-        key = (session_id, agent_id)
-        previous = self._store.get(key)
+        agents = self._sessions.setdefault(session_id, {})
+        previous = agents.get(agent_id)
         if previous is not None and previous.frozen:
             snapshot.version = previous.version + 1
         elif previous is not None:
             snapshot.version = previous.version
-        self._store[key] = snapshot
+        agents[agent_id] = snapshot
 
     def freeze_session(self, session_id: str) -> int:
         """O(1) per agent: mark live snapshots immutable. Returns max version."""
         max_version = 0
-        for (stored_session_id, _agent_id), snapshot in self._store.items():
-            if stored_session_id != session_id:
-                continue
+        for snapshot in list(self._sessions.get(session_id, {}).values()):
             snapshot.frozen = True
             max_version = max(max_version, snapshot.version)
         return max_version
 
     def wm_version(self, session_id: str) -> int:
-        versions = [
-            snap.version
-            for (stored_session_id, _agent_id), snap in self._store.items()
-            if stored_session_id == session_id
-        ]
+        versions = [snap.version for snap in list(self._sessions.get(session_id, {}).values())]
         return max(versions) if versions else 0
 
     def drop(self, session_id: str, agent_id: str) -> None:
-        self._store.pop((session_id, agent_id), None)
+        self._sessions.get(session_id, {}).pop(agent_id, None)
 
     def clear_session(self, session_id: str) -> None:
-        for key in [k for k in self._store if k[0] == session_id]:
-            del self._store[key]
+        self._sessions.pop(session_id, None)
 
     def clone_for_fork(self, session_id: str, new_session_id: str) -> None:
         """Copy one session's snapshots into a distinct session namespace."""
-        for (source_id, agent_id), snapshot in list(self._store.items()):
-            if source_id == session_id:
-                self.put(new_session_id, agent_id, deepcopy(snapshot))
+        for agent_id, snapshot in list(self._sessions.get(session_id, {}).items()):
+            self.put(new_session_id, agent_id, deepcopy(snapshot))
 
     def export_session(self, session_id: str) -> list[dict[str, Any]]:
         """JSON-compatible working-memory state. Shallow CoW spine, not deepcopy.
@@ -141,8 +136,7 @@ class WorkingMemoryRegistry:
                 "open_tool_call_id": snapshot.open_tool_call_id,
                 "synced_tool_result_cids": list(snapshot.synced_tool_result_cids),
             }
-            for (stored_session_id, agent_id), snapshot in sorted(self._store.items())
-            if stored_session_id == session_id
+            for agent_id, snapshot in sorted(self._sessions.get(session_id, {}).items())
         ]
 
     def restore_session(self, session_id: str, entries: list[dict[str, Any]]) -> None:
@@ -163,7 +157,7 @@ class WorkingMemoryRegistry:
             )
 
     def clear(self) -> None:
-        self._store.clear()
+        self._sessions = {}
 
 
 def snapshot_ctx(ctx: "AutoCtxAssembler") -> WorkingMemorySnapshot:
@@ -180,9 +174,7 @@ def snapshot_ctx(ctx: "AutoCtxAssembler") -> WorkingMemorySnapshot:
         conversation_chunks=chunks_dict,
         working_messages=_shallow_maps(getattr(working_memory, "messages", [])),
         open_tool_call_id=str(getattr(working_memory, "_open_tool_call_id", "")),
-        synced_tool_result_cids=sorted(
-            getattr(working_memory, "_synced_tool_result_cids", set())
-        ),
+        synced_tool_result_cids=sorted(getattr(working_memory, "_synced_tool_result_cids", set())),
     )
 
 

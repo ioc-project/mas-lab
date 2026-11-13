@@ -22,7 +22,7 @@ from mas.ctl.infra.identities import entry_agent_id as entry_agent_id
 from mas.ctl.infra.resolve import application_endpoint_is_used
 from mas.ctl.manifest.mas_agent_merge import enrich_entry_agent_for_delegation, wire_entry_engine_delegation
 from mas.ctl.session.controller import ConversationConfig, SessionController
-from mas.ctl.ui.turn_result import turn_failed
+from mas.ctl.ui.turn_result import turn_failed, turn_failure_message
 from mas.library.standard.lib.stack.handle import RunTurnFn as RunTurnFn
 from mas.library.standard.lib.stack.handle import SessionTurn
 from mas.runtime.agent_defaults import default_pattern_plugin_id
@@ -662,7 +662,7 @@ def make_workflow_send(
             close_observability(controller)
         state["prev_agent"] = agent_id
         if turn_failed(result):
-            raise RuntimeError(f"agent {agent_id!r} turn failed")
+            raise RuntimeError(turn_failure_message(result, agent_id))
 
         # Propagate awaiting_hitl state via side channel (not return value)
         # This allows external clients to detect and resolve HITL requests
@@ -755,7 +755,7 @@ def make_workflow_send(
             close_observability(controller)
         state["prev_agent"] = agent_id
         if turn_failed(result):
-            raise RuntimeError(f"agent {agent_id!r} turn failed")
+            raise RuntimeError(turn_failure_message(result, agent_id))
 
         if result.awaiting_hitl:
             from mas.runtime.boundary.hitl.registry import get_hitl_resolver_registry

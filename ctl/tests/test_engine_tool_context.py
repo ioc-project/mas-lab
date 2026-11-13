@@ -85,3 +85,44 @@ def test_spawned_child_gets_flavour_spec(monkeypatch):
     ctx.spawn_instance({}, template_id="worker")
     assert captured["flavour"] is flavour
     assert captured["entry"] == "desk"
+
+
+def _blocked_turn(reason: str):
+    return SimpleNamespace(
+        responses=[],
+        text="",
+        trace=SimpleNamespace(
+            client_responses=[],
+            boundary_errors=[SimpleNamespace(code="GOV_BLOCK", message=reason)],
+        ),
+    )
+
+
+class _FakeController:
+    def __init__(self, result, **_kw):
+        self._result = result
+
+    def run_turn(self, *_a, **_kw):
+        return self._result
+
+
+def test_run_turn_raises_with_the_governance_reason():
+    """A withheld hand-off tells the caller why, not just that the turn failed."""
+    from mas.ctl.executor.engine_tool_context import EngineToolTurnFailed
+
+    ctx = _context()
+    ctx.materialized.instances["worker"] = _instance()
+    ctx.controller_factory = lambda **kw: _FakeController(_blocked_turn("PII in reply"), **kw)
+    with pytest.raises(EngineToolTurnFailed, match="agent 'worker' turn failed: PII in reply"):
+        ctx.run_turn("worker", "do it")
+
+
+@pytest.mark.asyncio
+async def test_arun_turn_raises_with_the_governance_reason():
+    from mas.ctl.executor.engine_tool_context import EngineToolTurnFailed
+
+    ctx = _context()
+    ctx.materialized.instances["worker"] = _instance()
+    ctx.controller_factory = lambda **kw: _FakeController(_blocked_turn("PII in reply"), **kw)
+    with pytest.raises(EngineToolTurnFailed, match="PII in reply"):
+        await ctx.arun_turn("worker", "do it")

@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mas.ctl.compose.runner import ComposeRequest, compose_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
@@ -35,6 +36,94 @@ def _log_obs_output_paths(plugin_set: "ObsPluginSet") -> None:
                 path = getattr(em, "path", None)
                 if path:
                     logger.info("events: %s", path)
+
+
+@dataclass(frozen=True)
+class _EntrySession:
+    """What opening the entry agent's session needs, apart from the materialized MAS."""
+
+    entry: str
+    declared: str
+    delegates: list[str]
+    runtime_params: Any
+    flavour_spec: dict
+    session_interactive: bool
+    verbose: int = 0
+    trace: bool = False
+    trace_timestamps: bool = False
+    trace_engine: bool = False
+    trace_summary: bool = False
+    trace_color: bool = False
+
+
+class _QuietDisplay:
+    """Display for a conversation nobody watches in a terminal."""
+
+    def __getattr__(self, name: str) -> Any:
+        return lambda *args, **kwargs: None
+
+
+def open_entry_session(materialized: Any, args: _EntrySession, *, display: Any) -> Any:
+    """Wire the entry agent of a materialized MAS: delegation, peers, params, governance, HITL.
+
+    Used for the run's own session and for every A2A conversation, so a
+    conversation is wired exactly like the run.
+    """
+    from mas.ctl.session.flavour_control import apply_flavour_controls
+    from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
+    from mas.ctl.session.params_sidecar import apply_runtime_params_to_instance
+
+    prepared = prepare_delegation_entry_session(
+        materialized,
+        entry_id=args.entry,
+        display=display,
+        verbose=args.verbose,
+        trace=args.trace,
+        trace_timestamps=args.trace_timestamps,
+        trace_engine=args.trace_engine,
+        trace_summary=args.trace_summary,
+        trace_color=args.trace_color,
+    )
+    # Wire delegation onto every OTHER agent that declares its own peers too
+    # (not just the entry): without it an agent that is itself a delegate can
+    # never delegate further. Reuses prepared.session_id so every delegate's
+    # own SessionController joins the SAME MAS session.
+    wire_peer_delegation(
+        materialized,
+        entry_id=args.entry,
+        display=display,
+        verbose=args.verbose,
+        already_wired={args.entry},
+        session_id=prepared.session_id,
+        working_memory_registry=getattr(prepared, "working_memory_registry", None),
+        trace=args.trace,
+        trace_timestamps=args.trace_timestamps,
+        trace_engine=args.trace_engine,
+        trace_summary=args.trace_summary,
+        trace_color=args.trace_color,
+    )
+    for agent_instance in materialized.materialized.instances.values():
+        apply_runtime_params_to_instance(args.runtime_params, agent_instance)
+    # The entry agent's governance as the Controls give it (warnings print once, at instantiation).
+    apply_flavour_controls(
+        prepared.enriched_manifest,
+        args.flavour_spec,
+        agent_id=args.entry,
+        entry_id=args.declared,
+        delegate_ids=args.delegates,
+        warn=False,
+    )
+    hitl_responder, _ = resolve_hitl_from_manifest(
+        prepared.enriched_manifest,
+        session_interactive=args.session_interactive,
+        flavour_spec=args.flavour_spec,
+        agent_id=args.entry,
+        entry_id=args.declared,
+        delegate_ids=args.delegates,
+    )
+    if hitl_responder is not None:
+        prepared.instance.driver.hitl = hitl_responder
+    return prepared
 
 
 def execute_run_mas(
@@ -73,7 +162,6 @@ def execute_run_mas(
     names the infra rows agent-to-agent calls ride.
     """
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability, run_session_loop
-    from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
     from mas.ctl.ui.stdout import StdoutConversationDisplay
 
     scripted = list(queries or [])
@@ -128,10 +216,7 @@ def execute_run_mas(
             entry_id=declared,
         )
     result.bind.hitl_mode = "auto" if (auto_hitl and not interactive) else "block"
-    from mas.ctl.session.params_sidecar import (
-        apply_runtime_params_to_instance,
-        params_from_mas_config,
-    )
+    from mas.ctl.session.params_sidecar import params_from_mas_config
 
     runtime_params = params_from_mas_config(result.mas_config)
 
@@ -155,20 +240,25 @@ def execute_run_mas(
         trace=trace,
     )
 
+    session_args = _EntrySession(
+        entry=entry,
+        declared=declared,
+        delegates=delegates,
+        runtime_params=runtime_params,
+        flavour_spec=flavour_spec,
+        session_interactive=interactive or not auto_hitl,
+        verbose=verbose,
+        trace=trace,
+        trace_timestamps=trace_timestamps,
+        trace_engine=trace_engine,
+        trace_summary=trace_summary,
+        trace_color=trace_color,
+    )
+
     # The chains open while the session is prepared. Whatever fails before the run loop starts closes them.
     try:
         try:
-            prepared = prepare_delegation_entry_session(
-                materialized,
-                entry_id=entry,
-                display=display,
-                verbose=verbose,
-                trace=trace,
-                trace_timestamps=trace_timestamps,
-                trace_engine=trace_engine,
-                trace_summary=trace_summary,
-                trace_color=trace_color,
-            )
+            prepared = open_entry_session(materialized, session_args, display=display)
         except (KeyError, ChainStartError) as exc:
             logger.error("%s", exc)
             materialized.stack_handles.close()
@@ -176,51 +266,6 @@ def execute_run_mas(
 
         instance = prepared.instance
         enriched_manifest = prepared.enriched_manifest
-
-        # Wire delegation onto every OTHER agent that declares its own peers too
-        # (not just the entry) — see wire_peer_delegation's docstring: without
-        # this, an agent that is itself a delegate can never further delegate.
-        # Reuses prepared.session_id (minted once, above) so every delegate's
-        # own SessionController joins the SAME MAS session instead of each
-        # independently starting its own.
-        wire_peer_delegation(
-            materialized,
-            entry_id=entry,
-            display=display,
-            verbose=verbose,
-            already_wired={entry},
-            session_id=prepared.session_id,
-            working_memory_registry=getattr(prepared, "working_memory_registry", None),
-            trace=trace,
-            trace_timestamps=trace_timestamps,
-            trace_engine=trace_engine,
-            trace_summary=trace_summary,
-            trace_color=trace_color,
-        )
-
-        for agent_instance in materialized.materialized.instances.values():
-            apply_runtime_params_to_instance(runtime_params, agent_instance)
-        from mas.ctl.session.flavour_control import apply_flavour_controls
-
-        # The entry agent's governance as the Controls give it (warnings print once, at instantiation).
-        apply_flavour_controls(
-            enriched_manifest,
-            flavour_spec,
-            agent_id=entry,
-            entry_id=declared,
-            delegate_ids=delegates,
-            warn=False,
-        )
-        hitl_responder, _ = resolve_hitl_from_manifest(
-            enriched_manifest,
-            session_interactive=interactive or not auto_hitl,
-            flavour_spec=flavour_spec,
-            agent_id=entry,
-            entry_id=declared,
-            delegate_ids=delegates,
-        )
-        if hitl_responder is not None:
-            instance.driver.hitl = hitl_responder
 
         from mas.ctl.session.observability import setup_run_observability
 
@@ -242,10 +287,27 @@ def execute_run_mas(
 
         from mas.ctl.session.exposure import close_exposures, start_materialized_exposures
 
+        conversation_plugin_set = plugin_set
+
+        def new_conversation() -> Any:
+            """A new A2A conversation: the whole MAS built again, so it shares nothing with this run."""
+            fresh = materialize_mas_compose(result, mas_base_dir=manifest_dir or manifest.parent)
+            try:
+                opened = open_entry_session(fresh, session_args, display=_QuietDisplay())
+            except BaseException:
+                fresh.stack_handles.close()
+                raise
+            live = opened.instance
+            if conversation_plugin_set is not None and live.driver.observability is not None:
+                conversation_plugin_set.subscribe_to(live.driver.observability, agent_id=str(entry))
+            live.conversation_close = fresh.stack_handles.close
+            return live
+
         a2a_handles = start_materialized_exposures(
             materialized,
             entry_id=entry,
             manifests={str(entry): enriched_manifest},
+            conversation_factories={str(entry): new_conversation},
         )
     except ChainStartError as exc:
         logger.error("%s", exc)

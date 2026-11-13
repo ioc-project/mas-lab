@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import logging
 import socket
+import threading
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
@@ -51,13 +53,35 @@ class _SilentDisplay:
         return None
 
 
+MAX_CONVERSATIONS = 1024
+
+
+class TooManyConversations(RuntimeError):
+    """A new ``contextId`` cannot be opened: the limit is reached, or the agent cannot be rebuilt."""
+
+
 def make_runtime_handler(
     instance: Any,
     *,
     manifest: dict[str, Any] | None = None,
     control_dir: Path | None = None,
+    max_conversations: int = MAX_CONVERSATIONS,
+    conversation_factory: Callable[[], Any] | None = None,
 ) -> Any:
-    """Queue A2A ``message/send`` onto ``instance.run_user_text`` through one mailbox."""
+    """Queue A2A ``message/send`` onto one runtime per conversation.
+
+    ``session_id`` is A2A ``contextId``: pass it to continue that conversation,
+    omit it to start a new one. Every conversation runs on its own runtime
+    (kernel, context, engine), built by ``conversation_factory`` or, by
+    default, ``instance.conversation_factory``. The template ``instance`` is
+    never used for a conversation, so conversations never wait on each other
+    or see each other's state, whether they run on one thread or several.
+
+    An agent that cannot be rebuilt (no factory) serves the one conversation
+    it was given, ``instance`` itself, and refuses a second ``contextId``.
+    At most ``max_conversations`` stay open; a further new ``contextId``
+    raises :class:`TooManyConversations` instead of growing without bound.
+    """
     from mas.ctl.adapters.checkpoint import InMemoryCheckpointStore
     from mas.ctl.session.control_host import ControlDirectoryHost
     from mas.ctl.session.controller import SessionController
@@ -78,14 +102,38 @@ def make_runtime_handler(
             hub=exchange_hub,
         )
 
+    factory = conversation_factory or getattr(instance, "conversation_factory", None)
+    open_lock = threading.Lock()
+    opened: list[Any] = []
+
+    def _instance_for_session() -> Any:
+        if factory is None:
+            if opened:
+                raise TooManyConversations(
+                    "this agent was started without a way to rebuild it, so it serves one conversation"
+                )
+            return instance
+        return factory()
+
     def ensure_session(session_id: str) -> Any:
+        with open_lock:
+            return _ensure_session_locked(session_id)
+
+    def _ensure_session_locked(session_id: str) -> Any:
         if session_id not in manager.sessions:
+            if len(manager.sessions) >= max_conversations:
+                raise TooManyConversations(
+                    f"{max_conversations} conversations are open; reuse a contextId or restart the listener"
+                )
+            live = _instance_for_session()
+            opened.append(live)
             controller = SessionController(
-                instance=instance,
+                instance=live,
                 display=_SilentDisplay(),
                 exchange_hub=exchange_hub,
+                session_id=session_id,
             )
-            manager.create(instance, controller, manifest or {}, session_id=session_id)
+            manager.create(live, controller, manifest or {}, session_id=session_id)
             if host is not None:
                 host.advertise(session_id)
         return manager.get(session_id)
@@ -105,39 +153,34 @@ def make_runtime_handler(
         def run(text: str) -> Any:
             if session.status == SessionStatus.PAUSED:
                 raise SessionPaused(resolved_session, reason=session.pause_reason)
-            return instance.run_user_text(
+            # The controller's turn path keeps the conversation: it commits each turn to
+            # the context, so the next message on this contextId sees the earlier ones.
+            return session.controller.run_turn(
                 text,
-                turn_id=turn_id or "u1",
-                session_id=resolved_session,
+                turn_id=turn_id,
+                auto_hitl=False,
                 parent_call_id=parent_call_id or "",
                 upstream_correlation_id=upstream_correlation_id,
-            )
+                dequeued=True,
+            ).trace
 
         trace = mailbox.submit(resolved_session, prompt, source="a2a", run=run)
         text = "\n".join(
-            response.content
-            for response in trace.client_responses
-            if getattr(response, "content", "")
+            response.content for response in trace.client_responses if getattr(response, "content", "")
         ).strip()
         stream_chunks = tuple(
-            chunk
-            for response in trace.client_responses
-            for chunk in (getattr(response, "stream_chunks", ()) or ())
+            chunk for response in trace.client_responses for chunk in (getattr(response, "stream_chunks", ()) or ())
         )
         if stream_chunks:
             return stream_chunks
         result: dict[str, Any] = {"text": text, "context_id": resolved_session}
         artifacts = [
-            artifact
-            for response in trace.client_responses
-            for artifact in (getattr(response, "artifacts", ()) or ())
+            artifact for response in trace.client_responses for artifact in (getattr(response, "artifacts", ()) or ())
         ]
         if artifacts:
             result["artifacts"] = artifacts
         task_states = [
-            response.task_state
-            for response in trace.client_responses
-            if getattr(response, "task_state", None)
+            response.task_state for response in trace.client_responses if getattr(response, "task_state", None)
         ]
         if task_states:
             result["task_state"] = task_states[-1]
@@ -145,8 +188,22 @@ def make_runtime_handler(
             result["task_state"] = "input_required"
         return result
 
+    def close_conversations() -> None:
+        """End the conversations this handler opened (not the template instance)."""
+        for live in opened:
+            if live is instance:
+                continue
+            plugin_set = getattr(live, "obs_plugin_set", None)
+            for closer in (getattr(plugin_set, "close", None), getattr(live, "conversation_close", None)):
+                if callable(closer):
+                    try:
+                        closer()
+                    except Exception:
+                        logger.exception("failed to close a conversation")
+
     handle.host = host
     handle.manager = manager
+    handle.close_conversations = close_conversations
     return handle
 
 
@@ -184,8 +241,14 @@ def start_hosted_exposures(
     *,
     conversation_ids: Iterable[str],
     manifests: dict[str, dict[str, Any]] | None = None,
+    conversation_factories: dict[str, Callable[[], Any]] | None = None,
 ) -> list[Any]:
-    """Bind background listeners for hosted deploy targets. Close the handles."""
+    """Bind background listeners for hosted deploy targets. Close the handles.
+
+    ``conversation_factories`` maps an agent id to the function that builds a
+    new conversation for it. Without one, the agent's own
+    ``instance.conversation_factory`` is used.
+    """
     provided = dict(manifests or {})
     handles: list[Any] = []
     for agent_id in exposure_targets(
@@ -200,7 +263,13 @@ def start_hosted_exposures(
             manifest = {"metadata": {"name": agent_id}, "spec": {}}
         try:
             handles.append(
-                expose_agent(instance, manifest, endpoint, blocking=False)
+                expose_agent(
+                    instance,
+                    manifest,
+                    endpoint,
+                    blocking=False,
+                    conversation_factory=(conversation_factories or {}).get(agent_id),
+                )
             )
         except Exception:
             close_exposures(handles)
@@ -213,6 +282,7 @@ def start_materialized_exposures(
     *,
     entry_id: str,
     manifests: dict[str, dict[str, Any]] | None = None,
+    conversation_factories: dict[str, Callable[[], Any]] | None = None,
 ) -> list[Any]:
     """run-mas adapter: unwrap compose + instances, then bind."""
     from mas.ctl.executor.mas_session import load_agent_manifest_from_bind
@@ -235,6 +305,7 @@ def start_materialized_exposures(
         applications,
         conversation_ids=[entry_id],
         manifests=provided,
+        conversation_factories=conversation_factories,
     )
 
 
@@ -245,6 +316,7 @@ def expose_agent(
     *,
     blocking: bool = False,
     control_dir: Path | None = None,
+    conversation_factory: Callable[[], Any] | None = None,
 ) -> Any:
     """Create the ``agent_expose`` plugin and serve this instance.
 
@@ -262,7 +334,12 @@ def expose_agent(
         binding={"type": protocol},
         endpoint=endpoint,
     )
-    handler = make_runtime_handler(instance, manifest=manifest, control_dir=control_dir)
+    handler = make_runtime_handler(
+        instance,
+        manifest=manifest,
+        control_dir=control_dir,
+        conversation_factory=conversation_factory,
+    )
     if blocking:
         logger.info(
             "agent %r: A2A listening on %s",
@@ -276,6 +353,7 @@ def expose_agent(
             host = getattr(handler, "host", None)
             if host is not None:
                 host.close()
+            handler.close_conversations()
     handle = exposure.serve_background(manifest, handler)
     try:
         _wait_listening(
@@ -288,7 +366,24 @@ def expose_agent(
         raise
     url = str(endpoint.get("url") or "").strip() or f"http://{handle.host}:{handle.port}"
     logger.info("agent %r: A2A interrogation listening on %s", (manifest.get("metadata") or {}).get("name") or "", url)
-    return handle
+    return _ExposureWithConversations(handle, handler)
+
+
+class _ExposureWithConversations:
+    """A listener handle that also ends the conversations its handler opened."""
+
+    def __init__(self, handle: Any, handler: Any) -> None:
+        self.listener = handle
+        self.handler = handler
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.listener, name)
+
+    def close(self) -> None:
+        try:
+            self.listener.close()
+        finally:
+            self.handler.close_conversations()
 
 
 @contextmanager

@@ -365,16 +365,35 @@ async def test_placement_changes_timing_only_never_results_or_order():
 async def test_tool_concurrency_is_the_only_cap_and_defaults_to_none():
     from mas.runtime.engine.tool_workers import ToolPlacement
 
-    async def _peak(concurrency, calls):
-        provider = _SleepProvider(0.05)
-        placement = ToolPlacement(worker="thread", concurrency=concurrency)
-        await asyncio.gather(
-            *(aexecute_engine_tool(f"t{i}", tool_provider=provider, placement=placement) for i in range(calls))
-        )
-        return provider.max_in_flight
+    class _Rendezvous:
+        def __init__(self, n: int) -> None:
+            self._barrier = threading.Barrier(n, timeout=10)
+            self.max_in_flight = 0
+            self._lock = threading.Lock()
+            self.in_flight = 0
 
-    assert await _peak(None, 48) == 48  # no hidden pool limit, whatever the CPU count
-    assert await _peak(3, 12) == 3
+        def call_tool(self, tool, arguments, **kwargs):  # noqa: ANN001, ARG002
+            with self._lock:
+                self.in_flight += 1
+                self.max_in_flight = max(self.max_in_flight, self.in_flight)
+            self._barrier.wait()
+            with self._lock:
+                self.in_flight -= 1
+            return f"ok-{tool}"
+
+    provider = _Rendezvous(48)
+    await asyncio.gather(
+        *(
+            aexecute_engine_tool(f"t{i}", tool_provider=provider, placement=ToolPlacement(worker="thread"))
+            for i in range(48)
+        )
+    )
+    assert provider.max_in_flight == 48  # no hidden pool limit, whatever the CPU count
+
+    capped = _SleepProvider(0.05)
+    limited = ToolPlacement(worker="thread", concurrency=3)
+    await asyncio.gather(*(aexecute_engine_tool(f"t{i}", tool_provider=capped, placement=limited) for i in range(12)))
+    assert capped.max_in_flight == 3
 
 
 def test_an_unknown_tool_worker_is_rejected_when_the_placement_is_built():
