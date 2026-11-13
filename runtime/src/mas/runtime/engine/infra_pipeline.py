@@ -22,6 +22,9 @@ from mas.runtime.layers.compose import (
 )
 from mas.runtime.layers.compose import (
     filter_pipeline_for_kind,
+    layer_id,
+    layer_role,
+    order_steps,
     split_pipeline_layers,
     wrap_call_stack,
 )
@@ -182,20 +185,50 @@ def call_ctx(engine: Any) -> Any:
     return getattr(source, "ctx", None)
 
 
+def _bind_protocol_transport(provider: Any, steps: list[dict[str, Any]]) -> None:
+    """Bind transport/protocol steps under *provider*; skip a protocol step that *is* this provider."""
+    protocol = [step for step in steps if layer_role(step) in {"transport", "protocol"}]
+    if not protocol or provider is None:
+        return
+    kind = str(getattr(provider, "kind", "") or getattr(provider, "provider_id", "") or "").strip().lower()
+    inner = getattr(provider, "inner", None)
+    for spec in reversed(order_steps(protocol)):
+        name = str(layer_id(spec) or "").strip().lower()
+        if name and name == kind:
+            continue
+        if inner is not None and layer_role(spec) == "transport" and getattr(type(inner), "needs_lower", True) is False:
+            continue
+        inner = apply_middleware(inner, spec)
+    bind = getattr(provider, "bind", None)
+    if callable(bind) and inner is not None:
+        bind(inner)
+    elif inner is not None:
+        provider.inner = inner
+
+
 def wrap_llm_provider_pipeline(provider: Any, pipeline: list[dict[str, Any]] | None) -> Any:
     """Instantiate *pipeline* in front of one routed protocol plugin.
 
-    The model router registers the returned object. Cache does not belong
-    here — wrap the engine with :func:`split_pipeline_layers` common steps.
-    Tool steps are dropped; they wrap :class:`PipedToolCall` instead.
+    Transport and protocol steps bind under the plugin (``protocol: openai``
+    is ``[http, openai]``, bottom first). Wrap steps (retry, cache, impair) stay in front.
+    Cache that is ``per: all`` does not belong here — wrap the engine with
+    :func:`split_pipeline_layers` common steps. Tool steps are dropped; they
+    wrap :class:`PipedToolCall` instead.
     """
     steps = filter_pipeline_for_kind(
         [dict(step) for step in (pipeline or []) if isinstance(step, dict)],
         "llm",
     )
-    if not steps or provider is None:
+    existing: list[dict[str, Any]] = []
+    if isinstance(provider, PipedLLMProvider):
+        existing = list(provider.pipeline)
+        provider = provider.inner
+    wrap = [step for step in steps if layer_role(step) == "wrap"]
+    _bind_protocol_transport(provider, steps)
+    combined = list(wrap) + existing
+    if not combined or provider is None:
         return provider
-    return PipedLLMProvider(inner=provider, pipeline=steps)
+    return PipedLLMProvider(inner=provider, pipeline=combined)
 
 
 def wrap_tool_pipeline(body: Any, pipeline: list[dict[str, Any]] | None) -> Any:
@@ -204,9 +237,14 @@ def wrap_tool_pipeline(body: Any, pipeline: list[dict[str, Any]] | None) -> Any:
         [dict(step) for step in (pipeline or []) if isinstance(step, dict)],
         "tool",
     )
-    if not steps or body is None:
+    protocol = [step for step in steps if layer_role(step) in {"transport", "protocol"}]
+    if protocol:
+        names = ", ".join(str(layer_id(step) or "") for step in protocol)
+        raise ValueError(f"{names} belong on the tool-server row, not on a tool wrap")
+    wrap = [step for step in steps if layer_role(step) == "wrap"]
+    if not wrap or body is None:
         return body
-    return PipedToolCall(inner=body, pipeline=steps)
+    return PipedToolCall(inner=body, pipeline=wrap)
 
 
 @dataclass
@@ -306,29 +344,39 @@ class _ProviderCallEngine:
         return None
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        del correlation_id
+        del op, correlation_id
         payload = _PROVIDER_CALL.get() or {}
-        return f"provider:{op}:{payload.get('model') or ''}"
+        if not isinstance(payload, dict):
+            return ""
+        from mas.runtime.engine.llm_cache import completion_cache_params, llm_cache_key
+
+        skip = {"model", "messages", "tools", "api_key", "stream", "on_stream_chunk", "_result"}
+        extra = {key: value for key, value in payload.items() if key not in skip}
+        temperature = extra.pop("temperature", 0.7)
+        max_tokens = extra.pop("max_tokens", None)
+        params = completion_cache_params(
+            temperature=float(temperature) if temperature is not None else 0.7,
+            max_tokens=max_tokens,
+            **extra,
+        )
+        messages = payload.get("messages") or []
+        tools = payload.get("tools")
+        return llm_cache_key(
+            str(payload.get("model") or ""),
+            list(messages) if isinstance(messages, list) else [],
+            tools if isinstance(tools, list) else None,
+            params=params,
+        )
 
     def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         payload = _provider_call_payload()
         result = self.inner.chat_completion(**payload)
-        payload["_result"] = result
-        return EngineIoReturn(
-            correlation_id=io.correlation_id,
-            response_kind="MODEL_TEXT",
-            next_step="STOP",
-        )
+        return _provider_result_return(io, payload, result)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         payload = _provider_call_payload()
         result = await self.inner.achat_completion(**payload)
-        payload["_result"] = result
-        return EngineIoReturn(
-            correlation_id=io.correlation_id,
-            response_kind="MODEL_TEXT",
-            next_step="STOP",
-        )
+        return _provider_result_return(io, payload, result)
 
 
 @dataclass
@@ -426,10 +474,52 @@ class PipedToolCall(Lifecycle):
         return str(self._stack.exchange_preview(op, correlation_id=correlation_id) or "")
 
 
+def _provider_result_return(io: InvokeEngineIo, payload: dict[str, Any], result: Any) -> EngineIoReturn:
+    import json
+
+    if not isinstance(result, dict):
+        raise RuntimeError("infra pipeline returned no completion")
+    payload["_result"] = result
+    try:
+        text = json.dumps(result, default=str)
+    except TypeError:
+        text = str(result.get("content") or "")
+    usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+    return EngineIoReturn(
+        correlation_id=io.correlation_id,
+        response_kind="MODEL_TEXT",
+        next_step="STOP",
+        text=text,
+        usage=dict(usage or {}),
+        finish_reason=str(result.get("finish_reason") or ""),
+    )
+
+
+_COMPLETION_KEYS = frozenset({"role", "content", "tool_calls"})
+
+
+def _completion_from_cached_text(text: str) -> dict[str, Any]:
+    """The completion a cache layer replayed: the JSON ``_provider_result_return`` stored, never a bare answer."""
+    import json
+
+    try:
+        parsed = json.loads(str(text or ""))
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict) and _COMPLETION_KEYS & set(parsed):
+        return parsed
+    raise RuntimeError("infra pipeline returned no completion")
+
+
 def _completion_from_pipeline(ret: EngineIoReturn, payload: dict[str, Any]) -> dict[str, Any]:
     if ret.response_kind == "ERROR":
         raise RuntimeError(ret.text or "infra pipeline rejected LLM_CALL")
     result = payload.get("_result")
     if not isinstance(result, dict):
-        raise RuntimeError("infra pipeline returned no completion")
+        if not ret.cache_status:
+            raise RuntimeError("infra pipeline returned no completion")
+        result = _completion_from_cached_text(ret.text)
+    if ret.cache_status:
+        result = dict(result)
+        result["_mas_cache_status"] = ret.cache_status
     return result

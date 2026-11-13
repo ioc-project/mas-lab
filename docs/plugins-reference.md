@@ -156,6 +156,8 @@ practical examples.
 | `HttpLayer`              | `library_ioa.plugins.http_layer.transport`            | `library-ioa`      |
 | `LlmCacheMiddleware`     | `mas.library.standard.plugins.infra.llm_cache`        | `library-standard` |
 | `LlmSchedulerMiddleware` | `mas.library.standard.plugins.infra.llm_scheduler`    | `library-standard` |
+| `McpLayer`               | `library_ioa.plugins.mcp.layer`                       | `library-ioa`      |
+| `OpenAILLMProvider`      | `mas.library.standard.plugins.llm.openai`             | `library-standard` |
 | `ReplayLayer`            | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
 | `RetryLayer`             | `mas.library.standard.plugins.layers.retry`           | `library-standard` |
 | `SlimAgentComm`          | `library_ioa.plugins.slim.agent_comm`                 | `library-ioa`      |
@@ -277,18 +279,10 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 
 | Deprecated type    | Use type | Class                    | Library            |
 | ------------------ | -------- | ------------------------ | ------------------ |
-| `stack_layer`      | `layer`  | `A2ALayer`               | `library-ioa`      |
 | `circuit_breaker`  | `layer`  | `CircuitBreakerLayer`    | `library-standard` |
-| `stack_layer`      | `layer`  | `CorruptLayer`           | `library-standard` |
-| `stack_layer`      | `layer`  | `DelayLayer`             | `library-standard` |
-| `stack_layer`      | `layer`  | `DropLayer`              | `library-standard` |
-| `stack_layer`      | `layer`  | `FailLayer`              | `library-standard` |
 | `infra_middleware` | `layer`  | `FaultInjectMiddleware`  | `library-standard` |
-| `stack_layer`      | `layer`  | `HttpLayer`              | `library-ioa`      |
 | `infra_middleware` | `layer`  | `LlmCacheMiddleware`     | `library-standard` |
 | `infra_middleware` | `layer`  | `LlmSchedulerMiddleware` | `library-standard` |
-| `stack_layer`      | `layer`  | `ReplayLayer`            | `library-standard` |
-| `stack_layer`      | `layer`  | `SlimAgentComm`          | `library-ioa`      |
 
 ---
 
@@ -343,6 +337,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `LocalAgentComm`                 | agent_comm           | `library-standard`  |
 | `LocalGroupAgentComm`            | agent_comm           | `library-standard`  |
 | `LocalToolProvider`              | tool_provider        | `library-standard`  |
+| `McpLayer`                       | layer                | `library-ioa`       |
 | `MCPToolProvider`                | tool_provider        | `library-ioa`       |
 | `ModeratedRoundsPlugin`          | design_pattern       | `library-standard`  |
 | `NativeObservabilityPlugin`      | observability        | `library-standard`  |
@@ -355,6 +350,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `NoUndeclaredPeerPlugin`         | governance           | `library-standard`  |
 | `NoUndeclaredToolPlugin`         | governance           | `library-standard`  |
 | `OpenAILLMProvider`              | llm_provider         | `library-standard`  |
+| `OpenAILLMProvider`              | layer                | `library-standard`  |
 | `OtelObservabilityPlugin`        | observability        | `library-telemetry` |
 | `PauseSessionPlugin`             | system_plugin        | `library-standard`  |
 | `PlanExecutePlugin`              | design_pattern       | `library-standard`  |

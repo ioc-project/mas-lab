@@ -11,7 +11,7 @@ metadata:
     raise_on_miss, a cache miss fails instead of calling the provider.
 
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: llm
   params:
     allow_read: true

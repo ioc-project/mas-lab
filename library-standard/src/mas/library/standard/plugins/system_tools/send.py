@@ -573,7 +573,7 @@ class SendPlugin(InstanceSystemPlugin):
     def make_instance(self, session: SessionContext | None) -> SendTool:
         return SendTool()
 
-    def claims(self, tool: str, *, state: object) -> bool:
+    def claims(self, tool: str, *, state: object, ctx: Any | None = None) -> bool:
         return isinstance(state, SendTool) and state.offers(tool)
 
     def call(

@@ -11,7 +11,7 @@ metadata:
     See docs/manifests/llm-cache.md.
 
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: llm
   params:
     allow_read: true

@@ -20,9 +20,14 @@ def test_plugin_package_exports() -> None:
 
 
 def test_urn_registry_resolves_mcp_shortcut() -> None:
+    from library_ioa.plugins.mcp.layer import McpLayer
+
     info = get_registry().resolve_by_type("tool_provider", "mcp")
     assert info is not None
     assert info.load_class() is MCPToolProvider
+    layer = get_registry().resolve_by_type("layer", "mcp")
+    assert layer is not None
+    assert layer.load_class() is McpLayer
 
 
 def test_every_new_transport_and_framing_layer_is_a_layer() -> None:

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Mapping
 
 from mas.runtime.reliability.classes import FailureClass
@@ -63,7 +63,7 @@ class RetryPolicy:
     def allows(self, failure_class: FailureClass, *, idempotent: bool) -> bool:
         if failure_class not in self.retry_on:
             return False
-        if self.require_idempotent and failure_class == FailureClass.TRANSIENT and not idempotent:
+        if self.require_idempotent and not idempotent:
             return False
         return True
 
@@ -149,45 +149,3 @@ def llm_retry_policy(**overrides: Any) -> RetryPolicy:
     if overrides:
         policy = RetryPolicy.from_mapping(overrides, field_name="llm.retry", default=policy)
     return policy
-
-
-@dataclass(frozen=True)
-class ReliabilitySettings:
-    """Engine knobs parsed from ``spec.control``.
-
-    Retry and the circuit breaker are call layers; this only reads and checks the deprecated
-    ``spec.control`` spelling. Ingress ``error_policy`` lives on ``retry_on_error``.
-    """
-
-    llm_retry: RetryPolicy = field(default_factory=RetryPolicy.llm_default)
-    tool_retry: RetryPolicy = field(default_factory=RetryPolicy.tools_default)
-
-    @classmethod
-    def from_spec(cls, spec: Mapping[str, Any] | None) -> ReliabilitySettings:
-        control = (spec or {}).get("control") if isinstance(spec, Mapping) else None
-        control = control if isinstance(control, Mapping) else {}
-        retry_raw = control.get("retry")
-        if retry_raw is None:
-            retry_raw = {}
-        elif not isinstance(retry_raw, Mapping):
-            raise _binding_error("spec.control.retry must be an object")
-        else:
-            unknown_retry = set(retry_raw) - {"llm", "tools"}
-            if unknown_retry:
-                raise _binding_error(f"spec.control.retry: unknown field {sorted(unknown_retry)[0]!r}")
-        llm = RetryPolicy.from_mapping(
-            retry_raw.get("llm"),
-            field_name="spec.control.retry.llm",
-            default=RetryPolicy.llm_default(),
-        )
-        tools = RetryPolicy.from_mapping(
-            retry_raw.get("tools"),
-            field_name="spec.control.retry.tools",
-            default=RetryPolicy.tools_default(),
-        )
-        breaker = control.get("circuit_breaker")
-        if breaker is not None:
-            if not isinstance(breaker, Mapping):
-                raise _binding_error("spec.control.circuit_breaker must be an object or null")
-            # its params are checked by the circuit_breaker layer when the layer is built
-        return cls(llm_retry=llm, tool_retry=tools)

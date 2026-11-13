@@ -16,10 +16,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.runtime.boundary.engine_tools import EngineToolBudgetExceeded
 from mas.runtime.driver.instance import RuntimeInstance
+from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 logger = logging.getLogger(__name__)
 

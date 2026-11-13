@@ -15,6 +15,7 @@ import os
 from typing import Any, Callable
 
 import httpx
+from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.library.standard.plugins.llm.http import (
     arequest_once,
     request_once,
@@ -43,11 +44,15 @@ from mas.runtime.reliability.classify import (
 logger = logging.getLogger(__name__)
 
 
-class OpenAILLMProvider:
-    """OpenAI-compatible HTTP protocol plugin."""
+class OpenAILLMProvider(LayerLifecycle):
+    """OpenAI-compatible chat-completions layer. ``chat_completion`` is the adapter on top."""
 
     provider_id = "openai"
     kind = "openai"
+    protocol_layer = True
+    per = "destination"
+    call_kinds = ("llm",)
+    priority = 0
 
     def __init__(
         self,
@@ -60,8 +65,10 @@ class OpenAILLMProvider:
         reasoning: ReasoningSettings | dict[str, Any] | None = None,
         extra_body: dict[str, Any] | None = None,
         http_timeout: float | None = None,
+        inner: Any = None,
         **_: Any,
     ) -> None:
+        super().__init__()
         self.api_base = api_base or "https://api.openai.com/v1"
         self.api_key_env = api_key_env or "OPENAI_API_KEY"
         self.llm_proxy = llm_proxy
@@ -70,6 +77,7 @@ class OpenAILLMProvider:
         self.reasoning_effort = self.reasoning.effort
         self.extra_body = dict(extra_body or {})
         self.http_timeout = http_timeout
+        self.inner = inner
         self._client: httpx.Client | None = None
         self._aclient: httpx.AsyncClient | None = None
 
@@ -81,14 +89,18 @@ class OpenAILLMProvider:
             return float(self.http_timeout)
         return 120.0
 
-    def _get_client(self) -> httpx.Client:
-        """Reused keep-alive client — one connection pool per provider instance."""
+    def _get_client(self) -> Any:
+        """The http layer's client when this protocol sits on one, else a keep-alive pool."""
+        if self.inner is not None:
+            return self.inner.client
         if self._client is None:
             self._client = httpx.Client(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
         return self._client
 
-    def _get_async_client(self) -> httpx.AsyncClient:
-        """Reused async keep-alive client — one connection pool per provider instance."""
+    def _get_async_client(self) -> Any:
+        """Async twin of :meth:`_get_client`."""
+        if self.inner is not None:
+            return self.inner.aclient
         if self._aclient is None:
             self._aclient = httpx.AsyncClient(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
         return self._aclient
@@ -102,7 +114,11 @@ class OpenAILLMProvider:
         DNS/connect) on the next attempt. HTTP-status failures (429/5xx) keep
         the pool — the connection itself was fine.
         """
-        if not isinstance(exc, httpx.TransportError) or self._client is None:
+        if not isinstance(exc, httpx.TransportError):
+            return
+        if self.inner is not None:
+            self.inner.discard_client()
+        if self._client is None:
             return
         client, self._client = self._client, None
         with contextlib.suppress(Exception):
@@ -110,7 +126,11 @@ class OpenAILLMProvider:
 
     async def _adiscard_client_after_transport_failure(self, exc: BaseException) -> None:
         """Async twin of :meth:`_discard_client_after_transport_failure`."""
-        if not isinstance(exc, httpx.TransportError) or self._aclient is None:
+        if not isinstance(exc, httpx.TransportError):
+            return
+        if self.inner is not None:
+            await self.inner.adiscard_aclient()
+        if self._aclient is None:
             return
         client, self._aclient = self._aclient, None
         with contextlib.suppress(Exception):
@@ -139,6 +159,47 @@ class OpenAILLMProvider:
         raise exc
 
     @classmethod
+    def wrap(
+        cls,
+        inner: Any,
+        params: dict[str, Any] | None = None,
+        *,
+        call_kinds: tuple[str, ...] | None = None,
+    ) -> "OpenAILLMProvider":
+        payload = dict(params or {})
+        payload["inner"] = inner
+        wrapped = cls.from_infra_spec(payload)
+        if call_kinds is not None:
+            wrapped.call_kinds = call_kinds
+        return wrapped
+
+    @classmethod
+    def protocol_layers(cls, spec: dict[str, Any] | None) -> list[dict[str, Any]]:
+        """``protocol: openai`` plus a url is sugar for ``[http, openai]``, bottom first."""
+        raw = dict(spec or {})
+        proxy = raw.get("proxy") if isinstance(raw.get("proxy"), dict) else raw
+        api_base = str(proxy.get("api_base") or raw.get("api_base") or "").strip()
+        http_params: dict[str, Any] = {}
+        if api_base:
+            http_params["url"] = api_base
+        timeout = proxy.get("timeout")
+        if timeout is None:
+            timeout = raw.get("timeout")
+        # The provider's own budget (OpenAILLMProvider._timeout) is 120s; the transport keeps it.
+        http_params["timeout"] = float(timeout) if timeout is not None else 120.0
+        for key in ("verify_ssl", "ca_bundle"):
+            value = proxy.get(key) if proxy.get(key) is not None else raw.get(key)
+            if value is not None:
+                http_params[key] = value
+        openai_params = {
+            k: v for k, v in raw.items() if k not in {"inner", "pipeline", "layer", "middleware", "for", "per", "proxy"}
+        }
+        return [
+            {"layer": "http", "for": ["llm"], "params": http_params},
+            {"layer": "openai", "for": ["llm"], "params": openai_params},
+        ]
+
+    @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "OpenAILLMProvider":
         """Bind from ``spec.models[]`` (plus infra endpoint defaults), like tools."""
         return cls.from_infra_spec(spec)
@@ -153,7 +214,7 @@ class OpenAILLMProvider:
             if isinstance(src, dict) and src.get("timeout") is not None:
                 timeout = float(src["timeout"])
                 break
-        return cls(
+        inst = cls(
             api_base=str(proxy.get("api_base") or spec.get("api_base") or "https://api.openai.com/v1"),
             api_key_env=str(proxy.get("api_key_env") or spec.get("api_key_env") or "OPENAI_API_KEY"),
             llm_proxy=llm_proxy if isinstance(llm_proxy, dict) else spec,
@@ -162,7 +223,27 @@ class OpenAILLMProvider:
             reasoning_effort=str(spec["reasoning_effort"]) if spec.get("reasoning_effort") else None,
             extra_body=spec.get("extra") if isinstance(spec.get("extra"), dict) else None,
             http_timeout=timeout,
+            inner=spec.get("inner"),
         )
+        return inst
+
+    def invoke(self, io: Any) -> Any:
+        from mas.runtime.engine.infra_pipeline import _PROVIDER_CALL, _provider_result_return
+
+        payload = _PROVIDER_CALL.get()
+        if not isinstance(payload, dict):
+            raise RuntimeError("openai layer invoked without a chat_completion in flight")
+        call = {key: value for key, value in payload.items() if key != "_result"}
+        return _provider_result_return(io, payload, self.chat_completion(**call))
+
+    async def ainvoke(self, io: Any) -> Any:
+        from mas.runtime.engine.infra_pipeline import _PROVIDER_CALL, _provider_result_return
+
+        payload = _PROVIDER_CALL.get()
+        if not isinstance(payload, dict):
+            raise RuntimeError("openai layer invoked without a chat_completion in flight")
+        call = {key: value for key, value in payload.items() if key != "_result"}
+        return _provider_result_return(io, payload, await self.achat_completion(**call))
 
     def chat_completion(
         self,

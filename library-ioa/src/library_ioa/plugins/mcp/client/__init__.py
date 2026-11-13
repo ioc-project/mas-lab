@@ -44,6 +44,14 @@ def _streams_from_transport(transport: Any) -> tuple[Any, Any]:
     raise TypeError(f"unexpected MCP transport yield: {type(transport)!r}")
 
 
+def _current_task() -> asyncio.Task | None:
+    """The running task, or ``None`` once the event loop is gone (a session closed late)."""
+    try:
+        return asyncio.current_task()
+    except RuntimeError:
+        return None
+
+
 class MCPClient:
     """MCP client session backed by the official SDK.
 
@@ -72,6 +80,7 @@ class MCPClient:
         follow_pagination: bool = True,
         cache_ttl_ms: int | None = None,
         cache_scope: str | None = None,
+        http_client: Any = None,
     ) -> None:
         self.command = command
         self.args = list(args or [])
@@ -80,6 +89,7 @@ class MCPClient:
         self.url = url
         self.headers = dict(headers or {})
         self.timeout = timeout
+        self.http_client = http_client
         self.follow_pagination = follow_pagination
         self.cache_ttl_ms = cache_ttl_ms
         self.cache_scope = cache_scope if cache_scope in {"public", "private"} else None
@@ -144,7 +154,10 @@ class MCPClient:
                 raise ValueError("MCP HTTP client requires a url")
             # Connection timeout stays on the SDK client (30s / 300s read).
             # spec timeout is call_tool read_timeout_seconds, not the HTTP budget.
-            if self.headers:
+            http_client = self.http_client() if callable(self.http_client) else self.http_client
+            if http_client is not None:
+                transport = await stack.enter_async_context(streamable_http_client(self.url, http_client=http_client))
+            elif self.headers:
                 http_client = await stack.enter_async_context(create_mcp_http_client(headers=self.headers))
                 transport = await stack.enter_async_context(streamable_http_client(self.url, http_client=http_client))
             else:
@@ -189,7 +202,8 @@ class MCPClient:
             if isinstance(exc, asyncio.CancelledError):
                 raise
         finally:
-            if self._owner is asyncio.current_task():
+            current = _current_task()
+            if current is None or self._owner is current:
                 self._session = None
                 self._owner = None
                 self._stop = None

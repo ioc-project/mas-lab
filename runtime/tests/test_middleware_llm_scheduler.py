@@ -248,7 +248,7 @@ def test_install_policy_from_pipeline(tmp_path: Path) -> None:
     policy = install_policy_from_pipeline(
         [
             {
-                "middleware": "llm_scheduler",
+                "layer": "llm_scheduler",
                 "params": {
                     "max_in_flight": 2,
                     "state_path": str(tmp_path / "sched.json"),

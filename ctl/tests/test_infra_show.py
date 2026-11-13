@@ -244,12 +244,7 @@ def test_infra_resolved_json_lists_destination_chains(tmp_path: Path, monkeypatc
     )
     cache = tmp_path / "cache.yaml"
     cache.write_text(
-        "apiVersion: infra/v1\n"
-        "kind: InfraMiddleware\n"
-        "metadata: {name: cache}\n"
-        "spec:\n"
-        "  middleware: llm_cache\n"
-        "  for: llm\n",
+        "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata: {name: cache}\nspec:\n  layer: llm_cache\n  for: llm\n",
         encoding="utf-8",
     )
     runner = CliRunner()
@@ -260,7 +255,7 @@ def test_infra_resolved_json_lists_destination_chains(tmp_path: Path, monkeypatc
     payload = _json_payload(result)
     assert payload["llm"]
     assert payload["llm"][0]["name"] == "arm"
-    names = [step["middleware"] for step in payload["llm"][0]["steps"]]
+    names = [step["layer"] for step in payload["llm"][0]["steps"]]
     assert "llm_cache" in names
     assert "agents" in payload
     assert "tool" in payload
@@ -328,6 +323,37 @@ def test_infra_show_catalog_ignores_session_env(tmp_path: Path, monkeypatch: pyt
     retry = next(step for step in payload["llm"][0]["steps"] if step["layer"] == "retry")
     assert retry["params"]["max_attempts"] == 4
     assert retry["default"] is True
+
+
+def test_infra_show_protocol_openai_is_http_then_openai(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_user_and_workspace(tmp_path, monkeypatch)
+    payload = _json_payload(CliRunner().invoke(app, ["infra", "show", "standard:openai", "--pipeline", "--json"]))
+    names = [step["layer"] for step in payload["llm"][0]["steps"]]
+    assert names[:2] == ["http", "openai"]
+
+
+def test_infra_resolved_mcp_row_is_http_then_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_user_and_workspace(tmp_path, monkeypatch)
+    server = tmp_path / "tools.yaml"
+    server.write_text(
+        "apiVersion: infra/v1\n"
+        "kind: ToolServerRegistry\n"
+        "metadata: {name: mcp-web}\n"
+        "spec:\n"
+        "  tool_servers:\n"
+        "    - id: demo\n"
+        "      protocol: mcp\n"
+        "      usage: connect\n"
+        "      url: http://127.0.0.1:9/mcp\n"
+        "      tools: [echo]\n",
+        encoding="utf-8",
+    )
+    payload = _json_payload(
+        CliRunner().invoke(app, ["infra", "resolved", "--json", "--type", "tool", "--infra-ref", str(server)])
+    )
+    demo = next(row for row in payload["tool"] if row["name"] == "demo")
+    names = [step["layer"] for step in demo["steps"]]
+    assert names[:2] == ["http", "mcp"]
 
 
 def test_infra_show_lists_default_retry_when_pipeline_omits_it(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

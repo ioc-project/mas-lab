@@ -48,6 +48,7 @@ _LEAF_KINDS = {
     "SecretsProvider",
     "Datastore",
     "RuntimeEngine",
+    "Stack",
 }
 _VALID_KINDS = _LEAF_KINDS | {"InfraBundle"}
 
@@ -221,6 +222,7 @@ def resolve_infra_refs(
         runtime_engine=dict(runtime_engine),
         runtime_refs=list(runtime_effective),
         applications=dict(merged.applications),
+        stacks=dict(merged.stacks),
     )
 
 
@@ -559,6 +561,16 @@ def _load_file(
             raw=data,
         )
 
+    if kind == "Stack":
+        spec = data.get("spec") or {}
+        raw_layers = spec.get("layers") if spec.get("layers") is not None else spec.get("pipeline")
+        where = str((data.get("metadata") or {}).get("name") or path.stem)
+        steps: list[dict[str, Any]] = []
+        for item in raw_layers or []:
+            if isinstance(item, dict):
+                steps.append(stamp_middleware_step(item, where=where))
+        return InfraManifest(name=where, kind=kind, pipeline=steps, raw=data, stacks={where: list(steps)})
+
     if kind in {"InfraMiddleware", "InfraInterceptor"}:
         spec = data.get("spec") or {}
         params = _resolve_pipeline_param_paths(dict(spec.get("params") or {}), anchor=path.parent)
@@ -566,8 +578,6 @@ def _load_file(
             "layer": spec.get("layer") or spec.get("middleware") or path.stem.replace("-", "_"),
             "params": params,
         }
-        if spec.get("middleware") and not spec.get("layer"):
-            step["middleware"] = spec.get("middleware")
         for key in ("id", "enabled", "priority"):
             if key in spec:
                 step[key] = spec[key]
@@ -623,6 +633,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
     tool_servers_by_id: dict[str, dict[str, Any]] = {}
     tool_server_order: list[str] = []
     providers: dict[str, dict[str, Any]] = {}
+    stacks: dict[str, list[dict[str, Any]]] = {}
     name = parts[-1].name
 
     from mas.runtime.spec.runtime_engine import merge_runtime_engine_layers
@@ -645,6 +656,10 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
             previous = tool_servers_by_id.get(sid) or {}
             tool_servers_by_id[sid] = {**previous, **server}
         applications.update(m.applications)
+        if m.kind == "Stack" or m.stacks:
+            stacks.update(m.stacks or {str(m.name): list(m.pipeline)})
+            if m.kind == "Stack":
+                continue
 
         leaves = _connection_leaves(m)
         if leaves:
@@ -721,6 +736,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
         tool_servers=[tool_servers_by_id[sid] for sid in tool_server_order],
         applications=applications,
         providers=providers,
+        stacks=stacks,
     )
 
 
@@ -754,7 +770,7 @@ def _resolve_pipeline_entry(
             )
             return stamp_middleware_step(step, where=str(child_path))
         return stamp_middleware_step(
-            {"middleware": entry.split(":")[-1].replace("-", "_"), "params": {}},
+            {"layer": entry.split(":")[-1].replace("-", "_"), "params": {}},
             where=str(entry),
         )
     if isinstance(entry, dict):

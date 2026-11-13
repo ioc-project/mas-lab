@@ -10,7 +10,7 @@ metadata:
     then switch tests to ci-replay.yaml.
 
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: llm
   params:
     allow_read: true

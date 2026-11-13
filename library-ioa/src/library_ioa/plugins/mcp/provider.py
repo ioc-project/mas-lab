@@ -18,6 +18,26 @@ from library_ioa.utils import translate_mcp_error
 
 logger = logging.getLogger(__name__)
 
+
+def _http_inner(binding: MCPProviderSpec) -> Any:
+    """The http transport under an MCP layer, for a streamable-http server. SSE and stdio carry their own."""
+    if not binding.url or binding.transport not in {"streamable-http", "http"}:
+        return None
+    try:
+        from mas.runtime.layers.compose import LayerLoadError, apply_layer
+    except ImportError:
+        return None
+    params: dict[str, Any] = {"url": binding.url, "follow_redirects": True}
+    if binding.headers:
+        params["headers"] = dict(binding.headers)
+    if binding.timeout is not None:
+        params["timeout"] = float(binding.timeout)
+    try:
+        return apply_layer(None, {"layer": "http", "for": ["tool"], "params": params})
+    except LayerLoadError:
+        return None
+
+
 _HTTP_TRANSPORTS = {"streamable-http", "http"}
 _SSE_TRANSPORTS = {"sse"}
 
@@ -74,8 +94,10 @@ class MCPToolProvider(ToolProvider):
         provider_name: str = "mcp",
         tools_claim: str | list[str] | tuple[str, ...] | None = "*",
         timeout: float | None = None,
+        inner: Any = None,
     ) -> None:
         self._client = client_wrapper
+        self.inner = inner
         self.provider_name = provider_name
         self.timeout = timeout
         if tools_claim is None or tools_claim == "*":
@@ -86,9 +108,30 @@ class MCPToolProvider(ToolProvider):
             self.tools_claim = tuple(str(n) for n in tools_claim)
 
     @classmethod
+    def protocol_layers(cls, spec: dict[str, Any] | None) -> list[dict[str, Any]]:
+        from library_ioa.plugins.mcp.layer import McpLayer
+
+        return McpLayer.protocol_layers(spec)
+
+    @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "MCPToolProvider":
-        """Build a provider from a normalized MCP infra server entry."""
+        """Build a provider from a normalized MCP infra server entry.
+
+        ``protocol: mcp`` plus a url is sugar for ``[http, mcp]``.
+        """
+        from library_ioa.plugins.mcp.layer import McpLayer
+
         binding = MCPProviderSpec.from_dict(spec)
+        inner = _http_inner(binding)
+        if inner is not None:
+            layer = McpLayer.wrap(inner, spec)
+            return cls(
+                layer.wrapper,
+                provider_name=binding.name,
+                tools_claim=binding.tools,
+                timeout=binding.timeout,
+                inner=layer,
+            )
         client = MCPClientFactory(binding).create_client()
         return cls(
             client,
@@ -130,18 +173,18 @@ class MCPToolProvider(ToolProvider):
         return str(getattr(ctx, "user", "") or "")
 
     def _list_coro(self, ctx: Any):
-        fn = self._client.list_tools
-        user = self._list_user(ctx)
-        try:
-            return fn(user=user)
-        except TypeError:
-            return fn()
+        return self._client.list_tools(user=self._list_user(ctx))
 
     def close(self) -> None:
         """Close the held MCP session (and a stdio server process). Idempotent."""
-        closer = getattr(self._client, "close", None)
-        if callable(closer):
-            closer()
+        try:
+            closer = getattr(self._client, "close", None)
+            if callable(closer):
+                closer()
+        finally:
+            from mas.runtime.layers.lifecycle import call_stop
+
+            call_stop(self.inner)
 
     def _run(self, coro: Any) -> Any:
         runner = getattr(self._client, "run", None)
@@ -173,6 +216,12 @@ class MCPToolProvider(ToolProvider):
         user: str = "",
         **kwargs: Any,
     ) -> Any:
+        if self.tools_claim != "*" and tool_name not in self.tools_claim:
+            return {
+                "is_error": True,
+                "content": f"[mcp] tool {tool_name!r} is not advertised",
+                "tool": tool_name,
+            }
         options = dict(kwargs)
         if self.timeout is not None:
             options.setdefault("timeout_seconds", self.timeout)

@@ -10,7 +10,7 @@ metadata:
     in-flight / RPM caps for runtime and pipeline judge calls.
 
 spec:
-  middleware: llm_scheduler
+  layer: llm_scheduler
   for: llm
   per: destination
   params:

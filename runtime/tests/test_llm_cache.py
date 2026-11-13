@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
 from mas.library.standard.plugins.llm.cache import CacheLLMProvider
 from mas.runtime.engine.llm_cache import (
     assistant_message_from_cache_content,
@@ -15,6 +16,17 @@ from mas.runtime.engine.llm_cache import (
 )
 from mas.runtime.engine.llm_live import LiveLlmEngine
 from mas.runtime.schema.egress import InvokeEngineIo
+
+
+def _llm_cache_layer(provider):
+    cur = getattr(provider, "_stack", provider)
+    seen: set[int] = set()
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, LlmCacheMiddleware):
+            return cur
+        cur = getattr(cur, "inner", None)
+    raise AssertionError(f"no llm_cache layer on {type(provider).__name__}")
 
 
 def test_resolve_cache_path_prefers_explicit_argument(tmp_path, monkeypatch):
@@ -110,7 +122,7 @@ def test_live_llm_wraps_cache_provider_when_cache_path_set(tmp_path) -> None:
         cache_read=False,
         cache_write=True,
     )
-    assert isinstance(engine.llm_provider, CacheLLMProvider)
+    assert _llm_cache_layer(engine.llm_provider) is not None
     out = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="", tools=None)
     assert out["content"] == "fresh-response"
     assert cache_path.is_file()

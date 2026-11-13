@@ -126,7 +126,8 @@ properties:
               there (connect), hosts it here (listen), or both. Omitted, it
               is bind.usage, else connect, and must be within the usage of
               every row of the chain; params
-              overrides a row's params for this agent. A
+              overrides a row's params for this agent. llm and tools pick
+              that agent's Stack, else bind.llm / bind.tools. A
               one-row chain whose row is an agent_comm link with a url (an
               A2A server) reaches the agent at that url, the released direct
               path. An id that is no agent of the session is refused.
@@ -157,6 +158,28 @@ properties:
                     A string value may hold {agent}, the only placeholder.
                   additionalProperties:
                     type: object
+                llm:
+                  description: >
+                    This agent's llm stack, instead of bind.llm.
+                    ``{stack: NAME}`` naming a Stack infra row.
+                  type: object
+                  additionalProperties: false
+                  required: [stack]
+                  properties:
+                    stack:
+                      type: string
+                      minLength: 1
+                tools:
+                  description: >
+                    This agent's tool stack, instead of bind.tools.
+                    ``{stack: NAME}`` naming a Stack infra row.
+                  type: object
+                  additionalProperties: false
+                  required: [stack]
+                  properties:
+                    stack:
+                      type: string
+                      minLength: 1
           events:
             type: array
             minItems: 1
@@ -168,6 +191,30 @@ properties:
             items:
               type: string
               minLength: 1
+          llm:
+            description: >
+              The default stack llm calls ride: ``{stack: NAME}`` naming a
+              Stack infra row. An agent may replace it with
+              bind.agents.<id>.llm. Same idea as bind.agent_comm.
+            type: object
+            additionalProperties: false
+            required: [stack]
+            properties:
+              stack:
+                type: string
+                minLength: 1
+          tools:
+            description: >
+              The default stack tool calls ride: ``{stack: NAME}`` naming a
+              Stack infra row. An agent may replace it with
+              bind.agents.<id>.tools. Same idea as bind.agent_comm.
+            type: object
+            additionalProperties: false
+            required: [stack]
+            properties:
+              stack:
+                type: string
+                minLength: 1
       agent_comm:
         type: object
         deprecated: true

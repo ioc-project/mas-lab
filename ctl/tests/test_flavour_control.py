@@ -666,8 +666,8 @@ def test_require_usage_is_a_declared_field_not_the_name_prod() -> None:
     assert bound.agent_chains == {}
 
 
-def test_bind_tools_is_an_unknown_key() -> None:
-    with pytest.raises(BindError, match=r"bind: unknown keys \['tools'\]"):
+def test_bind_tools_is_a_named_stack() -> None:
+    with pytest.raises(BindError, match=r"bind.tools is \{stack: NAME\}"):
         bind_session(ResolvedInfra(), {"bind": {"tools": ["mcp-tools"]}}, agent_ids=["desk"])
 
 
@@ -1139,6 +1139,27 @@ def test_a_relative_path_not_listed_in_path_params_is_refused(tmp_path: Path) ->
     path = _write_control(tmp_path, spec={"governance": [{"path_probe": {"script_file": "break.gdb"}}]})
     with pytest.raises(ControlError, match="path_params"):
         load_control(path)
+
+
+def test_path_probe_is_not_loaded_from_conftest() -> None:
+    import sys
+    import types
+
+    from mas.runtime.registry import get_registry
+
+    info = get_registry().resolve_by_type("governance", "path_probe")
+    assert info is not None
+    assert info.module != "conftest"
+    previous = sys.modules.get("conftest")
+    sys.modules["conftest"] = types.ModuleType("conftest")
+    try:
+        plugin = info.load_class()(script_file="break.gdb")
+    finally:
+        if previous is None:
+            sys.modules.pop("conftest", None)
+        else:
+            sys.modules["conftest"] = previous
+    assert plugin.script_file == "break.gdb"
 
 
 def test_native_run_path_stays_relative_to_the_run(tmp_path: Path) -> None:

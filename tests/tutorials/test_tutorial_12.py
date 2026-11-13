@@ -73,7 +73,6 @@ class TestSpawnDispatch:
 
     def test_spawn_subagent_runs_the_reviewer_template_and_tears_down(self):
         from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext  # noqa: F401
-        from mas.ctl.executor.spawn_ledger import SpawnLedger
         from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
         from mas.ctl.placement.bus.inproc import InProcessCommBus
         from mas.ctl.session.controller import TurnResult
@@ -81,6 +80,7 @@ class TestSpawnDispatch:
         from mas.runtime.driver.driver import DriverTrace
         from mas.runtime.engine.tool_dispatch import execute_engine_tool
         from mas.runtime.schema.egress import EmitClientResponse
+        from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
         manifest = load_yaml(T12 / "agent.yaml")
         bus = InProcessCommBus()

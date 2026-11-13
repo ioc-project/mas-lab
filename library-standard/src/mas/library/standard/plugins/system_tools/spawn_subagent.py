@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from mas.runtime.engine.tools import CREATE_SUBAGENT_TOOL, SPAWN_SUBAGENT_NAMES
+from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 from mas.runtime.system_plugins import (
     CallContext,
     InstanceSystemPlugin,
@@ -108,7 +109,24 @@ class SubagentsPlugin(InstanceSystemPlugin):
     def __init__(self, **settings: Any) -> None:
         super().__init__()
         self.settings = dict(settings)
+        self._check_settings()
         self._state: SubagentsState | None = None
+
+    def _check_settings(self) -> None:
+        """Refuse a bad ``subagents`` setting at load, as a load error ``mas-ctl validate`` reports."""
+        for key in ("max_depth", "max_spawns"):
+            if key not in self.settings:
+                continue
+            value = self.settings[key]
+            if key == "max_spawns" and value is None:
+                continue  # None is unlimited
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ManifestToolLoadError(f"subagents.{key} must be a non-negative integer, got {value!r}")
+        templates = self.settings.get("templates", [])
+        if not isinstance(templates, list) or not all(
+            isinstance(item, dict) and str(item.get("id") or "").strip() for item in templates
+        ):
+            raise ManifestToolLoadError("subagents.templates must be a list of templates, each with an id")
 
     def make_instance(self, session: SessionContext | None) -> SpawnSubagentTool:
         return SpawnSubagentTool()
@@ -118,7 +136,7 @@ class SubagentsPlugin(InstanceSystemPlugin):
         if "max_depth" in self.settings:
             kwargs["max_depth"] = int(self.settings["max_depth"])
         if "max_spawns" in self.settings:
-            kwargs["max_spawns"] = int(self.settings["max_spawns"])
+            kwargs["max_spawns"] = self.settings["max_spawns"]
         return SpawnLedger(**kwargs)
 
     def bind(self, session: SessionContext) -> object:

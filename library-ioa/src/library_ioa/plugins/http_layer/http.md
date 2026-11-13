@@ -8,14 +8,16 @@
 |-------|--------|
 | **ID** | `http` |
 | **Kind** | `layer` (a transport: the bottom layer of a chain) |
-| **URN** | `mas.stack_layer.http` |
+| **URN** | `mas.layer.http` |
 | **Implementation** | `HttpLayer` in `library_ioa.plugins.http_layer.transport` |
 | **Manifest keys** | an infra row a Flavour binds at the bottom of `bind.agent_comm`: `{protocol: http, url: ..., headers: {...}, timeout: 30, dev: false}` |
 
-Each send's payload is POSTed to `url` with `content_type` (default
+On send, each payload is POSTed to `url` with `content_type` (default
 `application/json`). The request headers are the layer's `headers`, then
 the envelope's headers (the stack's `traceparent`, a protocol layer's
-own); an envelope header wins on a clash. The response body is the reply;
+own); an envelope header wins on a clash. On llm and tool calls the same
+plugin is the HTTP client under `openai` or `mcp` (`protocol: openai` or
+`protocol: mcp` plus a url is that pair). The response body is the reply;
 a body over `max_message_size` bytes (default 1 MiB, the same default as
 `slim`) is refused. A connection error, a timeout, or a status of 400 or more
 raises `AgentCommError`; its text shows the url without its query or

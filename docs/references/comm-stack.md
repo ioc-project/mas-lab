@@ -4,6 +4,14 @@
 -->
 # Communication stack
 
+Send, tool, and llm calls are the same idea: a list of layers, bottom first.
+A Flavour `bind.agent_comm` chain is send. A `kind: Stack` row named by
+`bind.llm` is llm; `bind.tools` is wrap layers on tool calls (`http` and `mcp`
+belong on the tool-server row). `bind.agents.<id>.llm` /
+`bind.agents.<id>.tools` pick that stack for one agent. `protocol: openai` plus a url is
+sugar for `[http, openai]`. `protocol: mcp` plus a url is sugar for
+`[http, mcp]`. Retry, the circuit breaker, cache, and impair wrap those.
+
 Two different things look like "talking to an agent":
 
 1. **Peer send** — one agent hands text to another after delegation.
@@ -111,8 +119,15 @@ denied call is an `AgentCommError`. The session does not pass
 ## Stack
 
 A stack is a list of layers, bottom to top. A call enters at the top and
-each layer hands it to the one below. Every layer, whatever it carries,
-has one contract (`mas.library.standard.lib.stack.Layer`):
+each layer hands it to the one below.
+
+Send carries an `Envelope`. Llm and tool carry `InvokeEngineIo` →
+`EngineIoReturn`. The wrap layers (retry, circuit breaker, cache, impair)
+are the same plugins on all three. Protocol layers differ: `a2a-framing`
+on send, `openai` on llm, `mcp` on tool. The transport today is `http`
+(or `slim` / `local-group` on send).
+
+Send's layer contract (`mas.library.standard.lib.stack.Layer`):
 
 | Method | Meaning |
 | --- | --- |
@@ -242,8 +257,9 @@ are not in the installed wheel.
 ### Chains from a Flavour
 
 A Flavour's `spec.bind.agent_comm` names infra endpoint rows, bottom first,
-and `spec.bind.agents.<id>` gives one agent its own `agent_comm` chain and its
-`usage` (`connect`, `listen`) in this deployment
+and `spec.bind.agents.<id>` gives one agent its own `agent_comm` chain, its
+`usage` (`connect`, `listen`) in this deployment, and its own `llm` / `tools`
+stack when those keys are set
 ([flavour.md](../manifests/flavour.md#bind),
 [infra.md](../manifests/infra.md#rows-a-flavour-binds)). Each row's
 `protocol` is the layer plugin and its other fields are the layer's params.

@@ -22,7 +22,7 @@ Read, write, and replay are separate switches on `kind: InfraMiddleware` manifes
 The [manifest example](#inframiddleware-manifest) below shows the YAML.
 
 One middleware manifest can serve recording and replay. Override
-`infra:spec.interceptors[middleware=llm_cache].params.allow_read`,
+`infra:spec.pipeline[layer=llm_cache].params.allow_read`,
 `allow_write`, and `raise_on_miss` with typed YAML booleans for a run.
 For a standalone file, `mas-ctl compile infra/llm-cache.yaml --override
 'infra:spec.params.allow_write=true'` emits a modified document without
@@ -37,7 +37,7 @@ The `llm_cache` infra middleware is the only LLM response cache. Nothing else in
 
 | Way to turn it on | Effect |
 | --- | --- |
-| `InfraMiddleware` with `middleware: llm_cache` | You write the step and its `params`. |
+| `InfraMiddleware` with `layer: llm_cache` | You write the step and its `params`. |
 | `--cache-read` / `--cache-write` / `--cache-read-only` on `mas-ctl chat`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE`, `RuntimeEngine.spec.cache.read` / `write` | `build_engine` inserts an `llm_cache` step when the infra has none. |
 
 When the infra already has an `llm_cache` step, the CLI flags overlay its `allow_read` / `allow_write`. The environment variables and `RuntimeEngine` flags leave it as written. `RuntimeEngine` `cache.enabled: false` turns both off. Default: off.
@@ -172,7 +172,7 @@ metadata:
   name: llm-cache-write
 
 spec:
-  middleware: llm_cache          # required; selects LlmCacheMiddleware
+  layer: llm_cache               # required; selects LlmCacheMiddleware
   for: llm                       # default
   params:
     allow_read: false
@@ -182,7 +182,7 @@ spec:
     cache_path: .cache/run.llm-cache.json
 ```
 
-`_load_file` loads the manifest when `kind in {InfraMiddleware, InfraInterceptor}`. `spec.middleware` becomes the pipeline entry `middleware` id. `spec.params` becomes the `params` dict.
+`_load_file` loads the manifest when `kind in {InfraMiddleware, InfraInterceptor}`. `spec.layer` becomes the pipeline entry `layer` id (`spec.middleware` is the deprecated spelling). `spec.params` becomes the `params` dict.
 
 Schema: `docs/schemas/runtime/fragments/infra-llm-cache-params.schema.yaml`.
 

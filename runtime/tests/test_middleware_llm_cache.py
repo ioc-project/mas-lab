@@ -145,7 +145,7 @@ def test_llm_cache_middleware_caches_tool_call_response(tmp_path):
     )
     engine = apply_middleware(
         inner,
-        {"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}},
+        {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}},
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     first = engine.invoke(io)
@@ -174,7 +174,7 @@ def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
     record = apply_middleware(
         _TrajectoryEngine(previews=previews),
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {"cache_path": str(cache_path), "allow_read": False, "allow_write": True},
         },
     )
@@ -188,7 +188,7 @@ def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
     replay = apply_middleware(
         replay_inner,
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {
                 "cache_path": str(cache_path),
                 "allow_read": True,
@@ -224,7 +224,7 @@ def test_llm_cache_include_preview_stores_exchange_text(tmp_path):
     engine = apply_middleware(
         inner,
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {"cache_path": str(cache_path), "include_preview": True},
         },
     )
@@ -247,7 +247,7 @@ def test_llm_cache_backward_compatible_plain_string_entries(tmp_path):
     )
     engine = apply_middleware(
         inner,
-        {"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}},
+        {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}},
     )
     ret = engine.invoke(InvokeEngineIo(correlation_id=5, op="LLM_CALL"))
     assert ret.text == "plain answer"
@@ -266,7 +266,7 @@ def test_raise_on_miss_records_cache_lookup_without_llm_return(tmp_path):
     engine = apply_middleware(
         inner,
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {
                 "cache_path": str(cache_path),
                 "allow_read": True,
@@ -310,7 +310,7 @@ def test_peer_engine_middleware_instances_do_not_clobber_cache(tmp_path):
             )
         ],
     )
-    spec = {"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}}
+    spec = {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}
     apply_middleware(inner_a, spec).invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     apply_middleware(inner_b, spec).invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     data = json.loads(cache_path.read_text(encoding="utf-8"))

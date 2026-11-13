@@ -17,10 +17,10 @@ def layer_binding(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def resolve_layer_class(kind: str, binding: dict[str, Any], registry: Any = None) -> type:
-    """The class for one ``{type, params}`` binding: a plugin of ``kind`` first, then a ``stack_layer`` plugin.
+    """The class for one ``{type, params}`` binding: a plugin of ``kind`` first, then a ``layer`` plugin.
 
     A link (an ``agent_comm`` plugin, the transport) and a generic layer
-    (a ``stack_layer`` plugin) have distinct ids, so the lookup does not depend on where
+    (a ``layer`` plugin) have distinct ids, so the lookup does not depend on where
     the entry sits in a stack. ``agent_comm/stack`` layers and the chains a Flavour binds
     resolve alike.
     """
@@ -31,10 +31,7 @@ def resolve_layer_class(kind: str, binding: dict[str, Any], registry: Any = None
     try:
         info = registry.resolve_spec(kind, binding)
     except KeyError:
-        try:
-            info = registry.resolve_spec("layer", binding)
-        except KeyError:
-            info = registry.resolve_spec("stack_layer", binding)
+        info = registry.resolve_spec("layer", binding)
     return info.load_class()
 
 

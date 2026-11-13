@@ -4,7 +4,6 @@ from types import SimpleNamespace
 
 import pytest
 from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.session.control import SessionControl
 from mas.ctl.session.controller import SessionController
 from mas.ctl.session.manager import SessionManager
@@ -14,6 +13,7 @@ from mas.runtime.boundary.control.contract import ControlCapability
 from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.engine.tools import current_spec_for_advertise, disabled_tool_names, is_spawn_subagent_enabled
 from mas.runtime.session.spec_revision import SpecDelta, SpecRevisionLog
+from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
 def _manager_with_session(manifest: dict | None = None) -> tuple[SessionManager, str]:

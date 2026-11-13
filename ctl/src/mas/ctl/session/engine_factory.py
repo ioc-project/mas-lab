@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
+from mas.ctl.infra.bind import apply_agent_call_stacks
 from mas.ctl.infra.resolve import api_key_for_infra, resolution_anchor, resolve_infra_refs
 from mas.ctl.session.manifest_config import engine_use_tool_loop, kernel_config_from_manifest
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
@@ -24,6 +25,7 @@ from mas.runtime.engine.llm_reasoning import reasoning_settings_from_manifest
 from mas.runtime.engine.llm_request import model_entry_from_manifest
 from mas.runtime.engine.tool_workers import ToolPlacement
 from mas.runtime.kernel.config import KernelConfig
+from mas.runtime.layers.compose import response_store_layer
 from mas.runtime.spec.model_ref import concrete_model, first_concrete, primary_model_binding
 
 logger = logging.getLogger(__name__)
@@ -298,13 +300,9 @@ def build_engine(
         workspace=ws,
         runtime_refs_cli=runtime_refs_cli,
     )
+    resolved = apply_agent_call_stacks(resolved, agent_id)
     llm_proxy = dict(resolved.llm_proxy or {})
     spec = (manifest or {}).get("spec") or {}
-    reliability = getattr(kernel_cfg, "reliability", None)
-    if reliability is None:
-        from mas.runtime.reliability.policy import ReliabilitySettings
-
-        reliability = ReliabilitySettings.from_spec(spec)
     from mas.ctl.session.llm_retry_env import llm_http_retry_overrides
 
     retry_overlay = llm_http_retry_overrides() or None
@@ -418,7 +416,6 @@ def build_engine(
         llm_proxies=llm_proxies or None,
         http_timeout=http_timeout,
         llm_provider=llm_provider,
-        reliability=reliability,
     )
     from mas.runtime.layers.control import resolve_call_pipeline
 
@@ -472,7 +469,7 @@ def _ensure_llm_cache_pipeline(
             params["cache_path"] = str(cache_path)
         pipeline.insert(
             0,
-            {"middleware": "llm_cache", "for": ["llm"], "per": "all", "params": params},
+            {"layer": response_store_layer(), "for": ["llm"], "per": "all", "params": params},
         )
         llm_proxy["pipeline"] = pipeline
         return

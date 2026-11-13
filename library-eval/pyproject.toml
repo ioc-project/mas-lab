@@ -16,6 +16,7 @@ dependencies = [
     "mas-lab-component-core",
     "mas-lab-component-bench",
     "mas-lab-runtime",
+    "mas-lab-library-standard",
     # MCE v1 — public packages from agntcy/telemetry-hub
     "metrics-computation-engine>=0.1.0",
     "mce-metrics-plugin>=0.1.0",

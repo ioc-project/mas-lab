@@ -168,7 +168,7 @@ def test_wire_entry_engine_delegation_enables_tool_loop_on_leaf():
 
     engine = LiveLlmEngine(manifest=None, use_tool_loop=False, use_cache=False)
     engine.install_infra_pipeline(
-        [{"middleware": "llm_cache", "params": {"allow_read": False, "allow_write": False}}],
+        [{"layer": "llm_cache", "params": {"allow_read": False, "allow_write": False}}],
     )
 
     manifest = {

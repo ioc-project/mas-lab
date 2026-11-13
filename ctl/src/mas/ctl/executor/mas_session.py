@@ -266,9 +266,9 @@ def prepare_delegation_entry_session(
         manifest_dir=entry_manifest_dir,
         mas_base_dir=materialized.mas_base_dir,
     )
-    from mas.ctl.executor.spawn_ledger import SpawnLedger
     from mas.ctl.executor.subagent_spawner import ledger_from_engine
     from mas.runtime.engine.tools import spawn_subagent_params
+    from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
     spawn_params = spawn_subagent_params(enriched.get("spec")) or {}
     engine = getattr(getattr(instance, "driver", None), "engine", None)

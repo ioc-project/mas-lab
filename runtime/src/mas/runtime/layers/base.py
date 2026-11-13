@@ -24,6 +24,8 @@ class LayerBase(Lifecycle):
     priority: ClassVar[int | None] = None
     stores_llm_responses: ClassVar[bool] = False
     paces_llm_calls: ClassVar[bool] = False
+    #: The layer reacts to the inner call raising (retry, circuit breaker); not for the shared ``per: all`` copy.
+    observes_failures: ClassVar[bool] = False
 
     @classmethod
     def wrap(

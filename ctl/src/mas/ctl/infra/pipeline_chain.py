@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Bidirectional infra middleware chain — forward queries, backward replies."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -65,7 +66,7 @@ class BidirectionalInfraPipeline:
         registry = handlers or {}
         forward: list[tuple[str, MiddlewareHandler]] = []
         for step in steps:
-            name = str(step.get("middleware") or step.get("ref") or "middleware")
+            name = str(step.get("layer") or step.get("ref") or "layer")
             forward.append((name, registry.get(name, _passthrough)))
         return cls(forward_handlers=forward)
 

@@ -1,14 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Documented default retry steps. Loaded from YAML, not from a hidden loop."""
+"""Default pipeline steps. A library row declares them; the runtime names none."""
 
 from __future__ import annotations
 
-from functools import cache
-from pathlib import Path
 from typing import Any
 
-_DEFAULTS_PATH = Path(__file__).resolve().parent / "defaults.yaml"
 FROM_DEFAULTS = object()
 _USER_STAMP = "_from_defaults"
 
@@ -20,20 +17,20 @@ def drop_default_stamp(step: dict[str, Any]) -> bool:
     return from_defaults
 
 
-@cache
 def default_pipeline_steps() -> tuple[dict[str, Any], ...]:
-    """Retry steps shipped next to this module. Empty if the file is gone (tests fail)."""
-    import yaml
+    """The steps layer rows declare as ``default_steps``: what a run gets when its pipeline names none of them."""
+    from mas.runtime.layers.compose import layers_declaring
 
-    raw = yaml.safe_load(_DEFAULTS_PATH.read_text(encoding="utf-8")) or {}
-    steps = raw.get("pipeline") if isinstance(raw, dict) else None
-    if not isinstance(steps, list):
-        return ()
-    return tuple(dict(step) for step in steps if isinstance(step, dict))
+    steps: list[dict[str, Any]] = []
+    for name, declared in layers_declaring("default_steps"):
+        for step in declared if isinstance(declared, list) else []:
+            if isinstance(step, dict):
+                steps.append({"layer": name, **step})
+    return tuple(steps)
 
 
-def merge_default_retry(pipeline: list[dict[str, Any]] | None, kind: str) -> list[dict[str, Any]]:
-    """Prepend the documented default retry for *kind* when the pipeline has none."""
+def merge_default_steps(pipeline: list[dict[str, Any]] | None, kind: str) -> list[dict[str, Any]]:
+    """Prepend the default steps for *kind* that the pipeline does not already name."""
     from mas.runtime.layers.compose import layer_call_kinds, layer_id
 
     steps = [dict(step) for step in (pipeline or []) if isinstance(step, dict)]

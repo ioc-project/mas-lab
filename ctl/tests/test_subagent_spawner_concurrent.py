@@ -8,7 +8,6 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.executor.subagent_spawner import SubagentTemplate, make_subagent_spawner
 from mas.ctl.placement.bus.inproc import InProcessCommBus
 from mas.ctl.session.controller import TurnResult
@@ -18,6 +17,7 @@ from mas.runtime.boundary.context.working_memory_registry import (
 )
 from mas.runtime.driver.driver import DriverTrace
 from mas.runtime.schema.egress import EmitClientResponse
+from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
 def test_aspawn_two_siblings_via_gather_no_crosstalk(tmp_path: Path):

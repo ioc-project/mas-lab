@@ -9,9 +9,9 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
+from mas.library.standard.lib.retry.log import log_exhausted, log_no_retry, log_recovered, log_retry
+from mas.library.standard.lib.retry.policy import RetryPolicy
 from mas.runtime.reliability.classes import CircuitOpenError, ClassifiedFailure
-from mas.runtime.reliability.log import log_exhausted, log_no_retry, log_recovered, log_retry
-from mas.runtime.reliability.policy import RetryPolicy
 
 T = TypeVar("T")
 Classify = Callable[[BaseException], ClassifiedFailure]
@@ -25,9 +25,7 @@ def _should_retry(
     policy: RetryPolicy,
     idempotent: bool,
 ) -> bool:
-    return attempt < attempts - 1 and policy.allows(
-        classified.failure_class, idempotent=idempotent
-    )
+    return attempt < attempts - 1 and policy.allows(classified.failure_class, idempotent=idempotent)
 
 
 def _finish_failure(

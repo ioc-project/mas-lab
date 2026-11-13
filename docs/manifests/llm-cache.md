@@ -18,7 +18,7 @@ kind: InfraMiddleware
 metadata:
   name: llm-cache-replay
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: [llm]
   params:
     allow_read: true
@@ -54,7 +54,7 @@ You configure caching in a **separate infra manifest**, not on the agent.
 Three parts work together:
 
 1. **Provider** (`standard:openai`, `standard:ollama`, and others): where the model runs.
-2. **Cache middleware** (`middleware: llm_cache`): the read, write, and replay policy plus `cache_path`.
+2. **Cache middleware** (`layer: llm_cache`): the read, write, and replay policy plus `cache_path`.
 3. **Pipeline**: `llm_cache` wraps the engine (one common instance). Other middleware wraps each routed provider. See [Pipeline order](#pipeline-order).
 
 This step is the only LLM cache. The `--cache-read` and `--cache-write` flags on `mas-ctl chat`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE`, and `RuntimeEngine` `cache.read` / `cache.write` do not cache on their own. When the infra has no `llm_cache` step, they insert one. See [references/llm-cache.md](../references/llm-cache.md#one-cache).
@@ -95,7 +95,7 @@ metadata:
   name: llm-cache-write
 
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: llm
   params:
     allow_read: false
@@ -119,7 +119,7 @@ metadata:
   name: llm-cache-replay
 
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: llm
   params:
     allow_read: true
@@ -317,6 +317,29 @@ No API stops writing mid-experiment or prunes entries in-process.
 See [Known limitations](../references/llm-cache.md#known-limitations).
 
 See [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
+
+## Deprecated: the `cache` provider kind
+
+**Current approach.** The cache is the `llm_cache` layer: a step in the infra
+`pipeline` (or the `--cache-read` / `--cache-write` flags that insert it). It
+wraps whatever protocol the model uses (`openai` over `http`, today), so the
+same cache serves every provider. This page describes it.
+
+**Deprecated.** The `llm_provider` plugin `cache` (`CacheLLMProvider`) wrapped
+one provider object instead of the call. The engine no longer builds it, and
+building one directly logs a deprecation warning once. It is dropped in the
+next release.
+
+**Move to the layer.**
+
+| Before | After |
+| --- | --- |
+| `CacheLLMProvider(inner, cache_path=..., allow_read=..., allow_write=...)` | `llm_cache` step with `params: {cache_path: ..., allow_read: ..., allow_write: ...}` |
+| `raise_on_miss=True` | `raise_on_miss: true` on the step |
+| a manifest naming `kind: cache` for a model | delete it; add the `llm_cache` step to the infra `pipeline` |
+
+A cache file recorded with the old class does not replay through the layer: the
+layer keys on the exchange preview. Record it again with the `llm_cache` step.
 
 ## See also
 

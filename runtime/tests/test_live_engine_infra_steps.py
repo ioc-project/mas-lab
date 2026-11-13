@@ -71,7 +71,7 @@ def test_live_engine_invoke_cache_hit_skips_provider(tmp_path) -> None:
     provider = _StubProvider()
     engine = _engine(provider)
     engine.install_infra_pipeline(
-        [{"middleware": "llm_cache", "params": {"cache_path": str(tmp_path / "cache.json")}}],
+        [{"layer": "llm_cache", "params": {"cache_path": str(tmp_path / "cache.json")}}],
     )
     first = engine.invoke(_io())
     second = engine.invoke(_io())
@@ -85,7 +85,7 @@ def test_live_engine_ainvoke_cache_hit_skips_provider(tmp_path) -> None:
     provider = _StubProvider()
     engine = _engine(provider)
     engine.install_infra_pipeline(
-        [{"middleware": "llm_cache", "params": {"cache_path": str(tmp_path / "cache.json")}}],
+        [{"layer": "llm_cache", "params": {"cache_path": str(tmp_path / "cache.json")}}],
     )
     first = asyncio.run(engine.ainvoke(_io()))
     second = asyncio.run(engine.ainvoke(_io()))
@@ -100,7 +100,7 @@ def test_live_engine_invoke_fault_rate_one_skips_provider() -> None:
     engine.install_infra_pipeline(
         [
             {
-                "middleware": "fault_inject",
+                "layer": "fault_inject",
                 "per": "all",
                 "params": {"rate": 1.0, "message": "injected"},
             }
@@ -118,7 +118,7 @@ def test_live_engine_ainvoke_fault_rate_one_skips_provider() -> None:
     engine.install_infra_pipeline(
         [
             {
-                "middleware": "fault_inject",
+                "layer": "fault_inject",
                 "per": "all",
                 "params": {"rate": 1.0, "message": "injected"},
             }
@@ -138,7 +138,7 @@ def test_live_engine_invoke_scheduler_paces(tmp_path, monkeypatch) -> None:
     engine.install_infra_pipeline(
         [
             {
-                "middleware": "llm_scheduler",
+                "layer": "llm_scheduler",
                 "per": "all",
                 "params": {
                     "max_in_flight": 1,
@@ -172,7 +172,7 @@ def test_install_infra_pipeline_refuses_destination_steps() -> None:
     engine = _engine(_StubProvider())
     with pytest.raises(ValueError, match="destination"):
         engine.install_infra_pipeline(
-            [{"middleware": "fault_inject", "params": {"rate": 1.0, "message": "injected"}}],
+            [{"layer": "fault_inject", "params": {"rate": 1.0, "message": "injected"}}],
         )
     assert engine._infra_stack is None
 
@@ -188,7 +188,7 @@ def _leaf_with_scheduler(provider: object, tmp_path, *, keys: list[str] | None =
         params["keys"] = keys
     return PipedLLMProvider(
         inner=provider,
-        pipeline=[{"middleware": "llm_scheduler", "params": params}],
+        pipeline=[{"layer": "llm_scheduler", "params": params}],
     )
 
 
@@ -239,7 +239,7 @@ def test_leaf_scheduler_keys_model_separates_buckets(tmp_path, monkeypatch) -> N
 def test_piped_provider_accepts_provider_without_kind() -> None:
     piped = PipedLLMProvider(
         inner=_BareProvider(),
-        pipeline=[{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+        pipeline=[{"layer": "llm_scheduler", "params": {"max_in_flight": 1}}],
     )
     assert piped.kind == ""
     assert piped.api_base == ""

@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Forward deprecated ``spec.control.retry`` / ``circuit_breaker`` onto the pipeline."""
+"""Forward deprecated ``spec.control.<key>`` onto the pipeline, for the layers that declare a ``control_key``."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from typing import Any
 
 from mas.runtime.deprecation import warn_deprecated_once
 from mas.runtime.layers.compose import layer_call_kinds, layer_id
-from mas.runtime.layers.defaults import drop_default_stamp, merge_default_retry
+from mas.runtime.layers.defaults import drop_default_stamp, merge_default_steps
+
+_SLOTS = {"llm": "llm", "tool": "tools"}
 
 
 def pipeline_from_agent_spec(
@@ -18,50 +20,52 @@ def pipeline_from_agent_spec(
     *,
     kind: str,
 ) -> list[dict[str, Any]]:
-    """Default retry plus leftover ``spec.control`` steps for *kind*."""
-    steps = merge_default_retry(list(pipeline or []), kind)
+    """Default steps plus leftover ``spec.control.<key>`` steps for *kind*.
+
+    A layer row names the ``spec.control`` key it answers to (``control_key``); the runtime knows no layer name.
+    """
+    from mas.runtime.layers.compose import layers_declaring
+
+    steps = merge_default_steps(list(pipeline or []), kind)
     control = spec.get("control") if isinstance(spec, Mapping) else None
     if not isinstance(control, Mapping):
         return steps
-    retry_raw = control.get("retry")
-    if isinstance(retry_raw, Mapping) and retry_raw:
+    for name, key in layers_declaring("control_key"):
+        raw = control.get(key)
+        if not isinstance(raw, Mapping) or not raw:
+            continue
         warn_deprecated_once(
-            "spec.control.retry",
-            "spec.control.retry is deprecated: list a retry layer on the infra pipeline",
+            f"spec.control.{key}",
+            f"spec.control.{key} is deprecated: list a {name} layer on the infra pipeline",
         )
-        slot = "llm" if kind == "llm" else "tools"
-        params = retry_raw.get(slot)
-        if isinstance(params, Mapping) and params:
-            for step in steps:
-                if layer_id(step) == "retry" and kind in layer_call_kinds(step):
-                    from_defaults = drop_default_stamp(step)
-                    named = dict(step.get("params") or {})
-                    # the default step gives way to the deprecated spelling; a retry layer the pipeline
-                    # names keeps its own params
-                    step["params"] = {**named, **params} if from_defaults else {**params, **named}
-                    break
-            else:
-                steps.insert(
-                    0,
-                    {"layer": "retry", "for": [kind], "params": dict(params)},
+        if set(_SLOTS.values()) & set(raw):
+            _merge_slot(steps, name, kind, raw.get(_SLOTS.get(kind, "")))
+        elif raw.get("enabled") is not False:
+            layer = str(raw.get("plugin") or name)
+            if not any(layer_id(step) == layer and kind in layer_call_kinds(step) for step in steps):
+                steps.append(
+                    {
+                        "layer": layer,
+                        "for": [kind],
+                        "per": "destination",
+                        "params": {k: v for k, v in dict(raw).items() if k != "plugin"},
+                    }
                 )
-    breaker = control.get("circuit_breaker")
-    if isinstance(breaker, Mapping) and breaker and breaker.get("enabled") is not False:
-        warn_deprecated_once(
-            "spec.control.circuit_breaker",
-            "spec.control.circuit_breaker is deprecated: list a circuit_breaker layer on the infra pipeline",
-        )
-        name = str(breaker.get("plugin") or "circuit_breaker")
-        if not any(layer_id(step) == name and kind in layer_call_kinds(step) for step in steps):
-            steps.append(
-                {
-                    "layer": name,
-                    "for": [kind],
-                    "per": "destination",
-                    "params": {k: v for k, v in dict(breaker).items() if k != "plugin"},
-                }
-            )
     return steps
+
+
+def _merge_slot(steps: list[dict[str, Any]], name: str, kind: str, params: Any) -> None:
+    """Fold a ``spec.control.<key>.<llm|tools>`` mapping into the layer's step for *kind*, or add the step."""
+    if not isinstance(params, Mapping) or not params:
+        return
+    for step in steps:
+        if layer_id(step) == name and kind in layer_call_kinds(step):
+            from_defaults = drop_default_stamp(step)
+            named = dict(step.get("params") or {})
+            # a default step gives way to the deprecated spelling; a layer the pipeline names keeps its own params
+            step["params"] = {**named, **params} if from_defaults else {**params, **named}
+            return
+    steps.insert(0, {"layer": name, "for": [kind], "params": dict(params)})
 
 
 def resolve_call_pipeline(
@@ -86,13 +90,16 @@ def overlay_retry_params(
     overlay: Mapping[str, Any] | None,
 ) -> list[dict[str, Any]]:
     """Fill omitted llm retry params. Keys a named layer (or spec.control) set stay."""
+    from mas.runtime.layers.compose import layers_declaring
+
+    overlaid = {name for name, _ in layers_declaring("retry_overlay")}
     steps = [dict(step) if isinstance(step, dict) else step for step in (pipeline or [])]
     extra = dict(overlay) if isinstance(overlay, Mapping) else {}
     applied = False
     for step in steps:
         if not isinstance(step, dict):
             continue
-        if applied or layer_id(step) != "retry" or "llm" not in layer_call_kinds(step):
+        if applied or layer_id(step) not in overlaid or "llm" not in layer_call_kinds(step):
             continue
         from_defaults = drop_default_stamp(step)
         if extra:

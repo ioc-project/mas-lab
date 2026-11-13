@@ -33,8 +33,8 @@ from typing import Any
 # and re-export so all existing ctl importers continue to work unchanged.
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.engine.tools import spawn_subagent_params
-from mas.runtime.spec.gov import GovernanceBinding
 from mas.runtime.spec.checkpoint import parse_checkpoint_policy
+from mas.runtime.spec.gov import GovernanceBinding
 from mas.runtime.spec.schema_bindings_generated import (
     ASSEMBLER_BINDING_KEYS,
     CONTEXT_MANAGER_BINDING_KEYS,
@@ -79,7 +79,6 @@ def _resolve_path_cfg(cfg: dict[str, Any]) -> str | None:
     return resolve_path_cfg(cfg)
 
 
-
 def _parse_obs_list(items: list[Any]) -> tuple[list[str], dict[str, dict[str, Any]]]:
     plugins: list[str] = []
     configs: dict[str, dict[str, Any]] = {}
@@ -93,9 +92,7 @@ def _parse_obs_list(items: list[Any]) -> tuple[list[str], dict[str, dict[str, An
                 if isinstance(cfg, dict):
                     configs[name] = dict(cfg)
         else:
-            raise SpecBindingError(
-                f"observability list entries must be str or dict, got {type(item).__name__}"
-            )
+            raise SpecBindingError(f"observability list entries must be str or dict, got {type(item).__name__}")
     return plugins, configs
 
 
@@ -135,9 +132,7 @@ def parse_design_pattern(raw: Any) -> None:
             raise SpecBindingError("spec.design_pattern string must be a plugin name")
         return
     if not isinstance(raw, dict):
-        raise SpecBindingError(
-            f"spec.design_pattern must be a plugin name or object, got {type(raw).__name__}"
-        )
+        raise SpecBindingError(f"spec.design_pattern must be a plugin name or object, got {type(raw).__name__}")
     _reject_unknown_keys(raw, allowed=DESIGN_PATTERN_BINDING_KEYS, field="spec.design_pattern")
 
 
@@ -149,9 +144,7 @@ def parse_context_manager(raw: Any) -> None:
             raise SpecBindingError("spec.context_manager string must be a plugin name")
         return
     if not isinstance(raw, dict):
-        raise SpecBindingError(
-            f"spec.context_manager must be a plugin name or object, got {type(raw).__name__}"
-        )
+        raise SpecBindingError(f"spec.context_manager must be a plugin name or object, got {type(raw).__name__}")
     _reject_unknown_keys(raw, allowed=CONTEXT_MANAGER_BINDING_KEYS, field="spec.context_manager")
 
 
@@ -163,9 +156,7 @@ def parse_assembler(raw: Any) -> None:
             raise SpecBindingError("spec.assembler string must be a plugin name")
         return
     if not isinstance(raw, dict):
-        raise SpecBindingError(
-            f"spec.assembler must be a plugin name or object, got {type(raw).__name__}"
-        )
+        raise SpecBindingError(f"spec.assembler must be a plugin name or object, got {type(raw).__name__}")
     _reject_unknown_keys(raw, allowed=ASSEMBLER_BINDING_KEYS, field="spec.assembler")
 
 
@@ -217,13 +208,36 @@ def parse_control(raw: Any) -> None:
     if not isinstance(raw, dict):
         raise SpecBindingError(f"spec.control must be an object, got {type(raw).__name__}")
     _reject_unknown_keys(raw, allowed=CONTROL_BINDING_KEYS, field="spec.control")
-    from mas.runtime.reliability.policy import ReliabilitySettings
-    from mas.runtime.spec.gov import SpecBindingError as RuntimeSpecBindingError
+    _check_control_params(raw)
 
-    try:
-        ReliabilitySettings.from_spec({"control": raw})
-    except RuntimeSpecBindingError as exc:
-        raise SpecBindingError(str(exc)) from exc
+
+def _check_control_params(raw: dict[str, Any]) -> None:
+    """Check the deprecated ``spec.control.<key>`` mappings with the layer that answers to each key.
+
+    A layer row names its key (``control_key``); the layer class checks its own params, so ctl knows no layer.
+    """
+    from mas.runtime.layers.compose import layers_declaring, require_layer_class
+
+    for name, key in layers_declaring("control_key"):
+        value = raw.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, dict):
+            raise SpecBindingError(f"spec.control.{key} must be an object or null")
+        layer = require_layer_class(name)
+        slots = {"llm": "llm", "tools": "tool"}
+        if set(value) & set(slots):
+            unknown = sorted(set(value) - set(slots))
+            if unknown:
+                raise SpecBindingError(f"spec.control.{key}: unknown field {unknown[0]!r}")
+            checks = [(slot, params, (kind,)) for slot, kind in slots.items() if (params := value.get(slot))]
+        else:
+            checks = [(key, {k: v for k, v in value.items() if k not in {"plugin", "enabled"}}, None)]
+        for slot, params, kinds in checks:
+            try:
+                layer.wrap(None, dict(params), call_kinds=kinds)
+            except Exception as exc:
+                raise SpecBindingError(f"spec.control.{slot}: {exc}") from exc
 
 
 def parse_infra_lists(raw_spec: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -279,17 +293,11 @@ def validate_agent_spec_bindings(spec: Any) -> None:
             "via workspace runtime_refs or --runtime-ref"
         )
     if "runtime_refs" in spec or "runtime_ref" in spec:
-        raise SpecBindingError(
-            "spec.runtime_refs is not allowed on Agent manifests — use workspace config or CLI"
-        )
+        raise SpecBindingError("spec.runtime_refs is not allowed on Agent manifests — use workspace config or CLI")
     if "infra_refs" in spec or "infra_ref" in spec:
-        raise SpecBindingError(
-            "spec.infra_refs is not allowed on Agent manifests — use workspace config or CLI"
-        )
+        raise SpecBindingError("spec.infra_refs is not allowed on Agent manifests — use workspace config or CLI")
     if "infra_interceptors" in spec or "infra_interceptor" in spec:
-        raise SpecBindingError(
-            "spec.infra_interceptors is not allowed on Agent manifests — use workspace config"
-        )
+        raise SpecBindingError("spec.infra_interceptors is not allowed on Agent manifests — use workspace config")
     if "control" in spec:
         parse_control(spec["control"])
     if "design_pattern" in spec:
@@ -299,9 +307,7 @@ def validate_agent_spec_bindings(spec: Any) -> None:
     if "assembler" in spec:
         parse_assembler(spec["assembler"])
     if "context_plugin" in spec:
-        raise SpecBindingError(
-            "spec.context_plugin was removed; use spec.assembler"
-        )
+        raise SpecBindingError("spec.context_plugin was removed; use spec.assembler")
 
 
 def parse_spawn_subagent_params(raw: Any) -> dict[str, Any] | None:
@@ -313,9 +319,7 @@ def parse_spawn_subagent_params(raw: Any) -> dict[str, Any] | None:
     if raw is None:
         return None
     if not isinstance(raw, dict) or set(raw) - {"templates", "max_spawns", "max_depth"}:
-        raise SpecBindingError(
-            "spawn_subagent params must contain only templates, max_spawns, and max_depth"
-        )
+        raise SpecBindingError("spawn_subagent params must contain only templates, max_spawns, and max_depth")
     templates = parse_subagent_templates(raw.get("templates"))
     if not templates:
         raise SpecBindingError("spawn_subagent params.templates must declare at least one template")
@@ -345,17 +349,11 @@ def parse_subagent_templates(raw: Any) -> list[dict[str, str]]:
         ref = entry.get("ref")
         description = entry.get("description", "")
         if not isinstance(template_id, str) or not template_id.strip():
-            raise SpecBindingError(
-                f"spawn_subagent params.templates[{index}].id must be a non-empty string"
-            )
+            raise SpecBindingError(f"spawn_subagent params.templates[{index}].id must be a non-empty string")
         if not isinstance(ref, str) or not ref.strip():
-            raise SpecBindingError(
-                f"spawn_subagent params.templates[{index}].ref must be a non-empty string"
-            )
+            raise SpecBindingError(f"spawn_subagent params.templates[{index}].ref must be a non-empty string")
         if not isinstance(description, str):
-            raise SpecBindingError(
-                f"spawn_subagent params.templates[{index}].description must be a string"
-            )
+            raise SpecBindingError(f"spawn_subagent params.templates[{index}].description must be a string")
         if template_id in seen:
             raise SpecBindingError(f"duplicate subagent template id {template_id!r}")
         seen.add(template_id)

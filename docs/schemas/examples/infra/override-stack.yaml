@@ -11,14 +11,14 @@ spec:
     defaults:
       llm: any
   pipeline:
-    - middleware: llm_cache
+    - layer: llm_cache
       for: [llm]
       params:
         allow_read: true
         allow_write: false
         raise_on_miss: true
         cache_path: ./cache/llm-cache.json
-    - middleware: fault_inject
+    - layer: fault_inject
       for: [llm]
       params: {}
   runtime_engine:

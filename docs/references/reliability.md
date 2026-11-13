@@ -22,7 +22,7 @@ Two layers share one taxonomy: `transient`, `unavailable`, `application`, `fatal
 
 | Layer | Where | What it does |
 |-------|--------|----------------|
-| **Infra** | retry layer around llm and tool calls | Re-issues the same call (`RetryPolicy`). After the budget is spent, an optional **circuit breaker** layer acts on `unavailable`. |
+| **Infra** | retry layer around llm and tool calls | Re-issues the same call (`RetryPolicy` and the retry loop live in `library-standard`, `mas.library.standard.lib.retry`, shared by the layer and the eval judge calls). After the budget is spent, an optional **circuit breaker** layer acts on `unavailable`. |
 | **Governance** | Ingress, after the call returns (the `_end` hook) | `error_policy` maps the typed failure onto `allow`, `retry`, `block`, or `skip`. Plugin: `retry_on_error`. |
 | **Lab** | `mas-lab benchmark run` | Re-issues a failed scenario, item, and run (`schedule.max_attempts`, default 3). Independent of `n_runs`. |
 
@@ -127,7 +127,7 @@ To make a provider trip the breaker, declare a tool as down with `ExplicitToolUn
 
 ### `spec.control.retry.llm` / `.tools`
 
-`spec.control` is deprecated: `retry` and `circuit_breaker` still apply (one warning) and become pipeline steps. Prefer a `retry` / `circuit_breaker` layer on the infra pipeline (next to the LLM cache, scheduler and fault injection). Its `budget` and `rate_limiter` keys are read by nothing; call ceilings are the `budget` governance plugin.
+`spec.control` is deprecated: `retry` and `circuit_breaker` still apply (one warning) and become pipeline steps. Prefer a `retry` / `circuit_breaker` layer on the infra pipeline (next to the LLM cache, scheduler and fault injection); [infra.md](../manifests/infra.md#deprecated-spellings) lists every old spelling and its replacement. Its `budget` and `rate_limiter` keys are read by nothing; call ceilings are the `budget` governance plugin.
 
 | Field | Type | LLM default | Tools default |
 |-------|------|-------------|----------------|

@@ -10,7 +10,7 @@ metadata:
     workspace middleware in front of any LLM provider ref.
 
 spec:
-  middleware: fault_inject
+  layer: fault_inject
   for: llm
   per: destination
   params:

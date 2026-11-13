@@ -4,32 +4,47 @@ $schema: "https://json-schema.org/draft-07/schema#"
 $id: "infra/v1#middleware-params-by-id"
 title: InfraMiddlewareParamsById
 description: >
-  Mixin for any object that has sibling ``middleware`` and ``params``.
+  Mixin for any object that has sibling ``layer`` (or the deprecated ``middleware``) and ``params``.
   Known registry ids get that plugin's param schema; unknown ids stay open.
 allOf:
   - if:
-      properties:
-        middleware:
-          enum: [llm_cache, llm-cache]
-      required: [middleware]
+      anyOf:
+        - properties:
+            layer:
+              enum: [llm_cache, llm-cache]
+          required: [layer]
+        - properties:
+            middleware:
+              enum: [llm_cache, llm-cache]
+          required: [middleware]
     then:
       properties:
         params:
           $ref: "./infra-llm-cache-params.schema.yaml"
   - if:
-      properties:
-        middleware:
-          enum: [llm_scheduler, llm-scheduler, rate_limit, rate_limiter, llm_pace]
-      required: [middleware]
+      anyOf:
+        - properties:
+            layer:
+              enum: [llm_scheduler, llm-scheduler, rate_limit, rate_limiter, llm_pace]
+          required: [layer]
+        - properties:
+            middleware:
+              enum: [llm_scheduler, llm-scheduler, rate_limit, rate_limiter, llm_pace]
+          required: [middleware]
     then:
       properties:
         params:
           $ref: "./infra-llm-scheduler-params.schema.yaml"
   - if:
-      properties:
-        middleware:
-          enum: [fault_inject, fault-inject, chaos_lite, chaos-lite]
-      required: [middleware]
+      anyOf:
+        - properties:
+            layer:
+              enum: [fault_inject, fault-inject, chaos_lite, chaos-lite]
+          required: [layer]
+        - properties:
+            middleware:
+              enum: [fault_inject, fault-inject, chaos_lite, chaos-lite]
+          required: [middleware]
     then:
       properties:
         params:
@@ -44,10 +59,15 @@ allOf:
         params:
           $ref: "./retry-policy.schema.yaml"
   - if:
-      properties:
-        middleware:
-          enum: [retry]
-      required: [middleware]
+      anyOf:
+        - properties:
+            layer:
+              enum: [retry]
+          required: [layer]
+        - properties:
+            middleware:
+              enum: [retry]
+          required: [middleware]
     then:
       properties:
         params:
@@ -62,10 +82,15 @@ allOf:
         params:
           $ref: "./control-binding.schema.yaml#/properties/circuit_breaker"
   - if:
-      properties:
-        middleware:
-          enum: [circuit_breaker, threshold]
-      required: [middleware]
+      anyOf:
+        - properties:
+            layer:
+              enum: [circuit_breaker, threshold]
+          required: [layer]
+        - properties:
+            middleware:
+              enum: [circuit_breaker, threshold]
+          required: [middleware]
     then:
       properties:
         params:

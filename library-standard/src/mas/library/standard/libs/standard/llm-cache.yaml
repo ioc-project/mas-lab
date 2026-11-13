@@ -10,7 +10,7 @@ metadata:
     the real LLMProxy to avoid repeat LiteLLM calls during dev and tutorials.
 
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   for: llm
   per: all
   params:

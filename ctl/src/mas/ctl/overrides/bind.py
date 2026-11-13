@@ -5,61 +5,85 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 import yaml
 
-_HTTP_SCHEMES = {
-    "a2a": "http",
-    "a2as": "https",
-    "mcp": "http",
-    "mcps": "https",
-}
+
+@dataclass(frozen=True)
+class _UrlScheme:
+    """A ``scheme://`` a protocol plugin accepts on ``--connect`` / ``--listen``, as its library row declares it."""
+
+    scheme: str
+    protocol: str
+    http_scheme: str
+    connect_as: str  # ``endpoint`` (an Application row) or ``tool_server``
+    listens: bool
+    listen_hint: str = ""  # what to do instead, for a scheme that cannot be listened on
+
+
+def _url_schemes() -> dict[str, _UrlScheme]:
+    """Every scheme an installed protocol plugin declares (``url_schemes``, ``protocol_name``, ``connect_as``).
+
+    ctl names no protocol: a library row says which schemes are its own and what they connect to.
+    """
+    from mas.runtime.registry import get_registry
+
+    found: dict[str, _UrlScheme] = {}
+    for entry in get_registry().all_entries():
+        attrs = entry.attributes or {}
+        protocol = str(attrs.get("protocol_name") or "").strip()
+        schemes = attrs.get("url_schemes")
+        if not protocol or not isinstance(schemes, dict):
+            continue
+        for scheme, http_scheme in schemes.items():
+            found[str(scheme).lower()] = _UrlScheme(
+                str(scheme).lower(),
+                protocol,
+                str(http_scheme),
+                str(attrs.get("connect_as") or "endpoint"),
+                bool(attrs.get("listen")),
+                str(attrs.get("listen_hint") or ""),
+            )
+    return found
 
 
 def expand_connects(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
-    """Turn ``NAME=a2a://…`` / ``NAME=mcp://…#tool`` into ``infra:`` overrides.
+    """Turn ``NAME=<scheme>://…`` into ``infra:`` overrides, for each scheme a protocol plugin declares.
 
     This is a shortcut over Application / ToolServerRegistry fields, not a
-    second resolver. A2A peers become ``spec.endpoints`` ``usage: connect`` rows;
-    MCP tools become ``spec.tool_servers`` ``usage: connect`` rows. Explicit
+    second resolver. A scheme the plugin connects as an endpoint becomes a
+    ``spec.endpoints`` ``usage: connect`` row; one it connects as a tool server
+    (``#fragment`` names the tool) becomes a ``spec.tool_servers`` row. Explicit
     ``--override`` values applied after these still win. ``--connect`` is the
     flag; ``--bind`` is the old name for the same expansion.
     """
+    schemes = _url_schemes()
     endpoints: dict[str, dict[str, Any]] = {}
-    mcp_servers: dict[str, dict[str, Any]] = {}
+    servers: dict[str, dict[str, Any]] = {}
     for source in assignments:
         name, uri = _split_assignment(source)
         parsed = urlparse(uri)
         scheme = (parsed.scheme or "").lower()
-        if scheme not in _HTTP_SCHEMES:
-            raise ValueError(
-                f"{source!r} must use a2a://, a2as://, mcp://, or mcps:// "
-                f"(got {scheme or 'no scheme'!r})"
-            )
-        http_url = _http_url(parsed)
-        if scheme in {"a2a", "a2as"}:
-            endpoints[name] = {"protocol": "a2a", "usage": "connect", "url": http_url}
+        if scheme not in schemes:
+            raise ValueError(f"{source!r} must use {_listed(schemes)} (got {scheme or 'no scheme'!r})")
+        known = schemes[scheme]
+        http_url = _http_url(parsed, known)
+        if known.connect_as == "endpoint":
+            endpoints[name] = {"protocol": known.protocol, "usage": "connect", "url": http_url}
             continue
         tool_name = (parsed.fragment or name).strip()
         if not tool_name:
-            raise ValueError(f"MCP {source!r} needs a tool name or #fragment")
-        server_id = _mcp_server_id(http_url)
-        server = mcp_servers.setdefault(
+            raise ValueError(f"{known.protocol} {source!r} needs a tool name or #fragment")
+        server_id = _server_id(known.protocol, http_url)
+        server = servers.setdefault(
             server_id,
-            {
-                "id": server_id,
-                "protocol": "mcp",
-                "usage": "connect",
-                "url": http_url,
-                "tools": [],
-            },
+            {"id": server_id, "protocol": known.protocol, "usage": "connect", "url": http_url, "tools": []},
         )
         if server.get("url") != http_url:
-            raise ValueError(
-                f"MCP {source!r} reuses id {server_id!r} with a different URL"
-            )
+            raise ValueError(f"{known.protocol} {source!r} reuses id {server_id!r} with a different URL")
         tools = server.setdefault("tools", [])
         if tool_name not in tools:
             tools.append(tool_name)
@@ -67,16 +91,14 @@ def expand_connects(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ..
     overrides: list[str] = []
     for name, endpoint in endpoints.items():
         overrides.append(f"infra:spec.endpoints[{name!r}]={_yaml_flow(endpoint)}")
-    for server in mcp_servers.values():
+    for server in servers.values():
         server_id = str(server["id"])
-        overrides.append(
-            f"infra:spec.tool_servers[id={server_id}]={_yaml_flow(server)}"
-        )
+        overrides.append(f"infra:spec.tool_servers[id={server_id}]={_yaml_flow(server)}")
     return tuple(overrides)
 
 
 def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...]:
-    """Turn ``NAME=a2a://host:port/path`` into ``infra:`` overrides that serve ``NAME``.
+    """Turn ``NAME=<scheme>://host:port/path`` into ``infra:`` overrides that serve ``NAME``.
 
     The mirror of :func:`expand_connects`: ``--connect`` says where to *use* a
     remote peer (``usage: connect``), ``--listen`` says where to *serve* an agent
@@ -87,12 +109,15 @@ def expand_listens(assignments: Sequence[str] | Iterable[str]) -> tuple[str, ...
         name, uri = _split_assignment(source, kind="listen")
         parsed = urlparse(uri)
         scheme = (parsed.scheme or "").lower()
-        if scheme not in {"a2a", "a2as"}:
+        listening = {key: value for key, value in _url_schemes().items() if value.listens}
+        if scheme not in listening:
+            hint = _url_schemes().get(scheme, _UrlScheme("", "", "", "", False)).listen_hint
             raise ValueError(
-                f"listen {source!r} must use a2a:// or a2as:// "
-                f"(got {scheme or 'no scheme'!r}); serve an MCP tool with mas-mcp"
+                f"listen {source!r} must use {_listed(listening)} (got {scheme or 'no scheme'!r})"
+                + (f"; {hint}" if hint else "")
             )
-        endpoint = {"protocol": "a2a", "usage": "listen", "url": _http_url(parsed)}
+        known = listening[scheme]
+        endpoint = {"protocol": known.protocol, "usage": "listen", "url": _http_url(parsed, known)}
         overrides.append(f"infra:spec.endpoints[{name!r}]={_yaml_flow(endpoint)}")
     return tuple(overrides)
 
@@ -118,19 +143,23 @@ def _split_assignment(source: str, *, kind: str = "connect") -> tuple[str, str]:
     return name, uri
 
 
-def _http_url(parsed) -> str:
-    http_scheme = _HTTP_SCHEMES[parsed.scheme.lower()]
+def _listed(schemes: dict[str, _UrlScheme]) -> str:
+    return ", ".join(f"{scheme}://" for scheme in sorted(schemes)) or "a scheme a protocol plugin declares"
+
+
+def _http_url(parsed, known: _UrlScheme) -> str:
+    http_scheme = known.http_scheme
     if not parsed.netloc:
         raise ValueError(f"URI is missing host: {parsed.geturl()!r}")
     return urlunparse((http_scheme, parsed.netloc, parsed.path or "/", "", "", ""))
 
 
-def _mcp_server_id(http_url: str) -> str:
+def _server_id(protocol: str, http_url: str) -> str:
     parsed = urlparse(http_url)
     host = parsed.hostname or "localhost"
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    path = (parsed.path or "/mcp").strip("/").replace("/", "-") or "mcp"
-    return f"mcp-{host}-{port}-{path}"
+    path = (parsed.path or f"/{protocol}").strip("/").replace("/", "-") or protocol
+    return f"{protocol}-{host}-{port}-{path}"
 
 
 def _yaml_flow(value: Any) -> str:

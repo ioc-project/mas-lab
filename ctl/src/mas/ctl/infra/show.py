@@ -44,9 +44,9 @@ def _redact_url(value: Any, *, limit: int = _MAX_CHARS) -> str:
 
 def _effective_steps(pipeline: list[dict[str, Any]] | None, kind: str) -> list[dict[str, Any]]:
     """Listed steps plus the documented default retry when that kind has none."""
-    from mas.runtime.layers.defaults import merge_default_retry
+    from mas.runtime.layers.defaults import merge_default_steps
 
-    return merge_default_retry(list(pipeline or []), kind)
+    return merge_default_steps(list(pipeline or []), kind)
 
 
 def _session_steps(
@@ -75,7 +75,6 @@ def _describe_step(step: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "id": step_id(stamped),
         "layer": name,
-        "middleware": name,
         "for": kinds,
         "per": middleware_per(stamped),
         "priority": layer_priority(stamped),
@@ -271,6 +270,12 @@ def _destination_view(
             if session
             else _effective_steps(listed, kind)
         )
+        plugin_type = "llm_provider" if kind == "llm" else "tool_provider"
+        protocol = str(payload.get("protocol") or payload.get("kind") or "").strip()
+        if protocol:
+            from mas.runtime.layers.compose import merge_protocol_layers
+
+            steps = merge_protocol_layers(steps, plugin_type=plugin_type, kind=protocol, spec=payload)
         row["steps"] = _describe_steps(steps)
     return row
 
@@ -328,13 +333,21 @@ def agents_from_manifest(
             comm = [str(row.get("protocol") or row.get("kind")).strip()]
         else:
             comm = [default] if default else []
-        out.append(
-            {
-                "id": _clip(agent_id, limit=64),
-                "comm": [_clip(layer, limit=64) for layer in comm],
-                "identity": _clip(names.get(agent_id, ""), limit=96) if names.get(agent_id) else "",
-            }
-        )
+        row = {
+            "id": _clip(agent_id, limit=64),
+            "comm": [_clip(layer, limit=64) for layer in comm],
+            "identity": _clip(names.get(agent_id, ""), limit=96) if names.get(agent_id) else "",
+        }
+        if infra is not None:
+            from mas.runtime.layers.compose import layer_id
+
+            llm_names = [str(layer_id(step) or "") for step in (infra.agent_llm_pipelines or {}).get(agent_id) or []]
+            tool_names = [str(layer_id(step) or "") for step in (infra.agent_tool_pipelines or {}).get(agent_id) or []]
+            if any(llm_names):
+                row["llm"] = [_clip(name, limit=64) for name in llm_names if name]
+            if any(tool_names):
+                row["tools"] = [_clip(name, limit=64) for name in tool_names if name]
+        out.append(row)
     return out
 
 
@@ -397,7 +410,7 @@ def _dest_line(row: dict[str, Any], url_key: str) -> str:
 def _step_lines(steps: list[dict[str, Any]]) -> list[str]:
     out: list[str] = []
     for step in steps:
-        name = step.get("middleware") or step.get("layer")
+        name = step.get("layer")
         if not name:
             continue
         kinds = ",".join(step.get("for") or [])

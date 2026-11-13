@@ -143,7 +143,7 @@ How steps land there:
 
 | Source | Where it runs |
 | --- | --- |
-| `InfraMiddleware` / workspace `middleware` with `middleware: llm_cache` | Common step on the engine |
+| `InfraMiddleware` / workspace `middleware` with `layer: llm_cache` | Common step on the engine |
 | Other `InfraMiddleware` refs (scheduler, fault inject, …) | Cloned in front of **each** leaf |
 | `LLMProxy.spec.pipeline` | That leaf only, except `llm_cache` (`per: all`), which is lifted to the shared wrap and applies to every connection |
 | Typed bundle `entries[].pipeline` on an `llm_provider` slot | That leaf only |
@@ -168,6 +168,7 @@ How steps land there:
 | `PersonalSecrets` | Logical token id → env var name (keep the file gitignored) | `token_refs[]` |
 | `SecretsProvider` | Secrets backend id and parameters | `provider`, `params` |
 | `RuntimeEngine` | Kernel/engine tuning; **rejected in `infra_refs`**, use `runtime_refs` ([runtime-engine.md](runtime-engine.md)) | `engine`, `cache`, `stream`, `parallel` |
+| `Stack` | Named layers a Flavour `bind.llm` / `bind.tools` (or `bind.agents.<id>.llm` / `.tools`) can pick (`{stack: NAME}`), bottom first | `layers[]` |
 | `Infrastructure` | Legacy alias of `LLMProxy` | as `LLMProxy` |
 
 ### Not used yet
@@ -283,7 +284,7 @@ spec:
 Reference a bundle from workspace `config.yaml` or CLI `--infra-ref`, not from Agent or MAS manifests.
 `includes` entries are paths (relative to the bundle file) or library refs such as `standard:openai`.
 A bundle that includes itself, directly or indirectly, is an error.
-`spec.pipeline[]` lists middleware refs, or inline `{middleware, params}` objects, that wrap the merged result, outermost first. `interceptors` is a read-only alias.
+`spec.pipeline[]` lists middleware refs, or inline `{layer, params}` objects, that wrap the merged result, outermost first. `interceptors` is a read-only alias.
 
 ## Relative refs and anchor
 
@@ -441,7 +442,7 @@ Plugin cards: [`slim`](https://github.com/ioc-project/mas-lab/blob/main/library-
 
 ## LLM cache middleware
 
-Record and replay LLM responses with `kind: InfraMiddleware` and `middleware: llm_cache`.
+Record and replay LLM responses with `kind: InfraMiddleware` and `layer: llm_cache`.
 Attach it with `--infra-ref` or workspace `infra_refs`.
 The guide is [llm-cache.md](llm-cache.md) (record and replay walkthrough, manifests, pipeline order).
 The reference is [llm-cache.md](../references/llm-cache.md).
@@ -455,7 +456,7 @@ See [llm-cache.md: Pipeline order](llm-cache.md#pipeline-order).
 
 ## LLM scheduler middleware
 
-Pace live `LLM_CALL` after cache and routing with `middleware: llm_scheduler`.
+Pace live `LLM_CALL` after cache and routing with `layer: llm_scheduler`.
 Stack it **inside** `llm_cache` so replay never waits on a slot.
 `spec.params` is that plugin's constructor kwargs (`max_in_flight`, `state_path`),
 not a shared Infra field — same shape as `llm_cache` and `fault_inject`.
@@ -463,7 +464,7 @@ The guide is [llm-scheduler.md](llm-scheduler.md).
 
 ## Fault-injection middleware
 
-`middleware: fault_inject` fails a fraction of `LLM_CALL`s with a synthetic HTTP error, for reliability experiments.
+`layer: fault_inject` fails a fraction of `LLM_CALL`s with a synthetic HTTP error, for reliability experiments.
 The bundled ref is `standard:chaos-lite`.
 
 | Param | Default | Meaning |
@@ -478,7 +479,7 @@ kind: InfraMiddleware
 metadata:
   name: chaos-lite
 spec:
-  middleware: fault_inject
+  layer: fault_inject
   for: llm
   per: destination
   params:
@@ -499,7 +500,7 @@ mas-ctl chat agent.yaml \
 This patches the effective in-memory infrastructure.
 It does not modify the referenced YAML file.
 
-Middleware parameters are under `infra:spec.interceptors[middleware=llm_cache].params` (the leftover `interceptors` address; `pipeline` is the YAML name), and runtime profile values under `infra:spec.runtime_engine`. All resolved resources survive these patches. To patch a standalone infra leaf, use [`mas-ctl compile`](../cli/compile.md#other-manifest-kinds) with `manifest:`.
+Middleware parameters are under `infra:spec.pipeline[layer=llm_cache].params`, and runtime profile values under `infra:spec.runtime_engine`. All resolved resources survive these patches. To patch a standalone infra leaf, use [`mas-ctl compile`](../cli/compile.md#other-manifest-kinds) with `manifest:`.
 
 For reusable infra changes, use an Overlay with `target.kind: Infra`.
 Put root-qualified assignments under `spec.overrides`; see the [Overlay manifest reference](overlay.md).
@@ -642,6 +643,76 @@ The runtime discovers the names that MCP advertises unless `tools` is set.
 
 [`library-samples/infra/tool-providers.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/tool-providers.yaml) is a `ToolProvider` sample (semantic name → Python class).
 `mas-ctl` does not read it in this release; see [Kinds](#kinds).
+
+## Deprecated spellings
+
+**Current approach.** A call pipeline is a list of layers, bottom first. Each
+step is `{layer: NAME, for: [llm, tool, send], per: all | destination, params: {...}}`.
+`retry`, `circuit_breaker`, `llm_cache`, `llm_scheduler`, `fault_inject` and the
+impair layers are registered as plugin type `layer`.
+
+Each old spelling below still works and warns once. Move to the new one; the old
+ones are dropped in a later release.
+
+| Deprecated | Use | Behaviour today |
+| --- | --- | --- |
+| `middleware: NAME` on a pipeline step | `layer: NAME` | Read as `layer`. When both are present, `layer` wins. |
+| `applies_to` | `for` | Read-only alias. Mixing both in one mapping is an error. |
+| `spec.interceptors` (infra), `infra_interceptors` (workspace) | `spec.pipeline`, workspace `middleware` | Read-only aliases. |
+| Agent `spec.control.retry` / `spec.control.circuit_breaker` | a `retry` / `circuit_breaker` step in the infra `pipeline` | Still applied (one warning) as pipeline steps. Fields keep their names; see [reliability.md](../references/reliability.md#spec-knobs). |
+| `--override` address `spec.interceptors[middleware=X]` | `spec.pipeline[layer=X]` | Read as the new address; warns once. |
+| plugin types `infra_middleware`, `circuit_breaker` | plugin type `layer` | A lookup under the old type resolves to the `layer` row and warns once. A library row that still registers under an old type keeps loading. |
+| a layer class that does not derive from `LayerBase` | derive from `mas.runtime.layers.LayerBase` | Loads and warns once. |
+
+**Moving a library row.** Register the plugin as `layer` and let the class (or the
+row's `attributes`) say where it sits:
+
+```yaml
+# before
+- type: infra_middleware
+  name: my_step
+  module: my_pkg.steps
+  class: MyMiddleware
+
+# after
+- type: layer
+  name: my_step
+  module: my_pkg.steps
+  class: MyLayer            # derives LayerBase
+  attributes:
+    per: destination
+    call_kinds: [llm]
+    priority: 50
+    deprecated_types: [infra_middleware]   # optional: old lookups keep resolving while users move
+```
+
+A layer row can also tell the runtime what the layer is for, so the runtime
+names no layer. These are `attributes` of the `layer` row:
+
+| Attribute | Meaning |
+| --- | --- |
+| `per`, `call_kinds`, `priority` | Where the layer sits (see above). |
+| `default_steps` | Steps a run gets when its pipeline names none of them. `retry` declares its LLM and tool defaults this way. |
+| `control_key` | The deprecated `spec.control.<key>` this layer answers to (`retry`, `circuit_breaker`). |
+| `retry_overlay` | The layer takes the LLM retry overrides (`MAS_LLM_HTTP_*`). |
+| `stores_llm_responses` | The layer is the response cache (`--cache-read` / `--cache-write` insert it). |
+| `paces_llm_calls` | The layer is the scheduler. |
+| `role: transport`, `protocol_layer` | A transport (bottom) or a protocol layer. |
+
+A protocol plugin row (`agent_comm`, `tool_provider`) tells ctl which URL schemes
+are its own, so ctl names no protocol:
+
+| Attribute | Meaning |
+| --- | --- |
+| `protocol_name` | The `protocol:` value of the infra row `--connect` / `--listen` writes. |
+| `url_schemes` | `{scheme: http scheme}`, e.g. a plugin's own scheme and its secure twin. |
+| `connect_as` | `endpoint` (an Application row) or `tool_server` (the `#fragment` names the tool). |
+| `listen` | The scheme may be served with `--listen`. |
+| `listen_hint` | What to do instead when it may not. |
+
+Rename the type in the row, derive the class from `LayerBase`, and write
+`layer:` in the manifests that name it. `deprecated_types` inside the row's
+`attributes` keeps lookups under the old type working while users move.
 
 ## See also
 

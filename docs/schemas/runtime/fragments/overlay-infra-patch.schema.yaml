@@ -24,6 +24,8 @@ properties:
     $ref: "../infra.schema.yaml#/properties/spec/properties/interceptors"
   pipeline:
     $ref: "../infra.schema.yaml#/properties/spec/properties/pipeline"
+  layers:
+    $ref: "../infra.schema.yaml#/properties/spec/properties/layers"
   runtime_engine:
     $ref: "../infra.schema.yaml#/properties/spec/properties/runtime_engine"
   middleware:

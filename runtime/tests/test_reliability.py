@@ -6,13 +6,12 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from mas.library.standard.lib.retry import (
+    RetryPolicy,
+    call_with_retry,
+)
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import classify_http_exception, classify_tool_exception
-from mas.runtime.reliability.policy import (
-    ReliabilitySettings,
-    RetryPolicy,
-)
-from mas.runtime.reliability.retry import call_with_retry
 from mas.runtime.spec.gov import SpecBindingError, build_kernel_config, parse_gov_spec
 
 
@@ -93,22 +92,6 @@ def test_error_policy_rejects_unknown_action() -> None:
         ErrorPolicy.from_mapping({"transient": "explode"})
 
 
-def test_from_spec_reads_the_llm_retry_slot() -> None:
-    settings = ReliabilitySettings.from_spec({"control": {"retry": {"llm": {"max_attempts": 9}}}})
-    assert settings.llm_retry.max_attempts == 9
-    assert settings.tool_retry.max_attempts == 2  # tools default
-
-
-def test_from_spec_omitted_llm_retry_is_default() -> None:
-    settings = ReliabilitySettings.from_spec({"control": {}})
-    assert settings.llm_retry.max_attempts == RetryPolicy.llm_default().max_attempts
-
-
-def test_from_spec_rejects_unknown_retry_slot() -> None:
-    with pytest.raises(SpecBindingError, match="unknown field"):
-        ReliabilitySettings.from_spec({"control": {"retry": {"http": {}}}})
-
-
 def test_classify_http_status_and_timeout() -> None:
     timeout = classify_http_exception(httpx.TimeoutException("boom"))
     assert timeout.failure_class is FailureClass.TRANSIENT
@@ -150,7 +133,7 @@ def test_call_with_retry_respects_require_idempotent() -> None:
 
 
 def test_call_with_retry_retries_transient_when_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("mas.runtime.reliability.retry.time.sleep", lambda _s: None)
+    monkeypatch.setattr("mas.library.standard.lib.retry.loop.time.sleep", lambda _s: None)
     attempts = {"n": 0}
 
     def flaky() -> str:
@@ -199,11 +182,15 @@ def test_build_kernel_config_wires_error_policy_and_plugin() -> None:
         }
     }
     config = build_kernel_config(binding, agent_spec=spec)
-    settings = ReliabilitySettings.from_spec(spec)
-    assert settings.llm_retry.max_attempts == 5
-    assert settings.tool_retry.max_attempts == 3
     from mas.runtime.layers.control import pipeline_from_agent_spec
 
+    retry = {
+        s["for"][0]: s
+        for s in pipeline_from_agent_spec(spec, [], kind="llm") + pipeline_from_agent_spec(spec, [], kind="tool")
+        if s["layer"] == "retry"
+    }
+    assert retry["llm"]["params"]["max_attempts"] == 5
+    assert retry["tool"]["params"]["max_attempts"] == 3
     breaker = next(s for s in pipeline_from_agent_spec(spec, [], kind="llm") if s["layer"] == "circuit_breaker")
     assert breaker["params"]["failure_threshold"] == 2
     recovery = [
@@ -300,7 +287,7 @@ def test_typed_error_without_plugin_follows_ingress_profile() -> None:
 def test_retry_logs_reattempt_then_recovery(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     import logging
 
-    monkeypatch.setattr("mas.runtime.reliability.retry.time.sleep", lambda _s: None)
+    monkeypatch.setattr("mas.library.standard.lib.retry.loop.time.sleep", lambda _s: None)
     attempts = {"n": 0}
 
     def flaky() -> str:
@@ -323,7 +310,7 @@ def test_retry_logs_reattempt_then_recovery(monkeypatch: pytest.MonkeyPatch, cap
 def test_exhausted_retry_logs_error(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:
     import logging
 
-    monkeypatch.setattr("mas.runtime.reliability.retry.time.sleep", lambda _s: None)
+    monkeypatch.setattr("mas.library.standard.lib.retry.loop.time.sleep", lambda _s: None)
 
     def boom() -> None:
         raise ClassifiedFailure("x", failure_class=FailureClass.TRANSIENT, code="TIMEOUT")

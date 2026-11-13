@@ -291,6 +291,8 @@ def instantiate_runtime(
             reason="InstantiationOptions.engine",
         )
     else:
+        from mas.ctl.session.manifest_config import agent_id_from_manifest
+
         selection = build_engine(
             ctx,
             options.agent_manifest,
@@ -309,6 +311,9 @@ def instantiate_runtime(
             parent_default_model=options.parent_default_model,
             experiment_default_model=options.experiment_default_model,
             flavour_spec=options.flavour_spec,
+            agent_id=agent_id_from_manifest(options.agent_manifest),
+            entry_id=str(options.entry_id or ""),
+            delegate_ids=list(options.delegate_ids),
         )
     engine_obj = selection.engine
     if engine_obj is not None:

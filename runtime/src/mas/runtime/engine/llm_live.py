@@ -39,7 +39,6 @@ from mas.runtime.layers.lifecycle import Lifecycle, call_tick
 from mas.runtime.layers.probe import ToolProber
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import classify_llm_failure, classify_llm_http_error
-from mas.runtime.reliability.policy import ReliabilitySettings
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -190,7 +189,6 @@ class LiveLlmEngine(Lifecycle):
     delegation_peer_descriptions: dict[str, str] | None = None
     tool_provider: Any | None = None
     llm_provider: Any | None = None
-    reliability: ReliabilitySettings | None = None
     _pending_tool: str = field(default="", init=False)
     _pending_tool_args: dict[str, Any] = field(default_factory=dict, init=False)
     _pending_tools_by_cid: dict[int, tuple[str, dict[str, Any]]] = field(default_factory=dict, init=False)
@@ -237,8 +235,6 @@ class LiveLlmEngine(Lifecycle):
             self.extra_body = extra_from_manifest(self.manifest, model=self.model)
         self._budget = budget_from_manifest(self.manifest)
         spec = ((self.manifest or {}).get("spec") or {}) if isinstance(self.manifest, dict) else {}
-        if self.reliability is None:
-            self.reliability = ReliabilitySettings.from_spec(spec)
         if self.llm_provider is None:
             self.llm_provider = self._default_llm_provider()
         self.llm_provider = self._wrap_cache(self.llm_provider)
@@ -259,6 +255,7 @@ class LiveLlmEngine(Lifecycle):
             split_pipeline_layers,
             wrap_call_stack,
         )
+        from mas.runtime.layers.compose import observes_failures
 
         steps = [dict(step) for step in (pipeline or []) if isinstance(step, dict)]
         common, per_leaf = split_pipeline_layers(steps)
@@ -267,6 +264,10 @@ class LiveLlmEngine(Lifecycle):
             raise ValueError(
                 f"install_infra_pipeline only accepts per: all steps; got destination {names}. Wrap those on each leaf."
             )
+        shared = [middleware_id(step) or "?" for step in common if observes_failures(step)]
+        if shared:
+            # The shared copy sits above the engine, which turns a provider failure into an ERROR return.
+            raise ValueError(f"{shared} must wrap each destination (per: destination), not the shared engine call")
         if not common:
             self._infra_stack = None
             return
@@ -286,6 +287,7 @@ class LiveLlmEngine(Lifecycle):
         """
         from mas.runtime.engine.infra_pipeline import (
             filter_pipeline_for_kind,
+            layer_role,
             middleware_id,
             split_pipeline_layers,
             wrap_call_stack,
@@ -312,6 +314,8 @@ class LiveLlmEngine(Lifecycle):
                 "tool",
             )
             _, dest_only = split_pipeline_layers(dest_steps)
+            # The tool provider built its own transport and protocol layers; only wrap steps go around it.
+            dest_only = [step for step in dest_only if layer_role(step) == "wrap"]
             if dest_only:
                 dest_wraps[name] = wrap_tool_pipeline(dispatch, dest_only)
         self._tool_destinations = dest_wraps
@@ -343,6 +347,12 @@ class LiveLlmEngine(Lifecycle):
         """Run a tool the running spec took away, to see whether it is back. Not a model call: no budget, no layers."""
         if self.tool_provider is None:
             raise ToolExecutionError(f"no tool provider to probe {name!r}")
+        from mas.runtime.engine.tool_dispatch import tool_is_idempotent
+        from mas.runtime.engine.tools import current_spec_for_advertise
+
+        if not tool_is_idempotent(name, current_spec_for_advertise(self.ctx)):
+            # A probe runs outside the model's turn; only a tool declared safe to repeat may be called that way.
+            raise ToolExecutionError(f"tool {name!r} is not declared idempotent, so it cannot be a probe")
         self.tool_provider.probe_tool(name, dict(arguments), ctx=self.ctx)
 
     def stop(self) -> None:
@@ -351,6 +361,10 @@ class LiveLlmEngine(Lifecycle):
         call_stop(self._tool_stack)
         call_stop(self._infra_stack)
         call_stop(self.llm_provider)
+        call_stop(self.tool_provider)
+        closer = getattr(self.tool_provider, "close", None)
+        if callable(closer):
+            closer()
         for wrap in self._tool_destinations.values():
             call_stop(wrap)
 
@@ -553,7 +567,7 @@ class LiveLlmEngine(Lifecycle):
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "LLM_CALL":
-            self.tick()
+            await asyncio.to_thread(self.tick)  # a probe is a real, blocking tool call
         token = self._begin_tool_call(io)
         try:
             if io.op == "TOOL_CALL" and self._tool_stack is not None:
@@ -621,6 +635,38 @@ class LiveLlmEngine(Lifecycle):
             text=f"Unsupported operation: {io.op}",
         )
 
+    def _llm_error_return(self, io: InvokeEngineIo, exc: Exception) -> EngineIoReturn:
+        """The ERROR return for a provider failure, classified and logged. Sync and async share it."""
+        logger.debug("LLM provider call failed", exc_info=True)
+        classified = exc if isinstance(exc, ClassifiedFailure) else classify_llm_failure(exc)
+        from mas.runtime.reliability.log import LOGGER as reliability_log
+        from mas.runtime.reliability.log import extra as reliability_extra
+
+        reliability_log.error(
+            "LLM call exhausted (%s %s, %s attempts): %s",
+            classified.failure_class.value if isinstance(classified, ClassifiedFailure) else "",
+            classified.code if isinstance(classified, ClassifiedFailure) else "",
+            classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
+            classified,
+            extra=reliability_extra(
+                target=self.model,
+                failure_class=classified.failure_class.value if isinstance(classified, ClassifiedFailure) else "",
+                failure_code=classified.code if isinstance(classified, ClassifiedFailure) else "",
+                attempt=classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
+                outcome="llm_error",
+            ),
+        )
+        return EngineIoReturn(
+            correlation_id=io.correlation_id,
+            response_kind="ERROR",
+            next_step="STOP",
+            text=str(classified) if isinstance(classified, ClassifiedFailure) else classify_llm_http_error(exc),
+            offered_tools=list(self._offered_tool_names),
+            failure_class=classified.failure_class.value if isinstance(classified, ClassifiedFailure) else "",
+            failure_code=classified.code if isinstance(classified, ClassifiedFailure) else "",
+            retry_attempts=classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
+        )
+
     def _llm_call(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not self._budget.allow_llm():
             return EngineIoReturn(
@@ -652,35 +698,7 @@ class LiveLlmEngine(Lifecycle):
                 offered_tools=list(self._offered_tool_names),
             )
         except Exception as exc:
-            logger.debug("LLM provider call failed", exc_info=True)
-            classified = exc if isinstance(exc, ClassifiedFailure) else classify_llm_failure(exc)
-            from mas.runtime.reliability.log import LOGGER as reliability_log
-            from mas.runtime.reliability.log import extra as reliability_extra
-
-            reliability_log.error(
-                "LLM call exhausted (%s %s, %s attempts): %s",
-                classified.failure_class.value if isinstance(classified, ClassifiedFailure) else "",
-                classified.code if isinstance(classified, ClassifiedFailure) else "",
-                classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
-                classified,
-                extra=reliability_extra(
-                    target=self.model,
-                    failure_class=classified.failure_class.value if isinstance(classified, ClassifiedFailure) else "",
-                    failure_code=classified.code if isinstance(classified, ClassifiedFailure) else "",
-                    attempt=classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
-                    outcome="llm_error",
-                ),
-            )
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="ERROR",
-                next_step="STOP",
-                text=str(classified) if isinstance(classified, ClassifiedFailure) else classify_llm_http_error(exc),
-                offered_tools=list(self._offered_tool_names),
-                failure_class=classified.failure_class.value if isinstance(classified, ClassifiedFailure) else "",
-                failure_code=classified.code if isinstance(classified, ClassifiedFailure) else "",
-                retry_attempts=classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
-            )
+            return self._llm_error_return(io, exc)
 
         usage = message.pop("usage", None) or {}
         finish_reason = message.pop("finish_reason", None) or ""
@@ -736,14 +754,7 @@ class LiveLlmEngine(Lifecycle):
                 offered_tools=list(self._offered_tool_names),
             )
         except Exception as exc:
-            logger.debug("LLM provider call failed", exc_info=True)
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="ERROR",
-                next_step="STOP",
-                text=classify_llm_http_error(exc),
-                offered_tools=list(self._offered_tool_names),
-            )
+            return self._llm_error_return(io, exc)
 
         usage = message.pop("usage", None) or {}
         finish_reason = message.pop("finish_reason", None) or ""

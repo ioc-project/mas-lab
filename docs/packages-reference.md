@@ -255,7 +255,7 @@ uv pip install -e library-eval  # source
 uv pip install "mas-lab-library-eval[dev]"  # PyPI, all extras
 ```
 
-**Depends on:** `mas-lab-component-core`, `mas-lab-component-bench`, `mas-lab-runtime`  
+**Depends on:** `mas-lab-component-core`, `mas-lab-component-bench`, `mas-lab-runtime`, `mas-lab-library-standard`  
 
 **Optional extras:**
 

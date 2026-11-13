@@ -99,7 +99,9 @@ and [Tutorial 12](../tutorials/12-subagents/README.md).
 `pause_session` is opt-in. Naming it gives the model a bounded session-control
 surface (`pause_session`, `list_checkpoints`, `inspect_session`,
 `navigate_checkpoint`, `cancel_inflight`, `run_control_script`) when the session
-has a control channel. See [Tutorial 13](../tutorials/13-control-and-debug/README.md).
+has a control channel. The grant is all six: `run_control_script` can persist state,
+steer the session and edit the running spec, so name `pause_session` only for a
+model you trust with that. See [Tutorial 13](../tutorials/13-control-and-debug/README.md).
 
 Third-party system plugins register with a library manifest:
 

@@ -8,14 +8,14 @@ from pathlib import Path
 
 import yaml
 from mas.runtime.layers.compose import layer_id
-from mas.runtime.layers.defaults import merge_default_retry
+from mas.runtime.layers.defaults import merge_default_steps
 
 _REPO = Path(__file__).resolve().parents[3]
 _TUTORIALS = _REPO / "docs" / "tutorials"
 
 
 def test_wrap_time_retry_is_not_empty() -> None:
-    wrapped = merge_default_retry([], "llm")
+    wrapped = merge_default_steps([], "llm")
     assert any(layer_id(step) == "retry" for step in wrapped)
 
 

@@ -57,23 +57,12 @@ def _clear_library_discovery_caches():
     clear_library_discovery_cache()
 
 
-class _PathProbe:
-    """A governance plugin that takes a file path, to test how a Control's paths are read."""
-
-    def __init__(self, script_file: str = "", **_: object) -> None:
-        self.script_file = script_file
-
-    def evaluate_egress(self, intent, *, config):
-        from mas.runtime.kernel.coupling import GovDecision
-
-        return GovDecision.ALLOW, "path_probe", "probe"
-
-
 @pytest.fixture(scope="session", autouse=True)
 def _path_probe_plugin():
     from mas.runtime.registry import register_plugin, unregister_plugin
+    from path_probe_plugin import PathProbe
 
     urn = "mas.gov.test_path_probe"
-    register_plugin(urn, _PathProbe, shortcuts=["path_probe"], attributes={"plugin_type": "governance"})
+    register_plugin(urn, PathProbe, shortcuts=["path_probe"], attributes={"plugin_type": "governance"})
     yield
     unregister_plugin(urn)

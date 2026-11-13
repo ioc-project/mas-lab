@@ -172,16 +172,16 @@ class BoundSystemPlugins:
     _by_tool: dict[str, _Bound] = field(default_factory=dict)
 
     def add(self, bound: _Bound) -> None:
-        self._bound.append(bound)
-        for definition in bound.plugin.tools():
-            if not definition.name:
-                continue
-            other = self._by_tool.get(definition.name)
+        names = [definition.name for definition in bound.plugin.tools() if definition.name]
+        for name in names:
+            other = self._by_tool.get(name)
             if other is not None and other.urn != bound.urn:
                 raise ManifestToolLoadError(
-                    f"system plugins {other.name!r} and {bound.name!r} both expose tool {definition.name!r}"
+                    f"system plugins {other.name!r} and {bound.name!r} both expose tool {name!r}"
                 )
-            self._by_tool[definition.name] = bound
+        self._bound.append(bound)
+        for name in names:
+            self._by_tool[name] = bound
 
     def tool_names(self) -> frozenset[str]:
         return frozenset(self._by_tool)
@@ -197,14 +197,14 @@ class BoundSystemPlugins:
                 out.append(definition.as_advertise())
         return out
 
-    def _owner(self, tool_name: str) -> _Bound | None:
+    def _owner(self, tool_name: str, ctx: Any | None = None) -> _Bound | None:
         owner = self._by_tool.get(tool_name)
         if owner is not None:
             return owner
-        return next((row for row in self._bound if row.plugin.claims(tool_name, state=row.state)), None)
+        return next((row for row in self._bound if row.plugin.claims(tool_name, state=row.state, ctx=ctx)), None)
 
-    def claims(self, tool_name: str) -> bool:
-        return self._owner(tool_name) is not None
+    def claims(self, tool_name: str, ctx: Any | None = None) -> bool:
+        return self._owner(tool_name, ctx) is not None
 
     def call(
         self,
@@ -213,7 +213,7 @@ class BoundSystemPlugins:
         *,
         context: CallContext | None = None,
     ) -> Any:
-        bound = self._owner(tool)
+        bound = self._owner(tool, context.ctx if context else None)
         if bound is None:
             raise UnknownSystemToolError(tool)
         return bound.plugin.call(tool, dict(args or {}), state=bound.state, context=context or CallContext())
@@ -225,7 +225,7 @@ class BoundSystemPlugins:
         *,
         context: CallContext | None = None,
     ) -> Any:
-        bound = self._owner(tool)
+        bound = self._owner(tool, context.ctx if context else None)
         if bound is None:
             raise UnknownSystemToolError(tool)
         return await bound.plugin.acall(tool, dict(args or {}), state=bound.state, context=context or CallContext())

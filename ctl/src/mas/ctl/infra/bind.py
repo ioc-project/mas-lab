@@ -9,7 +9,9 @@ agents we run (default ``connect``, as for every Application row). A Flavour
 links agents to rows: ``spec.bind.agent_comm`` is the default chain, bottom
 first, and ``spec.bind.agents.<id>`` gives one agent its own ``agent_comm``
 chain, the ``usage`` this deployment makes of it (``connect``: reach it there;
-``listen``: host it here), and ``params`` that override a row's params for it.
+``listen``: host it here), ``params`` that override a row's params for it, and
+``llm`` / ``tools`` stacks that replace ``bind.llm`` / ``bind.tools`` for that
+agent.
 A row's string params may hold ``{agent}``, replaced by each agent's id, so one
 row serves many agents. Each row of a chain is a layer: its ``protocol`` is the
 layer plugin, its other fields are the layer's params. ctl reads no protocol
@@ -115,13 +117,15 @@ def bound_chains(flavour_spec: dict[str, Any] | None) -> tuple[list[str], list[s
     """The default row names of ``spec.bind.agent_comm``, the default usage, and each ``spec.bind.agents.<id>`` entry.
 
     An entry is ``{agent_comm: [rows] | None, usage: [..] | None, params: {row: {param: value}}}``.
+    ``bind.llm`` / ``bind.tools`` and an agent's ``llm`` / ``tools`` stacks are read, and checked against the
+    Stack rows, by :func:`bind_flavour`.
     """
     bind = (flavour_spec or {}).get("bind")
     if bind is None:
         return [], list(DEFAULT_USAGE), {}
     if not isinstance(bind, dict):
         raise BindError("Flavour bind must be a map")
-    unknown = sorted(set(bind) - {"agent_comm", "agents", "usage", "events"})
+    unknown = sorted(set(bind) - {"agent_comm", "agents", "usage", "events", "llm", "tools"})
     if unknown:
         raise BindError(f"Flavour bind: unknown keys {unknown}")
     default = _row_names(bind["agent_comm"], "bind.agent_comm") if bind.get("agent_comm") is not None else []
@@ -132,8 +136,21 @@ def bound_chains(flavour_spec: dict[str, Any] | None) -> tuple[list[str], list[s
     entries: dict[str, dict[str, Any]] = {}
     for agent_id, entry in agents.items():
         where = f"bind.agents.{agent_id}"
-        if not isinstance(entry, dict) or not entry or set(entry) - {"agent_comm", "usage", "params"}:
-            raise BindError(f"Flavour {where} takes agent_comm (a list of Application row names), usage and params")
+        if (
+            not isinstance(entry, dict)
+            or not entry
+            or set(entry)
+            - {
+                "agent_comm",
+                "usage",
+                "params",
+                "llm",
+                "tools",
+            }
+        ):
+            raise BindError(
+                f"Flavour {where} takes agent_comm (a list of Application row names), usage, params, llm and tools"
+            )
         params = entry.get("params") or {}
         if not isinstance(params, dict) or not all(isinstance(value, dict) for value in params.values()):
             raise BindError(f"Flavour {where}.params is a map of row name to {{param: value}}")
@@ -143,6 +160,84 @@ def bound_chains(flavour_spec: dict[str, Any] | None) -> tuple[list[str], list[s
             "params": {str(row): dict(values) for row, values in params.items()},
         }
     return default, default_usage, entries
+
+
+def _call_stacks(
+    bind: dict[str, Any] | None, resolved: ResolvedInfra
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """``bind.llm`` / ``bind.tools`` as ``{stack: NAME}`` naming a Stack infra row."""
+    if not isinstance(bind, dict):
+        return [], []
+    stacks = dict(resolved.stacks or {})
+    return _optional_stack(bind, "llm", stacks, "bind.llm") or [], _optional_stack(
+        bind, "tools", stacks, "bind.tools"
+    ) or []
+
+
+def _stack_steps(raw: Any, where: str, stacks: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    if not isinstance(raw, dict) or set(raw) - {"stack"}:
+        raise BindError(f"Flavour {where} is {{stack: NAME}}")
+    name = str(raw.get("stack") or "").strip()
+    if not name:
+        raise BindError(f"Flavour {where} is {{stack: NAME}}")
+    if name not in stacks:
+        raise BindError(f"Flavour {where} names {name!r}, which is no Stack row")
+    return [dict(step) for step in stacks[name]]
+
+
+def _optional_stack(
+    owner: dict[str, Any], key: str, stacks: dict[str, list[dict[str, Any]]], where: str
+) -> list[dict[str, Any]] | None:
+    if key not in owner or owner.get(key) is None:
+        return None
+    steps = _stack_steps(owner[key], where, stacks)
+    if key == "tools":
+        from mas.runtime.layers.compose import layer_id, layer_role
+
+        bound = [str(layer_id(step)) for step in steps if layer_role(step) in {"transport", "protocol"}]
+        if bound:
+            raise BindError(f"Flavour {where}: {', '.join(bound)} belong on the tool-server row, not on a tool stack")
+    return steps
+
+
+def _replace_stack_prefix(
+    pipeline: list[dict[str, Any]], default: list[dict[str, Any]], replacement: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    rest = pipeline[len(default) :] if default and pipeline[: len(default)] == default else pipeline
+    return list(replacement) + rest
+
+
+def apply_agent_call_stacks(resolved: ResolvedInfra, agent_id: str) -> ResolvedInfra:
+    """*resolved* with that agent's ``bind.llm`` / ``bind.tools`` stack on the session pipelines.
+
+    ``bind.llm`` is the default for every agent. ``bind.agents.<id>.llm`` replaces
+    it for that agent, the way ``bind.agents.<id>.agent_comm`` replaces the
+    default send chain. An empty *agent_id* keeps the session default.
+    """
+    if not agent_id:
+        return resolved
+    llm_steps = (resolved.agent_llm_pipelines or {}).get(agent_id)
+    tool_steps = (resolved.agent_tool_pipelines or {}).get(agent_id)
+    if llm_steps is None and tool_steps is None:
+        return resolved
+    updates: dict[str, Any] = {}
+    default_llm = list(resolved.llm_stack or [])
+    default_tools = list(resolved.tool_stack or [])
+    if llm_steps is not None and resolved.llm_proxy:
+        llm_proxy = dict(resolved.llm_proxy)
+        llm_proxy["pipeline"] = _replace_stack_prefix(list(llm_proxy.get("pipeline") or []), default_llm, llm_steps)
+        leaves = {name: dict(leaf) for name, leaf in (resolved.llm_proxies or {}).items()}
+        for leaf in leaves.values():
+            leaf["pipeline"] = _replace_stack_prefix(list(leaf.get("pipeline") or []), default_llm, llm_steps)
+        updates["llm_proxy"] = llm_proxy
+        updates["llm_proxies"] = leaves
+    if tool_steps is not None:
+        servers = {name: dict(server) for name, server in (resolved.tool_server_registry or {}).items()}
+        for server in servers.values():
+            server["pipeline"] = _replace_stack_prefix(list(server.get("pipeline") or []), default_tools, tool_steps)
+        updates["tool_pipeline"] = _replace_stack_prefix(list(resolved.tool_pipeline or []), default_tools, tool_steps)
+        updates["tool_server_registry"] = servers
+    return dataclasses.replace(resolved, **updates)
 
 
 def _named_side_rows(
@@ -350,6 +445,8 @@ def bind_flavour(
     bind = flavour_spec.get("bind") if isinstance(flavour_spec, dict) else None
     if isinstance(bind, dict):
         _named_side_rows(bind, "events", rows=rows)
+    bind_map = bind if isinstance(bind, dict) else {}
+    llm_steps, tool_steps = _call_stacks(bind_map, resolved)
     known = list(agent_ids) if agent_ids is not None else list(entries)
     unknown = sorted(set(entries) - set(known))
     if unknown:
@@ -390,7 +487,49 @@ def bind_flavour(
         missing = [agent_id for agent_id in known if agent_id not in rows and agent_id not in agent_chains]
         if missing:
             raise BindError(f"require_usage: agent {missing[0]!r} has no bind chain or agent-keyed Application row")
-    return dataclasses.replace(resolved, applications=rows, agent_chains=agent_chains, agent_usage=agent_usage)
+    stacks = dict(resolved.stacks or {})
+    bind_agents = bind_map.get("agents") if isinstance(bind_map.get("agents"), dict) else {}
+    agent_llm: dict[str, list[dict[str, Any]]] = {}
+    agent_tools: dict[str, list[dict[str, Any]]] = {}
+    for agent_id in known:
+        raw_entry = bind_agents.get(agent_id) if isinstance(bind_agents.get(agent_id), dict) else {}
+        llm = _optional_stack(raw_entry, "llm", stacks, f"bind.agents.{agent_id}.llm")
+        tools = _optional_stack(raw_entry, "tools", stacks, f"bind.agents.{agent_id}.tools")
+        if llm is None:
+            llm = llm_steps
+        if tools is None:
+            tools = tool_steps
+        if llm:
+            agent_llm[agent_id] = llm
+        if tools:
+            agent_tools[agent_id] = tools
+    updates: dict[str, Any] = {
+        "applications": rows,
+        "agent_chains": agent_chains,
+        "agent_usage": agent_usage,
+        "llm_stack": list(llm_steps),
+        "tool_stack": list(tool_steps),
+        "agent_llm_pipelines": agent_llm,
+        "agent_tool_pipelines": agent_tools,
+    }
+    # Binding twice replaces the stack it put on the first time; it never stacks a second copy.
+    previous_llm = list(resolved.llm_stack or [])
+    previous_tools = list(resolved.tool_stack or [])
+    if (llm_steps or previous_llm) and resolved.llm_proxy:  # no endpoint, no pipeline to put the stack on
+        llm_proxy = dict(resolved.llm_proxy)
+        llm_proxy["pipeline"] = _replace_stack_prefix(list(llm_proxy.get("pipeline") or []), previous_llm, llm_steps)
+        leaves = {name: dict(leaf) for name, leaf in (resolved.llm_proxies or {}).items()}
+        for leaf in leaves.values():
+            leaf["pipeline"] = _replace_stack_prefix(list(leaf.get("pipeline") or []), previous_llm, llm_steps)
+        updates["llm_proxy"] = llm_proxy
+        updates["llm_proxies"] = leaves
+    if tool_steps or previous_tools:
+        servers = {name: dict(server) for name, server in (resolved.tool_server_registry or {}).items()}
+        for server in servers.values():
+            server["pipeline"] = _replace_stack_prefix(list(server.get("pipeline") or []), previous_tools, tool_steps)
+        updates["tool_pipeline"] = _replace_stack_prefix(list(resolved.tool_pipeline or []), previous_tools, tool_steps)
+        updates["tool_server_registry"] = servers
+    return dataclasses.replace(resolved, **updates)
 
 
 def bind_session(resolved: ResolvedInfra | None, flavour: Any, *, agent_ids: list[str]) -> ResolvedInfra:
