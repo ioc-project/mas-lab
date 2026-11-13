@@ -31,6 +31,8 @@ additionalProperties: false
 patternProperties:
   "^x-": {}
 properties:
+  mcp_tools:
+    $ref: "../agent.schema.yaml#/properties/spec/properties/mcp_tools"
   params:
     $ref: "../agent.schema.yaml#/properties/spec/properties/params"
   context:

@@ -258,3 +258,144 @@ def test_mcp_kind_binds_via_urn_registry() -> None:
 def test_invalidate_is_optional_on_duck_client() -> None:
     provider = MCPToolProvider(_Client())
     provider.invalidate()
+
+
+def test_per_agent_selection_preserves_schemas_and_rejects_before_transport(monkeypatch):
+    from library_ioa.plugins.mcp.contract import as_mas_tool_spec
+    from mas.runtime.engine.tool_routing import UnclaimedToolError
+
+    schema = {
+        "type": "object",
+        "required": ["record"],
+        "properties": {"record": {"type": "object", "properties": {"kind": {"enum": ["a", "b"]}}}},
+    }
+    tools = [
+        {"name": "records_get", "description": "Read record", "inputSchema": schema, "outputSchema": schema},
+        {"name": "records_update", "inputSchema": schema},
+    ]
+    clients = []
+
+    def create(_):
+        client = _Client(tools=tools)
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(MCPClientFactory, "create_client", create)
+    servers = [{"id": "records", "protocol": "mcp", "command": "unused"}]
+    reader = providers_from_manifest(
+        {"spec": {"mcp_tools": [{"server_ref": "records", "include": {"names": ["records_get"]}}]}},
+        tool_servers=servers,
+    )[0]
+    editor = providers_from_manifest(
+        {"spec": {"mcp_tools": [{"server_ref": "records", "include": {"prefixes": ["records_"]}}]}},
+        tool_servers=servers,
+    )[0]
+    assert reader.list_tools() == [as_mas_tool_spec(tools[0])]
+    assert editor.list_tools() == [as_mas_tool_spec(tool) for tool in tools]
+    with pytest.raises(UnclaimedToolError):
+        reader.call_tool("records_update", {})
+    assert not hasattr(clients[0], "call_kwargs")
+    reader.call_tool("records_get", {})
+    assert clients[0].list_calls == 3
+    assert hasattr(clients[0], "call_kwargs")
+    registry = ToolProviderRegistry()
+    registry.register_provider(reader)
+    assert [tool["name"] for tool in registry.list_tools()] == ["records_get"]
+    with pytest.raises(UnclaimedToolError):
+        registry.call_tool("records_update", {})
+
+
+def test_empty_scope_removes_mcp_providers():
+    providers = providers_from_manifest(
+        {"spec": {"mcp_tools": []}}, tool_servers=[{"id": "records", "protocol": "mcp", "command": "unused"}]
+    )
+    assert not any(provider.kind == "mcp" for provider in providers)
+
+
+@pytest.mark.parametrize("include", [{"names": ["missing"]}, {"prefixes": ["missing_"]}])
+def test_unresolved_selection_is_an_error(include):
+    provider = MCPToolProvider(_Client(), tool_selection=include)
+    with pytest.raises(ValueError, match="did not resolve"):
+        provider.list_tools()
+
+
+def test_server_claim_is_an_upper_bound_and_empty_selection_is_valid():
+    provider = MCPToolProvider(_Client(), tools_claim=[], tool_selection={"names": ["calculator"]})
+    with pytest.raises(ValueError, match="did not resolve"):
+        provider.list_tools()
+    empty = MCPToolProvider(_Client(), tool_selection={})
+    registry = ToolProviderRegistry()
+    registry.register_provider(empty)
+    assert registry.list_tools() == []
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        None,
+        ["records"],
+        [{"server_ref": "missing", "include": {}}],
+        [{"server_ref": "records", "include": {"names": "calculator"}}],
+    ],
+)
+def test_invalid_selection_fails_clearly(selection):
+    with pytest.raises(ValueError):
+        providers_from_manifest(
+            {"spec": {"mcp_tools": selection}}, tool_servers=[{"id": "records", "protocol": "mcp", "command": "unused"}]
+        )
+
+
+def test_selection_cannot_be_bypassed_by_legacy_providers():
+    from mas.runtime.registry.tool_provider_registry import providers_from_manifest
+
+    with pytest.raises(ValueError, match="legacy providers"):
+        providers_from_manifest({"spec": {"mcp_tools": [], "providers": [{"kind": "mcp", "name": "server"}]}})
+
+
+@pytest.mark.parametrize("ttl", [0, 100, None])
+def test_selection_respects_native_discovery_cache(monkeypatch, ttl):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from library_ioa.plugins.mcp.client import MCPClient
+    from mas.runtime.engine.tool_routing import UnclaimedToolError
+    from mcp.types import ListToolsResult, Tool
+
+    clock = [1.0]
+    monkeypatch.setattr("library_ioa.plugins.mcp.client.time.monotonic", lambda: clock[0])
+    client = MCPClient(command="unused", cache_scope="private", cache_ttl_ms=ttl)
+    schema = {"type": "object", "properties": {"alice": {"type": "string"}}}
+    session = SimpleNamespace(list_tools=AsyncMock())
+    session.list_tools.return_value = ListToolsResult(
+        ttl_ms=10000, tools=[Tool(name="records_get", inputSchema=schema)]
+    )
+
+    @asynccontextmanager
+    async def transport():
+        yield session
+
+    monkeypatch.setattr(client, "_ephemeral_session", transport)
+    client.call_tool = AsyncMock(return_value={})
+    provider = MCPToolProvider(client, tool_selection={"prefixes": ["records_"]})
+    alice, bob = SimpleNamespace(user="alice"), SimpleNamespace(user="bob")
+    assert provider.list_tools(ctx=alice)[0]["parameters"] == schema
+    schema_b = {"type": "object", "properties": {"bob": {"type": "integer"}}}
+    session.list_tools.return_value = ListToolsResult(
+        ttl_ms=10000, tools=[Tool(name="records_get", inputSchema=schema_b)]
+    )
+    assert provider.list_tools(ctx=bob)[0]["parameters"] == schema_b
+    assert session.list_tools.await_count == 2
+    assert provider.list_tools(ctx=alice)[0]["parameters"] == (schema_b if ttl == 0 else schema)
+    clock[0] += 1
+    assert provider.list_tools(ctx=alice)[0]["parameters"] == (schema if ttl is None else schema_b)
+    provider.invalidate()
+    session.list_tools.return_value = ListToolsResult(
+        ttl_ms=10000, tools=[Tool(name="records_list", inputSchema=schema_b)]
+    )
+    assert provider.list_tools(ctx=alice)[0]["name"] == "records_list"
+    with pytest.raises(UnclaimedToolError):
+        provider.call_tool("records_get", {}, ctx=alice)
+    with pytest.raises(UnclaimedToolError):
+        provider.call_tool("delete_all", {}, ctx=alice)
+    client.call_tool.assert_not_awaited()

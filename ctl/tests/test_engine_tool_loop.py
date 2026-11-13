@@ -45,3 +45,17 @@ def test_deprecated_kernel_config_path_does_not_take_dead_ingress_specs():
     assert "ingress_plugin_specs" not in params
     kernel = kernel_config_from_manifest({"spec": {}})
     assert kernel is not None
+
+
+def test_mcp_selection_enables_llm_tool_catalog():
+    manifest = {"spec": {"mcp_tools": [{"server_ref": "records", "include": {"prefixes": ["read_"]}}]}}
+    assert engine_use_tool_loop(manifest, kernel_config_from_manifest(manifest)) is True
+    assert (
+        engine_use_tool_loop(manifest, kernel_config_from_manifest(manifest, pattern_plugin_id="plan_execute@v1"))
+        is False
+    )
+
+
+def test_empty_mcp_selection_does_not_enable_llm_tool_catalog():
+    manifest = {"spec": {"mcp_tools": []}}
+    assert engine_use_tool_loop(manifest, kernel_config_from_manifest(manifest)) is False

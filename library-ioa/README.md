@@ -99,3 +99,5 @@ See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-
 - [ToolContract](../docs/references/tool-contract.md)
 - [kind: Tool](../docs/manifests/tool.md)
 - [ToolServerRegistry](../docs/references/tool-server-registry.md)
+
+Per-agent MCP selections filter the native client discovery results on each use. They preserve the client’s user-scoped cache, TTL, disabled-cache setting and invalidation, including execution checks after a previously advertised tool is removed.

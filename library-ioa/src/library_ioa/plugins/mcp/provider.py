@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
+from mas.runtime.engine.tool_routing import UnclaimedToolError
 from mas.runtime.registry.provider_protocol import ToolProvider
 from mas.runtime.spec.endpoint_usage import usage_connects
 
@@ -74,16 +75,22 @@ class MCPToolProvider(ToolProvider):
         provider_name: str = "mcp",
         tools_claim: str | list[str] | tuple[str, ...] | None = "*",
         timeout: float | None = None,
+        tool_selection: dict[str, list[str]] | None = None,
     ) -> None:
         self._client = client_wrapper
         self.provider_name = provider_name
         self.timeout = timeout
+        self._selection = tool_selection
         if tools_claim is None or tools_claim == "*":
             self.tools_claim: str | tuple[str, ...] = "*"
         elif isinstance(tools_claim, str):
             self.tools_claim = (tools_claim,)
         else:
             self.tools_claim = tuple(str(n) for n in tools_claim)
+
+    @property
+    def has_tool_selection(self) -> bool:
+        return self._selection is not None
 
     @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "MCPToolProvider":
@@ -95,6 +102,7 @@ class MCPToolProvider(ToolProvider):
             provider_name=binding.name,
             tools_claim=binding.tools,
             timeout=binding.timeout,
+            tool_selection=spec.get("tool_selection"),
         )
 
     @classmethod
@@ -141,13 +149,34 @@ class MCPToolProvider(ToolProvider):
         """MCP ``tools/list`` advertisement. Called at runtime init for ``*`` claims."""
         try:
             tools = run_sync(self._list_coro(ctx))
-            return [as_mas_tool_spec(item) for item in (tools or []) if isinstance(item, dict)]
+            specs = [as_mas_tool_spec(item) for item in (tools or []) if isinstance(item, dict)]
+            if self._selection is None:
+                return specs
+            if self.tools_claim != "*":
+                specs = [spec for spec in specs if spec["name"] in self.tools_claim]
+            available = {spec["name"] for spec in specs}
+            names = set(self._selection.get("names", []))
+            prefixes = self._selection.get("prefixes", [])
+            missing = names - available
+            unmatched = [prefix for prefix in prefixes if not any(name.startswith(prefix) for name in available)]
+            if missing or unmatched:
+                raise ValueError(
+                    f"MCP selection for {self.provider_name!r} did not resolve: "
+                    f"names={sorted(missing)}, prefixes={unmatched}"
+                )
+            return [
+                spec
+                for spec in specs
+                if spec["name"] in names or any(spec["name"].startswith(prefix) for prefix in prefixes)
+            ]
         except Exception as exc:
             logger.error("Failed to list tools from MCP client: %s", exc, exc_info=True)
             raise
 
     def list_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
         """Advertise claimed names. Explicit lists skip ``tools/list``."""
+        if self._selection is not None:
+            return self.discover_tools(ctx=ctx)
         if self.tools_claim != "*":
             return [{"name": n, "parameters": {"type": "object", "properties": {}}} for n in self.tools_claim]
         return self.discover_tools(ctx=ctx)
@@ -164,6 +193,8 @@ class MCPToolProvider(ToolProvider):
         options = dict(kwargs)
         if self.timeout is not None:
             options.setdefault("timeout_seconds", self.timeout)
+        if self._selection is not None and tool_name not in {spec["name"] for spec in self.discover_tools(ctx=ctx)}:
+            raise UnclaimedToolError(f"Tool {tool_name!r} is outside the MCP selection for {self.provider_name!r}")
         try:
             result = run_sync(self._client.call_tool(tool_name, arguments, **options))
             mapped = as_mas_tool_result(result)
