@@ -137,10 +137,22 @@ class MCPToolProvider(ToolProvider):
         except TypeError:
             return fn()
 
+    def close(self) -> None:
+        """Close the held MCP session (and a stdio server process). Idempotent."""
+        closer = getattr(self._client, "close", None)
+        if callable(closer):
+            closer()
+
+    def _run(self, coro: Any) -> Any:
+        runner = getattr(self._client, "run", None)
+        if callable(runner):
+            return runner(coro)
+        return run_sync(coro)
+
     def discover_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
         """MCP ``tools/list`` advertisement. Called at runtime init for ``*`` claims."""
         try:
-            tools = run_sync(self._list_coro(ctx))
+            tools = self._run(self._list_coro(ctx))
             return [as_mas_tool_spec(item) for item in (tools or []) if isinstance(item, dict)]
         except Exception as exc:
             logger.error("Failed to list tools from MCP client: %s", exc, exc_info=True)
@@ -165,7 +177,7 @@ class MCPToolProvider(ToolProvider):
         if self.timeout is not None:
             options.setdefault("timeout_seconds", self.timeout)
         try:
-            result = run_sync(self._client.call_tool(tool_name, arguments, **options))
+            result = self._run(self._client.call_tool(tool_name, arguments, **options))
             mapped = as_mas_tool_result(result)
             if mapped.get("is_error"):
                 mapped.setdefault("tool", tool_name)

@@ -143,6 +143,12 @@ Each line is one record. Common `kind` values (native format):
 | `tool_call_start`, `tool_call_end` | Tool call. |
 | `governance_event`, `governance_policy` | Policy and budget hooks. |
 | `routing`, `routing_result` | Delegation between agents in a MAS. |
+| `contract_call_start`, `contract_call_end` | Runtime wrapper around one engine call. |
+
+`contract_call_*` is the wrapper around one engine call and has its own
+`call_id`. The inner `llm_call_*` or `tool_call_*` keeps its `call_id` and has
+the same `parent_call_id` as the wrapper, so a span store keyed on `call_id`
+never merges the two.
 
 After a benchmark, logs live at:
 

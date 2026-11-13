@@ -883,6 +883,10 @@ class ObservabilityOperator:
             self._interval_call_ids[key] = str(uuid.uuid4())
         return self._interval_call_ids[key]
 
+    @staticmethod
+    def _contract_op_key(op: str) -> str:
+        return f"CONTRACT:{op}"
+
     def _interval_call_and_parent(self, correlation_id: int, key: str) -> tuple[str, str | None]:
         """call_id for (correlation_id, key) + its parent, falling back to the
         current frame when this call hasn't opened its own frame yet (several
@@ -903,9 +907,10 @@ class ObservabilityOperator:
         activity (CONTRACT_START/CONTRACT_END) — the one signal guaranteed to
         fire exactly once per call, even for a call a governance decision blocks
         before execution.  ENGINE_IO / ENGINE_IO_RETURN (fired separately, from
-        CONTRACT_EXECUTE / OBSERVABILITY_POST_EXECUTE for the SAME call) reuse
-        the same (correlation_id, op)-keyed call_id and look up its
-        already-established parent instead of pushing/popping a second frame.
+        CONTRACT_EXECUTE / OBSERVABILITY_POST_EXECUTE for the SAME call) keep
+        their own (correlation_id, op) call_id and the same parent the wrapper
+        has. Only the wrapper's id differs, (correlation_id, CONTRACT:op), so a
+        span store keyed on call_id never merges the wrapper with the call.
 
         Calls scheduled together as true siblings — parallel tool calls, or a
         moderator delegating to N agents in one turn — all fire their own
@@ -1015,15 +1020,17 @@ class ObservabilityOperator:
                     t_call_id = self._interval_call_id(int(t_cid), "TOOL_CALL")
                     self._call_parents.setdefault(t_call_id, group_parent)
             if activity == "contract_call" and boundary == "start" and op:
-                call_id = self._interval_call_id(cid, op)
+                call_id = self._interval_call_id(cid, self._contract_op_key(op))
+                inner_id = self._interval_call_id(cid, op)
                 if call_id in self._call_parents:
                     parent = self._call_parents[call_id]
                     self._frames.push(call_id)
                 else:
                     parent = self._open_call(call_id)
+                self._call_parents.setdefault(inner_id, parent)
                 return call_id, parent
             if activity == "contract_call" and boundary == "end" and op:
-                call_id = self._interval_call_ids.get((cid, op))
+                call_id = self._interval_call_ids.get((cid, self._contract_op_key(op)))
                 parent = self._call_parents.get(call_id) if call_id else None
                 if call_id:
                     self._close_call(call_id)

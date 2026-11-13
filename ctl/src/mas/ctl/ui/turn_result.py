@@ -55,3 +55,12 @@ def turn_to_agent_result(turn: TurnResult) -> AgentTurnResult:
 def turn_failed(turn: TurnResult) -> bool:
     """True when the turn ended in an error state."""
     return turn_to_agent_result(turn).status == "error"
+
+
+def turn_failure_message(turn: TurnResult, agent_id: str) -> str:
+    """Reason a delegated turn is withheld, including the policy or boundary text."""
+    mapped = turn_to_agent_result(turn)
+    reason = (mapped.error_message or mapped.error_detail or "").strip()
+    if reason:
+        return f"agent {agent_id!r} turn failed: {reason}"
+    return f"agent {agent_id!r} turn failed"

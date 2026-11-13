@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import random
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,6 +24,7 @@ from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
 _SHARED_LLM_CACHES: dict[str, dict[str, Any]] = {}
+_SHARED_LLM_CACHES_LOCK = threading.Lock()
 
 # First LlmCacheMiddleware in this process that asks for write_mode=replace
 # truncates cache_path. Later instances for the same path must load/merge so
@@ -49,11 +51,12 @@ def _cache_for_path(path: Path | None) -> dict[str, Any]:
     if path is None:
         return {}
     key = str(path.expanduser().resolve())
-    cached = _SHARED_LLM_CACHES.get(key)
-    if cached is None:
-        cached = load_cache(path)
-        _SHARED_LLM_CACHES[key] = cached
-    return cached
+    with _SHARED_LLM_CACHES_LOCK:
+        cached = _SHARED_LLM_CACHES.get(key)
+        if cached is None:
+            cached = load_cache(path)
+            _SHARED_LLM_CACHES[key] = cached
+        return cached
 
 
 @dataclass

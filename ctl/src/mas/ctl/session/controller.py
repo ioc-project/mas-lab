@@ -393,13 +393,36 @@ class SessionController:
         turn_id: str | None = None,
         auto_hitl: bool = True,
         parent_call_id: str = "",
+        upstream_correlation_id: int | None = None,
+        dequeued: bool = False,
     ) -> TurnResult:
+        """Run one user turn.
+
+        ``dequeued`` says ``text`` was already taken off the session's turn
+        queue by the caller (the A2A mailbox), so it is not queued again.
+        """
         with self.turn_guard or nullcontext():
             if text.strip().lower() == "/backtrack" or text.strip().lower().startswith("/backtrack "):
                 return self._handle_backtrack(text)
-            return self._run_turn_guarded(text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id)
+            return self._run_turn_guarded(
+                text,
+                turn_id=turn_id,
+                auto_hitl=auto_hitl,
+                parent_call_id=parent_call_id,
+                upstream_correlation_id=upstream_correlation_id,
+                dequeued=dequeued,
+            )
 
-    def _run_turn_guarded(self, text: str, *, turn_id: str | None, auto_hitl: bool, parent_call_id: str) -> TurnResult:
+    def _run_turn_guarded(
+        self,
+        text: str,
+        *,
+        turn_id: str | None,
+        auto_hitl: bool,
+        parent_call_id: str,
+        upstream_correlation_id: int | None = None,
+        dequeued: bool = False,
+    ) -> TurnResult:
         inject_now = text.strip().lower().startswith("/steer ")
         with self._turn_lock:
             if self.inflight:
@@ -417,10 +440,20 @@ class SessionController:
                 return self._handle_activate_skill(skill_name)
 
             self._reject_if_paused()
-            text = self._take_queued_or_direct(text)
+            if dequeued:
+                self._queued_actor = ""
+                self._queued_source = ""
+            else:
+                text = self._take_queued_or_direct(text)
             if text.strip().lower().startswith("/steer "):
                 return self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
-            return self._run_user_turn(text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id)
+            return self._run_user_turn(
+                text,
+                turn_id=turn_id,
+                auto_hitl=auto_hitl,
+                parent_call_id=parent_call_id,
+                upstream_correlation_id=upstream_correlation_id,
+            )
         finally:
             with self._turn_lock:
                 self.inflight = False
@@ -540,6 +573,7 @@ class SessionController:
         turn_id: str | None = None,
         auto_hitl: bool = True,
         parent_call_id: str = "",
+        upstream_correlation_id: int | None = None,
     ) -> TurnResult:
         from mas.ctl.manifest.mas_agent_merge import reset_engine_delegation
 
@@ -567,6 +601,7 @@ class SessionController:
             turn_id=tid,
             parent_call_id=parent_call_id,
             session_id=self.session_id,
+            upstream_correlation_id=upstream_correlation_id,
             source=queued_source,
             sender=queued_actor,
             intent="steer" if queued_source == "peer" else "",

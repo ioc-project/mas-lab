@@ -143,7 +143,7 @@ class MaterializedEngineToolContext:
             raise EngineToolTurnFailed(f"unknown agent {agent_id!r}")
 
         from mas.ctl.session.controller import ConversationConfig, SessionController
-        from mas.ctl.ui.turn_result import turn_failed
+        from mas.ctl.ui.turn_result import turn_failed, turn_failure_message
 
         controller_factory = self.controller_factory or SessionController
         controller = controller_factory(
@@ -159,7 +159,7 @@ class MaterializedEngineToolContext:
         )
         result = controller.run_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
         if turn_failed(result):
-            raise EngineToolTurnFailed(f"turn failed for {agent_id!r}")
+            raise EngineToolTurnFailed(turn_failure_message(result, agent_id))
         return result.text
 
     async def arun_turn(
@@ -176,7 +176,7 @@ class MaterializedEngineToolContext:
             raise EngineToolTurnFailed(f"unknown agent {agent_id!r}")
 
         from mas.ctl.session.controller import ConversationConfig, SessionController
-        from mas.ctl.ui.turn_result import turn_failed
+        from mas.ctl.ui.turn_result import turn_failed, turn_failure_message
 
         controller_factory = self.controller_factory or SessionController
         controller = controller_factory(
@@ -196,7 +196,7 @@ class MaterializedEngineToolContext:
         else:
             result = controller.run_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
         if turn_failed(result):
-            raise EngineToolTurnFailed(f"turn failed for {agent_id!r}")
+            raise EngineToolTurnFailed(turn_failure_message(result, agent_id))
         return result.text
 
     def teardown_instance(self, agent_id: str) -> None:

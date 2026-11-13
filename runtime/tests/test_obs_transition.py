@@ -240,6 +240,41 @@ def test_native_plugin_engine_io_is_sole_source_of_llm_call(tmp_path) -> None:
     assert len(ends) == 1, ends
 
 
+def test_contract_call_id_is_not_the_inner_llm_call_id() -> None:
+    """A span keyed only by call_id must not let contract_call_end overwrite llm_call_end."""
+    op = ObservabilityOperator()
+    cap = _CapturePlugin()
+    op.subscribe(cap)
+    op.push_call_frame("exec-001")
+    op.record_envelope_activity(
+        symbol="CONTRACT_START",
+        activity="contract_call",
+        boundary="start",
+        phase=ObsPhase.REQUEST,
+        correlation_id=5,
+        payload={"op": "LLM_CALL"},
+    )
+    op.record_engine_io(correlation_id=5, op="LLM_CALL")
+    op.record_engine_io_return(correlation_id=5, op="LLM_CALL", text="hi", model="gpt-test")
+    op.record_envelope_activity(
+        symbol="CONTRACT_END",
+        activity="contract_call",
+        boundary="end",
+        phase=ObsPhase.RESULT,
+        correlation_id=5,
+        payload={"op": "LLM_CALL"},
+    )
+    by_symbol = {(event.mealy_symbol, event.phase): event for event in cap.seen}
+    wrapper_start = by_symbol[("CONTRACT_START", "start")]
+    wrapper_end = by_symbol[("CONTRACT_END", "end")]
+    llm_start = by_symbol[("LLM_CALL", "start")]
+    llm_end = by_symbol[("LLM_CALL", "end")]
+    assert wrapper_start.call_id == wrapper_end.call_id
+    assert llm_start.call_id == llm_end.call_id
+    assert wrapper_start.call_id != llm_start.call_id
+    assert llm_start.parent_call_id == wrapper_start.parent_call_id == "exec-001"
+
+
 def test_governance_decision_resolves_real_call_id_and_parent() -> None:
     """A governance_decision carrying its own `op` must resolve to the SAME
     call_id the call's own ENGINE_IO/ENGINE_IO_RETURN pair uses (via

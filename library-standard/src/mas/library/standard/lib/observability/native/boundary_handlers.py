@@ -221,7 +221,8 @@ def _boundary_envelope_activity(
         native_kind = f"governance_{activity.replace('gov_', '')}_{boundary}"
     elif activity.startswith("obs_wrap"):
         native_kind = f"{activity}_{boundary}"
-    call_id = _resolve_call_id(record, ctx, cid, op_name or activity)
+    op_key = f"CONTRACT:{op_name}" if activity == "contract_call" and op_name else (op_name or activity)
+    call_id = _resolve_call_id(record, ctx, cid, op_key)
     rec = {
         "kind": native_kind,
         **base,
@@ -240,11 +241,15 @@ def _boundary_envelope_activity(
         wait_role = str(payload.get("wait_role") or ("WAIT" if boundary == "start" else "RESUME")).upper()
         wait_note = str(payload.get("wait_note") or "")
         wait_scope = str(payload.get("wait_scope") or "")
-        wait_call_id = _interval_call_id(
-            ctx,
-            cid,
-            f"PROCESSING_CALL:wait_state:{wait_role}:{wait_link_id}",
-        ) if cid else ""
+        wait_call_id = (
+            _interval_call_id(
+                ctx,
+                cid,
+                f"PROCESSING_CALL:wait_state:{wait_role}:{wait_link_id}",
+            )
+            if cid
+            else ""
+        )
         p_start = {
             "kind": "processing_call_start",
             **base,
@@ -283,11 +288,15 @@ def _boundary_envelope_activity(
     group_id = str(payload.get("group_id") or "")
     tools = list(payload.get("tools") or [])
     tool_count = len(tools)
-    proc_call_id = _interval_call_id(
-        ctx,
-        cid,
-        f"PROCESSING_CALL:parallel_group:{group_id}",
-    ) if cid else ""
+    proc_call_id = (
+        _interval_call_id(
+            ctx,
+            cid,
+            f"PROCESSING_CALL:parallel_group:{group_id}",
+        )
+        if cid
+        else ""
+    )
 
     if boundary == "start":
         proc_start = {
@@ -327,9 +336,7 @@ def _boundary_envelope_activity(
 
 def _context_assembly_operation(messages: list[dict]) -> str:
     """Determine if context operation is PREPEND (has system msg) or APPEND."""
-    return "PREPEND" if any(
-        str(m.get("role") or "").strip().lower() == "system" for m in messages
-    ) else "APPEND"
+    return "PREPEND" if any(str(m.get("role") or "").strip().lower() == "system" for m in messages) else "APPEND"
 
 
 def _add_provenance_fields(event: dict, seg: dict, is_rag: bool) -> None:
@@ -338,7 +345,7 @@ def _add_provenance_fields(event: dict, seg: dict, is_rag: bool) -> None:
     origin_id = seg.get("origin_id") or seg.get("plugin_id") or seg.get("skill_name")
     if origin_id:
         event["origin_id"] = origin_id
-    
+
     # Retrieval metadata
     if is_rag or seg.get("mechanism") == "retrieval":
         for key in ("retrieval_query", "retrieval_source", "retrieval_rank"):
@@ -346,13 +353,13 @@ def _add_provenance_fields(event: dict, seg: dict, is_rag: bool) -> None:
                 event[key] = seg[key]
         if seg.get("retrieval_confidence") is not None:
             event["retrieval_confidence"] = seg["retrieval_confidence"]
-    
+
     # Decision metadata
     if seg.get("decision_rank"):
         event["decision_rank"] = seg["decision_rank"]
     if seg.get("decision_score") is not None:
         event["decision_score"] = seg["decision_score"]
-    
+
     # Synthesis metadata
     if seg.get("synthesis_rule_id"):
         event["synthesis_rule_id"] = seg["synthesis_rule_id"]
@@ -372,9 +379,7 @@ def _boundary_context_assembled(
     # Prompt text lives here; InvokeEngineIo does not include messages.
     _asm_msgs = payload.get("messages") or []
     _operation = _context_assembly_operation(_asm_msgs)
-    _proc_call_id = (
-        ctx.next_interval_call_id(cid, "PROCESSING_CALL:context_assembly") if cid else ""
-    )
+    _proc_call_id = ctx.next_interval_call_id(cid, "PROCESSING_CALL:context_assembly") if cid else ""
     _usage = payload.get("context_usage") if isinstance(payload.get("context_usage"), dict) else {}
     _archive_view_id = str(_usage.get("archive_view_id") or "")
     _proc_common = {
@@ -394,7 +399,7 @@ def _boundary_context_assembled(
         "synthetic": True,
         **_proc_common,
     }
-    
+
     _ca: dict = {
         "kind": "context_assembled",
         **base,
@@ -424,7 +429,7 @@ def _boundary_context_assembled(
         mechanism = str(seg.get("mechanism") or "")
         source = str(seg.get("source") or "")
         is_rag = mechanism == "rag" or "rag" in source.lower()
-        
+
         # Build context_part_contributed event with full provenance
         cpc_event: dict = {
             "kind": "context_part_contributed",
@@ -443,7 +448,7 @@ def _boundary_context_assembled(
         }
         _add_provenance_fields(cpc_event, seg, is_rag)
         out.append(cpc_event)
-        
+
         # Emit RAG query events if mechanism is RAG
         if is_rag:
             rag_call_id = f"rag-{cid}-{seg.get('part_id', '')[:8]}"

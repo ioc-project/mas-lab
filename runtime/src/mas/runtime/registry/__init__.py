@@ -8,6 +8,7 @@ import importlib
 import inspect
 import logging
 import sys
+import threading
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -551,6 +552,7 @@ class PluginRegistry:
 
 
 _instance: PluginRegistry | None = None
+_instance_lock = threading.Lock()
 
 
 def get_registry() -> PluginRegistry:
@@ -565,7 +567,9 @@ def get_registry() -> PluginRegistry:
     """
     global _instance
     if _instance is None:
-        _instance = _bootstrap.load_registry()
+        with _instance_lock:
+            if _instance is None:
+                _instance = _bootstrap.load_registry()
     return _instance
 
 

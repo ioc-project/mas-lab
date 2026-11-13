@@ -268,24 +268,85 @@ def test_sse_without_url_raises() -> None:
         asyncio.run(client.list_tools())
 
 
-def test_connect_disconnect_are_session_lifecycle_noops() -> None:
+def test_connect_then_disconnect_without_calls_is_harmless() -> None:
     client = MCPClient(url="http://127.0.0.1:9001/mcp")
     assert asyncio.run(client.connect()) is None
     assert asyncio.run(client.disconnect()) is None
+
+
+def test_connect_reuses_one_http_transport_on_the_same_loop() -> None:
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    transports: list[_Transport] = []
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search", "inputSchema": {"type": "object"}})])])
+
+    def _factory(_url: str, **_kw) -> _Transport:
+        cm = _Transport()
+        transports.append(cm)
+        return cm
+
+    async def _both() -> tuple[list, dict]:
+        await client.connect()
+        tools = await client.list_tools()
+        payload = await client.call_tool("web-search", {"query": "Apple"})
+        await client.disconnect()
+        return tools, payload
+
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        tools, payload = asyncio.run(_both())
+
+    assert tools == [{"name": "web-search", "inputSchema": {"type": "object"}}]
+    assert payload["content"][0]["text"] == "ok"
+    assert len(transports) == 1
+    assert transports[0].exits == 1
+    assert session.initialize.await_count == 1
+
+
+def test_wrapper_run_reuses_one_http_transport() -> None:
+    inner = MCPClient(url="http://127.0.0.1:9001/mcp")
+    wrapper = MCPClientWrapper(inner)
+    transports: list[_Transport] = []
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search"})])])
+
+    def _factory(_url: str, **_kw) -> _Transport:
+        cm = _Transport()
+        transports.append(cm)
+        return cm
+
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        tools = wrapper.run(inner.list_tools())
+        payload = wrapper.run(inner.call_tool("web-search", {}))
+        wrapper.close()
+
+    assert tools[0]["name"] == "web-search"
+    assert payload["isError"] is False
+    assert len(transports) == 1
+    assert transports[0].exits == 1
+    assert session.initialize.await_count == 1
 
 
 def test_wrapper_delegates_to_client() -> None:
     inner = MCPClient(url="http://127.0.0.1:9001/mcp")
     wrapper = MCPClientWrapper(inner)
     session = _Session(list_pages=[_ListResult([_Dump({"name": "t"})])])
+
+    async def _all() -> tuple[list, dict]:
+        await wrapper.connect()
+        tools = await wrapper.list_tools()
+        payload = await wrapper.call_tool("t", {})
+        await wrapper.disconnect()
+        return tools, payload
+
     with (
         patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
         patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
     ):
-        assert asyncio.run(wrapper.connect()) is None
-        tools = asyncio.run(wrapper.list_tools())
-        payload = asyncio.run(wrapper.call_tool("t", {}))
-        assert asyncio.run(wrapper.disconnect()) is None
+        tools, payload = asyncio.run(_all())
     assert tools[0]["name"] == "t"
     assert payload["isError"] is False
 

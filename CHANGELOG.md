@@ -114,6 +114,29 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - An explicit pipeline retry keeps the params it named.
 - Session close stops the llm and tool call layers.
+- A withheld delegated turn includes the governance or boundary reason in the
+  `[send]` failure text.
+- An MCP client reuses one session for list and call after `connect`. The sync
+  wrapper keeps that session on one event loop so initialize is not repeated,
+  starts it once when parallel tool calls arrive together, reconnects after the
+  server connection closes, and ends a stdio server at `close()` or process exit.
+- Sessions on separate threads no longer disturb each other. Working memory is
+  stored per session, so one session walking its entries cannot meet another
+  session adding or dropping its own. The plugin registry and the shared LLM
+  cache are created under a lock. Tests run eight sessions on threads, on one
+  event loop, and on one loop per thread.
+- A2A `message/send` gives each `contextId` its own runtime: kernel, context and
+  engine, built again from the agent's manifest (`RuntimeInstance.conversation_factory`).
+  Omit `contextId` and a new conversation starts. Conversations run in parallel
+  and share nothing, and each one remembers its earlier messages: the turn is
+  committed to its context, which the listener used to skip. A second message on
+  the same id waits in a queue. At most 1024 conversations stay open; a further
+  new `contextId` is refused with `TooManyConversations`. An agent that cannot be
+  rebuilt (an injected engine) serves one conversation. A `run-mas` agent opens
+  each conversation as a new copy of the whole MAS, wired like the run.
+- `contract_call_*` has its own `call_id`. The inner `llm_call_*` / `tool_call_*`
+  keeps its `call_id` and parent. A span store keyed only by `call_id` no longer
+  overwrites the model tokens with the wrapper.
 - When no LLMProxy `api_base` is set, `OPENAI_BASE_URL` (or `OPENAI_API_BASE`) is
   used. The missing-address error names the infra manifest and that env var. The address reaches the LLM
   provider too, not only the engine's own label.
