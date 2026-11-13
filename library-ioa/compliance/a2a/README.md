@@ -38,6 +38,8 @@ fixture routes TCK prefixes such as `tck-artifact-text` to exact protocol
 responses while exercising the same SDK server, AgentCard, task store, and
 event executor used by MAS Lab.
 
+History acknowledgements avoid repeating the TCK's user-message markers because its ordering check currently matches text without distinguishing message roles. Agent echoes are valid A2A behaviour. This fixture adjustment avoids a test false positive without changing runtime history handling.
+
 ```bash
 MAS_LIBRARY_PATHS="$PWD" ../../../.venv/bin/mas-ctl serve \
   "$PWD/agents/a2a-tck-agent.yaml" \
