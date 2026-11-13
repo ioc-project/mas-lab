@@ -389,3 +389,15 @@ Design rules:
 - Conversion is the only path that needs the OpenTelemetry SDK. Importing `mas.library.telemetry.conversion` does not require it; `MasOtelConverter` is imported lazily and raises `OtelSdkUnavailableError` on construction.
 - Adding an event kind touches only a mapping module and the envelope table, never the converter (same design as `library-kg`).
 - Replay and live mode run the same handlers. Deterministic session ids make replays reproducible, so parity checks are meaningful.
+
+### Assembled LLM inputs
+
+The converter attaches `context_assembled` messages to the corresponding LLM
+span whether context arrives before or after `llm_call_start`. It retains early
+context in memory until that call opens, using its native run, agent and call
+identity. Finishing or resetting a run discards unmatched context. This applies
+to both live export and file replay, with no change to the exported schema.
+
+Pending assembled prompts are owned by their native run and agent/call identity. A native `mas_call_end` discards only that run’s pending prompts, even when the end event is filtered from export. Explicit finish and reset still discard all pending prompts.
+
+LLM lookup, duplicate detection and completed-call checks use the same run/agent/call ownership as pending prompts. Sequential or interleaved runs may reuse an LLM call label without dropping or overwriting another run's input. Internal disambiguation preserves exported native call identifiers and resolves LLM parent references within the owning run. Late context for a completed call in that run remains ignored.
