@@ -5,8 +5,18 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
+from dataclasses import replace
+from pathlib import Path
 from typing import Any, Dict, List
 
+from mas.runtime.boundary.connection import (
+    BindingUnavailable,
+    ConnectionBinding,
+    ConnectionTarget,
+    Invocation,
+    PreparedOperation,
+)
 from mas.runtime.registry.provider_protocol import ToolProvider
 from mas.runtime.spec.endpoint_usage import usage_connects
 
@@ -74,6 +84,7 @@ class MCPToolProvider(ToolProvider):
         provider_name: str = "mcp",
         tools_claim: str | list[str] | tuple[str, ...] | None = "*",
         timeout: float | None = None,
+        connection: MCPProviderSpec | None = None,
     ) -> None:
         self._client = client_wrapper
         self.provider_name = provider_name
@@ -84,17 +95,70 @@ class MCPToolProvider(ToolProvider):
             self.tools_claim = (tools_claim,)
         else:
             self.tools_claim = tuple(str(n) for n in tools_claim)
+        self._binding = self._connection_binding(connection) if connection is not None else None
+
+    def _connection_binding(self, spec: MCPProviderSpec) -> ConnectionBinding:
+        captured = deepcopy(spec)
+        client = self._client
+        transport = "http" if captured.transport in _HTTP_TRANSPORTS | _SSE_TRANSPORTS else "stdio"
+        target = ConnectionTarget(
+            endpoint=captured.url or "" if transport == "http" else "",
+            command=(str(captured.command), *captured.args) if transport == "stdio" else (),
+            cwd=str(captured.cwd or "") if transport == "stdio" else "",
+        )
+        timeout = self.timeout
+
+        def factory(name: str, arguments: dict[str, Any], ctx: Any) -> Invocation:
+            def convert(result: Any) -> dict[str, Any]:
+                mapped = as_mas_tool_result(result)
+                if mapped.get("is_error"):
+                    mapped.setdefault("tool", name)
+                return mapped
+
+            options = {"timeout_seconds": timeout} if timeout is not None else {}
+
+            def call(**trace: Any):
+                try:
+                    runner = getattr(client, "run", run_sync)
+                    return convert(runner(client.call_tool(name, arguments, **options)))
+                except Exception as exc:
+                    return translate_mcp_error(exc)
+
+            async def acall(**trace: Any):
+                try:
+                    runner = getattr(client, "arun", None)
+                    if runner is None:
+                        raise BindingUnavailable("MCP client does not support owned asynchronous execution")
+                    return convert(await runner(client.call_tool(name, arguments, **options)))
+                except Exception as exc:
+                    return translate_mcp_error(exc)
+
+            return Invocation(call, acall)
+
+        return ConnectionBinding("mcp", transport, target, factory, binding_ref=f"mcp:{self.provider_name}")
+
+    def prepare_call(self, tool_name: str, arguments: dict[str, Any], *, ctx: Any = None) -> PreparedOperation:
+        if self._binding is None:
+            raise BindingUnavailable("MCP provider has no resolved native connection")
+        return self._binding.prepare(tool_name, arguments, ctx=ctx)
+
+    def retire_bindings(self) -> None:
+        if self._binding is not None:
+            self._binding.close()
 
     @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "MCPToolProvider":
         """Build a provider from a normalized MCP infra server entry."""
         binding = MCPProviderSpec.from_dict(spec)
+        if binding.transport not in _HTTP_TRANSPORTS | _SSE_TRANSPORTS and binding.command:
+            binding = replace(binding, cwd=str(Path(binding.cwd or ".").resolve()))
         client = MCPClientFactory(binding).create_client()
         return cls(
             client,
             provider_name=binding.name,
             tools_claim=binding.tools,
             timeout=binding.timeout,
+            connection=binding,
         )
 
     @classmethod
@@ -139,6 +203,7 @@ class MCPToolProvider(ToolProvider):
 
     def close(self) -> None:
         """Close the held MCP session (and a stdio server process). Idempotent."""
+        self.retire_bindings()
         closer = getattr(self._client, "close", None)
         if callable(closer):
             closer()

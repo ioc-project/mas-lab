@@ -100,3 +100,9 @@ See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-
 - [ToolContract](../docs/references/tool-contract.md)
 - [kind: Tool](../docs/manifests/tool.md)
 - [ToolServerRegistry](../docs/references/tool-server-registry.md)
+
+## Resolved operation connections
+
+Native MCP providers and A2A delegation routes support the optional [prepared-operation capability](../runtime/docs/resolved-connections.md). A2A records the interface selected by the SDK, then dispatches with its frozen AgentCard and connection settings. MCP records the selected HTTP or stdio provider binding. Preparation can discover capabilities but never sends the held agent task or `tools/call`.
+
+A2A delivery candidates also carry optional connection metadata. Immediate replies and task retrieval describe the current HTTP request and authenticated principal, independently of the original task connection. Push describes a frozen callback URL and uses the same callback and credentials at delivery. Connection metadata contains no credentials, raw target selector or SDK object. Existing delivery policies need not consume it.

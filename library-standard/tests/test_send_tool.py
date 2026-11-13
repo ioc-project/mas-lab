@@ -579,3 +579,54 @@ def test_send_peer_descriptions_fill_in_when_delegation_map_is_absent() -> None:
     )
     assert specs[0]["name"] == "delegate_to_worker"
     assert specs[0]["description"] == "Overlay peer description."
+
+
+def test_optional_preparation_pins_a_route_and_configure_retires_it():
+    from mas.runtime.boundary.connection import BindingUnavailable, ConnectionBinding, ConnectionTarget, Invocation
+
+    class Resolved:
+        HONOURED_SEND_INTENTS = frozenset({"task"})
+
+        def __init__(self):
+            self.owner = ConnectionBinding(
+                "a2a",
+                "http",
+                ConnectionTarget(endpoint="https://worker.test"),
+                lambda _, args, ctx: Invocation(lambda: args["task"]),
+                binding_ref="a2a:worker",
+            )
+
+        def send(self, *args, **kwargs):
+            raise AssertionError("prepared operation must not re-resolve send")
+
+        def prepare_send(self, peer, task, **kwargs):
+            return self.owner.prepare("send", {"task": task})
+
+        def retire_bindings(self):
+            self.owner.close()
+
+    comm = Resolved()
+    routes = {"worker": AgentCommRoute("worker", "a2a", comm)}
+    tool = SendTool(routes=routes, allowed_peers=["worker"])
+    operation = tool.prepare_call("delegate_to_worker", {"task": "kept"})
+    assert operation.invoke() == "kept"
+    tool.configure(comm=None, routes={}, allowed_peers=[])
+    with pytest.raises(BindingUnavailable):
+        operation.invoke()
+
+
+@pytest.mark.parametrize("arguments", [{"task": 7}, {"task": ""}, {"task": "ok", "target": "other"}])
+def test_invalid_prepared_delegation_does_not_resolve_transport(arguments):
+    from mas.runtime.boundary.connection import BindingUnavailable
+
+    with pytest.raises(BindingUnavailable):
+        SendTool().prepare_call("delegate_to_worker", arguments)
+
+
+def test_legacy_routes_remain_optional_but_cannot_claim_connection_metadata():
+    from mas.runtime.boundary.connection import BindingUnavailable
+
+    tool = SendTool(comm=LocalAgentComm(_RunTurn()), allowed_peers=["worker"])
+    assert tool.send("worker", "ok") == "ok:worker:ok"
+    with pytest.raises(BindingUnavailable, match="resolved connection"):
+        tool.prepare_call("delegate_to_worker", {"task": "ok"})

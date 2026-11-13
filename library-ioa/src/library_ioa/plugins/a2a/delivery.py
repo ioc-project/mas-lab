@@ -16,6 +16,7 @@ from a2a.server.context import ServerCallContext
 from a2a.utils.errors import InvalidAgentResponseError
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message
+from mas.runtime.boundary.connection import ConnectionInfo
 
 logger = logging.getLogger(__name__)
 DeliveryStatus = Literal["allowed", "denied", "error", "timeout", "cancelled"]
@@ -46,6 +47,7 @@ class DeliveryCandidate:
     kind: DeliveryKind
     payload: bytes
     request_metadata: bytes
+    connection: ConnectionInfo | None = None
 
 
 class DeliveryPolicy(Protocol):
@@ -103,6 +105,7 @@ class DeliveryController:
         request: Message | None = None,
         destination: str = "",
         task_id: str = "",
+        connection: ConnectionInfo | None = None,
     ) -> _M:
         if self._closed:
             raise InvalidAgentResponseError(message="A2A delivery policy is closed")
@@ -124,6 +127,7 @@ class DeliveryController:
             kind=kind,
             payload=_json(data),
             request_metadata=_json(metadata),
+            connection=connection or (context.state.get("mas.delivery.connection") if context else None),
         )
         status: DeliveryStatus = "error"
         pending = None

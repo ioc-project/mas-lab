@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from mas.runtime.boundary.connection import BindingUnavailable, ConnectionInfo, PreparedOperation
 from mas.runtime.boundary.context.assemble import (
     assemble_llm_messages,
     has_tool_results,
@@ -191,6 +192,7 @@ class LiveLlmEngine(Lifecycle):
     tool_provider: Any | None = None
     llm_provider: Any | None = None
     reliability: ReliabilitySettings | None = None
+    _prepared_connections: dict[int, Any] = field(default_factory=dict, init=False, repr=False)
     _pending_tool: str = field(default="", init=False)
     _pending_tool_args: dict[str, Any] = field(default_factory=dict, init=False)
     _pending_tools_by_cid: dict[int, tuple[str, dict[str, Any]]] = field(default_factory=dict, init=False)
@@ -200,6 +202,43 @@ class LiveLlmEngine(Lifecycle):
     _infra_stack: Any = field(default=None, init=False, repr=False)
     _tool_stack: Any = field(default=None, init=False, repr=False)
     _tool_destinations: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+
+    def prepare_tool_connection(self, name: str, arguments: dict[str, Any], correlation_id: int) -> ConnectionInfo:
+        from copy import deepcopy
+
+        from mas.runtime.boundary.connection import BindingUnavailable
+
+        self.release_tool_connection(correlation_id)
+        owner = None
+        if self.delegation is not None and (
+            self.delegation.offers(name)
+            if callable(getattr(self.delegation, "offers", None))
+            else self.delegation.is_delegate_tool(name)
+        ):
+            owner = self.delegation
+        else:
+            owner = next((c for c in self.engine_tool_contracts if c.claims(name)), self.tool_provider)
+        prepare = getattr(owner, "prepare_call", None)
+        if not callable(prepare):
+            raise BindingUnavailable("The selected provider cannot prepare a resolved connection")
+        operation = prepare(name, arguments, ctx=self.ctx)
+        self._prepared_connections[correlation_id] = (name, deepcopy(arguments), operation)
+        return operation.connection
+
+    def release_tool_connection(self, correlation_id: int) -> None:
+        entry = self._prepared_connections.pop(correlation_id, None)
+        if entry is not None:
+            entry[2].close()
+
+    def _prepared_for(self, correlation_id: int, name: str, arguments: dict[str, Any]) -> PreparedOperation | None:
+        from mas.runtime.boundary.connection import BindingUnavailable
+
+        entry = self._prepared_connections.get(correlation_id)
+        if entry is None:
+            return None
+        if entry[0] != name or entry[1] != arguments:
+            raise BindingUnavailable("The prepared call's arguments changed after authorization")
+        return entry[2]
 
     def set_scheduled_tool(self, name: str, arguments: dict[str, Any] | None = None) -> None:
         """Kernel-scheduled tool (e.g. plan-execute) — TLA: ToolMachine.tla."""
@@ -348,6 +387,10 @@ class LiveLlmEngine(Lifecycle):
     def stop(self) -> None:
         from mas.runtime.layers.lifecycle import call_stop
 
+        for correlation_id in tuple(self._prepared_connections):
+            self.release_tool_connection(correlation_id)
+        call_stop(self.tool_provider)
+
         call_stop(self._tool_stack)
         call_stop(self._infra_stack)
         call_stop(self.llm_provider)
@@ -494,11 +537,13 @@ class LiveLlmEngine(Lifecycle):
             if self._infra_stack is not None:
                 return self._infra_stack.invoke(io)
             return self._dispatch(io)
-        except (ClassifiedFailure, ToolExecutionError) as exc:
+        except (ClassifiedFailure, ToolExecutionError, BindingUnavailable) as exc:
             if io.op != "TOOL_CALL":
                 raise
             return self._tool_failure_return(io, exc)
         finally:
+            if io.op == "TOOL_CALL":
+                self.release_tool_connection(io.correlation_id)
             if token is not None:
                 IN_FLIGHT_TOOL.reset(token)
 
@@ -530,6 +575,7 @@ class LiveLlmEngine(Lifecycle):
                 engine_contracts=self.engine_tool_contracts,
                 correlation_id=io.correlation_id,
                 caller_call_id=io.call_id,
+                prepared=self._prepared_for(io.correlation_id, tool, args),
             )
             return EngineIoReturn(
                 correlation_id=io.correlation_id,
@@ -561,11 +607,13 @@ class LiveLlmEngine(Lifecycle):
             if self._infra_stack is not None:
                 return await self._infra_stack.ainvoke(io)
             return await self._adispatch(io)
-        except (ClassifiedFailure, ToolExecutionError) as exc:
+        except (ClassifiedFailure, ToolExecutionError, BindingUnavailable) as exc:
             if io.op != "TOOL_CALL":
                 raise
             return self._tool_failure_return(io, exc)
         finally:
+            if io.op == "TOOL_CALL":
+                self.release_tool_connection(io.correlation_id)
             if token is not None:
                 IN_FLIGHT_TOOL.reset(token)
 
@@ -599,6 +647,7 @@ class LiveLlmEngine(Lifecycle):
                 engine_contracts=self.engine_tool_contracts,
                 correlation_id=io.correlation_id,
                 caller_call_id=io.call_id,
+                prepared=self._prepared_for(io.correlation_id, tool, args),
                 placement=self.tool_placement,
             )
             return EngineIoReturn(

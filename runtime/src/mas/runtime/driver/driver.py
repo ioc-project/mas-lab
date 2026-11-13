@@ -12,7 +12,7 @@ import uuid
 from collections import deque
 from collections.abc import Sequence
 from contextlib import nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -313,6 +313,7 @@ class KernelDriver(Lifecycle):
     _gov_exchange_seq: int = field(default=0, repr=False)
 
     def __post_init__(self) -> None:
+        self._bind_connections()
         if self.engine_pool is None and self.engine is not None:
             depth = self.kernel.config.engine_queue_depth if self.kernel is not None else DEFAULT_ENGINE_QUEUE_DEPTH
             self.engine_pool = EngineWorkerPool(worker=self._invoke_engine, max_depth=depth)
@@ -325,14 +326,25 @@ class KernelDriver(Lifecycle):
                 if bound_manifest is not None:
                     self.ctx.manifest = bound_manifest
 
+    def _bind_connections(self) -> None:
+        resolver = existing_attr(self.engine, "prepare_tool_connection")
+        if self.kernel is not None and callable(resolver):
+            self.kernel.config = replace(
+                self.kernel.config,
+                resolve_connection=resolver,
+                release_connection=self.engine.release_tool_connection,
+            )
+
     def stop(self) -> None:
         call_stop(self.engine)
 
     def feed(self, event: IngressSymbol) -> DriverTrace:
+        self._bind_connections()
         with runtime_binding(self.coordination, self.observability), _inbound_scope(event):
             return self._feed_bounded(event)
 
     async def afeed(self, event: IngressSymbol) -> DriverTrace:
+        self._bind_connections()
         with runtime_binding(self.coordination, self.observability), _inbound_scope(event):
             return await self._afeed_bounded(event)
 

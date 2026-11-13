@@ -10,6 +10,7 @@ calls. The target comes from the tool name; extra ``target`` or
 from __future__ import annotations
 
 import inspect
+import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -19,6 +20,7 @@ from mas.library.standard.lib.comm.payload import intents_honoured_by
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
+from mas.runtime.boundary.connection import BindingUnavailable, PreparedOperation
 from mas.runtime.boundary.delegation.policy import (
     SEND_INTENTS,
     SEND_SEMANTICS,
@@ -132,11 +134,21 @@ class SendTool:
     ) -> None:
         self._comm = comm
         self._routes = dict(routes or {})
+        self._binding_guard = threading.RLock()
         self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
         self._accepted: WeakKeyDictionary[Any, dict[str, frozenset[str]]] = WeakKeyDictionary()
 
+    def retire_bindings(self) -> None:
+        for handler in (self._comm, *(route.handler for route in self._routes.values())):
+            retire = getattr(handler, "retire_bindings", None)
+            if callable(retire):
+                retire()
+
     def set_routes(self, routes: dict[str, AgentCommRoute]) -> None:
-        self._routes = dict(routes)
+        with self._binding_guard:
+            if self._routes != routes:
+                self.retire_bindings()
+                self._routes = dict(routes)
 
     def configure(
         self,
@@ -146,9 +158,12 @@ class SendTool:
         allowed_peers: Sequence[str] | None,
     ) -> None:
         """Wire the link, routes and leftover ``delegate_to_*`` names into an instance built before they were known."""
-        self._comm = comm
-        self._routes = dict(routes or {})
-        self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
+        with self._binding_guard:
+            if self._comm is not comm or self._routes != (routes or {}):
+                self.retire_bindings()
+            self._comm = comm
+            self._routes = dict(routes or {})
+            self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
 
     def adopt_wiring(self, other: SendTool) -> None:
         """Take the wiring of another send tool, so one instance serves the engine and the plugin."""
@@ -319,6 +334,16 @@ class SendTool:
             extra["headers"] = dict(headers)
         return extra
 
+    @staticmethod
+    def _send_error(target_agent_id: str, protocol: str, exc: Exception) -> str:
+        if isinstance(exc, AgentCommError):
+            return f"[send] agent {target_agent_id!r} via {protocol} failed: {exc}"
+        if isinstance(exc, KeyError):
+            return f"[send] agent {target_agent_id!r} not available on bus"
+        if isinstance(exc, RuntimeError):
+            return f"[send] agent {target_agent_id!r} failed: {exc}"
+        raise exc
+
     def send(
         self,
         target_agent_id: str,
@@ -348,12 +373,8 @@ class SendTool:
         )
         try:
             result = communication.send(target_agent_id, payload, **extra)
-        except AgentCommError as exc:
-            return f"[send] agent {target_agent_id!r} via {protocol} failed: {exc}"
-        except KeyError:
-            return f"[send] agent {target_agent_id!r} not available on bus"
-        except RuntimeError as exc:
-            return f"[send] agent {target_agent_id!r} failed: {exc}"
+        except (AgentCommError, KeyError, RuntimeError) as exc:
+            return self._send_error(target_agent_id, protocol, exc)
         return result
 
     def delegate(
@@ -408,12 +429,8 @@ class SendTool:
                 result = await asend(target_agent_id, payload, **extra)
             else:
                 result = communication.send(target_agent_id, payload, **extra)
-        except AgentCommError as exc:
-            return f"[send] agent {target_agent_id!r} via {protocol} failed: {exc}"
-        except KeyError:
-            return f"[send] agent {target_agent_id!r} not available on bus"
-        except RuntimeError as exc:
-            return f"[send] agent {target_agent_id!r} failed: {exc}"
+        except (AgentCommError, KeyError, RuntimeError) as exc:
+            return self._send_error(target_agent_id, protocol, exc)
         return result
 
     async def adelegate(
@@ -461,6 +478,32 @@ class SendTool:
             str(args.get("intent") or "task").strip().lower() or "task",
             str(args.get("context_id") or "").strip(),
         )
+
+    def prepare_call(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        ctx: SendToolContext | None = None,
+    ) -> PreparedOperation:
+        parsed = self._args_to_send(tool_name, arguments)
+        if isinstance(parsed, str):
+            raise BindingUnavailable(parsed)
+        target, message, intent, context_id = parsed
+        with self._binding_guard:
+            prepared = self._prepare(target, message, intent=intent, ctx=ctx)
+            if isinstance(prepared, str):
+                raise BindingUnavailable(prepared)
+            communication, protocol, payload, _ = prepared
+            prepare = getattr(communication, "prepare_send", None)
+            if not callable(prepare):
+                raise BindingUnavailable("The selected agent route has no resolved connection capability")
+            return prepare(
+                target,
+                payload,
+                context_id=context_id,
+                on_error=lambda exc: self._send_error(target, protocol, exc),
+            )
 
     def call_delegate_tool(
         self,

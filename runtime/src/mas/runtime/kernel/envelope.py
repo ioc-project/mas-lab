@@ -240,7 +240,14 @@ def _evaluate_egress(ctx: EnvelopeContext) -> GovDecision:
     if not ctx.config.enable_governance:
         ctx.gov_reason = "governance disabled for this run"
         return GovDecision.ALLOW
+    connection = None
+    plugin = ctx.config.egress_governance_plugin
+    if ctx.scheduled_op == "TOOL_CALL" and getattr(plugin, "requires_connection_metadata", False):
+        if ctx.config.resolve_connection is None:
+            raise RuntimeError("Governance requires a native resolved connection")
+        connection = ctx.config.resolve_connection(ctx.tool_name, ctx.tool_arguments, ctx.correlation_id)
     view = EgressIntentView(
+        connection=connection,
         op=ctx.scheduled_op,  # type: ignore[arg-type]
         destructive=ctx.destructive,
         correlation_id=ctx.correlation_id,
@@ -248,11 +255,19 @@ def _evaluate_egress(ctx: EnvelopeContext) -> GovDecision:
         tool_arguments=ctx.tool_arguments,
         offered_tools=getattr(ctx.q, "offered_tools", None),
     )
-    decision, ctx.policy_name, ctx.gov_reason = evaluate_egress_at_chokepoint(
-        view,
-        config=ctx.config,
-        hitl_gov_override=ctx.hitl_gov_override,
-    )
+    try:
+        decision, ctx.policy_name, ctx.gov_reason = evaluate_egress_at_chokepoint(
+            view,
+            config=ctx.config,
+            hitl_gov_override=ctx.hitl_gov_override,
+        )
+    except BaseException:
+        if ctx.config.release_connection is not None:
+            ctx.config.release_connection(ctx.correlation_id)
+        raise
+
+    if decision not in {GovDecision.ALLOW, GovDecision.LOG} and ctx.config.release_connection is not None:
+        ctx.config.release_connection(ctx.correlation_id)
     _notify_decision_snapshot(ctx, hook="egress", decision=decision.value)
     return decision
 

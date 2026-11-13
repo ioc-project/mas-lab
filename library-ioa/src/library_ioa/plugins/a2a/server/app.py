@@ -8,12 +8,14 @@ from datetime import datetime, timezone
 from email.utils import format_datetime
 from hashlib import sha256
 from typing import Any
+from uuid import uuid4
 
 from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
+from a2a.server.routes.common import DefaultServerCallContextBuilder
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 from a2a.server.tasks import InMemoryTaskStore, PushNotificationConfigStore, PushNotificationSender
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, TaskState
@@ -27,6 +29,7 @@ from a2a.utils.errors import (
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from google.protobuf.descriptor import FieldDescriptor
+from mas.runtime.boundary.connection import ConnectionInfo, ConnectionTarget
 
 from ..delivery import DeliveryController, DeliveryKind
 
@@ -46,6 +49,22 @@ _TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_CANCELED,
     TaskState.TASK_STATE_REJECTED,
 }
+
+
+class _DeliveryContextBuilder(DefaultServerCallContextBuilder):
+    def build(self, request: Request):
+        context = super().build(request)
+        principal = context.user.user_name if context.user.is_authenticated else ""
+        target = ConnectionTarget(principal=principal)
+        context.state["mas.delivery.connection"] = ConnectionInfo(
+            "a2a",
+            "http",
+            uuid4().hex,
+            0,
+            lambda expected: target == expected,
+            "a2a:caller",
+        )
+        return context
 
 
 class _A2ARequestHandler(DefaultRequestHandler):
@@ -368,7 +387,13 @@ def build_app(
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),
-        jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url="/"),
-        rest_routes=create_rest_routes(request_handler, path_prefix="/a2a/rest"),
+        jsonrpc_routes=create_jsonrpc_routes(
+            request_handler, context_builder=_DeliveryContextBuilder() if delivery is not None else None, rpc_url="/"
+        ),
+        rest_routes=create_rest_routes(
+            request_handler,
+            context_builder=_DeliveryContextBuilder() if delivery is not None else None,
+            path_prefix="/a2a/rest",
+        ),
     )
     return app

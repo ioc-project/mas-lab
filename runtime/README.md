@@ -185,3 +185,5 @@ uv run pytest runtime/tests/ --cov=mas.runtime --cov-report=term-missing
 | [`mas-ctl`](../ctl/) | Compose, chat, run-mas, validate |
 | [`mas-lab`](../lab/) | Benchmarks, pipelines, UI |
 | [`library-standard`](../library-standard/) | Flavours, overlays, infra bundles |
+
+Optional [resolved connection metadata](docs/resolved-connections.md) pins governed operations to the provider binding used for authorization.

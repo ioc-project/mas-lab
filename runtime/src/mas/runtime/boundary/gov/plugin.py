@@ -61,6 +61,10 @@ class GovernancePluginChain:
         self._plugins = list(plugins)
 
     @property
+    def requires_connection_metadata(self) -> bool:
+        return any(getattr(p, "requires_connection_metadata", False) for p in self._plugins)
+
+    @property
     def plugins(self) -> tuple[GovernancePlugin, ...]:
         return tuple(self._plugins)
 

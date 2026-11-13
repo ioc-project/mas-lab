@@ -21,6 +21,7 @@ import inspect
 import logging
 from typing import Any, Dict, List
 
+from mas.runtime.boundary.connection import PreparedOperation
 from mas.runtime.contracts.tool_contract import invoke_call_tool
 from mas.runtime.engine.tool_routing import (
     ExplicitToolUnavailableError,
@@ -147,6 +148,9 @@ class ToolProviderRegistry:
 
     def unregister_provider(self, provider: ToolProvider) -> None:
         if provider in self._providers:
+            retire = getattr(provider, "retire_bindings", None)
+            if callable(retire):
+                retire()
             self._providers.remove(provider)
             self._routes = None
             logger.debug("Unregistered tool provider: %s", provider_name(provider))
@@ -319,6 +323,22 @@ class ToolProviderRegistry:
                 out.append(routed)
                 seen.add(name)
         return out
+
+    def assert_call_allowed(self, tool_name: str, *, ctx: Any = None) -> None:
+        self.initialize(ctx=ctx)
+        route = (self._routes or {}).get(tool_name)
+        if route is None or route.handler is None:
+            raise UnclaimedToolError(f"Tool {tool_name!r} is not registered with any provider")
+
+    def prepare_call(self, tool_name: str, arguments: dict[str, Any], *, ctx: Any = None) -> PreparedOperation:
+        from mas.runtime.boundary.connection import BindingUnavailable
+
+        self.assert_call_allowed(tool_name, ctx=ctx)
+        handler = self._routes[tool_name].handler
+        prepare = getattr(handler, "prepare_call", None)
+        if not callable(prepare):
+            raise BindingUnavailable("The selected tool provider does not expose a resolved connection")
+        return prepare(tool_name, arguments, ctx=ctx)
 
     def call_tool(
         self,

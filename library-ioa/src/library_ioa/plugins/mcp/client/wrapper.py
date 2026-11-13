@@ -132,6 +132,19 @@ class MCPClientWrapper:
 
         return self._loop.run(_sticky())
 
+    async def arun(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Await an operation on the same owning loop used by synchronous callers."""
+        if not self._registered:
+            self._registered = True
+            atexit.register(_close_weak, weakref.ref(self))
+
+        async def sticky() -> _T:
+            await self._client.connect()
+            return await coro
+
+        future = asyncio.run_coroutine_threadsafe(sticky(), self._loop.ensure())
+        return await asyncio.wrap_future(future)
+
     async def list_tools(self, **kwargs: Any) -> List[Dict[str, Any]]:
         return await self._client.list_tools(**kwargs)
 

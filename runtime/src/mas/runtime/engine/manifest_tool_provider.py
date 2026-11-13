@@ -13,8 +13,10 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, Optional
 
+from mas.runtime.boundary.connection import PreparedOperation
 from mas.runtime.contracts.user_communication_contract import HITLContract, UserIOContract
 from mas.runtime.engine.tool_routing import UnclaimedToolError
+from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError, ToolProvider
 from mas.runtime.registry.tool_provider_registry import (
     ToolProviderRegistry,
@@ -37,7 +39,7 @@ def _default_local_provider() -> Any:
     return tool_provider_class("local")()
 
 
-class ManifestToolProvider:
+class ManifestToolProvider(Lifecycle):
     """Name → provider dispatcher. Execution stays in the owning plugin."""
 
     seals_own_ctx = True  # the registry seals per provider; each tool gets the same ctx anywhere
@@ -110,6 +112,26 @@ class ManifestToolProvider:
                 }
             )
         return out
+
+    def assert_call_allowed(self, tool_name: str, *, ctx: Any = None) -> None:
+        from mas.runtime.engine.tools import current_spec_for_advertise, disabled_tool_names
+
+        if tool_name in disabled_tool_names(current_spec_for_advertise(ctx)):
+            raise ManifestToolLoadError(f"tool {tool_name!r} is disabled in the current spec revision")
+        self._registry.assert_call_allowed(tool_name, ctx=ctx)
+
+    def prepare_call(self, tool_name: str, arguments: dict[str, Any], *, ctx: Any = None) -> PreparedOperation:
+        self.assert_call_allowed(tool_name, ctx=ctx)
+        return self._registry.prepare_call(tool_name, arguments, ctx=ctx)
+
+    def stop(self) -> None:
+        self.close()
+
+    def close(self) -> None:
+        for provider in self._registry.providers():
+            closer = getattr(provider, "close", None)
+            if callable(closer):
+                closer()
 
     def call_tool(
         self,
