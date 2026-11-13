@@ -64,13 +64,13 @@ class RuntimeInstance(Lifecycle):
         self._exec_id_uses[base] = n
         return f"{base}-exec" if n == 1 else f"{base}-{n}-exec"
 
-    def _begin_user_turn(self, text: str, turn_id: str, parent_call_id: str) -> str | None:
+    def _begin_user_turn(self, text: str, turn_id: str, parent_call_id: str, session_id: str) -> str | None:
         op = self.driver.observability
         if op is None or self.obs_plugin_set is None:
             return None
         exec_id = self._execution_id(op._agent_id, turn_id)
         op.push_call_frame(exec_id)
-        rec: dict[str, Any] = {"text": text, "call_id": exec_id, "turn_id": turn_id}
+        rec: dict[str, Any] = {"text": text, "call_id": exec_id, "turn_id": turn_id, "session_id": session_id}
         if parent_call_id:
             rec["parent_call_id"] = parent_call_id
         op.record_session("user_input", **rec)
@@ -249,18 +249,17 @@ class RuntimeInstance(Lifecycle):
         instead of starting a new one; that's the caller's job, not this
         method's — it never mints one, only forwards or omits.
         """
-        exec_id = self._begin_user_turn(text, turn_id, parent_call_id)
-        trace = self.feed(
-            self._user_input_event(
-                text,
-                turn_id,
-                session_id,
-                upstream_correlation_id,
-                source=source,
-                sender=sender,
-                intent=intent,
-            )
+        event = self._user_input_event(
+            text,
+            turn_id,
+            session_id,
+            upstream_correlation_id,
+            source=source,
+            sender=sender,
+            intent=intent,
         )
+        exec_id = self._begin_user_turn(text, turn_id, parent_call_id, event.session_id)
+        trace = self.feed(event)
         self._finish_user_turn(exec_id, trace)
         return trace
 
@@ -280,18 +279,17 @@ class RuntimeInstance(Lifecycle):
         intent: str = "",
     ) -> DriverTrace:
         """Async twin of :meth:`run_user_text` — awaits ``driver.afeed``."""
-        exec_id = self._begin_user_turn(text, turn_id, parent_call_id)
-        trace = await self.afeed(
-            self._user_input_event(
-                text,
-                turn_id,
-                session_id,
-                upstream_correlation_id,
-                source=source,
-                sender=sender,
-                intent=intent,
-            )
+        event = self._user_input_event(
+            text,
+            turn_id,
+            session_id,
+            upstream_correlation_id,
+            source=source,
+            sender=sender,
+            intent=intent,
         )
+        exec_id = self._begin_user_turn(text, turn_id, parent_call_id, event.session_id)
+        trace = await self.afeed(event)
         self._finish_user_turn(exec_id, trace)
         return trace
 

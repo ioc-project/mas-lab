@@ -389,3 +389,11 @@ Design rules:
 - Conversion is the only path that needs the OpenTelemetry SDK. Importing `mas.library.telemetry.conversion` does not require it; `MasOtelConverter` is imported lazily and raises `OtelSdkUnavailableError` on construction.
 - Adding an event kind touches only a mapping module and the envelope table, never the converter (same design as `library-kg`).
 - Replay and live mode run the same handlers. Deterministic session ids make replays reproducible, so parity checks are meaningful.
+
+### Shared multi-agent export
+
+An OTel plugin may be shared by native multi-agent observability setup. It keeps transformation state separate for each agent and conversation, and serializes access to the shared converter. This preserves agent attribution when streams reuse correlation numbers while retaining cross-agent trace links. The owning plugin set drains operator queues before flushing and closing the exporter.
+
+Native Controls may configure `output_path` or `otel_file` as relative run output paths. The plugin resolves them against the runtime output base, while the owning plugin set handles queue draining and shutdown.
+
+Runtime turns resolve the incoming session before emitting their opening telemetry event. Generated session IDs, explicit IDs and follow-ups therefore use the same projection context for execution starts, model events and replies.

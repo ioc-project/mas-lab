@@ -14,6 +14,7 @@ plugin on the spec and set ``$OTEL_EXPORTER_OTLP_ENDPOINT``.
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -90,39 +91,60 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
     realtime: bool = False
     _export: OtelExport | None = field(default=None, init=False, repr=False)
 
+    _lock: Any = field(default_factory=threading.RLock, init=False, repr=False)
+    _contexts: dict[tuple[str, str], TransformContext] = field(default_factory=dict, init=False, repr=False)
+
     def reset_run(self) -> None:
-        if self.converter is not None:
-            self.converter.reset_run()
-        file_exporter = None if self._export is None else self._export.file_exporter
-        if file_exporter is not None and self.spans_path is not None:
-            self.spans_path.parent.mkdir(parents=True, exist_ok=True)
-            file_exporter.set_path(self.spans_path)
-            file_exporter.reset()
+        with self._lock:
+            self._contexts.clear()
+            self.context.mas_call_id = ""
+            if self.converter is not None:
+                self.converter.reset_run()
+            file_exporter = None if self._export is None else self._export.file_exporter
+            if file_exporter is not None and self.spans_path is not None:
+                self.spans_path.parent.mkdir(parents=True, exist_ok=True)
+                file_exporter.set_path(self.spans_path)
+                file_exporter.reset()
 
     def on_transition(self, event: TransitionEvent) -> None:
-        if self.converter is None:
-            return
-        for rec in project_transition(
-            event,
-            transforms=[self.native_transform],
-            ctx=self.context,
-            mas_id=self.mas_id,
-            session_id=event.session_id or self.session_id,
-            task_id=event.task_id,
-        ):
-            self.converter.process_event(rec)
+        # A shared set receives events from separate operator worker threads.
+        # Projection state belongs to an agent/context; the converter is shared
+        # to preserve cross-agent trace links and has one serialized owner.
+        with self._lock:
+            if self.converter is None:
+                return
+            key = (event.agent_id or self.context.agent_id, event.session_id or self.session_id)
+            ctx = self._contexts.setdefault(
+                key,
+                TransformContext(agent_id=key[0], run_id=event.run_id or self.context.run_id),
+            )
+            if self.context.mas_call_id:
+                ctx.mas_call_id = self.context.mas_call_id
+            for rec in project_transition(
+                event,
+                transforms=[self.native_transform],
+                ctx=ctx,
+                mas_id=self.mas_id,
+                session_id=key[1],
+                task_id=event.task_id,
+            ):
+                self.converter.process_event(rec)
+            if event.boundary_kind == "session" and event.mealy_symbol == "mas_call_start":
+                self.context.mas_call_id = ctx.mas_call_id
 
     def flush(self) -> None:
-        if self._export is not None:
-            self._export.finish()
-        elif self.converter is not None:
-            self.converter.finish()
+        with self._lock:
+            if self._export is not None:
+                self._export.finish()
+            elif self.converter is not None:
+                self.converter.finish()
 
     def close(self) -> None:
-        if self._export is not None:
-            self._export.close()
-        else:
-            self.flush()
+        with self._lock:
+            if self._export is not None:
+                self._export.close()
+            else:
+                self.flush()
 
     @classmethod
     def from_binding(
@@ -146,11 +168,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
         if not spans_path.is_absolute():
             spans_path = (base_path / spans_path).resolve()
 
-        env_name = str(
-            otel_cfg.get("otlp_endpoint_env")
-            or binding.otlp_endpoint_env
-            or "OTEL_EXPORTER_OTLP_ENDPOINT"
-        )
+        env_name = str(otel_cfg.get("otlp_endpoint_env") or binding.otlp_endpoint_env or "OTEL_EXPORTER_OTLP_ENDPOINT")
         endpoint = os.environ.get(env_name, "").strip() or None
 
         from mas.library.telemetry.conversion.topology import require_mas_name
@@ -160,9 +178,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             str(otel_cfg.get("mas_id") or ""),
         )
         profile = str(otel_cfg.get("converter_profile") or "observe_sdk")
-        realtime = bool(otel_cfg.get("realtime", False)) or _env_flag(
-            "OBSERVE_REALTIME_OBSERVABILITY_ENABLED", False
-        )
+        realtime = bool(otel_cfg.get("realtime", False)) or _env_flag("OBSERVE_REALTIME_OBSERVABILITY_ENABLED", False)
         ext_cfg = otel_cfg.get("extensions")
         rewrite_cfg = otel_cfg.get("rewrite_tool_delegation")
         ctx = TransformContext(agent_id=agent_id, run_id="")

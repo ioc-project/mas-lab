@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import pytest
 from mas.library.standard.lib.observability.native.transform import (
     NativeObservabilityTransform,
     TransformContext,
@@ -142,3 +143,111 @@ def test_on_transition_falls_back_to_override_field_when_event_has_none() -> Non
 
     assert converter.processed
     assert all(rec.get("session_id") == "override-session-id" for rec in converter.processed)
+
+
+def test_shared_plugin_preserves_agents_with_reused_call_numbers() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    converter = _DummyConverter()
+    plugin = OtelObservabilityPlugin(converter=converter, context=TransformContext(agent_id="planner"))
+
+    def emit(agent):
+        for kind, phase in (("engine.io", "start"), ("engine.io.return", "end")):
+            plugin.on_transition(
+                TransitionEvent(
+                    contract_id="tool",
+                    mealy_symbol="TOOL_CALL",
+                    phase=phase,
+                    agent_id=agent,
+                    session_id="conversation",
+                    correlation_id=1,
+                    boundary_kind=kind,
+                    attributes={"op": "TOOL_CALL", "tool_name": "lookup_record"},
+                )
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(emit, ["reader", "writer"]))
+    starts = [record for record in converter.processed if record["kind"] == "tool_call_start"]
+    ends = [record for record in converter.processed if record["kind"] == "tool_call_end"]
+    assert {record["agent_id"] for record in starts} == {"reader", "writer"}
+    assert len(starts) == len(ends) == 2
+    assert {record["call_id"] for record in starts} == {record["call_id"] for record in ends}
+
+
+def test_shared_run_frame_is_inherited_and_flushed_on_close() -> None:
+    converter = _DummyConverter()
+    plugin = OtelObservabilityPlugin(converter=converter)
+    plugin.on_transition(
+        TransitionEvent(
+            contract_id="orchestrator",
+            mealy_symbol="mas_call_start",
+            phase="event",
+            agent_id="mas",
+            run_id="run",
+            boundary_kind="session",
+            attributes={"call_id": "mas-call"},
+        )
+    )
+    plugin.on_transition(
+        TransitionEvent(
+            contract_id="orchestrator",
+            mealy_symbol="user_input",
+            phase="event",
+            agent_id="worker",
+            session_id="conversation",
+            boundary_kind="session",
+            attributes={"text": "request"},
+        )
+    )
+    assert plugin._contexts[("worker", "conversation")].mas_call_id == "mas-call"
+    plugin.close()
+    assert converter.flush_count == 1
+    empty = OtelObservabilityPlugin()
+    empty.on_transition(TransitionEvent(contract_id="tool", mealy_symbol="TOOL_CALL", phase="start"))
+    empty.close()
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("explicit_session", [False, True])
+def test_runtime_turn_projection_keeps_effective_session(tmp_path, asynchronous, explicit_session):
+    import asyncio
+
+    from mas.library.telemetry.plugins.otel_plugin import create_otel_plugin
+    from mas.runtime.boundary.obs.plugins import ObsPluginSet
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.engine.simulated import SimulatedEngine
+
+    plugin = create_otel_plugin(
+        spans_path=tmp_path / "spans.jsonl", converter_profile="raw", app_name="test", context=TransformContext()
+    )
+    owner = ObsPluginSet(plugins=[plugin])
+    for agent in ("reader", "writer"):
+        instance = RuntimeInstance.from_parts(engine=SimulatedEngine(llm_next_step=lambda _: "STOP", stop_text=agent))
+        instance.driver.agent_id = agent
+        owner.subscribe_to(instance.driver.observability, agent_id=agent)
+        instance.obs_plugin_set = owner
+        owner.begin_run(instance.driver.observability)
+        for i, session in enumerate(("A" if explicit_session else "", "B", "A")):
+            kwargs = {"session_id": session, "turn_id": f"u{i}"}
+            if asynchronous:
+                asyncio.run(instance.arun_user_text("hello", **kwargs))
+            else:
+                instance.run_user_text("hello", **kwargs)
+    owner.flush()
+    records = plugin.converter._seen_events
+    starts = [ev for ev in records if ev["kind"] == "execution_start"]
+    ends = [ev for ev in records if ev["kind"] == "execution_end"]
+    responses = [ev for ev in records if ev["kind"] == "user_response"]
+    assert len(starts) == len(ends) == len(responses) == 6
+    ends_by_call = {ev["call_id"]: ev for ev in ends}
+    replies_by_parent = {ev["parent_call_id"]: ev for ev in responses}
+    for start in starts:
+        end = ends_by_call[start["call_id"]]
+        response = replies_by_parent[start["call_id"]]
+        assert start["call_id"] == end["call_id"] == response["parent_call_id"]
+        assert start["session_id"] == end["session_id"] == response["session_id"]
+        assert start["session_id"]
+        assert response["turn_id"] == start["turn_id"]
+        assert response["call_id"] != "-resp"
+    owner.close()
