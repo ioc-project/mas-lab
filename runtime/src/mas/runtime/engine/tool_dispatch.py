@@ -271,8 +271,9 @@ async def aexecute_engine_tool(
     """Async twin of :func:`execute_engine_tool`.
 
     Routes to ``acall`` / ``adelegate`` / ``aspawn`` when present so nested
-    agent turns can overlap. Plugin tools use ``acall_tool`` /
-    ``on_aexecute_tool`` when present; otherwise ``call_tool`` runs where the
+    agent turns can overlap. Plugin tools use ``acall_tool``. An async
+    ``on_execute_tool`` (or ``execute``) is awaited on the loop;
+    ``on_aexecute_tool`` still wins when present. A sync method runs where the
     deployment says (``tool_workers``: inline or thread). The tool sees the same
     sealed context either way. ExecuteSandbox wraps the body after ALLOW; it is
     not a new envelope symbol. Retry is a layer around this invoke, not a loop

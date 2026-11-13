@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 from mas.library.standard.plugins.tools.local import LocalToolProvider
+from mas.runtime.contracts.tool_contract import ToolContract
 from mas.runtime.engine.manifest_tool_provider import build_manifest_tool_provider
 from mas.runtime.engine.tool_dispatch import execute_engine_tool
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
@@ -205,6 +206,15 @@ class _LegacySync:
         return {"sync": name}
 
 
+class _AsyncOnExecute:
+    def on_collect_tools(self, **_):
+        return [{"name": "echo"}]
+
+    async def on_execute_tool(self, name, args, **_):
+        await asyncio.sleep(0)
+        return {"one-method": name, **args}
+
+
 class _Blind:
     def on_collect_tools(self, **_):
         return [{"name": "other"}]
@@ -226,6 +236,116 @@ async def test_acall_tool_none_from_on_aexecute_tool_is_empty_string():
     provider = LocalToolProvider()
     provider._add_instance(_NoneAsync(), {"name": "empty"})
     assert await provider.acall_tool("empty", {}) == ""
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_awaits_async_on_execute_tool():
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
+    out = await provider.acall_tool("echo", {"q": 1})
+    assert out == {"one-method": "echo", "q": 1}
+
+
+class _AsyncExecute(ToolContract):
+    """One method, the ``ToolContract`` way: ``async def execute``."""
+
+    def get_name(self):
+        return "slow"
+
+    async def execute(self, **kwargs):
+        await asyncio.sleep(0.2)
+        return {"slow": kwargs}
+
+
+class _SlowOnExecute:
+    def on_collect_tools(self, **_):
+        return [{"name": "nap"}]
+
+    async def on_execute_tool(self, name, args, **_):
+        await asyncio.sleep(0.2)
+        return {"nap": args["i"]}
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_awaits_async_execute_of_a_tool_contract():
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncExecute(), None)
+    assert await provider.acall_tool("slow", {"x": 1}) == {"slow": {"x": 1}}
+
+
+@pytest.mark.asyncio
+async def test_a_batch_of_async_on_execute_tools_overlaps_on_the_loop():
+    import time
+
+    from mas.runtime.engine.tool_workers import ToolPlacement, bind_placement, unbind_placement
+
+    provider = LocalToolProvider()
+    provider._add_instance(_SlowOnExecute(), None)
+    token = bind_placement(ToolPlacement(worker="inline"))
+    try:
+        started = time.monotonic()
+        results = await asyncio.gather(*(provider.acall_tool("nap", {"i": i}) for i in range(5)))
+        elapsed = time.monotonic() - started
+    finally:
+        unbind_placement(token)
+    assert results == [{"nap": i} for i in range(5)]
+    assert elapsed < 0.6  # five 0.2 s calls on one loop, not one after another (1.0 s)
+
+
+def test_the_sync_path_runs_an_async_tool_to_completion():
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
+    provider._add_instance(_AsyncExecute(), None)
+    assert provider.call_tool("echo", {"q": 1}) == {"one-method": "echo", "q": 1}
+    assert provider.call_tool("slow", {"x": 2}) == {"slow": {"x": 2}}
+
+
+class _LegacyAsyncExecute:
+    def on_collect_tools(self, **_):
+        raise NotImplementedError
+
+    def get_name(self):
+        return "legacy-async"
+
+    def on_execute_tool(self, name, args, **_):
+        raise NotImplementedError
+
+    async def execute(self, **kwargs):
+        return {"via": "execute", **kwargs}
+
+
+class _NoneThenAsyncExecute:
+    def on_collect_tools(self, **_):
+        raise NotImplementedError
+
+    def get_name(self):
+        return "none-exec"
+
+    def on_execute_tool(self, name, args, **_):
+        return None
+
+    async def execute(self, **kwargs):
+        return {"via": "execute-after-none"}
+
+
+def test_call_tool_finishes_async_execute_when_on_execute_tool_is_missing():
+    provider = LocalToolProvider()
+    provider._add_instance(_LegacyAsyncExecute(), None)
+    assert provider.call_tool("legacy-async", {"n": 1}) == {"via": "execute", "n": 1}
+
+
+def test_call_tool_finishes_async_execute_when_on_execute_tool_returns_none():
+    provider = LocalToolProvider()
+    provider._add_instance(_NoneThenAsyncExecute(), None)
+    assert provider.call_tool("none-exec", {}) == {"via": "execute-after-none"}
+
+
+@pytest.mark.asyncio
+async def test_call_tool_from_a_running_loop_tells_you_to_use_acall_tool():
+    provider = LocalToolProvider()
+    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
+    with pytest.raises(RuntimeError, match="use acall_tool"):
+        provider.call_tool("echo", {"q": 3})
 
 
 @pytest.mark.asyncio
@@ -255,3 +375,18 @@ async def test_acall_tool_system_plugin_uses_call_tool():
     provider = LocalToolProvider()
     provider.system_plugins = _Sys()
     assert await provider.acall_tool("sys", {"k": 2}) == {"via": "system", "name": "sys", "args": {"k": 2}}
+
+
+@pytest.mark.asyncio
+async def test_acall_tool_awaits_async_system_plugin():
+    class _SysAsync:
+        def claims(self, name):
+            return name == "sys"
+
+        async def call(self, name, arguments, context=None):
+            await asyncio.sleep(0)
+            return {"via": "async-system", "name": name}
+
+    provider = LocalToolProvider()
+    provider.system_plugins = _SysAsync()
+    assert await provider.acall_tool("sys", {}) == {"via": "async-system", "name": "sys"}

@@ -27,7 +27,7 @@ from mas.library.standard.plugins.tools.containment import (
 )
 from mas.runtime.contracts.tool_contract import ToolContract, overlay_tool_advertise
 from mas.runtime.contracts.user_communication_contract import HITLContract, UserIOContract
-from mas.runtime.engine.tool_workers import arun_sync_tool, ctx_for_tool
+from mas.runtime.engine.tool_workers import arun_sync_tool, ctx_for_tool, run_awaitable
 from mas.runtime.manifest.schema import ToolDocument
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 from mas.runtime.system_plugins import (
@@ -98,6 +98,11 @@ def _tool_class_candidates(module: Any) -> list[type]:
         if callable(getattr(obj, "on_collect_tools", None)):
             out.append(obj)
     return out
+
+
+def _finished(result: Any) -> Any:
+    """The value of a tool call: an ``async def`` tool is run to completion on the sync path."""
+    return run_awaitable(result) if inspect.isawaitable(result) else result
 
 
 class LocalToolProvider:
@@ -236,8 +241,8 @@ class LocalToolProvider:
             if not owns and not legacy_match:
                 continue
             try:
-                result = instance.on_execute_tool(
-                    tool_name, arguments, ctx=ctx_for_tool(instance, ctx), user=user, **kwargs
+                result = _finished(
+                    instance.on_execute_tool(tool_name, arguments, ctx=ctx_for_tool(instance, ctx), user=user, **kwargs)
                 )
                 if result is not None:
                     return result
@@ -246,7 +251,7 @@ class LocalToolProvider:
             except NotImplementedError:
                 if legacy_match:
                     try:
-                        return instance.execute(**arguments)
+                        return _finished(instance.execute(**arguments))
                     except NotImplementedError:
                         continue
                 continue
@@ -254,7 +259,7 @@ class LocalToolProvider:
                 raise
             if legacy_match:
                 try:
-                    return instance.execute(**arguments)
+                    return _finished(instance.execute(**arguments))
                 except NotImplementedError:
                     continue
         raise ManifestToolLoadError(f"Tool {tool_name!r} not found in local provider")
@@ -270,19 +275,30 @@ class LocalToolProvider:
     ) -> Any:
         """Async twin of :meth:`call_tool`.
 
-        Prefers ``on_aexecute_tool`` so I/O overlaps on the event loop.
-        Otherwise ``call_tool`` runs where the deployment says (inline or in a
-        thread). The tool sees the same sealed context either way, except a
-        ``kernel_state`` tool, which gets the live ctx and runs inline.
+        One method is enough. ``on_aexecute_tool`` still wins when present.
+        An async ``on_execute_tool`` (or ``execute``) is awaited on the loop.
+        A sync ``on_execute_tool`` runs where the deployment says (inline or
+        in a thread). The tool sees the same sealed context either way, except
+        a ``kernel_state`` tool, which gets the live ctx and runs inline.
         """
         if self.system_plugins is not None and self.system_plugins.claims(tool_name):
-            return self.call_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+            result = self.system_plugins.call(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
+            if inspect.isawaitable(result):
+                result = await result
+            return result
         owner = self._owner_of(tool_name, ctx)
         if owner is None:
             return self.call_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
         aexec = getattr(owner, "on_aexecute_tool", None)
         if callable(aexec):
             result = aexec(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+            return "" if result is None else result
+        exec_fn = getattr(owner, "on_execute_tool", None)
+        execute = getattr(owner, "execute", None)
+        if callable(exec_fn) and (inspect.iscoroutinefunction(exec_fn) or inspect.iscoroutinefunction(execute)):
+            result = exec_fn(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
             if inspect.isawaitable(result):
                 result = await result
             return "" if result is None else result

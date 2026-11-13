@@ -13,6 +13,7 @@ reconciling the release notes with the code and docs currently on that branch.
 ### Added
 
 - `mas-lab init` writes `api_base: env:OPENAI_BASE_URL|<url>` so the file names the env var. `standard:openai` and the sample workspace do the same. A custom URL at init uses `<infra-name>_API_BASE` so a leftover `OPENAI_BASE_URL` does not steal the call.
+- Write a new tool as `async def on_execute_tool` (or `async def execute`). That one method is enough; the engine awaits it. A `def on_execute_tool` still works: the engine may run it in a worker thread. `on_aexecute_tool` still wins when present. The sync path finishes an async tool instead of returning a coroutine. Calling `call_tool` from a running loop raises; use `acall_tool`.
 
 ### Changed
 
