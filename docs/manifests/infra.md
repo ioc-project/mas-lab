@@ -29,7 +29,7 @@ spec:
     api_key_env: OPENAI_API_KEY
 ```
 
-Put the env var *name* in the file so several providers can run at once, each with its own variable. `mas-lab init` writes that form for the OpenAI default URL. A custom URL at init uses `<infra-name>_API_BASE`. If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. The right place for the name is still the file.
+Put the env var *name* in the file so several providers can run at once, each with its own variable. `mas-lab init` writes that form for the OpenAI default URL. A custom URL at init uses `<infra-name>_API_BASE`. If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. The right place for the name is still the file. When the address comes from the shell, the engine logs one warning naming the host, because the API key is sent there.
 
 The runtime resolves infra from deployment configuration, in this order of source:
 

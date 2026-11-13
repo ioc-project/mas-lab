@@ -173,3 +173,25 @@ def test_init_quiet_prints_nothing_but_writes_files(monkeypatch, tmp_path: Path)
     assert result.output == ""
     assert (tmp_path / "mas" / "config.yaml").exists()
     assert (tmp_path / "mas" / "infra" / "llmprovider.yaml").exists()
+
+
+def test_api_base_env_name_is_a_shell_name_and_never_the_legacy_one():
+    from mas.lab.cli.commands.init import _api_base_for_file
+
+    assert _api_base_for_file("https://x.io/v1", infra_name="openai").startswith("env:OPENAI_PROXY_API_BASE|")
+    assert _api_base_for_file("https://x.io/v1", infra_name="1abc").startswith("env:LLM_1ABC_API_BASE|")
+
+
+def test_two_infra_names_with_the_same_slug_do_not_share_a_variable(tmp_path: Path):
+    from mas.lab.cli.commands.init import _api_base_for_file, _taken_api_base_names
+
+    (tmp_path / "my-provider.yaml").write_text(
+        "spec:\n  proxy:\n    api_base: env:MY_PROVIDER_API_BASE|https://a/v1\n", encoding="utf-8"
+    )
+    taken = _taken_api_base_names(tmp_path, "my_provider")
+    assert taken == {"MY_PROVIDER_API_BASE"}
+    assert _api_base_for_file("https://b/v1", infra_name="my_provider", taken=taken).startswith(
+        "env:MY_PROVIDER_API_BASE_2|"
+    )
+    # rewriting the infra file itself does not collide with its own variable
+    assert _taken_api_base_names(tmp_path, "my-provider") == frozenset()

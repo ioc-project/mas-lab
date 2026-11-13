@@ -316,6 +316,12 @@ def build_engine(
     infra_base = str(llm_proxy.get("api_base") or "").strip()
     env_base = _env_llm_base()
     api_base = infra_base or env_base
+    if not infra_base and env_base:
+        from mas.ctl.infra.env_resolve import warn_endpoint_from_env
+
+        warn_endpoint_from_env(
+            "OPENAI_BASE_URL" if os.environ.get("OPENAI_BASE_URL", "").strip() else "OPENAI_API_BASE", env_base
+        )
     if infra_base and env_base and infra_base.rstrip("/") != env_base.rstrip("/"):
         logger.warning(
             "OPENAI_BASE_URL (%s) is ignored: the LLMProxy infra manifest sets api_base %s. "

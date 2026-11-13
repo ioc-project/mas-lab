@@ -123,6 +123,13 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- `mas-lab init` never writes `OPENAI_API_BASE` for a custom URL (an infra called `openai` used to) and never a name that starts with a digit.
+- The adversarial and trip-planner LLM judges follow `OPENAI_BASE_URL`, then `OPENAI_API_BASE`, like the engine.
+- A tool whose `on_execute_tool` returns a coroutine through a `functools.wraps` decorator is awaited on the loop instead of raising under `engine.tool_worker: inline`.
+- The sync tool path (`call_tool`) finishes an async tool on one shared helper loop, so a client kept between calls stays valid. It used a new loop per call.
+- A `None` answer from `on_aexecute_tool` / an async `on_execute_tool` falls back to the legacy `execute` like the sync path does.
+- `mas-lab init` gives a second infra name with the same slug its own variable (`MY_PROVIDER_API_BASE_2`).
+- A LLM address taken from the shell (`OPENAI_BASE_URL`, `*_API_BASE`) logs one warning with its host: the API key is sent there.
 - The v0.2 blog post links to `aaif.io`.
 - An explicit pipeline retry keeps the params it named.
 - Session close stops the llm and tool call layers.

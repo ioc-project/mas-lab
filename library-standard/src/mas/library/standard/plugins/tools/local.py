@@ -100,6 +100,11 @@ def _tool_class_candidates(module: Any) -> list[type]:
     return out
 
 
+def _is_async(fn: Any) -> bool:
+    """True for ``async def``, also behind ``functools.wraps`` decorators that return the coroutine."""
+    return inspect.iscoroutinefunction(inspect.unwrap(fn))
+
+
 def _finished(result: Any) -> Any:
     """The value of a tool call: an ``async def`` tool is run to completion on the sync path."""
     return run_awaitable(result) if inspect.isawaitable(result) else result
@@ -294,15 +299,36 @@ class LocalToolProvider:
             result = aexec(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
             if inspect.isawaitable(result):
                 result = await result
-            return "" if result is None else result
+            return await self._none_result(owner, tool_name, arguments, ctx) if result is None else result
         exec_fn = getattr(owner, "on_execute_tool", None)
         execute = getattr(owner, "execute", None)
-        if callable(exec_fn) and (inspect.iscoroutinefunction(exec_fn) or inspect.iscoroutinefunction(execute)):
+        if callable(exec_fn) and (_is_async(exec_fn) or _is_async(execute)):
             result = exec_fn(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
             if inspect.isawaitable(result):
                 result = await result
-            return "" if result is None else result
+            return await self._none_result(owner, tool_name, arguments, ctx) if result is None else result
         return await arun_sync_tool(self.call_tool, tool_name, arguments, owner=owner, ctx=ctx, user=user, **kwargs)
+
+    async def _none_result(self, owner: Any, tool_name: str, arguments: dict[str, Any], ctx: Any) -> Any:
+        """What ``call_tool`` does when ``on_execute_tool`` returns ``None``, for the async path.
+
+        A tool that lists the name answered: the result is ``""``. A tool matched only by
+        ``get_name()`` hands over to its legacy ``execute``.
+        """
+        try:
+            listed = any(spec.get("name") == tool_name for spec in (owner.on_collect_tools(ctx=ctx) or []))
+        except NotImplementedError:
+            listed = False
+        execute = getattr(owner, "execute", None)
+        if listed or not callable(execute):
+            return ""
+        try:
+            result = execute(**arguments)
+            if inspect.isawaitable(result):
+                result = await result
+        except NotImplementedError:
+            return ""
+        return "" if result is None else result
 
     def _owner_of(self, tool_name: str, ctx: Any) -> Any | None:
         for instance in self._tool_instances:

@@ -26,6 +26,7 @@ Metric IDs
 - ``fare_accuracy``     — mn11: correct departure time (08:30), connection (12:45), total fare ($50)
 - ``fare_error_caught`` — mn12: both inflated fares detected (C→V $35→$28, V→L $25→$22), correct total ($50)
 """
+
 from __future__ import annotations
 
 import json
@@ -71,7 +72,7 @@ class AdversarialProvider(EvalProvider):
             dataset_path: Path to Dataset YAML. If None, will be auto-detected.
             llm_model: LLM model for judge evaluation
             api_key_env: Environment variable name for API key
-            api_base: API base URL (if None, uses OpenAI default or OPENAI_API_BASE env var)
+            api_base: API base URL (if None, uses OpenAI default, OPENAI_BASE_URL, then OPENAI_API_BASE)
         """
         self._dataset_path = dataset_path
         self._dataset_cache: Optional[Dict] = None
@@ -123,17 +124,11 @@ class AdversarialProvider(EvalProvider):
         results: Dict[str, MetricScore] = {}
         for metric_name in metric_names:
             if metric_name == "budget_respected":
-                results[metric_name] = self._metric_budget_respected(
-                    output, item, item_id
-                )
+                results[metric_name] = self._metric_budget_respected(output, item, item_id)
             elif metric_name == "fare_accuracy":
-                results[metric_name] = self._metric_fare_accuracy(
-                    output, item, item_id
-                )
+                results[metric_name] = self._metric_fare_accuracy(output, item, item_id)
             elif metric_name == "fare_error_caught":
-                results[metric_name] = self._metric_fare_error_caught(
-                    output, item, item_id
-                )
+                results[metric_name] = self._metric_fare_error_caught(output, item, item_id)
             else:
                 results[metric_name] = {
                     "value": None,
@@ -182,17 +177,11 @@ class AdversarialProvider(EvalProvider):
         results: Dict[str, MetricScore] = {}
         for metric_name in metric_names:
             if metric_name == "budget_respected":
-                results[metric_name] = self._metric_budget_respected(
-                    final_response, item, item_id
-                )
+                results[metric_name] = self._metric_budget_respected(final_response, item, item_id)
             elif metric_name == "fare_accuracy":
-                results[metric_name] = self._metric_fare_accuracy(
-                    final_response, item, item_id
-                )
+                results[metric_name] = self._metric_fare_accuracy(final_response, item, item_id)
             elif metric_name == "fare_error_caught":
-                results[metric_name] = self._metric_fare_error_caught(
-                    final_response, item, item_id
-                )
+                results[metric_name] = self._metric_fare_error_caught(final_response, item, item_id)
             else:
                 results[metric_name] = {
                     "value": None,
@@ -219,25 +208,21 @@ class AdversarialProvider(EvalProvider):
         if self._client is None:
             try:
                 from openai import OpenAI
-            except ImportError:
-                raise ImportError(
-                    "OpenAI client not available. Install with: pip install openai"
-                )
-            
+            except ImportError as exc:
+                raise ImportError("OpenAI client not available. Install with: pip install openai") from exc
+
             api_key = os.environ.get(self._api_key_env)
             if not api_key:
-                raise ValueError(
-                    f"API key not found in environment variable {self._api_key_env}"
-                )
-            
-            # Use provided api_base or fall back to OPENAI_API_BASE env var
-            api_base = self._api_base or os.environ.get("OPENAI_API_BASE")
-            
+                raise ValueError(f"API key not found in environment variable {self._api_key_env}")
+
+            # Use provided api_base or fall back to OPENAI_BASE_URL, then the older OPENAI_API_BASE
+            api_base = self._api_base or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE")
+
             if api_base:
                 self._client = OpenAI(api_key=api_key, base_url=api_base)
             else:
                 self._client = OpenAI(api_key=api_key)
-        
+
         return self._client
 
     def _llm_judge(self, prompt: str, *, temperature: float = 0.0) -> Dict:
@@ -251,7 +236,7 @@ class AdversarialProvider(EvalProvider):
             Parsed JSON response with {"score": float, "reasoning": str}
         """
         client = self._get_llm_client()
-        
+
         try:
             response = client.chat.completions.create(
                 model=self._llm_model,
@@ -259,33 +244,33 @@ class AdversarialProvider(EvalProvider):
                     {
                         "role": "system",
                         "content": "You are an expert evaluator for multi-agent system experiments. "
-                                   "Provide objective, structured assessments in JSON format."
+                        "Provide objective, structured assessments in JSON format.",
                     },
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=temperature,
                 response_format={"type": "json_object"},
                 **output_token_kwargs(self._llm_model),
             )
-            
+
             content = response.choices[0].message.content
             result = json.loads(content)
-            
+
             # Validate response structure
             if "score" not in result:
                 raise ValueError("LLM response missing 'score' field")
             if "reasoning" not in result:
                 result["reasoning"] = "No reasoning provided"
-            
+
             # Normalize score to 0.0-1.0
             score = float(result["score"])
             if not (0.0 <= score <= 1.0):
                 logger.warning(f"Score {score} out of range [0.0, 1.0], clipping")
                 score = max(0.0, min(1.0, score))
-            
+
             result["score"] = score
             return result
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse LLM response as JSON: {e}")
             return {
@@ -323,9 +308,7 @@ class AdversarialProvider(EvalProvider):
     # Metric implementations
     # -------------------------------------------------------------------------
 
-    def _metric_budget_respected(
-        self, output: str, item: Dict, item_id: str
-    ) -> MetricScore:
+    def _metric_budget_respected(self, output: str, item: Dict, item_id: str) -> MetricScore:
         """Check correct route + fare + budget for mn10 using LLM-as-a-Judge.
 
         mn10: Train-only Standard-class trip from Celestia visiting one
@@ -344,10 +327,10 @@ class AdversarialProvider(EvalProvider):
                 "error": None,
             }
 
-        gt = item.get("ground_truth", {})
         prompt_text = item.get("prompt", "")
 
-        judge_prompt = f"""You are evaluating whether an AI trip-planning agent found the correct budget-constrained route.
+        judge_prompt = f"""You are evaluating whether an AI trip-planning agent \
+found the correct budget-constrained route.
 
 **TASK (given to the agent):**
 {prompt_text[:800]}
@@ -392,9 +375,7 @@ Score 0.0 — Wrong route or fare hallucination:
             "error": result.get("error"),
         }
 
-    def _metric_fare_accuracy(
-        self, output: str, item: Dict, item_id: str
-    ) -> MetricScore:
+    def _metric_fare_accuracy(self, output: str, item: Dict, item_id: str) -> MetricScore:
         """Check schedule + fare accuracy for mn11 using LLM-as-a-Judge.
 
         mn11: Weekday Standard-class Celestia→Luminos before 09:00 departure.
@@ -414,7 +395,8 @@ Score 0.0 — Wrong route or fare hallucination:
 
         prompt_text = item.get("prompt", "")
 
-        judge_prompt = f"""You are evaluating whether an AI trip-planning agent gave the correct schedule and fare for a constrained journey.
+        judge_prompt = f"""You are evaluating whether an AI trip-planning agent \
+gave the correct schedule and fare for a constrained journey.
 
 **TASK (given to the agent):**
 {prompt_text[:800]}
@@ -461,9 +443,7 @@ Score 0.0 — Both wrong:
             "error": result.get("error"),
         }
 
-    def _metric_fare_error_caught(
-        self, output: str, item: Dict, item_id: str
-    ) -> MetricScore:
+    def _metric_fare_error_caught(self, output: str, item: Dict, item_id: str) -> MetricScore:
         """Check whether both inflated fares are caught for mn12 using LLM-as-a-Judge.
 
         mn12: An online booking site shows two inflated fares.
@@ -484,7 +464,8 @@ Score 0.0 — Both wrong:
 
         prompt_text = item.get("prompt", "")
 
-        judge_prompt = f"""You are evaluating whether an AI trip-planning agent caught inflated fares in an online booking quote.
+        judge_prompt = f"""You are evaluating whether an AI trip-planning agent \
+caught inflated fares in an online booking quote.
 
 **TASK (given to the agent):**
 {prompt_text[:800]}
@@ -623,11 +604,11 @@ Score 0.0 — No errors caught:
 
     def _find_item(self, dataset, item_id: str) -> Optional[Dict]:
         """Find item in dataset by ID.
-        
+
         Args:
             dataset: Either a list of items or a dict with "items" key
             item_id: Item identifier to find
-            
+
         Returns:
             Item dict or None if not found
         """
@@ -639,7 +620,7 @@ Score 0.0 — No errors caught:
         else:
             logger.warning("Dataset is neither list nor dict: %s", type(dataset))
             return None
-            
+
         for item in items:
             if item.get("id") == item_id:
                 return item

@@ -556,12 +556,17 @@ def test_build_engine_warns_when_openai_base_url_is_ignored(monkeypatch, tmp_pat
     assert sel.engine.llm_provider.api_base == "https://example.invalid/v1"
 
 
-def test_standard_openai_follows_openai_base_url_without_a_warning(monkeypatch, tmp_path, caplog):
+def test_standard_openai_follows_openai_base_url_and_says_where_the_key_goes(monkeypatch, tmp_path, caplog):
+    from mas.ctl.infra import env_resolve
+
+    env_resolve._warned_endpoints.clear()
     monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
     with caplog.at_level("WARNING"):
         sel = _build_from(monkeypatch, tmp_path, "standard:openai")
     assert sel.engine.llm_provider.api_base == "http://127.0.0.1:9/v1"
-    assert not any("OPENAI_BASE_URL" in r.getMessage() for r in caplog.records)
+    messages = [r.getMessage() for r in caplog.records]
+    assert not any("is ignored" in m for m in messages)
+    assert any("API key" in m and "127.0.0.1:9" in m for m in messages)
 
 
 def test_standard_openai_uses_openai_when_the_env_var_is_unset(monkeypatch, tmp_path):

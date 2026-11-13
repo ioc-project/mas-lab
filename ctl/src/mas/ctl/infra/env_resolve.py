@@ -30,6 +30,28 @@ _ENV_PREFIX = "env:"
 _SECRET_KEY_SUFFIX = "_env"
 
 
+_ENDPOINT_SUFFIXES = ("_BASE_URL", "_API_BASE")
+_warned_endpoints: set[tuple[str, str]] = set()
+
+
+def warn_endpoint_from_env(var: str, value: str) -> None:
+    """Warn once that an address came from the shell, so the API key follows it to that host."""
+    from urllib.parse import urlparse
+
+    host = urlparse(value).netloc.rsplit("@", 1)[-1] or "(unparsed)"
+    key = (var, host)
+    if key in _warned_endpoints:
+        return
+    _warned_endpoints.add(key)
+    logger.warning(
+        "LLM address comes from the environment variable %s (host %s): the API key for this endpoint is "
+        "sent to that host. Unset %s to use the address in the file.",
+        var,
+        host,
+        var,
+    )
+
+
 def resolve_env_string(value: str) -> str:
     """Expand ``env:VAR`` or ``env:VAR|default`` to a string."""
     if not value.startswith(_ENV_PREFIX):
@@ -47,6 +69,8 @@ def resolve_env_string(value: str) -> str:
     resolved = os.environ.get(var)
     if resolved:
         logger.debug("env_resolve: %s resolved from env", var)
+        if var.upper().endswith(_ENDPOINT_SUFFIXES):
+            warn_endpoint_from_env(var, resolved)
         return resolved
     if default:
         logger.debug("env_resolve: %s is not set; using manifest default", var)

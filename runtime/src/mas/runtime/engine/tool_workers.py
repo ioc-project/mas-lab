@@ -26,6 +26,7 @@ Where it runs
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import contextvars
 import copy
 import inspect
@@ -180,13 +181,34 @@ def _flag_sync_tool(owner: Any, placement: ToolPlacement) -> None:
         )
 
 
+_HELPER_LOCK = threading.Lock()
+_HELPER_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _helper_loop() -> asyncio.AbstractEventLoop:
+    """The one loop that finishes async tools for the sync path, started on first use.
+
+    One loop for the life of the process, so a tool that keeps a loop-bound
+    object (an async HTTP client, a lock) between calls sees the same loop
+    every time. The async path (``acall_tool``) never uses it.
+    """
+    global _HELPER_LOOP
+    with _HELPER_LOCK:
+        if _HELPER_LOOP is None or _HELPER_LOOP.is_closed():
+            loop = asyncio.new_event_loop()
+            threading.Thread(target=loop.run_forever, name="mas-sync-tool-loop", daemon=True).start()
+            _HELPER_LOOP = loop
+        return _HELPER_LOOP
+
+
 def run_awaitable(awaitable: Any) -> Any:
     """Finish an awaitable from the sync tool path (``call_tool``).
 
-    That path has no loop, so this starts one with ``asyncio.run``. It does
-    not start a thread. The async path (``acall_tool``) awaits on the loop
-    that is already running. Calling ``call_tool`` from that loop is the
-    wrong path: use ``acall_tool``.
+    That path has no loop. The awaitable runs on one shared helper loop (see
+    ``_helper_loop``) in the caller's context, and the caller waits for it.
+    The async path (``acall_tool``) awaits on the loop that is already
+    running. Calling ``call_tool`` from that loop is the wrong path: use
+    ``acall_tool``.
     """
 
     async def _finish() -> Any:
@@ -195,10 +217,30 @@ def run_awaitable(awaitable: Any) -> Any:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(_finish())
-    if inspect.iscoroutine(awaitable):
-        awaitable.close()
-    raise RuntimeError("call_tool cannot finish an async tool while an event loop is running; use acall_tool")
+        pass
+    else:
+        if inspect.iscoroutine(awaitable):
+            awaitable.close()
+        raise RuntimeError("call_tool cannot finish an async tool while an event loop is running; use acall_tool")
+    loop = _helper_loop()
+    done: concurrent.futures.Future[Any] = concurrent.futures.Future()
+    context = contextvars.copy_context()
+
+    def _start() -> None:
+        task = loop.create_task(_finish(), context=context)
+
+        def _relay(finished: asyncio.Task[Any]) -> None:
+            if finished.cancelled():
+                done.cancel()
+            elif (error := finished.exception()) is not None:
+                done.set_exception(error)
+            else:
+                done.set_result(finished.result())
+
+        task.add_done_callback(_relay)
+
+    loop.call_soon_threadsafe(_start)
+    return done.result()
 
 
 async def arun_sync_tool(call: Callable[..., Any], *args: Any, owner: Any, ctx: Any, **kwargs: Any) -> Any:
