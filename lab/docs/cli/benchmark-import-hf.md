@@ -16,15 +16,22 @@ mas-lab benchmark import-hf [OPTIONS] PATH_IN_REPO
 
 ## DESCRIPTION
 
-Download a benchmark archive from a Hugging Face dataset repo and restore it locally.
+Download a benchmark archive from a Hugging Face dataset repo and restore it
+locally through the same flow as `benchmark import`.
 Pass `--token` or `--token-file`, or set `HF_TOKEN` (ctl reads the
 environment). `--dry-run` still uses `HF_TOKEN` when it is set, and
 does not require a token when it is not.
 
+Pin the import for a reproducible result: `--revision` takes a commit SHA
+(as printed by `publish-hf`), and `--sha256` checks the downloaded tarball
+before anything is extracted. The value may carry a `sha256:` prefix. A
+mismatch aborts the import. If `--sha256` is omitted the digest is not
+checked, and without `--revision` the repo's default branch is used.
+
 ## OPTIONS
 
 | Flag | Meaning |
-|------|------|
+| ------ | ------ |
 | `PATH_IN_REPO` | Positional path within the dataset repo. |
 | `--repo-id` | Hugging Face dataset repo id, e.g. `<user-or-org>/<repo>`. |
 | `--revision` | Branch or immutable commit SHA to pin the import to. |

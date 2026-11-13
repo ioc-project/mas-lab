@@ -188,6 +188,7 @@ ref overrides log a warning when applied.
 | `MAS_LLM_HTTP_RETRIES` | Last-resort interactive override of extra LLM HTTP retries (`attempts = retries + 1`). Prefer a `retry` layer on the infra pipeline — [reliability.md](references/reliability.md) |
 | `MAS_LLM_HTTP_RETRY_BACKOFF` | Last-resort interactive override of LLM HTTP base backoff seconds (also disables jitter) |
 | `MAS_HOME`, `MAS_CONTROLLER_SOCKET` | Controller data root / socket |
+| `HF_TOKEN` | Hugging Face token for `benchmark publish-hf` and `import-hf` (use `--token` / `--token-file`) |
 
 Secrets (`OPENAI_API_KEY`, proxy credentials) are the exception: they belong
 in the environment, never in YAML.
