@@ -37,3 +37,33 @@ def test_unset_var_with_no_default_returns_empty_without_warning(monkeypatch, ca
 
 def test_env_prefix_with_no_var_name_returns_empty() -> None:
     assert resolve_env_string("env:") == ""
+
+
+def test_an_address_taken_from_the_environment_is_warned_once(monkeypatch, caplog):
+    import logging
+
+    from mas.ctl.infra import env_resolve
+
+    env_resolve._warned_endpoints.clear()
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://user:pw@proxy.example:8080/v1")
+    with caplog.at_level(logging.WARNING):
+        assert env_resolve.resolve_env_string("env:OPENAI_BASE_URL|https://api.openai.com/v1").startswith("http://")
+        env_resolve.resolve_env_string("env:OPENAI_BASE_URL|https://api.openai.com/v1")
+    warnings = [r for r in caplog.records if "API key" in r.getMessage()]
+    assert len(warnings) == 1
+    assert "proxy.example:8080" in warnings[0].getMessage()
+    assert "pw" not in warnings[0].getMessage()
+
+
+def test_the_file_fallback_and_secret_names_do_not_warn(monkeypatch, caplog):
+    import logging
+
+    from mas.ctl.infra import env_resolve
+
+    env_resolve._warned_endpoints.clear()
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("MCP_AUTH_HEADER", "Bearer x")
+    with caplog.at_level(logging.WARNING):
+        env_resolve.resolve_env_string("env:OPENAI_BASE_URL|https://api.openai.com/v1")
+        env_resolve.resolve_env_string("env:MCP_AUTH_HEADER")
+    assert not [r for r in caplog.records if "API key" in r.getMessage()]

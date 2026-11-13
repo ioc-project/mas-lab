@@ -480,3 +480,32 @@ async def test_a_sync_tool_is_flagged_once_and_louder_when_it_blocks_the_loop(wo
     flagged = [r for r in caplog.records if "FlaggedSyncTool" in r.getMessage()]
     assert len(flagged) == 1
     assert flagged[0].levelname == level
+
+
+def test_run_awaitable_uses_one_loop_for_every_sync_call() -> None:
+    import asyncio
+    import contextvars
+
+    from mas.runtime.engine.tool_workers import run_awaitable
+
+    marker: contextvars.ContextVar[str] = contextvars.ContextVar("marker", default="unset")
+
+    async def where() -> tuple[int, str]:
+        return id(asyncio.get_running_loop()), marker.get()
+
+    marker.set("caller")
+    first = run_awaitable(where())
+    second = run_awaitable(where())
+    assert first[0] == second[0]
+    assert first[1] == "caller"
+
+
+def test_run_awaitable_raises_what_the_awaitable_raises() -> None:
+    import pytest
+    from mas.runtime.engine.tool_workers import run_awaitable
+
+    async def boom() -> None:
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError, match="boom"):
+        run_awaitable(boom())

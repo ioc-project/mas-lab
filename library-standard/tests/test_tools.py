@@ -390,3 +390,99 @@ async def test_acall_tool_awaits_async_system_plugin():
     provider = LocalToolProvider()
     provider.system_plugins = _SysAsync()
     assert await provider.acall_tool("sys", {}) == {"via": "async-system", "name": "sys"}
+
+
+class _WrappedCoroutine:
+    """A plain ``def on_execute_tool`` that hands back a coroutine through a ``functools.wraps`` decorator."""
+
+    def on_collect_tools(self, **_):
+        return [{"name": "wrapped"}]
+
+    @staticmethod
+    def _decorate(fn):
+        import functools
+
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    async def _impl(self, name, args, **_):
+        return {"wrapped": True}
+
+    def on_execute_tool(self, name, args, **kw):
+        return self._decorate(self._impl)(name, args, **kw)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("worker", ["inline", "thread"])
+async def test_a_wrapped_coroutine_from_a_sync_on_execute_tool_is_awaited(worker):
+    from mas.runtime.engine.tool_workers import ToolPlacement, bind_placement, unbind_placement
+
+    provider = LocalToolProvider()
+    inst = _WrappedCoroutine()
+    # the decorator hides the coroutine function from a plain iscoroutinefunction check
+    inst.on_execute_tool = inst._decorate(inst._impl)
+    provider._add_instance(inst, None)
+    token = bind_placement(ToolPlacement(worker=worker))
+    try:
+        assert await provider.acall_tool("wrapped", {}) == {"wrapped": True}
+    finally:
+        unbind_placement(token)
+
+
+class _NoneThenLegacyExecute:
+    """Listed by ``get_name`` only; ``on_aexecute_tool`` has no answer, so the legacy ``execute`` does."""
+
+    def get_name(self):
+        return "legacy"
+
+    def on_collect_tools(self, **_):
+        raise NotImplementedError
+
+    def on_execute_tool(self, name, args, **_):
+        return None
+
+    async def on_aexecute_tool(self, name, args, **_):
+        return None
+
+    async def execute(self, **kwargs):
+        return {"legacy": kwargs}
+
+
+class _NoneFromListedTool:
+    def on_collect_tools(self, **_):
+        return [{"name": "quiet"}]
+
+    async def on_aexecute_tool(self, name, args, **_):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_a_none_answer_matches_the_sync_path():
+    legacy = LocalToolProvider()
+    legacy._add_instance(_NoneThenLegacyExecute(), None)
+    assert await legacy.acall_tool("legacy", {"x": 1}) == {"legacy": {"x": 1}}
+
+    quiet = LocalToolProvider()
+    quiet._add_instance(_NoneFromListedTool(), None)
+    assert await quiet.acall_tool("quiet", {}) == ""
+
+
+def test_a_none_answer_matches_the_sync_path_for_legacy_execute():
+    legacy = LocalToolProvider()
+    legacy._add_instance(_NoneThenLegacyExecute(), None)
+    assert legacy.call_tool("legacy", {"x": 1}) == {"legacy": {"x": 1}}
+
+
+class _NoneThenUnimplementedExecute(_NoneThenLegacyExecute):
+    async def execute(self, **kwargs):
+        raise NotImplementedError
+
+
+@pytest.mark.asyncio
+async def test_a_none_answer_with_an_unimplemented_legacy_execute_is_empty():
+    provider = LocalToolProvider()
+    provider._add_instance(_NoneThenUnimplementedExecute(), None)
+    assert await provider.acall_tool("legacy", {}) == ""

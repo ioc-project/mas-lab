@@ -33,6 +33,7 @@ Usage::
         metric_names=["key_facts_accuracy"],
     )
 """
+
 from __future__ import annotations
 
 import json
@@ -42,7 +43,6 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
-
 from mas.library.eval.evaluator import EvalProvider, MetricScore
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
 from mas.runtime.spec.source import load_dataset_items_file as _load_dataset_file
@@ -70,7 +70,7 @@ class TripPlannerGTProvider(EvalProvider):
     api_key_env : str
         Environment variable name for the API key.
     api_base : str | None
-        OpenAI-compatible endpoint.  Falls back to OPENAI_API_BASE env var.
+        OpenAI-compatible endpoint.  Falls back to OPENAI_BASE_URL, then OPENAI_API_BASE.
     """
 
     name = "trip_planner_gt"
@@ -177,9 +177,7 @@ class TripPlannerGTProvider(EvalProvider):
     # Metric implementations
     # ------------------------------------------------------------------
 
-    def _metric_key_facts_accuracy(
-        self, output: str, item: Dict, item_id: str
-    ) -> MetricScore:
+    def _metric_key_facts_accuracy(self, output: str, item: Dict, item_id: str) -> MetricScore:
         """Check whether the agent response contains the correct key facts.
 
         The judge receives the full ground_truth dict and scores how many
@@ -198,8 +196,7 @@ class TripPlannerGTProvider(EvalProvider):
 
         prompt_text = item.get("prompt", "")
         gt_yaml = yaml.dump(
-            {k: v for k, v in gt.items() if not k.startswith("fare_breakdown")
-             and "note" not in k},
+            {k: v for k, v in gt.items() if not k.startswith("fare_breakdown") and "note" not in k},
             default_flow_style=False,
         )
 
@@ -236,9 +233,7 @@ Score = (number of correct key facts) / (total number of key facts in ground tru
             "error": result.get("error"),
         }
 
-    def _metric_claim_verification(
-        self, output: str, item: Dict, item_id: str
-    ) -> MetricScore:
+    def _metric_claim_verification(self, output: str, item: Dict, item_id: str) -> MetricScore:
         """Binary: did the agent correctly identify the claim violation?
 
         Specifically for mn3 (blogger's claim verification).
@@ -256,7 +251,6 @@ Score = (number of correct key facts) / (total number of key facts in ground tru
                 "error": None,
             }
 
-        gt = item.get("ground_truth", {})
         prompt_text = item.get("prompt", "")
 
         judge_prompt = f"""You are evaluating whether a trip-planning AI correctly verified a travel blogger's claim.
@@ -303,10 +297,11 @@ Score = (number of correct key facts) / (total number of key facts in ground tru
     def _get_llm_client(self):
         if self._client is None:
             from openai import OpenAI
+
             api_key = os.environ.get(self._api_key_env)
             if not api_key:
                 raise ValueError(f"API key not found in {self._api_key_env}")
-            api_base = self._api_base or os.environ.get("OPENAI_API_BASE")
+            api_base = self._api_base or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE")
             self._client = OpenAI(api_key=api_key, base_url=api_base) if api_base else OpenAI(api_key=api_key)
         return self._client
 

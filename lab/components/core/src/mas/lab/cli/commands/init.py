@@ -21,7 +21,7 @@ _DEFAULT_API_BASE = "https://api.openai.com/v1"
 _DEFAULT_API_BASE_ENV = "OPENAI_BASE_URL"
 
 
-def _api_base_env_name(raw: str, infra_name: str) -> str:
+def _api_base_env_name(raw: str, infra_name: str, taken: frozenset[str] = frozenset()) -> str:
     """Env var named in the file. OpenAI's default URL uses OPENAI_BASE_URL.
 
     A custom URL uses ``<INFRA>_API_BASE`` so a leftover OPENAI_BASE_URL in the
@@ -30,11 +30,38 @@ def _api_base_env_name(raw: str, infra_name: str) -> str:
     text = (raw or "").strip() or _DEFAULT_API_BASE
     if text.rstrip("/") == _DEFAULT_API_BASE.rstrip("/"):
         return _DEFAULT_API_BASE_ENV
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", infra_name or "").strip("_").upper()
-    return f"{slug or 'LLM'}_API_BASE"
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", infra_name or "").strip("_").upper() or "LLM"
+    if slug[0].isdigit():
+        slug = f"LLM_{slug}"  # a shell cannot export a name that starts with a digit
+    name = f"{slug}_API_BASE"
+    # OPENAI_API_BASE is the older name of OPENAI_BASE_URL: an infra called "openai" must not read it.
+    if name == "OPENAI_API_BASE":
+        name = "OPENAI_PROXY_API_BASE"
+    # ``my-provider`` and ``my_provider`` give the same slug: another infra file must not share the variable.
+    base, n = name, 1
+    while name in taken:
+        n += 1
+        name = f"{base}_{n}"
+    return name
 
 
-def _api_base_for_file(raw: str, *, infra_name: str = _DEFAULT_INFRA_NAME) -> str:
+def _taken_api_base_names(infra_dir: Path, infra_name: str) -> frozenset[str]:
+    """Env var names the other infra files in ``infra_dir`` already read for their ``api_base``."""
+    taken: set[str] = set()
+    if not infra_dir.is_dir():
+        return frozenset()
+    for path in infra_dir.glob("*.yaml"):
+        if path.stem == infra_name:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        taken.update(re.findall(r"api_base:\s*env:([A-Za-z_][A-Za-z0-9_]*)", text))
+    return frozenset(taken)
+
+
+def _api_base_for_file(raw: str, *, infra_name: str = _DEFAULT_INFRA_NAME, taken: frozenset[str] = frozenset()) -> str:
     """Write the env var name in the file so several providers can coexist.
 
     A value that is already ``env:NAME|fallback`` is left as written.
@@ -42,7 +69,7 @@ def _api_base_for_file(raw: str, *, infra_name: str = _DEFAULT_INFRA_NAME) -> st
     text = (raw or "").strip() or _DEFAULT_API_BASE
     if text.startswith("env:"):
         return text
-    return f"env:{_api_base_env_name(text, infra_name)}|{text}"
+    return f"env:{_api_base_env_name(text, infra_name, taken)}|{text}"
 
 
 _DEFAULT_MODEL_ALIAS = "generic-model"
@@ -308,7 +335,9 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
         infra_path.write_text(
             _render_infra_yaml(
                 name=infra_name,
-                api_base=_api_base_for_file(api_base, infra_name=infra_name),
+                api_base=_api_base_for_file(
+                    api_base, infra_name=infra_name, taken=_taken_api_base_names(infra_dir, infra_name)
+                ),
                 api_key_env=api_key_env,
                 model_alias=model_alias,
                 target_model=target_model,
