@@ -14,14 +14,19 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - `mas-lab init` writes `api_base: env:OPENAI_BASE_URL|<url>` so the file names the env var. `standard:openai` and the sample workspace do the same. A custom URL at init uses `<infra-name>_API_BASE` so a leftover `OPENAI_BASE_URL` does not steal the call.
 - Write a new tool as `async def on_execute_tool` (or `async def execute`). That one method is enough; the engine awaits it. A `def on_execute_tool` still works: the engine may run it in a worker thread. `on_aexecute_tool` still wins when present. The sync path finishes an async tool instead of returning a coroutine. Calling `call_tool` from a running loop raises; use `acall_tool`.
+- `gov_no_undeclared_peer` BLOCKs leftover `delegate_to_*` to a dest not in this agent's `delegates_to`. A user tool named `send` or a declared `delegate_to_<x>` tool is left alone. `with-hardened` names it. Send itself does not refuse.
 
 ### Changed
 
 - `--cache-read` / `--cache-write` help now says the cache is off until those flags insert the `llm_cache` step. The default pipeline is retry only.
 - The cache docs describe one LLM cache, the `llm_cache` step. The "built-in engine cache" sections are gone; `MAS_LLM_CACHE_READ` / `_WRITE` and `RuntimeEngine` `cache.read` / `write` insert that step.
+- `behavior.delegation_style: none` hides the leftover `delegate_to_*` tools from the LLM. The peers and the send path stay, so a linear, parallel, or single pattern can still send to the next agent.
+- Leftover `delegate_to_*` tools shown to the LLM are this agent's `delegates_to`. An empty list means none of those tools. An agent not listed in the workflow shows none. `workflow.entry` only names who receives the user message.
 
 ### Breaking
 
+- A pattern's next hop is this agent's `delegates_to`. The old fallbacks (`workflow.participants`, every other node, the agency list) are gone, and an agent with no `delegates_to` has no next hop (the pattern logs a warning and ends the turn). `behavior.delegation_style` does not affect a pattern's next hop.
+- `send` no longer refuses a target outside `delegates_to`; the model can only call peers that are offered, and `gov_no_undeclared_peer` (in `with-hardened`) blocks the rest. It does nothing when the kernel has no agent id.
 - `standard:openai` now reads `OPENAI_BASE_URL` when that env var is set (`api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1`). A hardcoded URL in that file used to ignore the env var. `openai.example.yaml` and the sample workspace use the same form; they used to read `OPENAI_API_BASE`. `OPENAI_API_BASE` is still used only when `api_base` is left empty.
 - LLM answers are stored only by the `llm_cache` infra step. `--cache-read` /
   `--cache-write` / `--cache-read-only` turn that step on or change its flags.

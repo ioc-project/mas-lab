@@ -23,7 +23,7 @@ never goes out as an `inform`. The table below is the whole map.
 | `ask` | Peer send | Same as `task`, with the peer text marked as coming from another agent. The caller waits for the reply. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-framing` layer refuse it. |
 | `inform` | Peer send | Same as `ask`, then drop the reply and return `delivered`. The caller still waits. A peer error still raises. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-framing` layer refuse it. |
 | Channel `publish` | Peer send | Fan-out to a room. Intent is `publish`, not `task`. Labelled untrusted. | **Yes** on `local-group` and `slim`. |
-| `send(..., intent="steer")` | Peer send → control | Call `ControlContract.scoped` then `steer` on the session the link maps for that target. The new handle cannot do more than the control you passed. Default mode is `after` at the tail. `preempt` and `replace` must be set. Peer entries always queue at the tail. `after` on a paused session waits in the queue; `preempt` and `replace` are refused. The target must be on `steer_peers` (empty list means nobody) and on SendTool `allowed_peers`. | **Yes** on `local` and `local-group` when `control=` is passed at construction. **No** on A2A. Session wiring does not inject `control` yet. |
+| `send(..., intent="steer")` | Peer send → control | Call `ControlContract.scoped` then `steer` on the session the link maps for that target. The new handle cannot do more than the control you passed. Default mode is `after` at the tail. `preempt` and `replace` must be set. Peer entries always queue at the tail. `after` on a paused session waits in the queue; `preempt` and `replace` are refused. The target must be on `steer_peers` (empty list means nobody). | **Yes** on `local` and `local-group` when `control=` is passed at construction. **No** on A2A. Session wiring does not inject `control` yet. |
 | Pause / resume | Control | Block or continue the next user turn. | **Yes.** `mas-ctl control`. |
 | Steer `after` | Control | Do not interrupt. Queue text at the front for an operator, at the tail for a peer. The current decode finishes, then the text runs. | **Yes.** Control protocol only. Not A2A. Not a peer send. |
 | Steer `preempt` | Control | Cancel the streamed model call between chunks, keep tokens so far, continue with `OperatorSteerReceived` in the Mealy machine. | **Yes.** Control protocol only. Needs a streaming provider API. |
@@ -87,8 +87,7 @@ refused. The link maps the target to that session: `steer_peers` is
 name→session on `local`, and the target's `session_id` on
 `local-group` after the name is resolved. The send `context_id` is
 not the control session (for a `task` it still picks the target's
-working-memory context). A send through `SendTool` also needs the
-target on `allowed_peers`; both lists apply. The steer text is
+working-memory context). The steer text is
 labelled as an untrusted peer message. Mode defaults to `after`,
 queued at the tail so a peer does not jump a human's pending input.
 Peer `preempt` and `replace` also queue at the tail when they cannot
@@ -345,7 +344,7 @@ standard library registers a system tool named `send` with
 to the model's list; `list_tools` still returns only `delegate_to_<id>`,
 with the same `task` and `context_id` arguments. A user tool named `send`
 stays that tool. A user tool named `delegate_to_<id>` stays that tool unless
-`list_tools` offered that name.
+that peer is on the send allow list.
 Cards: [local-group](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/local-group.md),
 [stack](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/stack.md),
 [trace_context](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/trace-context.md),

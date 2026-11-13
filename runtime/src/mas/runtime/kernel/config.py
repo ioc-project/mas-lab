@@ -48,6 +48,9 @@ class KernelConfig:
     # models rather than just the live transition stream. None when built
     # outside spec parsing (e.g. tests constructing KernelConfig directly).
     agent_spec: dict[str, Any] | None = field(default=None, compare=False)
+    # This agent's id in a MAS (metadata.name / bind agent_id). Empty when the
+    # kernel is built outside a MAS (standalone chat, tests).
+    agent_id: str = ""
     # Optional sink: Session.on_governance_decision. compare=False so tests
     # constructing KernelConfig() still match. Called after authorize/validate.
     on_decision_snapshot: Any | None = field(default=None, compare=False, repr=False)

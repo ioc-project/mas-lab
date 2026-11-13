@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from mas.runtime.boundary.delegation.policy import delegate_tool_name, delegation_targets
 from mas.runtime.boundary.gov.policy import EgressIntentView
 from mas.runtime.engine.tools import tool_entry_name
 from mas.runtime.kernel.config import KernelConfig
@@ -15,10 +16,7 @@ PLUGIN_ID = "gov_no_undeclared_tool"
 def undeclared_tool_observation(tool: str, available: list[str]) -> str:
     """Text the model sees when it names a tool that was not in ``tools``."""
     names = ", ".join(available) if available else "(none)"
-    return (
-        f"Tool {tool!r} was not in the tools list offered to you. "
-        f"Do not call it. Available tools: {names}."
-    )
+    return f"Tool {tool!r} was not in the tools list offered to you. Do not call it. Available tools: {names}."
 
 
 def _names_from_spec(spec: dict | None) -> list[str] | None:
@@ -39,7 +37,14 @@ def allowed_tool_names(intent: EgressIntentView, *, config: KernelConfig) -> lis
     """
     if intent.offered_tools is not None:
         return list(intent.offered_tools)
-    return _names_from_spec(getattr(config, "agent_spec", None))
+    spec = getattr(config, "agent_spec", None)
+    names = _names_from_spec(spec)
+    if names is None or not isinstance(spec, dict):
+        return names
+    # delegate_to_<peer> tools come from the topology, not from spec.tools.
+    agent_id = str(getattr(config, "agent_id", "") or "").strip() or None
+    peers = delegation_targets({"spec": spec}, agent_id=agent_id) if agent_id else []
+    return names + [delegate_tool_name(p) for p in peers if delegate_tool_name(p) not in names]
 
 
 class NoUndeclaredToolPlugin:

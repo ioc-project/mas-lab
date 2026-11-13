@@ -218,7 +218,7 @@ patch:
 
 _Used by:_ `spec.workflow`
 
-Declares the entry point and the delegation graph. The embedded `MAS.spec.workflow` has `entry` and `nodes`. It has no `type` or `edges` field. The first agent in the team (`entry`) is the one that decides who to call and in what order. A setting on another agent does not change that order.
+Declares the entry point and the delegation graph. The embedded `MAS.spec.workflow` has `entry` and `nodes`. It has no `type` or `edges` field. `entry` is the agent that receives the user query. It does not change which leftover tools that agent offers. Each agent's leftover `delegate_to_<id>` tools come from its own `delegates_to` (deprecated, still implied). Set `behavior.delegation_style: none` on an agent to keep the topology and the send path without offering the model those tools. A linear, parallel, or single design pattern on an agent uses that agent's list as its next hop. An empty `delegates_to` means the model sees none of those tools. Hiding the tools is not a lock: a model call to a hidden `delegate_to_<id>` name for a declared peer still runs unless `gov_no_undeclared_tool` blocks it (it is in `with-hardened`).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -246,7 +246,7 @@ _Used by:_ `spec.workflow.nodes[]`
 | Field | Type | Required | Default | Description |
 | ------- | ------ | ---------- | --------- | ------------- |
 | `id` | `string` | **yes** | — | Node identifier. Must match an `agency.agents[].id`. |
-| `delegates_to` | `string[]` | no | `[]` | IDs of agents this node may delegate to. Sets the `delegate_to_<id>` tools that the entry agent's LLM sees. Deprecated, still supported, no removal date. An empty list does not warn. |
+| `delegates_to` | `string[]` | no | `[]` | IDs of leftover `delegate_to_<id>` tools offered to the model. A pattern that sends itself uses this list as the next hop. An empty list means none of those tools. Deprecated, still supported, no removal date. An empty list does not warn. |
 | `role` | `string` | no | — | Role label, informational. |
 | `agent` | `string` | no | — | Agent id override, for when the node id differs from the agent id. |
 | `dispatch` | `string` | no | — | Deprecated, still accepted, ignored. Validation warns once and lists the nodes that set it. A node does not fan out to its peers; the model chooses parallel tool calls. |

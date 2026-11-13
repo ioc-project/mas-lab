@@ -125,7 +125,7 @@ Registered in the standard library with `default_enabled: false`. Naming
 `send` in `spec.system_plugins` does not put a tool named `send` in the
 model's list; `list_tools` still returns only `delegate_to_<id>`. A user
 tool named `send` stays that tool. A user tool named `delegate_to_<id>`
-stays that tool unless `list_tools` offered that name.
+stays that tool unless that peer is on the send allow list.
 
 See [Communication stack](comm-stack.md). Card:
 [send.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/system_tools/send.md).

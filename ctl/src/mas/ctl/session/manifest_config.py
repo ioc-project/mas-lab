@@ -82,7 +82,12 @@ def kernel_config_from_manifest(
     # Ingress plugins are wired inside build_kernel_config from
     # binding.ingress_plugins. Do not pass a second spec list here — that
     # parameter was dead and looked like a double-wiring path.
-    return build_kernel_config(gov, pattern_plugin_id=pattern_plugin_id or "", agent_spec=spec)
+    return build_kernel_config(
+        gov,
+        pattern_plugin_id=pattern_plugin_id or "",
+        agent_spec=spec,
+        agent_id=agent_id,
+    )
 
 
 def agent_id_from_manifest(manifest: dict | None) -> str:

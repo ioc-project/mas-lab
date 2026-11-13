@@ -145,7 +145,7 @@ class SendTool:
         routes: dict[str, AgentCommRoute] | None,
         allowed_peers: Sequence[str] | None,
     ) -> None:
-        """Wire the link, routes and offered peers into an instance built before they were known."""
+        """Wire the link, routes and leftover ``delegate_to_*`` names into an instance built before they were known."""
         self._comm = comm
         self._routes = dict(routes or {})
         self._allowed = frozenset(str(peer) for peer in (allowed_peers or ()) if str(peer).strip())
@@ -155,7 +155,11 @@ class SendTool:
         self.configure(comm=other._comm, routes=other._routes, allowed_peers=other._allowed)
 
     def offers(self, tool_name: str) -> bool:
-        """True for ``delegate_to_<peer>`` where *peer* was offered to the model."""
+        """True for leftover ``delegate_to_<peer>`` names this instance lists.
+
+        That is ``list_tools`` / claims, not an execute lock. ``send`` still
+        delivers if a pattern or Python calls it with another dest.
+        """
         target = parse_delegate_tool_name(tool_name)
         return bool(target) and target in self._allowed
 
@@ -284,8 +288,6 @@ class SendTool:
         kind = str(intent or "task").strip().lower() or "task"
         if kind not in SEND_INTENTS:
             return f"[send] unknown intent {intent!r}"
-        if target not in self._allowed:
-            return f"[send] target {target!r} is not an allowed peer"
         communication, protocol = self._resolve(target, ctx=ctx)
         if kind not in intents_honoured_by(communication):
             return f"[send] intent {kind!r} is not supported on this link"
@@ -562,7 +564,8 @@ class SendPlugin(InstanceSystemPlugin):
     """System plugin for ``send``. The model still sees ``delegate_to_<id>``.
 
     The bound :class:`SendTool` is the engine's delegation: ``configure`` (or ``adopt_wiring``) gives it
-    the link and the offered peers, and it claims exactly the ``delegate_to_<peer>`` names it offered.
+    the link and the leftover ``delegate_to_<peer>`` names it offers. Those names are what the
+    model may see. ``send`` still delivers when a pattern or Python calls it.
     """
 
     name = "send"

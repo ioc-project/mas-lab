@@ -61,7 +61,7 @@ class _Engine:
 def _raw(reply: Callable[[str, str], str], **params: object) -> tuple[str, _Engine]:
     engine = _Engine(reply)
     instance = RuntimeInstance.from_parts(
-        config=KernelConfig(agent_spec=_spec(**params)),
+        config=KernelConfig(agent_spec=_spec(**params), agent_id="moderator"),
         engine=engine,
         enable_observability=False,
         enable_coordination=False,
@@ -171,7 +171,7 @@ def test_unknown_participant_is_refused() -> None:
     outcome_text = None
     engine = _Engine(lambda a, t: "ok")
     instance = RuntimeInstance.from_parts(
-        config=KernelConfig(agent_spec=_spec(order=["nobody"])),
+        config=KernelConfig(agent_spec=_spec(order=["nobody"]), agent_id="moderator"),
         engine=engine,
         enable_observability=False,
         enable_coordination=False,

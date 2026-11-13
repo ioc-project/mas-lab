@@ -123,6 +123,7 @@ practical examples.
 | `BacktrackOnErrorPlugin` | `mas.library.standard.plugins.governance.backtrack_on_error` | `library-standard` |
 | `BudgetPlugin`           | `mas.library.standard.plugins.governance.budget`             | `library-standard` |
 | `DebugScriptPlugin`      | `mas.library.standard.plugins.governance.debug_script`       | `library-standard` |
+| `NoUndeclaredPeerPlugin` | `mas.library.standard.plugins.governance.no_undeclared_peer` | `library-standard` |
 | `NoUndeclaredToolPlugin` | `mas.library.standard.plugins.governance.no_undeclared_tool` | `library-standard` |
 | `RetryOnErrorPlugin`     | `mas.library.standard.plugins.governance.retry_on_error`     | `library-standard` |
 | `SampleGovernancePlugin` | `mas.library.standard.plugins.governance.sample`             | `library-standard` |
@@ -351,6 +352,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `Neo4jPushStep`                  | step                 | `library-kg`        |
 | `NormalizeEventsStep`            | step                 | `library-kg`        |
 | `NormalizeOtelStep`              | step                 | `library-kg`        |
+| `NoUndeclaredPeerPlugin`         | governance           | `library-standard`  |
 | `NoUndeclaredToolPlugin`         | governance           | `library-standard`  |
 | `OpenAILLMProvider`              | llm_provider         | `library-standard`  |
 | `OtelObservabilityPlugin`        | observability        | `library-telemetry` |

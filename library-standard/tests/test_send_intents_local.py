@@ -428,7 +428,7 @@ def test_local_group_steer_uses_the_target_session_after_resolve() -> None:
         a.send("s9", "nudge", context=SendContext(intent="steer"))
 
 
-def test_send_tool_steer_needs_both_allow_lists() -> None:
+def test_send_tool_steer_uses_steer_peers_not_offer_list() -> None:
     control = _Control()
     comm = LocalAgentComm(_RunTurn(), control=control, steer_peers={"worker": "sess-1"})
     tool = SendTool(comm=comm, allowed_peers=["worker"])
@@ -442,7 +442,7 @@ def test_send_tool_steer_needs_both_allow_lists() -> None:
         "head",
     )
     closed_tool = SendTool(comm=comm, allowed_peers=[])
-    assert "not an allowed peer" in closed_tool.send("worker", "nudge", intent="steer")
+    assert closed_tool.send("worker", "nudge", intent="steer") == "delivered"
     other = SendTool(
         comm=LocalAgentComm(_RunTurn(), control=control, steer_peers={}),
         allowed_peers=["worker"],

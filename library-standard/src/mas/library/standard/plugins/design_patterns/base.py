@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from mas.runtime.kernel.config import KernelConfig
@@ -18,6 +19,8 @@ from mas.runtime.schema.ingress import (
     IngressSymbol,
     UserInputReceived,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -67,6 +70,10 @@ class _DeterministicBase(DesignPatternPlugin):
 
     def _no_participants(self, q: QProduct) -> list[EgressSymbol]:
         """Return an early-exit response when no participants are configured."""
+        logger.warning(
+            "%s has no participants: this agent's workflow node lists no delegates_to (or the agent is not a node).",
+            self.plugin_id,
+        )
         q.dp = DpState.IDLE
         q.scheduled_egress = "NONE"
         return [EmitClientResponse(content="Deterministic run complete (no participants).", finish_reason="stop")]
@@ -131,56 +138,10 @@ class _DeterministicBase(DesignPatternPlugin):
     # --- Participant resolution ---
 
     def _participants_from_spec(self, config: KernelConfig) -> list[str]:
+        from mas.runtime.boundary.delegation.policy import delegation_targets
+
         spec = getattr(config, "agent_spec", None) or {}
-        wf = (spec.get("workflow") or {}) if isinstance(spec, dict) else {}
-        entry_id = str(wf.get("entry") or "moderator").strip()
-
-        def participants(values: object) -> list[str]:
-            if not isinstance(values, list):
-                return []
-            return [
-                participant
-                for value in values
-                if (participant := str(value).strip()) and participant != entry_id
-            ]
-
-        # 1) entry node delegates_to (dynamic topology)
-        nodes = wf.get("nodes") or []
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            if str(node.get("id") or "").strip() != entry_id:
-                continue
-            out = participants(node.get("delegates_to") or [])
-            if out:
-                return out
-
-        # 2) explicit workflow.participants
-        out = participants(wf.get("participants") or [])
-        if out:
-            return out
-
-        # 3) fallback: workflow.nodes excluding the entry agent
-        out: list[str] = []
-        for node in nodes:
-            if not isinstance(node, dict):
-                continue
-            node_id = str(node.get("id") or node.get("agent") or "").strip()
-            if not node_id or node_id == entry_id:
-                continue
-            out.append(node_id)
-        if out:
-            return out
-
-        # 4) fallback: agency agents list from MAS spec (exclude entry/self)
-        agency = (spec.get("agency") or {}) if isinstance(spec, dict) else {}
-        rows = agency.get("agents") or []
-        out = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            aid = str(row.get("id") or row.get("name") or "").strip()
-            if not aid or aid == entry_id:
-                continue
-            out.append(aid)
-        return out
+        if not isinstance(spec, dict):
+            spec = {}
+        agent_id = str(getattr(config, "agent_id", "") or "").strip() or None
+        return delegation_targets({"spec": spec}, agent_id=agent_id)

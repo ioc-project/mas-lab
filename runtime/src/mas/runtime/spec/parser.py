@@ -53,6 +53,7 @@ def parse_agent_spec(
     *,
     runtime_engine: dict[str, Any] | None = None,
     manifest_dir: Any | None = None,
+    agent_id: str = "",
 ) -> tuple[KernelConfig, ObservabilityBinding | None]:
     """Parse a raw agent spec dict into (KernelConfig, ObservabilityBinding | None).
 
@@ -74,6 +75,7 @@ def parse_agent_spec(
         gov_binding,
         pattern_plugin_id=pattern_plugin_id,
         agent_spec=spec,
+        agent_id=agent_id,
         manifest_dir=manifest_dir,
     )
     kernel_config = _apply_design_pattern_params(spec, kernel_config)

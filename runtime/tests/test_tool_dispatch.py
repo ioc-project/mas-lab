@@ -67,6 +67,50 @@ def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
     assert not delegator.is_delegate_tool("send")
 
 
+def test_execute_engine_tool_leaves_unlisted_delegate_name_to_provider():
+    seen: list[str] = []
+
+    class Provider:
+        def call_tool(self, tool, arguments, **kwargs):
+            seen.append(tool)
+            return "from-user-tool"
+
+    delegator = LlmDelegator(
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}"),
+        allowed_peers=["db"],
+    )
+    out = execute_engine_tool(
+        "delegate_to_stranger",
+        delegation=delegator,
+        arguments={"task": "hi"},
+        tool_provider=Provider(),
+    )
+    assert out == "from-user-tool"
+    assert seen == ["delegate_to_stranger"]
+    assert delegator.send("stranger", "hi") == "delegated:stranger"
+
+
+def test_execute_engine_tool_with_no_peer_list_does_not_claim_delegate_names():
+    seen: list[str] = []
+
+    class Provider:
+        def call_tool(self, tool, arguments, **kwargs):
+            seen.append(tool)
+            return "from-user-tool"
+
+    delegator = LlmDelegator(
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}"),
+    )
+    out = execute_engine_tool(
+        "delegate_to_db",
+        delegation=delegator,
+        arguments={"task": "hi"},
+        tool_provider=Provider(),
+    )
+    assert out == "from-user-tool"
+    assert seen == ["delegate_to_db"]
+
+
 def test_execute_engine_tool_runs_async_on_execute_tool_to_completion():
     from mas.library.standard.plugins.tools.local import LocalToolProvider
 

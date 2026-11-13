@@ -21,7 +21,7 @@ Governance, control-plane settings and event sinks are not patches of the agent:
 | File | `metadata.name` | What it does |
 |------|-----------------|--------------|
 | `observability-native.yaml` | `observability-native` | Writes native `events.jsonl`. |
-| `with-hardened.yaml` | `with-hardened` | Production guidelines, written once for every agent: `gov_no_undeclared_tool`, the `budget` call ceilings, and `retry_on_error`. |
+| `with-hardened.yaml` | `with-hardened` | Production guidelines, written once for every agent: `gov_no_undeclared_tool`, `gov_no_undeclared_peer`, the `budget` call ceilings, and `retry_on_error`. |
 | `openclaw.yaml` | `openclaw` | Repeated-error backtracking. Pair it with the `openclaw` overlay. |
 
 The overlays below are patches of the agent spec.

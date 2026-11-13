@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 # SPDX-License-Identifier: Apache-2.0
-"""SendTool: name-locked legacy tools, allowed peers, one prepare for sync/async."""
+"""SendTool: leftover delegate_to_* names, one prepare for sync/async."""
 
 from __future__ import annotations
 
@@ -112,6 +112,28 @@ def test_delegate_to_schemas_match_openai_delegation_tools() -> None:
     }
 
 
+def test_list_tools_empty_when_delegation_style_is_none() -> None:
+    manifest = {
+        "metadata": {"name": "moderator"},
+        "spec": {
+            "behavior": {"delegation_style": "none"},
+            "workflow": {
+                "entry": "moderator",
+                "nodes": [
+                    {"id": "moderator", "delegates_to": ["worker"]},
+                    {"id": "worker"},
+                ],
+            },
+        },
+    }
+    tool = SendTool(comm=LocalAgentComm(_RunTurn()), allowed_peers=["worker"])
+    assert tool.list_tools(manifest=manifest) == []
+    assert openai_delegation_tools(manifest, agent_id="moderator") == []
+    assert tool.send("worker", "hello") == "ok:worker:hello"
+    assert tool.offers("delegate_to_worker")
+    assert not tool.offers("delegate_to_stranger")
+
+
 def test_list_tools_follow_spec_not_bus_routes() -> None:
     run = _RunTurn()
     routes = {
@@ -161,7 +183,8 @@ def test_delegate_to_ignores_bus_and_rejects_smuggled_target() -> None:
     assert run.calls == [("b", "hello", 0, "", "")]
 
 
-def test_send_checks_allowed_peers_not_routes() -> None:
+def test_send_delivers_even_when_dest_is_not_offered() -> None:
+    """delegates_to / allowed_peers is list_tools, not an execute lock."""
     run = _RunTurn()
     stranger = _RunTurn()
     tool = SendTool(
@@ -169,10 +192,13 @@ def test_send_checks_allowed_peers_not_routes() -> None:
         routes={"stranger": AgentCommRoute("stranger", "a2a", LocalAgentComm(stranger))},
         allowed_peers=["worker"],
     )
-    assert "not an allowed peer" in tool.send("stranger", "no")
-    assert stranger.calls == []
+    assert tool.offers("delegate_to_worker")
+    assert not tool.offers("delegate_to_stranger")
+    assert tool.send("stranger", "no") == "ok:stranger:no"
+    assert stranger.calls == [("stranger", "no", 0, "", "")]
+    assert run.calls == []
     assert tool.send("worker", "yes") == "ok:worker:yes"
-    assert "not an allowed peer" in tool.call_send_tool("send", {"target": "evil", "message": "no"})
+    assert tool.call_send_tool("send", {"target": "evil", "message": "no"}) == "ok:evil:no"
 
 
 def test_unknown_intent_is_an_error() -> None:
@@ -185,12 +211,14 @@ def test_unknown_intent_is_an_error() -> None:
     )
 
 
-def test_no_allow_list_reaches_nobody() -> None:
+def test_empty_offer_list_hides_tools_send_still_sends() -> None:
     run = _RunTurn()
     tool = SendTool(comm=LocalAgentComm(run))
-    assert "not an allowed peer" in tool.send("worker", "hello")
-    assert "not an allowed peer" in tool.call_send_tool("delegate_to_zzz", {"task": "x"})
-    assert run.calls == []
+    assert not tool.offers("delegate_to_worker")
+    assert not tool.offers("delegate_to_zzz")
+    assert tool.send("worker", "hello") == "ok:worker:hello"
+    assert tool.call_send_tool("delegate_to_zzz", {"task": "x"}) == "ok:zzz:x"
+    assert run.calls == [("worker", "hello", 0, "", ""), ("zzz", "x", 0, "", "")]
 
 
 def test_send_errors_and_claims() -> None:
@@ -260,7 +288,7 @@ async def test_asend_uses_same_prepare_including_routes() -> None:
     assert remote_calls == [("peer", "job")]
     assert local.calls == []
     assert await tool.asend("worker", "job") == "async:worker:job"
-    assert await tool.asend("stranger", "job") == "[send] target 'stranger' is not an allowed peer"
+    assert await tool.asend("stranger", "job") == "async:stranger:job"
     assert await tool.asend("", "x") == "[send] missing target"
     assert await tool.asend("worker", " ") == "[send] missing message for 'worker'"
     assert await tool.asend("worker", "x", intent="nope") == "[send] unknown intent 'nope'"

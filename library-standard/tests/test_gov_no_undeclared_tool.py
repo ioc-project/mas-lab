@@ -222,3 +222,19 @@ def test_plugin_allows_mwe_listed_tools() -> None:
     for name in offered:
         decision, _, _ = plugin.evaluate_egress(_intent(name, offered), config=KernelConfig())
         assert decision == GovDecision.ALLOW
+
+
+def test_a_pattern_sending_to_a_declared_peer_is_not_blocked_by_spec_tools() -> None:
+    from mas.runtime.boundary.gov.policy import EgressIntentView
+    from mas.runtime.kernel.config import KernelConfig
+    from mas.runtime.kernel.coupling import GovDecision
+
+    spec = {"tools": ["calc"], "workflow": {"nodes": [{"id": "a", "delegates_to": ["b"]}, {"id": "b"}]}}
+    config = KernelConfig(agent_spec=spec, agent_id="a")
+
+    def verdict(tool: str):
+        intent = EgressIntentView(op="TOOL_CALL", destructive=False, correlation_id=1, tool_name=tool)
+        return NoUndeclaredToolPlugin().evaluate_egress(intent, config=config)[0]
+
+    assert verdict("delegate_to_b") == GovDecision.ALLOW
+    assert verdict("delegate_to_c") == GovDecision.BLOCK

@@ -69,7 +69,7 @@ One Control, written once and attached to every agent you deploy: `pkg://mas.lib
 
 | Knob | Value |
 |------|--------|
-| Egress | `gov_no_undeclared_tool` |
+| Egress | `gov_no_undeclared_tool`, `gov_no_undeclared_peer` |
 | Call ceilings | the `budget` plugin: `max_llm_calls: 50`; `max_tool_calls: 100` |
 | Ingress | `retry_on_error` with `error_recovery_plugin: retry_on_error` |
 | `error_policy` | transient/unavailable → `retry`; application → `allow`; fatal → `block` |
@@ -208,6 +208,7 @@ A flavour is the glue between the logic spec and the infra (`bind`). It is not a
 | Concern | Overlay / plugin | Notes |
 |---------|------------------|--------|
 | Undeclared tools | `with-hardened` → `gov_no_undeclared_tool` | Egress chain BLOCK |
+| Leftover send dest | `with-hardened` → `gov_no_undeclared_peer` | Egress chain BLOCK when dest is not in `delegates_to` |
 | Typed retry / breaker | `with-hardened` → `retry_on_error` (Control); infra retry defaults and `standard:llm-proxy-hardened` for the breaker | Infra then ingress |
 | Native traces | `observability-native` | Sequence, not chain |
 | Checkpoints / resume | separate overlay | Compose it. The flavour does not carry it. |
@@ -225,6 +226,7 @@ spec:
     - ref: ./tools/get_metrics.tool.yaml
   governance:
     - gov_no_undeclared_tool
+    - gov_no_undeclared_peer
     - retry_on_error:
         error_recovery_plugin: retry_on_error
         error_policy:

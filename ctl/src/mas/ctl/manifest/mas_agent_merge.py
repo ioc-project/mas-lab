@@ -18,7 +18,7 @@ from mas.ctl.overlay.merge import (
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
 from mas.runtime.boundary.context.manifest_context import routing_description_from_agent
-from mas.runtime.boundary.delegation.policy import delegation_targets
+from mas.runtime.boundary.delegation.policy import advertise_delegate_tools, delegation_targets
 from mas.runtime.contracts.tool_semantics import existing_attr
 from mas.runtime.engine.leaf import leaf_engine
 from mas.runtime.engine.llm_live import LiveLlmEngine
@@ -306,11 +306,12 @@ def wire_entry_engine_delegation(
     routes: dict[str, AgentCommRoute] | None = None,
     peers: list[str] | None = None,
 ) -> None:
-    """Set enriched manifest on the entry engine and bind the delegation plugin when peers exist.
+    """Bind the send path when this agent has peers.
 
-    When peers exist, ``use_tool_loop`` is enabled on the leaf engine so the LLM can
-    emit ``delegate_to_*`` tool calls. A manifest or instantiation that set
-    ``use_tool_loop=False`` is overridden with a warning.
+    ``behavior.delegation_style: none`` hides leftover ``delegate_to_*``
+    tools from the model. The send path still runs. ``use_tool_loop`` is enabled only when those tools are
+    offered to the model. A manifest that set ``use_tool_loop=False`` is
+    overridden with a warning in that case.
     """
     if engine is None:
         return
@@ -346,6 +347,8 @@ def wire_entry_engine_delegation(
         shared.configure(comm=comm, routes=routes, allowed_peers=peers)
         leaf.delegation = shared
     else:
+        # Keep send wired when delegation_style is none: it hides tools from the
+        # model, it does not remove the path a pattern uses to call a peer.
         leaf.delegation = get_registry().instantiate_by_type(
             "engine_tool_provider",
             "delegation",
@@ -353,6 +356,8 @@ def wire_entry_engine_delegation(
             routes=routes,
             allowed_peers=peers,
         )
+    if not advertise_delegate_tools(manifest):
+        return
     if hasattr(leaf, "use_tool_loop"):
         if not leaf.use_tool_loop:
             logger.warning(
