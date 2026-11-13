@@ -31,7 +31,7 @@ Field-by-field `config.yaml` keys (including `mas_ctl.trace`) are in the
 | `$XDG_CACHE_HOME` | `~/.cache` | Base for caches |
 | `$XDG_CACHE_HOME/mas/traces` | under `$XDG_CACHE_HOME` | Content-addressed trace cache |
 | `$XDG_CACHE_HOME/mas/artifacts` | under `$XDG_CACHE_HOME` | Pipeline step cache |
-| `$XDG_CACHE_HOME/mas/llm_cache.json` | under `$XDG_CACHE_HOME` | LLM cache — built-in: [llm-cache.md](manifests/llm-cache.md) · [ref](references/llm-cache.md) |
+| `$XDG_CACHE_HOME/mas/llm_cache.json` | under `$XDG_CACHE_HOME` | LLM cache file of the `llm_cache` step the cache flags insert: [llm-cache.md](manifests/llm-cache.md) · [ref](references/llm-cache.md) |
 | `$XDG_STATE_HOME` | `~/.local/state` | Base for state files |
 | `$XDG_STATE_HOME/mas/last-run.json` | under `$XDG_STATE_HOME` | Last benchmark run pointer |
 | `MAS_LABS_ROOT` | — | Env override for labs root |
@@ -40,7 +40,7 @@ Field-by-field `config.yaml` keys (including `mas_ctl.trace`) are in the
 | `MAS_TRACE_CACHE` | — | Env override for trace cache |
 | `MAS_DATA_CACHE` | — | Env override for pipeline cache |
 | `MAS_LLM_CACHE` | — | Env override for the LLM response cache file path |
-| `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | — | Built-in engine cache — [llm-cache.md](manifests/llm-cache.md). Infra middleware: [references/llm-cache.md](references/llm-cache.md) |
+| `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | — | Turn the `llm_cache` step on — [llm-cache.md](manifests/llm-cache.md), [references/llm-cache.md](references/llm-cache.md) |
 | `MAS_LLM_MAX_TOKENS` / `MAS_LLM_MAX_COMPLETION_TOKENS` | — (no limit sent) | Output-token budget for model rows that set none; below `spec.models[]` overrides and above infra `generation` — [Output-token limits](manifests/agent.md#output-token-limits) |
 | `MAS_LLM_ON_TRUNCATION` | — | `ignore` \| `warn` \| `error` \| `escalate`; default action below `spec.models[].on_truncation` |
 | `MAS_HOME` | `$XDG_DATA_HOME/mas` | Env override for controller data root |
@@ -184,7 +184,8 @@ ref overrides log a warning when applied.
 | `MAS_LABS_ROOT`, `MAS_RUNS_ROOT` | `paths.labs_dir`, `paths.runs_dir` |
 | `MAS_DATA_ROOT` / `MAS_LAB_DATA` | Data root (derived from `paths.labs_dir`) |
 | `MAS_TRACE_CACHE`, `MAS_DATA_CACHE` | Trace / pipeline step cache (use `--trace-cache` / `--data-cache`) |
-| `MAS_LLM_CACHE`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | Built-in engine cache — [llm-cache.md](manifests/llm-cache.md) |
+| `MAS_LLM_CACHE` | Cache file path of an inserted `llm_cache` step — [llm-cache.md](manifests/llm-cache.md) |
+| `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE` | Turn the `llm_cache` step on — [llm-cache.md](manifests/llm-cache.md) |
 | `MAS_LLM_HTTP_RETRIES` | Last-resort interactive override of extra LLM HTTP retries (`attempts = retries + 1`). Prefer a `retry` layer on the infra pipeline — [reliability.md](references/reliability.md) |
 | `MAS_LLM_HTTP_RETRY_BACKOFF` | Last-resort interactive override of LLM HTTP base backoff seconds (also disables jitter) |
 | `MAS_HOME`, `MAS_CONTROLLER_SOCKET` | Controller data root / socket |

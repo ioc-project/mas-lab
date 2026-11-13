@@ -2,12 +2,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Capture golden-run artifacts (events.jsonl + trace-cache backup) for CI parity."""
+
 from __future__ import annotations
 
 import argparse
 import logging
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -56,8 +58,6 @@ def _capture_one(
     from mas.lab.benchmark.golden.events import events_fingerprint, normalize_events_file
     from mas.lab.benchmark.worker import run_benchmark_sync
 
-    import tempfile
-
     if not experiment.is_file():
         print(f"skip {label}: missing {experiment}", file=sys.stderr)
         return 1
@@ -85,7 +85,7 @@ def _capture_one(
     if "MAS_WORKSPACE_ROOT" not in os.environ:
         os.environ["MAS_WORKSPACE_ROOT"] = str(ROOT / "library-samples" / "sample-workspace")
     # Same isolation as tests/test_golden_labs_run.py: replay the committed
-    # llm_cache fixture, never the developer's engine cache or live provider.
+    # llm_cache fixture, never the developer's llm_cache file or live provider.
     if "MAS_INFRA_REFS" not in os.environ:
         replay = ROOT / "tests/fixtures/llm-cache/ci-replay.yaml"
         os.environ["MAS_INFRA_REFS"] = f"standard:openai,{replay.resolve()}"

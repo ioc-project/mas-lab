@@ -21,10 +21,9 @@ from mas.runtime.engine.llm_cache import (
 class CacheLLMProvider:
     """LLMProvider decorator: disk cache in front of an inner protocol plugin.
 
-    Independent ``allow_read`` / ``allow_write`` match the engine cache policy
-    and the infra ``llm_cache`` middleware knobs. This wraps *chat completions*,
-    not ``EngineContract.invoke`` — preview-keyed EngineIoReturn replay stays
-    on ``LlmCacheMiddleware``.
+    Independent ``allow_read`` / ``allow_write`` match the ``llm_cache`` step
+    knobs. This wraps *chat completions*, not ``EngineContract.invoke`` —
+    preview-keyed EngineIoReturn replay stays on ``LlmCacheMiddleware``.
     """
 
     provider_id = "cache"
@@ -80,9 +79,7 @@ class CacheLLMProvider:
     ) -> dict[str, Any]:
         params = completion_cache_params(temperature=temperature, max_tokens=max_tokens, **kwargs)
         if self.allow_read:
-            content, cached_usage, _source = lookup_response(
-                self._cache, model, messages, tools=tools, params=params
-            )
+            content, cached_usage, _source = lookup_response(self._cache, model, messages, tools=tools, params=params)
             cached = assistant_message_from_cache_content(content)
             if cached is not None:
                 if cached_usage:
@@ -92,8 +89,10 @@ class CacheLLMProvider:
             if self.raise_on_miss:
                 key = llm_cache_key(model, messages, tools, params=params)
                 raise RuntimeError(
-                    f"llm_cache miss (raise_on_miss=true) for key {key}: no recorded answer for this prompt. "
-                    "To call the model, turn read-only mode off (no --cache-read-only, no `cache: read-only` in config.yaml) and set an API key."
+                    f"llm_cache miss (raise_on_miss=true) for key {key}: "
+                    "no recorded answer for this prompt. To call the model, "
+                    "turn read-only mode off (no --cache-read-only, no "
+                    "`cache: read-only` in config.yaml) and set an API key."
                 )
         message = self.inner.chat_completion(
             model=model,
@@ -122,9 +121,7 @@ class CacheLLMProvider:
     ) -> dict[str, Any]:
         params = completion_cache_params(temperature=temperature, max_tokens=max_tokens, **kwargs)
         if self.allow_read:
-            content, cached_usage, _source = lookup_response(
-                self._cache, model, messages, tools=tools, params=params
-            )
+            content, cached_usage, _source = lookup_response(self._cache, model, messages, tools=tools, params=params)
             cached = assistant_message_from_cache_content(content)
             if cached is not None:
                 if cached_usage:
@@ -134,8 +131,10 @@ class CacheLLMProvider:
             if self.raise_on_miss:
                 key = llm_cache_key(model, messages, tools, params=params)
                 raise RuntimeError(
-                    f"llm_cache miss (raise_on_miss=true) for key {key}: no recorded answer for this prompt. "
-                    "To call the model, turn read-only mode off (no --cache-read-only, no `cache: read-only` in config.yaml) and set an API key."
+                    f"llm_cache miss (raise_on_miss=true) for key {key}: "
+                    "no recorded answer for this prompt. To call the model, "
+                    "turn read-only mode off (no --cache-read-only, no "
+                    "`cache: read-only` in config.yaml) and set an API key."
                 )
         message = await self.inner.achat_completion(
             model=model,

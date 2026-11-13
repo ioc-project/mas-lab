@@ -8,7 +8,7 @@
 
 This page is the full reference for the `llm_cache` infra middleware. It stores model responses on disk, so a repeated request skips the LLM call. Read it to record a run, replay it offline, or share a cache across a deployment. For a walkthrough, see the [hands-on guide](../manifests/llm-cache.md).
 
-Terms: *infra* is the layer that says where things are and how to reach them. *Middleware* is a step that wraps the LLM call. A *run* is one execution of an agent or MAS. The *trace cache* (also called the LLM cache here) stores completed model responses.
+Terms: *infra* is the layer that says where things are and how to reach them. *Middleware* is a step that wraps the LLM call. A *run* is one execution of an agent or MAS. This page is the LLM response cache (`llm_cache`). The *trace cache* stores whole-run traces and is a different store.
 
 ## The problem
 
@@ -31,16 +31,16 @@ for complete commands and environment-variable usage.
 
 ---
 
-## Two cache mechanisms
+## One cache
 
-MAS has two separate LLM response caches:
+The `llm_cache` infra middleware is the only LLM response cache. Nothing else in the engine stores responses.
 
-| Mechanism | Configured via | When to use |
-| --- | --- | --- |
-| **Built-in engine cache** | `RuntimeEngine.spec.cache`, `MAS_LLM_CACHE` / `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE`, `--cache-read` / `--cache-write` (and `--no-…`) on `mas-ctl chat` | Deployment-wide policy via `runtime_refs`. See [runtime-engine.md](../manifests/runtime-engine.md). |
-| **Infra middleware cache** (this reference) | `InfraMiddleware` with `middleware: llm_cache` | Shared deployment policy, write-only recording, strict replay (`raise_on_miss`), experiments |
+| Way to turn it on | Effect |
+| --- | --- |
+| `InfraMiddleware` with `middleware: llm_cache` | You write the step and its `params`. |
+| `--cache-read` / `--cache-write` / `--cache-read-only` on `mas-ctl chat`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE`, `RuntimeEngine.spec.cache.read` / `write` | `build_engine` inserts an `llm_cache` step when the infra has none. |
 
-When the resolved infra contains an `llm_cache` step, `build_engine` disables the built-in `LiveLlmEngine` disk cache. A scheduler-only pipeline does not. For that session, middleware `params` own read and write.
+When the infra already has an `llm_cache` step, the CLI flags overlay its `allow_read` / `allow_write`. The environment variables and `RuntimeEngine` flags leave it as written. `RuntimeEngine` `cache.enabled: false` turns both off. Default: off.
 
 Source: `ctl/src/mas/ctl/session/engine_factory.py`.
 
@@ -158,7 +158,7 @@ The path is `UserConfig.cache_dir / "llm_cache.json"`. An explicit `cache_path` 
 
 At infra load time, relative `cache_path` and `path` strings become absolute paths. They resolve against the directory that contains the middleware YAML file. Infra file refs themselves resolve from the MAS or agent **anchor**, or from the workspace root. They never resolve from the process working directory. See [infra.md](../manifests/infra.md).
 
-The `MAS_LLM_CACHE` env var applies to the **built-in** engine cache only. It does not set middleware `params.cache_path`.
+The `MAS_LLM_CACHE` env var sets the path of an `llm_cache` step that `build_engine` inserts for the flags above. It does not change the `cache_path` of a step you wrote in the infra.
 
 ---
 
@@ -266,7 +266,7 @@ Keys are SHA-256 hex strings. Values are either:
 | Next to infra YAML | `.cache/tutorial.llm-cache.json` | Resolved relative to the middleware manifest directory |
 | Repo example | `cache/demo.llm-cache.json` in infra YAML | Resolves to `library-samples/infra/cache/demo.llm-cache.json` |
 | XDG default | `null` or omit | `standard:llm-cache-*` refs |
-| Env `MAS_LLM_CACHE` | n/a | Built-in engine cache only |
+| Env `MAS_LLM_CACHE` | n/a | Only for a step inserted by the cache flags |
 
 Delete the JSON file to invalidate all entries, or use `write_mode: replace` on the recording manifest. The format is `{ "<sha256-hex>": "<text>" | {…}, ... }`. See [Cache entry format](#cache-entry-format).
 
@@ -290,22 +290,10 @@ Delete the JSON file to invalidate all entries, or use `write_mode: replace` on 
 | Stop caching mid-run / mid-experiment | Not implemented | Use write manifest only on record runs; replay manifest on CI runs |
 | Prune or invalidate single entries | Not implemented | Delete `cache_path` or edit the JSON manually; use `include_preview: true` to find keys |
 | Human-readable query in cache file | Opt-in | `include_preview: true` stores `_preview` (includes user message) per entry |
-| Built-in cache vs middleware keying | Different schemes | Do not mix built-in RuntimeEngine cache files with middleware `cache_path` |
+| Cache file written before the single `llm_cache` step | May not hit | Record again. The key scheme changed when the provider wrap was removed |
 | Non-deterministic tool-call IDs | Runtime behaviour | Record with a live provider or deterministic tools for strict replay |
 
 `raise_on_miss: true` is the safeguard for **fully offline** replay. Any cache miss is a hard error, so CI never silently calls a live provider.
-
----
-
-## Relation to built-in RuntimeEngine cache
-
-| | Built-in (`runtime-engine.md`) | Infra middleware |
-| --- | --- | --- |
-| Config surface | `RuntimeEngine.spec.cache` + workspace `runtime_refs` | `InfraMiddleware` + `--infra-ref` |
-| Shared across agents | Yes (merged runtime manifests) | Yes |
-| `raise_on_miss` | No | Yes |
-| Independent read/write | Yes | Yes (`allow_read` / `allow_write`) |
-| Active when pipeline set | Disabled | **Active** |
 
 ---
 
@@ -330,6 +318,6 @@ Delete the JSON file to invalidate all entries, or use `write_mode: replace` on 
 
 - [llm-cache.md](../manifests/llm-cache.md): getting started and walkthrough.
 - [infra.md](../manifests/infra.md): infra kinds and bundles.
-- [execution.md](../manifests/execution.md): built-in engine cache.
+- [execution.md](../manifests/execution.md): RuntimeEngine cache flags.
 - [user-config.md](../user-config.md): XDG paths.
 - [Context management](context-management.md): cache stability and cost.

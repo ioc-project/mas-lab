@@ -26,7 +26,7 @@ metadata:
   name: openai
 spec:
   provider: openai
-  api_base: https://api.openai.com/v1
+  api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
   api_key_env: OPENAI_API_KEY
 ```
 

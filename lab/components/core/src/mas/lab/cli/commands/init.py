@@ -18,6 +18,33 @@ from mas.runtime.xdg import mas_config_dir, mas_infra_dir, mas_user_config_file
 _DEFAULT_INFRA_NAME = "llmprovider"
 _DEFAULT_ENV_KEY = "OPENAI_API_KEY"
 _DEFAULT_API_BASE = "https://api.openai.com/v1"
+_DEFAULT_API_BASE_ENV = "OPENAI_BASE_URL"
+
+
+def _api_base_env_name(raw: str, infra_name: str) -> str:
+    """Env var named in the file. OpenAI's default URL uses OPENAI_BASE_URL.
+
+    A custom URL uses ``<INFRA>_API_BASE`` so a leftover OPENAI_BASE_URL in the
+    shell does not steal the call.
+    """
+    text = (raw or "").strip() or _DEFAULT_API_BASE
+    if text.rstrip("/") == _DEFAULT_API_BASE.rstrip("/"):
+        return _DEFAULT_API_BASE_ENV
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", infra_name or "").strip("_").upper()
+    return f"{slug or 'LLM'}_API_BASE"
+
+
+def _api_base_for_file(raw: str, *, infra_name: str = _DEFAULT_INFRA_NAME) -> str:
+    """Write the env var name in the file so several providers can coexist.
+
+    A value that is already ``env:NAME|fallback`` is left as written.
+    """
+    text = (raw or "").strip() or _DEFAULT_API_BASE
+    if text.startswith("env:"):
+        return text
+    return f"env:{_api_base_env_name(text, infra_name)}|{text}"
+
+
 _DEFAULT_MODEL_ALIAS = "generic-model"
 _DEFAULT_TARGET_MODEL = "gpt-4o-mini"
 
@@ -139,9 +166,7 @@ def _confirm_overwrite(path: Path, *, label: str, yes: bool) -> bool:
     if not path.exists():
         return True
     if yes:
-        raise click.ClickException(
-            f"{label} already exists at {path}; rerun without --yes to confirm overwrite."
-        )
+        raise click.ClickException(f"{label} already exists at {path}; rerun without --yes to confirm overwrite.")
     return click.confirm(
         f"{label} already exists at {path}. Overwrite?",
         default=False,
@@ -176,11 +201,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
     project_root = Path.cwd()
     cfg_dir = project_root if local_config else mas_config_dir()
     infra_dir = project_root / "infra" if local_config else mas_infra_dir()
-    config_path = (
-        project_root / WORKSPACE_CONFIG_FILENAME
-        if local_config
-        else mas_user_config_file()
-    )
+    config_path = project_root / WORKSPACE_CONFIG_FILENAME if local_config else mas_user_config_file()
 
     # Load existing values to pre-fill prompts
     existing_cfg = _read_existing_config(config_path)
@@ -221,8 +242,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
                 "Infra name",
                 default=infra_name,
                 show_default=True,
-            )
-            .strip()
+            ).strip()
             or infra_name
         )
         # Reload infra defaults if name changed
@@ -244,8 +264,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
                 "Environment variable for API key",
                 default=api_key_env,
                 show_default=True,
-            )
-            .strip()
+            ).strip()
             or api_key_env
         )
         model_alias = (
@@ -253,8 +272,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
                 "Generic model alias used in agent manifests",
                 default=model_alias,
                 show_default=True,
-            )
-            .strip()
+            ).strip()
             or model_alias
         )
         target_model = (
@@ -262,8 +280,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
                 "Provider model mapped from this alias",
                 default=target_model,
                 show_default=True,
-            )
-            .strip()
+            ).strip()
             or target_model
         )
 
@@ -291,7 +308,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
         infra_path.write_text(
             _render_infra_yaml(
                 name=infra_name,
-                api_base=api_base,
+                api_base=_api_base_for_file(api_base, infra_name=infra_name),
                 api_key_env=api_key_env,
                 model_alias=model_alias,
                 target_model=target_model,
@@ -304,11 +321,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
 
     _TRIP = "library-samples/apps/trip-planner"
     click.echo()
-    click.echo(
-        "Initialized MAS project configuration."
-        if local_config
-        else "Initialized MAS user configuration."
-    )
+    click.echo("Initialized MAS project configuration." if local_config else "Initialized MAS user configuration.")
     click.echo()
     click.echo(f"  config  {config_path}")
     if infra_path is not None:
@@ -329,7 +342,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
     click.echo(f"  {step}. Run a first multi-agent system:")
     click.echo(
         f"       mas-ctl run-mas {_TRIP}/mas.yaml --infra-ref standard:openai "
-        "--trace -q \"Plan a trip from Celestia to Verdantia\""
+        '--trace -q "Plan a trip from Celestia to Verdantia"'
     )
     click.echo()
     click.echo(f"  {step + 1}. Look at what happened:")

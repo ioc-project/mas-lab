@@ -25,11 +25,11 @@ metadata:
 spec:
   protocol: openai
   proxy:
-    api_base: https://api.openai.com/v1
+    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
 ```
 
-If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. Prefer an LLMProxy file so the address is in the manifest.
+Put the env var *name* in the file so several providers can run at once, each with its own variable. `mas-lab init` writes that form for the OpenAI default URL. A custom URL at init uses `<infra-name>_API_BASE`. If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. The right place for the name is still the file.
 
 The runtime resolves infra from deployment configuration, in this order of source:
 
@@ -230,7 +230,7 @@ metadata:
 spec:
   protocol: openai
   proxy:
-    api_base: https://api.openai.com/v1
+    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
     api_key_env: OPENAI_API_KEY
   models:
     mappings:

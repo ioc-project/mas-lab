@@ -30,7 +30,7 @@ Paper figures come only from this command (phase 1 plus level hooks). Do not use
 ## What you need installed
 
 - Python 3.11+ and [uv](https://docs.astral.sh/uv/)
-- An OpenAI-compatible API (`OPENAI_API_KEY`, optional `OPENAI_API_BASE`)
+- An OpenAI-compatible API (`OPENAI_API_KEY`, optional `OPENAI_BASE_URL`)
 - The repo cloned. From the root, run `uv sync --all-packages`.
 
 Install walkthrough: [Tutorial 0](../../docs/tutorials/00-environment-setup/README.md).

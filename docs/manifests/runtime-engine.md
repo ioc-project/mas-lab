@@ -5,7 +5,7 @@
 # Runtime engine manifests (`kind: RuntimeEngine`)
 
 A **RuntimeEngine** manifest sets kernel and LLM engine tuning for a whole deployment.
-It covers queue depth, the dispatch step budget, streaming, parallel tool calls, and the built-in LLM response cache policy (read and write flags).
+It covers queue depth, the dispatch step budget, streaming, parallel tool calls, and the LLM response cache policy (read and write flags).
 Write one to change these settings for every agent, for example to cap a runaway dispatch loop in CI.
 
 A RuntimeEngine does not configure LLM endpoints.
@@ -47,15 +47,13 @@ For offline CI, replay responses recorded against a live provider with [llm_cach
 | `engine.timeout` | none | Accepted by the schema; the current kernel does not apply it |
 | `engine.tool_worker` | `thread` | Where sync plugin tools run when a batch overlaps: `thread` or `inline`. Placement only: same context, same results, same order. Async tools (`on_aexecute_tool`) never use it; they run on the event loop. Each sync tool class is logged once (warning under `inline`) |
 | `engine.tool_concurrency` | none | How many sync plugin tools run at once. No cap other than the batch size |
-| `cache.enabled` | none | `false` turns built-in cache read and write off |
+| `cache.enabled` | none | `false` turns cache read and write off, even when a flag asks for them |
 | `cache.read` / `cache.write` | `false` / `false` | Turn the `llm_cache` infra step on for this deployment |
 | `stream` | `false` | Stream LLM responses |
 | `parallel` | none | Overrides the design pattern's `parallel_tool_calls` for agents on this deployment. `false` runs every call of a reply one at a time, in order, then asks the model once. |
 
-The built-in cache stores responses in `$XDG_CACHE_HOME/mas/llm_cache.json`.
-The default is `~/.cache/mas/llm_cache.json`; `cache_dir` in the user `config.yaml` moves it.
-The built-in cache is off for a session whose infra pipeline has any middleware step, such as `llm_cache` or `fault_inject`.
-The middleware then owns caching.
+These flags do not cache anything themselves. When `cache.read` or `cache.write` is on and the infra has no `llm_cache` step, `mas-ctl` inserts one. It stores responses in `$XDG_CACHE_HOME/mas/llm_cache.json` (default `~/.cache/mas/llm_cache.json`; `cache_dir` in the user `config.yaml` moves it).
+An `llm_cache` step already in the infra keeps its own `params`, except that `cache.enabled: false` turns its read and write off.
 See [LLM cache: Overview](llm-cache.md#overview).
 
 ## How refs are resolved
@@ -105,4 +103,4 @@ Later layers win:
 - [user-config.md](../user-config.md): workspace and XDG layout
 - [LLM cache](llm-cache.md): cache middleware versus cache policy
 - [Execution tuning](execution.md): fields removed from Agent manifests
-- [LLM cache reference: Two cache mechanisms](../references/llm-cache.md#two-cache-mechanisms)
+- [LLM cache reference: One cache](../references/llm-cache.md#one-cache)

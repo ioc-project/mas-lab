@@ -22,6 +22,7 @@ def test_init_yes_creates_config_and_default_infra(monkeypatch, tmp_path: Path):
     assert infra.exists()
     assert "infra_refs" in cfg.read_text(encoding="utf-8")
     assert "OPENAI_API_KEY" in infra.read_text(encoding="utf-8")
+    assert "env:OPENAI_BASE_URL|https://api.openai.com/v1" in infra.read_text(encoding="utf-8")
     assert "Next:" in result.output
 
 
@@ -41,6 +42,7 @@ def test_init_local_creates_self_contained_project_config(tmp_path: Path):
         assert "infra/llmprovider.yaml" in cfg_text
         assert "~/.config/mas/infra" not in cfg_text
         assert "OPENAI_API_KEY" in infra.read_text(encoding="utf-8")
+        assert "env:OPENAI_BASE_URL|https://api.openai.com/v1" in infra.read_text(encoding="utf-8")
         assert "Initialized MAS project configuration." in result.output
 
 
@@ -80,7 +82,7 @@ def test_init_interactive_custom_provider(monkeypatch, tmp_path: Path):
     cfg_text = cfg.read_text(encoding="utf-8")
     infra_text = infra.read_text(encoding="utf-8")
     assert "myprovider" in cfg_text
-    assert "https://example.llm/v1" in infra_text
+    assert "env:MYPROVIDER_API_BASE|https://example.llm/v1" in infra_text
     assert "MY_API_KEY" in infra_text
     assert "trip-model: openai/gpt-4o-mini" in infra_text
     assert "mas-ctl run-mas library-samples/apps/trip-planner/mas.yaml" in result.output
@@ -139,6 +141,18 @@ def test_init_config_lists_every_option_commented_out(monkeypatch, tmp_path: Pat
     for section in ("runtime_refs", "middleware", "manifest_libraries", "aliases", "defaults", "paths"):
         assert section not in active
         assert f"# {section}:" in text
+
+
+def test_api_base_for_file_names_the_env_var():
+    from mas.lab.cli.commands.init import _api_base_for_file
+
+    assert _api_base_for_file("https://api.openai.com/v1") == "env:OPENAI_BASE_URL|https://api.openai.com/v1"
+    assert _api_base_for_file("env:MY_BASE|http://localhost/v1") == "env:MY_BASE|http://localhost/v1"
+    assert _api_base_for_file("") == "env:OPENAI_BASE_URL|https://api.openai.com/v1"
+    assert (
+        _api_base_for_file("https://example.llm/v1", infra_name="myprovider")
+        == "env:MYPROVIDER_API_BASE|https://example.llm/v1"
+    )
 
 
 def test_render_without_infra_drops_infra_block_but_keeps_options():

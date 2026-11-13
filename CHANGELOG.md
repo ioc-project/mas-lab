@@ -10,8 +10,18 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ## Unreleased
 
+### Added
+
+- `mas-lab init` writes `api_base: env:OPENAI_BASE_URL|<url>` so the file names the env var. `standard:openai` and the sample workspace do the same. A custom URL at init uses `<infra-name>_API_BASE` so a leftover `OPENAI_BASE_URL` does not steal the call.
+
+### Changed
+
+- `--cache-read` / `--cache-write` help now says the cache is off until those flags insert the `llm_cache` step. The default pipeline is retry only.
+- The cache docs describe one LLM cache, the `llm_cache` step. The "built-in engine cache" sections are gone; `MAS_LLM_CACHE_READ` / `_WRITE` and `RuntimeEngine` `cache.read` / `write` insert that step.
+
 ### Breaking
 
+- `standard:openai` now reads `OPENAI_BASE_URL` when that env var is set (`api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1`). A hardcoded URL in that file used to ignore the env var. `openai.example.yaml` and the sample workspace use the same form; they used to read `OPENAI_API_BASE`. `OPENAI_API_BASE` is still used only when `api_base` is left empty.
 - LLM answers are stored only by the `llm_cache` infra step. `--cache-read` /
   `--cache-write` / `--cache-read-only` turn that step on or change its flags.
   The old provider wrap on the chat path is gone. A cache file written by that
@@ -112,6 +122,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- The v0.2 blog post links to `aaif.io`.
 - An explicit pipeline retry keeps the params it named.
 - Session close stops the llm and tool call layers.
 - A withheld delegated turn includes the governance or boundary reason in the

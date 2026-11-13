@@ -127,6 +127,8 @@ def test_build_engine_cache_read_flag_inserts_llm_cache_step(monkeypatch, tmp_pa
     assert steps
     assert steps[0]["params"]["allow_read"] is True
     assert steps[0]["params"]["allow_write"] is False
+    assert sel.engine._infra_stack is not None
+    assert any(is_cache_middleware(s) for s in sel.engine._infra_stack.pipeline_steps)
     assert not isinstance(sel.engine.llm_provider, CacheLLMProvider)
 
 
@@ -523,18 +525,70 @@ def test_strict_replay_false_when_registry_empty(monkeypatch):
     )
 
 
-def test_build_engine_warns_when_openai_base_url_is_ignored(monkeypatch, tmp_path, caplog):
+def _llm_proxy_file(tmp_path, api_base: str) -> str:
+    path = tmp_path / "llm.yaml"
+    path.write_text(
+        "apiVersion: infra/v1\nkind: LLMProxy\nmetadata:\n  name: llm\n"
+        f"spec:\n  protocol: openai\n  proxy:\n    api_base: {api_base}\n    api_key_env: OPENAI_API_KEY\n"
+        "  models:\n    mappings:\n      default: gpt-4o\n",
+        encoding="utf-8",
+    )
+    return str(path)
+
+
+def _build_from(monkeypatch, tmp_path, ref: str):
     from mas.ctl.infra.resolve import resolve_infra_refs
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
     monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
     monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    infra = resolve_infra_refs([ref], anchor=tmp_path)
+    return build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+
+
+def test_build_engine_warns_when_openai_base_url_is_ignored(monkeypatch, tmp_path, caplog):
+    """A file that hardcodes the address wins over OPENAI_BASE_URL, and says so."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
-    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
     with caplog.at_level("WARNING"):
-        build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+        sel = _build_from(monkeypatch, tmp_path, _llm_proxy_file(tmp_path, "https://example.invalid/v1"))
     assert any("OPENAI_BASE_URL" in r.getMessage() and "ignored" in r.getMessage() for r in caplog.records)
+    assert sel.engine.llm_provider.api_base == "https://example.invalid/v1"
+
+
+def test_standard_openai_follows_openai_base_url_without_a_warning(monkeypatch, tmp_path, caplog):
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
+    with caplog.at_level("WARNING"):
+        sel = _build_from(monkeypatch, tmp_path, "standard:openai")
+    assert sel.engine.llm_provider.api_base == "http://127.0.0.1:9/v1"
+    assert not any("OPENAI_BASE_URL" in r.getMessage() for r in caplog.records)
+
+
+def test_standard_openai_uses_openai_when_the_env_var_is_unset(monkeypatch, tmp_path):
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    sel = _build_from(monkeypatch, tmp_path, "standard:openai")
+    assert sel.engine.llm_provider.api_base == "https://api.openai.com/v1"
+
+
+def test_standard_openai_does_not_follow_openai_api_base(monkeypatch, tmp_path):
+    """The file names OPENAI_BASE_URL. The older OPENAI_API_BASE name is not read."""
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:9/v1")
+    sel = _build_from(monkeypatch, tmp_path, "standard:openai")
+    assert sel.engine.llm_provider.api_base == "https://api.openai.com/v1"
+
+
+def test_a_named_env_var_in_the_file_is_not_stolen_by_openai_base_url(monkeypatch, tmp_path):
+    """The init form for a custom URL: its own variable decides, a leftover OPENAI_BASE_URL does not."""
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
+    monkeypatch.delenv("MYLLM_API_BASE", raising=False)
+    ref = _llm_proxy_file(tmp_path, "env:MYLLM_API_BASE|http://127.0.0.1:11434/v1")
+    sel = _build_from(monkeypatch, tmp_path, ref)
+    assert sel.engine.llm_provider.api_base == "http://127.0.0.1:11434/v1"
+    monkeypatch.setenv("MYLLM_API_BASE", "http://127.0.0.1:8000/v1")
+    sel = _build_from(monkeypatch, tmp_path, ref)
+    assert sel.engine.llm_provider.api_base == "http://127.0.0.1:8000/v1"
 
 
 def test_runtime_engine_cache_kill_switch_turns_off_an_infra_llm_cache_step():
