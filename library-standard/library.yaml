@@ -322,6 +322,16 @@ plugins:
       - gov_no_undeclared_tool
       - no_undeclared_tool
   - type: governance
+    name: gov_no_undeclared_peer
+    urn: mas.gov.no_undeclared_peer
+    module: mas.library.standard.plugins.governance.no_undeclared_peer
+    class: NoUndeclaredPeerPlugin
+    description: >
+      BLOCK leftover delegate_to_* whose dest is not this agent's delegates_to.
+    shortcuts:
+      - gov_no_undeclared_peer
+      - no_undeclared_peer
+  - type: governance
     name: budget
     urn: mas.gov.budget
     module: mas.library.standard.plugins.governance.budget

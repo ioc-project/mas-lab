@@ -259,7 +259,7 @@ class _Engine:
 
 def _instance(engine: _Engine, _parallel: bool = True, **params: object) -> RuntimeInstance:
     instance = RuntimeInstance.from_parts(
-        config=KernelConfig(agent_spec=_spec(**params), parallel_tool_calls=_parallel),
+        config=KernelConfig(agent_spec=_spec(**params), agent_id="desk", parallel_tool_calls=_parallel),
         engine=engine,
         enable_observability=False,
         enable_coordination=False,
@@ -895,7 +895,7 @@ def test_a_signal_can_fire_between_the_rounds_of_a_parallel_state(monkeypatch: p
 def _machine(table: dict, config: KernelConfig | None = None) -> tuple[StateMachinePlugin, KernelConfig]:
     """A machine driven by hand: it records the call it wants next instead of sending it."""
     machine = StateMachinePlugin()
-    config = config or KernelConfig(agent_spec=_spec())
+    config = config or KernelConfig(agent_spec=_spec(), agent_id="desk")
     machine.region_start(table, {}, "the task", TOWN, config)
     return machine, config
 

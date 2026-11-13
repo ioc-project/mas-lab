@@ -17,7 +17,9 @@
 named `send` to the model's list; `list_tools` still returns only
 `delegate_to_<id>`. A Python `send` call uses the same path.
 A user tool named `send` stays that tool. A user tool named `delegate_to_<id>`
-stays that tool unless `list_tools` offered that name.
+stays that tool unless that leftover name is offered. `delegates_to` is that
+offer list, not an execute lock. `with-hardened` names `gov_no_undeclared_peer`
+so leftover send to another dest is BLOCK at egress.
 
 [Communication stack](../../../../../../../docs/references/comm-stack.md).
 [System plugins](../../../../../../../docs/manifests/system-plugins.md).

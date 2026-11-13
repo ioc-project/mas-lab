@@ -70,7 +70,7 @@ def _workflow(manifest: dict | None) -> dict[str, Any]:
 
 def delegation_style(manifest: dict | None) -> str:
     """Extract delegation_style from manifest behavior settings.
-    
+
     Returns:
         The delegation style ('typed', 'none', etc.). Defaults to 'typed'.
         Current OSS supports only 'typed' (delegate_to_<id> tools).
@@ -84,12 +84,21 @@ def delegation_style(manifest: dict | None) -> str:
     return "typed"
 
 
+def advertise_delegate_tools(manifest: dict | None) -> bool:
+    """False when the model must not see ``delegate_to_*`` tools.
+
+    ``behavior.delegation_style: none`` is the one switch. Topology still
+    lists peers and the send path still runs.
+    """
+    return uses_llm_peer_delegation(manifest)
+
+
 def uses_llm_peer_delegation(manifest: dict | None) -> bool:
     """Check if the manifest enables LLM-driven peer delegation.
-    
+
     Delegation is enabled when behavior.delegation_style is 'typed'.
     Delegation enablement is capability-driven (behavior.delegation_style).
-    
+
     Returns:
         True if typed delegation tools should be exposed, False otherwise.
     """
@@ -105,39 +114,57 @@ def entry_agent_id(manifest: dict | None) -> str | None:
     return str(name) if name else None
 
 
+def _name(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _names(values: object, *, exclude: frozenset[str]) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        peer = _name(value)
+        if not peer or peer in exclude or peer in seen:
+            continue
+        seen.add(peer)
+        out.append(peer)
+    return out
+
+
+def _node_identity(node: dict[str, Any]) -> str:
+    return _name(node.get("agent")) or _name(node.get("id"))
+
+
+def _node_delegates(nodes: list[dict[str, Any]], node_id: str) -> list[str] | None:
+    for node in nodes:
+        if node_id not in (_node_identity(node), _name(node.get("id"))):
+            continue
+        return [_name(t) for t in (node.get("delegates_to") or []) if _name(t)]
+    return None
+
+
 def delegation_targets(manifest: dict | None, *, agent_id: str | None = None) -> list[str]:
-    """Get delegation peer targets for a specific agent from workflow topology.
-    
-    Args:
-        manifest: Agent or MAS manifest dict.
-        agent_id: Optional agent ID. If None, returns all delegation targets
-                  across the entire workflow.
-    
-    Returns:
-        List of agent IDs this agent can delegate to, based on:
-        1. behavior.delegation_style == 'typed' (capability contract)
-        2. workflow.nodes[].delegates_to (topology declaration)
-        
-        Returns empty list if delegation is disabled or agent has no peers.
+    """Leftover ``delegate_to_*`` names this agent offers, and the next hop a pattern picks.
+
+    That is this agent's ``delegates_to``. ``workflow.entry`` only names who
+    receives the user message; it does not change this list. An empty list,
+    a missing node, or a missing agent id means none of those tools (and a
+    pattern that sends itself has no next hop). Send still delivers if called.
+
+    ``behavior.delegation_style`` does not change this list. It only decides
+    whether the model is shown the tools (see ``advertise_delegate_tools``).
     """
-    if not manifest or not uses_llm_peer_delegation(manifest):
+    if not manifest:
         return []
     nodes = [n for n in (_workflow(manifest).get("nodes") or []) if isinstance(n, dict)]
-    if not nodes:
+    self_id = _name(agent_id) or _name(((manifest or {}).get("metadata") or {}).get("name"))
+    if not self_id:
         return []
-    aid = agent_id or entry_agent_id(manifest)
-    if aid:
-        for node in nodes:
-            if str(node.get("id") or "") == aid:
-                return [str(t) for t in (node.get("delegates_to") or []) if t]
+    own = _node_delegates(nodes, self_id)
+    if own is None:
         return []
-    seen: list[str] = []
-    for node in nodes:
-        for target in node.get("delegates_to") or []:
-            s = str(target)
-            if s and s not in seen:
-                seen.append(s)
-    return seen
+    return _names(own, exclude=frozenset({self_id}))
 
 
 def delegate_tool_name(agent_id: str) -> str:
@@ -157,6 +184,8 @@ def openai_delegation_tools(
     agent_id: str | None = None,
     peer_descriptions: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
+    if not advertise_delegate_tools(manifest):
+        return []
     descriptions: dict[str, str] = {}
     if peer_descriptions:
         descriptions.update({str(k): str(v) for k, v in peer_descriptions.items() if v})
@@ -165,8 +194,7 @@ def openai_delegation_tools(
             "type": "function",
             "function": {
                 "name": delegate_tool_name(peer),
-                "description": descriptions.get(peer)
-                or f"Delegate a sub-task to agent {peer}.",
+                "description": descriptions.get(peer) or f"Delegate a sub-task to agent {peer}.",
                 "parameters": _DELEGATE_PARAMS,
             },
         }

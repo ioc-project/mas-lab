@@ -76,10 +76,13 @@ def test_topology_without_delegates_uses_capability_contract():
 def test_openai_delegation_tools_shape():
     manifest = {
         "spec": {
-            "workflow": {"nodes": [{"delegates_to": ["worker"]}]},
+            "workflow": {
+                "entry": "lead",
+                "nodes": [{"id": "lead", "delegates_to": ["worker"]}],
+            },
         }
     }
-    tools = openai_delegation_tools(manifest)
+    tools = openai_delegation_tools(manifest, agent_id="lead")
     assert len(tools) == 1
     assert tools[0]["function"]["name"] == "delegate_to_worker"
     assert "task" in tools[0]["function"]["parameters"]["properties"]
@@ -100,6 +103,9 @@ def test_delegation_targets_unknown_agent_id_returns_empty():
 
 
 def test_delegation_targets_empty_delegates_on_matched_node():
+    """An empty delegates_to offers no leftover tools. A listed hop is only
+    that leftover name.
+    """
     manifest = {
         "metadata": {"name": "leaf"},
         "spec": {
@@ -108,11 +114,14 @@ def test_delegation_targets_empty_delegates_on_matched_node():
                 "nodes": [
                     {"id": "leaf", "delegates_to": []},
                     {"id": "other", "delegates_to": ["worker"]},
+                    {"id": "helper", "delegates_to": []},
                 ],
             },
         },
     }
     assert delegation_targets(manifest, agent_id="leaf") == []
+    assert delegation_targets(manifest, agent_id="other") == ["worker"]
+    assert delegation_targets(manifest, agent_id="helper") == []
 
 
 def test_parse_delegate_tool_name():

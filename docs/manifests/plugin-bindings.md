@@ -183,7 +183,7 @@ Card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-s
 
 | Slot | Default | Shipped plugins |
 |------|---------|-----------------|
-| `governance` | `[]` | `sample` / `sample_governance`, `gov_no_undeclared_tool` (alias `no_undeclared_tool`), `retry_on_error`, `backtrack_on_error` |
+| `governance` | `[]` | `sample` / `sample_governance`, `gov_no_undeclared_tool` (alias `no_undeclared_tool`), `gov_no_undeclared_peer` (alias `no_undeclared_peer`), `retry_on_error`, `backtrack_on_error` |
 | `observability` | `[]` (flavour/CLI may attach `native`) | `native`, `otel` (from `library-telemetry`) |
 | `context_sources` | `[]` | `native`, `adk`, `langchain` (skill engines from `library-skills`) |
 

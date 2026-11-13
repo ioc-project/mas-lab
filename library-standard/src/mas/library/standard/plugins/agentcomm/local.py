@@ -37,8 +37,7 @@ class LocalAgentComm(LocalLinkBase, AgentCommContract):
     ``steer_peers`` maps the target name to that agent's control session;
     the send ``context_id`` is not the session. The ``control`` object is
     re-scoped to this sender, surface ``peer``, ``steer`` only, and those
-    sessions, even if the caller passed an admin handle. A steer also
-    needs the target on SendTool ``allowed_peers``.
+    sessions, even if the caller passed an admin handle.
     """
 
     def __init__(

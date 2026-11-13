@@ -58,7 +58,7 @@ Governance plugins that alter the agent's trajectory are declared in a Control t
 Retry and circuit_breaker stay on Agent `spec.control` (deprecated, still applied). They are not Control plugins.
 
 To mimic another product (for example an OpenClaw-like profile), attach Controls instead of copying every plugin into the flavour YAML.
-`with-hardened` adds an undeclared-tool BLOCK, call ceilings and a typed ingress retry.
+`with-hardened` adds an undeclared-tool BLOCK, a leftover-send dest BLOCK, call ceilings and a typed ingress retry.
 Add an observability Control next, and later checkpoint and backtrack.
 See [governance.md](governance.md) and [reliability.md](../references/reliability.md#where-reliability-behaviour-goes).
 

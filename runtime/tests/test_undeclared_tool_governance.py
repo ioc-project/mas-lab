@@ -206,6 +206,7 @@ def test_with_hardened_control_does_not_copy_governance_onto_the_agent() -> None
         ]
     ]
     assert "gov_no_undeclared_tool" in names
+    assert "gov_no_undeclared_peer" in names
 
 
 def test_undeclared_tool_block_is_in_native_events_jsonl(tmp_path: Path) -> None:

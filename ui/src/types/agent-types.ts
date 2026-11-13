@@ -564,12 +564,12 @@ export interface AgentManifest {
        */
       share_reasoning?: boolean;
       /**
-       * Controls which delegation tools are registered for this agent.
-       * typed (only value in this release): delegate_to_<id> tools derived from MAS workflow.delegates_to when workflow.type is dynamic. Peer IDs are fixed at compose time — the LLM cannot call agents outside the topology.
-       * generic (delegate_task with free-form agent_id) is a design target — not implemented in OSS; see ROADMAP.
+       * Controls whether the model sees delegation tools for this agent.
+       * typed: delegate_to_<id> tools derived from this agent's workflow.delegates_to. Peer IDs are fixed at compose time.
+       * none: the model sees no delegation tools. The peers and the send path stay, so a fixed-order design pattern can still call them.
        *
        */
-      delegation_style?: "typed";
+      delegation_style?: "typed" | "none";
     };
     governance?: GovernanceBinding;
     llm?: LlmBinding;

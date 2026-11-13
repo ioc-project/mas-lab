@@ -231,7 +231,7 @@ def _machine_config(table: dict) -> KernelConfig:
             "nodes": [{"id": "desk", "delegates_to": ["helper"]}, {"id": "helper"}],
         },
     }
-    return KernelConfig(agent_spec=spec)
+    return KernelConfig(agent_spec=spec, agent_id="desk")
 
 
 class _HangThenAnswerEngine:

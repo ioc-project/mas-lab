@@ -85,8 +85,8 @@ spec:
 
 `send` does not put a tool named `send` in the model's list; `list_tools` still
 returns only `delegate_to_<id>`. A user tool named `send` stays that tool. A
-user tool named `delegate_to_<id>` stays that tool unless `list_tools` offered
-that name.
+user tool named `delegate_to_<id>` stays that tool unless that peer is on the
+send allow list.
 See [Communication stack](../references/comm-stack.md).
 
 `request_human_input` and `inform_user` are never implicit. Give an agent these

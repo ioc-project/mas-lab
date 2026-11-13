@@ -54,7 +54,7 @@ def test_overlay_dir_files_are_overlay_or_control() -> None:
 def test_with_hardened_control_sets_governance_and_retry() -> None:
     doc = yaml.safe_load((CONTROLS / "with-hardened.yaml").read_text(encoding="utf-8"))
     names = [g if isinstance(g, str) else next(iter(g)) for g in doc["spec"]["governance"]]
-    assert names == ["gov_no_undeclared_tool", "budget", "retry_on_error"]
+    assert names == ["gov_no_undeclared_tool", "gov_no_undeclared_peer", "budget", "retry_on_error"]
     retry_on_error = next(
         item for item in doc["spec"]["governance"] if isinstance(item, dict) and "retry_on_error" in item
     )
@@ -116,7 +116,7 @@ def test_the_hardened_control_replaces_agent_governance() -> None:
     assert applied["spec"]["governance"] == ["sample_governance"]
     lists = control_lists_for_agent([row], agent_id="telemetry", entry_id="telemetry")
     names = [g if isinstance(g, str) else next(iter(g)) for g in lists["governance"]]
-    assert names == ["budget", "gov_no_undeclared_tool", "retry_on_error"]
+    assert names == ["budget", "gov_no_undeclared_peer", "gov_no_undeclared_tool", "retry_on_error"]
 
 
 def test_hardened_then_native_keeps_both() -> None:
@@ -143,6 +143,7 @@ def test_hardened_then_native_keeps_both() -> None:
     lists = control_lists_for_agent(rows, agent_id="telemetry", entry_id="telemetry")
     gov = [g if isinstance(g, str) else next(iter(g)) for g in lists["governance"]]
     assert "gov_no_undeclared_tool" in gov
+    assert "gov_no_undeclared_peer" in gov
     native = lists["observability"][0]["mas.observability.native"]
     assert native["path"] == "traces/events.jsonl"
     cfg = observability_config_from_manifest(applied, flavour_spec=flavour, agent_id="telemetry")

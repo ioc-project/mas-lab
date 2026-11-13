@@ -144,6 +144,7 @@ def build_kernel_config(
     *,
     pattern_plugin_id: str = "",
     agent_spec: dict[str, Any] | None = None,
+    agent_id: str = "",
     manifest_dir: Any | None = None,
 ) -> Any:
     """Instantiate governance plugins and build a KernelConfig from a GovernanceBinding.
@@ -221,6 +222,7 @@ def build_kernel_config(
     kwargs: dict[str, Any] = {
         "pattern_plugin_id": pattern_plugin_id or default_pattern_plugin_id(),
         "agent_spec": agent_spec,
+        "agent_id": agent_id or "",
     }
     if egress_plugin is not None:
         kwargs["egress_governance_plugin"] = egress_plugin

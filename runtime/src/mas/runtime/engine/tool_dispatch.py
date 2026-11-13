@@ -49,6 +49,9 @@ class _DelegationEngineTool:
         self.delegation = delegation
 
     def claims(self, tool_name: str) -> bool:
+        offers = getattr(self.delegation, "offers", None)
+        if callable(offers):
+            return bool(offers(tool_name))
         return self.delegation.is_delegate_tool(tool_name)
 
     def call(

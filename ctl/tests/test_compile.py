@@ -298,7 +298,7 @@ def test_compile_with_hardened_does_not_copy_control_lists() -> None:
 
     lists = control_lists_for_agent([control_row_from_path(control)], agent_id="desk", entry_id="desk")
     names = [item if isinstance(item, str) else next(iter(item)) for item in lists["governance"]]
-    assert names == ["budget", "gov_no_undeclared_tool", "retry_on_error"]
+    assert names == ["budget", "gov_no_undeclared_peer", "gov_no_undeclared_tool", "retry_on_error"]
 
 
 def test_compile_tutorial_1_stacks_overlays() -> None:

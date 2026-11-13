@@ -844,7 +844,7 @@ Flags that set which system plugins and capabilities the agent's LLM sees at run
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `share_reasoning` | `boolean` | `false` | Planned: a sub-agent returns a short summary of how it reached its answer, next to the result. Not used yet: the schema accepts it and no shipped tool reads it. |
-| `delegation_style` | `"typed"` | `"typed"` | Sets which delegation tools exist. `typed` is the only value: one `delegate_to_<id>` tool per peer in the MAS workflow. |
+| `delegation_style` | `"typed"` or `"none"` | `"typed"` | Sets whether the model sees delegation tools. `typed`: one `delegate_to_<id>` tool per peer in this agent's `delegates_to`. `none`: no such tools; the peers and the send path stay, so a fixed-order design pattern can still call them. |
 
 #### Not used yet
 

@@ -191,6 +191,7 @@ class RuntimeInstance(Lifecycle):
             spec,
             runtime_engine=runtime_engine,
             manifest_dir=resolved_base_dir,
+            agent_id=agent_id,
         )
         if obs_from_cli:
             obs_binding = obs_binding_override
