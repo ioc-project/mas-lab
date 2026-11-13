@@ -16,10 +16,11 @@ Register additional wire protocols the same way as tools: `type: llm_provider`
 in `library.yaml`, then claim models with `spec.models[].kind`. Infra
 `spec.protocol` (default `openai`) fills `kind` when the agent omits it.
 
-Do **not** put `kind: cache` on `spec.models[]`. Cache is applied by ctl when
-engine cache is enabled, or as infra `llm_cache` middleware for recorded
-replay (`raise_on_miss`). A future Bedrock plugin is a new class in this
-package, not a runtime `model_access.module_path`.
+Do **not** put `kind: cache` on `spec.models[]`. The only LLM response cache
+is the `llm_cache` infra step (`--cache-read` / `--cache-write`,
+`MAS_LLM_CACHE_READ` / `_WRITE`, or `RuntimeEngine` `cache.read` / `write`).
+A future Bedrock plugin is a new class in this package, not a runtime
+`model_access.module_path`.
 
 Reasoning / sampling surface: [`docs/manifests/llm-reasoning.md`](../../../../../../../docs/manifests/llm-reasoning.md).
 Catalog: [`docs/manifests/llm-model-catalog.md`](../../../../../../../docs/manifests/llm-model-catalog.md).

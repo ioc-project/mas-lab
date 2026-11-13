@@ -123,7 +123,7 @@ strengthening in future releases.
 Keeping behavior separate from transport makes integrations easier to test and
 reuse; we plan to extend this approach to more protocols in the next releases.
 It reflects why we participate in the
-[Agentic AI Foundation](https://jordan.auge.synaxe.net/news/2026-07-22-agntcon-mcpcon-mas-lab/)
+[Agentic AI Foundation](https://aaif.io/)
 (AAIF): standards make systems interoperable, while a shared specification and
 reproducible evidence let us ask whether they behaved as intended. We want to
 build reliability in from the design phase: make contracts explicit, test

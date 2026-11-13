@@ -57,10 +57,7 @@ Three parts work together:
 2. **Cache middleware** (`middleware: llm_cache`): the read, write, and replay policy plus `cache_path`.
 3. **Pipeline**: `llm_cache` wraps the engine (one common instance). Other middleware wraps each routed provider. See [Pipeline order](#pipeline-order).
 
-MAS also has a **built-in engine disk cache**.
-Merged `RuntimeEngine` manifests (`runtime_refs` or `--runtime-ref`) set its policy, and so do the `--cache-read` and `--cache-write` flags on `mas-ctl chat`.
-When the infra pipeline has any middleware step (`llm_cache`, `fault_inject`, and others), the built-in cache is off for that session.
-See [references/llm-cache.md](../references/llm-cache.md#two-cache-mechanisms).
+This step is the only LLM cache. The `--cache-read` and `--cache-write` flags on `mas-ctl chat`, `MAS_LLM_CACHE_READ` / `MAS_LLM_CACHE_WRITE`, and `RuntimeEngine` `cache.read` / `cache.write` do not cache on their own. When the infra has no `llm_cache` step, they insert one. See [references/llm-cache.md](../references/llm-cache.md#one-cache).
 
 ### End-to-end workflow (record, fixture, replay)
 
@@ -325,6 +322,6 @@ See [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
 
 - [references/llm-cache.md](../references/llm-cache.md): exhaustive reference
 - [infra.md](infra.md): infra kinds and bundles
-- [runtime-engine.md](runtime-engine.md): built-in cache policy (`spec.cache` on RuntimeEngine)
+- [runtime-engine.md](runtime-engine.md): cache flags (`spec.cache` on RuntimeEngine)
 - [Tutorial 1](../tutorials/01-building-an-agent/README.md): agent and overlays used above
 - [library-samples/README.md](https://github.com/ioc-project/mas-lab/blob/main/library-samples/README.md): sample infra manifests

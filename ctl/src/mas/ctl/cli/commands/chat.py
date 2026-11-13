@@ -106,12 +106,12 @@ from mas.runtime.spec.checkpoint import parse_checkpoint_policy
 @click.option(
     "--cache-read/--no-cache-read",
     default=None,
-    help="Look up a cached response before calling the LLM (default: RuntimeEngine cache.read, else true)",
+    help="Look up a cached response before calling the LLM (default: off; inserts the llm_cache pipeline step)",
 )
 @click.option(
     "--cache-write/--no-cache-write",
     default=None,
-    help="Persist a response to the cache after calling the LLM (default: RuntimeEngine cache.write, else true)",
+    help="Persist a response to the cache after calling the LLM (default: off; inserts the llm_cache pipeline step)",
 )
 @click.option(
     "--cache-read-only",

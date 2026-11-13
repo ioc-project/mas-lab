@@ -17,7 +17,7 @@ mas-runtime run-agent agent.yaml --infra-ref standard:ollama
 - **`standard:openai`** — Direct OpenAI API connection
   - Models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo
   - Requires: `OPENAI_API_KEY` environment variable
-  - Endpoint: `https://api.openai.com/v1`
+  - Endpoint: `env:OPENAI_BASE_URL` (fallback `https://api.openai.com/v1`)
 
 - **`standard:ollama`** — Local Ollama instance
   - Models: llama3.2, mistral, codellama, phi3, qwen2.5

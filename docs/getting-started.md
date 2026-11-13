@@ -36,8 +36,9 @@ export OPENAI_API_KEY=<your-key>
 - A clone of the repository: `git clone https://github.com/ioc-project/mas-lab.git && cd mas-lab`
 - An `OPENAI_API_KEY` for live LLM runs. Offline, only `mas-ctl validate` works.
 
-Keep secrets out of YAML. The infra manifest names the environment variable
-(`api_key_env`); the key itself lives in `docker/.env` or a gitignored `.env`.
+Keep secrets out of YAML. The infra manifest names the environment variables
+(`api_base: env:OPENAI_BASE_URL|…`, `api_key_env`); the values live in
+`docker/.env` or a gitignored `.env`. `mas-lab init` writes that `api_base` form.
 
 ## First run
 

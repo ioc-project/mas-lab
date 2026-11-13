@@ -18,6 +18,17 @@ mas-lab init [OPTIONS]
 
 Bootstrap user config and optional LLM infra. Prints a short summary and the first commands to run; `--quiet` hides it.
 
+The infra file names the address as an env var, so several providers can coexist:
+
+```yaml
+spec:
+  proxy:
+    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
+    api_key_env: OPENAI_API_KEY
+```
+
+The OpenAI default URL uses `OPENAI_BASE_URL`. A custom URL uses `<infra-name>_API_BASE` so a leftover `OPENAI_BASE_URL` in the shell does not steal the call. `standard:openai` ships as `env:OPENAI_BASE_URL|https://api.openai.com/v1`.
+
 ## OPTIONS
 
 | Flag | Meaning |
