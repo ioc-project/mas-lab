@@ -204,7 +204,6 @@ def test_engine_omits_limit_by_default(monkeypatch) -> None:
     assert ret.text == "ok"
     assert "max_tokens" not in provider.calls[0]
     assert "max_completion_tokens" not in provider.calls[0]
-    assert ret.max_tokens is None
 
 
 def test_engine_escalates_on_length(monkeypatch) -> None:
@@ -219,7 +218,6 @@ def test_engine_escalates_on_length(monkeypatch) -> None:
     ret = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "full"
     assert [c["max_tokens"] for c in provider.calls] == [1000, 2000]
-    assert ret.max_tokens == 2000
     assert ret.truncation_retries == 1
     assert ret.usage["completion_tokens"] == 2500
 
@@ -260,7 +258,6 @@ async def test_async_engine_escalates_on_length(monkeypatch) -> None:
 
     assert ret.text == "full"
     assert [call["max_tokens"] for call in provider.calls] == [1000, 2000]
-    assert ret.max_tokens == 2000
     assert ret.truncation_retries == 1
 
 

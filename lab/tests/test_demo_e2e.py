@@ -270,7 +270,7 @@ if __name__ == "__main__":
                 "tool_call_end",
             ):
                 check("agent_id" in ev, f"event '{k}' has 'agent_id'")
-            if k in ("llm_call_start", "llm_call_end"):
+            if k == "llm_call_start":
                 check("model" in ev, f"event '{k}' has 'model'")
             if k in ("tool_call_start", "tool_call_end"):
                 check("tool_name" in ev, f"event '{k}' has 'tool_name'")

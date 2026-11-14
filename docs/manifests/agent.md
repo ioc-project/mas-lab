@@ -212,7 +212,7 @@ The runtime lowers a configured budget per call so that the estimated prompt plu
 The CLI alias `--max-tokens N` expands to `.agent.spec.models[*].max_tokens=N`. For example, `mas-ctl chat agent.yaml --max-tokens 4096` equals `--override '.agent.spec.models[*].max_tokens=4096'`. Explicit `--override` arguments apply afterward.
 The environment variables `MAS_LLM_MAX_TOKENS`, `MAS_LLM_MAX_COMPLETION_TOKENS`, and `MAS_LLM_ON_TRUNCATION` fill in settings that the model row does not declare.
 
-LLM traces include `finish_reason`, the final `max_tokens` budget, completion token usage, and `truncation_retries`. See also [infra.md, LLM output-token policy](infra.md#llm-output-token-policy) and [CLI overrides](../cli/overrides.md).
+LLM traces put `model`, `messages`, offered tools, and `max_tokens` on `llm_call_start`. `llm_call_end` carries `finish_reason`, completion token usage, `truncation_retries`, `tool_calls` when the model asked for tools, and `max_tokens` when the final attempt sent a different cap than the one on `llm_call_start`. See also [infra.md, LLM output-token policy](infra.md#llm-output-token-policy) and [CLI overrides](../cli/overrides.md).
 
 ---
 

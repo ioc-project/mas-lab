@@ -127,6 +127,10 @@ class NativeGraphBuilder:
         self._delegated_agent_ids: set[str] = set()
         self._resume_pending: Dict[str, str] = {}
         self._agent_visit_count: Dict[str, int] = {}
+        # run_id -> the ``session_id`` its events carry (first one seen).
+        self._event_session_ids: Dict[str, str] = {}
+        # run_id -> the ``app_name`` its events carry (first one seen).
+        self._event_app_names: Dict[str, str] = {}
 
         self._skip_kinds = layer_skip_kinds(
             include_infrastructure=include_infrastructure,
@@ -308,6 +312,12 @@ class NativeGraphBuilder:
         local_name = event.get("mas_class", "ExecutionElement")
 
         self.run_ids.add(run_id)
+        event_session = str(event.get("session_id") or "").strip()
+        if event_session:
+            self._event_session_ids.setdefault(run_id, event_session)
+        event_app = str(event.get("app_name") or "").strip()
+        if event_app:
+            self._event_app_names.setdefault(run_id, event_app)
         if (
             agent_id
             and str(agent_id).strip().lower() not in {"", "unknown", "agent", "mas"}
@@ -401,6 +411,12 @@ class NativeGraphBuilder:
             if node["node_type"] == "AgentCall" and not node.get("agentName"):
                 node["agentName"] = node.get("agentId", "")
 
+        # A call that started and never ended (the run was cut off) did not succeed.
+        # The OTel converter closes such spans as unfinished, so say the same here.
+        for node in call_nodes.values():
+            if node.get("startTime") is not None and node.get("endTime") is None:
+                node.setdefault("success", False)
+
         # Synthesize readable completions for LLM tool-use calls (empty content).
         derive_tool_use_completions(call_nodes)
 
@@ -430,13 +446,25 @@ class NativeGraphBuilder:
             derived_app_name, derived_session_id = _split_composite_run_id(run_id)
             inferred_app_name = _infer_app_name_from_ids(run_id, self.session_id_override)
             app_name = (
-                (self.app_name_override or "").strip() or inferred_app_name or derived_app_name
+                (self.app_name_override or "").strip()
+                or inferred_app_name
+                or derived_app_name
+                or self._event_app_names.get(run_id, "")
             )
+            event_session = self._event_session_ids.get(run_id)
             if self.split_session_id and derived_session_id != run_id:
                 session_id = derived_session_id
             elif self.split_session_id and "/" in str(run_id):
                 # Hierarchical run IDs are already session-like (e.g. app/exp/scenario/item/r1).
                 session_id = str(run_id)
+            elif (
+                self.split_session_id
+                and event_session
+                and list(self._event_session_ids.values()).count(event_session) == 1
+            ):
+                # A plain run_id says nothing about the session, but the events name it:
+                # use that as is, as the OTel path does.
+                session_id = event_session
             else:
                 session_id = f"session-{run_id}"
 
@@ -453,6 +481,7 @@ class NativeGraphBuilder:
                     "node_type": "Session",
                     "id": session_id,
                     "sessionId": session_id,
+                    "name": f"Session {session_id}",
                     "executionId": f"exec-Session-{run_id}",
                     "runId": run_id,
                     "appName": app_name,
@@ -462,6 +491,7 @@ class NativeGraphBuilder:
                     "finalResponse": agent_output_text(outer) if outer else "",
                     "startTime": outer.get("startTime") if outer else None,
                     "endTime": outer.get("endTime") if outer else None,
+                    "success": outer.get("success") if outer else None,
                 }
             )
 

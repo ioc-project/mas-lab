@@ -32,6 +32,33 @@ else:
 _logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class LlmCallRequest:
+    """What one LLM call sends, stamped on ENGINE_IO and so on ``llm_call_start``.
+
+    The return (``llm_call_end``) never repeats these fields. ``offered_tools``
+    is tool *names*; ``max_tokens`` is the cap actually sent and
+    ``temperature`` the value actually sent (both ``None`` when unknown).
+    """
+
+    model: str = ""
+    messages: list[Any] | None = None
+    offered_tools: list[str] | None = None
+    max_tokens: int | None = None
+    temperature: float | None = None
+
+    def engine_io_fields(self) -> dict[str, Any]:
+        """Keyword fields for ``record_engine_io``; unset fields are left out."""
+        fields: dict[str, Any] = {
+            "model": self.model or None,
+            "messages": self.messages or None,
+            "tools": self.offered_tools,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
+        return {key: value for key, value in fields.items() if value is not None}
+
+
 @dataclass
 class EnvelopeContext:
     """Shared tape slice for one contract-call envelope."""
@@ -51,6 +78,8 @@ class EnvelopeContext:
     policy_name: str = "sample_governance"
     destructive: bool = False
     hitl_gov_override: bool = False
+    # Set for LLM_CALL only; stamped on ENGINE_IO / llm_call_start.
+    llm_request: LlmCallRequest | None = None
 
 
 def execute_contract_call(

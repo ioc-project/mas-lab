@@ -49,6 +49,7 @@ Schema of the output dict::
 Tool-call details live in the raw trace; this record captures the
 session-level and per-agent I/O summaries needed for embeddings and metrics.
 """
+
 from __future__ import annotations
 
 import json
@@ -100,7 +101,7 @@ class TrajectoryExtractor:
         agent_calls: dict[str, list[dict]] = defaultdict(list)
         agent_tool_names: dict[str, list[str]] = defaultdict(list)
         # Authoritative per-agent I/O from execution lifecycle events.
-        agent_exec_input: dict[str, str] = {}   # execution_start.input
+        agent_exec_input: dict[str, str] = {}  # execution_start.input
         agent_exec_output: dict[str, str] = {}  # execution_end.output
         pending_msgs: dict[str, list] = {}  # agent_id -> messages from last llm_call_start
 
@@ -123,13 +124,13 @@ class TrajectoryExtractor:
 
             elif kind == "llm_call_end":
                 msgs = pending_msgs.pop(agent_id, [])
-                response = ev.get("response", {})
-                content = (response.get("content", "") if isinstance(response, dict)
-                           else str(response))
-                agent_calls[agent_id].append({
-                    "input_messages": msgs,
-                    "output": content,
-                })
+                content = _llm_output_text(ev)
+                agent_calls[agent_id].append(
+                    {
+                        "input_messages": msgs,
+                        "output": content,
+                    }
+                )
 
             elif kind == "tool_call_start" and agent_id:
                 agent_tool_names[agent_id].append(ev.get("tool_name", ""))
@@ -140,14 +141,10 @@ class TrajectoryExtractor:
         for agent_id in all_agent_ids:
             calls = agent_calls.get(agent_id, [])
             # Prefer execution lifecycle events; fall back to llm_call data.
-            first_msg = (
-                agent_exec_input.get(agent_id)
-                or _first_user_message(calls[0]["input_messages"] if calls else [])
+            first_msg = agent_exec_input.get(agent_id) or _first_user_message(
+                calls[0]["input_messages"] if calls else []
             )
-            final_out = (
-                agent_exec_output.get(agent_id)
-                or (calls[-1]["output"] if calls else "")
-            )
+            final_out = agent_exec_output.get(agent_id) or (calls[-1]["output"] if calls else "")
             agents[agent_id] = {
                 "first_user_message": first_msg,
                 "final_output": final_out,
@@ -175,9 +172,7 @@ class TrajectoryExtractor:
                     "input_messages": msgs,
                     # Last non-system message as a convenience text field
                     "input_prompt": next(
-                        (m.get("content", "") for m in reversed(msgs)
-                         if m.get("role") != "system"),
-                        ""
+                        (m.get("content", "") for m in reversed(msgs) if m.get("role") != "system"), ""
                     ),
                     "latency_ms": None,
                     "output": "",
@@ -186,11 +181,7 @@ class TrajectoryExtractor:
 
             elif kind == "llm_call_end" and agent_id in _pending_call:
                 rec = _pending_call.pop(agent_id)
-                response = ev.get("response", {})
-                rec["output"] = (
-                    response.get("content", "") if isinstance(response, dict)
-                    else str(response)
-                )
+                rec["output"] = _llm_output_text(ev)
                 rec["latency_ms"] = ev.get("latency_ms")
                 calls.append(rec)
 
@@ -226,6 +217,22 @@ class TrajectoryExtractor:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
+def _llm_output_text(event: dict[str, Any]) -> str:
+    """Text the model returned, from an ``llm_call_end`` event.
+
+    The runtime writes it as ``output``; an OpenAI-shaped ``response`` (dict
+    with ``content``, or plain text) is still read when ``output`` is empty.
+    """
+    text = event.get("output")
+    if text:
+        return text if isinstance(text, str) else str(text)
+    response = event.get("response") or {}
+    if isinstance(response, dict):
+        return str(response.get("content") or "")
+    return str(response)
+
+
 def _load_events(path: Path) -> list[dict[str, Any]]:
     events = []
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -246,7 +253,7 @@ def _find_session_input(events: list[dict]) -> str:
     """
     for ev in events:
         if ev.get("kind") == "llm_call_start":
-            for msg in (ev.get("messages") or []):
+            for msg in ev.get("messages") or []:
                 if msg.get("role") == "user":
                     return _msg_content(msg)
     # Fallback: execution_start carries input_prompt for every agent.
@@ -297,8 +304,5 @@ def _first_user_message(messages: list[dict]) -> str:
 def _msg_content(msg: dict) -> str:
     content = msg.get("content", "")
     if isinstance(content, list):
-        return " ".join(
-            p.get("text", "") for p in content
-            if isinstance(p, dict) and "text" in p
-        )
+        return " ".join(p.get("text", "") for p in content if isinstance(p, dict) and "text" in p)
     return str(content)

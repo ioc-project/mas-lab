@@ -409,6 +409,11 @@ def ensure_oxp_topology(
                 catalog = mas
             else:
                 catalog = _ensure_catalog(nodes, catalog_type, catalog_name)
+            provider = str(node.get("provider") or "")
+            if catalog_type == "LLM" and provider not in ("", "unknown"):
+                # The call knows its provider; the catalog entry follows it.
+                if catalog.get("provider") in (None, "", "unknown"):
+                    catalog["provider"] = provider
             cat_id = str(catalog.get("id"))
             _add_edge(edges, seen, edge_name, nid, cat_id)
             _add_edge(edges, seen, "executes", nid, cat_id)

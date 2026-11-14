@@ -138,6 +138,11 @@ class ObservabilityOperator:
     # this call, e.g. enable_envelope_observability=False) — ENGINE_IO_RETURN
     # must pop these itself since no contract_call/end is coming to do it.
     _bare_engine_calls: set[str] = field(default_factory=set, repr=False)
+    # correlation_id -> output cap stamped on an LLM_CALL start, so its return
+    # reports a cap only when a different one was actually sent.
+    _requested_max_tokens: dict[int, int] = field(default_factory=dict, repr=False)
+    # (correlation_id, op) of engine calls started and not yet returned.
+    _open_engine_calls: set[tuple[int, str]] = field(default_factory=set, repr=False)
     _async_plugins: bool = False
     _plugin_queue: queue.Queue | None = field(default=None, repr=False)
     _plugin_worker: threading.Thread | None = field(default=None, repr=False)
@@ -581,6 +586,9 @@ class ObservabilityOperator:
         if tool_arguments:
             payload["tool_arguments"] = dict(tool_arguments)
         payload.update({k: v for k, v in extra.items() if v is not None})
+        if op == "LLM_CALL" and extra.get("max_tokens") is not None:
+            self._requested_max_tokens[correlation_id] = extra["max_tokens"]  # type: ignore[assignment]
+        self._open_engine_calls.add((correlation_id, op))
         return self._emit(
             ObsEventKind.ENGINE_IO,
             ObsPhase.EXECUTE,
@@ -588,6 +596,26 @@ class ObservabilityOperator:
             correlation_id=correlation_id,
             payload=payload,
         )
+
+    def abandon_open_engine_calls(self, reason: str) -> list[ObservabilityEvent]:
+        """End every engine call that started and will never return.
+
+        The run was cut off (step budget, shutdown) with calls in flight. Each
+        gets an ERROR return carrying ``reason``, so no interval stays open and
+        none reads as successful.
+        """
+        events = []
+        for correlation_id, op in sorted(self._open_engine_calls):
+            events.append(
+                self.record_engine_io_return(
+                    correlation_id=correlation_id,
+                    op=op,
+                    text=reason,
+                    next_step="STOP",
+                    response_kind="ERROR",
+                )
+            )
+        return events
 
     def record_engine_io_return(
         self,
@@ -600,8 +628,6 @@ class ObservabilityOperator:
         tool_name: str = "",
         usage: dict | None = None,
         finish_reason: str = "",
-        tools: list | None = None,
-        model: str = "",
         category: str = "",
         **extra: object,
     ) -> ObservabilityEvent:
@@ -623,11 +649,12 @@ class ObservabilityOperator:
             payload["usage"] = dict(usage)
         if finish_reason:
             payload["finish_reason"] = finish_reason
-        if model:
-            payload["model"] = model
-        if tools is not None:
-            payload["tools"] = [str(name) for name in tools if str(name)]
-        payload.update({k: v for k, v in extra.items() if v is not None})
+        payload.update(
+            {k: v for k, v in extra.items() if v is not None and k not in {"model", "tools", "messages", "temperature"}}
+        )
+        if op == "LLM_CALL" and self._requested_max_tokens.pop(correlation_id, None) == payload.get("max_tokens"):
+            payload.pop("max_tokens", None)
+        self._open_engine_calls.discard((correlation_id, op))
         return self._emit(
             ObsEventKind.ENGINE_IO_RETURN,
             ObsPhase.RESULT,

@@ -117,6 +117,7 @@ shapes:
           [
             mas.llm.temperature,
             mas.llm.max_tokens,
+            mas.llm.tools,
             mas.llm.finish_reason,
             metrics.token.total,
           ]
@@ -438,7 +439,7 @@ attribute_types:
   mas.status:
     level: L3
     type: string
-    enum: [success, error, failed, ok]
+    enum: [success, error, failed, ok, unfinished]
   metrics.token.input:
     level: L3
     type: integer

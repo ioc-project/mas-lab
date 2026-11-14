@@ -241,7 +241,7 @@ def test_observe_sdk_profile_sets_genai_semconv_prompt_and_completion(
 
 
 @requires_otel
-def test_brownfield_output_fields_reach_oxp_attributes(tmp_path):
+def test_brownfield_output_fields_reach_scope_attributes(tmp_path):
     """Live trip-planner traces put the answer on user_response.content and
     tool_call_end.output -- not execution_end.output / tool_call_end.result.
     Norm copies ioa_observe.entity.output / gen_ai.output.messages into
@@ -1099,3 +1099,193 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
         and "Plan a trip" in str((s.get("attributes") or {}).get("gen_ai.input.messages"))
         for s in chats
     )
+
+
+def _replay_chat_attrs(tmp_path, events: list[dict]) -> dict:
+    import json
+
+    from mas.library.telemetry.conversion.replay import replay_events_file
+
+    events_path = tmp_path / "events.jsonl"
+    events_path.write_text("\n".join(json.dumps(e) for e in events))
+    out = tmp_path / "spans.jsonl"
+    replay_events_file(events_path, out, app_name="test-app", converter_profile="observe_sdk")
+    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+    return _first(spans, suffix=".chat")["attributes"]
+
+
+def _convert_observe_sdk(events: list[dict]):
+    from mas.library.telemetry.conversion.converter import MasOtelConverter
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+
+    provider = TracerProvider(resource=Resource.create({"service.name": "test-app"}))
+    conv = MasOtelConverter(
+        provider.get_tracer("t"),
+        app_name="test-app",
+        converter_profile="observe_sdk",
+    )
+    for event in events:
+        conv.process_event(event)
+    conv.flush_open_spans()
+    return conv
+
+
+@requires_otel
+def test_observe_sdk_reads_model_from_start(tmp_path):
+    events = [
+        {
+            "kind": "execution_start",
+            "call_id": "exec",
+            "timestamp": 1.0,
+            "agent_id": "planner",
+            "input": "hi",
+        },
+        {
+            "kind": "llm_call_start",
+            "call_id": "llm",
+            "parent_call_id": "exec",
+            "timestamp": 1.1,
+            "agent_id": "planner",
+            "model": "bedrock/global.anthropic.claude-haiku-4-5-20251001-v1:0",
+            "messages": [{"role": "user", "content": "renew"}],
+            "tools": ["lookup_quote"],
+            "max_tokens": 4096,
+            "temperature": 0.0,
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "llm",
+            "timestamp": 1.2,
+            "agent_id": "planner",
+            "output": "",
+            "finish_reason": "tool_calls",
+            "tool_calls": [{"toolName": "lookup_quote", "arguments": {"id": "1"}}],
+            "tokens_used": {
+                "prompt_tokens": 80,
+                "completion_tokens": 18,
+                "total_tokens": 98,
+            },
+        },
+        {
+            "kind": "execution_end",
+            "call_id": "exec",
+            "timestamp": 1.3,
+            "agent_id": "planner",
+            "output": "done",
+        },
+    ]
+    attrs = _replay_chat_attrs(tmp_path, events)
+    assert attrs.get("gen_ai.request.model") == "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert attrs.get("gen_ai.provider.name") == "bedrock"
+    assert "renew" in str(attrs.get("gen_ai.input.messages") or "")
+    assert "lookup_quote" in str(attrs.get("gen_ai.completion.0.content") or "")
+    assert attrs.get("gen_ai.response.finish_reasons") == "tool_calls"
+    assert attrs.get("gen_ai.usage.input_tokens") == 80
+    assert attrs.get("gen_ai.usage.output_tokens") == 18
+    assert attrs.get("gen_ai.usage.total_tokens") == 98
+    assert attrs.get("gen_ai.request.temperature") == 0.0
+    assert "lookup_quote" in str(attrs.get("mas.llm.tools") or "")
+
+
+@requires_otel
+def test_observe_sdk_tool_call_text_matches_native_kg(tmp_path):
+    events = [
+        {"kind": "execution_start", "call_id": "exec", "timestamp": 1.0, "agent_id": "planner", "input": "hi"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "llm",
+            "parent_call_id": "exec",
+            "timestamp": 1.1,
+            "agent_id": "planner",
+            "model": "bedrock/m",
+            "messages": [{"role": "user", "content": "renew"}],
+        },
+        {
+            "kind": "llm_call_end",
+            "call_id": "llm",
+            "timestamp": 1.2,
+            "agent_id": "planner",
+            "output": "ok",
+            "finish_reason": "tool_calls",
+            "tool_calls": [{"toolName": "lookup_quote", "arguments": {"id": "1"}}],
+        },
+        {"kind": "execution_end", "call_id": "exec", "timestamp": 1.3, "agent_id": "planner", "output": "done"},
+    ]
+    attrs = _replay_chat_attrs(tmp_path, events)
+    assert attrs.get("gen_ai.completion.0.content") == 'ok\n→ lookup_quote({"id": "1"})'
+
+
+def _cut_off_events() -> list[dict]:
+    """An LLM call that started and never ended: the run was cut off."""
+    return [
+        {"kind": "execution_start", "call_id": "exec", "timestamp": 1.0, "agent_id": "planner", "input": "hi"},
+        {
+            "kind": "llm_call_start",
+            "call_id": "llm",
+            "parent_call_id": "exec",
+            "timestamp": 1.1,
+            "agent_id": "planner",
+            "model": "bedrock/m",
+            "messages": [{"role": "user", "content": "renew"}],
+        },
+    ]
+
+
+@requires_otel
+def test_a_call_with_no_end_event_is_not_reported_as_successful(tmp_path):
+    attrs = _replay_chat_attrs(tmp_path, _cut_off_events())
+    assert attrs.get("mas.status") == "unfinished"
+    assert attrs.get("execution.success") == "false"
+
+
+@requires_otel
+def test_a_call_that_ended_is_still_successful(tmp_path):
+    end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "ok"}
+    events = [*_cut_off_events(), end]
+    attrs = _replay_chat_attrs(tmp_path, events)
+    assert attrs.get("mas.status") == "success"
+    assert attrs.get("execution.success") == "true"
+
+
+@requires_otel
+def test_the_cap_on_the_return_replaces_the_one_on_start(tmp_path):
+    end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "ok"}
+    events = [*_cut_off_events(), {**end, "max_tokens": 512}]
+    events[1]["max_tokens"] = 4096
+    attrs = _replay_chat_attrs(tmp_path, events)
+    assert attrs.get("mas.llm.max_tokens") == 512
+
+
+@requires_otel
+def test_a_malformed_temperature_does_not_stop_the_conversion(tmp_path):
+    events = _cut_off_events()
+    events[1].update(temperature="auto", max_tokens="")
+    attrs = _replay_chat_attrs(tmp_path, events)
+    assert "mas.llm.temperature" not in attrs
+
+
+@requires_otel
+def test_an_unfinished_span_passes_the_span_spec(tmp_path):
+    import json
+
+    from mas.library.telemetry.conversion.replay import replay_events_file
+    from mas.library.telemetry.verification import SpanValidator
+
+    events_path = tmp_path / "events.jsonl"
+    events_path.write_text("\n".join(json.dumps(e) for e in _cut_off_events()))
+    out = tmp_path / "spans.jsonl"
+    replay_events_file(events_path, out, app_name="test-app", converter_profile="observe_sdk")
+    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+    assert any(s["attributes"].get("mas.status") == "unfinished" for s in spans)
+
+    report = SpanValidator().validate_file(out, strictness="complete")
+    assert not [v for v in report.violations if "mas.status" in str(v)], report.violations
+
+
+@requires_otel
+def test_an_llm_call_that_ended_in_error_is_not_reported_as_successful(tmp_path):
+    end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "boom"}
+    attrs = _replay_chat_attrs(tmp_path, [*_cut_off_events(), {**end, "status": "error"}])
+    assert attrs.get("mas.status") == "error"
+    assert attrs.get("execution.success") == "false"

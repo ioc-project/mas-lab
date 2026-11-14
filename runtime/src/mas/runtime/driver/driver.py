@@ -10,12 +10,13 @@ import logging
 import time
 import uuid
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from mas.runtime.boundary.context.assemble import has_tool_results
 from mas.runtime.boundary.coordination.chokepoint import ChokepointCoordinator
 from mas.runtime.boundary.delegation.policy import parse_delegate_tool_name
 from mas.runtime.boundary.hitl.responders import HitlResponder
@@ -24,9 +25,11 @@ from mas.runtime.boundary.obs.exchange_plugin import ExchangePlugin
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.contracts.tool_semantics import bound_tool_semantics, existing_attr
 from mas.runtime.driver.mocks import AutoCtxAssembler
-from mas.runtime.engine.exchange_preview import ExchangeSnapshot
+from mas.runtime.engine.exchange_preview import ExchangeSnapshot, tool_def_names
+from mas.runtime.engine.llm_request import sampling_temperature
 from mas.runtime.engine.simulated import SimulatedEngine
 from mas.runtime.engine.worker_pool import DEFAULT_ENGINE_QUEUE_DEPTH, EngineWorkerPool
+from mas.runtime.kernel.envelope import LlmCallRequest
 from mas.runtime.kernel.inflight import pending_for_validate, register_inflight
 from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.kernel.run_event import max_event_seq, new_run_events
@@ -112,44 +115,78 @@ class ExchangeRecord:
     cache_layer: str = ""
 
 
-def engine_model_id(engine: Any) -> str:
-    """Model id the engine will actually call (unwraps infra middleware).
+def _engine_chain(engine: Any):
+    """Yield ``engine`` and each ``.inner`` middleware link below it.
 
     Uses :func:`existing_attr` so a spec-less ``MagicMock`` cannot auto-create
-    ``.inner`` / ``.model`` and allocate an unbounded mock tree.
+    ``.inner`` and allocate an unbounded mock tree; bounded depth and a cycle
+    guard stop a self-referencing wrapper.
     """
     seen: set[int] = set()
     cur = engine
     for _ in range(8):
         if cur is None or id(cur) in seen:
-            break
+            return
         seen.add(id(cur))
-        model = existing_attr(cur, "model")
-        if isinstance(model, str) and model.strip():
-            return model.strip()
+        yield cur
         inner = existing_attr(cur, "inner")
         if inner is None or inner is cur:
-            break
+            return
         cur = inner
-    return ""
+
+
+def _engine_chain_attr(engine: Any, name: str, accept: Callable[[Any], bool] = lambda v: v is not None) -> Any:
+    """First ``name`` on the engine or a wrapped inner engine that ``accept`` takes."""
+    for cur in _engine_chain(engine):
+        value = existing_attr(cur, name)
+        if accept(value):
+            return value
+    return None
+
+
+def _is_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def llm_request_for(engine: Any, record: ExchangeRecord, op: str) -> LlmCallRequest | None:
+    """The request ``engine`` is about to send for ``op``; ``None`` for non-LLM ops.
+
+    ``max_tokens`` is the cap actually sent (``OutputLimits.budget``, where
+    ``max_completion_tokens`` wins). ``temperature`` is 0.0 on an
+    answer-from-tool-results turn, as the live engine sends it.
+    """
+    if op != "LLM_CALL":
+        return None
+    limits = _engine_chain_attr(engine, "output_limits")
+    budget = existing_attr(limits, "budget") if limits is not None else None
+    max_tokens = budget if _is_int(budget) else _engine_chain_attr(engine, "max_tokens", _is_int)
+    temperature = _engine_chain_attr(engine, "temperature", _is_number)
+    if temperature is not None:
+        temperature = sampling_temperature(
+            temperature, answering_from_tools=bool(record.messages) and has_tool_results(list(record.messages))
+        )
+    return LlmCallRequest(
+        model=record.model or engine_model_id(engine),
+        messages=list(record.messages) if record.messages else None,
+        offered_tools=tool_def_names(record.tools) or None,
+        max_tokens=max_tokens,
+        temperature=float(temperature) if temperature is not None else None,
+    )
+
+
+def engine_model_id(engine: Any) -> str:
+    """Model id the engine will actually call (unwraps infra middleware)."""
+    model = _engine_chain_attr(engine, "model", lambda v: isinstance(v, str) and bool(v.strip()))
+    return model.strip() if model else ""
 
 
 def engine_manifest(engine: Any) -> dict[str, Any] | None:
     """Agent manifest on the engine, unwrapping infra ``.inner`` wrappers."""
-    seen: set[int] = set()
-    cur = engine
-    for _ in range(8):
-        if cur is None or id(cur) in seen:
-            break
-        seen.add(id(cur))
-        manifest = existing_attr(cur, "manifest")
-        if isinstance(manifest, dict):
-            return manifest
-        inner = existing_attr(cur, "inner")
-        if inner is None or inner is cur:
-            break
-        cur = inner
-    return None
+    return _engine_chain_attr(engine, "manifest", lambda v: isinstance(v, dict))
 
 
 def _exchange_timestamp() -> tuple[float, str]:
@@ -170,8 +207,9 @@ def _engine_payload_json(obj: object) -> str:
 
 
 def _engine_snapshot(engine: Any, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot | None:
-    snap_fn = getattr(engine, "exchange_snapshot", None)
-    if not callable(snap_fn):
+    # Infra middleware wrappers expose ``.inner`` only, so look through the chain.
+    snap_fn = _engine_chain_attr(engine, "exchange_snapshot", callable)
+    if snap_fn is None:
         return None
     snap = snap_fn(op, correlation_id=correlation_id)
     return snap if isinstance(snap, ExchangeSnapshot) else None
@@ -366,6 +404,11 @@ class KernelDriver(Lifecycle):
         self._after_kernel_step(ingress, seen_seq)
         return result
 
+    def _abandon_in_flight_calls(self, reason: str) -> None:
+        """Close the observability interval of every engine call the run abandons."""
+        if self.observability is not None:
+            self.observability.abandon_open_engine_calls(reason)
+
     def _feed_bounded(self, event: IngressSymbol) -> DriverTrace:
         trace = DriverTrace()
         queue: deque[IngressSymbol] = deque([event])
@@ -470,6 +513,7 @@ class KernelDriver(Lifecycle):
         if queue:
             # auto_steps hit max_auto_steps while items were still queued —
             # anything left in the queue will be abandoned: exit with error
+            self._abandon_in_flight_calls("step budget exhausted")
             trace.boundary_errors.append(
                 RaiseBoundaryError(
                     code="STEP_BUDGET_EXHAUSTED",
@@ -575,6 +619,7 @@ class KernelDriver(Lifecycle):
                 queue.extend(await self._adispatch_engine_batch(engine_ios, trace))
 
         if queue:
+            self._abandon_in_flight_calls("step budget exhausted")
             trace.boundary_errors.append(
                 RaiseBoundaryError(
                     code="STEP_BUDGET_EXHAUSTED",
@@ -903,6 +948,7 @@ class KernelDriver(Lifecycle):
             obs_tool_name, obs_tool_args = (
                 by_cid_obs if by_cid_obs is not None else (q.pending_tool_name, q.pending_tool_args)
             )
+            llm_request = llm_request_for(engine, record, sym.op)
             env_ctx = EnvelopeContext(
                 q=q,
                 correlation_id=sym.correlation_id,
@@ -912,6 +958,7 @@ class KernelDriver(Lifecycle):
                 tool_name=obs_tool_name,
                 tool_arguments=dict(obs_tool_args or {}),
                 destructive=sym.destructive,
+                llm_request=llm_request,
             )
             run_contract_execute_obs(env_ctx)
             self._record_wait_state_obs(sym, q, boundary="start")
@@ -1018,6 +1065,7 @@ class KernelDriver(Lifecycle):
             obs_tool_name, obs_tool_args = (
                 by_cid_obs if by_cid_obs is not None else (q.pending_tool_name, q.pending_tool_args)
             )
+            llm_request = llm_request_for(engine, record, orig.op)
             env_ctx = EnvelopeContext(
                 q=q,
                 correlation_id=orig.correlation_id,
@@ -1027,6 +1075,7 @@ class KernelDriver(Lifecycle):
                 tool_name=obs_tool_name,
                 tool_arguments=dict(obs_tool_args or {}),
                 destructive=orig.destructive,
+                llm_request=llm_request,
             )
             run_contract_execute_obs(env_ctx)
             self._record_wait_state_obs(orig, q, boundary="start")

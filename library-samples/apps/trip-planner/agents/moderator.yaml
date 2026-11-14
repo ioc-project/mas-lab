@@ -12,7 +12,7 @@ spec:
   design_pattern:
     type: react
     params:
-      max_steps: 10
+      max_steps: 40
   description:
     Trip planner moderator. Coordinates schedule_agent, itinerary_agent,
     and concierge_agent to answer trip questions.

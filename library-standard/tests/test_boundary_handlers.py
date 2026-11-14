@@ -344,6 +344,58 @@ def test_boundary_egress_ingress_catch_alls() -> None:
     assert ingress[0]["ingress_kind"] == "TOOL_RESULT"
 
 
+def test_llm_call_start_takes_request_end_takes_return() -> None:
+    start = dispatch_boundary(
+        {
+            "kind": "engine.io",
+            "correlation_id": 5,
+            "call_id": "llm-5",
+            "payload": {
+                "op": "LLM_CALL",
+                "model": "openai/gpt-4o",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": ["search"],
+                "max_tokens": 64,
+                "temperature": 0.2,
+            },
+        },
+        ctx=_ctx(),
+    )
+    assert start[0]["kind"] == "llm_call_start"
+    assert start[0]["model"] == "openai/gpt-4o"
+    assert start[0]["messages"] == [{"role": "user", "content": "hi"}]
+    assert start[0]["tools"] == ["search"]
+    assert start[0]["max_tokens"] == 64
+    assert start[0]["temperature"] == 0.2
+
+    end = dispatch_boundary(
+        {
+            "kind": "engine.io.return",
+            "correlation_id": 5,
+            "call_id": "llm-5",
+            "payload": {
+                "op": "LLM_CALL",
+                "text": "",
+                "next_step": "TOOL_CALL",
+                "finish_reason": "tool_calls",
+                "model": "should-not-copy",
+                "tools": ["search"],
+                "max_tokens": 64,
+                "tool_calls": [{"toolName": "search", "arguments": {"q": "x"}}],
+                "usage": {"total_tokens": 9},
+            },
+        },
+        ctx=_ctx(),
+    )
+    assert end[0]["kind"] == "llm_call_end"
+    assert "model" not in end[0]
+    assert "tools" not in end[0]
+    assert end[0]["max_tokens"] == 64  # the return carried a cap: it is the one actually sent
+    assert end[0]["tool_calls"] == [{"toolName": "search", "arguments": {"q": "x"}}]
+    assert end[0]["finish_reason"] == "tool_calls"
+    assert end[0]["tokens_used"]["total_tokens"] == 9
+
+
 def test_unknown_kind_is_dropped() -> None:
     assert dispatch_boundary({"kind": "not.a.real.kind", "payload": {}}, ctx=_ctx()) == []
 
@@ -405,3 +457,30 @@ def test_second_assembly_for_same_correlation_id_gets_distinct_call_id() -> None
     assert len(set(_proc_ids(first) + _proc_ids(second))) == 2
     ends = [ev["call_id"] for ev in first + second if ev["kind"] == "processing_call_end"]
     assert ends == _proc_ids(first) + _proc_ids(second)
+
+
+def test_llm_request_fields_leave_out_unset_values() -> None:
+    from mas.library.standard.lib.observability.native.boundary_handlers import _llm_request_fields
+
+    assert _llm_request_fields({"op": "LLM_CALL"}) == {}
+    assert _llm_request_fields({"messages": [], "tools": None, "model": ""}) == {}
+    assert _llm_request_fields({"max_tokens": 0, "temperature": 0.0, "tools": []}) == {
+        "max_tokens": 0,
+        "temperature": 0.0,
+        "tools": [],
+    }
+
+
+def test_an_error_return_ends_the_call_with_an_error_status() -> None:
+    for op, kind in (("LLM_CALL", "llm_call_end"), ("TOOL_CALL", "tool_call_end")):
+        end = dispatch_boundary(
+            {
+                "kind": "engine.io.return",
+                "correlation_id": 9,
+                "call_id": f"{op}-9",
+                "payload": {"op": op, "text": "boom", "next_step": "STOP", "response_kind": "ERROR"},
+            },
+            ctx=_ctx(),
+        )
+        assert end[0]["kind"] == kind
+        assert end[0]["status"] == "error"

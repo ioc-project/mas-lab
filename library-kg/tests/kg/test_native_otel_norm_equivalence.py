@@ -82,11 +82,6 @@ def _import_compare():
 def test_fixture_native_matches_otel_via_norm(mode: str) -> None:
     compare = _import_compare()
     report = compare(_load_events(_FIXTURE), mode=mode)
-    if mode == "default":
-        # This synthetic fixture has no Agent catalog span on the default OTel
-        # path; live trip-planner traces match Agent counts. Compare the rest.
-        report["mismatched_types"] = [t for t in report["mismatched_types"] if t != "Agent"]
-        report["equivalent"] = not report["mismatched_types"]
     assert report["equivalent"], report
     if mode == "complete":
         assert report["same_trace"], report
@@ -100,3 +95,88 @@ def test_t02_native_matches_otel_via_norm(mode: str) -> None:
     report = compare(_load_events(_T02), mode=mode)
     assert report["equivalent"], report
     assert report["same_trace"], report
+
+
+def _tool_use_events() -> list[dict]:
+    """The fixture with its LLM call rewritten as a tool-use turn (request on start)."""
+    events = _load_events(_FIXTURE)
+    for event in events:
+        if event["kind"] == "llm_call_start":
+            event.update(
+                model="openai/gpt-4",
+                messages=[{"role": "user", "content": "find flights"}],
+                tools=["search_flights"],
+                max_tokens=512,
+                temperature=0.25,
+            )
+        elif event["kind"] == "llm_call_end":
+            event.pop("response", None)
+            event.update(
+                output="",
+                finish_reason="tool_calls",
+                tokens_used={"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
+                tool_calls=[{"toolName": "search_flights", "arguments": {"to": "Verdantia"}}],
+            )
+    return events
+
+
+def _llm_call_view(nodes: list[dict], edges: list[dict]) -> dict:
+    by_id = {node["id"]: node for node in nodes}
+    (call,) = [node for node in nodes if node.get("node_type") == "LLMCall"]
+    final = [
+        by_id[edge["to_id"]]
+        for edge in edges
+        if edge["from_id"] == call["id"]
+        and edge["edge_type"] == "hasFinalState"
+        and edge["to_id"] in by_id
+    ]
+    return {
+        "modelName": call.get("modelName"),
+        "temperature": float(call["temperature"]),
+        "finishReason": call.get("finishReason"),
+        "final_state": [state.get("content") for state in final],
+    }
+
+
+def test_tool_use_turn_reads_the_same_in_both_paths() -> None:
+    """Request on start, tool calls on end: native KG and OTel→norm KG agree.
+
+    The KG handler and the OTel converter each render ``tool_calls`` as
+    completion text (the packages share no code). This is the contract that
+    keeps the two renderings identical.
+    """
+    _import_compare()
+    from mas.library.kg.observability.otel_via_norm import normalize_otel
+    from mas.library.kg.observability.path_equivalence import _native_kg, _otel_kg
+
+    events = _tool_use_events()
+    native = _llm_call_view(*_native_kg(events, mode="default"))
+    _, _, spans = _otel_kg(events, mode="default")
+    otel = _llm_call_view(*normalize_otel(spans))
+
+    assert native["final_state"] == ['→ search_flights({"to": "Verdantia"})']
+    assert otel == native
+
+
+@pytest.mark.parametrize("mode", ["default", "complete"])
+def test_tool_use_turn_traces_are_the_same_trace_in_both_paths(mode: str) -> None:
+    """Agents, calls and their containment agree, not only the per-type counts."""
+    compare = _import_compare()
+    report = compare(_tool_use_events(), mode=mode)
+    assert report["equivalent"], report
+    assert report["same_trace"], report
+
+
+@pytest.mark.parametrize(
+    ("name", "stripped"),
+    [
+        ("moderator call 1d91cb6a3f66e3d1", "moderator"),
+        ("moderator call 0x1d91cb6a3f66e3d1", "moderator"),
+        ("Tool call (get_fares)", "get_fares"),
+        ("planner", "planner"),
+    ],
+)
+def test_generated_call_suffix_is_stripped(name: str, stripped: str) -> None:
+    from mas.library.kg.observability.path_equivalence import _strip_generated_suffix
+
+    assert _strip_generated_suffix(name) == stripped

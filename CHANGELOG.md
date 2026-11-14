@@ -18,6 +18,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- `llm_call_start` carries the request: `model`, `messages`, offered tools, `max_tokens`, `temperature`. `llm_call_end` is the return: `output`, `finish_reason`, tokens, `tool_calls`, and `max_tokens` only when the sent cap differs. `model` on `llm_call_end` is no longer read.
 - `--cache-read` / `--cache-write` help now says the cache is off until those flags insert the `llm_cache` step. The default pipeline is retry only.
 - The cache docs describe one LLM cache, the `llm_cache` step. The "built-in engine cache" sections are gone; `MAS_LLM_CACHE_READ` / `_WRITE` and `RuntimeEngine` `cache.read` / `write` insert that step.
 - `behavior.delegation_style: none` hides the leftover `delegate_to_*` tools from the LLM. The peers and the send path stay, so a linear, parallel, or single pattern can still send to the next agent.
@@ -128,6 +129,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- Native KG and OTel name `LLMCall` the same way, take Session and MAS identity from the events, and treat a failed, cut-off, or interrupted call as unsuccessful.
+- The trip-planner moderator allows 40 dispatch steps, not 10.
 - A lab's own `library.yaml` steps (a lab-local `snapshot_kg`, say) now resolve when the controller daemon runs the lab from another directory, including `/api/pipeline/run`. Library discovery adds the lab root to its search, not only the process cwd, and plugins of a lab loaded after the registry was built are added to it. When two labs in one process declare a library of the same name, the one loaded last wins. Two labs that ship the same plugin package name are refused. Before, the post pipeline failed with `Unknown step type`.
 - `mas-lab init` never writes `OPENAI_API_BASE` for a custom URL (an infra called `openai` used to) and never a name that starts with a digit.
 - The adversarial and trip-planner LLM judges follow `OPENAI_BASE_URL`, then `OPENAI_API_BASE`, like the engine.
