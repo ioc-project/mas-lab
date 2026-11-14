@@ -7,6 +7,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+
+def sampling_temperature(configured: float, *, answering_from_tools: bool) -> float:
+    """Temperature sent for one call: 0.0 when answering from tool results, else the configured one.
+
+    The live engine and the observability request on ``llm_call_start`` both use
+    this, so the stamped value cannot drift from the sent one.
+    """
+    return 0.0 if answering_from_tools else configured
+
+
 _SAMPLING_KEYS = (
     "temperature",
     "max_tokens",

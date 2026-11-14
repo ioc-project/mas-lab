@@ -91,13 +91,20 @@ Streams also contain governance and envelope events (`governance_decision`, `bou
 |------|--------------|----------------|
 | `execution_start` | An agent begins a task (entry point or delegation) | `input`: the prompt or delegated task text |
 | `execution_end` | An agent finishes | `status`: `"ok"`, or the failure class |
-| `llm_call_start` | Just before an LLM request is dispatched | `messages`: the array sent to the model, when available (also on the preceding `context_assembled` event) |
-| `llm_call_end` | After the LLM response arrives | `output`: model text; `next_step`: what the design pattern schedules next (`"TOOL_CALL"`, `"FINALIZE"`, ...). When set: `tokens_used` (provider usage), `finish_reason`, `model`, `max_tokens`, `truncation_retries`, `tools`, `cache_status`, `cache_layer`, `cache_events` |
+| `llm_call_start` | Just before an LLM request is dispatched | `model`; `messages`: the array sent to the model; `tools`: offered function names; `max_tokens`; `temperature` |
+| `llm_call_end` | After the LLM response arrives | `output`: model text; `next_step`: what the design pattern schedules next (`"TOOL_CALL"`, `"FINALIZE"`, ...). When set: `status` (`"error"` when the call failed or the run was cut off with it in flight), `tokens_used`, `finish_reason`, `truncation_retries`, `max_tokens` (only when it differs from the start), `tool_calls` (the calls the model returned), `cache_status`, `cache_layer`, `cache_events`. |
 | `tool_call_start` | The runtime dispatches a tool call, including delegation tools such as `delegate_to_<agent>` | `tool_name`; `arguments`: what the model supplied |
 | `tool_call_end` | The tool returns | `tool_name`; `output`: tool or sub-agent result text |
 | `user_response` | The entry-point agent emits its final answer | `content`: the rendered answer; `message_type`: `"info"`, `"warning"`, or `"error"` |
 | `context_assembled` | The context assembler finishes, before each LLM call | `segments`, `total_tokens`, `message_count`, `messages` (see below) |
 | `audit` | Any plugin calls `recorder.audit(payload)` | `payload`: arbitrary plugin-specific object |
+
+**LLM request and return.** `llm_call_start` is the request and `llm_call_end` is the return; neither repeats the other's fields.
+
+- The request is built once, per call, by `llm_request_for` (driver) into an `LlmCallRequest` and stamped on the `ENGINE_IO` event. `max_tokens` is the configured cap (`max_completion_tokens` wins when set) and `temperature` is the value sent (0.0 when the model is answering from tool results; the engine and the request share one rule, `sampling_temperature`). Both are read through infra middleware wrappers, like `model`.
+- The engine may send a smaller cap than the configured one (the prompt leaves less room) or a larger one (a truncation retry). `llm_call_end.max_tokens` then carries the cap of the final attempt; it is omitted when it equals the one on start.
+- `tools` is the list of offered tool names (`tool_def_names`). It is omitted when the engine offered none.
+- `tool_calls` on `llm_call_end` is the list of calls the model returned, `{toolName, arguments}` each. Readers render it as `→ name(args)` text when the model produced no other output.
 
 Examples:
 

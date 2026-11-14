@@ -19,7 +19,7 @@ from mas.runtime.boundary.context.assemble import (
     llm_request_tools,
 )
 from mas.runtime.boundary.gov.budget import BudgetTracker, budget_from_manifest
-from mas.runtime.engine.exchange_preview import ExchangeSnapshot, format_exchange_snapshot
+from mas.runtime.engine.exchange_preview import ExchangeSnapshot, format_exchange_snapshot, tool_def_names
 from mas.runtime.engine.llm_output_limits import (
     OutputLimits,
     estimate_prompt_tokens,
@@ -31,7 +31,7 @@ from mas.runtime.engine.llm_reasoning import (
     coerce_reasoning_settings,
     reasoning_settings_from_manifest,
 )
-from mas.runtime.engine.llm_request import extra_from_manifest, sampling_settings_from_manifest
+from mas.runtime.engine.llm_request import extra_from_manifest, sampling_settings_from_manifest, sampling_temperature
 from mas.runtime.engine.textual_tool_calls import maybe_recover_textual_tool_calls, repair_merged_arg_keys
 from mas.runtime.engine.tool_dispatch import IN_FLIGHT_TOOL, InFlightTool, ToolExecutionError, execute_engine_tool
 from mas.runtime.engine.tools import openai_tools
@@ -640,7 +640,7 @@ class LiveLlmEngine(Lifecycle):
             message, retries = self._complete_with_truncation_policy(
                 messages,
                 tools=tools,
-                temperature=0.0 if answering_from_tools else self.temperature,
+                temperature=sampling_temperature(self.temperature, answering_from_tools=answering_from_tools),
             )
         except TruncatedCompletionError as exc:
             return EngineIoReturn(
@@ -650,7 +650,6 @@ class LiveLlmEngine(Lifecycle):
                 text=str(exc),
                 finish_reason="length",
                 offered_tools=list(self._offered_tool_names),
-                model=self.model,
             )
         except Exception as exc:
             logger.debug("LLM provider call failed", exc_info=True)
@@ -685,7 +684,7 @@ class LiveLlmEngine(Lifecycle):
 
         usage = message.pop("usage", None) or {}
         finish_reason = message.pop("finish_reason", None) or ""
-        max_tokens = message.pop("_max_tokens", None)
+        sent_max_tokens = message.pop("_max_tokens", None)
         cache_status = message.pop("_mas_cache_status", None)
         ret = self._message_to_engine_return(
             io,
@@ -700,9 +699,9 @@ class LiveLlmEngine(Lifecycle):
             cache_events=([{"layer": "provider_cache", "status": cache_status}] if cache_status else []),
             pricing=dict(self.output_limits.pricing if self.output_limits is not None else {}),
         )
-        if max_tokens is None and not retries:
+        if sent_max_tokens is None and not retries:
             return ret
-        return ret.model_copy(update={"max_tokens": max_tokens, "truncation_retries": retries})
+        return ret.model_copy(update={"max_tokens": sent_max_tokens, "truncation_retries": retries})
 
     async def _allm_call(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not self._budget.allow_llm():
@@ -723,7 +722,7 @@ class LiveLlmEngine(Lifecycle):
             message, retries = await self._acomplete_with_truncation_policy(
                 messages,
                 tools=tools,
-                temperature=0.0 if answering_from_tools else self.temperature,
+                temperature=sampling_temperature(self.temperature, answering_from_tools=answering_from_tools),
             )
         except asyncio.CancelledError:
             raise
@@ -735,7 +734,6 @@ class LiveLlmEngine(Lifecycle):
                 text=str(exc),
                 finish_reason="length",
                 offered_tools=list(self._offered_tool_names),
-                model=self.model,
             )
         except Exception as exc:
             logger.debug("LLM provider call failed", exc_info=True)
@@ -749,7 +747,7 @@ class LiveLlmEngine(Lifecycle):
 
         usage = message.pop("usage", None) or {}
         finish_reason = message.pop("finish_reason", None) or ""
-        max_tokens = message.pop("_max_tokens", None)
+        sent_max_tokens = message.pop("_max_tokens", None)
         cache_status = message.pop("_mas_cache_status", None)
         ret = self._message_to_engine_return(
             io,
@@ -764,9 +762,9 @@ class LiveLlmEngine(Lifecycle):
             cache_events=([{"layer": "provider_cache", "status": cache_status}] if cache_status else []),
             pricing=dict(self.output_limits.pricing if self.output_limits is not None else {}),
         )
-        if max_tokens is None and not retries:
+        if sent_max_tokens is None and not retries:
             return ret
-        return ret.model_copy(update={"max_tokens": max_tokens, "truncation_retries": retries})
+        return ret.model_copy(update={"max_tokens": sent_max_tokens, "truncation_retries": retries})
 
     async def _acomplete_with_truncation_policy(
         self,
@@ -910,8 +908,7 @@ class LiveLlmEngine(Lifecycle):
                     text="",
                     usage=usage,
                     finish_reason=finish_reason,
-                    offered_tools=self._names_from_tool_defs(tool_defs),
-                    model=self.model,
+                    offered_tools=tool_def_names(tool_defs),
                     cache_status=cache_status,
                     cache_layer=cache_layer,
                     cache_events=cache_events or [],
@@ -929,8 +926,7 @@ class LiveLlmEngine(Lifecycle):
                 text="",
                 usage=usage,
                 finish_reason=finish_reason,
-                offered_tools=self._names_from_tool_defs(tool_defs),
-                model=self.model,
+                offered_tools=tool_def_names(tool_defs),
                 cache_status=cache_status,
                 cache_layer=cache_layer,
                 cache_events=cache_events or [],
@@ -945,8 +941,7 @@ class LiveLlmEngine(Lifecycle):
             text=text,
             usage=usage,
             finish_reason=finish_reason,
-            offered_tools=self._names_from_tool_defs(tool_defs),
-            model=self.model,
+            offered_tools=tool_def_names(tool_defs),
             cache_status=cache_status,
             cache_layer=cache_layer,
             cache_events=cache_events or [],
@@ -978,18 +973,8 @@ class LiveLlmEngine(Lifecycle):
             peer_descriptions=self.delegation_peer_descriptions,
             ctx=self.ctx,
         )
-        self._offered_tool_names = self._names_from_tool_defs(tool_defs)
+        self._offered_tool_names = tool_def_names(tool_defs)
         return tool_defs
-
-    @staticmethod
-    def _names_from_tool_defs(tool_defs: list[dict[str, Any]] | None) -> list[str]:
-        names: list[str] = []
-        for tool in tool_defs or []:
-            fn = tool.get("function") if isinstance(tool, dict) else None
-            name = str((fn or {}).get("name") or "") if isinstance(fn, dict) else ""
-            if name:
-                names.append(name)
-        return names
 
     def _unavailable_tool_observation(self, tool: str, exc: BaseException) -> str:
         available = ", ".join(self._offered_tool_names) if self._offered_tool_names else "(none)"

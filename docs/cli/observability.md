@@ -138,7 +138,7 @@ Each line is one record. Common `kind` values (native format):
 | Kind | Meaning |
 | --- | --- |
 | `execution_start`, `execution_end` | Run lifecycle. |
-| `llm_call_start`, `llm_call_end` | Model call. `_end` carries latency. `llm_call_end.tools` lists the function names sent to the model. |
+| `llm_call_start`, `llm_call_end` | Model call. `_start` is the request (`model`, `messages`, offered `tools`, `max_tokens`). `_end` is the return (`output`, `finish_reason`, `tokens_used`, `tool_calls` when the model asked for tools, `max_tokens` when a different cap was sent). |
 | `context_assembled` | Prompt snapshot for that call. `tools` is the same function-name list. |
 | `tool_call_start`, `tool_call_end` | Tool call. |
 | `governance_event`, `governance_policy` | Policy and budget hooks. |

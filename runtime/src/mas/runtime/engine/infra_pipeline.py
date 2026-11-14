@@ -318,7 +318,6 @@ class _ProviderCallEngine:
             correlation_id=io.correlation_id,
             response_kind="MODEL_TEXT",
             next_step="STOP",
-            model=str(payload.get("model") or ""),
         )
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
@@ -329,7 +328,6 @@ class _ProviderCallEngine:
             correlation_id=io.correlation_id,
             response_kind="MODEL_TEXT",
             next_step="STOP",
-            model=str(payload.get("model") or ""),
         )
 
 

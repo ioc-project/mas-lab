@@ -273,6 +273,7 @@ def test_contract_call_id_is_not_the_inner_llm_call_id() -> None:
     assert llm_start.call_id == llm_end.call_id
     assert wrapper_start.call_id != llm_start.call_id
     assert llm_start.parent_call_id == wrapper_start.parent_call_id == "exec-001"
+    assert "model" not in llm_end.attributes
 
 
 def test_governance_decision_resolves_real_call_id_and_parent() -> None:

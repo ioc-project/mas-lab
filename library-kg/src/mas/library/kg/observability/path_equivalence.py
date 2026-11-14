@@ -16,6 +16,7 @@ Two modes:
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Any, Iterable, Literal, Sequence
 
@@ -125,6 +126,9 @@ def _identity_name(node: dict[str, Any]) -> str:
     return ""
 
 
+_CALL_SPAN_SUFFIX = re.compile(r" call (?:0x)?[0-9a-fA-F]{8,}$")
+
+
 def _strip_generated_suffix(value: str) -> str:
     text = str(value or "").strip()
     if text.startswith("Tool call (") and ")" in text:
@@ -136,9 +140,8 @@ def _strip_generated_suffix(value: str) -> str:
     for prefix in ("Session ", "MASCall ", "AgentCall "):
         if text.startswith(prefix):
             text = text[len(prefix) :]
-    if " call 0x" in text:
-        text = text.rsplit(" call 0x", 1)[0]
-    return text
+    # OTel call names end in `` call <span id>`` (hex, with or without ``0x``).
+    return _CALL_SPAN_SUFFIX.sub("", text)
 
 
 def _logical_key(
@@ -146,10 +149,11 @@ def _logical_key(
     *,
     agent_by_span: dict[str, str] | None = None,
     span_index: dict[str, dict[str, Any]] | None = None,
+    agent_hint: str = "",
 ) -> tuple[str, str]:
     ntype = node_type(node)
     agent = _strip_generated_suffix(
-        str(node.get("agentId") or node.get("agent_id") or "")
+        str(node.get("agentId") or node.get("agent_id") or agent_hint or "")
     )
     if not agent and agent_by_span:
         parent = _norm_span(node.get("parentSpanId") or node.get("parent_span_id") or "")
@@ -164,13 +168,21 @@ def _logical_key(
                     parent_node.get("parentSpanId") or parent_node.get("parent_span_id") or ""
                 )
                 agent = agent_by_span.get(grandparent, "")
-    tool = _strip_generated_suffix(
-        str(node.get("toolName") or node.get("tool_name") or "")
-    )
+    tool = _strip_generated_suffix(str(node.get("toolName") or node.get("tool_name") or ""))
     if ntype in {"Tool", "ToolCall"}:
         label = tool or _identity_name(node)
         return ntype, label
-    if ntype in {"Agent", "AgentCall", "LLMCall", "ProcessingCall", "MemoryCall", "SkillCall", "RAGQuery", "GovernanceEvent", "ContextContribution"}:
+    if ntype in {
+        "Agent",
+        "AgentCall",
+        "LLMCall",
+        "ProcessingCall",
+        "MemoryCall",
+        "SkillCall",
+        "RAGQuery",
+        "GovernanceEvent",
+        "ContextContribution",
+    }:
         return ntype, agent or _identity_name(node)
     if ntype == "LLM":
         return ntype, _identity_name(node) or "llm"
@@ -195,6 +207,33 @@ def _agent_by_span(nodes: list[dict[str, Any]]) -> dict[str, str]:
         span = _norm_span(node.get("spanId") or node.get("span_id") or "")
         if span and agent:
             out[span] = agent
+    return out
+
+
+def _agent_by_child_id(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> dict[str, str]:
+    """Owning agent of each node an AgentCall contains, read from the edges.
+
+    The native KG has no span ids and, in the default attribute set, no
+    ``agentId``/``parentCallId`` on a call: its AgentCall edges are what say
+    whose LLM or tool call it is.
+    """
+    agent_of_call = {
+        str(node.get("id") or ""): _strip_generated_suffix(
+            str(node.get("agentId") or node.get("agent_id") or _identity_name(node))
+        )
+        for node in nodes
+        if node_type(node) == "AgentCall"
+    }
+    out: dict[str, str] = {}
+    for edge in edges:
+        src = str(edge.get("from_id") or edge.get("source_id") or "")
+        dst = str(edge.get("to_id") or edge.get("target_id") or "")
+        if (
+            agent_of_call.get(src)
+            and dst
+            and not str(edge.get("edge_type") or "").endswith("hasAgentCall")
+        ):
+            out.setdefault(dst, agent_of_call[src])
     return out
 
 
@@ -297,7 +336,15 @@ def _canonical_subgraph(
         for node in nodes
         if node_type(node) in allowed and not _is_synthesized(node) and not _is_end_governance(node)
     ]
-    keys = {str(node.get("id") or ""): _logical_key(node, agent_by_span=by_span_agent) for node in kept}
+    agent_of_child = _agent_by_child_id(nodes, edges)
+    keys = {
+        str(node.get("id") or ""): _logical_key(
+            node,
+            agent_by_span=by_span_agent,
+            agent_hint=agent_of_child.get(str(node.get("id") or ""), ""),
+        )
+        for node in kept
+    }
     referenced_agents = {key[1] for key in keys.values() if key[0] == "AgentCall"}
     referenced_tools = {key[1] for key in keys.values() if key[0] == "ToolCall"}
     keys = {
@@ -321,9 +368,17 @@ def _canonical_subgraph(
         if mapped is None:
             continue
         src_key, dst_key = keys[src], keys[dst]
-        if mapped == "contributesTo" and src_key[0] == "AgentCall" and dst_key[0] == "ContextContribution":
+        if (
+            mapped == "contributesTo"
+            and src_key[0] == "AgentCall"
+            and dst_key[0] == "ContextContribution"
+        ):
             src_key, dst_key = dst_key, src_key
-        elif mapped == "annotates" and dst_key[0] == "GovernanceEvent" and src_key[0] != "GovernanceEvent":
+        elif (
+            mapped == "annotates"
+            and dst_key[0] == "GovernanceEvent"
+            and src_key[0] != "GovernanceEvent"
+        ):
             src_key, dst_key = dst_key, src_key
         if not _keep_canonical_edge(mapped, src_key, dst_key):
             continue
@@ -338,7 +393,12 @@ def _canonical_subgraph(
         parent_edge = _CONTAINS_TO_OXP.get(child_key[0])
         if parent_edge is None:
             continue
-        if child_key[0] in {"AgentCall", "ProcessingCall", "ContextContribution", "GovernanceEvent"}:
+        if child_key[0] in {
+            "AgentCall",
+            "ProcessingCall",
+            "ContextContribution",
+            "GovernanceEvent",
+        }:
             continue
         ancestor = _enclosing_agent_call(node, by_span=by_span_node)
         if ancestor is None:
@@ -360,7 +420,9 @@ def _canonical_subgraph(
     }
 
 
-def _identity_bag(nodes: Iterable[dict[str, Any]], allowed: frozenset[str]) -> dict[str, Counter[str]]:
+def _identity_bag(
+    nodes: Iterable[dict[str, Any]], allowed: frozenset[str]
+) -> dict[str, Counter[str]]:
     bags: dict[str, Counter[str]] = {ntype: Counter() for ntype in allowed}
     for node in nodes:
         ntype = node_type(node)
@@ -408,7 +470,9 @@ def materialize_extension_nodes(spans: Sequence[dict[str, Any]]) -> list[dict[st
     return nodes
 
 
-def _native_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _native_kg(
+    events: list[dict[str, Any]], *, mode: Mode
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     run_id = "unknown-run"
     for event in events:
         rid = event.get("run_id") or event.get("session_id")
@@ -431,7 +495,9 @@ def _native_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[s
     return list(doc.get("nodes") or []), list(doc.get("edges") or [])
 
 
-def _otel_kg(events: list[dict[str, Any]], *, mode: Mode) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def _otel_kg(
+    events: list[dict[str, Any]], *, mode: Mode
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     from mas.library.telemetry.conversion.layers import ExportLayers
     from mas.library.telemetry.conversion.replay import replay_events_file
     from mas.library.telemetry.conversion.topology import derive_app_name
@@ -510,7 +576,9 @@ def compare_native_and_otel(
             "otel_nodes": otel_canon["nodes"],
             "native_edges": native_canon["edges"],
             "otel_edges": otel_canon["edges"],
-        } if not same_trace else {},
+        }
+        if not same_trace
+        else {},
         "session_present": {"native": native_sessions > 0, "otel": otel_sessions > 0},
         "span_count": len(spans),
         "native_node_count": len(native_nodes),

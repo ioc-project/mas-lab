@@ -39,6 +39,26 @@ def dispatch_boundary(record: dict, *, ctx: TransformContext) -> list[dict]:
     return handler(record, ctx=ctx, cid=cid, base=base, payload=payload, ts=ts)
 
 
+def _llm_request_fields(payload: dict) -> dict:
+    """The request an ENGINE_IO payload carries, as ``llm_call_start`` fields.
+
+    ``llm_call_start`` is the request: ``model``, ``messages``, offered
+    ``tools`` (names), ``max_tokens``, ``temperature``. Unset values are left
+    out. ``llm_call_end`` never repeats them.
+    """
+    fields: dict = {}
+    if payload.get("messages"):
+        fields["messages"] = payload["messages"]
+    if payload.get("model"):
+        fields["model"] = payload["model"]
+    for name in ("max_tokens", "temperature"):
+        if payload.get(name) is not None:
+            fields[name] = payload[name]
+    if isinstance(payload.get("tools"), list):
+        fields["tools"] = list(payload["tools"])
+    return fields
+
+
 def _boundary_engine_io(
     record: dict,
     *,
@@ -62,14 +82,13 @@ def _boundary_engine_io(
         out.append(_with_parent(rec, record, ctx))
     if op == "LLM_CALL" and key not in ctx._seen_engine_ops:
         ctx._seen_engine_ops.add(key)
-        messages = payload.get("messages") or []
         rec = {
             "kind": "llm_call_start",
             **base,
             "call_id": _resolve_call_id(record, ctx, cid, "LLM_CALL"),
             "timestamp": ts,
-            **({"messages": messages} if messages else {}),
         }
+        rec.update(_llm_request_fields(payload))
         out.append(_with_parent(rec, record, ctx))
     if op == "TOOL_CALL" and key not in ctx._seen_engine_ops:
         ctx._seen_engine_ops.add(key)
@@ -126,24 +145,24 @@ def _boundary_engine_io_return(
             "output": payload.get("text", ""),
             "next_step": payload.get("next_step", "STOP"),
         }
+        if payload.get("response_kind") == "ERROR":
+            rec["status"] = "error"
         usage = payload.get("usage")
         if usage:
             rec["tokens_used"] = usage
         finish_reason = payload.get("finish_reason")
         if finish_reason:
             rec["finish_reason"] = finish_reason
-        model = payload.get("model")
-        if model:
-            rec["model"] = model
         if payload.get("max_tokens") is not None:
             rec["max_tokens"] = payload["max_tokens"]
         if payload.get("truncation_retries"):
             rec["truncation_retries"] = payload["truncation_retries"]
-        if isinstance(payload.get("tools"), list):
-            rec["tools"] = list(payload["tools"])
-        for key in ("cache_status", "cache_layer", "cache_events"):
-            if payload.get(key) is not None:
-                rec[key] = payload[key]
+        tool_calls = payload.get("tool_calls")
+        if isinstance(tool_calls, list) and tool_calls:
+            rec["tool_calls"] = list(tool_calls)
+        for field in ("cache_status", "cache_layer", "cache_events"):
+            if payload.get(field) is not None:
+                rec[field] = payload[field]
         out.append(_with_parent(rec, record, ctx))
     if op == "TOOL_CALL" and key not in ctx._seen_engine_returns:
         ctx._seen_engine_returns.add(key)
@@ -155,6 +174,8 @@ def _boundary_engine_io_return(
             "output": payload.get("text", ""),
             "tool_name": resolve_tool_name(payload),
         }
+        if payload.get("response_kind") == "ERROR":
+            rec["status"] = "error"
         out.append(_with_parent(rec, record, ctx))
     if op == "MEMORY_OP" and key not in ctx._seen_engine_returns:
         ctx._seen_engine_returns.add(key)

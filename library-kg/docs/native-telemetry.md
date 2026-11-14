@@ -156,7 +156,7 @@ The "Spec required" and "Spec recommended" columns below come from `events.spec.
 |------|----------|--------------------|------------------------|
 | `execution_start` | `AgentCall`, or `TaskCall` when `boundary="TaskCall"` or `agent_id` ends in `.task` | `input` | `context` |
 | `execution_end` | same as its start | `status` | `output`, `output_parts` |
-| `llm_call_start` | `LLMCall` | `model` | `messages`, `temperature`, `max_tokens` |
+| `llm_call_start` | `LLMCall` | `model` | `messages`, `temperature`, `max_tokens`, `tools` |
 | `llm_call_end` | `LLMCall` | | `latency_ms`, `response`, `tool_calls`, `output_parts`, `finish_reason`, `tokens_used` |
 | `tool_call_start` | `ToolCall` | `tool_name` | `arguments` |
 | `tool_call_end` | `ToolCall` | `tool_name` | `latency_ms`, `result`, `output_parts`, `status` |
@@ -260,8 +260,11 @@ The handler pairs the end with the agent's currently open `execution_start`, eve
 | `model` | `modelName`, `provider` | Spec-required. `"provider/name"` is split on the first `/`; otherwise `provider` is `unknown`. |
 | `llm_name` / `model` | `llmName` | |
 | `input` / `prompt` / `messages` | `prompt` | `messages` is rendered as `[ROLE]\ncontent` blocks. |
+| `tools` | `offeredTools` | Offered function names sent with the request (kept when `all_attributes` is on). |
+| `temperature` | `temperature` | Spec-recommended. |
+| `max_tokens` | `maxTokens` | Spec-recommended (kept when `all_attributes` is on). A `max_tokens` on `llm_call_end` (another cap was sent) replaces the start's. |
 
-`temperature` and `max_tokens` are spec-recommended but not read by the handler. Token counts and `finishReason` start at `0` / empty and are filled by the end event.
+Token counts and `finishReason` start at `0` / empty and are filled by the end event.
 
 ```json
 {"kind":"llm_call_start","agent_id":"planner","call_id":"tp-llm-001","parent_call_id":"tp-exec-001","run_id":"r1","model":"vertex_ai/gemini-2.5-flash","timestamp":1716200002.0,"messages":[{"role":"system","content":"You are a travel planning agent."},{"role":"user","content":"Plan a 3-day trip to Paris."}],"temperature":0.7,"max_tokens":1024}
@@ -275,16 +278,16 @@ The handler pairs the end with the agent's currently open `execution_start`, eve
 | `response.usage.completion_tokens` / `output_tokens` | `completionTokenCount` | Same. |
 | `response.usage.total_tokens` | `totalTokenCount` | Same. |
 | `response.usage.cache_read_input_tokens` | `cacheReadTokenCount` | |
-| `response.model`, top-level `model`, `response.id` | `modelName`, `responseId` | `provider/model` splits into `provider` + `modelName`. |
+| `response.id` | `responseId` | |
 | `response.choices[0].finish_reason` or top-level `finish_reason` | `finishReason` | |
-| `response.choices[0].message.{content,tool_calls}` or flat `response.{content,text,tool_calls}` | `completion`, `toolCalls` | Tool-use-only responses are rendered as `-> name(args)` lines. |
+| `response.choices[0].message.{content,tool_calls}` or flat `response.{content,text,tool_calls}` or top-level `tool_calls` | `completion`, `toolCalls` | Tool calls are rendered as `→ name(args)` lines (args cut at 300 characters, appended after any output text). The OTel converter renders the same text. |
 | `response.thinking` | child `ThinkingCall` node | Emitted when `include_native_extensions` is on. Linked from the LLM call by a `hasThinking` edge. |
 | `content` / `output` (flat) | `completion` | Used when there is no `response` object. |
 
-Runtime traces (trip-planner, `examples/qa-agent`) put `tokens_used`, `model`, and `finish_reason` on the event. The handler reads those first, then falls back to `response.usage` / `response.choices`.
+New runtime traces put `model` / `messages` / offered `tools` on `llm_call_start`. Token usage and `finish_reason` stay on `_end`. An OpenAI-shaped `response` is still accepted; `model` on that object is not read.
 
 ```json
-{"kind":"llm_call_end","agent_id":"planner","call_id":"tp-llm-001","parent_call_id":"tp-exec-001","run_id":"r1","status":"success","timestamp":1716200003.5,"latency_ms":1500,"response":{"id":"resp-abc123","model":"gemini-2.5-flash","choices":[{"message":{"role":"assistant","content":"Delegating to itinerary_agent."},"finish_reason":"stop"}],"usage":{"prompt_tokens":80,"completion_tokens":18,"total_tokens":98}}}
+{"kind":"llm_call_end","agent_id":"planner","call_id":"tp-llm-001","parent_call_id":"tp-exec-001","run_id":"r1","status":"success","timestamp":1716200003.5,"latency_ms":1500,"output":"Delegating to itinerary_agent.","finish_reason":"stop","tokens_used":{"prompt_tokens":80,"completion_tokens":18,"total_tokens":98}}
 ```
 
 ### 6.5 `tool_call_start` / `network_call_start`
@@ -478,12 +481,13 @@ call_id tp-tc-007: mixed interval bases ['llm_call', 'tool_call']
 
 ## 8. Session ID convention
 
-The normalizer builds one `Session` node per distinct `run_id`; the event field `session_id` is not read by the graph builder. Session identity comes from the `run_id` (the one passed to `run_normalize` / `--run-id`, which overrides the value in the events):
+The normalizer builds one `Session` node per distinct `run_id`. Session identity comes from the `run_id` (the one passed to `run_normalize` / `--run-id`, which overrides the value in the events). The last row applies when the `run_id` carries no session of its own: the events' own `session_id` (the runtime writes one on every event), if no other run shares it, is the Session id as is, and the first `app_name` the events carry is `Session.appName` when `run_id` gives none. The OTel path reads the same two fields, so both paths name the session alike. `--no-split-session-id` turns the events' `session_id` off too.
 
 | `run_id` shape | Session id | `Session.appName` |
 |----------------|------------|-------------------|
 | `<appName>_<uuid>` (and `split_session_id=True`, the default) | the `<uuid>` part | `<appName>` |
 | contains `/` (for example `trip-planner/demo/baseline/item1/r1`; with `split_session_id=True`) | the whole `run_id` | text before the first `/` |
+| anything else, and the events carry a `session_id` | that `session_id` | the events' `app_name`, else `""` unless `--app-name` is given |
 | anything else | `session-<run_id>` | `""` unless `--app-name` is given |
 
 A hierarchical identifier of the form `{app}/{experiment}/{scenario}/{item}/{run}` (following the Experiment / Scenario / Item / Run levels) is therefore a convenient `run_id`: it becomes the Session id and its first segment becomes `appName`. The format is a convention, not validated.

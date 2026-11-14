@@ -25,6 +25,28 @@ class ExchangeSnapshot:
     note: str = ""
 
 
+def tool_def_names(tools: list[Any] | None) -> list[str]:
+    """Names of the tools offered to the model, in order.
+
+    Accepts OpenAI tool definitions (``{"function": {"name": ...}}``), flat
+    ``{"name": ...}`` dicts, and plain strings. Entries without a name are
+    skipped. Shared by the live engine (``EngineIoReturn.offered_tools``) and
+    the driver (``llm_call_start.tools``) so both report the same list.
+    """
+    names: list[str] = []
+    for tool in tools or []:
+        if isinstance(tool, str):
+            name = tool
+        elif isinstance(tool, dict):
+            fn = tool.get("function")
+            name = (fn.get("name") if isinstance(fn, dict) else None) or tool.get("name")
+        else:
+            continue
+        if name:
+            names.append(str(name))
+    return names
+
+
 def format_exchange_snapshot(snap: ExchangeSnapshot) -> str:
     """Pretty-print an ExchangeSnapshot. Last-step view, not interchange."""
     if snap.messages:

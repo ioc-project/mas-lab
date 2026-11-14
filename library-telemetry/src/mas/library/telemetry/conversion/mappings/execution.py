@@ -14,7 +14,18 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from mas.library.telemetry.conversion.mappings.base import SpanEmitter, register
+from mas.library.telemetry.conversion.tool_calls import tool_calls_text
 from mas.library.telemetry.conversion.tool_name import resolve_tool_name
+
+
+def _number(value: Any, cast: Any) -> Any:
+    """``value`` as ``cast`` (int/float), or None when it is unset or not a number."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return cast(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ── LLM calls ────────────────────────────────────────────────────────────────
@@ -34,13 +45,13 @@ def h_llm_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         or "",
         "mas.llm.messages": conv.enc(ev.get("messages")),
     }
-    if ev.get("temperature") is not None:
-        attrs["mas.llm.temperature"] = float(ev["temperature"])
-    if ev.get("max_tokens") is not None:
-        attrs["mas.llm.max_tokens"] = int(ev["max_tokens"])
-    conv.open_span(
-        call_id, "LLMCall", attrs, ev.get("parent_call_id"), start_ns=conv.ts_ns(ev)
-    )
+    if (temperature := _number(ev.get("temperature"), float)) is not None:
+        attrs["mas.llm.temperature"] = temperature
+    if (max_tokens := _number(ev.get("max_tokens"), int)) is not None:
+        attrs["mas.llm.max_tokens"] = max_tokens
+    if ev.get("tools") is not None:
+        attrs["mas.llm.tools"] = conv.enc(ev.get("tools"))
+    conv.open_span(call_id, "LLMCall", attrs, ev.get("parent_call_id"), start_ns=conv.ts_ns(ev))
 
 
 @register("llm_call_end")
@@ -58,12 +69,18 @@ def h_llm_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         thinking = ""
     if not completion:
         completion = ev.get("output", "")
+    tool_text = tool_calls_text(ev.get("tool_calls"))
+    if tool_text:
+        completion = f"{completion}\n{tool_text}".strip() if completion else tool_text
     extra: Dict[str, Any] = {
         "mas.llm.finish_reason": ev.get("finish_reason") or "",
         "mas.llm.response": str(completion),
     }
     if thinking:
         extra["mas.llm.thinking"] = str(thinking)
+    # A cap on the return is the one actually sent, when it differs from the one asked for on start.
+    if (sent_max_tokens := _number(ev.get("max_tokens"), int)) is not None:
+        extra["mas.llm.max_tokens"] = sent_max_tokens
     if isinstance(tokens, dict):
         extra["metrics.token.input"] = tokens.get("prompt_tokens")
         extra["metrics.token.output"] = tokens.get("completion_tokens")
@@ -83,7 +100,7 @@ def h_llm_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         if hasattr(conv, "_orphan_call_end_total"):
             conv._orphan_call_end_total += 1
         return
-    conv.close_span(call_id, extra, status="success", end_ns=conv.ts_ns(ev))
+    conv.close_span(call_id, extra, status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
 
 
 # ── Tool calls ───────────────────────────────────────────────────────────────
@@ -106,9 +123,7 @@ def h_tool_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     }
     if ev.get("barrier_id"):
         attrs["mas.tool.barrier_id"] = ev["barrier_id"]
-    conv.open_span(
-        call_id, "ToolCall", attrs, ev.get("parent_call_id"), start_ns=conv.ts_ns(ev)
-    )
+    conv.open_span(call_id, "ToolCall", attrs, ev.get("parent_call_id"), start_ns=conv.ts_ns(ev))
 
 
 @register("tool_call_end")
@@ -154,9 +169,7 @@ def h_processing_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 
 @register("processing_call_end")
 def h_processing_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.close_span(
-        conv.span_key(ev), status=ev.get("status", "success"), end_ns=conv.ts_ns(ev)
-    )
+    conv.close_span(conv.span_key(ev), status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
 
 
 # ── Skill executions ─────────────────────────────────────────────────────────
@@ -314,9 +327,7 @@ def h_contract_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 def h_contract_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     if getattr(conv, "_converter_profile", "") == "observe_sdk":
         return
-    conv.close_span(
-        conv.span_key(ev), status=ev.get("status", "success"), end_ns=conv.ts_ns(ev)
-    )
+    conv.close_span(conv.span_key(ev), status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
 
 
 @register(
@@ -344,8 +355,6 @@ def h_execution_annotation(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 def h_execution_annotation_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     call_id = ev.get("call_id")
     if conv.is_open(call_id):
-        conv.close_span(
-            call_id, status=ev.get("status", "success"), end_ns=conv.ts_ns(ev)
-        )
+        conv.close_span(call_id, status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
         return
     h_execution_annotation(conv, ev)

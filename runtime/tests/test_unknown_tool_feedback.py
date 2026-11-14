@@ -51,13 +51,18 @@ def test_context_assembled_records_offered_tool_names() -> None:
     assert assembled[-1].payload["tools"] == ["get_logs", "get_metrics"]
     assert assembled[-1].payload["agent_id"] == "telemetry"
 
+    obs.record_engine_io(
+        correlation_id=6,
+        op="LLM_CALL",
+        tools=["get_logs", "get_metrics"],
+    )
     obs.record_engine_io_return(
         correlation_id=6,
         op="LLM_CALL",
         text="",
         next_step="TOOL_CALL",
         response_kind="MODEL_TEXT",
-        tools=["get_logs", "get_metrics"],
+        tool_calls=[{"toolName": "get_deployments", "arguments": {}}],
     )
     from mas.library.standard.lib.observability.native.transform import (
         NativeObservabilityTransform,
@@ -73,6 +78,9 @@ def test_context_assembled_records_offered_tool_names() -> None:
         native.extend(transform.transform(payload, ctx=tctx))
 
     context_events = [row for row in native if row["kind"] == "context_assembled"]
+    llm_starts = [row for row in native if row["kind"] == "llm_call_start"]
     llm_ends = [row for row in native if row["kind"] == "llm_call_end"]
     assert context_events[-1]["tools"] == ["get_logs", "get_metrics"]
-    assert llm_ends[-1]["tools"] == ["get_logs", "get_metrics"]
+    assert llm_starts[-1]["tools"] == ["get_logs", "get_metrics"]
+    assert "tools" not in llm_ends[-1]
+    assert llm_ends[-1]["tool_calls"] == [{"toolName": "get_deployments", "arguments": {}}]

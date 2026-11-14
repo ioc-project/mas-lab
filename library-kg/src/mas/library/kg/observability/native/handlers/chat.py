@@ -52,21 +52,62 @@ def _format_messages(messages: Any) -> str:
     return "\n\n".join(parts)
 
 
+def _number(value: Any, cast: Any) -> Any:
+    """``value`` as ``cast`` (int/float), or None when it is unset or not a number."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return cast(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _tool_names(tools: List[Any]) -> List[str]:
+    """Offered tools as names: the runtime writes names; OpenAI tool dicts are reduced to theirs."""
+    names: List[str] = []
+    for tool in tools:
+        if isinstance(tool, dict):
+            fn = tool.get("function") if isinstance(tool.get("function"), dict) else {}
+            tool = fn.get("name") or tool.get("name") or ""
+        if tool:
+            names.append(str(tool))
+    return names
+
+
+def _parse_tool_call(tc: Dict[str, Any]) -> Dict[str, str]:
+    """One tool call in any accepted shape as ``{id, name, arguments}``.
+
+    Accepts OpenAI (``function.name`` / ``function.arguments``), the runtime's
+    ``{toolName, arguments}`` and flat ``{name, arguments}``. ``arguments`` is
+    always a JSON string.
+    """
+    fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+    args = fn.get("arguments") or tc.get("arguments") or "{}"
+    if not isinstance(args, str):
+        args = json.dumps(args, ensure_ascii=False, default=str)
+    return {
+        "id": str(tc.get("id") or tc.get("tool_call_id") or ""),
+        "name": str(fn.get("name") or tc.get("toolName") or tc.get("name") or "tool"),
+        "arguments": args,
+    }
+
+
 def _format_tool_calls(tool_calls: Any) -> str:
-    """Render a list of OpenAI tool-call dicts as a compact text block."""
+    """Render tool calls as ``→ name(args)`` lines, args cut at 300 characters.
+
+    The OTel converter renders the same text (``tool_calls_text``), so a
+    tool-use turn reads identically in both paths.
+    """
     if not tool_calls or not isinstance(tool_calls, list):
         return ""
-    lines: List[str] = []
-    for tc in tool_calls:
-        if not isinstance(tc, dict):
-            continue
-        fn = tc.get("function") or {}
-        name = fn.get("name") or tc.get("name") or "tool"
-        args = fn.get("arguments") or tc.get("arguments") or "{}"
-        if not isinstance(args, str):
-            args = json.dumps(args, ensure_ascii=False)
-        lines.append(f"→ {name}({args[:300]})")
-    return "\n".join(lines)
+    parsed = (_parse_tool_call(tc) for tc in tool_calls if isinstance(tc, dict))
+    return "\n".join(f"→ {call['name']}({call['arguments'][:300]})" for call in parsed)
+
+
+def _text_with_tool_calls(content: str, tool_calls: Any) -> str:
+    """``content`` followed by the rendered tool calls, if any."""
+    tc_text = _format_tool_calls(tool_calls)
+    return (content + "\n" + tc_text).strip() if tc_text else content
 
 
 def _extract_completion(resp: Dict[str, Any]) -> str:
@@ -81,50 +122,24 @@ def _extract_completion(resp: Dict[str, Any]) -> str:
     choices = resp.get("choices") or []
     if choices and isinstance(choices, list):
         msg = choices[0].get("message") or {}
-        content = str(msg.get("content") or "")
-        tool_calls = msg.get("tool_calls") or []
-        if tool_calls:
-            tc_text = _format_tool_calls(tool_calls)
-            return (content + "\n" + tc_text).strip()
-        return content
-    # Flat runtime dict
+        return _text_with_tool_calls(str(msg.get("content") or ""), msg.get("tool_calls"))
     content = str(resp.get("content") or resp.get("text") or "")
-    tool_calls = resp.get("tool_calls") or []
-    if tool_calls:
-        tc_text = _format_tool_calls(tool_calls)
-        return (content + "\n" + tc_text).strip()
-    return content
+    return _text_with_tool_calls(content, resp.get("tool_calls"))
 
 
 def _extract_tool_calls_structured(resp: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Extract structured tool calls from OpenAI-style response payloads."""
-    tool_calls: Any = []
     choices = resp.get("choices") or []
     if choices and isinstance(choices, list):
-        msg = choices[0].get("message") or {}
-        tool_calls = msg.get("tool_calls") or []
+        tool_calls = (choices[0].get("message") or {}).get("tool_calls") or []
     else:
         tool_calls = resp.get("tool_calls") or []
-
-    out: List[Dict[str, Any]] = []
     if not isinstance(tool_calls, list):
-        return out
-    for tc in tool_calls:
-        if not isinstance(tc, dict):
-            continue
-        fn = tc.get("function") or {}
-        name = str(fn.get("name") or tc.get("name") or "tool")
-        args = fn.get("arguments") or tc.get("arguments") or "{}"
-        if not isinstance(args, str):
-            args = json.dumps(args, ensure_ascii=False)
-        out.append(
-            {
-                "toolCallId": str(tc.get("id") or tc.get("tool_call_id") or ""),
-                "toolName": name,
-                "arguments": args,
-            }
-        )
-    return out
+        return []
+    parsed = (_parse_tool_call(tc) for tc in tool_calls if isinstance(tc, dict))
+    return [
+        {"toolCallId": c["id"], "toolName": c["name"], "arguments": c["arguments"]} for c in parsed
+    ]
 
 
 def _extract_finish_reason(resp: Dict[str, Any]) -> str:
@@ -162,6 +177,10 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         else:
             node.setdefault("modelName", model)
             node.setdefault("provider", "unknown")
+        # Same name the OTel normalizer gives an LLMCall, so the two paths pair
+        # calls by name: ``LLM call (<provider>/<model>) <id>``.
+        label = f"{node['provider']}/{node['modelName'] or 'llm'}"
+        node.setdefault("name", f"LLM call ({label}) {event.get('call_id') or ''}".rstrip())
         # Prefer explicit input/prompt field; fall back to formatting the
         # messages list as a readable conversation (no artificial truncation
         # — callers truncate when writing to State.content).
@@ -178,12 +197,18 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         node.setdefault("cacheReadTokenCount", 0)
         node.setdefault("finishReason", "")
         node.setdefault("responseId", "")
-        node.setdefault("temperature", 0.0)
+        temperature = _number(event.get("temperature"), float)
+        node.setdefault("temperature", 0.0 if temperature is None else temperature)
+        max_tokens = _number(event.get("max_tokens"), int)
+        if max_tokens is not None:
+            node.setdefault("maxTokens", max_tokens)
+        if isinstance(event.get("tools"), list):
+            node.setdefault("offeredTools", _tool_names(event["tools"]))
         return new_nodes
 
-    # llm_call_end — runtime traces put usage/model/finish_reason at the
-    # top level (`tokens_used`, `model`, `finish_reason`); OpenAI-shaped
-    # `response` is also accepted.
+    # llm_call_end — usage/finish_reason/tool_calls at the top level;
+    # OpenAI-shaped `response` is also accepted. Request fields (`model`,
+    # messages, tools) live on start and are not read here.
     resp: Dict[str, Any] = event.get("response") or {}
     if not isinstance(resp, dict):
         resp = {}
@@ -194,13 +219,23 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         usage.update(top_usage)
     if resp.get("usage") and isinstance(resp["usage"], dict):
         usage.update({k: v for k, v in resp["usage"].items() if v not in (None, "")})
+    event_tool_calls = event.get("tool_calls")
     if resp:
         node.setdefault("toolCalls", _extract_tool_calls_structured(resp))
         node.setdefault("completion", _extract_completion(resp))
         node.setdefault("responseId", resp.get("id", "") or "")
-        node.setdefault("temperature", event.get("temperature") or 0.0)
-    elif flat_out:
-        node.setdefault("completion", flat_out)
+    if event_tool_calls:
+        # The runtime's own shape wins over an OpenAI-shaped ``response`` on the same event;
+        # the OTel converter does the same: text first, then the rendered calls.
+        node["toolCalls"] = _extract_tool_calls_structured({"tool_calls": event_tool_calls})
+        base_text = str(resp.get("content") or flat_out)
+        node["completion"] = _text_with_tool_calls(base_text, event_tool_calls)
+    if not node.get("completion") and flat_out:
+        node["completion"] = flat_out
+    # A cap on the return is the one actually sent, when it differs from the one asked for on start.
+    sent_max_tokens = _number(event.get("max_tokens"), int)
+    if sent_max_tokens is not None:
+        node["maxTokens"] = sent_max_tokens
     if usage:
         node["promptTokenCount"] = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
         node["completionTokenCount"] = (
@@ -208,15 +243,6 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         )
         node["totalTokenCount"] = usage.get("total_tokens") or 0
         node.setdefault("cacheReadTokenCount", usage.get("cache_read_input_tokens") or 0)
-    model = str(event.get("model") or resp.get("model") or node.get("modelName") or "")
-    if model:
-        if "/" in model:
-            provider, name = model.split("/", 1)
-            node["provider"] = provider or node.get("provider") or "unknown"
-            node["modelName"] = name or model
-        else:
-            node.setdefault("provider", node.get("provider") or "unknown")
-            node["modelName"] = model
     finish = str(event.get("finish_reason") or _extract_finish_reason(resp) or "")
     if finish:
         node["finishReason"] = finish

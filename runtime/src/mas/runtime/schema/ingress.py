@@ -93,12 +93,12 @@ class EngineIoReturn(BaseModel):
     # Names sent as the OpenAI ``tools`` array for this LLM call.
     # None means the engine did not record them (budget stop, non-LLM return).
     offered_tools: list[str] | None = None
-    # Resolved LiteLLM id actually dispatched. Empty for non-LLM returns.
-    model: str = ""
     failure_class: str = ""
     failure_code: str = ""
     retry_attempts: int = 0
-    # Output-token budget sent on the final attempt; None when no limit was sent.
+    # Output-token cap of the final attempt (after fitting to the prompt and any
+    # truncation escalation); None when no limit was sent. Reported on
+    # llm_call_end only when it differs from the cap stamped on llm_call_start.
     max_tokens: int | None = None
     truncation_retries: int = 0
     # Response-cache provenance is separate from provider-reported token usage.

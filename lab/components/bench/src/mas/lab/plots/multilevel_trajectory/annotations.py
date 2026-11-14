@@ -1,9 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+"""Annotation and context-provenance hover enrichment."""
 
 from __future__ import annotations
-
-"""Annotation and context-provenance hover enrichment."""
 
 import re
 from collections import defaultdict
@@ -22,11 +21,11 @@ from mas.lab.plots.multilevel_trajectory.constants import _STAGGER_DUR, _TS_TOL
 # authoritative output takes precedence over both call-layer and call_end
 # values sharing the same ts.
 _HOVER_PRIORITY: dict[str, int] = {
-    "session":   0,
-    "mas":       1,
-    "agent":     2,
-    "call":      3,
-    "call_end":  4,
+    "session": 0,
+    "mas": 1,
+    "agent": 2,
+    "call": 3,
+    "call_end": 4,
     "agent_end": 5,
 }
 
@@ -35,29 +34,31 @@ _HOVER_PRIORITY: dict[str, int] = {
 # Annotation collection — L2/L3 XAI context attached to hover text
 # ---------------------------------------------------------------------------
 
-_ANNOTATION_KINDS: frozenset[str] = frozenset({
-    "routing",
-    "routing_result",
-    "context_assembled",
-    "state_update_start",
-    "state_update_end",
-    "agent_communication_start",
-    "agent_communication_end",
-})
+_ANNOTATION_KINDS: frozenset[str] = frozenset(
+    {
+        "routing",
+        "routing_result",
+        "context_assembled",
+        "state_update_start",
+        "state_update_end",
+        "agent_communication_start",
+        "agent_communication_end",
+    }
+)
 
 _ANNOTATION_LABEL: dict[str, str] = {
-    "routing":                        "→ routing",
-    "routing_result":                 "→ routed",
-    "context_assembled":              "ctx",
-    "state_update_start":             "state↑",
-    "state_update_end":               "state↓",
-    "agent_communication_start":      "agent-remote↑",
-    "agent_communication_end":        "agent-remote↓",
+    "routing": "→ routing",
+    "routing_result": "→ routed",
+    "context_assembled": "ctx",
+    "state_update_start": "state↑",
+    "state_update_end": "state↓",
+    "agent_communication_start": "agent-remote↑",
+    "agent_communication_end": "agent-remote↓",
 }
 
 
 def _collect_annotations(
-    events:  list[dict],
+    events: list[dict],
     records: list[dict],
 ) -> dict[str, list[str]]:
     """Return ``call_id \u2192 [annotation_summary_line, ...]`` for L2/L3 XAI hover enrichment.
@@ -107,9 +108,9 @@ def _collect_annotations(
                 parts.append(str(val))
                 break
         if kind == "context_assembled":
-            segs   = ann.get("segments")
+            segs = ann.get("segments")
             tokens = ann.get("total_tokens")
-            if segs   is not None:
+            if segs is not None:
                 parts.append(f"{segs} seg")
             if tokens is not None:
                 parts.append(f"{tokens} tok")
@@ -128,15 +129,15 @@ def _collect_annotations(
 # ── Mechanism colour badges ──────────────────────────────────────────────
 
 _MECH_BADGE: dict[str, str] = {
-    "inject":    "🔵",
-    "rag":       "🟣",
+    "inject": "🔵",
+    "rag": "🟣",
     "tool_call": "🟠",
 }
 
 _CAUSE_BADGE_MAP: dict[str, str] = {
     "deterministic": "⚙",
-    "stochastic":    "🎲",
-    "explicit":      "👤",
+    "stochastic": "🎲",
+    "explicit": "👤",
 }
 
 
@@ -168,33 +169,66 @@ _SECTION_ORDINAL_RE = re.compile(r"assembled/(\d+)/")
 
 
 _ROLE_SEMANTICS = {
-    "system": dict(cause="system prompt", causeType="system",
-                   trigger="system_initialization", actor="system",
-                   via="system_configuration", cause_detail="system prompt"),
-    "user": dict(cause="user turn", causeType="user_provided",
-                 trigger="user_input", actor="user",
-                 via="user_provided", cause_detail="user turn"),
-    "assistant": dict(cause="LLM response", causeType="llm_decision",
-                      trigger="llm_response", actor="llm",
-                      via="llm_generated", cause_detail="assistant turn"),
-    "tool": dict(cause="tool result", causeType="tool_result",
-                 trigger="tool_execution", actor="tool",
-                 via="tool_provided", cause_detail="tool execution result"),
+    "system": dict(
+        cause="system prompt",
+        causeType="system",
+        trigger="system_initialization",
+        actor="system",
+        via="system_configuration",
+        cause_detail="system prompt",
+    ),
+    "user": dict(
+        cause="user turn",
+        causeType="user_provided",
+        trigger="user_input",
+        actor="user",
+        via="user_provided",
+        cause_detail="user turn",
+    ),
+    "assistant": dict(
+        cause="LLM response",
+        causeType="llm_decision",
+        trigger="llm_response",
+        actor="llm",
+        via="llm_generated",
+        cause_detail="assistant turn",
+    ),
+    "tool": dict(
+        cause="tool result",
+        causeType="tool_result",
+        trigger="tool_execution",
+        actor="tool",
+        via="tool_provided",
+        cause_detail="tool execution result",
+    ),
 }
 
 _ROLE_SEMANTICS_ASSISTANT_TOOL_CALL = dict(
-    cause="LLM tool-call decision", causeType="llm_decision",
-    trigger="llm_tool_call", actor="llm",
-    via="llm_generated", cause_detail="LLM tool-call decision")
+    cause="LLM tool-call decision",
+    causeType="llm_decision",
+    trigger="llm_tool_call",
+    actor="llm",
+    via="llm_generated",
+    cause_detail="LLM tool-call decision",
+)
 
 _ROLE_SEMANTICS_TOOL_DELEGATION = dict(
-    cause="delegation result", causeType="delegated",
-    trigger="delegation_result", actor="delegated_agent",
-    via="delegation", cause_detail="delegation result")
+    cause="delegation result",
+    causeType="delegated",
+    trigger="delegation_result",
+    actor="delegated_agent",
+    via="delegation",
+    cause_detail="delegation result",
+)
 
-_UNKNOWN_SEMANTICS = dict(cause="?", causeType="unknown",
-                          trigger="context_addition", actor="?",
-                          via="injected", cause_detail="context addition")
+_UNKNOWN_SEMANTICS = dict(
+    cause="?",
+    causeType="unknown",
+    trigger="context_addition",
+    actor="?",
+    via="injected",
+    cause_detail="context addition",
+)
 
 
 def _detect_delegation(tool_call_id: str, content: str) -> bool:
@@ -202,9 +236,7 @@ def _detect_delegation(tool_call_id: str, content: str) -> bool:
     return "delegate" in content.lower() or "delegat" in tool_call_id.lower()
 
 
-def _derive_context_semantics(
-    role: str, source: str = "", *, tool_call_id: str = "", content: str = ""
-) -> dict:
+def _derive_context_semantics(role: str, source: str = "", *, tool_call_id: str = "", content: str = "") -> dict:
     """Derive semantic fields from role, source, tool_call_id, and content.
 
     This implements the normalized data model where events.jsonl carries only
@@ -239,7 +271,7 @@ def _derive_context_semantics(
 
 
 def _collect_context_provenance(
-    events:  list[dict],
+    events: list[dict],
     records: list[dict],
 ) -> dict[str, list[dict]]:
     """Return ``call_id → [context_part_event, …]`` for context provenance hover enrichment.
@@ -272,9 +304,7 @@ def _collect_context_provenance(
     if not cpr_events:
         return {}
 
-    llm_records_by_id = {
-        r["call_id"]: r for r in records if r.get("call_type") == "LLMCall"
-    }
+    llm_records_by_id = {r["call_id"]: r for r in records if r.get("call_type") == "LLMCall"}
 
     ca_messages_by_call: dict[str, list] = {}
     for _e in events:
@@ -305,7 +335,7 @@ def _collect_context_provenance(
 
 
 def _collect_llm_tool_decisions(
-    events:  list[dict],
+    events: list[dict],
     records: list[dict],
 ) -> dict[str, str]:
     """Return ``call_id → decision text`` for LLMCall records whose real
@@ -315,8 +345,10 @@ def _collect_llm_tool_decisions(
     ended by deciding to call a tool (single or parallel/delegation) — this
     is not missing telemetry, the native trace already says so explicitly
     via ``llm_call_end.next_step`` (``"TOOL_CALL"`` / ``"PARALLEL_TOOL_CALLS"``),
-    a field dag.py never previously read. The actual decision (tool name +
-    arguments) is not repeated on llm_call_end itself; it is the very next
+    a field dag.py never previously read. Current traces also carry the
+    decision as ``llm_call_end.tool_calls``; this reconstruction is what reads
+    traces written before that field. There the decision (tool name +
+    arguments) is not repeated on llm_call_end; it is the very next
     record sharing this LLM call's own ``parent_call_id`` (its agent's
     execution scope) — verified against a real production trace to hold for
     every TOOL_CALL/PARALLEL_TOOL_CALLS occurrence, including delegation
@@ -329,7 +361,8 @@ def _collect_llm_tool_decisions(
     """
     result: dict[str, str] = {}
     needs_decision = [
-        r for r in records
+        r
+        for r in records
         if r.get("call_type") == "LLMCall"
         and not str(r.get("output") or "").strip()
         and r.get("next_step") in ("TOOL_CALL", "PARALLEL_TOOL_CALLS")
@@ -440,9 +473,7 @@ def _format_context_assembly_diff(messages: list[dict]) -> str:
         role = str(message.get("role") or "?").strip().lower()
         content = message.get("content") or ""
         if isinstance(content, list):
-            content = " ".join(
-                part.get("text", "") for part in content if isinstance(part, dict)
-            )
+            content = " ".join(part.get("text", "") for part in content if isinstance(part, dict))
         content = str(content).strip()
         if not content:
             continue
@@ -509,15 +540,15 @@ def _stagger_coinc_processing_calls(seq: list[dict]) -> list[dict]:
             and not crec.get("_pg_fork_marker")
             and not crec.get("_pg_join_marker")
         ):
-            ts    = crec["start_ts"]
+            ts = crec["start_ts"]
             group: list[dict] = [crec]
-            j     = i + 1
+            j = i + 1
             while j < len(seq):
                 nxt = seq[j]
                 if (
                     nxt.get("call_type") == "ProcessingCall"
                     and abs(nxt["start_ts"] - ts) <= _TS_TOL
-                    and abs(nxt["end_ts"]   - ts) <= _TS_TOL
+                    and abs(nxt["end_ts"] - ts) <= _TS_TOL
                     and not nxt.get("_pg_fork_marker")
                     and not nxt.get("_pg_join_marker")
                 ):
@@ -538,7 +569,7 @@ def _stagger_coinc_processing_calls(seq: list[dict]) -> list[dict]:
             for idx, rec in enumerate(group):
                 staggered = dict(rec)
                 staggered["start_ts"] = ts + idx * _STAGGER_DUR
-                staggered["end_ts"]   = ts + (idx + 1) * _STAGGER_DUR
+                staggered["end_ts"] = ts + (idx + 1) * _STAGGER_DUR
                 result.append(staggered)
             # Snap the next record's start_ts forward if it falls inside the
             # staggered group.  Only advance — never move it backward — and

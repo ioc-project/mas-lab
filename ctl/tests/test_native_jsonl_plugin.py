@@ -79,15 +79,53 @@ def test_native_jsonl_plugin_engine_io_llm(tmp_path) -> None:
             run_id="run-test",
             correlation_id=5,
             boundary_kind="engine.io",
-            attributes={"op": "LLM_CALL"},
+            attributes={
+                "op": "LLM_CALL",
+                "model": "openai/gpt-4o",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": ["search"],
+                "max_tokens": 128,
+                "temperature": 0.1,
+            },
         )
     )
-    assert any("llm_call" in line for line in events_path.read_text().splitlines())
-    event = json.loads(events_path.read_text().strip().splitlines()[0])
-    assert event["kind"] == "llm_call_start"
-    assert event["block"] == "execution"
-    assert event["summand"] == "model"
-    assert event["mealy_symbol"] == "LLM_CALL"
+    plugin.on_transition(
+        TransitionEvent(
+            contract_id="model",
+            mealy_symbol="LLM_CALL",
+            phase="end",
+            agent_id="planner",
+            run_id="run-test",
+            correlation_id=5,
+            boundary_kind="engine.io.return",
+            attributes={
+                "op": "LLM_CALL",
+                "text": "ok",
+                "next_step": "STOP",
+                "finish_reason": "stop",
+                "model": "should-not-copy",
+                "tools": ["search"],
+                "max_tokens": 64,
+                "tool_calls": [{"toolName": "search", "arguments": {"q": "x"}}],
+            },
+        )
+    )
+    lines = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+    start = next(e for e in lines if e["kind"] == "llm_call_start")
+    end = next(e for e in lines if e["kind"] == "llm_call_end")
+    assert start["model"] == "openai/gpt-4o"
+    assert start["messages"] == [{"role": "user", "content": "hi"}]
+    assert start["tools"] == ["search"]
+    assert start["max_tokens"] == 128
+    assert start["temperature"] == 0.1
+    assert start["block"] == "execution"
+    assert start["summand"] == "model"
+    assert start["mealy_symbol"] == "LLM_CALL"
+    assert "model" not in end
+    assert "tools" not in end
+    assert end["max_tokens"] == 64  # a different cap than the 128 asked for on start
+    assert end["output"] == "ok"
+    assert end["tool_calls"] == [{"toolName": "search", "arguments": {"q": "x"}}]
 
 
 def test_native_jsonl_plugin_contract_call_alone_produces_no_llm_call(tmp_path) -> None:

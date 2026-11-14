@@ -11,6 +11,7 @@ from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.envelope import (
     EnvelopeContext,
     GuardedProductComposer,
+    LlmCallRequest,
     close_envelope,
     contract_kind_for_op,
     execute_contract_call,
@@ -25,7 +26,7 @@ from mas.runtime.schema.envelope import (
     resolve_egress_symbols,
     resolve_ingress_symbols,
 )
-from mas.runtime.schema.ingress import EngineIoReturn
+from mas.runtime.schema.ingress import EngineIoReturn, ToolCallSpec
 from mas.runtime.schema.observability import ObsEventKind
 
 
@@ -88,6 +89,123 @@ def test_governance_decisions_before_and_after() -> None:
     assert any(p.get("checkpoint") == "after" for p in egress)
     assert any(p.get("checkpoint") == "before" for p in ingress)
     assert any(p.get("checkpoint") == "after" for p in ingress)
+
+
+def test_llm_contract_execute_stamps_request_on_engine_io() -> None:
+    ctx = EnvelopeContext(
+        q=QProduct(),
+        correlation_id=7,
+        contract=contract_kind_for_op("LLM_CALL"),
+        scheduled_op="LLM_CALL",
+        observability=ObservabilityOperator(),
+        config=KernelConfig(hitl_on_tool=False),
+        llm_request=LlmCallRequest(
+            model="openai/gpt-4o",
+            messages=[{"role": "user", "content": "hi"}],
+            offered_tools=["search"],
+            max_tokens=64,
+            temperature=0.3,
+        ),
+    )
+    from mas.runtime.kernel.envelope import run_contract_execute_obs
+
+    run_contract_execute_obs(ctx)
+    ios = [e for e in ctx.observability.events if e.kind == ObsEventKind.ENGINE_IO]  # type: ignore[union-attr]
+    assert ios
+    payload = ios[-1].payload
+    assert payload.get("model") == "openai/gpt-4o"
+    assert payload.get("messages") == [{"role": "user", "content": "hi"}]
+    assert payload.get("tools") == ["search"]
+    assert payload.get("max_tokens") == 64
+    assert payload.get("temperature") == 0.3
+
+
+def test_llm_post_execute_does_not_copy_request_onto_return() -> None:
+    ctx = EnvelopeContext(
+        q=QProduct(),
+        correlation_id=7,
+        contract=contract_kind_for_op("LLM_CALL"),
+        scheduled_op="LLM_CALL",
+        observability=ObservabilityOperator(),
+        config=KernelConfig(hitl_on_tool=False),
+        llm_request=LlmCallRequest(model="openai/gpt-4o", offered_tools=["search"]),
+    )
+    ctx.ingress_event = EngineIoReturn(
+        correlation_id=7,
+        response_kind="MODEL_TEXT",
+        next_step="TOOL_CALL",
+        text="",
+        tool_name="search",
+        tool_arguments={"q": "x"},
+        finish_reason="tool_calls",
+        offered_tools=["search"],
+        max_tokens=128,
+        usage={"total_tokens": 9},
+    )
+    from mas.runtime.kernel.envelope import run_ingress_validate_envelope
+
+    run_ingress_validate_envelope(ctx)
+    returns = [e for e in ctx.observability.events if e.kind == ObsEventKind.ENGINE_IO_RETURN]  # type: ignore[union-attr]
+    assert returns
+    payload = returns[-1].payload
+    assert "model" not in payload
+    assert "tools" not in payload
+    assert payload.get("max_tokens") == 128  # no cap was stamped on a start: the cap sent is reported
+    assert payload.get("tool_calls") == [{"toolName": "search", "arguments": {"q": "x"}}]
+    assert payload.get("finish_reason") == "tool_calls"
+    assert payload.get("usage", {}).get("total_tokens") == 9
+
+
+def test_return_drops_the_cap_when_it_is_the_one_stamped_on_start() -> None:
+    from mas.runtime.kernel.envelope import run_ingress_validate_envelope
+
+    obs = ObservabilityOperator()
+    obs.record_engine_io(correlation_id=7, op="LLM_CALL", max_tokens=128)
+    ctx = EnvelopeContext(
+        q=QProduct(),
+        correlation_id=7,
+        contract=contract_kind_for_op("LLM_CALL"),
+        scheduled_op="LLM_CALL",
+        observability=obs,
+        config=KernelConfig(hitl_on_tool=False),
+    )
+    ctx.ingress_event = EngineIoReturn(
+        correlation_id=7, response_kind="MODEL_TEXT", next_step="STOP", text="ok", max_tokens=128
+    )
+    run_ingress_validate_envelope(ctx)
+    (ret,) = [e for e in obs.events if e.kind == ObsEventKind.ENGINE_IO_RETURN]
+    assert "max_tokens" not in ret.payload
+    assert obs._requested_max_tokens == {}
+
+
+def test_llm_post_execute_emits_parallel_tool_calls() -> None:
+    ctx = EnvelopeContext(
+        q=QProduct(),
+        correlation_id=8,
+        contract=contract_kind_for_op("LLM_CALL"),
+        scheduled_op="LLM_CALL",
+        observability=ObservabilityOperator(),
+        config=KernelConfig(hitl_on_tool=False),
+    )
+    ctx.ingress_event = EngineIoReturn(
+        correlation_id=8,
+        response_kind="MODEL_TEXT",
+        next_step="PARALLEL_TOOL_CALLS",
+        text="",
+        finish_reason="tool_calls",
+        parallel_tools=(
+            ToolCallSpec(tool_name="alpha", tool_arguments={"n": 1}),
+            ToolCallSpec(tool_name="beta", tool_arguments={}),
+        ),
+    )
+    from mas.runtime.kernel.envelope import run_ingress_validate_envelope
+
+    run_ingress_validate_envelope(ctx)
+    returns = [e for e in ctx.observability.events if e.kind == ObsEventKind.ENGINE_IO_RETURN]  # type: ignore[union-attr]
+    assert returns[-1].payload.get("tool_calls") == [
+        {"toolName": "alpha", "arguments": {"n": 1}},
+        {"toolName": "beta", "arguments": {}},
+    ]
 
 
 def test_execute_contract_call_in_process() -> None:

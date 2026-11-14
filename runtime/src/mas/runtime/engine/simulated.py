@@ -34,10 +34,19 @@ class SimulatedEngine:
     llm_next_step: Callable[[int], str] | None = None
     llm_tool_intent: Callable[[int], tuple[str, dict]] | None = None
     stop_text: str | None = None
+    model: str = ""
+    llm_messages: list[dict] | None = None
+    llm_tools: list[dict] | None = None
+    max_tokens: int | None = None
+    temperature: float | None = None
 
     def exchange_snapshot(self, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot:
         if op == "LLM_CALL":
-            return ExchangeSnapshot(note=f"simulated:{self.sim_mode.value}")
+            return ExchangeSnapshot(
+                note=f"simulated:{self.sim_mode.value}",
+                messages=self.llm_messages,
+                tools=self.llm_tools,
+            )
         return ExchangeSnapshot()
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:

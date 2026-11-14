@@ -46,7 +46,7 @@ shapes:
     levels:
       - level: L3
         required: [model]
-        recommended: [messages, temperature, max_tokens]
+        recommended: [messages, temperature, max_tokens, tools]
 
   - kinds: [llm_call_end]
     levels:

@@ -107,12 +107,12 @@ class ObsEnvelopeMachine:
                     # see driver.py's _record_engine_return).
                     ret_record = getattr(obs, "record_engine_io_return", None)
                     if callable(ret_record):
-                        ret_record(
-                            correlation_id=ctx.correlation_id,
-                            op=ctx.scheduled_op,
-                            text=ev.text,
-                            next_step=ev.next_step,
-                            response_kind=ev.response_kind,
+                        ret_kwargs: dict[str, Any] = {
+                            "correlation_id": ctx.correlation_id,
+                            "op": ctx.scheduled_op,
+                            "text": ev.text,
+                            "next_step": ev.next_step,
+                            "response_kind": ev.response_kind,
                             # Without this, the native layer's resolve_tool_name
                             # falls back to the literal string "tool" (no
                             # tool_name in this payload at all), which never
@@ -123,27 +123,38 @@ class ObsEnvelopeMachine:
                             # branch actually firing. Same field CONTRACT_EXECUTE
                             # already passes to record_engine_io below for the
                             # matching start event.
-                            tool_name=ctx.tool_name,
-                            usage=ev.usage,
-                            finish_reason=ev.finish_reason,
-                            tools=getattr(ev, "offered_tools", None),
-                            model=getattr(ev, "model", "") or "",
-                            cache_status=getattr(ev, "cache_status", None),
-                            cache_layer=getattr(ev, "cache_layer", "") or "",
-                            cache_events=list(getattr(ev, "cache_events", []) or []),
-                            pricing=dict(getattr(ev, "pricing", {}) or {}),
-                        )
+                            "tool_name": ctx.tool_name,
+                            "usage": ev.usage,
+                            "finish_reason": ev.finish_reason,
+                            "cache_status": getattr(ev, "cache_status", None),
+                            "cache_layer": getattr(ev, "cache_layer", "") or "",
+                            "cache_events": list(getattr(ev, "cache_events", []) or []),
+                            "pricing": dict(getattr(ev, "pricing", {}) or {}),
+                        }
+                        if getattr(ev, "truncation_retries", 0):
+                            ret_kwargs["truncation_retries"] = ev.truncation_retries
+                        if ctx.scheduled_op == "LLM_CALL":
+                            tool_calls = _llm_return_tool_calls(ev)
+                            if tool_calls:
+                                ret_kwargs["tool_calls"] = tool_calls
+                            # The operator drops it when it equals the cap asked for on start.
+                            if getattr(ev, "max_tokens", None) is not None:
+                                ret_kwargs["max_tokens"] = ev.max_tokens
+                        ret_record(**ret_kwargs)
         elif symbol == EnvelopeSymbol.CONTRACT_EXECUTE:
             payload["tool_name"] = str(ctx.tool_name or ctx.scheduled_op or ctx.operation or "tool")
             payload["tool_arguments"] = dict(ctx.tool_arguments or {})
             io_record = getattr(obs, "record_engine_io", None)
             if callable(io_record):
+                request = ctx.llm_request if ctx.scheduled_op == "LLM_CALL" else None
+                extras = request.engine_io_fields() if request is not None else {}
                 io_record(
                     correlation_id=ctx.correlation_id,
                     op=ctx.scheduled_op,
                     destructive=ctx.destructive,
                     tool_name=ctx.tool_name,
                     tool_arguments=dict(ctx.tool_arguments or {}),
+                    **extras,
                 )
         record = getattr(obs, "record_envelope_activity", None)
         if callable(record):
@@ -156,3 +167,25 @@ class ObsEnvelopeMachine:
                 machine_id=self.machine_id,
                 payload=payload,
             )
+
+
+def _llm_return_tool_calls(ev: Any) -> list[dict[str, Any]] | None:
+    """Structured tool calls the model asked for. Request-side tools stay on start."""
+    if getattr(ev, "next_step", "") == "PARALLEL_TOOL_CALLS":
+        specs = list(getattr(ev, "parallel_tools", ()) or ())
+        return [
+            {
+                "toolName": str(getattr(spec, "tool_name", "") or ""),
+                "arguments": dict(getattr(spec, "tool_arguments", None) or {}),
+            }
+            for spec in specs
+        ] or None
+    name = str(getattr(ev, "tool_name", "") or "")
+    if name:
+        return [
+            {
+                "toolName": name,
+                "arguments": dict(getattr(ev, "tool_arguments", None) or {}),
+            }
+        ]
+    return None

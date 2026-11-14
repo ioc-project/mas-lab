@@ -349,6 +349,7 @@ def test_llm_call_end_reads_top_level_tokens_used(tmp_path: Path) -> None:
             "call_id": "llm1",
             "parent_call_id": "c1",
             "agent_id": "planner",
+            "model": "azure/gpt-4o-mini",
         },
         {
             "kind": "llm_call_end",
@@ -357,7 +358,6 @@ def test_llm_call_end_reads_top_level_tokens_used(tmp_path: Path) -> None:
             "call_id": "llm1",
             "parent_call_id": "c1",
             "agent_id": "planner",
-            "model": "azure/gpt-4o-mini",
             "finish_reason": "tool_calls",
             "tokens_used": {
                 "prompt_tokens": 535,
@@ -393,3 +393,54 @@ def test_llm_call_end_reads_top_level_tokens_used(tmp_path: Path) -> None:
     assert full_llm["modelName"] == "gpt-4o-mini"
     assert full_llm["provider"] == "azure"
     assert full_llm["callId"] == "llm1"
+
+
+def test_llm_call_start_model_is_preferred(tmp_path: Path) -> None:
+    events = [
+        {
+            "kind": "execution_start",
+            "timestamp": 1.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+        },
+        {
+            "kind": "llm_call_start",
+            "timestamp": 1.1,
+            "run_id": "r1",
+            "call_id": "llm1",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+            "model": "bedrock/claude-haiku",
+            "messages": [{"role": "user", "content": "renew"}],
+        },
+        {
+            "kind": "llm_call_end",
+            "timestamp": 1.2,
+            "run_id": "r1",
+            "call_id": "llm1",
+            "parent_call_id": "c1",
+            "agent_id": "planner",
+            "finish_reason": "tool_calls",
+            "output": "",
+            "tool_calls": [{"toolName": "lookup_quote", "arguments": {"id": "1"}}],
+            "tokens_used": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+        },
+        {
+            "kind": "execution_end",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "c1",
+            "agent_id": "planner",
+            "status": "ok",
+            "output": "done",
+        },
+    ]
+    path = _write_events(tmp_path, events)
+    full_nodes, _ = _normalize_full(path)
+    llm = next(n for n in full_nodes if n.get("node_type") == "LLMCall")
+    assert llm["modelName"] == "claude-haiku"
+    assert llm["provider"] == "bedrock"
+    assert llm["finishReason"] == "tool_calls"
+    assert llm["toolCalls"][0]["toolName"] == "lookup_quote"
+    assert "lookup_quote" in llm["completion"]
