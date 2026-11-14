@@ -1,0 +1,24 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Library
+module_base: mas.library.enforcement_proxy
+name: enforcement_proxy
+description: Cooperative native MasLab enforcement integration.
+version: "0.2.0"
+types: [governance, a2a_delivery_policy, webserver]
+plugins:
+  - type: governance
+    name: proxy_requests
+    module: mas.library.enforcement_proxy.plugins
+    class: RequestPolicy
+    attributes:
+      path_params: [config_file]
+  - type: a2a_delivery_policy
+    name: proxy_release
+    module: mas.library.enforcement_proxy.plugins
+    class: ReleasePolicy
+  - type: webserver
+    name: proxy_authenticated_http
+    module: mas.library.enforcement_proxy.webserver
+    class: AuthenticatedWebServer

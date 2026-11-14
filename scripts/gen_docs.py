@@ -539,6 +539,7 @@ PACKAGE_REGISTRY: list[tuple[str, str, str]] = [
     ("library-lab/pyproject.toml", "library-lab", "Libraries"),
     ("library-samples/pyproject.toml", "library-samples", "Libraries"),
     ("library-ioa/pyproject.toml", "library-ioa", "Libraries"),
+    ("library-enforcement-proxy/pyproject.toml", "library-enforcement-proxy", "Libraries"),
     ("library-telemetry/pyproject.toml", "library-telemetry", "Libraries"),
     ("library-kg/pyproject.toml", "library-kg", "Libraries"),
 ]
@@ -549,6 +550,7 @@ LIBRARY_MANIFESTS: list[str] = [
     "library-skills/library.yaml",
     "library-samples/library.yaml",
     "library-telemetry/library.yaml",
+    "library-enforcement-proxy/library.yaml",
     "library-kg/library.yaml",
     "library-eval/library.yaml",
     "library-ioa/library.yaml",

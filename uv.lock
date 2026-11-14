@@ -26,6 +26,7 @@ members = [
     "mas-lab-component-controller",
     "mas-lab-component-core",
     "mas-lab-ctl",
+    "mas-lab-library-enforcement-proxy",
     "mas-lab-library-eval",
     "mas-lab-library-ioa",
     "mas-lab-library-kg",
@@ -3326,6 +3327,23 @@ requires-dist = [
     { name = "windows-curses", marker = "sys_platform == 'win32' and extra == 'curses'", specifier = ">=2.3.2" },
 ]
 provides-extras = ["curses", "dev"]
+
+[[package]]
+name = "mas-lab-library-enforcement-proxy"
+version = "0.2.0"
+source = { editable = "library-enforcement-proxy" }
+dependencies = [
+    { name = "httpx" },
+    { name = "mas-lab-library-ioa" },
+    { name = "mas-lab-runtime" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
+    { name = "mas-lab-library-ioa", editable = "library-ioa" },
+    { name = "mas-lab-runtime", editable = "runtime" },
+]
 
 [[package]]
 name = "mas-lab-library-eval"

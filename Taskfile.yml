@@ -247,6 +247,7 @@ tasks:
       COV: "{{.COV}}"
       FAIL_UNDER: '{{.FAIL_UNDER | default "90"}}'
     cmds:
+      - uv pip install --no-deps -e {{.LIB}}
       - python3 scripts/ruff_changed.py check --root {{.LIB}}
       - python3 scripts/ruff_changed.py format-check --root {{.LIB}}
       - |
@@ -266,6 +267,7 @@ tasks:
       - task verify-library LIB=library-eval COV=mas.library.eval
       - task verify-library LIB=library-ioa COV=library_ioa
       - task verify-library LIB=library-telemetry COV=mas.library.telemetry
+      - task verify-library LIB=library-enforcement-proxy COV=mas.library.enforcement_proxy
       - task verify-library LIB=library-kg COV=mas.library.kg FAIL_UNDER=80
       - task verify-library LIB=library-skills COV=mas.library.skills
       - task verify-library LIB=library-samples COV=mas.library.samples

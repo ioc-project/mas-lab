@@ -56,6 +56,10 @@ mas-lab-library-samples
 mas-lab-library-ioa
 --8<-- [end:library-ioa-name]
 
+--8<-- [start:library-enforcement-proxy-name]
+mas-lab-library-enforcement-proxy
+--8<-- [end:library-enforcement-proxy-name]
+
 --8<-- [start:library-telemetry-name]
 mas-lab-library-telemetry
 --8<-- [end:library-telemetry-name]
