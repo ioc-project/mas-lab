@@ -1,0 +1,9 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: control/v1
+kind: Control
+metadata: {name: authorization}
+spec:
+  agents: worker
+  governance:
+    - proxy_requests: {config_file: ./client.json, agent: worker}

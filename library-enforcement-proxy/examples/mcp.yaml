@@ -1,0 +1,12 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: ToolServerRegistry
+metadata: {name: records}
+spec:
+  tool_servers:
+    - id: records
+      protocol: mcp
+      transport: streamable-http
+      url: http://127.0.0.1:9200/mcp
+      tools: [records_read, records_write]

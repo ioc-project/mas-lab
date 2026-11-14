@@ -4,22 +4,23 @@
 > **Auto-generated** from `pyproject.toml` files and `library.yaml` manifests.  Run `task docs-gen` to refresh after adding or modifying packages.
 
 ## Summary
-| Package                        | Layer         | Description                                                                                             | CLI                   |
-| ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------- | --------------------- |
-| `mas-lab`                      | Meta          | MAS Lab — meta-package installing the runtime, control plane, lab components, and libraries.            | —                     |
-| `mas-lab-runtime`              | Runtime core  | MAS Runtime V2 — Mealy kernel (embeddable library)                                                      | `mas-runtime`         |
-| `mas-lab-ctl`                  | Orchestration | MAS control plane V2 — compile, compose, session, placement                                             | `mas-ctl`             |
-| `mas-lab-component-core`       | Lab framework | MAS Lab core — CLI, contracts, telemetry, schemas, and shared utilities.                                | `mas-lab`             |
-| `mas-lab-component-bench`      | Lab framework | Benchmark engine, pipeline execution, plots and validation for MAS Lab.                                 | —                     |
-| `mas-lab-component-controller` | Lab framework | MAS Lab controller daemon — workers, IPC, HTTP API for CLI and UI.                                      | —                     |
-| `mas-lab-library-standard`     | Libraries     | Standard library for MAS — infra bundles, tools, and pattern aliases.                                   | —                     |
-| `mas-lab-library-skills`       | Libraries     | Skills library for MAS — ContextContract catalog plugin + ToolContract skill-access tools.              | —                     |
-| `mas-lab-library-eval`         | Libraries     | Evaluation and quality metrics library for MAS Lab — MCE integration.                                   | —                     |
-| `mas-lab-library-lab`          | Libraries     | MAS Lab provider library with public eval plugins.                                                      | —                     |
-| `mas-lab-library-samples`      | Libraries     | Community-contributed MAS sample apps, datasets, and tools.                                             | —                     |
-| `mas-lab-library-ioa`          | Libraries     | MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A framing stack layers.   | `mas-mcp`, `mas-slim` |
-| `mas-lab-library-telemetry`    | Libraries     | MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization. | —                     |
-| `mas-lab-library-kg`           | Libraries     | MAS Lab trace normalization and knowledge-graph validation algorithms.                                  | —                     |
+| Package                             | Layer         | Description                                                                                             | CLI                   |
+| ----------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------- | --------------------- |
+| `mas-lab`                           | Meta          | MAS Lab — meta-package installing the runtime, control plane, lab components, and libraries.            | —                     |
+| `mas-lab-runtime`                   | Runtime core  | MAS Runtime V2 — Mealy kernel (embeddable library)                                                      | `mas-runtime`         |
+| `mas-lab-ctl`                       | Orchestration | MAS control plane V2 — compile, compose, session, placement                                             | `mas-ctl`             |
+| `mas-lab-component-core`            | Lab framework | MAS Lab core — CLI, contracts, telemetry, schemas, and shared utilities.                                | `mas-lab`             |
+| `mas-lab-component-bench`           | Lab framework | Benchmark engine, pipeline execution, plots and validation for MAS Lab.                                 | —                     |
+| `mas-lab-component-controller`      | Lab framework | MAS Lab controller daemon — workers, IPC, HTTP API for CLI and UI.                                      | —                     |
+| `mas-lab-library-standard`          | Libraries     | Standard library for MAS — infra bundles, tools, and pattern aliases.                                   | —                     |
+| `mas-lab-library-skills`            | Libraries     | Skills library for MAS — ContextContract catalog plugin + ToolContract skill-access tools.              | —                     |
+| `mas-lab-library-eval`              | Libraries     | Evaluation and quality metrics library for MAS Lab — MCE integration.                                   | —                     |
+| `mas-lab-library-lab`               | Libraries     | MAS Lab provider library with public eval plugins.                                                      | —                     |
+| `mas-lab-library-samples`           | Libraries     | Community-contributed MAS sample apps, datasets, and tools.                                             | —                     |
+| `mas-lab-library-ioa`               | Libraries     | MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A framing stack layers.   | `mas-mcp`, `mas-slim` |
+| `mas-lab-library-enforcement-proxy` | Libraries     | Optional native governance and A2A delivery integration for enforcement-proxy                           | —                     |
+| `mas-lab-library-telemetry`         | Libraries     | MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization. | —                     |
+| `mas-lab-library-kg`                | Libraries     | MAS Lab trace normalization and knowledge-graph validation algorithms.                                  | —                     |
 ---
 
 ## Installation
@@ -329,6 +330,22 @@ uv pip install "mas-lab-library-ioa[all]"  # PyPI, all extras
 | ---------- | ------------------------------------- |
 | `mas-mcp`  | `library_ioa.plugins.mcp.server:main` |
 | `mas-slim` | `library_ioa.plugins.slim.cli:main`   |
+
+**Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
+
+---
+
+### `mas-lab-library-enforcement-proxy`
+**Install path:** `library-enforcement-proxy`  
+**Layer:** Libraries  
+Optional native governance and A2A delivery integration for enforcement-proxy
+
+```bash
+uv pip install -e library-enforcement-proxy  # source
+uv pip install mas-lab-library-enforcement-proxy  # PyPI
+```
+
+**Depends on:** `mas-lab-runtime`, `mas-lab-library-ioa`  
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 

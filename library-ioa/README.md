@@ -83,6 +83,7 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 ```
 
 For a MAS, declare remote dependencies as named endpoints in an `infra/v1` Application manifest, and keep `workflow.nodes[].delegates_to` as the topology.
+Optional [A2A delivery policies](docs/a2a/delivery-policy.md) authorize replies before delivery.
 See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-compliance.md).
 
 ## Development notes
@@ -99,3 +100,9 @@ See the A2A feature page at [docs/a2a/protocol-compliance.md](docs/a2a/protocol-
 - [ToolContract](../docs/references/tool-contract.md)
 - [kind: Tool](../docs/manifests/tool.md)
 - [ToolServerRegistry](../docs/references/tool-server-registry.md)
+
+### Webserver selection and transport validation
+
+An A2A Application endpoint can set `a2a.webserver` to a registered webserver binding, for example `webserver: {type: uvicorn}`. Omitting it retains the Uvicorn default. A directly supplied webserver instance takes precedence.
+
+Webserver plugins may implement `TransportValidatingWebServer.validate_transports(transports)`. The immutable set contains normalized `http` and, when configured or advertised, `grpc`. Raise an exception to reject unsupported transports. The shared A2A exposure calls this hook before constructing AgentCards, push clients or listeners, for both blocking and background serving. Plugins without the optional hook retain their existing behaviour. This hook validates configuration and does not itself authenticate requests.

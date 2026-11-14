@@ -63,6 +63,7 @@ members = [
     "library-eval",
     "library-ioa",
     "library-telemetry",
+    "library-enforcement-proxy",
     "library-kg",
     "lab/components/core",
     "lab/components/bench",
