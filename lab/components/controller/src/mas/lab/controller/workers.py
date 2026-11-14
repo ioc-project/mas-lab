@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Worker implementations."""
+
 from __future__ import annotations
 
 import asyncio
@@ -100,9 +101,7 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
                 traceback.print_exc()
                 raise
             if not ok:
-                raise RuntimeError(
-                    "benchmark run failed — see the logged error above for the cause"
-                )
+                raise RuntimeError("benchmark run failed — see the logged error above for the cause")
         return ok
 
     runner.submit(record, _execute)
@@ -202,9 +201,7 @@ def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec
                 os.chdir(prev_cwd)
                 _restore_env(previous)
             if not ok:
-                raise RuntimeError(
-                    "experiment run failed — see the logged error above for the cause"
-                )
+                raise RuntimeError("experiment run failed — see the logged error above for the cause")
         return ok
 
     runner.submit(record, _execute)
@@ -264,11 +261,13 @@ def run_pipeline_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: 
         from pathlib import Path
 
         from mas.lab.benchmark.pipeline import Pipeline, PipelineExecutor
+        from mas.lab.benchmark.pipeline.channel import install_channel
         from mas.lab.benchmark.pipeline.cli import _load_lab_custom_steps
         from mas.lab.benchmark.pipeline.config import PipelineEngineSpec
-        from mas.lab.benchmark.pipeline.channel import install_channel
+        from mas.lab.lab.config import discover_lab_context, inject_lab_libraries
 
         pipeline_yaml = Path(spec["pipeline_yaml"])
+        inject_lab_libraries(discover_lab_context(pipeline_yaml.resolve()))
         _load_lab_custom_steps(pipeline_yaml.resolve())
         try:
             install_channel(PipelineEngineSpec())

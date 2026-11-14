@@ -52,13 +52,18 @@ def _clear_library_discovery_caches():
     then rewrites the same path must still see the change.
     """
     from mas.library_catalog import clear_catalog_discovery_cache
-    from mas.library_roots import clear_library_discovery_cache
+    from mas.library_roots import clear_library_discovery_cache, unregister_lab_dirs
+    from mas.runtime.registry.bootstrap import clear_library_plugin_registration
 
     clear_catalog_discovery_cache()
     clear_library_discovery_cache()
+    unregister_lab_dirs()
+    clear_library_plugin_registration()
     yield
     clear_catalog_discovery_cache()
     clear_library_discovery_cache()
+    unregister_lab_dirs()
+    clear_library_plugin_registration()
 
 
 @pytest.fixture(scope="session")

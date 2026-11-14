@@ -128,6 +128,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- A lab's own `library.yaml` steps (a lab-local `snapshot_kg`, say) now resolve when the controller daemon runs the lab from another directory, including `/api/pipeline/run`. Library discovery adds the lab root to its search, not only the process cwd, and plugins of a lab loaded after the registry was built are added to it. When two labs in one process declare a library of the same name, the one loaded last wins. Two labs that ship the same plugin package name are refused. Before, the post pipeline failed with `Unknown step type`.
 - `mas-lab init` never writes `OPENAI_API_BASE` for a custom URL (an infra called `openai` used to) and never a name that starts with a digit.
 - The adversarial and trip-planner LLM judges follow `OPENAI_BASE_URL`, then `OPENAI_API_BASE`, like the engine.
 - A tool whose `on_execute_tool` returns a coroutine through a `functools.wraps` decorator is awaited on the loop instead of raising under `engine.tool_worker: inline`.

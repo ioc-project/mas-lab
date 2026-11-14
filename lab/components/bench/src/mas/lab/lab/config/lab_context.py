@@ -9,8 +9,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
-from mas.library_roots import find_ancestor_with_file
+from mas.library_roots import find_ancestor_with_file, register_lab_dir
 from mas.runtime.constants import LAB_CONFIG_FILENAME
+from mas.runtime.registry import register_new_library_plugins
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +143,15 @@ def resolve_library_root(ref: str, anchor: Path) -> Path | None:
 
 
 def inject_lab_libraries(lab_context: LabContext) -> None:
-    """Add lab directory, library roots, and plugins to ``sys.path`` / imports."""
+    """Add lab directory, library roots, and plugins to ``sys.path`` / imports.
+
+    Also registers the lab root for library discovery, so the lab's own
+    ``library.yaml`` plugins (pipeline steps) resolve in a process whose cwd
+    is elsewhere, such as the controller daemon.
+    """
+    if lab_context.lab_yaml and lab_context.lab_dir:
+        register_lab_dir(lab_context.lab_dir)
+        register_new_library_plugins()
     if lab_context.lab_dir:
         lab_dir = str(lab_context.lab_dir.resolve())
         if lab_dir not in sys.path:

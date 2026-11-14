@@ -160,6 +160,8 @@ A library splits plugin declarations across several manifests in one of two ways
 
 Every discovered manifest is registered through `register_manifest_file()` / `register_manifest_data()`, the same fixpoint mechanism described above. A malformed manifest or an unresolvable type raises at startup.
 
+The registry is built once per process. `register_new_library_plugins()` adds manifests that appeared after that (a lab the controller daemon loads later). Two libraries that both ship the same top-level plugin package name are refused.
+
 `library-lab/` registers its pipeline steps and artifact codecs this way; see the `types:` / `plugins:` block of `library-lab/library.yaml`.
 
 ## Availability gate: `requires:`/`extra:` for optional dependencies

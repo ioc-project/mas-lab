@@ -573,6 +573,17 @@ def get_registry() -> PluginRegistry:
     return _instance
 
 
+def register_new_library_plugins() -> None:
+    """Add plugins from libraries discovered since the registry was built.
+
+    No-op while the registry has not been built yet (it will find them when
+    it is).
+    """
+    if _instance is not None:
+        with _instance_lock:
+            _bootstrap.register_new_library_plugins(_instance)
+
+
 def construct_plugin(plugin_cls: type, params: Mapping[str, Any] | None = None) -> Any:
     """Instantiate *plugin_cls*, allowing only its constructor field names.
 

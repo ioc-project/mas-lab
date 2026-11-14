@@ -335,3 +335,58 @@ def test_discover_library_roots_includes_nested_lab_library(tmp_path, monkeypatc
 
     roots = discover_library_roots(lab)
     assert mylib.resolve() in roots
+
+
+def _lab_with_library(root, name: str = "mylab_lib"):
+    lab = root / "some.lab"
+    lib = lab / name
+    lib.mkdir(parents=True)
+    (lab / "lab-config.yaml").write_text(f"lab:\n  name: some\n  libraries:\n    - {name}/\n", encoding="utf-8")
+    (lib / "library.yaml").write_text("apiVersion: mas/v1\nkind: Library\nname: x\n", encoding="utf-8")
+    return lab, lib
+
+
+def test_lab_library_is_not_found_from_an_unrelated_cwd(tmp_path, monkeypatch) -> None:
+    _, lib = _lab_with_library(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    assert lib.resolve() not in library_roots.discover_library_roots()
+
+
+def test_registered_lab_dir_makes_its_library_visible_from_any_cwd(tmp_path, monkeypatch) -> None:
+    lab, lib = _lab_with_library(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    library_roots.register_lab_dir(lab)
+
+    assert lib.resolve() in library_roots.discover_library_roots()
+    assert library_roots.resolve_named_library_root("mylab_lib") == lib.resolve()
+
+
+def test_register_lab_dir_is_idempotent_and_unregister_forgets_it(tmp_path, monkeypatch) -> None:
+    lab, lib = _lab_with_library(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    library_roots.register_lab_dir(lab)
+    library_roots.register_lab_dir(lab)
+    assert library_roots._REGISTERED_LAB_DIRS == [lab.resolve()]
+
+    library_roots.unregister_lab_dirs()
+    assert library_roots._REGISTERED_LAB_DIRS == []
+
+
+def test_the_lab_registered_last_wins_a_library_name_two_labs_share(tmp_path, monkeypatch) -> None:
+    first, first_lib = _lab_with_library(tmp_path / "a")
+    second, second_lib = _lab_with_library(tmp_path / "b")
+    monkeypatch.chdir(tmp_path)
+
+    library_roots.register_lab_dir(first)
+    library_roots.register_lab_dir(second)
+    assert library_roots.resolve_named_library_root("mylab_lib") == second_lib.resolve()
+
+    library_roots.register_lab_dir(first)  # running lab A again makes it current
+    assert library_roots.resolve_named_library_root("mylab_lib") == first_lib.resolve()
