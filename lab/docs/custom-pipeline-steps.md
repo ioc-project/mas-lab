@@ -189,7 +189,7 @@ experiment:
 
 ## `register_steps.py` — standalone CLI registration
 
-You run `mas-lab benchmark pipeline run pipelines/post-run.yaml -o ...` directly, not through `benchmark run`. Then the CLI loads the first `register_steps.py` it finds. It searches the pipeline file's directory and up to five parent directories.
+You run `mas-lab benchmark pipeline run pipelines/post-run.yaml -o ...` directly, not through `benchmark run`. Then the CLI loads the first `register_steps.py` it finds. It searches the pipeline file's directory and up to five parent directories. `/api/pipeline/run` also injects the enclosing lab's `library.yaml` steps.
 
 Create one at the experiment root so the standalone pipeline CLI recognizes the type:
 

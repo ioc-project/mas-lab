@@ -279,17 +279,52 @@ def _register_library_plugins(reg: PluginRegistry) -> None:
     """
     from mas.library_catalog import discover_plugin_manifests
 
-    claimed: dict[str, Path] = {}
     for manifest_path in discover_plugin_manifests():
-        library_parent = str(manifest_path.parent.parent)
-        if library_parent not in sys.path:
-            sys.path.append(library_parent)
-        try:
-            data = _load_yaml(manifest_path)
-            _claim_library_package(manifest_path.parent, data, claimed)
-            register_manifest_data(reg, data, source=manifest_path)
-        except Exception as exc:
-            raise ValueError(f"Failed to register plugin manifest {manifest_path}: {exc}") from exc
+        _register_library_manifest(reg, manifest_path)
+
+
+# Manifests already in the registry, so a later discovery adds only new ones.
+_REGISTERED_MANIFESTS: set[Path] = set()
+# Top-level plugin package names already claimed, including those registered
+# at bootstrap, so a lab loaded later cannot silently share ``lib``.
+_CLAIMED_PACKAGES: dict[str, Path] = {}
+
+
+def _register_library_manifest(reg: PluginRegistry, manifest_path: Path) -> None:
+    library_parent = str(manifest_path.parent.parent)
+    if library_parent not in sys.path:
+        sys.path.append(library_parent)
+    try:
+        data = _load_yaml(manifest_path)
+        _claim_library_package(manifest_path.parent, data, _CLAIMED_PACKAGES)
+        register_manifest_data(reg, data, source=manifest_path)
+    except Exception as exc:
+        raise ValueError(f"Failed to register plugin manifest {manifest_path}: {exc}") from exc
+    _REGISTERED_MANIFESTS.add(manifest_path.resolve())
+
+
+def register_new_library_plugins(reg: PluginRegistry) -> None:
+    """Register plugin manifests that appeared after ``reg`` was built.
+
+    The registry is built once per process. A long-lived process (the
+    controller daemon) later loads labs whose own ``library.yaml`` declares
+    pipeline steps; this adds those, and only those, to the live registry.
+    """
+    from mas.library_catalog import discover_plugin_manifests
+
+    for manifest_path in discover_plugin_manifests():
+        if manifest_path.resolve() not in _REGISTERED_MANIFESTS:
+            _register_library_manifest(reg, manifest_path)
+
+
+def clear_library_plugin_registration() -> None:
+    """Forget manifests and plugin package names registered in this process.
+
+    Tests call this with :func:`mas.library_roots.unregister_lab_dirs` so a
+    later lab can reuse a package name. Production never calls it.
+    """
+    _REGISTERED_MANIFESTS.clear()
+    _CLAIMED_PACKAGES.clear()
 
 
 def _manifest_modules(data: dict[str, Any]) -> list[str]:

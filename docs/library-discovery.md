@@ -60,12 +60,18 @@ A listed directory without `library.yaml` still joins the Python `sys.path`
 (lab-local code). Direct children of the lab root that contain `library.yaml`
 are picked up too.
 
+A long-lived process (the controller daemon) also searches lab roots registered
+when that lab's libraries are injected, so a lab-local `library.yaml` is visible
+when the process cwd is elsewhere. When two registered labs declare a library of
+the same name, the one loaded last wins.
+
 ## Search order
 
 The first name found wins. A lab-local library beats a workspace or installed
 library of the same name. MAS Lab searches in this order:
 
-1. Lab-local search paths (`lab.libraries` + lab-root children)
+1. Lab-local search paths (`lab.libraries` + lab-root children), including
+   labs registered while the process runs a lab from another directory
 2. Workspace search paths (`manifest_libraries`)
 3. Installed libraries (entry points)
 4. `MAS_LIBRARY_PATHS`

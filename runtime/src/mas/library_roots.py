@@ -15,7 +15,10 @@ shared by :func:`resolve_named_library_root` and
    basename (``mylib/`` → ``mylib``) or the child directory name. A
    listed directory **without** ``library.yaml`` is Python ``sys.path``
    only (no library name). A listed name that is already a known library
-   (``samples``) keeps resolve-by-name behaviour via later steps.
+   (``samples``) keeps resolve-by-name behaviour via later steps. The lab
+   is found from the anchors, from lab roots added with
+   :func:`register_lab_dir` (a daemon running a lab from elsewhere), and
+   from the process cwd.
 2. **Workspace config** — ``config.yaml`` ``manifest_libraries:``
    (search folders: a library root, or a parent of sibling libraries).
 3. **Installed libraries** — libraries registered in the environment.
@@ -53,9 +56,7 @@ from mas.runtime.constants import LAB_CONFIG_FILENAME, LIBRARY_MANIFEST_FILENAME
 _LAB_DIR_SUFFIX = ".lab"
 
 
-def find_ancestor_with_file(
-    start: Path, filename: str, *, stop_at_suffix: str | None = None
-) -> Path | None:
+def find_ancestor_with_file(start: Path, filename: str, *, stop_at_suffix: str | None = None) -> Path | None:
     """Walk upward from *start* to find a directory containing *filename*.
 
     Checks *start* itself (or its parent, if *start* is a file) first, then
@@ -273,9 +274,7 @@ def _is_lab_root(path: Path) -> bool:
 
 def find_lab_dir(start: Path) -> Path | None:
     """Enclosing lab root from *start*, stopping at a ``.lab`` directory."""
-    return find_ancestor_with_file(
-        start, LAB_CONFIG_FILENAME, stop_at_suffix=_LAB_DIR_SUFFIX
-    )
+    return find_ancestor_with_file(start, LAB_CONFIG_FILENAME, stop_at_suffix=_LAB_DIR_SUFFIX)
 
 
 def _lab_library_entries(lab_dir: Path) -> list[str]:
@@ -400,11 +399,41 @@ def _ancestor_named_libraries(*anchors: Path | None) -> dict[str, Path]:
     return named
 
 
+_REGISTERED_LAB_DIRS: list[Path] = []
+
+
+def register_lab_dir(lab_dir: Path) -> None:
+    """Make *lab_dir*'s lab-local libraries visible whatever the process cwd.
+
+    Discovery walks up from the caller's anchors and from ``Path.cwd()``. A
+    long-lived process (the controller daemon) runs experiments from labs it
+    was not started in, so without this a lab-local ``library.yaml`` (its
+    pipeline steps, apps, datasets) is never found there. Registering the lab
+    root adds it to every later discovery call, like the ``sys.path`` entries
+    :func:`mas.lab.lab.config.inject_lab_libraries` adds for the same lab.
+
+    Roots accumulate for the life of the process. When two registered labs
+    declare a library of the same name, the one registered last wins.
+    """
+    resolved = Path(lab_dir).resolve()
+    if resolved in _REGISTERED_LAB_DIRS:
+        _REGISTERED_LAB_DIRS.remove(resolved)
+    _REGISTERED_LAB_DIRS.append(resolved)
+
+
+def unregister_lab_dirs() -> None:
+    """Forget every lab root added by :func:`register_lab_dir`."""
+    _REGISTERED_LAB_DIRS.clear()
+
+
 def _search_starts(*anchors: Path | None) -> list[Path]:
-    """Anchor paths plus cwd, skipping ``None``."""
+    """Anchor paths, registered lab roots, then cwd, skipping ``None``."""
     starts: list[Path] = []
     seen: set[Path] = set()
     raw: list[Path | None] = list(anchors) if anchors else []
+    # Most recently registered first: the lab just loaded wins a name that an
+    # earlier lab in the same long-lived process also declared.
+    raw.extend(reversed(_REGISTERED_LAB_DIRS))
     raw.append(Path.cwd())
     for anchor in raw:
         if anchor is None:
