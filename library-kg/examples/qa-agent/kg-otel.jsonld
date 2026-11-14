@@ -1,8 +1,8 @@
 {
   "@context": {
-    "@vocab": "https://outshift-open.github.io/oxp-ontology/kg-artifact#",
-    "mas": "https://outshift-open.github.io/oxp-ontology/mas#",
-    "maskg": "https://outshift-open.github.io/oxp-ontology/kg#"
+    "@vocab": "https://ioc-project.github.io/scope-ontology/kg-artifact#",
+    "mas": "https://ioc-project.github.io/scope-ontology/mas#",
+    "maskg": "https://ioc-project.github.io/scope-ontology/kg#"
   },
   "nodes": [
     {

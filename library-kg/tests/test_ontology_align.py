@@ -10,7 +10,7 @@ def test_canonical_contains_becomes_typed_has_call():
     assert canonicalize_edge_type("fromState", "Transition", "State") is None
 
 
-def test_align_graph_strips_oxp_class_layer_and_fills_id():
+def test_align_graph_strips_scope_class_layer_and_fills_id():
     nodes, edges = align_graph(
         [
             {

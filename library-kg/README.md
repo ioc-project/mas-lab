@@ -114,6 +114,8 @@ environment, load SCOPE from local sources for one command:
 uv run --with-editable /abs/path/to/scope/ontology pytest tests/test_validate_kg.py -q
 ```
 
+`scripts/prepare_env.sh` installs that tree when `SCOPE_ONTOLOGY_EDITABLE` points at it.
+
 For OTel span contracts and SpanSpec definitions, also install the peer library:
 `uv pip install -e library-telemetry`.
 
@@ -521,7 +523,7 @@ mas/library/kg/
 │   ├── event_mappings.py     KIND_TO_CLASS: event kind -> ontology class
 │   ├── graph_builder.py      normalize_events + extract_graph (events -> nodes/edges)
 │   ├── native_graph_builder.py  NativeGraphBuilder (batch / realtime builders)
-│   ├── oxp_models.py         bridge to scope_ontology.models.*
+│   ├── scope_models.py       bridge to scope_ontology.models.*
 │   ├── annotate.py           annotate_kg_nodes
 │   ├── query.py              KGIndex, FacetQuery, KGSource, KGView
 │   ├── compare.py            compare_kg, KGCompareResult (7 structural checks)

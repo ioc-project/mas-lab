@@ -138,3 +138,7 @@ def test_layer_field_on_event_overrides_kind_lookup() -> None:
     layers = ExportLayers(governance=False)
     ev = {"kind": "mas_call_start", "layer": "governance"}
     assert should_export_event(ev, layers) is False
+
+
+def test_scope_default_is_the_layer_defaults() -> None:
+    assert ExportLayers.scope_default() == ExportLayers()

@@ -11,8 +11,8 @@ if [[ ! -x "$PY_BIN" ]]; then
   uv venv "$VENV_DIR" --python 3.13
 fi
 
-if [[ -n "${OXP_ONTOLOGY_EDITABLE:-}" ]] && [[ -d "${OXP_ONTOLOGY_EDITABLE}" ]]; then
-  uv pip install --python "$PY_BIN" -e "$OXP_ONTOLOGY_EDITABLE"
+if [[ -n "${SCOPE_ONTOLOGY_EDITABLE:-}" ]] && [[ -d "${SCOPE_ONTOLOGY_EDITABLE}" ]]; then
+  uv pip install --python "$PY_BIN" -e "$SCOPE_ONTOLOGY_EDITABLE"
 fi
 
 # [all] (defined in pyproject.toml) installs every optional extra,

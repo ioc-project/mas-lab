@@ -20,6 +20,7 @@ import re
 from collections import Counter
 from typing import Any, Iterable, Literal, Sequence
 
+from mas.library.kg.core.ontology_align import CONTAINS_TO_SCOPE
 from mas.library.kg.observability.otel_via_norm import normalize_otel, to_clickhouse_spans
 from mas.library.kg.pipeline import build_kg_document
 
@@ -276,36 +277,11 @@ def _enclosing_agent_call(
     return _enclosing_call(node, by_span=by_span, types={"AgentCall"})
 
 
-_CONTAINS_TO_OXP = {
-    "LLMCall": "hasLLMCall",
-    "ToolCall": "hasToolCall",
-    "AgentCall": "hasAgentCall",
-    "MASCall": "hasMASCall",
-    "ProcessingCall": "hasProcessingCall",
-    "MemoryCall": "hasMemoryCall",
-    "SkillCall": "hasSkillCall",
-    "RAGQuery": "hasRAGQuery",
-    "ContextContribution": "contributesTo",
-    "GovernanceEvent": "annotates",
-}
-
-
 def _canonical_edge_type(etype: str, src_type: str, dst_type: str) -> str | None:
     name = etype.rsplit("/", 1)[-1].rsplit("#", 1)[-1]
     if name in {"contains", "hasCall"}:
-        return _CONTAINS_TO_OXP.get(dst_type)
-    if name in {
-        "hasLLMCall",
-        "hasToolCall",
-        "hasAgentCall",
-        "hasMASCall",
-        "hasProcessingCall",
-        "hasMemoryCall",
-        "hasSkillCall",
-        "hasRAGQuery",
-        "contributesTo",
-        "annotates",
-    }:
+        return CONTAINS_TO_SCOPE.get(dst_type)
+    if name in CONTAINS_TO_SCOPE.values():
         return name
     return None
 
@@ -390,7 +366,7 @@ def _canonical_subgraph(
         child_key = keys.get(str(node.get("id") or ""))
         if child_key is None:
             continue
-        parent_edge = _CONTAINS_TO_OXP.get(child_key[0])
+        parent_edge = CONTAINS_TO_SCOPE.get(child_key[0])
         if parent_edge is None:
             continue
         if child_key[0] in {
@@ -505,7 +481,7 @@ def _otel_kg(
     from pathlib import Path
     import json
 
-    layers = ExportLayers.complete() if mode == "complete" else ExportLayers.oxp_default()
+    layers = ExportLayers.complete() if mode == "complete" else ExportLayers.scope_default()
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as handle:
         events_path = Path(handle.name)
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as handle:

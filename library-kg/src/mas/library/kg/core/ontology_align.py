@@ -18,7 +18,7 @@ _TOOL_CALL_NAME = re.compile(r"^Tool call \((.+)\)(?:\s|$)")
 _LLM_CALL_NAME = re.compile(r"^LLM call \(([^/]+)/([^)]+)\)")
 
 # Destination node_type → ontology containment property (replaces contains/hasCall).
-CONTAINS_TO_OXP: Dict[str, str] = {
+CONTAINS_TO_SCOPE: Dict[str, str] = {
     "LLMCall": "hasLLMCall",
     "ToolCall": "hasToolCall",
     "AgentCall": "hasAgentCall",
@@ -37,11 +37,11 @@ CONTAINMENT_EDGE_TYPES: frozenset[str] = frozenset(
     {
         "contains",
         "hasCall",
-        *CONTAINS_TO_OXP.values(),
+        *CONTAINS_TO_SCOPE.values(),
     }
 )
 
-_OXP_LAYER_AS_BLOCK = frozenset({"structural", "execution", "trajectory", "evaluation"})
+_SCOPE_LAYER_AS_BLOCK = frozenset({"structural", "execution", "trajectory", "evaluation"})
 
 _EXECUTES = {
     "MASCall": ("executesMAS", "MAS"),
@@ -193,7 +193,7 @@ def align_node_fields(node: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(node)
     ntype = str(out.get("node_type") or "")
     layer = out.get("layer")
-    if layer in _OXP_LAYER_AS_BLOCK:
+    if layer in _SCOPE_LAYER_AS_BLOCK:
         out.setdefault("block", layer)
         if ntype in {"State", "Transition", "Branch", "ParallelGroup"}:
             out["layer"] = "normalized"
@@ -293,7 +293,7 @@ def canonicalize_edge_type(
     if name in {"contains", "hasCall"}:
         if dst_type == "Run" or src_type == "Run":
             return None
-        return CONTAINS_TO_OXP.get(dst_type)
+        return CONTAINS_TO_SCOPE.get(dst_type)
     if name in _CATALOG_EDGE:
         return _CATALOG_EDGE[name]
     return name
@@ -339,7 +339,7 @@ def _ensure_catalog(
     return rec
 
 
-def ensure_oxp_topology(
+def ensure_scope_topology(
     nodes: List[Dict[str, Any]],
     edges: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -457,7 +457,7 @@ def ensure_oxp_topology(
         for alias in aliases:
             children.extend(by_parent.get(alias, []))
         for child in children:
-            scope = CONTAINS_TO_OXP.get(str(child.get("node_type") or ""))
+            scope = CONTAINS_TO_SCOPE.get(str(child.get("node_type") or ""))
             cid = str(child.get("id") or child.get("callId") or "")
             if scope and cid:
                 _add_edge(edges, seen, scope, nid, cid)
@@ -474,7 +474,7 @@ def ensure_oxp_topology(
         parent = by_span.get(parent_span) if parent_span else None
         if parent is None:
             continue
-        scope = CONTAINS_TO_OXP.get(str(node.get("node_type") or ""))
+        scope = CONTAINS_TO_SCOPE.get(str(node.get("node_type") or ""))
         if not scope:
             continue
         src = str(parent.get("id") or parent.get("callId") or "")
@@ -587,5 +587,5 @@ def align_graph(
         seen.add(key)
         rewritten.append(rec)
     if emit_topology:
-        aligned_nodes = ensure_oxp_topology(aligned_nodes, rewritten)
+        aligned_nodes = ensure_scope_topology(aligned_nodes, rewritten)
     return aligned_nodes, rewritten

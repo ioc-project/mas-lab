@@ -43,7 +43,7 @@ _EXPERIMENT_LAYER = "experiment"
 # Structural types — shared across sessions/runs; block="structural".
 # "Agent"/"LLM"/"Tool"/"Skill" are the real catalog/definition node types
 # (not "CatalogTool"/"CatalogModel"/"CatalogSkill", which don't exist
-# anywhere in the ontology's vocabulary -- see core/oxp_models.py's
+# anywhere in the ontology's vocabulary -- see core/scope_models.py's
 # SCOPE_CORE_NODE_TYPES / NATIVE_EXTENSION_NODE_TYPES).
 _STRUCTURAL_TYPES = frozenset({"Agent", "LLM", "Tool", "Skill"})
 

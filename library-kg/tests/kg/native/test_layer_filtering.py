@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 from unittest.mock import MagicMock
 
 from mas.library.kg.core.graph_builder import normalize_events
-from mas.library.kg.core.oxp_models import mas_namespace
+from mas.library.kg.core.scope_models import mas_namespace
 
 _MAS_NS = mas_namespace()
 

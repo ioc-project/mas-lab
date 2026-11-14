@@ -4,7 +4,8 @@
 
 The public GitHub org and docs host are now `ioc-project/mas-lab`
 (`https://github.com/ioc-project/mas-lab`,
-`https://ioc-project.github.io/mas-lab/`). Docs name OXP as SCOPE.
+`https://ioc-project.github.io/mas-lab/`). Docs name the ontology SCOPE
+(`https://ioc-project.github.io/scope/`).
 
 The web UI talks only to the controller (`/api/scopes`, items, runs, artifacts).
 `mas-lab serve` gains `--cors-origin`, `--token-file`, `--state-dir`, and `--workspace`.

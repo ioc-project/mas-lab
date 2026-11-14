@@ -1,8 +1,8 @@
 {
   "@context": {
-    "@vocab": "https://outshift-open.github.io/oxp-ontology/kg-artifact#",
-    "mas": "https://outshift-open.github.io/oxp-ontology/mas#",
-    "maskg": "https://outshift-open.github.io/oxp-ontology/kg#"
+    "@vocab": "https://ioc-project.github.io/scope-ontology/kg-artifact#",
+    "mas": "https://ioc-project.github.io/scope-ontology/mas#",
+    "maskg": "https://ioc-project.github.io/scope-ontology/kg#"
   },
   "nodes": [
     {
@@ -61,7 +61,7 @@
       "agentId": "mas",
       "parentCallId": "",
       "kindBase": "mas_call",
-      "masUri": "https://outshift-open.github.io/oxp-ontology/mas#MASCall",
+      "masUri": "https://ioc-project.github.io/scope-ontology/mas#MASCall",
       "spanLevel": "",
       "runId": "t8-native",
       "startTime": 1791132003.876734,
@@ -86,7 +86,7 @@
       "agentId": "agent",
       "parentCallId": "5bcde400-f75e-47cf-80cd-41ca54e01715",
       "kindBase": "execution",
-      "masUri": "https://outshift-open.github.io/oxp-ontology/mas#AgentCall",
+      "masUri": "https://ioc-project.github.io/scope-ontology/mas#AgentCall",
       "spanLevel": "",
       "runId": "t8-native",
       "startTime": 1791132003.8905869,
@@ -134,7 +134,7 @@
       "agentId": "agent",
       "parentCallId": "agent-u1-exec",
       "kindBase": "processing_call",
-      "masUri": "https://outshift-open.github.io/oxp-ontology/mas#ProcessingCall",
+      "masUri": "https://ioc-project.github.io/scope-ontology/mas#ProcessingCall",
       "spanLevel": "",
       "runId": "t8-native",
       "startTime": 1791132003.900473,
@@ -161,7 +161,7 @@
       "agentId": "agent",
       "parentCallId": "agent-u1-exec",
       "kindBase": "processing_call",
-      "masUri": "https://outshift-open.github.io/oxp-ontology/mas#ProcessingCall",
+      "masUri": "https://ioc-project.github.io/scope-ontology/mas#ProcessingCall",
       "spanLevel": "",
       "runId": "t8-native",
       "startTime": 1791132003.900473,
@@ -188,7 +188,7 @@
       "agentId": "agent",
       "parentCallId": "agent-u1-exec",
       "kindBase": "llm_call",
-      "masUri": "https://outshift-open.github.io/oxp-ontology/mas#LLMCall",
+      "masUri": "https://ioc-project.github.io/scope-ontology/mas#LLMCall",
       "spanLevel": "",
       "runId": "t8-native",
       "startTime": 1791132003.900404,
@@ -712,7 +712,7 @@
       "name": "context assembly",
       "callCount": 2,
       "block": "structural",
-      "masUri": "https://outshift-open.github.io/oxp-ontology/mas#Processing",
+      "masUri": "https://ioc-project.github.io/scope-ontology/mas#Processing",
       "canonicalId": "urn:mas:global:processing:context-assembly",
       "declared": false,
       "description": "context assembly",
@@ -1530,7 +1530,7 @@
     "events": 44,
     "nodes": 47,
     "edges": 79,
-    "ontology_path": "/Users/augjorda/repos/worktrees/mas-lab-library-telemetry/.venv/lib/python3.13/site-packages/oxp_ontology/mas-ontology.ttl",
+    "ontology_path": "scope_ontology/mas-ontology.ttl",
     "layers": {
       "infrastructure": false,
       "trajectory": true,

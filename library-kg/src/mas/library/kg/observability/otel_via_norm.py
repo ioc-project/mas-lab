@@ -209,7 +209,7 @@ def normalize_otel(
     from norm.normalizer import normalize
 
     from mas.library.kg.core.ontology_align import align_graph
-    from mas.library.kg.core.oxp_models import restrict_graph
+    from mas.library.kg.core.scope_models import restrict_graph
 
     clickhouse = to_clickhouse_spans(spans)
     nodes, edges = normalize(clickhouse)

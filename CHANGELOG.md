@@ -18,6 +18,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- The qa-agent example graphs use the ioc-project scope-ontology URIs.
 - `llm_call_start` carries the request: `model`, `messages`, offered tools, `max_tokens`, `temperature`. `llm_call_end` is the return: `output`, `finish_reason`, tokens, `tool_calls`, and `max_tokens` only when the sent cap differs. `model` on `llm_call_end` is no longer read.
 - `--cache-read` / `--cache-write` help now says the cache is off until those flags insert the `llm_cache` step. The default pipeline is retry only.
 - The cache docs describe one LLM cache, the `llm_cache` step. The "built-in engine cache" sections are gone; `MAS_LLM_CACHE_READ` / `_WRITE` and `RuntimeEngine` `cache.read` / `write` insert that step.
@@ -26,6 +27,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- Code names the ontology SCOPE (`scope_models`, `ensure_scope_topology`, `scope_default`, `SCOPE_ONTOLOGY_EDITABLE`).
 - A pattern's next hop is this agent's `delegates_to`. The old fallbacks (`workflow.participants`, every other node, the agency list) are gone, and an agent with no `delegates_to` has no next hop (the pattern logs a warning and ends the turn). `behavior.delegation_style` does not affect a pattern's next hop.
 - `send` no longer refuses a target outside `delegates_to`; the model can only call peers that are offered, and `gov_no_undeclared_peer` (in `with-hardened`) blocks the rest. It does nothing when the kernel has no agent id.
 - `standard:openai` now reads `OPENAI_BASE_URL` when that env var is set (`api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1`). A hardcoded URL in that file used to ignore the env var. `openai.example.yaml` and the sample workspace use the same form; they used to read `OPENAI_API_BASE`. `OPENAI_API_BASE` is still used only when `api_base` is left empty.
@@ -538,7 +540,7 @@ reconciling the release notes with the code and docs currently on that branch.
   `ioc-project/mas-lab` (`https://github.com/ioc-project/mas-lab`,
   `https://ioc-project.github.io/mas-lab/`). On an existing clone:
   `git remote set-url origin git@github.com:ioc-project/mas-lab.git`.
-- Docs name the former Observe and eXplain Platform as SCOPE
+- Docs name the ontology SCOPE
   (`https://ioc-project.github.io/scope/`). The ontology package is
   `ioc-scope-ontology` (`scope_ontology`); `norm` still comes from git.
 - Schema `$id` values are vocabulary ids (`mas/v1#…`, `mas-lab/…`), not
