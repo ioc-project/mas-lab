@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from mas.library.kg.core.event_mappings import KIND_TO_CLASS
-from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, SCOPE_CORE_NODE_TYPES
+from mas.library.kg.core.scope_models import NATIVE_EXTENSION_NODE_TYPES, SCOPE_CORE_NODE_TYPES
 from mas.library.kg.pipeline import build_kg_document
 
 
@@ -79,7 +79,7 @@ def test_kind_to_class_core_subset_is_documented() -> None:
     assert not missing_from_audit, f"KIND_TO_CLASS has undocumented classes: {missing_from_audit}"
 
 
-def test_native_core_types_exist_on_oxp_models(native_doc) -> None:
+def test_native_core_types_exist_on_scope_models(native_doc) -> None:
     pytest.importorskip("scope_ontology")
     from scope_ontology import models as scope_models
 

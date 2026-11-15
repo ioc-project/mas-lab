@@ -29,7 +29,7 @@ from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from mas.library.kg._dist import extra_hint
-from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES, SCOPE_CORE_NODE_TYPES
+from mas.library.kg.core.scope_models import NATIVE_EXTENSION_NODE_TYPES, SCOPE_CORE_NODE_TYPES
 
 _KNOWN_NODE_TYPES = SCOPE_CORE_NODE_TYPES | NATIVE_EXTENSION_NODE_TYPES
 
@@ -387,7 +387,9 @@ class _Neo4jWriter:
                     # creation is still best-effort: a lookup running
                     # without an index is slow, not wrong, so this does not
                     # fail the push itself.
-                    logger.warning("Index creation failed, continuing without it: %s", stmt[:60], exc_info=True)  # noqa: E501
+                    logger.warning(
+                        "Index creation failed, continuing without it: %s", stmt[:60], exc_info=True
+                    )  # noqa: E501
 
 
 # ---------------------------------------------------------------------------

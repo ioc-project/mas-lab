@@ -54,7 +54,7 @@ class TestOntologyResolution:
         assert path.exists()
         assert path.suffix == ".ttl"
 
-    def test_explicit_config_path_overrides_oxp(self, tmp_path):
+    def test_explicit_config_path_overrides_scope(self, tmp_path):
         from mas.library.kg.ontology import resolve_mas_ontology_path
 
         fake_ttl = tmp_path / "custom.ttl"

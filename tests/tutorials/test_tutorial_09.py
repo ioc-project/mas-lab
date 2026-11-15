@@ -57,7 +57,7 @@ class TestNormalize:
         assert (tmp_path / "kg.jsonld").is_file()
 
 
-class TestOxpValidation:
+class TestScopeValidation:
     def test_validate_runs_shacl_on_native_kg(self):
         pytest.importorskip("mas.library.kg")
         pytest.importorskip("pyshacl")

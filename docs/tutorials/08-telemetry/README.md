@@ -245,7 +245,7 @@ Check the pairing:
 
 ```bash
 cd library-telemetry
-python -m pytest tests/telemetry/conversion/test_oxp_contract.py -k realtime -q
+python -m pytest tests/telemetry/conversion/test_scope_contract.py -k realtime -q
 ```
 
 ---

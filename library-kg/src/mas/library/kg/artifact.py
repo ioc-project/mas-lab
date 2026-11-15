@@ -46,7 +46,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
-from mas.library.kg.core.oxp_models import mas_namespace
+from mas.library.kg.core.scope_models import mas_namespace
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +168,9 @@ class KGArtifact:
         p.parent.mkdir(parents=True, exist_ok=True)
         payload = self.to_jsonld()
         p.write_text(payload, encoding="utf-8")
-        logger.debug("KGArtifact saved: %d nodes, %d edges → %s",
-                     self.node_count, self.edge_count, p)
+        logger.debug(
+            "KGArtifact saved: %d nodes, %d edges → %s", self.node_count, self.edge_count, p
+        )
         return p
 
     # ------------------------------------------------------------------

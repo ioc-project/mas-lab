@@ -6,4 +6,4 @@ __pycache__/
 *.egg-info/
 
 # Internal-cluster infra sample, kept locally, never shipped to OSS.
-infra/oxp-k8s.yaml
+infra/scope-k8s.yaml

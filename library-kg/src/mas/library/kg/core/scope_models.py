@@ -15,6 +15,7 @@ module does not copy field lists. Never imports a private ontology package.
 
 from __future__ import annotations
 
+import importlib
 import logging
 from functools import cache
 from typing import Any, Dict, List, Optional, Tuple
@@ -67,50 +68,33 @@ def _scope_model_namespace() -> Any:
     return scope_models
 
 
-def _scope_nodes_module() -> Any:
+def _models_part(part: str) -> Any:
     try:
-        from scope_ontology.models import nodes as scope_nodes
-
-        return scope_nodes
+        return importlib.import_module(f"scope_ontology.models.{part}")
     except ImportError:
         return _scope_model_namespace()
 
 
-def _scope_edges_module() -> Any:
-    try:
-        from scope_ontology.models import edges as scope_edges
-
-        return scope_edges
-    except ImportError:
-        return _scope_model_namespace()
+def _scope_class(name: str, part: str) -> Optional[type]:
+    if not name:
+        return None
+    for module in (_scope_model_namespace(), _models_part(part)):
+        cls = getattr(module, name, None)
+        if isinstance(cls, type):
+            return cls
+    return None
 
 
 def scope_core_node_types() -> frozenset[str]:
     """Node class names declared by the installed SCOPE models."""
     names: set[str] = set()
-    for obj in vars(_scope_nodes_module()).values():
+    for obj in vars(_models_part("nodes")).values():
         if isinstance(obj, type) and issubclass(obj, KGNode) and obj is not KGNode:
             names.add(obj.__name__)
     return frozenset(names)
 
 
 SCOPE_CORE_NODE_TYPES: frozenset[str] = scope_core_node_types()
-# Back-compat alias used by Neo4j push / native model tests.
-OXP_CORE_NODE_TYPES = SCOPE_CORE_NODE_TYPES
-
-
-def _scope_node_class(name: str) -> Optional[type]:
-    cls = getattr(_scope_model_namespace(), name, None)
-    if cls is None:
-        cls = getattr(_scope_nodes_module(), name, None)
-    return cls if isinstance(cls, type) else None
-
-
-def _scope_edge_class(name: str) -> Optional[type]:
-    cls = getattr(_scope_model_namespace(), name, None)
-    if cls is None:
-        cls = getattr(_scope_edges_module(), name, None)
-    return cls if isinstance(cls, type) else None
 
 
 def _model_field_names(cls: type) -> set[str]:
@@ -135,10 +119,6 @@ def graph_identity_keys() -> frozenset[str]:
     return frozenset(keys)
 
 
-# Back-compat name. Prefer :func:`graph_identity_keys`.
-GRAPH_KEYS = graph_identity_keys()
-
-
 def _dump_model(instance: Any, fallback: Dict[str, Any]) -> Dict[str, Any]:
     if hasattr(instance, "to_json"):
         dumped = instance.to_json()
@@ -154,6 +134,29 @@ def _dump_model(instance: Any, fallback: Dict[str, Any]) -> Dict[str, Any]:
     return fallback
 
 
+def _merge_model(
+    cls: type,
+    payload: Dict[str, Any],
+    fallback: Dict[str, Any],
+    *,
+    kind: str,
+    kind_key: str,
+) -> Dict[str, Any]:
+    out = dict(fallback)
+    if kind:
+        out.setdefault("@type", kind)
+    try:
+        instance = cls(**payload)
+    except Exception as exc:  # noqa: BLE001 — extra=forbid / missing required
+        logger.debug("scope %s model %s rejected native payload: %s", kind_key, kind, exc)
+        return out
+    for key, value in _dump_model(instance, fallback).items():
+        if value is not None:
+            out.setdefault(key, value)
+    out.setdefault(kind_key, kind)
+    return out
+
+
 def map_node(node: Dict[str, Any]) -> Dict[str, Any]:
     """Return a native node dict annotated with SCOPE ``@type`` when possible.
 
@@ -162,35 +165,25 @@ def map_node(node: Dict[str, Any]) -> Dict[str, Any]:
     still need them) until :func:`restrict_graph`.
     """
     ntype = str(node.get("node_type") or node.get("@type") or "")
-    out = dict(node)
-    if ntype:
-        out.setdefault("@type", ntype)
-    cls = _scope_node_class(ntype) if ntype else None
+    cls = _scope_class(ntype, "nodes")
     if cls is None:
+        out = dict(node)
+        if ntype:
+            out.setdefault("@type", ntype)
         return out
     allowed = _model_field_names(cls)
     payload = {k: v for k, v in node.items() if k in allowed and v is not None}
-    try:
-        instance = cls(**payload)
-    except Exception as exc:  # noqa: BLE001 — extra=forbid / missing required
-        logger.debug("scope node model %s rejected native payload: %s", ntype, exc)
-        return out
-    dumped = _dump_model(instance, node)
-    for key, value in dumped.items():
-        if value is not None:
-            out.setdefault(key, value)
-    out.setdefault("node_type", ntype)
-    return out
+    return _merge_model(cls, payload, node, kind=ntype, kind_key="node_type")
 
 
 def map_edge(edge: Dict[str, Any]) -> Dict[str, Any]:
     """Return a native edge dict annotated with SCOPE ``@type`` when possible."""
     etype = str(edge.get("edge_type") or edge.get("@type") or "")
-    out = dict(edge)
-    if etype:
-        out.setdefault("@type", etype)
-    cls = _scope_edge_class(etype) if etype else None
+    cls = _scope_class(etype, "edges")
     if cls is None:
+        out = dict(edge)
+        if etype:
+            out.setdefault("@type", etype)
         return out
     allowed = _model_field_names(cls)
     payload: Dict[str, Any] = {}
@@ -203,16 +196,7 @@ def map_edge(edge: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in edge.items():
         if key in allowed and key not in payload and value is not None:
             payload[key] = value
-    try:
-        instance = cls(**payload)
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("scope edge model %s rejected native payload: %s", etype, exc)
-        return out
-    dumped = _dump_model(instance, edge)
-    for key, value in dumped.items():
-        if value is not None:
-            out.setdefault(key, value)
-    out.setdefault("edge_type", etype)
+    out = _merge_model(cls, payload, edge, kind=etype, kind_key="edge_type")
     if source is not None:
         out.setdefault("from_id", source)
     if target is not None:
@@ -232,22 +216,22 @@ def _edge_type_name(edge: Dict[str, Any]) -> str:
     return str(edge.get("edge_type") or edge.get("edgeType") or edge.get("type") or "")
 
 
-def allowed_node_keys(ntype: str) -> frozenset[str]:
-    """Return SCOPE model fields for *ntype*, plus graph identity keys."""
-    cls = _scope_node_class(ntype) if ntype else None
+def _allowed_keys(name: str, part: str) -> frozenset[str]:
     keys = set(graph_identity_keys())
+    cls = _scope_class(name, part)
     if cls is not None:
         keys |= _model_field_names(cls)
     return frozenset(keys)
+
+
+def allowed_node_keys(ntype: str) -> frozenset[str]:
+    """Return SCOPE model fields for *ntype*, plus graph identity keys."""
+    return _allowed_keys(ntype, "nodes")
 
 
 def allowed_edge_keys(etype: str) -> frozenset[str]:
     """Return SCOPE model fields for *etype*, plus graph identity keys."""
-    cls = _scope_edge_class(etype) if etype else None
-    keys = set(graph_identity_keys())
-    if cls is not None:
-        keys |= _model_field_names(cls)
-    return frozenset(keys)
+    return _allowed_keys(etype, "edges")
 
 
 def restrict_graph(

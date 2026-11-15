@@ -4,13 +4,20 @@
 
 from __future__ import annotations
 
-from mas.library.kg.core.oxp_models import (
+from pathlib import Path
+
+from mas.library.kg.core import scope_models
+from mas.library.kg.core.scope_models import (
     DEFERRED_EDGE_TYPES,
-    GRAPH_KEYS,
     allowed_node_keys,
+    graph_identity_keys,
     restrict_graph,
 )
 from mas.library.kg.pipeline import build_kg_document
+
+
+def test_models_module_is_scope_models() -> None:
+    assert Path(scope_models.__file__).name == "scope_models.py"
 
 
 def _events() -> list[dict]:
@@ -99,7 +106,7 @@ def test_native_extensions_layer_keeps_rag_query() -> None:
     assert any(n.get("node_type") == "RAGQuery" for n in doc["nodes"])
 
 
-def test_default_kg_keeps_only_oxp_attributes() -> None:
+def test_default_kg_keeps_only_scope_attributes() -> None:
     doc = build_kg_document(_events(), run_id="r1")
     llm = next(n for n in doc["nodes"] if n.get("node_type") == "LLMCall")
     extra = set(llm) - allowed_node_keys("LLMCall")
@@ -135,4 +142,4 @@ def test_restrict_graph_drops_deferred_edges_even_with_all_attributes() -> None:
     assert {e["edge_type"] for e in out_edges} == {"hasLLMCall"}
     stripped_nodes, stripped_edges = restrict_graph(nodes, edges, all_attributes=False)
     assert "callId" not in stripped_nodes[0]
-    assert set(stripped_edges[0]) <= GRAPH_KEYS
+    assert set(stripped_edges[0]) <= graph_identity_keys()

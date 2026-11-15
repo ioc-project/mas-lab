@@ -42,7 +42,7 @@ def _load_spans(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def test_observe_sdk_profile_has_oxp_required_attributes(tmp_path):
+def test_observe_sdk_profile_has_scope_required_attributes(tmp_path):
     if not FIXTURE.exists():
         pytest.skip("events fixture missing")
     out = tmp_path / "otel_sdk_spans.jsonl"

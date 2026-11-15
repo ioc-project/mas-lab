@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from mas.library.kg.core.oxp_models import mas_namespace
+from mas.library.kg.core.scope_models import mas_namespace
 
 _MAS_NS = mas_namespace()
 

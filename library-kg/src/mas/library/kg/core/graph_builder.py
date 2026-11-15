@@ -44,7 +44,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from mas.library.kg._dist import extra_hint
 from mas.library.kg.core.event_mappings import KIND_TO_CLASS, LAYER_KINDS
-from mas.library.kg.core.oxp_models import mas_namespace
+from mas.library.kg.core.scope_models import mas_namespace
 from mas.library.kg.exceptions import (
     MissingCallIdError,
     UnknownSpanBoundaryError,

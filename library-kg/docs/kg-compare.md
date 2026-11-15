@@ -232,7 +232,7 @@ Computes the maximum containment nesting depth by walking containment edges from
 
 ### Check 5: `check_tool_coverage`
 
-Collects tool names from `ToolCall` (`toolName` / `tool_name` / `name`) and catalog `Tool.name`. Passes when `missing` is empty. Default oxp graphs keep the name on `ToolCall.name`.
+Collects tool names from `ToolCall` (`toolName` / `tool_name` / `name`) and catalog `Tool.name`. Passes when `missing` is empty. Default SCOPE graphs keep the name on `ToolCall.name`.
 
 ```python
 {

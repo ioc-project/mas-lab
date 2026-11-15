@@ -38,7 +38,7 @@ class ExportLayers:
     governance: bool = False
 
     @classmethod
-    def oxp_default(cls) -> "ExportLayers":
+    def scope_default(cls) -> "ExportLayers":
         """SCOPE-required layers: structure, execution, trajectory (plus semantic)."""
         return cls()
 
@@ -75,9 +75,7 @@ def parse_export_layers(cfg: Dict[str, Any] | None) -> ExportLayers:
     )
 
 
-def _flag(
-    cfg: Dict[str, Any], primary: str, alias: str | None = None, *, default: bool
-) -> bool:
+def _flag(cfg: Dict[str, Any], primary: str, alias: str | None = None, *, default: bool) -> bool:
     if primary in cfg:
         return bool(cfg[primary])
     if alias is not None and alias in cfg:

@@ -119,7 +119,7 @@ def handle_context_contribution(
             if str(aid).strip().lower() not in {"", "agent", "unknown", "mas"}:
                 agent_id = aid
                 break
-    from mas.library.kg.core.oxp_models import mas_namespace
+    from mas.library.kg.core.scope_models import mas_namespace
 
     _MAS_NS = mas_namespace()
 

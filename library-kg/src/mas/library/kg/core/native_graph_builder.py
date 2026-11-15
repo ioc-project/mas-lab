@@ -702,7 +702,7 @@ class NativeGraphBuilder:
             e["canonicalId"] = _edge_canonical_id(e, node_by_local_id)
 
         from mas.library.kg.core.ontology_align import align_graph
-        from mas.library.kg.core.oxp_models import map_graph, restrict_graph
+        from mas.library.kg.core.scope_models import map_graph, restrict_graph
 
         mapped_nodes, mapped_edges = map_graph(*align_graph(nodes, edges))
         return restrict_graph(mapped_nodes, mapped_edges, all_attributes=self.all_attributes)

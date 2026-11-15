@@ -716,12 +716,6 @@ html.layout-gallery-open, html.layout-gallery-open body, html.layout-gallery-ope
   text-align: left; padding: 0.28rem 0.2rem; border-bottom: 1px solid var(--border);
 }
 .session-report-table th { color: var(--muted); font-weight: 500; font-size: 0.68rem; text-transform: uppercase; }
-.session-report-table tr.oxp-cat th {
-  padding-top: 0.7rem;
-  color: var(--accent);
-  letter-spacing: 0.04em;
-  border-bottom-color: #334155;
-}
 .session-report-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .session-report-table tr.pending { opacity: 0.45; }
 .session-report-table tr.fail td.num { color: #fda4af; }

@@ -40,13 +40,19 @@ STRUCTURAL_CHECKS = [
 # SCOPE SHACL (mas-shapes.ttl + mas-shapes-custom.ttl) does not include the
 # former custom SPARQL rules these tests encode (Session.appName, processing
 # gate, temporal enclosure, inbound containment, leadsTo range).
-_OXP_SHACL_GAP = pytest.mark.skip(
+_SCOPE_SHACL_GAP = pytest.mark.skip(
     reason=(
         "SCOPE SHACL shapes do not include the custom SPARQL rules these "
         "assertions encode; they remain documented gaps pending upstream "
         "shapes."
     )
 )
+
+
+def test_verifier_indexes_scope_ontology_namespaces() -> None:
+    from mas.library.kg.core.verifier import _OntologyIndex
+
+    assert "https://ioc-project.github.io/scope-ontology/mas#" in _OntologyIndex._NS
 
 
 def _scope_ontology_path() -> str:
@@ -121,7 +127,7 @@ class TestRunValidateKgStructuralChecks:
             row["status"] == "error" and "missing" in row["detail"] and "argument" in row["detail"]
         )
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_orphaned_agent_call_reported_as_real_violation(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -271,7 +277,7 @@ class TestRunValidateKgStructuralChecks:
         assert shacl_rows[0]["status"] != "skipped"
         assert "not a well-formed SHACL PropertyShape" not in shacl_rows[0]["detail"]
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_session_app_name_check_fails_when_missing(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -323,7 +329,7 @@ class TestRunValidateKgStructuralChecks:
         assert result["error_count"] == 1
         assert any("maslab:appName" in r["detail"] for r in result["results"])
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_session_app_name_check_passes_when_present(self, tmp_path):
         from mas.library.kg.steps.validate_kg import run_validate_kg
 
@@ -379,7 +385,7 @@ class TestRunValidateKgStructuralChecks:
         assert result["error_count"] == 0
         assert result["results"] == [{"check": "shacl", "status": "pass", "detail": ""}]
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_does_not_require_callid_on_session(self, tmp_path):
         from mas.library.kg.steps.validate_kg import run_validate_kg
 
@@ -443,7 +449,7 @@ class TestRunValidateKgStructuralChecks:
             pytest.skip("Bundled ontology version still requires Session.callId")
         assert session_callid_errors == []
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_session_no_executionelement_inheritance(self, tmp_path):
         from mas.library.kg.steps.validate_kg import run_validate_kg
 
@@ -534,7 +540,7 @@ class TestRunValidateKgStructuralChecks:
         assert any("mas:hasInitialState" in row["detail"] for row in result["results"])
         assert any("mas:hasFinalState" in row["detail"] for row in result["results"])
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_executionelement_can_carry_its_own_initial_and_final_state(self, tmp_path):
         """The Session-level hasInitialState/hasFinalState requirement above
         must not be satisfied by an ExecutionElement's own boundary states --
@@ -602,7 +608,7 @@ class TestRunValidateKgStructuralChecks:
             "independently of whether an ExecutionElement child has its own"
         )
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_rejects_state_to_state_leadsto(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -644,7 +650,7 @@ class TestRunValidateKgStructuralChecks:
             for row in result["results"]
         )  # noqa: E501
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_processing_gate_rejects_agentcall_with_llm_but_no_processing(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -717,7 +723,7 @@ class TestRunValidateKgStructuralChecks:
             "must also contain a ProcessingCall" in row["detail"] for row in result["results"]
         )  # noqa: E501
 
-    @_OXP_SHACL_GAP
+    @_SCOPE_SHACL_GAP
     def test_shacl_temporal_enclosure_rejects_non_enclosing_parent(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 

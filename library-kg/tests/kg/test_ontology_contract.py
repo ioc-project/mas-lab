@@ -13,7 +13,7 @@ from mas.library.kg.core.graph_builder import (
     _load_ontology,
     _resolve_ontology_path,
 )
-from mas.library.kg.core.oxp_models import NATIVE_EXTENSION_NODE_TYPES
+from mas.library.kg.core.scope_models import NATIVE_EXTENSION_NODE_TYPES
 
 # ---------------------------------------------------------------------------
 # Fixture — loaded ontology index (skip if no TTL on disk)

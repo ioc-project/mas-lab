@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from mas.library.kg._dist import extra_hint
-from mas.library.kg.core.oxp_models import mas_namespace
+from mas.library.kg.core.scope_models import mas_namespace
 
 # ---------------------------------------------------------------------------
 # Ontology index — derives all validation constants from mas-ontology.ttl via
@@ -63,7 +63,6 @@ class _OntologyIndex:
     Recognised namespaces (used to filter triples to the MAS vocabulary):
 
     * ``mas:``    SCOPE ``https://ioc-project.github.io/scope-ontology/mas#``
-    * prior OXP URI kept so older graphs still index
     """
 
     # Recognised MAS namespaces — triples outside these are ignored.
@@ -71,9 +70,6 @@ class _OntologyIndex:
         "https://ioc-project.github.io/scope-ontology/mas#",
         "https://ioc-project.github.io/scope-ontology/mas-lab#",
         "https://ioc-project.github.io/scope-ontology/mas-kg#",
-        "https://outshift-open.github.io/oxp-ontology/mas#",
-        "https://outshift-open.github.io/oxp-ontology/mas-lab#",
-        "https://outshift-open.github.io/oxp-ontology/mas-kg#",
     ]
 
     def __init__(self) -> None:
@@ -439,7 +435,7 @@ def check_orphaned_edges(nodes: List[Dict], edges: List[Dict]) -> CheckResult:
 
     1. **Node creation failure**: A node should exist but was filtered out
        (e.g., missing 'id' field, validation failure, denormalization bug).
-    
+
     2. **Edge creation bug**: An edge was created with invalid from_id/to_id
        that doesn't match any real node.
 
@@ -665,7 +661,10 @@ def run_shacl_validation(
             entry["@id"] = f"urn:mas:agent:{local_id}"
         elif ntype in {"Tool", "LLM", "Skill", "Processing", "MAS", "Capability"}:
             name = n.get("name") or n.get("id") or ntype
-            slug = "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in str(name).strip()) or ntype.lower()  # noqa: E501
+            slug = (
+                "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in str(name).strip())
+                or ntype.lower()
+            )  # noqa: E501
             local_id = str(n.get("id") or slug)
             entry["@id"] = f"urn:mas:catalog:{ntype.lower()}:{slug}"
         elif n.get("callId"):
