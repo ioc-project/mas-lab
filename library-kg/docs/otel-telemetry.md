@@ -95,7 +95,7 @@ Status, span events, links and span kind are not carried over by the reshape. `n
 
 After all spans are processed, `norm` links agent hand-offs (from `ioa_observe.handoff.source.span_ids`, with a timestamp-order fallback), chains capability calls inside an agent call, and assigns boundary states to the session and MAS call.
 
-Names seen in MAS Lab traces that `norm` does not map: `agent_start_event` / `agent_end_event` (lifecycle markers, `mas.boundary = AgentLifecycleEvent`) and `invoke_agent <app>` (a `TaskCall`-boundary span). The observe-sdk MAS extension suffixes (`*.memory`, `*.processing`, `*.context`, `*.governance`, `*.skill`, `*.rag`) are likewise not dispatched by stock `norm`; `observability/path_equivalence.py` materializes them only for native-versus-OTel comparison, not for `run_normalize_otel`.
+Names seen in MAS Lab traces that `norm` does not map: `agent_start_event` / `agent_end_event` (lifecycle markers, `mas.boundary = AgentLifecycleEvent`) and `invoke_agent <app>` (a `TaskCall`-boundary span). The observe-sdk MAS extension suffixes (`*.memory`, `*.context`, `*.governance`, `*.skill`, `*.rag`) are likewise not dispatched by stock `norm`; `observability/path_equivalence.py` materializes them only for native-versus-OTel comparison, not for `run_normalize_otel`. `*.processing` (a `ProcessingCall`, a SCOPE core class) is exported by default and is added to the graph by the completion pass below.
 
 ## 4. Attributes read by `norm`
 
@@ -155,6 +155,16 @@ All attributes live in `SpanAttributes` (SDK: `attributes`). Values below are wh
 ### 4.7 MAS attributes carried on spans
 
 MAS Lab instrumentation also writes `mas.boundary` (for example `Session`, `AgentCall`, `LLMCall`, `ToolCall`, `TaskCall`, `Graph`, `AgentLifecycleEvent`), `mas.call.id`, `mas.agent.id`, `mas.run.id`, `mas.status`, `mas.llm.*`, `mas.tool.*`, `ioa_observe.span.kind` (`agent`, `llm`, `tool`, `task`, `graph`) and `ioa_observe.workflow.name`. Stock `norm` dispatches on the span name, not on these, so they are provenance that `norm` currently does not read. The constants for them are in `observability/vocabulary.py`.
+
+### 4.8 Completion pass (`observability/otel_completion.py`)
+
+`run_normalize_otel` runs `norm` as published, then adds what the MAS Lab `mas.*` attributes carry and `norm` does not read, so the graph read from spans matches the graph read from native events:
+
+- **LLMCall:** `llmName` (`mas.llm.model`), `prompt` (`mas.llm.messages`, rendered as the native path renders it), `completion` (`mas.llm.response`), `toolCalls` (`mas.llm.tool_calls`), `maxTokens` and `offeredTools`.
+- **MASCall:** `success` and `duration` from the `TaskCall` span. `norm` builds the MASCall from the session alone and reports duration 0 and not successful.
+- **Trajectory:** `norm`'s own States, Transitions and Processing nodes (it chains consecutive spans without knowing what each call took in and returned) are dropped. The ProcessingCalls come from their `*.processing` spans (`mas.processing.name`, `.type`, `.input`, `.messages`, `.output`), and the same `synthesize_states_and_transitions` the native path runs rebuilds States and Transitions from the calls, with the same sibling chaining. Both paths therefore build the trajectory with one function.
+
+Only attributes are added to nodes `norm` made, except the MASCall outcome, which `norm` could only guess. Spans without these attributes (another producer) come out as `norm` made them. The trajectory is rebuilt only when the spans carry ProcessingCalls (every run from the current converter does); otherwise `norm`'s trajectory stays, since the calls alone say too little to chain.
 
 ## 5. Example spans
 
@@ -243,7 +253,7 @@ MAS Lab produces OTel spans from a run's `events.jsonl` with `library-telemetry`
 
 ## 7. Relationship to the native path
 
-`examples/qa-agent/` ships one run both ways: `events.jsonl` normalized with `run_normalize` (`kg-native.jsonld`), and its replayed `otel_spans.jsonl` normalized with `run_normalize_otel` (`kg-otel.jsonld`). The two paths do not produce identical graphs: the native path builds `MASCall`, `AgentCall`, `LLMCall`, ... nodes from every event kind and optional layer ([native-telemetry.md](native-telemetry.md)), while the OTel path builds the `Session`, `MAS`, `MASCall`, `Agent`, `AgentCall`, `LLM`, `LLMCall`, `Tool`, `ToolCall`, `State` and `Transition` nodes that `norm` derives from the span names in [Section 3](#3-span-names-dispatched-by-norm).
+`examples/qa-agent/` ships one run both ways: `events.jsonl` normalized with `run_normalize` (`kg-native.jsonld`), and its replayed `otel_spans.jsonl` normalized with `run_normalize_otel` (`kg-otel.jsonld`). For the core classes the two paths agree: calls, catalogs, `ProcessingCall` and the `State`/`Transition` trajectory come out alike for a MAS Lab run (see [4.8](#48-completion-pass-observabilityotel_completionpy); the lab `kg-path-compare` shows the rest). They still differ where the native path has more to read: it builds `Run` and the optional layers (annotations, governance, context contributions, memory, skill, RAG) from every event kind ([native-telemetry.md](native-telemetry.md)), which the OTel path only has when those spans are exported, and durations differ by the sub-millisecond ordering offsets the converter adds between spans.
 
 `observability/path_equivalence.py` (`compare_native_and_otel`, modes `default` and `complete`) compares the two on a canonical subgraph; it is exercised by `tests/kg/test_native_otel_norm_equivalence.py`.
 

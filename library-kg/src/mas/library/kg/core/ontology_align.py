@@ -168,6 +168,9 @@ def _duration_ms(node: Dict[str, Any]) -> Optional[float]:
     return max(delta, 0.0)
 
 
+_UNNAMED_TYPES = frozenset({"State", "Transition"})
+
+
 def _default_name(node: Dict[str, Any]) -> str:
     for key in (
         "name",
@@ -206,7 +209,18 @@ def align_node_fields(node: Dict[str, Any]) -> Dict[str, Any]:
         key = _node_key(out)
         if key:
             out["id"] = key
-    out.setdefault("name", _default_name(out))
+    if ntype in _UNNAMED_TYPES:
+        # A State or Transition is identified by its id and content, not by a name:
+        # the OTel normalizer leaves it empty, so the native path does too.
+        out.setdefault("name", "")
+    elif ntype == "MASCall":
+        # Named as the OTel normalizer names it: ``MASCall <session id>``.
+        if not out.get("name") or out.get("name") == out.get("agentId"):
+            session = str(out.get("sessionId") or "")
+            session = session.removeprefix("session-") or str(out.get("callId") or _node_key(out))
+            out["name"] = f"MASCall {session}"
+    else:
+        out.setdefault("name", _default_name(out))
     duration = _duration_ms(out)
     if duration is not None and ntype in {
         "Session",
@@ -234,7 +248,9 @@ def align_node_fields(node: Dict[str, Any]) -> Dict[str, Any]:
         "Worker",
         "Capability",
     }:
-        out.setdefault("declared", False)
+        # An agent or MAS that ran is part of the declared topology; the OTel graph
+        # span says so for the same run. Catalog entries seen only as calls are not.
+        out.setdefault("declared", ntype in {"Agent", "MAS"})
         if not out.get("description"):
             out["description"] = out.get("name")
     if ntype == "Agent":
@@ -328,7 +344,7 @@ def _ensure_catalog(
         "id": nid,
         "name": name,
         "block": "structural",
-        "declared": False,
+        "declared": ntype in {"Agent", "MAS"},
         "description": name,
     }
     if ntype == "Agent":

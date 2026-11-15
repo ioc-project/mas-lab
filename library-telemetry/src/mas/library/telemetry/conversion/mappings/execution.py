@@ -78,6 +78,8 @@ def h_llm_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     }
     if thinking:
         extra["mas.llm.thinking"] = str(thinking)
+    if isinstance(ev.get("tool_calls"), list) and ev["tool_calls"]:
+        extra["mas.llm.tool_calls"] = conv.enc(ev["tool_calls"])
     # A cap on the return is the one actually sent, when it differs from the one asked for on start.
     if (sent_max_tokens := _number(ev.get("max_tokens"), int)) is not None:
         extra["mas.llm.max_tokens"] = sent_max_tokens
@@ -161,6 +163,7 @@ def h_processing_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.processing.type": ev.get("processing_type", ""),
             "mas.processing.segments": int(ev.get("segments") or 0),
             "mas.processing.tokens": int(ev.get("tokens") or 0),
+            **_processing_content(conv, ev, "input"),
         },
         ev.get("parent_call_id"),
         start_ns=conv.ts_ns(ev),
@@ -169,7 +172,27 @@ def h_processing_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 
 @register("processing_call_end")
 def h_processing_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.close_span(conv.span_key(ev), status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
+    conv.close_span(
+        conv.span_key(ev),
+        _processing_content(conv, ev, "output"),
+        status=ev.get("status", "success"),
+        end_ns=conv.ts_ns(ev),
+    )
+
+
+def _processing_content(conv: SpanEmitter, ev: Dict[str, Any], side: str) -> Dict[str, Any]:
+    """What a processing step took in (``input``) or produced (``output``), when it says.
+
+    ``input`` is the step's own input; ``output`` is the prompt it assembled
+    (``messages``) or its plain ``output``.
+    """
+    if side == "input":
+        value = ev.get("input") or ev.get("payload")
+        return {"mas.processing.input": value if isinstance(value, str) else conv.enc(value)} if value else {}
+    if ev.get("messages"):
+        return {"mas.processing.messages": conv.enc(ev["messages"])}
+    output = ev.get("output")
+    return {"mas.processing.output": output if isinstance(output, str) else conv.enc(output)} if output else {}
 
 
 # ── Skill executions ─────────────────────────────────────────────────────────

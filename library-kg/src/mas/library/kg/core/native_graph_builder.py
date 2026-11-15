@@ -54,7 +54,10 @@ from mas.library.kg.core.output_rendering import (
     derive_tool_use_completions,
     materialize_agent_outputs,
 )
-from mas.library.kg.core.state_transition import synthesize_states_and_transitions
+from mas.library.kg.core.state_transition import (
+    session_trajectory_anchors,
+    synthesize_states_and_transitions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -618,51 +621,7 @@ class NativeGraphBuilder:
         call_node_by_call_id: Dict[str, Dict[str, Any]] = {
             str(n.get("callId")): n for n in call_nodes.values() if n.get("callId")
         }
-        transitions_by_session: Dict[str, List[Dict[str, Any]]] = {}
-        for node in nodes:
-            if node.get("node_type") != "Transition":
-                continue
-            sess = str(node.get("sessionId") or "")
-            if not sess:
-                continue
-            transitions_by_session.setdefault(sess, []).append(node)
-
-        for session_node in session_nodes:
-            session_id = str(session_node.get("sessionId") or "")
-            session_transitions = transitions_by_session.get(session_id, [])
-            if not session_transitions:
-                continue
-            top_level_transitions = [
-                t
-                for t in session_transitions
-                if not call_node_by_call_id.get(t.get("realizesCallId", ""), {}).get("parentCallId")
-            ]
-            ordered = sorted(
-                top_level_transitions or session_transitions,
-                key=lambda node: float(node.get("transitionTimestamp") or 0),
-            )
-            first_state = ordered[0].get("fromState")
-            last_state = ordered[-1].get("toState")
-            if first_state:
-                edges.append(
-                    {
-                        "edge_type": "hasInitialState",
-                        "from_id": session_node["id"],
-                        "from_type": "session",
-                        "to_id": first_state,
-                        "to_type": "state",
-                    }
-                )
-            if last_state:
-                edges.append(
-                    {
-                        "edge_type": "hasFinalState",
-                        "from_id": session_node["id"],
-                        "from_type": "session",
-                        "to_id": last_state,
-                        "to_type": "state",
-                    }
-                )
+        edges.extend(session_trajectory_anchors(session_nodes, nodes, call_node_by_call_id))
 
         # Remove deprecated scalar link fields from exported nodes.
         for n in nodes:

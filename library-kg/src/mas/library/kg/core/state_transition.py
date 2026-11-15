@@ -393,3 +393,54 @@ def synthesize_states_and_transitions(
         all_edges.extend(edges)
 
     return state_nodes + transition_nodes, all_edges
+
+
+def session_trajectory_anchors(
+    session_nodes: List[Dict[str, Any]],
+    nodes: List[Dict[str, Any]],
+    call_node_by_call_id: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """``hasInitialState`` / ``hasFinalState`` edges from each Session to its trajectory ends.
+
+    A session starts at the first top-level Transition (one whose call has no
+    parent) and ends at the last. ``call_node_by_call_id`` is keyed by each
+    call's own ``callId``, which is what a Transition's ``realizesCallId`` holds.
+    """
+    transitions_by_session: Dict[str, List[Dict[str, Any]]] = {}
+    for node in nodes:
+        if node.get("node_type") != "Transition":
+            continue
+        sess = str(node.get("sessionId") or "")
+        if sess:
+            transitions_by_session.setdefault(sess, []).append(node)
+
+    edges: List[Dict[str, Any]] = []
+    for session_node in session_nodes:
+        session_id = str(session_node.get("sessionId") or "")
+        session_transitions = transitions_by_session.get(session_id, [])
+        if not session_transitions:
+            continue
+        top_level = [
+            t
+            for t in session_transitions
+            if not call_node_by_call_id.get(t.get("realizesCallId", ""), {}).get("parentCallId")
+        ]
+        ordered = sorted(
+            top_level or session_transitions,
+            key=lambda node: float(node.get("transitionTimestamp") or 0),
+        )
+        for edge_type, state in (
+            ("hasInitialState", ordered[0].get("fromState")),
+            ("hasFinalState", ordered[-1].get("toState")),
+        ):
+            if state:
+                edges.append(
+                    {
+                        "edge_type": edge_type,
+                        "from_id": session_node["id"],
+                        "from_type": "session",
+                        "to_id": state,
+                        "to_type": "state",
+                    }
+                )
+    return edges

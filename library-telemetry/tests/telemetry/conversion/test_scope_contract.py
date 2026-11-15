@@ -161,12 +161,53 @@ def test_new_session_id_reseeds_span_ids(tmp_path):
     assert _span_ids(isolated) != _span_ids(stable_a)
 
 
-def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
-    """Default observe_sdk export is the noa-trip-planner ingest subset.
+def test_observe_sdk_exports_processing_call_without_extensions(tmp_path):
+    """ProcessingCall is a SCOPE core class: observe_sdk emits it by default."""
+    events = tmp_path / "events.jsonl"
+    events.write_text(
+        json.dumps(
+            {
+                "kind": "processing_call_start",
+                "call_id": "proc-1",
+                "parent_call_id": "agent-1",
+                "timestamp": 1.0,
+                "agent_id": "planner",
+                "processing_name": "context assembly",
+                "processing_type": "context_assembly",
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "kind": "processing_call_end",
+                "call_id": "proc-1",
+                "timestamp": 1.1,
+                "agent_id": "planner",
+                "processing_name": "context assembly",
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "spans.jsonl"
+    replay_events_file(events, out, app_name="qa-agent", converter_profile="observe_sdk")
+    names = [_name(s) for s in _load_spans(out)]
+    assert any(n.endswith(".processing") for n in names), names
+    proc = next(s for s in _load_spans(out) if _name(s).endswith(".processing"))
+    attrs = _attrs(proc)
+    assert attrs.get("mas.boundary") == "ProcessingCall"
+    assert attrs.get("mas.processing.name") == "context assembly"
+    assert attrs.get("mas.processing.messages")
 
-    No governance / context / processing / CallAnnotation spans. Extra
-    attributes (``mas.*``, ``session.name``, ``tool_name``, …) stay on the
-    wire — ingest silently ignores them. Required ingest keys stay on.
+
+def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
+    """Default observe_sdk export is the SCOPE ingest subset.
+
+    No governance / context / CallAnnotation spans. ProcessingCall is a
+    SCOPE core class, so ``*.processing`` is on. Extra attributes
+    (``mas.*``, ``session.name``, ``tool_name``, …) stay on the wire —
+    ingest silently ignores them. Required ingest keys stay on.
     """
     sample = (
         Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
@@ -186,7 +227,7 @@ def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
     suffixes = {n.rsplit(".", 1)[-1] if "." in n else n for n in names}
     assert "governance" not in suffixes
     assert "context" not in suffixes
-    assert "processing" not in suffixes
+    assert "processing" in suffixes
     assert "session.start" in names
     assert "session.end" in names
     assert any(n.endswith(".graph") for n in names)

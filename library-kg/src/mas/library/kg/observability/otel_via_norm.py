@@ -198,7 +198,9 @@ def normalize_otel(
 
     Uses whatever ``norm`` / ``ioc-scope-ontology`` are installed, as
     published — this package does not patch, subclass, or otherwise work
-    around either dependency's own behavior. If ``norm``'s handlers and the
+    around either dependency's own behavior. It only adds what the MAS Lab
+    spans carry under ``mas.*`` and ``norm`` does not read
+    (:mod:`mas.library.kg.observability.otel_completion`). If ``norm``'s handlers and the
     installed SCOPE models disagree about what fields a model accepts,
     that is a real inconsistency in that dependency pair and is reported
     upstream, not silently papered over here.
@@ -210,8 +212,10 @@ def normalize_otel(
 
     from mas.library.kg.core.ontology_align import align_graph
     from mas.library.kg.core.scope_models import restrict_graph
+    from mas.library.kg.observability.otel_completion import complete_otel_graph
 
     clickhouse = to_clickhouse_spans(spans)
     nodes, edges = normalize(clickhouse)
+    nodes, edges = complete_otel_graph(nodes, edges, clickhouse)
     aligned_nodes, aligned_edges = align_graph(nodes, edges)
     return restrict_graph(aligned_nodes, aligned_edges, all_attributes=all_attributes)

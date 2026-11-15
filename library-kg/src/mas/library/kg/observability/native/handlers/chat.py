@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from mas.library.kg.core.native_graph_builder import NativeGraphBuilder
 
 
-def _format_messages(messages: Any) -> str:
+def format_messages(messages: Any) -> str:
     """Format an OpenAI-style messages list as a readable conversation string.
 
     Each turn is rendered as::
@@ -127,7 +127,7 @@ def _extract_completion(resp: Dict[str, Any]) -> str:
     return _text_with_tool_calls(content, resp.get("tool_calls"))
 
 
-def _extract_tool_calls_structured(resp: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_tool_calls_structured(resp: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Extract structured tool calls from OpenAI-style response payloads."""
     choices = resp.get("choices") or []
     if choices and isinstance(choices, list):
@@ -188,7 +188,7 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
             "prompt",
             event.get("input")
             or event.get("prompt")
-            or _format_messages(event.get("messages"))
+            or format_messages(event.get("messages"))
             or json.dumps(event.get("messages") or [], ensure_ascii=False),
         )
         node.setdefault("promptTokenCount", 0)
@@ -221,13 +221,13 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         usage.update({k: v for k, v in resp["usage"].items() if v not in (None, "")})
     event_tool_calls = event.get("tool_calls")
     if resp:
-        node.setdefault("toolCalls", _extract_tool_calls_structured(resp))
+        node.setdefault("toolCalls", extract_tool_calls_structured(resp))
         node.setdefault("completion", _extract_completion(resp))
         node.setdefault("responseId", resp.get("id", "") or "")
     if event_tool_calls:
         # The runtime's own shape wins over an OpenAI-shaped ``response`` on the same event;
         # the OTel converter does the same: text first, then the rendered calls.
-        node["toolCalls"] = _extract_tool_calls_structured({"tool_calls": event_tool_calls})
+        node["toolCalls"] = extract_tool_calls_structured({"tool_calls": event_tool_calls})
         base_text = str(resp.get("content") or flat_out)
         node["completion"] = _text_with_tool_calls(base_text, event_tool_calls)
     if not node.get("completion") and flat_out:
