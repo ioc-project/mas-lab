@@ -1,0 +1,19 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: Application
+metadata: {name: authorized-worker}
+spec:
+  endpoints:
+    worker:
+      protocol: a2a
+      usage: listen
+      url: http://127.0.0.1:9101
+      a2a:
+        delivery_timeout: 30
+        delivery_policy:
+          type: proxy_release
+          params: {config_file: ./client.json, agent: worker}
+        webserver:
+          type: proxy_authenticated_http
+          params: {config_file: ./client.json}

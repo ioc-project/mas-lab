@@ -1,0 +1,27 @@
+# Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+# SPDX-License-Identifier: Apache-2.0
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mas-lab-library-enforcement-proxy"
+version = "0.2.0"
+requires-python = ">=3.11"
+description = "Optional native governance and A2A delivery integration for enforcement-proxy"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+dependencies = ["httpx>=0.28,<1", "mas-lab-runtime", "mas-lab-library-ioa"]
+
+[project.entry-points."mas.runtime.manifest_libraries"]
+enforcement_proxy = "mas.library.enforcement_proxy"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mas"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"library.yaml" = "mas/library/enforcement_proxy/library.yaml"
+
+[tool.uv.sources]
+mas-lab-runtime = { workspace = true }
+mas-lab-library-ioa = { workspace = true }

@@ -23,6 +23,7 @@ LIBRARIES = {
     "lib_eval": "library-eval/",
     "lib_ioa": "library-ioa/",
     "lib_telemetry": "library-telemetry/",
+    "lib_enforcement_proxy": "library-enforcement-proxy/",
     "lib_kg": "library-kg/",
     "lib_skills": "library-skills/",
     "lib_samples": "library-samples/",
@@ -73,6 +74,13 @@ UNIT_ROWS = (
     {"flag": "repo", "name": "Repo", "task": "verify-repo"},
 )
 LIBRARY_ROWS = (
+    {
+        "flag": "lib_enforcement_proxy",
+        "name": "enforcement-proxy",
+        "dir": "library-enforcement-proxy",
+        "cov": "mas.library.enforcement_proxy",
+        "fail_under": "90",
+    },
     {
         "flag": "lib_standard",
         "name": "standard",
