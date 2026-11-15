@@ -180,3 +180,69 @@ def test_generated_call_suffix_is_stripped(name: str, stripped: str) -> None:
     from mas.library.kg.observability.path_equivalence import _strip_generated_suffix
 
     assert _strip_generated_suffix(name) == stripped
+
+
+def _events_with_processing() -> list[dict]:
+    """A tool-use run whose LLM call is preceded by a context-assembly step."""
+    events = _tool_use_events()
+    llm = next(e for e in events if e["kind"] == "llm_call_start")
+    messages = [{"role": "user", "content": "find flights"}]
+    base = {k: llm[k] for k in ("run_id", "session_id", "agent_id", "parent_call_id")}
+    start = {
+        **base,
+        "kind": "processing_call_start",
+        "call_id": "proc-1",
+        "timestamp": float(llm["timestamp"]) - 0.05,
+        "processing_name": "context assembly",
+        "processing_type": "context_assembly",
+        "messages": messages,
+    }
+    end = {**start, "kind": "processing_call_end", "timestamp": float(llm["timestamp"]) - 0.04}
+    index = events.index(llm)
+    return [*events[:index], start, end, *events[index:]]
+
+
+def _trajectory_view(nodes: list[dict]) -> dict:
+    count = lambda ntype: sum(1 for n in nodes if n.get("node_type") == ntype)  # noqa: E731
+    return {
+        "counts": {
+            t: count(t) for t in ("State", "Transition", "ProcessingCall", "Processing", "LLMCall")
+        },
+        "state_content": sorted(
+            str(n.get("content", "")) for n in nodes if n.get("node_type") == "State"
+        ),
+    }
+
+
+def test_the_trajectory_is_the_same_whether_built_from_events_or_from_spans() -> None:
+    """States, Transitions and ProcessingCalls come out alike, content included."""
+    _import_compare()
+    from mas.library.kg.observability.path_equivalence import _native_kg, _otel_kg
+
+    events = _events_with_processing()
+    native = _trajectory_view(_native_kg(events, mode="default")[0])
+    otel = _trajectory_view(_otel_kg(events, mode="default")[0])
+    assert native["counts"]["ProcessingCall"] >= 2  # the fixture's own step and the one added here
+    assert otel == native
+
+
+def test_spans_from_another_producer_keep_the_normalizers_own_trajectory() -> None:
+    """No ``mas.*`` attributes, so nothing to rebuild from: the graph is ``norm``'s."""
+    pytest.importorskip("norm")
+    from norm.normalizer import normalize
+
+    from mas.library.kg.observability.otel_via_norm import normalize_otel, to_clickhouse_spans
+
+    example = _ROOT / "examples" / "trip-planner" / "otel_spans.jsonl"
+    spans = _load_events(example)
+    for span in spans:
+        attrs = span.get("attributes") or {}
+        span["attributes"] = {k: v for k, v in attrs.items() if not k.startswith("mas.")}
+    stock_nodes, _ = normalize(to_clickhouse_spans(spans))
+    nodes, _ = normalize_otel(spans)
+
+    def count(graph: list, ntype: str) -> int:
+        return sum(1 for n in graph if n.get("node_type") == ntype)
+
+    for ntype in ("State", "Transition", "ProcessingCall"):
+        assert count(nodes, ntype) == count(stock_nodes, ntype), ntype

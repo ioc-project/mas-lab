@@ -23,10 +23,10 @@ DEFAULT_CONVERTER_PROFILE: Final[ConverterProfile] = "raw"
 def default_extensions(profile: ConverterProfile, extensions: bool | None) -> bool:
     """Extension suffixes stay off unless the caller opts in.
 
-    Observe-sdk default matches the noa-trip-planner reference: session,
-    graph, invoke_agent, ``*.agent``, ``*.chat``, ``*.tool`` only.
-    Governance / context / processing / memory / skill / rag spans are
-    opt-in via ``extensions=True``.
+    Observe-sdk default is session, graph, invoke_agent, ``*.agent``,
+    ``*.chat``, ``*.tool``, and ``*.processing`` (ProcessingCall is a
+    SCOPE core class). Governance / context / memory / skill / rag spans
+    are opt-in via ``extensions=True``.
     """
     del profile
     if extensions is None:
@@ -41,10 +41,7 @@ def normalize_converter_profile(value: str | None) -> ConverterProfile:
         return "raw"
     if profile in {"observe_sdk", "observe-sdk", "observe"}:
         return "observe_sdk"
-    raise ValueError(
-        "invalid converter profile "
-        f"{value!r}; expected one of: raw, observe_sdk"
-    )
+    raise ValueError(f"invalid converter profile {value!r}; expected one of: raw, observe_sdk")
 
 
 __all__ = [

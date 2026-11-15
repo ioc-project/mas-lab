@@ -55,7 +55,10 @@ def handle_tool_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Li
         # rewrite_tool_delegation=False: keep the ToolCall. callsAgent is a
         # native extension and is not emitted until A2A observability lands.
     else:
-        node["toolOutput"] = event.get("output") or event.get("result") or ""
+        output = event.get("output") or event.get("result") or ""
+        # A structured result is text in the graph, as JSON like the arguments (and as the
+        # OTel converter writes it), not a Python repr.
+        node["toolOutput"] = output if isinstance(output, str) else json.dumps(output, default=str)
 
     return [node]
 

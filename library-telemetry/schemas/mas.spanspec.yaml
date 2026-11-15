@@ -82,7 +82,13 @@ shapes:
         required: [mas.agent.id, mas.boundary]
         recommended:
           [mas.processing.name, mas.processing.type, mas.processing.tokens]
-        optional: [mas.processing.segments]
+        optional:
+          [
+            mas.processing.segments,
+            mas.processing.input,
+            mas.processing.messages,
+            mas.processing.output,
+          ]
 
   # ─ LLM calls ─────────────────────────────────────────────────────────────────
 
@@ -118,6 +124,7 @@ shapes:
             mas.llm.temperature,
             mas.llm.max_tokens,
             mas.llm.tools,
+            mas.llm.tool_calls,
             mas.llm.finish_reason,
             metrics.token.total,
           ]

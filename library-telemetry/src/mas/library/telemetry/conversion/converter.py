@@ -158,11 +158,12 @@ class MasOtelConverter:
             "RealtimeSignal",
             "AgentLifecycleEvent",
             "ParallelGroup",
+            # A SCOPE core class (execution layer), so exported without opting in.
+            "ProcessingCall",
         }
     )
     _OBSERVE_SDK_EXTENSION_BOUNDARIES: ClassVar[frozenset[str]] = frozenset(
         {
-            "ProcessingCall",
             "ContextContribution",
             "GovernanceEvent",
             "MemoryCall",
@@ -1364,13 +1365,13 @@ class MasOtelConverter:
             return f"{agent}.{kind}"
         if boundary == "ParallelGroup":
             return f"{agent}.parallel_group"
+        if boundary == "ProcessingCall":
+            actor = str(attrs.get("mas.processing.actor") or agent or "processing")
+            return f"{actor}.{semconv.SPAN_SUFFIX_PROCESSING}"
         if self._extensions:
             if boundary == "MemoryCall":
                 mem = str(attrs.get("mas.memory.type") or agent or "memory")
                 return f"{mem}.{semconv.SPAN_SUFFIX_MEMORY}"
-            if boundary == "ProcessingCall":
-                actor = str(attrs.get("mas.processing.actor") or agent or "processing")
-                return f"{actor}.{semconv.SPAN_SUFFIX_PROCESSING}"
             if boundary == "ContextContribution":
                 return f"{agent}.{semconv.SPAN_SUFFIX_CONTEXT}"
             if boundary == "GovernanceEvent":
@@ -1490,7 +1491,7 @@ class MasOtelConverter:
                 semconv.IOA_ENTITY_NAME,
                 str(out.get("mas.memory.type") or agent or "memory"),
             )
-        if self._extensions and boundary == "ProcessingCall":
+        if boundary == "ProcessingCall":
             out.setdefault(semconv.OBSERVE_PROCESSING_ACTOR, agent)
             out.setdefault(semconv.IOA_ENTITY_NAME, agent or "processing")
         if self._extensions and boundary == "GovernanceEvent":

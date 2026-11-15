@@ -131,6 +131,11 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- The observe-sdk profile exports ProcessingCall as `*.processing` by default.
+- `run_normalize_otel` reads LLM request and return fields, the MAS call outcome, and ProcessingCalls from `mas.*` span attributes, and rebuilds the trajectory with the native path's function.
+- Spans carry structured tool calls and processing content, declared in the span spec.
+- A structured tool result is JSON text, not a Python repr. `State` and `Transition` have no invented name; the `MASCall` is named like `norm`; `Agent` and `MAS` are declared.
+- Both paths share the session anchor edges.
 - Native KG and OTel name `LLMCall` the same way, take Session and MAS identity from the events, and treat a failed, cut-off, or interrupted call as unsuccessful.
 - The trip-planner moderator allows 40 dispatch steps, not 10.
 - A lab's own `library.yaml` steps (a lab-local `snapshot_kg`, say) now resolve when the controller daemon runs the lab from another directory, including `/api/pipeline/run`. Library discovery adds the lab root to its search, not only the process cwd, and plugins of a lab loaded after the registry was built are added to it. When two labs in one process declare a library of the same name, the one loaded last wins. Two labs that ship the same plugin package name are refused. Before, the post pipeline failed with `Unknown step type`.

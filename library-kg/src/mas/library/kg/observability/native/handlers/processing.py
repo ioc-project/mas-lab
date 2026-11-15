@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from mas.library.kg.core.native_graph_builder import NativeGraphBuilder
 
 
-def _render_assembled_messages(messages: Any) -> str:
+def render_assembled_messages(messages: Any) -> str:
     """Render a context-assembly event's own ``messages`` list to readable text.
 
     The runtime's ``context_assembly`` step (``boundary_handlers.py``'s
@@ -53,7 +53,7 @@ def handle_processing_call(
         node.setdefault("processingType", event.get("processing_type") or "")
         node.setdefault("inputContent", event.get("input") or event.get("payload") or "")
     else:
-        rendered = _render_assembled_messages(event.get("messages"))
+        rendered = render_assembled_messages(event.get("messages"))
         node["processingOutput"] = rendered or event.get("output") or ""
 
     return [node]

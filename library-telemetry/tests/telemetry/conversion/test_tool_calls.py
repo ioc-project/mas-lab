@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import json
+
 from mas.library.telemetry.conversion.mappings.execution import h_llm_call_end
 from mas.library.telemetry.conversion.tool_calls import MAX_ARGS_CHARS, tool_calls_text
 
@@ -38,6 +40,9 @@ class _Conv:
     def ts_ns(self, ev):
         return 0
 
+    def enc(self, value):
+        return json.dumps(value)
+
     def is_closed(self, call_id):
         return False
 
@@ -56,3 +61,10 @@ def test_llm_call_end_keeps_output_and_appends_tool_calls() -> None:
     assert conv.closed["mas.llm.response"] == "→ t({})"
     h_llm_call_end(conv, {"call_id": "c", "output": "plain"})
     assert conv.closed["mas.llm.response"] == "plain"
+    assert "mas.llm.tool_calls" not in conv.closed
+
+
+def test_llm_call_end_carries_the_structured_tool_calls() -> None:
+    conv = _Conv()
+    h_llm_call_end(conv, {"call_id": "c", "output": "", "tool_calls": [{"toolName": "t", "arguments": {"a": 1}}]})
+    assert json.loads(conv.closed["mas.llm.tool_calls"]) == [{"toolName": "t", "arguments": {"a": 1}}]
