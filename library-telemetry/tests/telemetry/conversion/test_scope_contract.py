@@ -43,8 +43,7 @@ def _load_spans(path: Path) -> list[dict]:
 
 
 def test_observe_sdk_profile_has_scope_required_attributes(tmp_path):
-    if not FIXTURE.exists():
-        pytest.skip("events fixture missing")
+    assert FIXTURE.exists(), FIXTURE
     out = tmp_path / "otel_sdk_spans.jsonl"
     replay_events_file(
         FIXTURE,
@@ -115,8 +114,7 @@ def test_observe_sdk_profile_has_scope_required_attributes(tmp_path):
 
 
 def test_new_session_id_replaces_event_session_id(tmp_path):
-    if not FIXTURE.exists():
-        pytest.skip("events fixture missing")
+    assert FIXTURE.exists(), FIXTURE
     out = tmp_path / "otel_sdk_spans.jsonl"
     replay_events_file(
         FIXTURE,
@@ -135,8 +133,7 @@ def test_new_session_id_replaces_event_session_id(tmp_path):
 
 
 def test_new_session_id_reseeds_span_ids(tmp_path):
-    if not FIXTURE.exists():
-        pytest.skip("events fixture missing")
+    assert FIXTURE.exists(), FIXTURE
 
     def _span_ids(path):
         return {
@@ -212,8 +209,7 @@ def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
     sample = (
         Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
     )
-    if not sample.exists():
-        pytest.skip(f"missing tutorial sample {sample}")
+    assert sample.exists(), sample
     out = tmp_path / "otel_sdk_spans.jsonl"
     replay_events_file(
         sample,
@@ -235,7 +231,8 @@ def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
     assert any(n.endswith(".agent") for n in names)
     assert any(n.endswith(".chat") for n in names)
     assert any(n.endswith(".tool") for n in names)
-    assert not any(n.startswith("delegate_to_") for n in names)
+    # delegate_to_* is an ordinary tool span of the caller, not a visit split.
+    assert "delegate_to_schedule_agent.tool" in names
     for span in spans:
         attrs = _attrs(span)
         # application_id is the primary MAS name; service.name is only the
@@ -244,145 +241,131 @@ def test_observe_sdk_default_matches_noa_ingest_categories(tmp_path):
         assert attrs.get(semconv.APPLICATION_ID), span
         assert attrs.get(semconv.SESSION_ID), span
     schedule = next(s for s in spans if _name(s) == "schedule_agent.agent")
-    assert _attrs(schedule).get("ioa_observe.agent.previous") == "moderator"
+    assert "ioa_observe.agent.previous" not in _attrs(schedule)
 
 
-def test_realtime_replaces_graph_span(tmp_path):
-    from mas.library.telemetry.conversion.converter import MasOtelConverter
-    from mas.library.telemetry.conversion.exporter import JSONLineFileSpanExporter
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+def _realtime_replay(tmp_path: Path, events: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(spans, runtime-event LogRecords) of a realtime replay of ``events``."""
+    from mas.library.telemetry.conversion.session import runtime_events_path
 
+    src = tmp_path / "events.jsonl"
+    src.write_text("\n".join(json.dumps(e) for e in events))
     out = tmp_path / "rt.jsonl"
-    exporter = JSONLineFileSpanExporter(out)
-    provider = TracerProvider(resource=Resource.create({"service.name": "trip-planner"}))
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    conv = MasOtelConverter(
-        provider.get_tracer("t"),
-        app_name="trip-planner",
-        converter_profile="observe_sdk",
-        realtime=True,
-    )
-    conv.process_event(
-        {
-            "kind": "execution_start",
-            "call_id": "a1",
-            "agent_id": "planner",
-            "timestamp": 1.0,
-        }
-    )
-    conv.process_event(
-        {
-            "kind": "execution_end",
-            "call_id": "a1",
-            "agent_id": "planner",
-            "timestamp": 2.0,
-        }
-    )
-    conv.emit_graph_span({"nodes": {"planner": {}}, "edges": []}, app_name="trip-planner")
-    conv.flush_open_spans()
-    provider.force_flush()
-    names = [_name(s) for s in _load_spans(out)]
-    assert "topology.node.started" in names
-    assert "topology.node.completed" in names
-    assert not any(n.endswith(".graph") for n in names)
+    replay_events_file(src, out, service_name="svc", app_name="planner", converter_profile="observe_sdk", realtime=True)
+    records = [json.loads(line) for line in runtime_events_path(out).read_text().splitlines() if line.strip()]
+    return _load_spans(out), records
 
 
-def test_realtime_tool_signals_carry_entity_name_and_agent_span_id(tmp_path):
-    """norm's realtime handlers (handlers/tool.py, handlers/chat.py) drop a
-    signal with no ioa_observe.entity.name, and can't link it to its
-    AgentCall without ioa_observe.agent.span_id. The *_start event's own
-    tool_name/model must survive to the matching *_end signal too, since
-    that event never repeats it."""
-    from mas.library.telemetry.conversion.converter import MasOtelConverter
-    from mas.library.telemetry.conversion.exporter import JSONLineFileSpanExporter
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-
-    out = tmp_path / "rt.jsonl"
-    exporter = JSONLineFileSpanExporter(out)
-    provider = TracerProvider(resource=Resource.create({"service.name": "trip-planner"}))
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    conv = MasOtelConverter(
-        provider.get_tracer("t"),
-        app_name="trip-planner",
-        converter_profile="observe_sdk",
-        realtime=True,
-    )
-    conv.process_event({"kind": "execution_start", "call_id": "a1", "agent_id": "planner", "timestamp": 1.0})
-    conv.process_event(
-        {
-            "kind": "tool_call_start",
-            "call_id": "t1",
-            "parent_call_id": "a1",
-            "agent_id": "planner",
-            "tool_name": "lookup_schedule",
-            "timestamp": 1.1,
-        }
-    )
-    conv.process_event({"kind": "tool_call_end", "call_id": "t1", "agent_id": "planner", "timestamp": 1.2})
-    conv.process_event({"kind": "execution_end", "call_id": "a1", "agent_id": "planner", "timestamp": 2.0})
-    conv.flush_open_spans()
-    provider.force_flush()
-    signals = {_name(s): _attrs(s) for s in _load_spans(out) if _name(s).startswith("tool.")}
-    assert set(signals) == {"tool.started", "tool.completed"}
-    for attrs in signals.values():
-        assert attrs.get(semconv.IOA_ENTITY_NAME) == "lookup_schedule"
-        assert attrs.get(semconv.IOA_AGENT_SPAN_ID)
+_REALTIME_RUN = [
+    {"kind": "mas_call_start", "call_id": "run", "timestamp": 0.0, "agent_id": "orchestrator", "session_id": "s1"},
+    {"kind": "execution_start", "call_id": "a1", "parent_call_id": "run", "timestamp": 0.1, "agent_id": "planner"},
+    {
+        "kind": "llm_call_start",
+        "call_id": "l1",
+        "parent_call_id": "a1",
+        "agent_id": "planner",
+        "model": "openai/gpt-4o",
+        "messages": [{"role": "user", "content": "plan"}],
+        "timestamp": 0.15,
+    },
+    {"kind": "llm_call_end", "call_id": "l1", "agent_id": "planner", "output": "call it", "timestamp": 0.18},
+    {
+        "kind": "tool_call_start",
+        "call_id": "t1",
+        "parent_call_id": "a1",
+        "agent_id": "planner",
+        "tool_name": "lookup_schedule",
+        "arguments": {"day": "mon"},
+        "timestamp": 0.2,
+    },
+    {"kind": "tool_call_end", "call_id": "t1", "agent_id": "planner", "output": "9am", "timestamp": 0.3},
+    {"kind": "execution_end", "call_id": "a1", "agent_id": "planner", "timestamp": 0.4},
+    {"kind": "mas_call_end", "call_id": "run", "timestamp": 0.5, "agent_id": "orchestrator"},
+]
 
 
-def test_realtime_lifecycle_pair_shares_one_span_id(tmp_path):
-    """A realtime "started"/"completed" (or topology node started/completed)
-    pair is two independently start()/end()'d OTel spans, each normally
-    getting its own random span id from the SDK's id generator -- with no
-    shared id, norm's build_kg has no key to link them as one logical call
-    and creates two disconnected nodes instead of one. The active
-    id_generator's reuse_span_id() hook (session.py's
-    _SharedTraceIdGenerator) must make the "completed" half reuse the
-    "started" half's own id."""
-    from mas.library.telemetry.conversion.replay import replay_events_file
-
-    events = tmp_path / "events.jsonl"
-    events.write_text(
-        "\n".join(
-            json.dumps(e)
-            for e in [
-                {"kind": "mas_call_start", "call_id": "run", "timestamp": 0.0, "agent_id": "orchestrator"},
-                {
-                    "kind": "execution_start",
-                    "call_id": "a1",
-                    "parent_call_id": "run",
-                    "timestamp": 0.1,
-                    "agent_id": "planner",
-                },
-                {
-                    "kind": "tool_call_start",
-                    "call_id": "t1",
-                    "parent_call_id": "a1",
-                    "agent_id": "planner",
-                    "tool_name": "lookup_schedule",
-                    "timestamp": 0.2,
-                },
-                {"kind": "tool_call_end", "call_id": "t1", "agent_id": "planner", "timestamp": 0.3},
-                {"kind": "execution_end", "call_id": "a1", "agent_id": "planner", "timestamp": 0.4},
-                {"kind": "mas_call_end", "call_id": "run", "timestamp": 0.5, "agent_id": "orchestrator"},
-            ]
-        )
-    )
-    out = tmp_path / "rt.jsonl"
-    replay_events_file(
-        events, out, service_name="svc", app_name="planner", converter_profile="observe_sdk", realtime=True
-    )
-    spans = _load_spans(out)
-    tool_signals = [s for s in spans if _name(s).startswith("tool.")]
-    assert {_name(s) for s in tool_signals} == {"tool.started", "tool.completed"}
-    span_ids = {s["context"]["span_id"] for s in tool_signals}
-    assert len(span_ids) == 1, f"started/completed must share one span id, got {span_ids}"
-    topology_signals = [s for s in spans if _name(s).startswith("topology.node.")]
-    assert {_name(s) for s in topology_signals} == {
+def test_realtime_replaces_graph_span_with_runtime_event_log_records(tmp_path):
+    spans, records = _realtime_replay(tmp_path, _REALTIME_RUN)
+    assert not any(_name(s).endswith(".graph") for s in spans)
+    # Runtime events are LogRecords named like the SDK's own, not spans.
+    assert not any(_name(s).startswith(("topology.", "tool.", "llm.")) for s in spans)
+    assert [r["event_name"] for r in records] == [
+        "topology.session.started",
         "topology.node.started",
+        "llm.started",
+        "llm.completed",
+        "tool.started",
+        "tool.completed",
         "topology.node.completed",
-    }
-    assert len({s["context"]["span_id"] for s in topology_signals}) == 1
+        "topology.session.completed",
+    ]
+    for record in records:
+        assert record["body"] == record["event_name"] == record["attributes"]["event.name"]
+
+
+def test_realtime_events_carry_the_sdk_keys(tmp_path):
+    spans, records = _realtime_replay(tmp_path, _REALTIME_RUN)
+    by_name = {r["event_name"]: r["attributes"] for r in records}
+    session = {name: by_name.pop(name) for name in ("topology.session.started", "topology.session.completed")}
+    agent_span = next(s for s in spans if _name(s) == "planner.agent")["context"]["span_id"][2:]
+    tool_span = next(s for s in spans if _name(s) == "lookup_schedule.tool")["context"]["span_id"][2:]
+    chat_span = next(s for s in spans if _name(s) == "planner.chat")["context"]["span_id"][2:]
+    for attrs in by_name.values():
+        assert attrs["agent.name"] == "planner"
+        assert attrs["application_id"] == "planner"
+        assert attrs["session.id"] == "planner_s1"
+        assert attrs[semconv.IOA_AGENT_SPAN_ID] == agent_span
+        assert len(attrs["trace.id"]) == 32 and len(attrs["event.id"]) == 64
+        assert attrs["event.time"].startswith("1970-01-01T00:00:00")
+    assert by_name["topology.node.started"]["span.id"] == agent_span
+    tool = by_name["tool.completed"]
+    assert (tool["tool.name"], tool["tool.type"], tool["tool.output"], tool["tool.status"]) == (
+        "lookup_schedule",
+        "function",
+        "9am",
+        "success",
+    )
+    assert by_name["tool.started"]["tool.input"] == '{"day":"mon"}'
+    assert by_name["tool.started"]["span.id"] == by_name["tool.completed"]["span.id"] == tool_span
+    llm = by_name["llm.started"]
+    assert (llm["llm.name"], llm["gen_ai.provider.name"], llm["llm.call.id"]) == ("gpt-4o", "openai", chat_span)
+    assert by_name["llm.completed"]["llm.output"] == "call it"
+    # The MAS call's records: its own span, no agent span (it is no agent's).
+    invoke = next(s for s in spans if _name(s).startswith("invoke_agent"))["context"]["span_id"][2:]
+    for attrs in session.values():
+        assert attrs["span.id"] == invoke and semconv.IOA_AGENT_SPAN_ID not in attrs
+    # A started record carries the attributes its span was started with.
+    assert by_name["topology.node.started"]["mas.call.id"]
+    assert by_name["llm.started"]["gen_ai.request.model"] == "gpt-4o"
+
+
+def test_realtime_records_are_valid_sdk_runtime_events(tmp_path):
+    """Each record passes the ioa-observe SDK's own contract and numbers the session's snapshots in order."""
+    from ioa_observe.sdk.tracing.runtime_events import identify_runtime_event, validate_runtime_event_attributes
+
+    _spans, records = _realtime_replay(tmp_path, _REALTIME_RUN)
+    assert records
+    for record in records:
+        attrs = record["attributes"]
+        validate_runtime_event_attributes(attrs["event.name"], attrs)
+        assert identify_runtime_event(attrs) == attrs  # event.id is the SDK's
+        assert record["severity_text"] == "INFO"
+    versions = [r["attributes"]["snapshot.version"] for r in records]
+    assert versions == list(range(1, len(records) + 1))
+
+
+@pytest.mark.scope_next
+def test_norm_realtime_path_ingests_the_runtime_events_unchanged(tmp_path):
+    """SCOPE norm reads each LogRecord as it stands (``otel_io_realtime``)."""
+    from norm.ioa_observe.otel_io_realtime import realtime_record_to_span
+
+    _spans, records = _realtime_replay(tmp_path, _REALTIME_RUN)
+    as_spans = [realtime_record_to_span(r) for r in records]
+    tool = [s for s in as_spans if s["SpanName"].startswith("tool.")]
+    assert {s["SpanId"] for s in tool} == {tool[0]["SpanId"]}  # started + completed fold into one call
+    assert all(s["SpanAttributes"]["ioa_observe.entity.name"] == "lookup_schedule" for s in tool)
+    assert all(
+        s["SpanAttributes"]["agent_id"] == "planner"
+        for s in as_spans
+        if not s["SpanName"].startswith("topology.session.")
+    )

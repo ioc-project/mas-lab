@@ -2,83 +2,97 @@
 #  SPDX-License-Identifier: Apache-2.0
 """ioa-observe / GenAI semantic-convention attribute names.
 
-Prefer constants exported by the installed ``ioa-observe-sdk`` when present.
-Fall back to the published string values so conversion works with stock PyPI
-SDK, a local extended checkout, or no SDK at all (attribute names only).
+Names that ``ioa_observe.sdk.utils.const`` defines are read from it (``_const``,
+by the SDK's own constant name) when the installed SDK has them; the literal next
+to each is the same published value, used when the installed SDK predates that
+constant. Names the SDK does not define (yet) are plain literals here. Every
+other module takes these names from this one.
 """
 
 from __future__ import annotations
 
-import importlib
-import logging
-from typing import Any, Final
+from typing import Final
 
-logger = logging.getLogger(__name__)
-
-
-def _load_sdk_span_attributes() -> Any | None:
-    for module_name in (
-        "ioa_observe.sdk.tracing.tracing",
-        "ioa_observe.sdk.tracing",
-        "ioa_observe.tracing.tracing",
-    ):
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError:
-            continue
-        except Exception:
-            # The module exists but is broken (e.g. an internal import error
-            # inside ioa_observe) -- distinct from "genuinely absent," and
-            # worth a log line rather than silently falling back to guessed
-            # literal attribute names as if the dependency weren't installed.
-            logger.warning(
-                "ioa-observe-sdk's %s is installed but failed to import; "
-                "falling back to literal attribute-name strings.",
-                module_name,
-                exc_info=True,
-            )
-            continue
-        attrs = getattr(module, "SpanAttributes", None)
-        if attrs is not None:
-            return attrs
-    return None
+try:
+    from ioa_observe.sdk.utils import const as _sdk_const  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - the SDK is a dependency; kept for a bare install
+    _sdk_const = None
 
 
-_SdkSpanAttributes = _load_sdk_span_attributes()
-
-
-def _sdk(name: str, default: str) -> str:
-    if _SdkSpanAttributes is None:
-        return default
-    return str(getattr(_SdkSpanAttributes, name, default) or default)
+def _const(name: str, published: str) -> str:
+    """``ioa_observe.sdk.utils.const.<name>`` when the installed SDK has it, else its published value."""
+    return str(getattr(_sdk_const, name, published) or published)
 
 
 APPLICATION_ID: Final[str] = "application_id"
 AGENT_ID: Final[str] = "agent_id"
 SESSION_ID: Final[str] = "session.id"
 SESSION_NAME: Final[str] = "session.name"
-IOA_START_TIME: Final[str] = _sdk("IOA_START_TIME", "ioa_start_time")
-IOA_SPAN_KIND: Final[str] = "ioa_observe.span.kind"
-IOA_ENTITY_NAME: Final[str] = _sdk("IOA_OBSERVE_ENTITY_NAME", "ioa_observe.entity.name")
-IOA_ENTITY_INPUT: Final[str] = _sdk("IOA_OBSERVE_ENTITY_INPUT", "ioa_observe.entity.input")
-IOA_ENTITY_OUTPUT: Final[str] = _sdk("IOA_OBSERVE_ENTITY_OUTPUT", "ioa_observe.entity.output")
-IOA_AGENT_SPAN_ID: Final[str] = "ioa_observe.agent.span_id"
-IOA_AGENT_TRACE_ID: Final[str] = "ioa_observe.agent.trace_id"
-IOA_AGENT_PREVIOUS: Final[str] = "ioa_observe.agent.previous"
-IOA_AGENT_SEQUENCE: Final[str] = "ioa_observe.agent.sequence"
-IOA_HANDOFF_SOURCE_SPAN_IDS: Final[str] = "ioa_observe.handoff.source.span_ids"
-# The real SDK emits this as a native OTel array attribute. SCOPE's own
-# norm.heuristics.handoff._source_span_ids reads ioa_observe.handoff.source.
-# span_ids with json.loads(raw) -- it would raise (caught, returning no
-# signal) on a real array value, so both handoff attributes here stay
-# JSON-encoded strings, matching what norm actually parses rather than what
-# the real SDK happens to emit for this one pair of keys.
-IOA_HANDOFF_SOURCE_TRACE_IDS: Final[str] = "ioa_observe.handoff.source.trace_ids"
-IOA_WORKFLOW_NAME: Final[str] = "ioa_observe.workflow.name"
+IOA_START_TIME: Final[str] = "ioa_start_time"
+IOA_SPAN_KIND: Final[str] = _const("OBSERVE_SPAN_KIND", "ioa_observe.span.kind")
+IOA_ENTITY_NAME: Final[str] = _const("OBSERVE_ENTITY_NAME", "ioa_observe.entity.name")
+IOA_ENTITY_INPUT: Final[str] = _const("OBSERVE_ENTITY_INPUT", "ioa_observe.entity.input")
+IOA_ENTITY_OUTPUT: Final[str] = _const("OBSERVE_ENTITY_OUTPUT", "ioa_observe.entity.output")
+IOA_AGENT_SPAN_ID: Final[str] = _const("OBSERVE_AGENT_SPAN_ID", "ioa_observe.agent.span_id")
+IOA_AGENT_TRACE_ID: Final[str] = _const("OBSERVE_AGENT_TRACE_ID", "ioa_observe.agent.trace_id")
+IOA_AGENT_SEQUENCE: Final[str] = _const("OBSERVE_AGENT_SEQUENCE", "ioa_observe.agent.sequence")
+IOA_WORKFLOW_NAME: Final[str] = _const("OBSERVE_WORKFLOW_NAME", "ioa_observe.workflow.name")
 AGENT_CHAIN_START_TIME: Final[str] = "agent_chain_start_time"
 SPAN_NAME_AGENT_START_EVENT: Final[str] = "agent_start_event"
 SPAN_NAME_AGENT_END_EVENT: Final[str] = "agent_end_event"
 EXECUTION_SUCCESS: Final[str] = "execution.success"
+# A call status that means success; every other status is a failure. The native KG fold
+# (``mas.library.kg.core.native_graph_builder.SUCCESS_STATUS``) reads the same set.
+SUCCESS_STATUS: Final[frozenset[str]] = frozenset({"ok", "success", "true", "completed"})
+
+
+# The fields of an annotation record that no ontology property holds: its ``payload``,
+# written as one JSON object under the record's own field names
+# (``mas.annotation.content``). The native KG fold
+# (``mas.library.kg.observability.native.handlers.annotation``) writes the same payload.
+ANNOTATION_PAYLOAD_FIELDS: Final[tuple[str, ...]] = (
+    "source_agent_id",
+    "target_agent_id",
+    "task",
+    "correlation_id",
+    "status",
+    "segments",
+    "total_tokens",
+    "operation",
+    "target",
+    "from",
+    "to",
+    "message_type",
+    "denied_call_id",
+    "budget_scope",
+    "amount",
+    "intervention_type",
+)
+CONTEXT_PAYLOAD_FIELDS: Final[tuple[str, ...]] = (
+    "parents",
+    "section_id",
+    "source_type",
+    "cause",
+    "cause_type",
+    "sensitivity",
+    "eviction_reason",
+    "content",
+)
+
+
+def annotation_payload(ev: dict, fields: tuple[str, ...]) -> str:
+    """The payload of an annotation record: the ``fields`` it carries, as JSON ("" if none)."""
+    import json
+
+    values = {key: ev[key] for key in fields if ev.get(key) not in (None, "", [])}
+    return json.dumps(values, sort_keys=True, separators=(",", ":"), default=str) if values else ""
+
+
+def execution_success(status: object) -> str:
+    """``execution.success`` of a call that ended with ``status`` (none reads as success)."""
+    return "true" if str(status or "success").strip().lower() in SUCCESS_STATUS else "false"
+
+
 GEN_AI_PROVIDER: Final[str] = "gen_ai.provider.name"
 GEN_AI_REQUEST_MODEL: Final[str] = "gen_ai.request.model"
 GEN_AI_REQUEST_TEMPERATURE: Final[str] = "gen_ai.request.temperature"
@@ -99,22 +113,47 @@ GEN_AI_IOA_GRAPH: Final[str] = "gen_ai.ioa.graph"
 GEN_AI_IOA_GRAPH_PROTOCOL: Final[str] = "gen_ai.ioa.graph.protocol"
 GEN_AI_IOA_GRAPH_DYNAMISM: Final[str] = "gen_ai.ioa.graph_dynamism"
 GEN_AI_IOA_GRAPH_DETERMINISM: Final[str] = "gen_ai.ioa.graph_determinism_score"
-OBSERVE_MEMORY_OPERATION: Final[str] = "ioa_observe.memory.operation"
-OBSERVE_MEMORY_TYPE: Final[str] = "ioa_observe.memory.type"
-OBSERVE_PROCESSING_TYPE: Final[str] = "ioa_observe.processing.type"
-OBSERVE_PROCESSING_ACTOR: Final[str] = "ioa_observe.processing.actor"
-OBSERVE_GOVERNANCE_DECISION_TYPE: Final[str] = "ioa_observe.governance.decision_type"
-OBSERVE_GOVERNANCE_POLICY_ID: Final[str] = "ioa_observe.governance.policy_id"
-SPAN_SUFFIX_AGENT: Final[str] = "agent"
-SPAN_SUFFIX_CHAT: Final[str] = "chat"
-SPAN_SUFFIX_TOOL: Final[str] = "tool"
-SPAN_SUFFIX_GRAPH: Final[str] = "graph"
-SPAN_SUFFIX_MEMORY: Final[str] = "memory"
-SPAN_SUFFIX_PROCESSING: Final[str] = "processing"
-SPAN_SUFFIX_CONTEXT: Final[str] = "context"
-SPAN_SUFFIX_GOVERNANCE: Final[str] = "governance"
-SPAN_SUFFIX_SKILL: Final[str] = "skill"
-SPAN_SUFFIX_RAG: Final[str] = "rag"
+OBSERVE_MEMORY_OPERATION: Final[str] = _const("OBSERVE_MEMORY_OPERATION", "ioa_observe.memory.operation")
+OBSERVE_MEMORY_TYPE: Final[str] = _const("OBSERVE_MEMORY_TYPE", "ioa_observe.memory.type")
+OBSERVE_PROCESSING_TYPE: Final[str] = _const("OBSERVE_PROCESSING_TYPE", "ioa_observe.processing.type")
+OBSERVE_PROCESSING_ACTOR: Final[str] = _const("OBSERVE_PROCESSING_ACTOR", "ioa_observe.processing.actor")
+OBSERVE_GOVERNANCE_DECISION_TYPE: Final[str] = _const(
+    "OBSERVE_GOVERNANCE_DECISION_TYPE", "ioa_observe.governance.decision_type"
+)
+OBSERVE_GOVERNANCE_POLICY_ID: Final[str] = _const("OBSERVE_GOVERNANCE_POLICY_ID", "ioa_observe.governance.policy_id")
+# Mirrors of observe-sdk const.py OBSERVE_PROCESSING_NAME and the explicit dataflow
+# OBSERVE_STATE_{INPUT,OUTPUT}_{ID,CONTENT}.
+OBSERVE_PROCESSING_NAME: Final[str] = _const("OBSERVE_PROCESSING_NAME", "ioa_observe.processing.name")
+OBSERVE_STATE_INPUT_ID: Final[str] = _const("OBSERVE_STATE_INPUT_ID", "ioa_observe.state.input.id")
+OBSERVE_STATE_INPUT_CONTENT: Final[str] = _const("OBSERVE_STATE_INPUT_CONTENT", "ioa_observe.state.input.content")
+OBSERVE_STATE_OUTPUT_ID: Final[str] = _const("OBSERVE_STATE_OUTPUT_ID", "ioa_observe.state.output.id")
+OBSERVE_STATE_OUTPUT_CONTENT: Final[str] = _const("OBSERVE_STATE_OUTPUT_CONTENT", "ioa_observe.state.output.content")
+# The execution an annotation, governance or context record is about (norm
+# ``handlers/annotation.py``). Not an SDK constant.
+OBSERVE_ANNOTATES_SPAN_ID: Final[str] = "ioa_observe.annotates.span_id"
+# Reasoning on an LLM span. Not fixed by the GenAI semantic conventions yet:
+# these are the names norm reads (``norm.ioa_observe.fields``).
+GEN_AI_USAGE_REASONING_TOKENS: Final[str] = "gen_ai.usage.reasoning_tokens"
+GEN_AI_REQUEST_REASONING_EFFORT: Final[str] = "gen_ai.request.reasoning_effort"
+# Ontology memory operations (scope ``MemoryCall.memoryOperation``).
+MEMORY_OPERATION_STORE: Final[str] = "store"
+MEMORY_OPERATION_RETRIEVE: Final[str] = "retrieve"
+MEMORY_OPERATION_UPDATE: Final[str] = "update"
+MEMORY_OPERATION_DELETE: Final[str] = "delete"
+SPAN_SUFFIX_AGENT: Final[str] = _const("OBSERVE_SPAN_SUFFIX_AGENT", "agent")
+SPAN_SUFFIX_CHAT: Final[str] = _const("OBSERVE_SPAN_SUFFIX_CHAT", "chat")
+SPAN_SUFFIX_TOOL: Final[str] = _const("OBSERVE_SPAN_SUFFIX_TOOL", "tool")
+SPAN_SUFFIX_GRAPH: Final[str] = _const("OBSERVE_SPAN_SUFFIX_GRAPH", "graph")
+SPAN_SUFFIX_MEMORY: Final[str] = _const("OBSERVE_SPAN_SUFFIX_MEMORY", "memory")
+SPAN_SUFFIX_PROCESSING: Final[str] = _const("OBSERVE_SPAN_SUFFIX_PROCESSING", "processing")
+SPAN_SUFFIX_CONTEXT: Final[str] = _const("OBSERVE_SPAN_SUFFIX_CONTEXT", "context")
+SPAN_SUFFIX_GOVERNANCE: Final[str] = _const("OBSERVE_SPAN_SUFFIX_GOVERNANCE", "governance")
+SPAN_SUFFIX_SKILL: Final[str] = _const("OBSERVE_SPAN_SUFFIX_SKILL", "skill")
+SPAN_SUFFIX_RAG: Final[str] = _const("OBSERVE_SPAN_SUFFIX_RAG", "rag")
+# Not ioa-observe suffixes: norm reads ``*.thinking``, ``*.worker`` and ``*.annotation``.
+SPAN_SUFFIX_THINKING: Final[str] = "thinking"
+SPAN_SUFFIX_WORKER: Final[str] = "worker"
+SPAN_SUFFIX_ANNOTATION: Final[str] = "annotation"
 
 # TaskCall is the MAS-run wrapper. Observe-sdk names the equivalent span
 # ``invoke_agent {graph}`` (e.g. ``invoke_agent LangGraph``). SCOPE ``norm``
@@ -127,27 +166,6 @@ SPAN_NAME_SESSION_END: Final[str] = "session.end"
 def invoke_agent_span_name(app_name: str | None) -> str:
     """Observe-sdk workflow root: ``invoke_agent LangGraph`` → ``invoke_agent {app}``."""
     return f"invoke_agent {str(app_name or 'mas').strip() or 'mas'}"
-
-try:
-    from ioa_observe.sdk.utils.const import (  # type: ignore[import-not-found]
-        OBSERVE_SPAN_SUFFIX_AGENT as SPAN_SUFFIX_AGENT,
-        OBSERVE_SPAN_SUFFIX_CHAT as SPAN_SUFFIX_CHAT,
-        OBSERVE_SPAN_SUFFIX_GRAPH as SPAN_SUFFIX_GRAPH,
-        OBSERVE_SPAN_SUFFIX_TOOL as SPAN_SUFFIX_TOOL,
-    )
-except ImportError:
-    pass
-try:
-    from ioa_observe.sdk.utils.const import (  # type: ignore[import-not-found]
-        OBSERVE_SPAN_SUFFIX_CONTEXT as SPAN_SUFFIX_CONTEXT,
-        OBSERVE_SPAN_SUFFIX_GOVERNANCE as SPAN_SUFFIX_GOVERNANCE,
-        OBSERVE_SPAN_SUFFIX_MEMORY as SPAN_SUFFIX_MEMORY,
-        OBSERVE_SPAN_SUFFIX_PROCESSING as SPAN_SUFFIX_PROCESSING,
-        OBSERVE_SPAN_SUFFIX_RAG as SPAN_SUFFIX_RAG,
-        OBSERVE_SPAN_SUFFIX_SKILL as SPAN_SUFFIX_SKILL,
-    )
-except ImportError:
-    pass
 
 
 def session_id_for(application_id: str, raw_session_id: str) -> str:

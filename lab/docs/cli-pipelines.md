@@ -38,7 +38,7 @@ Man pages (one page per command, grouped by owner):
 | `mas-lab kg validate` | `kg:native-to-kg` | same | `validate_kg` |
 | `mas-lab kg verify` | `kg:native-to-kg` | same | `verify_events` |
 | `mas-lab kg otel-to-events` | `kg:otel-to-kg` | `library-kg/pipelines/otel-to-kg.yaml` | `normalize_otel` |
-| `mas-lab kg otel-to-kg` | `kg:otel-to-kg` | same | `normalize_otel`, `normalize_events`, `validate_kg` |
+| `mas-lab kg otel-to-kg` | `kg:otel-to-kg` | same | `normalize_otel`, `validate_kg` |
 | `mas-lab kg push` / `neo4j-push` | `kg:native-to-neo4j` | `library-kg/pipelines/native-to-neo4j.yaml` | `neo4j_push` |
 | `mas-lab kg dump` | `kg:neo4j-dump` | `library-kg/pipelines/neo4j-dump.yaml` | `neo4j_dump` |
 | `mas-lab plot multilevel-trajectory` | `kg:native-plots` | `library-kg/pipelines/native-plots.yaml` | `plot_multilevel_trajectory`, `plot_multilevel_trajectory_kg` |

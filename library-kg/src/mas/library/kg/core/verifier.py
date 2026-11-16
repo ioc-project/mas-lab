@@ -2,8 +2,7 @@
 ``steps/validate_kg.py``'s ``run_validate_kg``.
 
 Graph-shape invariants — containment chain, state nesting, the
-ProcessingCall gate, temporal enclosure, Session↔Run connectivity, and
-Session.appName — live in SHACL (``mas-shapes.ttl``, run via
+temporal enclosure and the Session boundary States — live in SHACL (``mas-shapes.ttl``, run via
 :func:`run_shacl_validation`) rather than as hand-rolled Python, so there is
 a single source of truth for what a valid KG looks like.
 
@@ -49,14 +48,8 @@ logger = logging.getLogger(__name__)
 class _OntologyIndex:
     """Loads all validation constants from a set of ontology TTL files.
 
-    TTL sources loaded in order into one combined rdflib graph:
-
-    1. ``mas-ontology.ttl`` from ``scope_ontology`` (SCOPE)
-    2. MAS-Lab native-path extension TTLs (RAGQuery, MemoryCall, SkillCall,
-       governance, …) from ``library-kg/ontology/extensions/``
-
-    All resolved by ``mas.library.kg.ontology``. Missing extensions are
-    skipped with a warning, not fatal.
+    The TTL is ``mas-ontology.ttl`` from ``scope_ontology`` (SCOPE), resolved by
+    ``mas.library.kg.ontology``. SCOPE declares every class the native fold emits.
 
     Every constant is derived from the combined graph. Nothing is hardcoded.
 
@@ -616,16 +609,39 @@ def run_shacl_validation(
         # Timing (decimal)
         ("startTime", "startTime"),
         ("endTime", "endTime"),
+        # CallAnnotation and its subclasses
+        ("eventKind", "eventKind"),
+        ("eventTime", "eventTime"),
+        ("payload", "payload"),
+        ("decision", "decision"),
+        ("policyName", "policyName"),
+        ("decisionReason", "decisionReason"),
+        ("partId", "partId"),
+        ("contextSource", "contextSource"),
+        ("contributionMechanism", "contributionMechanism"),
+        ("tokenEstimate", "tokenEstimate"),
+        ("retained", "retained"),
+        # MemoryCall, RAGQuery, Memory, Worker
+        ("memoryOperation", "memoryOperation"),
+        ("memoryQuery", "memoryQuery"),
+        ("resultCount", "resultCount"),
+        ("topK", "topK"),
+        ("memoryType", "memoryType"),
+        ("processId", "processId"),
+        ("durableBackend", "durableBackend"),
     ]
-    _DECIMAL_PROPS = {"startTime", "endTime", "transitionTimestamp", "temperature"}
+    _DECIMAL_PROPS = {"startTime", "endTime", "transitionTimestamp", "temperature", "eventTime"}
     _DOUBLE_PROPS = {"duration"}
     _INTEGER_PROPS = {
         "promptTokenCount",
         "completionTokenCount",
         "totalTokenCount",
         "cacheReadTokenCount",
+        "tokenEstimate",
+        "resultCount",
+        "topK",
     }
-    _BOOLEAN_PROPS = {"declared"}
+    _BOOLEAN_PROPS = {"declared", "retained"}
 
     ld_nodes = []
     node_iri_by_local_id: Dict[str, str] = {}
@@ -635,9 +651,8 @@ def run_shacl_validation(
         if not ntype:
             continue
 
-        type_ns = MASKG if ntype == "Run" else MAS
         entry: Dict[str, Any] = {
-            "@type": f"{type_ns}{ntype}",
+            "@type": f"{MAS}{ntype}",
         }
         local_id: Optional[str] = None
         sess = n.get("sessionId") or f"session-{run_id}"
@@ -650,16 +665,22 @@ def run_shacl_validation(
         elif ntype == "Transition" and n.get("transitionId"):
             local_id = str(n["transitionId"])
             entry["@id"] = f"urn:mas:session:{sess}:transition:{local_id}"
-        elif ntype == "Run" and n.get("runId"):
-            local_id = str(n["runId"])
-            entry["@id"] = f"urn:mas:run:{local_id}"
         elif ntype == "Session" and n.get("sessionId"):
             local_id = str(n["sessionId"])
             entry["@id"] = f"urn:mas:session:{local_id}"
         elif ntype == "Agent" and (n.get("agentId") or n.get("id") or n.get("name")):
             local_id = str(n.get("agentId") or n.get("id") or n.get("name"))
             entry["@id"] = f"urn:mas:agent:{local_id}"
-        elif ntype in {"Tool", "LLM", "Skill", "Processing", "MAS", "Capability"}:
+        elif ntype in {
+            "Tool",
+            "LLM",
+            "Skill",
+            "Memory",
+            "Worker",
+            "Processing",
+            "MAS",
+            "Capability",
+        }:
             name = n.get("name") or n.get("id") or ntype
             slug = (
                 "".join(ch if ch.isalnum() or ch in "-._" else "_" for ch in str(name).strip())
@@ -686,9 +707,10 @@ def run_shacl_validation(
             "Tool",
             "Processing",
             "Skill",
+            "Memory",
+            "Worker",
             "Capability",
             "Session",
-            "Run",
         }:
             node_iri_by_local_id[local_id] = entry["@id"]
             entry_by_local_id[local_id] = entry
@@ -701,9 +723,10 @@ def run_shacl_validation(
             "Tool",
             "Processing",
             "Skill",
+            "Memory",
+            "Worker",
             "Capability",
             "Session",
-            "Run",
         }
         aliases = [n.get("id"), n.get("callId"), n.get("canonicalId")]
         if ntype in catalog_types:
@@ -712,7 +735,6 @@ def run_shacl_validation(
                     n.get("agentId"),
                     n.get("annotationId"),
                     n.get("name"),
-                    n.get("runId") if ntype == "Run" else None,
                     n.get("sessionId") if ntype == "Session" else None,
                 )
             )
@@ -725,7 +747,7 @@ def run_shacl_validation(
                 if ntype not in catalog_types:
                     continue
                 # An LLM/Tool named after an agent must not steal the Agent IRI.
-                if ntype not in {"Agent", "MAS", "Session", "Run"}:
+                if ntype not in {"Agent", "MAS", "Session"}:
                     continue
             node_iri_by_local_id[key] = entry["@id"]
             entry_by_local_id[key] = entry
@@ -772,12 +794,10 @@ def run_shacl_validation(
             "ofLLMType": f"{MAS}executesLLM",
             "ofToolType": f"{MAS}executesTool",
             "invokesProcessing": f"{MAS}executesProcessing",
-            "invokesSkill": f"{MAS}executesProcessing",
             "fromState": f"{MAS}fromState",
             "toState": f"{MAS}toState",
             "realizes": f"{MAS}representsExecution",
             "annotates": f"{MAS}annotates",
-            "contributesTo": f"{MAS}contributesTo",
         }
     )
     for e in edges:
@@ -825,12 +845,19 @@ def run_shacl_validation(
     shacl_graph = rdflib.Graph()
     for shapes_file in shapes_files:
         shacl_graph.parse(str(shapes_file), format="turtle")
+    # RDFS inference runs over the data graph plus ``ont_graph``. The class hierarchy and
+    # property hierarchy (SkillCall is a CapabilityCall, hasMemoryCall is a containsCall) must be
+    # there, or a shape that targets a superclass (every ExecutionElement) never meets a node.
+    ontology_graph = rdflib.Graph()
+    for ontology_file in resolve_all_ontology_paths():
+        ontology_graph.parse(str(ontology_file), format="turtle")
 
     SH = rdflib.Namespace("http://www.w3.org/ns/shacl#")
 
     conforms, report_graph, report_text = pyshacl.validate(
         data_graph,
         shacl_graph=shacl_graph,
+        ont_graph=ontology_graph,
         inference="rdfs",
         abort_on_first=False,
     )

@@ -46,6 +46,8 @@ class LlmCallRequest:
     offered_tools: list[str] | None = None
     max_tokens: int | None = None
     temperature: float | None = None
+    # The reasoning effort requested (``spec.models[].reasoning.effort``), when one is.
+    reasoning_effort: str | None = None
 
     def engine_io_fields(self) -> dict[str, Any]:
         """Keyword fields for ``record_engine_io``; unset fields are left out."""
@@ -55,6 +57,7 @@ class LlmCallRequest:
             "tools": self.offered_tools,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
+            "reasoning_effort": self.reasoning_effort or None,
         }
         return {key: value for key, value in fields.items() if value is not None}
 

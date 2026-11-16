@@ -111,7 +111,7 @@ CLI_PIPELINE_SHORTCUTS: tuple[CliPipelineShortcut, ...] = (
         command="mas-lab kg otel-to-kg",
         pipeline_ref="kg:otel-to-kg",
         source_path="library-kg/pipelines/otel-to-kg.yaml",
-        step_types=("normalize_otel", "normalize_events", "validate_kg"),
+        step_types=("normalize_otel", "validate_kg"),
         notes="OTel spans → events → kg.json",
         cli_group="kg",
         cli_name="otel-to-kg",
@@ -199,7 +199,6 @@ def resolve_shortcut_pipeline(item: CliPipelineShortcut, repo_root: Path) -> Pat
     path = _resolve_in_library(library_root_for_shortcut(item, repo_root), rel)
     if not path.is_file():
         raise FileNotFoundError(
-            f"{item.command}: {item.pipeline_ref} did not resolve under "
-            f"{library_root_for_shortcut(item, repo_root)}"
+            f"{item.command}: {item.pipeline_ref} did not resolve under {library_root_for_shortcut(item, repo_root)}"
         )
     return path

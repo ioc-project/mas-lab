@@ -72,3 +72,22 @@ def observe_sdk_spans(tmp_path: Path, events_path: Path) -> list[dict]:
         converter_profile="observe_sdk",
     )
     return [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+
+
+# Tests marked ``scope_next`` exercise SCOPE ontology and ``norm`` changes that are not released.
+# They are off; run them against a SCOPE that has the changes with ``pytest --scope-next``.
+def pytest_addoption(parser):
+    parser.addoption("--scope-next", action="store_true", default=False, help="run the scope_next tests")
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "scope_next: needs unreleased SCOPE changes; run with --scope-next")
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--scope-next"):
+        return
+    skip = pytest.mark.skip(reason="needs unreleased SCOPE changes (run with --scope-next)")
+    for item in items:
+        if "scope_next" in item.keywords:
+            item.add_marker(skip)

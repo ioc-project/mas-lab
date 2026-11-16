@@ -7,10 +7,13 @@ from __future__ import annotations
 import pytest
 from mas.runtime.engine.llm_reasoning import (
     ReasoningSettings,
-    ThinkTagStreamFilter,
+    ReasoningStream,
+    ThinkTagSplitter,
     apply_reasoning_payload,
     reasoning_settings_from_manifest,
+    reasoning_text,
     sanitize_assistant_message,
+    think_block_text,
 )
 
 
@@ -114,17 +117,90 @@ def test_sanitize_strips_cot_fields_and_think_tags():
     assert "<think>" in str(kept["content"])
 
 
-def test_stream_filter_drops_split_think_tags():
-    filt = ThinkTagStreamFilter()
-    assert filt.feed("<thi") == ""
-    assert filt.feed("nk>abc</th") == ""
-    assert filt.feed("ink>OK") == "OK"
-    assert filt.feed(" more") == " more"
+def _answer(pieces):
+    return "".join(text for kind, text in pieces if kind == "answer")
 
 
-def test_stream_filter_drops_thinking_tags():
-    filt = ThinkTagStreamFilter()
-    assert filt.feed("<thinking>hidden</thinking>visible") == "visible"
+def test_splitter_holds_split_think_tags_and_returns_reasoning():
+    split = ThinkTagSplitter()
+    assert split.feed("<thi") == []
+    assert split.feed("nk>abc</th") == [("reasoning", "abc")]
+    assert split.feed("ink>OK") == [("reasoning_end", ""), ("answer", "OK")]
+    assert split.feed(" more") == [("answer", " more")]
+
+
+def test_splitter_reads_thinking_tags():
+    pieces = ThinkTagSplitter().feed("<thinking>hidden</thinking>visible")
+    assert pieces == [("reasoning", "hidden"), ("reasoning_end", ""), ("answer", "visible")]
+    assert _answer(pieces) == "visible"
+
+
+def test_reasoning_text_reads_every_reasoning_key():
+    assert reasoning_text({"reasoning_content": "a", "content": "x"}) == "a"
+    assert reasoning_text({"reasoning_details": [{"type": "reasoning.text", "text": "b"}, {"summary": "c"}]}) == "bc"
+    assert think_block_text("<think>p</think>answer<thinking>q</thinking>") == "pq"
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_reasoning_stream_reports_real_boundaries_as_deltas_arrive():
+    clock, events = _Clock(), []
+    stream = ReasoningStream(lambda b, t, at: events.append((b, t, at)), clock=clock)
+    split = ThinkTagSplitter()
+    assert stream.feed_delta({"role": "assistant"}, split) == ""
+    assert events == []
+    clock.now = 101.0
+    stream.feed_delta({"reasoning_content": "step 1. "}, split)
+    assert events == [("start", "", 101.0)]  # emitted at the first reasoning delta, not at the response
+    clock.now = 102.5
+    stream.feed_delta({"reasoning_content": "step 2."}, split)
+    clock.now = 103.0
+    assert stream.feed_delta({"content": "Answer"}, split) == "Answer"
+    clock.now = 104.0
+    stream.feed_delta({"reasoning_content": "late"}, split)
+    stream.close()
+    assert events == [("start", "", 101.0), ("end", "step 1. step 2.", 103.0)]
+
+
+def test_reasoning_stream_think_tag_close_ends_the_interval():
+    clock, events = _Clock(), []
+    stream = ReasoningStream(lambda b, t, at: events.append((b, t, at)), clock=clock)
+    split = ThinkTagSplitter()
+    stream.feed_delta({"content": "<think>pl"}, split)
+    clock.now = 101.0
+    stream.feed_delta({"content": "an</think>"}, split)
+    clock.now = 102.0
+    assert stream.feed_delta({"content": "done"}, split) == "done"
+    assert events == [("start", "", 100.0), ("end", "plan", 101.0)]
+
+
+def test_reasoning_stream_tool_call_delta_ends_the_interval_and_stream_end_closes():
+    events = []
+    stream = ReasoningStream(lambda b, t, at: events.append(b))
+    stream.feed_delta({"reasoning": "r"})
+    stream.feed_delta({"tool_calls": [{"index": 0}]})
+    assert events == ["start", "end"]
+    open_only = []
+    stream = ReasoningStream(lambda b, t, at: open_only.append(b))
+    stream.feed_delta({"reasoning": "r"})
+    stream.close()
+    assert open_only == ["start", "end"]
+
+
+def test_reasoning_received_whole_is_a_zero_length_interval_at_receipt():
+    clock, events = _Clock(), []
+    stream = ReasoningStream(lambda b, t, at: events.append((b, t, at)), clock=clock)
+    stream.received("")
+    assert events == []  # no reasoning text, no interval (a token count is not one)
+    stream.received("all of it")
+    stream.received("again")
+    assert events == [("start", "", 100.0), ("end", "all of it", 100.0)]
 
 
 def test_to_spec_dict_omits_default_exclude():

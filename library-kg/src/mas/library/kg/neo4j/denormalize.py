@@ -44,8 +44,8 @@ _EXPERIMENT_LAYER = "experiment"
 # "Agent"/"LLM"/"Tool"/"Skill" are the real catalog/definition node types
 # (not "CatalogTool"/"CatalogModel"/"CatalogSkill", which don't exist
 # anywhere in the ontology's vocabulary -- see core/scope_models.py's
-# SCOPE_CORE_NODE_TYPES / NATIVE_EXTENSION_NODE_TYPES).
-_STRUCTURAL_TYPES = frozenset({"Agent", "LLM", "Tool", "Skill"})
+# SCOPE_CORE_NODE_TYPES).
+_STRUCTURAL_TYPES = frozenset({"Agent", "LLM", "Tool", "Skill", "Memory", "Worker"})
 
 # Trajectory types — normalized State/Transition; block="trajectory".
 _TRAJECTORY_TYPES = frozenset({"State", "Transition"})

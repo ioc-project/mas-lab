@@ -1,13 +1,13 @@
 {
-  "run_hash": "d1d5181502e5c1e48956",
+  "run_hash": "b4321de6a5445b70777d",
   "experiment": "golden-lifecycle-control",
   "scenario": "golden",
   "item_id": "1",
   "run_idx": 0,
-  "referenced_at": "2026-11-13T18:30:55.647599Z",
+  "referenced_at": "2026-11-16T15:44:45.924467Z",
   "mas": {
     "app": "trip-planner",
-    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-llm-interval-telemetry/library-samples/apps/trip-planner/mas.yaml",
+    "mas_ref": "library-samples/apps/trip-planner/mas.yaml",
     "overlay": "golden"
   }
 }

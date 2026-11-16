@@ -35,13 +35,7 @@ def h_mas_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 
 @register("mas_call_end")
 def h_mas_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    output = (
-        ev.get("result")
-        or ev.get("output")
-        or ev.get("content")
-        or conv.agent_output_for(ev.get("call_id"))
-        or ""
-    )
+    output = ev.get("state_out_content") or ev.get("result") or ev.get("output") or ev.get("content") or ""
     conv.close_span(
         ev.get("call_id"),
         {
@@ -64,6 +58,7 @@ def h_execution_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.run.id": ev.get("run_id", ""),
             "mas.input": str(ev.get("input", "")),
             **({} if not ev.get("dp_id") else {"mas.dp.id": ev["dp_id"]}),
+            **conv.agent_start_state_attrs(ev),
         },
         ev.get("parent_call_id"),
         start_ns=conv.ts_ns(ev),
@@ -72,24 +67,15 @@ def h_execution_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 
 @register("execution_end")
 def h_execution_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    output = (
-        ev.get("output")
-        or ev.get("result")
-        or ev.get("content")
-        or conv.agent_output_for(ev.get("call_id"))
-        or ""
-    )
-    extra: Dict[str, Any] = {"mas.output": str(output)}
+    # The visit's final State is its output; the reply is not read from user_response.
+    output = ev.get("state_in_content") or ev.get("output") or ev.get("result") or ev.get("content") or ""
+    extra: Dict[str, Any] = {"mas.output": str(output), **conv.agent_end_state_attrs(ev)}
     if ev.get("failure_reason"):
         extra["mas.failure.reason"] = str(ev["failure_reason"])[:500]
     if ev.get("failure_category"):
         extra["mas.failure.category"] = str(ev["failure_category"])
-    end_id = ev.get("call_id")
-    resolve = getattr(conv, "resolve_agent_end_call_id", None)
-    if callable(resolve):
-        end_id = resolve(ev)
     conv.close_span(
-        end_id,
+        ev.get("call_id"),
         extra,
         status=ev.get("status", "success"),
         end_ns=conv.ts_ns(ev),
@@ -105,7 +91,7 @@ def h_infrastructure_info(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.agent.id": conv.agent_id(ev),
             "mas.worker.id": str(ev.get("worker_id", "")),
             "mas.worker.pid": int(ev.get("worker_pid") or 0),
-            "mas.worker.durable_backend": ev.get("durable_backend", "in_memory"),
+            "mas.worker.durable_backend": ev.get("durable_backend") or "",
         },
         ev.get("parent_call_id"),
         ts_ns=conv.ts_ns(ev),

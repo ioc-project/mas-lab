@@ -68,7 +68,10 @@ def test_realtime_replay_skips_graph_and_emits_signals(tmp_path: Path) -> None:
         converter_profile="observe_sdk",
         realtime=True,
     )
+    from mas.library.telemetry.conversion.session import runtime_events_path
+
     names = [json.loads(line).get("name") for line in out.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert "topology.node.started" in names
-    assert "topology.node.completed" in names
     assert not any(str(n).endswith(".graph") for n in names)
+    events = runtime_events_path(out).read_text(encoding="utf-8").splitlines()
+    event_names = [json.loads(line)["event_name"] for line in events if line.strip()]
+    assert event_names == ["topology.node.started", "topology.node.completed"]

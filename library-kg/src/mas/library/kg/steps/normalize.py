@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from mas.library.kg.artifact import KGArtifact
 
@@ -21,17 +21,11 @@ def run_normalize(
     ontology_path: Optional[str] = None,
     split_session_id: bool = True,
     app_name: Optional[str] = None,
-    application_node: bool = False,
-    fill_synthesized_processing_defaults: bool = True,
     dry_run: bool = False,
     strict: bool = False,
-    include_infrastructure: bool = False,
-    include_trajectory: bool = False,
-    include_provenance: bool = False,
-    include_governance: bool = False,
-    include_annotation: bool = False,
-    include_native_extensions: bool = False,
+    categories: Any = None,
     all_attributes: bool = False,
+    realtime: bool = False,
 ) -> KGArtifact:
     """Normalize events.jsonl to a :class:`~mas.library.kg.artifact.KGArtifact`.
 
@@ -46,20 +40,19 @@ def run_normalize(
         split_session_id: If *True*, split ``run_id`` when it matches
             ``<appName>_<sessionUuid>`` and write ``Session.appName``.
         app_name: Optional explicit application name override.
-        application_node: If *True*, create one ``Application`` node per
-            app and connect it to corresponding ``Session`` nodes.
         strict: If *True*, raise on an observability gap (unmapped event
             kind, missing call_id, …) instead of the default behavior of
             logging a warning and skipping the offending event. An
             observability gap should never crash a benchmark run, so this
             defaults to *False*; enable it only for CI conformance checks
             of the mapping tables themselves.
-        include_annotation: If *True*, keep point CallAnnotation kinds.
-            Default *False* to match observe-sdk.
-        include_native_extensions: If *True*, keep RAG / memory / skill
-            kinds and ThinkingCall. Default *False*.
+        categories: Opt-in categories added to the core output: ``capabilities``,
+            ``annotations``, ``worker``, ``thinking`` (or ``all``); a list or a
+            comma-separated string. Default none (core classes only).
         all_attributes: If *True*, keep native-only fields. Default
             *False* keeps SCOPE model attributes only.
+        realtime: If *True*, fold one event at a time, in arrival order, as a
+            live consumer does. Default *False* (batch).
 
     Returns:
         :class:`KGArtifact` with the normalised KG.  If *output_dir* is given
@@ -77,16 +70,10 @@ def run_normalize(
         ontology_path=ontology_path,
         split_session_id=split_session_id,
         app_name=app_name,
-        application_node=application_node,
-        fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
         strict=strict,
-        include_infrastructure=include_infrastructure,
-        include_trajectory=include_trajectory,
-        include_provenance=include_provenance,
-        include_governance=include_governance,
-        include_annotation=include_annotation,
-        include_native_extensions=include_native_extensions,
+        categories=categories,
         all_attributes=all_attributes,
+        realtime=realtime,
     )
     artifact = KGArtifact.from_doc(doc)
 

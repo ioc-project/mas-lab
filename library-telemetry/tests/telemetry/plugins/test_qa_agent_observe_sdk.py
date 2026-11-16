@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from mas.library.telemetry.conversion import semconv
 
 from tests.conftest import requires_otel
@@ -38,8 +37,7 @@ def _name(span: dict) -> str:
 
 @requires_otel
 def test_qa_agent_live_plugin_emits_session_end_and_graph(tmp_path: Path) -> None:
-    if not QA_EVENTS.is_file():
-        pytest.skip(f"missing {QA_EVENTS}")
+    assert QA_EVENTS.is_file(), QA_EVENTS
 
     from mas.library.standard.lib.observability.native.transform import TransformContext
     from mas.library.telemetry.plugins.otel_plugin import create_otel_plugin

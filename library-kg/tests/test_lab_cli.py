@@ -200,69 +200,7 @@ def test_normalize_forwards_split_session_id_and_app_name(tmp_path, monkeypatch)
     assert calls[0]["app_name"] == "trip-planner"
 
 
-def test_normalize_forwards_application_node_flag(tmp_path, monkeypatch):
-    from mas.library.kg.artifact import KGArtifact
-    from mas.library.kg.lab_cli import kg_group
-
-    events_path = tmp_path / "events.jsonl"
-    events_path.write_text(
-        '{"kind": "execution_start", "run_id": "app_x", "agent_id": "a", "call_id": "c"}\n',
-        encoding="utf-8",
-    )
-
-    calls: list[dict[str, object]] = []
-
-    def _fake_run_normalize(**kwargs):
-        calls.append(kwargs)
-        return KGArtifact(nodes=[{"id": "n1"}], edges=[], metadata={"run_id": kwargs["run_id"]})
-
-    monkeypatch.setattr("mas.library.kg.steps.normalize.run_normalize", _fake_run_normalize)
-
-    result = CliRunner().invoke(
-        kg_group,
-        [
-            "normalize",
-            str(events_path),
-            "--application-node",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert calls[0]["application_node"] is True
-
-
-def test_normalize_forwards_synthesized_processing_defaults_flag(tmp_path, monkeypatch):
-    from mas.library.kg.artifact import KGArtifact
-    from mas.library.kg.lab_cli import kg_group
-
-    events_path = tmp_path / "events.jsonl"
-    events_path.write_text(
-        '{"kind": "execution_start", "run_id": "app_x", "agent_id": "a", "call_id": "c"}\n',
-        encoding="utf-8",
-    )
-
-    calls: list[dict[str, object]] = []
-
-    def _fake_run_normalize(**kwargs):
-        calls.append(kwargs)
-        return KGArtifact(nodes=[{"id": "n1"}], edges=[], metadata={"run_id": kwargs["run_id"]})
-
-    monkeypatch.setattr("mas.library.kg.steps.normalize.run_normalize", _fake_run_normalize)
-
-    result = CliRunner().invoke(
-        kg_group,
-        [
-            "normalize",
-            str(events_path),
-            "--no-fill-synthesized-processing-defaults",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert calls[0]["fill_synthesized_processing_defaults"] is False
-
-
-def test_otel_to_kg_forwards_synthesized_processing_defaults_flag(tmp_path, monkeypatch):
+def test_otel_to_kg_forwards_its_arguments(tmp_path, monkeypatch):
     from mas.library.kg.artifact import KGArtifact
     from mas.library.kg.lab_cli import kg_group
 
@@ -286,13 +224,17 @@ def test_otel_to_kg_forwards_synthesized_processing_defaults_flag(tmp_path, monk
             str(spans_path),
             "--run-id",
             "r1",
-            "--no-fill-synthesized-processing-defaults",
             "--dry-run",
         ],
     )
 
     assert result.exit_code == 0
-    assert calls[0]["fill_synthesized_processing_defaults"] is False
+    assert calls[0] == {
+        "spans_path": str(spans_path),
+        "run_id": "r1",
+        "output_dir": ".",
+        "dry_run": True,
+    }
 
 
 def test_push_forwards_extension_layers(tmp_path, monkeypatch):

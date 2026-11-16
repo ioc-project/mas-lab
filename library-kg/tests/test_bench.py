@@ -20,17 +20,12 @@ def _has_bench() -> bool:
         return False
 
 
-_HAS_BENCH = _has_bench()
-requires_bench = pytest.mark.skipif(not _HAS_BENCH, reason="bench extra not installed")
-
-
 def test_core_library_does_not_require_bench():
     import mas.library.kg  # noqa: F401
 
-    assert "mas.library.kg.bench" not in __import__("sys").modules or _HAS_BENCH
+    assert "mas.library.kg.bench" not in __import__("sys").modules or _has_bench()
 
 
-@requires_bench
 def test_compare_kg_adapter_registers():
     from mas.lab.benchmark.pipeline import PipelineStep
 
@@ -80,7 +75,6 @@ def test_node_type_helpers_cover_alt_keys():
     assert filtered["edges"] == [{"source": "n1", "target": "n1"}]
 
 
-@requires_bench
 @pytest.mark.asyncio
 async def test_compare_kg_step_node_types_and_deps(tmp_path):
     from mas.lab.benchmark.pipeline import StepOutput
@@ -111,7 +105,6 @@ async def test_compare_kg_step_node_types_and_deps(tmp_path):
     assert report["node_types"] == ["Session", "AgentCall"]
 
 
-@requires_bench
 @pytest.mark.asyncio
 async def test_compare_kg_step_non_list_node_types_and_empty_fail(tmp_path):
     from mas.library.kg.bench import CompareKgStep

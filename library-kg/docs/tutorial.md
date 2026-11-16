@@ -174,17 +174,17 @@ It prints a summary (counts depend on the library version):
 ```json
 {
   "output": "/tmp/tutorial-kg.jsonld",
-  "node_count": 56,
-  "edge_count": 89,
-  "session_id": "session-tutorial-native",
+  "node_count": 18,
+  "edge_count": 53,
+  "session_id": "d3ee979a-befa-4e05-9d27-00e4225e0938",
   "run_id": null
 }
 ```
 
-Without `-o` / `--output-dir`, the command prints the KG to stdout. The session id is
-`session-<run_id>`. The flags `--include-governance`, `--include-provenance` and
-`--include-infrastructure` add event categories; see
-[normalization.md](normalization.md#8-layer-defaults-and-control).
+Without `-o` / `--output-dir`, the command prints the KG to stdout. The session id is the
+one the events carry (`session-<run_id>` when they name none). `--categories` (for example `--categories capabilities,annotations`, or `all`) adds
+opt-in classes to the core output; see
+[normalization.md](normalization.md#8-categories-and-control).
 
 The output is a [`KGArtifact`](steps.md#kgartifact) serialised as JSON-LD:
 
@@ -192,15 +192,15 @@ The output is a [`KGArtifact`](steps.md#kgartifact) serialised as JSON-LD:
 {
   "@context": "...",
   "nodes": [
-    {"node_type": "Session", "id": "session-tutorial-native", "sessionId": "session-tutorial-native", ...},
+    {"node_type": "Session", "id": "d3ee979a-befa-4e05-9d27-00e4225e0938", "sessionId": "d3ee979a-befa-4e05-9d27-00e4225e0938", ...},
     {"node_type": "MASCall", "id": "mascall:tutorial-native:mas:5bcde400-...", ...},
     ...
   ],
   "edges": [
-    {"edge_type": "hasMASCall", "from_id": "session-tutorial-native", "to_id": "mascall:..."},
+    {"edge_type": "hasMASCall", "from_id": "d3ee979a-befa-4e05-9d27-00e4225e0938", "to_id": "mascall:..."},
     ...
   ],
-  "metadata": {"events": 44, "nodes": 56, "edges": 89, "layers": {...}, ...}
+  "metadata": {"events": 11, "nodes": 18, "edges": 53, "categories": [], ...}
 }
 ```
 
@@ -214,7 +214,7 @@ artifact = run_normalize(
     run_id="tutorial-native",
     output_dir="/tmp/tutorial-kg",      # writes /tmp/tutorial-kg/kg.jsonld
 )
-print(artifact)   # KGArtifact(nodes=56, edges=89, run_id=...)
+print(artifact)   # KGArtifact(nodes=18, edges=53, run_id=...)
 ```
 
 `run_normalize` calls `mas.library.kg.pipeline.build_kg_from_events_path`, which runs the
@@ -261,7 +261,8 @@ print(artifact.metadata["otel_format"], artifact.metadata["otel_spans"])
 
 A graph built from the spans ships as
 [`examples/qa-agent/kg-otel.jsonld`](../examples/qa-agent/kg-otel.jsonld). Two different
-normalisers build the native and OTel graphs, so compare them structurally (step 8 and
+normalisers build the native and OTel graphs. For a MAS Lab run they agree on calls, states, transitions and
+edges (`compare_trajectories` checks it); ids and call names differ, so compare structurally (step 8 and
 Tutorial 9, section 4), not byte for byte.
 
 Reference: [otel-telemetry.md](otel-telemetry.md),
@@ -350,13 +351,13 @@ is an alias of `push`. The output is the push summary:
 
 ```json
 {
-  "rows": 145,
-  "nodes": 56,
-  "edges": 89,
+  "rows": 71,
+  "nodes": 18,
+  "edges": 53,
   "uri": "bolt://localhost:7687",
   "dry_run": false,
-  "node_count": 56,
-  "edge_count": 89,
+  "node_count": 18,
+  "edge_count": 53,
   "kg_path": "/tmp/tutorial-kg.jsonld"
 }
 ```
@@ -391,14 +392,14 @@ run id from step 3.
 
 ```cypher
 // All nodes for our session
-MATCH (n {sessionId: "session-tutorial-native"}) RETURN n LIMIT 50
+MATCH (n {sessionId: "d3ee979a-befa-4e05-9d27-00e4225e0938"}) RETURN n LIMIT 50
 
 // Node counts by type
-MATCH (n {sessionId: "session-tutorial-native"})
+MATCH (n {sessionId: "d3ee979a-befa-4e05-9d27-00e4225e0938"})
 RETURN labels(n)[0] AS type, count(*) AS n ORDER BY n DESC
 
 // The LLM call made by the agent call
-MATCH (a:AgentCall {sessionId: "session-tutorial-native"})-[:hasLLMCall]->(l:LLMCall)
+MATCH (a:AgentCall {sessionId: "d3ee979a-befa-4e05-9d27-00e4225e0938"})-[:hasLLMCall]->(l:LLMCall)
 RETURN a.id, l.id, l.startTime
 ```
 
@@ -409,7 +410,7 @@ RETURN a.id, l.id, l.startTime
 Fetch the session back into a file. Pass exactly one of `--session-id` and `--run-id`.
 
 ```bash
-mas-lab kg dump --session-id session-tutorial-native \
+mas-lab kg dump --session-id d3ee979a-befa-4e05-9d27-00e4225e0938 \
   --infra library-kg/infra/local-neo4j.yaml \
   -o /tmp/tutorial-dumped.jsonld
 ```
@@ -421,7 +422,7 @@ The command prints a summary with `output`, `node_count`, `edge_count`, `session
 from mas.library.kg.steps import run_neo4j_dump
 
 artifact = run_neo4j_dump(
-    session_id="session-tutorial-native",
+    session_id="d3ee979a-befa-4e05-9d27-00e4225e0938",
     output_path="/tmp/tutorial-dumped.jsonld",
     uri="bolt://localhost:7687",
 )
@@ -608,7 +609,7 @@ To remove one session from a running database, re-push with `--clear-session`, o
 Neo4j Browser:
 
 ```cypher
-MATCH (n {sessionId: "session-tutorial-native"}) DETACH DELETE n
+MATCH (n {sessionId: "d3ee979a-befa-4e05-9d27-00e4225e0938"}) DETACH DELETE n
 ```
 
 ---

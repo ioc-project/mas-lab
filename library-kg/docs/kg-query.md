@@ -63,16 +63,16 @@ KG, verified on `examples/qa-agent/kg-native.jsonld` (direction is `from_id` to 
 | `hasLLMCall` | AgentCall to LLMCall |
 | `hasToolCall` | Parent call to ToolCall |
 | `hasProcessingCall` | Parent call to ProcessingCall |
-| `hasMemoryCall`, `hasSkillCall`, `hasRAGQuery` | Parent call to memory, skill or RAG call |
-| `annotates` | CallAnnotation to the call it annotates |
-| `contributesTo` | ContextContribution to the call it flows into |
+| `hasMemoryCall`, `hasSkillCall` | Parent call to a memory call (a `RAGQuery` is one) or a skill call |
+| `annotates` | CallAnnotation (and GovernanceEvent, ContextContribution) to the call it annotates |
 | `hasState` | Agent or call to State |
 | `hasInitialState`, `hasFinalState` | Call to its first or last State |
 | `leadsTo` | State to the next State (via a Transition) |
 | `inputTo` | State to the Transition that consumes it |
 | `correspondsToTransition` | Call or annotation to the Transition it corresponds to |
-| `executes`, `executesAgent`, `executesLLM`, `executesMAS`, `executesSession` | Execution record to the entity it runs |
-| `usesLLM` | AgentCall to LLM catalog node |
+| `executesAgent`, `executesLLM`, `executesTool`, `executesSkill`, `executesMemory`, `executesMAS`, `executesSession` | Execution record to the entity it runs |
+| `usesLLM`, `usesTool` | Agent to the LLM / Tool its calls used |
+| `runsOn` | Execution to the Worker it ran on |
 | `callsAgent` | ToolCall (delegation) to target Agent |
 
 The edge types present depend on the layers in the run. List the ones in your graph with
@@ -121,7 +121,7 @@ with open("library-kg/examples/qa-agent/kg-native.jsonld") as f:
     kg_doc = json.load(f)
 
 idx = KGIndex.from_doc(kg_doc)
-print("Session ID:", idx.session["sessionId"] if idx.session else "none")  # session-t8-native
+print("Session ID:", idx.session["sessionId"] if idx.session else "none")  # the session UUID the events carry
 print("AgentCalls:", len(idx.agent_calls))   # 1
 print("LLMCalls:  ", len(idx.llm_calls))     # 1
 print("ToolCalls: ", len(idx.tool_calls))    # 0
@@ -195,7 +195,7 @@ class FacetQuery:
 ### `call_types` vs `node_types`
 
 The recognised call types are `AgentCall`, `LLMCall`, `ToolCall`, `SkillCall`,
-`ProcessingCall`, `ThinkingCall`, `MITMCall`, `MASCall` and `TaskCall`. With
+`MemoryCall`, `RAGQuery`, `ProcessingCall`, `ThinkingCall`, `MITMCall` and `MASCall`. With
 `call_types=["LLMCall", "ToolCall"]` the type whitelist is exactly those two types, so
 Session, State, Transition, Agent and the other call types are removed. To keep
 structural nodes, add them through `node_types`:
@@ -487,7 +487,6 @@ readability.
 | `node_type` | Category | Description |
 |-------------|----------|-------------|
 | `Session` | Structural | Top-level session record |
-| `Run` | Structural | Run metadata |
 | `Agent` | Structural | Agent catalog entry |
 | `AgentCall` | Call | One invocation of an agent |
 | `LLMCall` | Call | One call to a language model |

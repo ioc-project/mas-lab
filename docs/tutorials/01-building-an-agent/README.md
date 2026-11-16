@@ -426,7 +426,7 @@ so you can skip the live run. The same stream feeds the plots and Tutorial 3's p
 `plot trajectory` prints the Mermaid diagram and writes `trajectory.mmd` in the current directory.
 
 For the full picture, render a multilevel trajectory from your own run (Step 7a): swim lanes for the session, agents, and each call, with hover cards.
-The shipped sample trace currently fails this plot with `Duplicate open call_id`, so use your own `output/events.jsonl`:
+The shipped sample, `traces/events.jsonl`, plots the same way:
 
 ```bash
 mas-lab plot multilevel-trajectory output/events.jsonl --format html -o output/trajectory.html   # self-contained, offline

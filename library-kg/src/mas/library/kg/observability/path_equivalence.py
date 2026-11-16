@@ -1,73 +1,27 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# ruff: noqa: E501, I001
-"""Compare native events → KG vs native events → observe-sdk OTel → norm.
+"""Native events -> KG versus native events -> OTel (converter) -> ``norm``.
 
-Two modes:
+Both graphs are built from the same events and nothing runs on either result: the
+native fold of the events, and the graph ``norm`` returns for the converter's output.
+:func:`compare_trajectories` pairs the two node by node and lists every difference.
 
-* ``default`` — the SCOPE / observe-sdk native OTel categories
-  (``*.agent`` / ``*.chat`` / ``*.tool`` / ``*.processing`` / ``*.graph`` /
-  ``session.*``).
-* ``complete`` — every export layer plus observe-sdk MAS extensions
-  (``*.memory`` / ``*.context`` / ``*.governance`` / ``*.skill`` /
-  ``*.rag``). Stock ``norm.normalize()`` still owns the default
-  categories; MAS materializes the extension suffixes that SCOPE
-  does not yet dispatch.
+* Batch: the converter's spans, folded by ``norm.normalize``.
+* Realtime (``realtime=True``): the native fold fed one event at a time, and the
+  converter in realtime mode: its spans (exported when they end) and its runtime
+  events (``*.started`` / ``*.completed`` LogRecords), folded by ``norm``'s
+  ``RealtimeKG``. A call that never ended is never exported as a span; its
+  ``*.started`` record is what ``norm`` gets of it.
 """
 
 from __future__ import annotations
 
-import re
 from collections import Counter
-from typing import Any, Iterable, Literal, Sequence
+from typing import Any
 
-from mas.library.kg.core.ontology_align import CONTAINS_TO_SCOPE
-from mas.library.kg.observability.otel_via_norm import normalize_otel, to_clickhouse_spans
+from mas.library.kg.core.event_mappings import CHECK_INTERVALS, parse_categories
+from mas.library.kg.observability.otel_via_norm import to_clickhouse_spans
 from mas.library.kg.pipeline import build_kg_document
-
-Mode = Literal["default", "complete"]
-
-DEFAULT_COMPARE_TYPES: frozenset[str] = frozenset(
-    {
-        "Agent",
-        "AgentCall",
-        "LLMCall",
-        "Tool",
-        "ToolCall",
-    }
-)
-
-COMPLETE_COMPARE_TYPES: frozenset[str] = DEFAULT_COMPARE_TYPES | frozenset(
-    {
-        "ProcessingCall",
-        "MemoryCall",
-        "SkillCall",
-        "RAGQuery",
-        "ContextContribution",
-        "GovernanceEvent",
-    }
-)
-
-_SUFFIX_TO_TYPE: dict[str, str] = {
-    "memory": "MemoryCall",
-    "processing": "ProcessingCall",
-    "context": "ContextContribution",
-    "governance": "GovernanceEvent",
-    "skill": "SkillCall",
-    "rag": "RAGQuery",
-}
-
-_NAME_FIELDS = (
-    "name",
-    "toolName",
-    "tool_name",
-    "agentId",
-    "agent_id",
-    "callId",
-    "call_id",
-    "processingName",
-    "skillName",
-)
 
 
 def node_type(node: dict[str, Any]) -> str:
@@ -80,496 +34,266 @@ def node_type(node: dict[str, Any]) -> str:
     return text
 
 
-def _is_synthesized(node: dict[str, Any]) -> bool:
-    return bool(node.get("synthesised") or node.get("synthesized"))
-
-
-def _is_end_governance(node: dict[str, Any]) -> bool:
-    if node_type(node) != "GovernanceEvent":
-        return False
-    kind = str(node.get("kind") or node.get("annotationKind") or "")
-    return kind.endswith("_end")
-
-
-def _align_reused_call_ids(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Give each start/end pair a unique call_id so native KG keeps instances.
-
-    The observe-sdk converter opens a new span when a call_id is reused after
-    close. Native ``extract_graph`` keys nodes by ``call_id`` and would
-    otherwise collapse those instances.
-    """
-    stacks: dict[str, list[str]] = {}
-    seen: dict[str, int] = {}
-    aligned: list[dict[str, Any]] = []
-    for event in events:
-        item = dict(event)
-        call_id = item.get("call_id")
-        kind = str(item.get("kind") or "")
-        if not call_id:
-            aligned.append(item)
-            continue
-        key = str(call_id)
-        if kind.endswith("_start"):
-            seen[key] = seen.get(key, 0) + 1
-            unique = key if seen[key] == 1 else f"{key}#{seen[key]}"
-            stacks.setdefault(key, []).append(unique)
-            item["call_id"] = unique
-        elif kind.endswith("_end") and stacks.get(key):
-            item["call_id"] = stacks[key].pop()
-        aligned.append(item)
-    return aligned
-
-
-def _identity_name(node: dict[str, Any]) -> str:
-    for field in _NAME_FIELDS:
-        value = node.get(field)
-        if value not in (None, ""):
-            return _strip_generated_suffix(str(value))
-    return ""
-
-
-_CALL_SPAN_SUFFIX = re.compile(r" call (?:0x)?[0-9a-fA-F]{8,}$")
-
-
-def _strip_generated_suffix(value: str) -> str:
-    text = str(value or "").strip()
-    if text.startswith("Tool call (") and ")" in text:
-        inner = text[len("Tool call (") :]
-        inner = inner.rsplit(")", 1)[0]
-        return inner
-    if text.startswith("LLM call ("):
-        return ""
-    for prefix in ("Session ", "MASCall ", "AgentCall "):
-        if text.startswith(prefix):
-            text = text[len(prefix) :]
-    # OTel call names end in `` call <span id>`` (hex, with or without ``0x``).
-    return _CALL_SPAN_SUFFIX.sub("", text)
-
-
-def _logical_key(
-    node: dict[str, Any],
+def _lab_graphs(
+    events: list[dict[str, Any]],
+    categories: Any = None,
     *,
-    agent_by_span: dict[str, str] | None = None,
-    span_index: dict[str, dict[str, Any]] | None = None,
-    agent_hint: str = "",
-) -> tuple[str, str]:
-    ntype = node_type(node)
-    agent = _strip_generated_suffix(
-        str(node.get("agentId") or node.get("agent_id") or agent_hint or "")
-    )
-    if not agent and agent_by_span:
-        parent = _norm_span(node.get("parentSpanId") or node.get("parent_span_id") or "")
-        agent = agent_by_span.get(parent, "")
-        if not agent and span_index:
-            # The direct parent span may be an LLM/tool span (not the
-            # AgentCall itself) -- walk one more hop up to that span's own
-            # parent, which is where the owning AgentCall's span lives.
-            parent_node = span_index.get(parent)
-            if parent_node is not None:
-                grandparent = _norm_span(
-                    parent_node.get("parentSpanId") or parent_node.get("parent_span_id") or ""
-                )
-                agent = agent_by_span.get(grandparent, "")
-    tool = _strip_generated_suffix(str(node.get("toolName") or node.get("tool_name") or ""))
-    if ntype in {"Tool", "ToolCall"}:
-        label = tool or _identity_name(node)
-        return ntype, label
-    if ntype in {
-        "Agent",
-        "AgentCall",
-        "LLMCall",
-        "ProcessingCall",
-        "MemoryCall",
-        "SkillCall",
-        "RAGQuery",
-        "GovernanceEvent",
-        "ContextContribution",
-    }:
-        return ntype, agent or _identity_name(node)
-    if ntype == "LLM":
-        return ntype, _identity_name(node) or "llm"
-    return ntype, _identity_name(node)
+    realtime: bool = False,
+) -> tuple[
+    str,
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Both folds of one event list: the native fold and converter -> ``norm``.
 
-
-def _norm_span(value: Any) -> str:
-    text = str(value or "").strip().lower()
-    if text.startswith("0x"):
-        text = text[2:]
-    return text
-
-
-def _agent_by_span(nodes: list[dict[str, Any]]) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for node in nodes:
-        if node_type(node) != "AgentCall":
-            continue
-        agent = _strip_generated_suffix(
-            str(node.get("agentId") or node.get("agent_id") or _identity_name(node))
-        )
-        span = _norm_span(node.get("spanId") or node.get("span_id") or "")
-        if span and agent:
-            out[span] = agent
-    return out
-
-
-def _agent_by_child_id(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> dict[str, str]:
-    """Owning agent of each node an AgentCall contains, read from the edges.
-
-    The native KG has no span ids and, in the default attribute set, no
-    ``agentId``/``parentCallId`` on a call: its AgentCall edges are what say
-    whose LLM or tool call it is.
+    Nothing runs on either result: the native graph is the fold of the events with the given
+    opt-in ``categories`` (default: none, the core classes) and the OTel graph is what
+    ``norm`` returns for the converter's output (the default export layers, or every layer,
+    extension span and annotation when ``categories`` enables any: ``norm`` has no category
+    gating, it maps every span it is given). With ``realtime``, the native fold takes the
+    events one at a time and ``norm``'s ``RealtimeKG`` folds the converter's spans and its
+    runtime events. Returns the run id the native ids carry, the native nodes and edges, the
+    OTel nodes and edges, and the ClickHouse-shaped records ``norm`` was given.
     """
-    agent_of_call = {
-        str(node.get("id") or ""): _strip_generated_suffix(
-            str(node.get("agentId") or node.get("agent_id") or _identity_name(node))
-        )
-        for node in nodes
-        if node_type(node) == "AgentCall"
-    }
-    out: dict[str, str] = {}
-    for edge in edges:
-        src = str(edge.get("from_id") or edge.get("source_id") or "")
-        dst = str(edge.get("to_id") or edge.get("target_id") or "")
-        if (
-            agent_of_call.get(src)
-            and dst
-            and not str(edge.get("edge_type") or "").endswith("hasAgentCall")
-        ):
-            out.setdefault(dst, agent_of_call[src])
-    return out
-
-
-def _span_index(nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    out: dict[str, dict[str, Any]] = {}
-    for node in nodes:
-        span = _norm_span(node.get("spanId") or node.get("span_id") or "")
-        if span:
-            out[span] = node
-    return out
-
-
-def _enclosing_call(
-    node: dict[str, Any],
-    *,
-    by_span: dict[str, dict[str, Any]],
-    types: set[str],
-) -> dict[str, Any] | None:
-    seen: set[str] = set()
-    current = node
-    for _ in range(8):
-        parent = _norm_span(current.get("parentSpanId") or current.get("parent_span_id") or "")
-        if not parent or parent in seen:
-            return None
-        seen.add(parent)
-        ancestor = by_span.get(parent)
-        if ancestor is None:
-            return None
-        if node_type(ancestor) in types:
-            return ancestor
-        current = ancestor
-    return None
-
-
-def _enclosing_agent_call(
-    node: dict[str, Any],
-    *,
-    by_span: dict[str, dict[str, Any]],
-) -> dict[str, Any] | None:
-    return _enclosing_call(node, by_span=by_span, types={"AgentCall"})
-
-
-def _canonical_edge_type(etype: str, src_type: str, dst_type: str) -> str | None:
-    name = etype.rsplit("/", 1)[-1].rsplit("#", 1)[-1]
-    if name in {"contains", "hasCall"}:
-        return CONTAINS_TO_SCOPE.get(dst_type)
-    if name in CONTAINS_TO_SCOPE.values():
-        return name
-    return None
-
-
-def _keep_canonical_edge(mapped: str, src_key: tuple[str, str], dst_key: tuple[str, str]) -> bool:
-    """Keep the overlapping call-tree projection both paths can emit.
-
-    Native KG nests AgentCalls under delegate ToolCalls and ProcessingCalls
-    under LLM/tool spans. Stock OTel→norm only has AgentCall containment plus
-    ToolCall annotations. Comparing that shared tree (modulo order) is the
-    contract; native-only nesting is ignored.
-    """
-    if mapped.startswith("has") and mapped != "hasProcessingCall" and src_key[0] == "AgentCall":
-        return True
-    return False
-
-
-def _canonical_subgraph(
-    nodes: list[dict[str, Any]],
-    edges: list[dict[str, Any]],
-    allowed: frozenset[str],
-) -> dict[str, Any]:
-    """Order-insensitive projection of the overlapping KG."""
-    by_span_agent = _agent_by_span(nodes)
-    by_span_node = _span_index(nodes)
-    kept = [
-        node
-        for node in nodes
-        if node_type(node) in allowed and not _is_synthesized(node) and not _is_end_governance(node)
-    ]
-    agent_of_child = _agent_by_child_id(nodes, edges)
-    keys = {
-        str(node.get("id") or ""): _logical_key(
-            node,
-            agent_by_span=by_span_agent,
-            agent_hint=agent_of_child.get(str(node.get("id") or ""), ""),
-        )
-        for node in kept
-    }
-    referenced_agents = {key[1] for key in keys.values() if key[0] == "AgentCall"}
-    referenced_tools = {key[1] for key in keys.values() if key[0] == "ToolCall"}
-    keys = {
-        nid: key
-        for nid, key in keys.items()
-        if not (
-            (key[0] == "Agent" and key[1] not in referenced_agents)
-            or (key[0] == "Tool" and key[1] not in referenced_tools)
-        )
-    }
-    node_keys = sorted(keys.values())
-    edge_keys = []
-    linked_children: set[str] = set()
-    for edge in edges:
-        src = str(edge.get("from_id") or edge.get("source_id") or "")
-        dst = str(edge.get("to_id") or edge.get("target_id") or "")
-        if src not in keys or dst not in keys:
-            continue
-        etype = str(edge.get("edge_type") or edge.get("@type") or "")
-        mapped = _canonical_edge_type(etype, keys[src][0], keys[dst][0])
-        if mapped is None:
-            continue
-        src_key, dst_key = keys[src], keys[dst]
-        if (
-            mapped == "contributesTo"
-            and src_key[0] == "AgentCall"
-            and dst_key[0] == "ContextContribution"
-        ):
-            src_key, dst_key = dst_key, src_key
-        elif (
-            mapped == "annotates"
-            and dst_key[0] == "GovernanceEvent"
-            and src_key[0] != "GovernanceEvent"
-        ):
-            src_key, dst_key = dst_key, src_key
-        if not _keep_canonical_edge(mapped, src_key, dst_key):
-            continue
-        edge_keys.append((mapped, src_key, dst_key))
-        linked_children.add(src if mapped == "annotates" else dst)
-    # OTel via stock norm often omits AgentCall→child containment; recover it
-    # from parentSpanId so both paths share the same call tree (modulo order).
-    for node in kept:
-        child_key = keys.get(str(node.get("id") or ""))
-        if child_key is None:
-            continue
-        parent_edge = CONTAINS_TO_SCOPE.get(child_key[0])
-        if parent_edge is None:
-            continue
-        if child_key[0] in {
-            "AgentCall",
-            "ProcessingCall",
-            "ContextContribution",
-            "GovernanceEvent",
-        }:
-            continue
-        ancestor = _enclosing_agent_call(node, by_span=by_span_node)
-        if ancestor is None:
-            continue
-        parent_key = keys.get(str(ancestor.get("id") or "")) or _logical_key(
-            ancestor, agent_by_span=by_span_agent
-        )
-        item = (parent_edge, parent_key, child_key)
-        child_id = str(node.get("id") or "")
-        if child_id in linked_children:
-            continue
-        if not _keep_canonical_edge(item[0], item[1], item[2]):
-            continue
-        linked_children.add(child_id)
-        edge_keys.append(item)
-    return {
-        "nodes": node_keys,
-        "edges": sorted(edge_keys),
-    }
-
-
-def _identity_bag(
-    nodes: Iterable[dict[str, Any]], allowed: frozenset[str]
-) -> dict[str, Counter[str]]:
-    bags: dict[str, Counter[str]] = {ntype: Counter() for ntype in allowed}
-    for node in nodes:
-        ntype = node_type(node)
-        if ntype not in allowed or _is_synthesized(node) or _is_end_governance(node):
-            continue
-        bags[ntype][_identity_name(node)] += 1
-    return bags
-
-
-def _span_suffix(name: str) -> str:
-    text = str(name or "")
-    if "." not in text:
-        return ""
-    return text.rsplit(".", 1)[-1]
-
-
-def materialize_extension_nodes(spans: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Turn observe-sdk MAS extension suffixes into typed KG nodes."""
-    nodes: list[dict[str, Any]] = []
-    for row in to_clickhouse_spans(spans):
-        suffix = _span_suffix(str(row.get("SpanName") or ""))
-        ntype = _SUFFIX_TO_TYPE.get(suffix)
-        if ntype is None:
-            continue
-        attrs = row.get("SpanAttributes") if isinstance(row.get("SpanAttributes"), dict) else {}
-        name = (
-            attrs.get("ioa_observe.entity.name")
-            or attrs.get("mas.skill.name")
-            or attrs.get("mas.tool.name")
-            or attrs.get("mas.memory.type")
-            or attrs.get("agent_id")
-            or str(row.get("SpanName") or "").rsplit(".", 1)[0]
-        )
-        nodes.append(
-            {
-                "node_type": ntype,
-                "@type": ntype,
-                "id": str(row.get("SpanId") or f"{ntype}-{len(nodes)}"),
-                "name": str(name or ""),
-                "agentId": str(attrs.get("agent_id") or attrs.get("mas.agent.id") or ""),
-                "spanId": str(row.get("SpanId") or ""),
-                "parentSpanId": str(row.get("ParentSpanId") or ""),
-            }
-        )
-    return nodes
-
-
-def _native_kg(
-    events: list[dict[str, Any]], *, mode: Mode
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    run_id = "unknown-run"
-    for event in events:
-        rid = event.get("run_id") or event.get("session_id")
-        if rid:
-            run_id = str(rid)
-            break
-    events = _align_reused_call_ids(events)
-    complete = mode == "complete"
-    doc = build_kg_document(
-        events,
-        run_id=run_id,
-        include_trajectory=complete,
-        include_provenance=complete,
-        include_governance=complete,
-        include_annotation=complete,
-        include_native_extensions=complete,
-        all_attributes=complete,
-        fill_synthesized_processing_defaults=False,
-    )
-    return list(doc.get("nodes") or []), list(doc.get("edges") or [])
-
-
-def _otel_kg(
-    events: list[dict[str, Any]], *, mode: Mode
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
-    from mas.library.telemetry.conversion.layers import ExportLayers
-    from mas.library.telemetry.conversion.replay import replay_events_file
-    from mas.library.telemetry.conversion.topology import derive_app_name
+    import json
     import tempfile
     from pathlib import Path
-    import json
 
-    layers = ExportLayers.complete() if mode == "complete" else ExportLayers.scope_default()
-    with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as handle:
-        events_path = Path(handle.name)
-    with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as handle:
-        spans_path = Path(handle.name)
-    try:
-        events_path.write_text(
-            "\n".join(json.dumps(event) for event in events) + "\n",
-            encoding="utf-8",
-        )
+    from mas.library.telemetry.conversion.replay import replay_events_file
+    from mas.library.telemetry.conversion.session import runtime_events_path
+    from mas.library.telemetry.conversion.topology import derive_app_name
+    from norm import RealtimeKG, normalize, realtime_record_to_span
+
+    run_id = next((str(e["run_id"]) for e in events if e.get("run_id")), "run")
+    doc = build_kg_document(events, run_id=run_id, categories=categories, realtime=realtime)
+    everything = bool(parse_categories(categories))
+    layers = {"governance": everything, "annotation": everything}
+    with tempfile.TemporaryDirectory() as tmp:
+        source, spans = Path(tmp) / "events.jsonl", Path(tmp) / "spans.jsonl"
+        source.write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
         replay_events_file(
-            events_path,
-            spans_path,
+            source,
+            spans,
             converter_profile="observe_sdk",
             export_layers=layers,
-            extensions=mode == "complete",
+            extensions=everything,
+            realtime=realtime,
             app_name=derive_app_name(events, fallback="mas"),
         )
-        spans = [
-            json.loads(line)
-            for line in spans_path.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-    finally:
-        events_path.unlink(missing_ok=True)
-        spans_path.unlink(missing_ok=True)
 
-    nodes, edges = normalize_otel(spans, all_attributes=mode == "complete")
-    if mode == "complete":
-        keep = DEFAULT_COMPARE_TYPES | {"Session", "MAS", "MASCall", "LLM"}
-        core = [node for node in nodes if node_type(node) in keep]
-        nodes = core + materialize_extension_nodes(spans)
-    return nodes, edges, spans
+        def read(path: Path) -> list[dict[str, Any]]:
+            if not path.exists():
+                return []
+            return [
+                json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line
+            ]
+
+        rows = to_clickhouse_spans(read(spans))
+        records = [realtime_record_to_span(r) for r in read(runtime_events_path(spans))]
+    if realtime:
+        otel_nodes, otel_edges = RealtimeKG().add_all([*rows, *records]).snapshot()
+    else:
+        otel_nodes, otel_edges = normalize(rows)
+    return (
+        run_id,
+        list(doc.get("nodes") or []),
+        list(doc.get("edges") or []),
+        list(otel_nodes),
+        list(otel_edges),
+        [*rows, *records],
+    )
 
 
-def compare_native_and_otel(
+_CALL_TYPES = (
+    "AgentCall",
+    "LLMCall",
+    "ToolCall",
+    "ProcessingCall",
+    "SkillCall",
+    "MemoryCall",
+    "RAGQuery",
+    "ThinkingCall",
+)
+_ANNOTATION_TYPES = ("CallAnnotation", "GovernanceEvent", "ContextContribution")
+_CATALOG_TYPES = ("Agent", "LLM", "Tool", "Processing", "MAS", "Skill", "Memory", "Worker")
+_NOT_COMPARED = frozenset({"id", "@type", "node_type", "spanId", "parentSpanId"})
+_TIMING_FIELDS = frozenset({"startTime", "endTime", "duration", "eventTime"})
+
+
+def compare_trajectories(
     events: list[dict[str, Any]],
     *,
-    mode: Mode,
-) -> dict[str, Any]:
-    """Return a type-count / identity comparison for one mode."""
-    allowed = COMPLETE_COMPARE_TYPES if mode == "complete" else DEFAULT_COMPARE_TYPES
-    native_nodes, native_edges = _native_kg(events, mode=mode)
-    otel_nodes, otel_edges, spans = _otel_kg(events, mode=mode)
-    native_canon = _canonical_subgraph(native_nodes, native_edges, allowed)
-    otel_canon = _canonical_subgraph(otel_nodes, otel_edges, allowed)
-    same_trace = Counter(native_canon["nodes"]) == Counter(otel_canon["nodes"]) and Counter(
-        native_canon["edges"]
-    ) == Counter(otel_canon["edges"])
-    native_counts = Counter(ntype for ntype, _ in native_canon["nodes"])
-    otel_counts = Counter(ntype for ntype, _ in otel_canon["nodes"])
-    mismatched = sorted(ntype for ntype in allowed if native_counts[ntype] != otel_counts[ntype])
-    native_ids = _identity_bag(native_nodes, allowed)
-    otel_ids = _identity_bag(otel_nodes, allowed)
-    native_sessions = sum(1 for node in native_nodes if node_type(node) == "Session")
-    otel_sessions = sum(1 for node in otel_nodes if node_type(node) == "Session")
-    return {
-        "mode": mode,
-        "allowed_types": sorted(allowed),
-        "native_counts": dict(native_counts),
-        "otel_counts": dict(otel_counts),
-        "native_identities": {k: dict(v) for k, v in native_ids.items() if v},
-        "otel_identities": {k: dict(v) for k, v in otel_ids.items() if v},
-        "mismatched_types": mismatched,
-        "equivalent": not mismatched,
-        "same_trace": same_trace,
-        "canonical_diff": {
-            "native_nodes": native_canon["nodes"],
-            "otel_nodes": otel_canon["nodes"],
-            "native_edges": native_canon["edges"],
-            "otel_edges": otel_canon["edges"],
+    timing_tolerance_ms: float = 1.0,
+    categories: Any = None,
+    realtime: bool = False,
+) -> list[str]:
+    """Differences between the native fold and converter -> ``norm``; empty means they agree.
+
+    Both graphs are built from the same events with no post-processing. The explicit identity
+    anchors them: a native call node id ends in the call id, the converter writes that call id
+    on its span (``mas.call.id``), so the call is the ``norm`` node of that span; a native State
+    id ends in the producer's State id, which ``norm`` hashes into its own State id; a
+    Transition is the one its call corresponds to. Catalog nodes pair by class and name. An
+    annotation pairs by its class, kind, time and the paired node it annotates.
+
+    Every paired node is compared field by field (timing to within ``timing_tolerance_ms``;
+    native stamps seconds, spans nanoseconds), and every edge must exist on both sides between
+    the same paired nodes. A node of either side with no counterpart is a difference. Each line
+    is ``<key>: <detail>`` with a stable key (``LLMCall.name``, ``edge only OTel usesTool``);
+    the same difference on several nodes is counted on one line. ``realtime`` compares the
+    realtime folds (see :func:`_lab_graphs`).
+    """
+    from norm.ioa_observe.trajectory import state_node_id
+
+    run_id, native_nodes, native_edges, otel_nodes, otel_edges, rows = _lab_graphs(
+        events, categories, realtime=realtime
+    )
+    native = {str(n["id"]): n for n in native_nodes}
+    otel = {str(n["id"]): n for n in otel_nodes}
+    problems: list[str] = []
+    for side, nodes in (("native", native_nodes), ("OTel", otel_nodes)):
+        repeated = [i for i, n in Counter(str(n["id"]) for n in nodes).items() if n > 1]
+        problems += [f"{side} duplicate id: {i}" for i in sorted(repeated)]
+
+    pair: dict[str, str] = {}  # native node id -> OTel node id
+
+    # Calls: the span that carries the call id.
+    spans_of_call: dict[str, list[str]] = {}
+    for row in rows:
+        call_id = (row.get("SpanAttributes") or {}).get("mas.call.id")
+        if call_id:
+            known = spans_of_call.setdefault(str(call_id), [])
+            if str(row["SpanId"]) not in known:  # a span and its realtime records
+                known.append(str(row["SpanId"]))
+    otel_of_span = {str(n["spanId"]): i for i, n in otel.items() if n.get("spanId")}
+    for nid, node in native.items():
+        ntype = node_type(node)
+        if ntype not in _CALL_TYPES:
+            continue
+        call_id = nid.removeprefix(f"{ntype.lower()}:{run_id}:")
+        if ntype == "ProcessingCall" and str(node.get("name")) in CHECK_INTERVALS:
+            # The converter keys a check interval ``{call_id}:{kind}_start``.
+            call_id = f"{call_id}:{node['name']}_start"
+        spans = spans_of_call.get(call_id, [])
+        found = otel_of_span.get(spans[0]) if len(spans) == 1 else None
+        if found is not None and node_type(otel[found]) == ntype:
+            pair[nid] = found
+
+    # Session and MASCall are unique; catalog nodes pair by class and name.
+    for ntype in ("Session", "MASCall", *_CATALOG_TYPES):
+        left = [i for i, n in native.items() if node_type(n) == ntype]
+        right = [i for i, n in otel.items() if node_type(n) == ntype]
+        by_name = {str(otel[i].get("name")): i for i in right}
+        unique = ntype in ("Session", "MASCall")
+        for i in left:
+            if unique and len(left) == len(right) == 1:
+                pair[i] = right[0]
+            elif not unique and str(native[i].get("name")) in by_name:
+                pair[i] = by_name[str(native[i].get("name"))]
+
+    # Annotations carry no call id: they pair by class, kind, time (to the millisecond) and
+    # the node they annotate (already paired); a group of several pairs only when both sides
+    # hold the same number, in time and payload order.
+    def annotation_groups(
+        nodes: dict[str, dict[str, Any]], edges: list[dict[str, Any]], mapping: dict[str, str]
+    ) -> dict[tuple, list[str]]:
+        target = {
+            str(e["from_id"]): mapping.get(str(e["to_id"]), str(e["to_id"]))
+            for e in edges
+            if e.get("edge_type") == "annotates"
         }
-        if not same_trace
-        else {},
-        "session_present": {"native": native_sessions > 0, "otel": otel_sessions > 0},
-        "span_count": len(spans),
-        "native_node_count": len(native_nodes),
-        "otel_node_count": len(otel_nodes),
-        "native_edge_count": len(native_edges),
-        "otel_edge_count": len(otel_edges),
-    }
+        groups: dict[tuple, list[str]] = {}
+        for i, n in nodes.items():
+            if node_type(n) in _ANNOTATION_TYPES:
+                stamp = round(float(n.get("eventTime") or 0.0) * 1000.0)
+                key = (node_type(n), n.get("eventKind"), stamp, target.get(i, ""))
+                groups.setdefault(key, []).append(i)
+        return groups
 
+    otel_groups = annotation_groups(otel, otel_edges, {})
+    for key, left in annotation_groups(native, native_edges, pair).items():
+        right = otel_groups.get(key, [])
+        if len(left) == len(right):
 
-def compare_both_modes(events: list[dict[str, Any]]) -> dict[str, Any]:
-    default = compare_native_and_otel(events, mode="default")
-    complete = compare_native_and_otel(events, mode="complete")
-    return {
-        "default": default,
-        "complete": complete,
-        "equivalent": bool(default["equivalent"] and complete["equivalent"]),
-    }
+            def order(graph: dict[str, dict[str, Any]]) -> Any:
+                return lambda i: (
+                    float(graph[i].get("eventTime") or 0.0),
+                    str(graph[i].get("payload")),
+                )
+
+            for i, o in zip(sorted(left, key=order(native)), sorted(right, key=order(otel))):
+                pair[i] = o
+
+    # States: the producer's State id, hashed by norm with the session id.
+    sessions = [i for i, n in otel.items() if node_type(n) == "Session"]
+    session_id = sessions[0] if len(sessions) == 1 else ""
+    for nid, node in native.items():
+        if node_type(node) == "State":
+            pair[nid] = state_node_id(session_id, nid.removeprefix(f"state:{run_id}:"))
+
+    # Transitions: the one the paired call corresponds to.
+    def transition_of(edges: list[dict[str, Any]]) -> dict[str, str]:
+        return {
+            str(e["from_id"]): str(e["to_id"])
+            for e in edges
+            if e.get("edge_type") == "correspondsToTransition"
+        }
+
+    native_transition, otel_transition = transition_of(native_edges), transition_of(otel_edges)
+    for call, transition in native_transition.items():
+        if call in pair and pair[call] in otel_transition:
+            pair[transition] = otel_transition[pair[call]]
+
+    taken = set(pair.values())
+    for side, graph, mapped in (("native", native, set(pair)), ("OTel", otel, taken)):
+        lost = Counter(node_type(n) for i, n in graph.items() if i not in mapped)
+        problems += [
+            f"{t} without counterpart ({side}): {c} node(s)" for t, c in sorted(lost.items())
+        ]
+    for nid in sorted(pair):
+        if pair[nid] not in otel:
+            problems.append(f"{node_type(native[nid])} pairs to no OTel node: {nid}")
+
+    # Fields of paired nodes.
+    differing: dict[str, list[tuple[Any, Any]]] = {}
+    for nid, oid in pair.items():
+        if nid not in native or oid not in otel:
+            continue
+        left, right = native[nid], otel[oid]
+        for key in sorted((set(left) | set(right)) - _NOT_COMPARED):
+            a, b = left.get(key), right.get(key)
+            if key in _TIMING_FIELDS and a is not None and b is not None:
+                scale = 1.0 if key == "duration" else 1000.0
+                same = abs(float(a) - float(b)) * scale <= timing_tolerance_ms
+            else:
+                same = a == b
+            if not same:
+                differing.setdefault(f"{node_type(left)}.{key}", []).append((a, b))
+    for key, cases in sorted(differing.items()):
+        a, b = cases[0]
+        problems.append(f"{key}: {len(cases)} differ, e.g. native {a!r:.60} vs OTel {b!r:.60}")
+
+    # Edges between paired nodes.
+    def bag(edges: list[dict[str, Any]], mapping: dict[str, str]) -> Counter:
+        return Counter(
+            (
+                str(e.get("edge_type")),
+                mapping.get(str(e.get("from_id")), str(e.get("from_id"))),
+                mapping.get(str(e.get("to_id")), str(e.get("to_id"))),
+            )
+            for e in edges
+        )
+
+    left_edges, right_edges = bag(native_edges, pair), bag(otel_edges, {})
+    for side, extra in (("native", left_edges - right_edges), ("OTel", right_edges - left_edges)):
+        by_type: dict[str, list[tuple[str, str, str]]] = {}
+        for edge in extra.elements():
+            by_type.setdefault(edge[0], []).append(edge)
+        for etype, cases in sorted(by_type.items()):
+            problems.append(
+                f"edge only {side} {etype}: {len(cases)}, e.g. {cases[0][1]} -> {cases[0][2]}"
+            )
+    return problems

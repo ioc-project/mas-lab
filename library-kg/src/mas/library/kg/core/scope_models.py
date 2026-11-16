@@ -2,12 +2,12 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Map native graph_builder dicts onto ``scope_ontology.models``.
 
-SCOPE (https://github.com/ioc-project/scope) ships Session, MASCall,
-AgentCall, LLMCall, ToolCall, ProcessingCall, State, Transition, and the
-structural catalog classes. Native-path classes that are not yet on that
-package (RAGQuery, MemoryCall, SkillCall, GovernanceEvent, CallAnnotation,
-…) stay as typed dicts with the same keys ``norm`` uses (``node_type`` /
-``edge_type`` / ``id``) plus ``@type``.
+SCOPE (https://github.com/ioc-project/scope) ships every class the fold emits
+(Session, MASCall, AgentCall, LLMCall, ToolCall, ProcessingCall, SkillCall,
+MemoryCall, RAGQuery, State, Transition, CallAnnotation and its subclasses, and
+the catalog classes). Nodes and edges are plain dicts with the keys ``norm`` uses
+(``node_type`` / ``edge_type`` / ``id``) plus ``@type``; the class declares which
+other keys survive the projection.
 
 Allowed default attributes come from the installed SCOPE models — this
 module does not copy field lists. Never imports a private ontology package.
@@ -24,8 +24,8 @@ from scope_ontology.models.base import MAS_CONTEXT, KGEdge, KGNode
 
 logger = logging.getLogger(__name__)
 
-# Native-path classes not in SCOPE. Declared in
-# library-kg/ontology/extensions/mas-kg-native-extensions.ttl pending upstream.
+# Classes the native fold emits that a released SCOPE ontology may not declare yet.
+# Declared in library-kg/ontology/extensions/mas-kg-native-extensions.ttl until it does.
 NATIVE_EXTENSION_NODE_TYPES: frozenset[str] = frozenset(
     {
         "RAGQuery",
@@ -34,23 +34,16 @@ NATIVE_EXTENSION_NODE_TYPES: frozenset[str] = frozenset(
         "Skill",
         "CallAnnotation",
         "ContextContribution",
-        "ParallelGroup",
-        "Branch",
         "GovernanceEvent",
         "Worker",
-        "Run",
-        "Application",
         "ThinkingCall",
-        "TaskCall",
     }
 )
 
-# Native-extension / future A2A+MCP properties. Not emitted on the default path.
+# Future A2A+MCP properties. Not emitted on the default path.
 DEFERRED_EDGE_TYPES: frozenset[str] = frozenset(
     {
         "callsAgent",
-        "usesTool",
-        "usesLLM",
         "usesCapability",
         "usesProcessing",
     }
@@ -134,6 +127,11 @@ def _dump_model(instance: Any, fallback: Dict[str, Any]) -> Dict[str, Any]:
     return fallback
 
 
+# Fields whose SCOPE model default (0, "") would read as a value: they are in the output only
+# when the event carries them (a model that was not asked for reasoning has no effort).
+_ONLY_WHEN_STATED = frozenset({"reasoningTokenCount", "reasoningEffort"})
+
+
 def _merge_model(
     cls: type,
     payload: Dict[str, Any],
@@ -151,7 +149,7 @@ def _merge_model(
         logger.debug("scope %s model %s rejected native payload: %s", kind_key, kind, exc)
         return out
     for key, value in _dump_model(instance, fallback).items():
-        if value is not None:
+        if value is not None and (key not in _ONLY_WHEN_STATED or key in payload):
             out.setdefault(key, value)
     out.setdefault(kind_key, kind)
     return out
@@ -243,7 +241,7 @@ def restrict_graph(
     """Drop deferred edges and, unless *all_attributes*, extra native fields.
 
     Default output is the installed SCOPE attribute set so native→KG and
-    OTel→KG share the same keys. ``callsAgent`` / ``usesTool`` stay off until
+    OTel→KG share the same keys. ``callsAgent`` stays off until
     A2A / MCP observability lands.
     """
     kept_edges = [e for e in edges if _edge_type_name(e) not in DEFERRED_EDGE_TYPES]
@@ -252,7 +250,8 @@ def restrict_graph(
     out_nodes: List[Dict[str, Any]] = []
     for node in nodes:
         ntype = str(node.get("node_type") or node.get("@type") or "")
-        if ntype in NATIVE_EXTENSION_NODE_TYPES:
+        if ntype in NATIVE_EXTENSION_NODE_TYPES and _scope_class(ntype, "nodes") is None:
+            # The installed SCOPE does not declare the class: nothing to restrict it to.
             out_nodes.append(dict(node))
             continue
         allowed = allowed_node_keys(ntype)

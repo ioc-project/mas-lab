@@ -1,15 +1,16 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 """Event trace analysis helpers."""
+
+from __future__ import annotations
 
 import json
 
 # ---------------------------------------------------------------------------
 # Internal analysis
 # ---------------------------------------------------------------------------
+
 
 def _parse_llm_content(raw: str) -> str | None:
     """Extract human-readable content from an LLM response string.
@@ -57,9 +58,8 @@ def _parse_llm_content(raw: str) -> str | None:
     return raw if len(raw.split()) > 3 else None
 
 
-def _extract_agent_output(events: list[dict], agent_id: str,
-                          ts_start: float, ts_end: float) -> str:
-    """Return the last LLM response content from *agent_id* in the delegation window."""
+def _extract_agent_output(events: list[dict], agent_id: str, ts_start: float, ts_end: float) -> str:
+    """Return the last LLM output (``output``, or ``response.content``) from *agent_id* in the delegation window."""
     best = ""
     best_ts = 0.0
     for e in events:
@@ -72,8 +72,8 @@ def _extract_agent_output(events: list[dict], agent_id: str,
             continue
         if ts >= best_ts:
             resp = e.get("response", {})
-            raw = resp.get("content", "") if isinstance(resp, dict) else str(resp)
-            content = _parse_llm_content(raw)
+            raw = e.get("output") or (resp.get("content", "") if isinstance(resp, dict) else str(resp))
+            content = _parse_llm_content(raw if isinstance(raw, str) else str(raw))
             if content:
                 best = content
                 best_ts = ts
@@ -102,16 +102,18 @@ def _extract_delegations(events: list[dict]) -> list[dict]:
         ts_end = result_evt.get("timestamp", 0)
         target = route_evt.get("target_agent_id", "?")
         output = _extract_agent_output(events, target, ts_start, ts_end)
-        pairs.append({
-            "source": route_evt.get("source_agent_id", "?"),
-            "target": target,
-            "task": route_evt.get("task", ""),
-            "output": output,
-            "status": result_evt.get("status", "unknown"),
-            "correlation_id": cid,
-            "ts_start": ts_start,
-            "ts_end": ts_end,
-        })
+        pairs.append(
+            {
+                "source": route_evt.get("source_agent_id", "?"),
+                "target": target,
+                "task": route_evt.get("task", ""),
+                "output": output,
+                "status": result_evt.get("status", "unknown"),
+                "correlation_id": cid,
+                "ts_start": ts_start,
+                "ts_end": ts_end,
+            }
+        )
 
     pairs.sort(key=lambda p: p["ts_start"])
     return pairs
@@ -132,6 +134,7 @@ def _extract_user_frame(events: list[dict]) -> dict | None:
             if isinstance(ctx, str):
                 try:
                     import ast
+
                     ctx = ast.literal_eval(ctx)
                 except Exception:
                     ctx = {}
@@ -161,6 +164,7 @@ def _extract_user_frame(events: list[dict]) -> dict | None:
         if isinstance(ctx, str):
             try:
                 import ast
+
                 ctx = ast.literal_eval(ctx)
             except Exception:
                 ctx = {}
@@ -195,13 +199,14 @@ def _extract_agent_order(events: list[dict]) -> list[str]:
 def _short_task(task: str, max_chars: int = 80) -> str:
     """Truncate and sanitise a task string for inline diagram labels."""
     import re
+
     if not task:
         return ""
     # Collapse whitespace / strip Markdown headers and bold/italic markers
     text = task.strip()
-    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)   # ## headers
-    text = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text)     # **bold** / *italic*
-    text = re.sub(r"_{1,3}([^_]+)_{1,3}", r"\1", text)       # __bold__
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)  # ## headers
+    text = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text)  # **bold** / *italic*
+    text = re.sub(r"_{1,3}([^_]+)_{1,3}", r"\1", text)  # __bold__
     text = re.sub(r"\s+", " ", text).strip()
     # keep first sentence or first N chars
     first_sentence = text.split(".")[0].strip()

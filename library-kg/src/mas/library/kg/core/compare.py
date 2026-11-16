@@ -114,6 +114,23 @@ class KGCompareResult:
 # Field extraction helpers (multi-format)
 # ---------------------------------------------------------------------------
 
+# The ontology's containment properties (``containsCall`` and its sub-properties) and
+# ``annotates``, which hangs an annotation under the call it is about.
+CONTAINMENT_EDGE_TYPES: frozenset[str] = frozenset(
+    {
+        "containsCall",
+        "hasMASCall",
+        "hasAgentCall",
+        "hasLLMCall",
+        "hasToolCall",
+        "hasProcessingCall",
+        "hasMemoryCall",
+        "hasSkillCall",
+        "hasThinkingCall",
+        "annotates",
+    }
+)
+
 
 def _node_type(node: Dict[str, Any]) -> str:
     for key in ("node_type", "nodeType", "type"):
@@ -189,8 +206,6 @@ def _delegation_pairs(
 
 def _max_nesting_depth(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> int:
     """Compute maximum containment nesting depth via BFS."""
-    from mas.library.kg.core.ontology_align import CONTAINMENT_EDGE_TYPES
-
     children: Dict[str, List[str]] = {}
     node_ids: Set[str] = {n.get("id", "") for n in nodes}
     for e in edges:

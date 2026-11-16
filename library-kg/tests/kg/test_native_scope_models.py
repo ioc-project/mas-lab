@@ -73,14 +73,13 @@ def native_doc():
     return build_kg_document(events, run_id="scope-native-1")
 
 
-def test_kind_to_class_core_subset_is_documented() -> None:
+def test_every_mapped_class_is_a_scope_model_or_a_declared_extension() -> None:
     mapped = {cls for cls in KIND_TO_CLASS.values() if cls}
-    missing_from_audit = mapped - SCOPE_CORE_NODE_TYPES - NATIVE_EXTENSION_NODE_TYPES
-    assert not missing_from_audit, f"KIND_TO_CLASS has undocumented classes: {missing_from_audit}"
+    undeclared = mapped - SCOPE_CORE_NODE_TYPES - NATIVE_EXTENSION_NODE_TYPES
+    assert not undeclared, undeclared
 
 
 def test_native_core_types_exist_on_scope_models(native_doc) -> None:
-    pytest.importorskip("scope_ontology")
     from scope_ontology import models as scope_models
 
     present = {n.get("node_type") for n in native_doc["nodes"]}
@@ -90,12 +89,7 @@ def test_native_core_types_exist_on_scope_models(native_doc) -> None:
         assert hasattr(scope_models, ntype), f"scope_ontology.models missing {ntype}"
 
 
-def test_native_extension_types_are_typed_dicts_when_models_absent(native_doc) -> None:
-    nodes_by_type = {n.get("node_type") for n in native_doc["nodes"]}
+def test_native_nodes_carry_an_id_and_a_scope_type(native_doc) -> None:
     for node in native_doc["nodes"]:
-        ntype = node.get("node_type")
-        if ntype in NATIVE_EXTENSION_NODE_TYPES:
-            assert node.get("@type") == ntype or node.get("node_type") == ntype
-        if ntype in SCOPE_CORE_NODE_TYPES:
-            assert node.get("id") or node.get("callId") or node.get("sessionId")
-    assert "AgentCall" in nodes_by_type
+        assert node.get("node_type") in SCOPE_CORE_NODE_TYPES, node
+        assert node.get("id"), node

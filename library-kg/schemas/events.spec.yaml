@@ -100,7 +100,7 @@ shapes:
       - level: L3
         recommended: [spec_id, spec_version, catalog]
 
-  - kind_prefixes: [memory_, rag_, processing_, skill_, network_, workflow_, agent_communication_, parallel_group_, branch_, checkpoint_, governance_, obs_wrap_gov_]
+  - kind_prefixes: [memory_, rag_, processing_, skill_, network_, workflow_, agent_communication_, parallel_group_, checkpoint_, governance_, obs_wrap_gov_]
     levels:
       - level: L2
         required: [call_id]

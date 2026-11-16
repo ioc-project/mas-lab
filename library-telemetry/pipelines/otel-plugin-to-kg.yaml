@@ -17,19 +17,13 @@ spec:
         spanspec_level: L3
         spanspec_strictness: required
 
-    - name: normalize-otel-plugin
+    - name: normalize-otel-plugin-kg
       type: normalize_otel
       per_run: true
       depends_on: [verify-otel-plugin-spans]
       config:
-        filename: otel_sdk_spans.jsonl
-
-    - name: normalize-otel-plugin-kg
-      type: normalize_events
-      per_run: true
-      depends_on: [normalize-otel-plugin]
-      config:
         artifact: kg_otel_plugin
+        filename: otel_sdk_spans.jsonl
 
     - name: validate-otel-plugin-kg
       type: validate_kg

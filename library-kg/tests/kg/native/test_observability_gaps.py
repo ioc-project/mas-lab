@@ -121,7 +121,7 @@ def test_missing_call_id_raises_when_strict() -> None:
 
 def test_call_annotation_without_call_id_is_not_a_gap() -> None:
     events = [_event("user_output", call_id=None)]
-    result = normalize_events(events, ONTOLOGY, "run-1", strict=True, include_annotation=True)
+    result = normalize_events(events, ONTOLOGY, "run-1", strict=True, categories="annotations")
     assert len(result) == 1
     assert result[0]["call_id"] == ""
 

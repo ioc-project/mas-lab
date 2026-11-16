@@ -25,17 +25,10 @@ spec:
         spanspec_level: L3
         spanspec_strictness: required
 
-    - name: normalize-otel-events
+    - name: normalize-otel-kg
       type: normalize_otel
       per_run: true
       depends_on: [verify-otel-replay]
-      config:
-        output: events_otel.jsonl
-
-    - name: normalize-otel-kg
-      type: normalize_events
-      per_run: true
-      depends_on: [normalize-otel-events]
       config:
         artifact: kg_otel
 

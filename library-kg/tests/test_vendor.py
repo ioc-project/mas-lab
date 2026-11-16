@@ -8,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("scope_ontology")
-
 
 class TestOntologyPackage:
     def test_get_ontology_path_returns_existing_file(self):

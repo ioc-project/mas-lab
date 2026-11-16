@@ -121,6 +121,11 @@ def _capture_one(
     backup_events_golden(events_path, golden_dir, also_cache_entry=None)
     backup_trace_cache(trace_cache, golden_dir / "cache-backup", label=label)
 
+    # run_info.json records the checkout it ran from: keep repo-relative paths only.
+    for info in golden_dir.rglob("run_info.json"):
+        text = info.read_text(encoding="utf-8")
+        info.write_text(text.replace(str(ROOT) + "/", ""), encoding="utf-8")
+
     fp = events_fingerprint(normalize_events_file(events_path))
     (golden_dir / "events.sha256").write_text(fp + "\n", encoding="utf-8")
     print(f"Captured golden run → {golden_dir}")

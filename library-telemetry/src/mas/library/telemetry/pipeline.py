@@ -64,7 +64,6 @@ def convert_events_to_spans_file(
     extensions: bool | None = None,
     shift_to_now: bool = False,
     new_session_id: bool = False,
-    rewrite_tool_delegation: bool = True,
 ) -> int:
     """Convert a native ``events.jsonl`` file to an ``otel_sdk_spans.jsonl`` file.
 
@@ -88,7 +87,6 @@ def convert_events_to_spans_file(
         extensions=extensions,
         shift_to_now=shift_to_now,
         new_session_id=new_session_id,
-        rewrite_tool_delegation=rewrite_tool_delegation,
     )
 
 

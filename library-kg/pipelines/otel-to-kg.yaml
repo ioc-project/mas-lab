@@ -1,34 +1,26 @@
 # OTel spans (already on disk, e.g. from telemetry:dump-session or
 # telemetry:native-to-otel-json) → KG, standalone.
 #
-# Mirrors `mas-lab kg otel-to-kg` -- that CLI command wraps the same two
-# stages (normalize_otel then normalize_events) in one convenience call
-# (steps.normalize_otel.run_normalize_otel); this pipeline composes them as
-# two steps so `--var`/`depends_on` work the normal pipeline way.
+# Mirrors `mas-lab kg otel-to-kg`: normalize_otel returns the graph of SCOPE
+# norm for the spans, untouched (steps.normalize_otel.run_normalize_otel).
 apiVersion: mas/v1
 kind: Pipeline
 
 metadata:
   name: kg-otel-to-kg
-  description: Verify-free OTel spans → events.jsonl → kg.json, standalone.
+  description: Verify-free OTel spans → kg.json (SCOPE norm), standalone.
 
 spec:
   steps:
-    - name: normalize-otel-to-events
+    - name: normalize-otel-kg
       type: normalize_otel
       per_run: true
       config:
+        artifact: kg_otel
         # filename defaults to otel_sdk_spans.jsonl; override via
         # --var filename=... or config.filename for a different input name
         # (e.g. the output of telemetry:dump-session).
         filename: "{filename}"
-
-    - name: normalize-otel-kg
-      type: normalize_events
-      per_run: true
-      depends_on: [normalize-otel-to-events]
-      config:
-        artifact: kg_otel
 
     - name: validate-otel-kg
       type: validate_kg

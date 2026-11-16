@@ -1,14 +1,14 @@
 {
-  "run_hash": "16153ef250b4328c711c",
+  "run_hash": "c3d3ccd4382393a05dc0",
   "experiment": "golden-design-space",
   "scenario": "tools",
   "item_id": "1",
   "run_idx": 0,
-  "referenced_at": "2026-11-13T18:30:50.957809Z",
+  "referenced_at": "2026-11-16T15:44:41.167860Z",
   "mas": {
     "app": "qa-agent",
-    "mas_ref": "/Users/augjorda/repos/worktrees/mas-lab-llm-interval-telemetry/docs/tutorials/01-building-an-agent/agent.yaml",
+    "mas_ref": "docs/tutorials/01-building-an-agent/agent.yaml",
     "overlay": "tools",
-    "overlay_ref": "/Users/augjorda/repos/worktrees/mas-lab-llm-interval-telemetry/docs/tutorials/01-building-an-agent/overlays/tools.yaml"
+    "overlay_ref": "docs/tutorials/01-building-an-agent/overlays/tools.yaml"
   }
 }

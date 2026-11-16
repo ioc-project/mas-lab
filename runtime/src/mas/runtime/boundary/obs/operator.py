@@ -114,6 +114,11 @@ class _CallFrames:
         self._batch_remaining_var.set(value)
 
 
+# What a call asked for stays on its start event. A return that repeats it would
+# put the prompt, tools and model on both ends of every LLM interval.
+_REQUEST_ONLY_FIELDS = frozenset({"model", "tools", "messages", "temperature"})
+
+
 @dataclass
 class ObservabilityOperator:
     """M_obs — append-only event log with attribution metadata."""
@@ -134,6 +139,8 @@ class ObservabilityOperator:
     _frames: _CallFrames = field(default_factory=_CallFrames, repr=False)
     _interval_call_ids: dict[tuple[int, str], str] = field(default_factory=dict)
     _call_parents: dict[str, str | None] = field(default_factory=dict)
+    # Contract-call wrapper frame id -> the call it wraps (the call that is a node).
+    _wrapped_calls: dict[str, str] = field(default_factory=dict, repr=False)
     # call_ids the ENGINE_IO fallback pushed itself (no contract_call wraps
     # this call, e.g. enable_envelope_observability=False) — ENGINE_IO_RETURN
     # must pop these itself since no contract_call/end is coming to do it.
@@ -212,6 +219,13 @@ class ObservabilityOperator:
 
     def _current_frame(self) -> str | None:
         return self._frames.top
+
+    def _enclosing_call(self) -> str | None:
+        """The innermost open call, as the call itself (never its contract-call wrapper)."""
+        top = self._frames.top
+        if not top:
+            return None
+        return self._wrapped_calls.get(top, top)
 
     def call_id_for(self, correlation_id: int, op: str) -> str:
         """Public accessor for the stable call_id assigned to a (correlation_id, op) pair.
@@ -403,7 +417,7 @@ class ObservabilityOperator:
                     "code": sym.code,
                     "recoverable": sym.recoverable,
                     "message": sym.message,
-                    "parent_call_id": self._current_frame(),
+                    "parent_call_id": self._enclosing_call(),
                 },
             )
             return
@@ -536,6 +550,32 @@ class ObservabilityOperator:
             },
         )
 
+    def record_llm_thinking(
+        self,
+        *,
+        correlation_id: int,
+        boundary: str,
+        at: float,
+        text: str = "",
+    ) -> ObservabilityEvent:
+        """Record the start or end of the reasoning interval of one LLM call.
+
+        ``boundary`` is ``"start"`` (the first reasoning delta arrived) or
+        ``"end"`` (the first answer delta arrived, or the stream ended).
+        ``at`` is when that happened (epoch seconds), taken by the caller as it
+        happened. ``text`` is the reasoning text received so far (the whole
+        reasoning on ``"end"``).
+        """
+        if boundary not in ("start", "end"):
+            raise ValueError(f"thinking boundary must be 'start' or 'end', not {boundary!r}")
+        return self._emit(
+            ObsEventKind.LLM_THINKING,
+            ObsPhase.EXECUTE,
+            "M_model",
+            correlation_id=correlation_id,
+            payload={"op": "LLM_CALL", "boundary": boundary, "at": float(at), "text": text},
+        )
+
     def record_envelope_activity(
         self,
         *,
@@ -615,6 +655,11 @@ class ObservabilityOperator:
                     response_kind="ERROR",
                 )
             )
+            # No contract_call/end will arrive: pop the envelope's frame too,
+            # or every later call would be parented to the dead one.
+            contract_id = self._interval_call_ids.get((correlation_id, self._contract_op_key(op)))
+            if contract_id:
+                self._close_call(contract_id)
         return events
 
     def record_engine_io_return(
@@ -649,9 +694,7 @@ class ObservabilityOperator:
             payload["usage"] = dict(usage)
         if finish_reason:
             payload["finish_reason"] = finish_reason
-        payload.update(
-            {k: v for k, v in extra.items() if v is not None and k not in {"model", "tools", "messages", "temperature"}}
-        )
+        payload.update({k: v for k, v in extra.items() if v is not None and k not in _REQUEST_ONLY_FIELDS})
         if op == "LLM_CALL" and self._requested_max_tokens.pop(correlation_id, None) == payload.get("max_tokens"):
             payload.pop("max_tokens", None)
         self._open_engine_calls.discard((correlation_id, op))
@@ -925,7 +968,7 @@ class ObservabilityOperator:
         already resolved for it or else the current call in progress."
         """
         call_id = self._interval_call_id(correlation_id, key)
-        return call_id, self._call_parents.get(call_id, self._current_frame())
+        return call_id, self._call_parents.get(call_id, self._enclosing_call())
 
     def _resolve_transition_ids(self, ev: ObservabilityEvent) -> tuple[str | None, str | None]:
         """Return (call_id, parent_call_id) using a per-thread call stack.
@@ -950,6 +993,8 @@ class ObservabilityOperator:
         snapshots the enclosing frame ONCE and hands it to the next N opens
         via ``_open_call``, regardless of what those N opens push in between.
         """
+        from mas.runtime.boundary.obs.transition import ENCLOSED_KINDS
+
         payload = ev.payload or {}
         op = str(payload.get("op") or "")
         cid = ev.correlation_id
@@ -1019,6 +1064,18 @@ class ObservabilityOperator:
             mutation_call_id = self._interval_call_id(cid, f"{op}:mutation")
             return mutation_call_id, owning_call_id
 
+        if ev.kind == ObsEventKind.LLM_THINKING and op:
+            # The reasoning interval of the LLM_CALL with this correlation id:
+            # the same (correlation_id, "LLM_CALL") key its llm_call_start/end use.
+            return self._interval_call_and_parent(cid, op)
+
+        if ev.kind in ENCLOSED_KINDS:
+            # A record the kernel emits while some call is running: it belongs to
+            # that call (the innermost open frame, the wrapped call itself rather
+            # than its contract-call wrapper). No own call id. With no open frame
+            # the consumer falls back to the agent visit that emitted it.
+            return None, self._enclosing_call()
+
         if ev.kind in (ObsEventKind.HITL_REQUEST, ObsEventKind.HITL_RESOLVE):
             # request_id (carried as this event's correlation_id) is just
             # another RunLedger counter, not a UUID — it collides across
@@ -1049,6 +1106,7 @@ class ObservabilityOperator:
             if activity == "contract_call" and boundary == "start" and op:
                 call_id = self._interval_call_id(cid, self._contract_op_key(op))
                 inner_id = self._interval_call_id(cid, op)
+                self._wrapped_calls[call_id] = inner_id
                 if call_id in self._call_parents:
                     parent = self._call_parents[call_id]
                     self._frames.push(call_id)
@@ -1062,6 +1120,11 @@ class ObservabilityOperator:
                 if call_id:
                     self._close_call(call_id)
                 return call_id, parent
+            if activity not in ("contract_call", "parallel_group", "wait_state") and op:
+                # A check or hook bracketing one call (gov_authorize, gov_validate,
+                # obs_wrap_*, observability_*): its own interval id, owned by the
+                # call it brackets (the same id that call's ENGINE_IO uses).
+                return self._interval_call_id(cid, f"{activity}:{op}"), self._interval_call_id(cid, op)
 
         if cid and op:
             if op == "TOOL_CALL":
@@ -1071,6 +1134,8 @@ class ObservabilityOperator:
             else:
                 prefix = "llm"
             return f"{prefix}-{cid}", parent
+        # Anything else happened while the innermost open call ran: it is that call's.
+        parent = self._enclosing_call()
         if cid:
             return f"call-{cid}", parent
         return None, parent

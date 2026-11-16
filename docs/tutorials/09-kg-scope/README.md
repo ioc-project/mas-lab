@@ -55,9 +55,12 @@ the same models without OTel or `norm`, because nothing else reads
 `normalize_events`, `normalize_otel` and `neo4j_push`
 (`kg:pipelines/native-to-kg.yaml`, `native-to-neo4j.yaml`). The sink is a file
 path (`-o`), an infra manifest (`--infra`, `kind: Neo4j`) or `$NEO4J_URI`.
-Layers `structure`, `execution` and `trajectory` are on by default;
-`provenance`, `governance` and `infrastructure` are off. Enable them with
-`--include-governance`, `--include-provenance` and similar flags. Reference:
+The default graph holds the core classes only: `Session`, `MASCall`, `AgentCall`,
+`LLMCall`, `ToolCall`, `ProcessingCall`, their States and Transitions, and the
+`MAS` / `Agent` / `LLM` / `Tool` / `Processing` catalog. One option, `categories`,
+adds the rest: `capabilities` (skills, memory, RAG), `annotations` (call
+annotations, governance events, context contributions), `worker` and `thinking`,
+or `all` (`--categories annotations,thinking` on the CLI). Reference:
 [library-kg docs](https://github.com/ioc-project/mas-lab/tree/main/library-kg/docs).
 
 ## What you need
@@ -120,8 +123,8 @@ PY
 ```
 
 The output has the same form as Step 1. CLI:
-`mas-lab kg normalize events.jsonl -o kg.jsonld` (add `--include-governance`
-to opt that layer in). Pipeline: `kg:pipelines/native-to-kg.yaml`. Shipped
+`mas-lab kg normalize events.jsonl -o kg.jsonld` (add `--categories annotations`
+to opt the annotation classes in). Pipeline: `kg:pipelines/native-to-kg.yaml`. Shipped
 result: `library-kg/examples/qa-agent/kg-native.jsonld`.
 
 ---
@@ -235,7 +238,8 @@ and the kg library. Neither exists yet.
    `scope_ontology.models.*`, and a test keeps them aligned.
 2. `kg normalize` and `kg neo4j-push` are shortcuts for pipeline steps; a path,
    `--infra` or `$NEO4J_URI` picks the sink, and `--dry-run` needs no Neo4j.
-3. Layers match Tutorial 8's categories, with governance off by default.
+3. The default graph is the core classes; `categories` opts the others in
+   (`capabilities`, `annotations`, `worker`, `thinking`, or `all`).
    Realtime KG means re-normalizing the whole growing file on a timer.
 
 ## Next

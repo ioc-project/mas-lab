@@ -15,6 +15,7 @@ from pathlib import Path
 from tests.conftest import requires_otel
 
 EXAMPLE_EVENTS = Path(__file__).resolve().parents[1] / "examples" / "travel-planner.events.jsonl"
+EXAMPLE_SPANS = 944
 INFRA = Path(__file__).resolve().parents[1] / "infra" / "local-otel.yaml"
 
 
@@ -28,26 +29,27 @@ def test_story_step1_convert(tmp_path):
         output_filename="spans.jsonl",
         converter_profile="raw",
     )
-    # 14 events → root + TaskCall + 3 agents + 2 routing + graph + ...
-    assert ss.span_count == 10
+    # A live run: 1256 events → 944 spans (one per call, annotation and processing step).
+    assert ss.span_count == EXAMPLE_SPANS
     names = Counter(s["name"] for s in ss.spans)
     assert names["root"] == 1
-    assert names["AgentCall"] == 3
+    assert names["AgentCall"] == 5  # moderator, itinerary_agent, budget_agent (three turns)
     assert names["TaskCall"] == 1
-    assert names["CallAnnotation"] == 2  # two routing hand-offs
+    assert names["LLMCall"] == 17
+    assert names["ToolCall"] == 26
+    assert names["CallAnnotation"] > 0
     assert names["travel-planner.graph"] == 1
 
     # App name derived from the trace (not "mas-runtime").
     assert all(s["attributes"].get("application_id") == "travel-planner" for s in ss.spans)
 
-    # The graph span carries all four agents.
+    # The graph span carries all three agents.
     g = next(s for s in ss.spans if s["name"].endswith(".graph"))
     topo = json.loads(g["attributes"]["gen_ai.ioa.graph"])
     nodes = topo["nodes"]
     assert isinstance(nodes, dict)
     node_ids = set(nodes)
     assert node_ids == {
-        "orchestrator",
         "moderator",
         "itinerary_agent",
         "budget_agent",
@@ -85,7 +87,7 @@ def test_story_step3_push_via_infra_dry_run(tmp_path):
     )
     result = run_push_otlp(tmp_path / "spans.jsonl", infra=INFRA, dry_run=True)
     assert result["status"] == "dry-run"
-    assert result["spans"] == 10
+    assert result["spans"] == EXAMPLE_SPANS
     assert "localhost:4318" in result["detail"]
 
 

@@ -439,7 +439,7 @@ def test_native_transform_memory_and_parallel_kinds() -> None:
     assert any(r.get("kind") == "parallel_group_start" for r in parallel)
 
 
-def test_native_transform_wait_state_emits_processing_wait_and_resume() -> None:
+def test_native_transform_wait_state_emits_plain_markers_only() -> None:
     from mas.library.standard.lib.observability.native.transform import (
         NativeObservabilityTransform,
         TransformContext,
@@ -482,20 +482,9 @@ def test_native_transform_wait_state_emits_processing_wait_and_resume() -> None:
         ctx=ctx,
     )
 
-    assert any(r.get("kind") == "wait_state_start" for r in wait_start)
-    assert any(r.get("kind") == "wait_state_end" for r in wait_end)
-    assert any(
-        r.get("kind") == "processing_call_start"
-        and r.get("processing_type") == "wait_state"
-        and r.get("wait_role") == "WAIT"
-        for r in wait_start
-    )
-    assert any(
-        r.get("kind") == "processing_call_start"
-        and r.get("processing_type") == "wait_state"
-        and r.get("wait_role") == "RESUME"
-        for r in wait_end
-    )
+    # Wait and resume are control markers: plain records, no ProcessingCall companions.
+    assert [r.get("kind") for r in wait_start] == ["wait_state_start"]
+    assert [r.get("kind") for r in wait_end] == ["wait_state_end"]
 
 
 def test_context_mutation_resolves_real_parent_for_1to1_op() -> None:
@@ -504,7 +493,7 @@ def test_context_mutation_resolves_real_parent_for_1to1_op() -> None:
     result being committed to working memory), so its real parent must be
     that call's own call_id — not null, and not that call's own parent. A
     mutation without `op` (turn/session-scoped: turn_start, wm_clear, ...)
-    correctly resolves no parent at all."""
+    belongs to the call open when it happened: the agent visit."""
     op = ObservabilityOperator()
     cap = _CapturePlugin()
     op.subscribe(cap)
@@ -523,10 +512,10 @@ def test_context_mutation_resolves_real_parent_for_1to1_op() -> None:
     mutation = cap.seen[-1]
     assert mutation.parent_call_id == tool_start.call_id, (mutation, tool_start)
 
-    # No op (turn/session-scoped) — no parent to guess, correctly none.
+    # No op (turn/session-scoped): owned by the innermost open frame, the visit.
     op.record_context_mutation(action="turn_start", correlation_id=0)
     turn_event = cap.seen[-1]
-    assert turn_event.parent_call_id is None, turn_event
+    assert turn_event.parent_call_id == "exec-001", turn_event
 
     op.pop_call_frame()
 
@@ -549,3 +538,33 @@ def test_context_assembled_shares_call_id_with_its_llm_call() -> None:
     assert llm_start.call_id == assembled.call_id, (llm_start, assembled)
 
     op.pop_call_frame()
+
+
+def test_kernel_records_are_owned_by_the_call_running_not_its_contract_wrapper() -> None:
+    """A boundary ingress/egress, client response or steer has no call id of its
+    own; its parent is the innermost open call, as the call itself (the
+    contract-call wrapper frame is no node)."""
+    from mas.runtime.schema.observability import ObsEventKind, ObsPhase
+
+    op = ObservabilityOperator()
+    cap = _CapturePlugin()
+    op.subscribe(cap)
+    op.push_call_frame("exec-001")
+    op.record_envelope_activity(
+        symbol="CONTRACT_START",
+        activity="contract_call",
+        boundary="start",
+        phase=ObsPhase.EXECUTE,
+        correlation_id=3,
+        payload={"op": "LLM_CALL"},
+    )
+    op.record_engine_io(correlation_id=3, op="LLM_CALL")
+    llm = cap.seen[-1]
+    op._emit(ObsEventKind.BOUNDARY_INGRESS, ObsPhase.RESULT, "execution_engine", correlation_id=3, payload={})
+    ingress = cap.seen[-1]
+    assert ingress.call_id is None
+    assert ingress.parent_call_id == llm.call_id
+    op.record_llm_thinking(correlation_id=3, boundary="start", at=5.0)
+    thinking = cap.seen[-1]
+    assert thinking.call_id == llm.call_id
+    assert thinking.phase == "start"

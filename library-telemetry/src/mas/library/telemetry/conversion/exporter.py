@@ -79,7 +79,6 @@ if OTEL_AVAILABLE:
         def shutdown(self) -> None:
             pass
 
-
     class MultiSpanExporter(SpanExporter):  # type: ignore[misc]
         """Fan-out exporter used when file + OTLP sinks are both configured."""
 
@@ -96,9 +95,49 @@ if OTEL_AVAILABLE:
             for exporter in self._exporters:
                 exporter.shutdown()
 
+    from opentelemetry.sdk._logs.export import LogRecordExporter, LogRecordExportResult
+
+    class JSONLineFileLogExporter(LogRecordExporter):  # type: ignore[misc]
+        """Writes LogRecords (realtime runtime events) as JSON lines to a local file.
+
+        Each line is ``ReadableLogRecord.to_json()``: ``body`` / ``event_name``,
+        ``attributes``, ``timestamp``, ``trace_id`` and ``span_id``. The file is
+        truncated on the first write.
+        """
+
+        def __init__(self, path: str | Path) -> None:
+            self._path = Path(path)
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._lock = threading.Lock()
+            self._needs_truncate = True
+
+        @property
+        def path(self) -> Path:
+            return self._path
+
+        def export(self, batch) -> "LogRecordExportResult":  # type: ignore[no-untyped-def]
+            try:
+                with self._lock:
+                    mode = "w" if self._needs_truncate else "a"
+                    with open(self._path, mode, encoding="utf-8") as f:
+                        for record in batch:
+                            f.write(record.to_json(indent=None) + "\n")
+                    self._needs_truncate = False
+                return LogRecordExportResult.SUCCESS
+            except Exception:  # pragma: no cover - defensive
+                logger.exception("JSONLineFileLogExporter: write failed")
+                return LogRecordExportResult.FAILURE
+
+        def force_flush(self, timeout_millis: int = 10_000) -> bool:
+            return True  # every batch is written when exported
+
+        def shutdown(self) -> None:
+            pass
+
 else:  # pragma: no cover
     JSONLineFileSpanExporter = None  # type: ignore[assignment,misc]
     MultiSpanExporter = None  # type: ignore[assignment,misc]
+    JSONLineFileLogExporter = None  # type: ignore[assignment,misc]
 
 
-__all__ = ["JSONLineFileSpanExporter", "MultiSpanExporter", "OTEL_AVAILABLE"]
+__all__ = ["JSONLineFileLogExporter", "JSONLineFileSpanExporter", "MultiSpanExporter", "OTEL_AVAILABLE"]

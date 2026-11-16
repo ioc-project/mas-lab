@@ -56,3 +56,14 @@ def test_a_response_without_content_gives_empty_text_not_the_word_none(tmp_path)
     events = _events({"output": "", "response": {"content": None}})
     record = TrajectoryExtractor(_write(tmp_path, events)).extract()
     assert record["calls"][0]["output"] == ""
+
+
+def test_agent_output_is_the_reply_not_the_empty_text_of_a_tool_use_turn(tmp_path) -> None:
+    """The last model call of an agent that then replied asked for a tool: its text is empty."""
+    events = [
+        *_events({"output": ""}),
+        {"kind": "user_response", "agent_id": "planner", "content": "Take the 9:40 train."},
+        {"kind": "execution_end", "agent_id": "planner"},
+    ]
+    record = TrajectoryExtractor(_write(tmp_path, events)).extract()
+    assert record["agents"]["planner"]["final_output"] == "Take the 9:40 train."

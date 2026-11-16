@@ -229,7 +229,7 @@ def test_cache_lookup_is_not_misreported_as_a_model_completion() -> None:
     ]
 
 
-def test_parallel_group_emits_processing_start_and_end_for_fork_and_aggregation() -> None:
+def test_parallel_group_emits_one_aggregate_pair_at_group_end() -> None:
     ctx = _ctx()
     start_record = {
         "kind": "envelope.activity",
@@ -263,18 +263,23 @@ def test_parallel_group_emits_processing_start_and_end_for_fork_and_aggregation(
     out_start = dispatch_boundary(start_record, ctx=ctx)
     out_end = dispatch_boundary(end_record, ctx=ctx)
 
-    pstart = next(ev for ev in out_start if ev.get("kind") == "processing_call_start")
+    # The fork is a control marker: no ProcessingCall at the group start.
+    assert [ev["kind"] for ev in out_start] == ["parallel_group_start"]
+    assert not [ev for ev in out_start if ev["kind"].startswith("processing_call_")]
+
+    # The join is the one real processing step: one aggregate pair at the group end.
+    pstart = next(ev for ev in out_end if ev.get("kind") == "processing_call_start")
     pend = next(ev for ev in out_end if ev.get("kind") == "processing_call_end")
-    assert pstart["processing_name"] == "parallel fork"
-    assert pend["processing_name"] == "parallel aggregation"
+    assert pstart["processing_name"] == "aggregate"
+    assert pend["processing_name"] == "aggregate"
     assert pstart["call_id"] == pend["call_id"]
+    assert pstart["timestamp"] == pend["timestamp"]
     assert pstart.get("parent_call_id") == "exec-1"
     assert pend.get("parent_call_id") == "exec-1"
-    assert "fork 2 parallel tool calls" in pstart.get("input", "")
-    assert "aggregate 2 parallel tool results" in pend.get("output", "")
+    assert "fork" not in pstart["input"] and "aggregate 2" not in pend["output"]
 
 
-def test_wait_state_emits_processing_markers_for_wait_and_resume() -> None:
+def test_wait_state_emits_plain_markers_without_processing_calls() -> None:
     ctx = _ctx()
     wait_start = {
         "kind": "envelope.activity",
@@ -310,22 +315,11 @@ def test_wait_state_emits_processing_markers_for_wait_and_resume() -> None:
     out_wait = dispatch_boundary(wait_start, ctx=ctx)
     out_resume = dispatch_boundary(wait_end, ctx=ctx)
 
-    wstart = next(ev for ev in out_wait if ev.get("kind") == "processing_call_start")
-    wend = next(ev for ev in out_wait if ev.get("kind") == "processing_call_end")
-    rstart = next(ev for ev in out_resume if ev.get("kind") == "processing_call_start")
-    rend = next(ev for ev in out_resume if ev.get("kind") == "processing_call_end")
-
-    assert wstart["processing_type"] == "wait_state"
-    assert wstart["wait_role"] == "WAIT"
-    assert wstart["wait_link_id"] == "delegate-21"
-    assert wstart.get("parent_call_id") == "exec-1"
-    assert wstart["call_id"] == wend["call_id"]
-
-    assert rstart["processing_type"] == "wait_state"
-    assert rstart["wait_role"] == "RESUME"
-    assert rstart["wait_link_id"] == "delegate-21"
-    assert rstart.get("parent_call_id") == "exec-1"
-    assert rstart["call_id"] == rend["call_id"]
+    # wait and resume are control markers: plain records, no ProcessingCall companions.
+    assert [ev["kind"] for ev in out_wait] == ["wait_state_start"]
+    assert [ev["kind"] for ev in out_resume] == ["wait_state_end"]
+    assert out_wait[0].get("parent_call_id") == "exec-1"
+    assert out_resume[0].get("parent_call_id") == "exec-1"
 
 
 def test_boundary_egress_ingress_catch_alls() -> None:
@@ -484,3 +478,37 @@ def test_an_error_return_ends_the_call_with_an_error_status() -> None:
         )
         assert end[0]["kind"] == kind
         assert end[0]["status"] == "error"
+
+
+def _engine(kind: str, cid: int, op: str, call_id: str, **payload: Any) -> dict:
+    return {"kind": kind, "correlation_id": cid, "call_id": call_id, "payload": {"op": op, **payload}}
+
+
+def _check(activity: str, boundary: str, cid: int, checked: str) -> dict:
+    return {
+        "kind": "envelope.activity",
+        "correlation_id": cid,
+        "parent_call_id": checked,
+        "payload": {"activity": activity, "boundary": boundary, "op": "LLM_CALL"},
+    }
+
+
+def test_a_check_runs_in_the_visit_and_reads_the_state_of_the_call_it_checks() -> None:
+    """authorize reads the State the checked call consumes, validate its output State; the
+    bracket's parent is the visit, and the checked call is ``checked_call_id``."""
+    ctx = _ctx()
+    ctx.exec_call_id = "moderator-exec"
+    ctx._state_current = "moderator-exec#0"
+    ctx._state_contents["moderator-exec#0"] = "plan a trip"
+    authorize = dispatch_boundary(_check("gov_authorize", "start", 7, "llm-1"), ctx=ctx)
+    dispatch_boundary(_engine("engine.io", 7, "LLM_CALL", "llm-1"), ctx=ctx)
+    dispatch_boundary(_engine("engine.io.return", 7, "LLM_CALL", "llm-1", response={"content": "ok"}), ctx=ctx)
+    validate = dispatch_boundary(_check("gov_validate", "end", 7, "llm-1"), ctx=ctx)
+    (start,) = authorize
+    assert start["kind"] == "governance_authorize_start"
+    assert (start["parent_call_id"], start["checked_call_id"]) == ("moderator-exec", "llm-1")
+    assert start["state_in"] == start["state_out"] == "moderator-exec#0"
+    assert start["state_in_content"] == start["state_out_content"] == "plan a trip"
+    (end,) = validate
+    llm_out = ctx._state_by_call["llm-1"]["state_out"]
+    assert end["state_in"] == end["state_out"] == llm_out

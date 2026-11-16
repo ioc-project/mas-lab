@@ -14,7 +14,6 @@ KGView     — faceted access to call records by call_type.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -34,11 +33,12 @@ _CALL_NODE_TYPES: Set[str] = {
     "LLMCall",
     "ToolCall",
     "SkillCall",
+    "MemoryCall",
+    "RAGQuery",
     "ProcessingCall",
     "ThinkingCall",
     "MITMCall",
     "MASCall",
-    "TaskCall",
 }
 
 
@@ -260,9 +260,7 @@ class KGSource:
         p = Path(path).expanduser().resolve()
         return cls(KGArtifact.from_file(p).to_doc())
 
-    def subgraph(
-        self, query: Optional[FacetQuery] = None
-    ) -> Dict[str, Any]:
+    def subgraph(self, query: Optional[FacetQuery] = None) -> Dict[str, Any]:
         """Return a filtered ``{nodes, edges, run_id, metadata}`` dict.
 
         Filtering is applied in this order:

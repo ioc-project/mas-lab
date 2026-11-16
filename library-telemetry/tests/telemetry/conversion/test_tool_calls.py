@@ -52,6 +52,9 @@ class _Conv:
     def close_span(self, call_id, extra, **_):
         self.closed = extra
 
+    def state_end_attrs(self, ev):
+        return {}
+
 
 def test_llm_call_end_keeps_output_and_appends_tool_calls() -> None:
     conv = _Conv()

@@ -145,17 +145,27 @@ class SpanEmitter(Protocol):
     def is_closed(self, call_id: str | None) -> bool:
         """Whether a span for ``call_id`` has already been closed."""
 
-    def record_agent_output(self, call_id: str | None, text: str) -> None:
-        """Remember user-facing output for an open AgentCall."""
+    def emit_annotation(
+        self,
+        ev: Dict[str, Any],
+        boundary: str,
+        attrs: Dict[str, Any],
+        *,
+        fields: tuple[str, ...] = ...,
+    ) -> None:
+        """One point span for one annotation record (payload and target as the native fold)."""
 
-    def agent_output_for(self, call_id: str | None) -> str:
-        """Last recorded user-facing output for ``call_id``, or ``""``."""
+    def state_start_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """``ioa_observe.state.*`` input and output id from a START record."""
 
-    def rewrite_delegate_tool_start(self, ev: Dict[str, Any]) -> bool:
-        """If this is ``delegate_to_<id>``, skip the tool span (default on)."""
+    def state_end_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """``ioa_observe.state.output.content`` from an END record."""
 
-    def rewrite_delegate_tool_end(self, ev: Dict[str, Any]) -> bool:
-        """No-op close for a rewritten ``delegate_to_*`` tool call."""
+    def agent_start_state_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """An agent visit's input State, from ``execution_start``."""
+
+    def agent_end_state_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """An agent visit's output State, from ``execution_end``."""
 
 
 __all__ = [

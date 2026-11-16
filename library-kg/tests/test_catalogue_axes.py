@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from mas.library.kg.core.ontology_align import CONTAINMENT_EDGE_TYPES
+from mas.library.kg.core.compare import CONTAINMENT_EDGE_TYPES
 from mas.library.kg.pipeline import build_kg_document, load_events_jsonl
 
 _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "events_full_ontology.jsonl"
@@ -17,17 +17,11 @@ _FIXTURE = Path(__file__).resolve().parent / "fixtures" / "events_full_ontology.
 
 @pytest.fixture(scope="module")
 def full_kg() -> dict:
-    if not _FIXTURE.exists():
-        pytest.skip(f"fixture missing: {_FIXTURE}")
     events = load_events_jsonl(_FIXTURE)
     return build_kg_document(
         events,
         run_id="full-ontology-test",
-        include_provenance=True,
-        include_governance=True,
-        include_annotation=True,
-        include_trajectory=True,
-        include_native_extensions=True,
+        categories="all",
         all_attributes=True,
     )
 
@@ -45,8 +39,11 @@ class TestCatalogueProvenance:
         assert "ContextContribution" in _node_types(full_kg)
 
     def test_provenance_links_exist(self, full_kg: dict):
-        edges = _edge_types(full_kg)
-        assert "contributesTo" in edges or "derivedFrom" in edges
+        contributions = {
+            n["id"] for n in full_kg["nodes"] if n.get("node_type") == "ContextContribution"
+        }
+        annotated = {e["from_id"] for e in full_kg["edges"] if e["edge_type"] == "annotates"}
+        assert contributions & annotated
 
 
 class TestCatalogueGovernance:
@@ -90,8 +87,6 @@ class TestCatalogueStructural:
 
 class TestCatalogueCoverage:
     def test_fixture_kinds_present(self):
-        if not _FIXTURE.exists():
-            pytest.skip(f"fixture missing: {_FIXTURE}")
         kinds = {json.loads(line)["kind"] for line in _FIXTURE.read_text().splitlines()}
         assert {"llm_call_start", "tool_call_start", "context_part_contributed"} <= kinds
 

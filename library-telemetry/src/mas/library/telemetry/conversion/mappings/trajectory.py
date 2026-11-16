@@ -2,10 +2,10 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Trajectory & annotation handlers.
 
-Routing decisions, user I/O, wait-state markers, and the
-``obs_wrap_gov_*`` observability wrapper events emit ``CallAnnotation``
-point spans. Parallel-group fork/join events emit a ``ParallelGroup``
-interval span (only when those events exist).
+Routing decisions, user I/O and wait-state markers emit one ``CallAnnotation``
+point span per record. Parallel-group fork/join events emit a ``ParallelGroup``
+interval span (only when those events exist). ``user_response`` is no node (the
+reply is the visit's final State), so it is not exported.
 
 Ontology blocks: ``trajectory`` (parallel groups) and ``execution``
 (routing / user I/O annotations).
@@ -13,89 +13,15 @@ Ontology blocks: ``trajectory`` (parallel groups) and ``execution``
 
 from __future__ import annotations
 
-import json
 from typing import Any, Dict
 
 from mas.library.telemetry.conversion.mappings.base import SpanEmitter, register
 
 
-@register("routing")
-def h_routing(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.point_span(
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": "routing",
-            "mas.annotation.content": json.dumps(
-                {
-                    "routing_type": ev.get("routing_type", ""),
-                    "selected_agent": ev.get("selected_agent", ""),
-                    "confidence": ev.get("confidence"),
-                    "candidates": ev.get("candidates", []),
-                }
-            ),
-        },
-        ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-    )
-
-
-@register("routing_result")
-def h_routing_result(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.point_span(
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": "routing_result",
-            "mas.annotation.content": json.dumps(
-                {
-                    "selected_agent": ev.get("selected_agent", ""),
-                    "target_agent_id": ev.get("target_agent_id", ""),
-                    "routing_type": ev.get("routing_type", ""),
-                }
-            ),
-        },
-        ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-    )
-
-
-@register("user_input")
-def h_user_input(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.point_span(
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": "user_input",
-            "mas.annotation.content": str(ev.get("content") or ev.get("input", ""))[:2000],
-        },
-        ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-    )
-
-
-@register("user_output", "client_response", "user_response")
-def h_user_output(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    content = str(ev.get("content") or ev.get("output", ""))
-    ensure = getattr(conv, "ensure_resumed_agent_call", None)
-    dest = ev.get("parent_call_id") or ev.get("call_id")
-    if callable(ensure):
-        dest = ensure(ev) or dest
-    conv.record_agent_output(dest, content)
-    conv.point_span(
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": ev.get("kind", "user_output"),
-            "mas.annotation.content": content,
-        },
-        ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-    )
+@register("routing", "routing_result", "user_input", "user_output", "client_response")
+def h_point_annotation(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    """Routing decisions and user I/O: one CallAnnotation point per record."""
+    conv.emit_annotation(ev, "CallAnnotation", {"mas.annotation.kind": str(ev.get("kind") or "")})
 
 
 @register("parallel_group_start")
@@ -130,57 +56,21 @@ def h_parallel_group_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     )
 
 
-@register("wait_state_start")
-def h_wait_state_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.open_span(
-        conv.span_key(ev),
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": "wait_state",
-        },
-        ev.get("parent_call_id"),
-        start_ns=conv.ts_ns(ev),
-    )
-
-
-@register("wait_state_end")
-def h_wait_state_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    conv.close_span(
-        conv.span_key(ev),
-        status=ev.get("status", "success"),
-        end_ns=conv.ts_ns(ev),
-    )
-
-
-def h_obs_wrap_gov(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    """``obs_wrap_gov_*`` wrapper events → CallAnnotation point spans.
-
-    Matched by ``kind`` *prefix* rather than exact name, so it is dispatched
-    from the converter's fallback path rather than the exact-match registry.
-    """
-    conv.point_span(
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": ev.get("kind", "obs_wrap_gov"),
-        },
-        ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-        call_id=ev.get("call_id"),
-    )
+@register("wait_state_start", "wait_state_end")
+def h_wait_state(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    """A wait marker carries no data: one CallAnnotation point per record."""
+    conv.emit_annotation(ev, "CallAnnotation", {"mas.annotation.kind": str(ev.get("kind") or "")})
 
 
 __all__ = [
-    "h_routing",
-    "h_routing_result",
-    "h_user_input",
-    "h_user_output",
+    "h_point_annotation",
     "h_parallel_group_start",
     "h_parallel_group_end",
-    "h_wait_state_start",
-    "h_wait_state_end",
-    "h_obs_wrap_gov",
+    "h_wait_state",
+    "h_user_response",
 ]
+
+
+@register("user_response")
+def h_user_response(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    """No span: the reply is the visit's final State (``execution_end``), not an annotation."""

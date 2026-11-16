@@ -129,13 +129,9 @@ class NormalizeEventsStep(PipelineStep):
             # the offending event by default. Set `strict: true` in the
             # step config to instead fail fast (e.g. CI conformance runs).
             strict=bool(config.get("strict", False)),
-            include_infrastructure=bool(config.get("include_infrastructure", False)),
-            include_trajectory=bool(config.get("include_trajectory", False)),
-            include_provenance=bool(config.get("include_provenance", False)),
-            include_governance=bool(config.get("include_governance", False)),
-            include_annotation=bool(config.get("include_annotation", False)),
-            include_native_extensions=bool(config.get("include_native_extensions", False)),
+            categories=config.get("categories"),
             all_attributes=bool(config.get("all_attributes", False)),
+            realtime=bool(config.get("realtime", False)),
         )
         kg_path = output_dir / "kg.jsonld"
         return StepOutput(
@@ -151,7 +147,8 @@ class NormalizeEventsStep(PipelineStep):
 
 
 class NormalizeOtelStep(PipelineStep):
-    """OTel spans → events → KG artifact — wraps ``steps.run_normalize_otel``."""
+    """OTel spans (and realtime runtime events) → KG artifact — wraps
+    ``steps.run_normalize_otel``."""
 
     type = "normalize_otel"
 
@@ -169,11 +166,6 @@ class NormalizeOtelStep(PipelineStep):
             spans_path,
             run_id=_run_id(ctx, config),
             output_dir=output_dir,
-            ontology_path=config.get("ontology_path"),
-            # Same "observability gap should never crash" default as
-            # NormalizeEventsStep above; opt into `strict: true` for CI
-            # conformance checks of the mapping tables.
-            strict=bool(config.get("strict", False)),
             all_attributes=bool(config.get("all_attributes", False)),
         )
         kg_path = output_dir / "kg.jsonld"

@@ -10,8 +10,6 @@ from __future__ import annotations
 
 import importlib.util
 
-import pytest
-
 
 def _has_bench() -> bool:
     try:
@@ -20,19 +18,14 @@ def _has_bench() -> bool:
         return False
 
 
-_HAS_BENCH = _has_bench()
-requires_bench = pytest.mark.skipif(not _HAS_BENCH, reason="bench extra not installed")
-
-
 def test_core_library_does_not_require_bench():
     # Importing the package must never pull in the bench framework.
     import mas.library.telemetry  # noqa: F401
 
     # bench.py is only imported when the framework resolves entry points.
-    assert "mas.library.telemetry.bench" not in __import__("sys").modules or _HAS_BENCH
+    assert "mas.library.telemetry.bench" not in __import__("sys").modules or _has_bench()
 
 
-@requires_bench
 def test_adapters_register_and_wrap():
     from mas.lab.benchmark.pipeline import PipelineStep
     from mas.library.telemetry.bench import EventsToOtelStep, VerifyOtelStep
@@ -45,7 +38,6 @@ def test_adapters_register_and_wrap():
     assert VerifyOtelStep.type == "verify_otel"
 
 
-@requires_bench
 def test_steps_discoverable_via_manifest():
     from mas.lab.benchmark.pipeline import list_steps
 
@@ -55,7 +47,6 @@ def test_steps_discoverable_via_manifest():
     assert {"events_to_otel", "verify_otel"} <= steps.keys()
 
 
-@requires_bench
 def test_resolve_run_file_uses_output_dir_when_scope_is_missing(tmp_path):
     """Standalone ``pipeline run -o <run folder>`` has no scope_context."""
     from mas.library.telemetry.bench import _resolve_run_file

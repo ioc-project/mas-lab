@@ -22,11 +22,9 @@ spec:
       depends_on: [verify-native-events]
       config:
         strict: true
-        # Categories (same as CLI --include-governance / --include-trajectory):
-        # include_trajectory: true
-        # include_provenance: false
-        # include_governance: false
-        # include_infrastructure: false
+        # Opt-in categories added to the core output (default: none; same as the
+        # CLI --categories): capabilities, annotations, worker, thinking, or all.
+        # categories: [capabilities, annotations]
 
     - name: validate-native-kg
       type: validate_kg

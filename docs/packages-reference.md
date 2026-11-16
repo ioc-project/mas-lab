@@ -346,15 +346,15 @@ uv pip install "mas-lab-library-telemetry[all]"  # PyPI, all extras
 
 **Optional extras:**
 
-| Extra        | Packages / features                                                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `convert`    | `opentelemetry-sdk>=1.20`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `ioa-observe-sdk>=1.0.49`                                       |
-| `observe`    | `ioa-observe-sdk>=1.0.49`                                                                                                                  |
-| `verify`     | `pyyaml>=6.0.0`, `jsonschema>=4.0.0`                                                                                                       |
-| `clickhouse` | `clickhouse-connect>=0.7`                                                                                                                  |
-| `bench`      | `mas-lab-component-bench`, `click>=8.0`                                                                                                    |
-| `dev`        | `pytest>=7.0`, `pytest-cov>=4.0`, `opentelemetry-sdk>=1.20`, `ioa-observe-sdk>=1.0.49`, `pyyaml>=6.0.0`, `jsonschema>=4.0.0`, `click>=8.0` |
-| `all`        | `mas-lab-library-telemetry[dev,bench,clickhouse]`                                                                                          |
+| Extra        | Packages / features                                                                                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `convert`    | `opentelemetry-sdk>=1.20`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `ioa-observe-sdk>=1.1.2`                                                                                                                  |
+| `observe`    | `ioa-observe-sdk>=1.1.2`                                                                                                                                                                                             |
+| `verify`     | `pyyaml>=6.0.0`, `jsonschema>=4.0.0`                                                                                                                                                                                 |
+| `clickhouse` | `clickhouse-connect>=0.7`                                                                                                                                                                                            |
+| `bench`      | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                                              |
+| `dev`        | `pytest>=7.0`, `pytest-cov>=4.0`, `opentelemetry-sdk>=1.20`, `ioa-observe-sdk>=1.1.2`, `pyyaml>=6.0.0`, `jsonschema>=4.0.0`, `click>=8.0`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `mas-lab-component-bench` |
+| `all`        | `mas-lab-library-telemetry[dev,bench,clickhouse]`                                                                                                                                                                    |
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 
@@ -374,19 +374,19 @@ uv pip install "mas-lab-library-kg[all]"  # PyPI, all extras
 
 **Optional extras:**
 
-| Extra                 | Packages / features                                                                                                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ontology`            | `ioc-scope-ontology[models]>=1.1.0`                                                                                                                                                                    |
-| `graph`               | `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                                                     |
-| `validation`          | `ioc-scope-ontology[models]>=1.1.0`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                |
-| `verify`              | `jsonschema>=4.0.0`, `pyyaml>=6.0.0`                                                                                                                                                                   |
-| `neo4j`               | `neo4j>=5.0`                                                                                                                                                                                           |
-| `bench`               | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                                |
-| `plot`                | `mas-lab-component-bench`                                                                                                                                                                              |
-| `norm`                | `ioc-scope-norm>=1.0.0`                                                                                                                                                                                |
-| `compare-native-otel` | `mas-lab-library-telemetry`                                                                                                                                                                            |
-| `dev`                 | `pytest>=7.0`, `pytest-cov>=4.0`, `pytest-asyncio>=0.21`, `click>=8.0`, `ruff>=0.12.10`, `ioc-scope-ontology[models]>=1.1.0`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`, `jsonschema>=4.0.0`, `pyyaml>=6.0.0` |
-| `all`                 | `mas-lab-library-kg[dev,neo4j,norm]`                                                                                                                                                                   |
+| Extra                 | Packages / features                                                                                                                                                                                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ontology`            | `ioc-scope-ontology[models]>=1.1.0`                                                                                                                                                                                                                                                          |
+| `graph`               | `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                                                                                                                                           |
+| `validation`          | `ioc-scope-ontology[models]>=1.1.0`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`                                                                                                                                                                                                                      |
+| `verify`              | `jsonschema>=4.0.0`, `pyyaml>=6.0.0`                                                                                                                                                                                                                                                         |
+| `neo4j`               | `neo4j>=5.0`                                                                                                                                                                                                                                                                                 |
+| `bench`               | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                                                                                                                      |
+| `plot`                | `mas-lab-component-bench`                                                                                                                                                                                                                                                                    |
+| `norm`                | `ioc-scope-norm>=1.0.0`                                                                                                                                                                                                                                                                      |
+| `compare-native-otel` | `mas-lab-library-telemetry`                                                                                                                                                                                                                                                                  |
+| `dev`                 | `pytest>=7.0`, `pytest-cov>=4.0`, `pytest-asyncio>=0.21`, `click>=8.0`, `ruff>=0.12.10`, `ioc-scope-ontology[models]>=1.1.0`, `rdflib>=6.0.0`, `pyshacl>=0.25.0`, `jsonschema>=4.0.0`, `pyyaml>=6.0.0`, `ioc-scope-norm>=1.0.0`, `mas-lab-library-telemetry[dev]`, `mas-lab-component-bench` |
+| `all`                 | `mas-lab-library-kg[dev,neo4j,norm]`                                                                                                                                                                                                                                                         |
 
 **Python entry point `mas.lab.cli.components`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.cli.components` without a hard-coded path.
 

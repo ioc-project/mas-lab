@@ -84,12 +84,19 @@ def test_every_registered_kind_converts(tmp_path):
         }
     ]
     ts = 1000.0
-    for i, kind in enumerate(registered_kinds()):
+    kinds = registered_kinds()
+    # Every *_start before its *_end, so each interval opens and then closes
+    # (a call that never ends is not exported).
+    ordered = [k for k in kinds if not k.endswith("_end")] + [k for k in kinds if k.endswith("_end")]
+    for kind in ordered:
+        if kind == "mas_call_start":
+            continue
         ts += 0.01
         ev = {"kind": kind, "timestamp": ts, "parent_call_id": "run", **_FIELDS}
-        # give *_start/_end pairs a matching call_id so intervals open+close
-        if kind.endswith(("_start", "_end")) or kind in ("mas_call_end",):
-            ev["call_id"] = f"c{i}" if kind.endswith("_start") else f"c{i - 1}"
+        if kind.endswith(("_start", "_end")):
+            ev["call_id"] = "c-" + kind.rsplit("_", 1)[0]
+        if kind == "mas_call_end":
+            continue
         events.append(ev)
     events.append(
         {

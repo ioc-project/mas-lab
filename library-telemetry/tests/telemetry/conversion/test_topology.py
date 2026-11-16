@@ -392,7 +392,8 @@ def test_session_end_emitted_on_mas_call_end(tmp_path):
 
 
 @requires_otel
-def test_session_end_fallback_without_mas_call_end(tmp_path):
+def test_no_session_end_without_mas_call_end(tmp_path):
+    """A run that never recorded its end stays open: no session.end is made up."""
     from mas.library.telemetry.conversion.replay import replay_events_file
 
     ep = tmp_path / "e.jsonl"
@@ -401,7 +402,7 @@ def test_session_end_fallback_without_mas_call_end(tmp_path):
     replay_events_file(ep, op, app_name="travel-planner", converter_profile="observe_sdk")
     spans = [json.loads(line) for line in op.read_text().splitlines() if line.strip()]
     names = [s["name"] for s in spans]
-    assert names.count("session.end") == 1
+    assert names.count("session.end") == 0
 
 
 @requires_otel

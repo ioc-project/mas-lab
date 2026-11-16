@@ -15,10 +15,14 @@ Design (mirrors library-kg)
   through a decorator registry.  The dispatch table is assembled once via
   :func:`~mas.library.telemetry.conversion.mappings.base.build_handler_table`.
   Adding a new event kind never touches this file.
-* **1:1 otherwise.**  Span names and attributes come from the native event
-  fields. The only remapping is :mod:`.delegation` (``delegate_to_*`` →
-  observe-sdk handoff / visit split). Session/graph bookends are the other
-  high-level exceptions.
+* **1:1.**  Span names and attributes come from the native event fields. Each
+  ``delegate_to_*`` tool call is an ordinary ``*.tool`` span of the caller, and
+  the callee's visit is an ordinary ``*.agent`` span. Session/graph bookends are
+  the only high-level exceptions.
+* **Explicit dataflow.** The ``state_*`` fields on the native events become
+  ``ioa_observe.state.*`` attributes on the agent, chat, tool and processing
+  spans, and on ``session.end``. The converter copies them and never fabricates
+  one.
 
 Two modes of use
 ----------------
@@ -43,21 +47,10 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, ClassVar, Dict, Optional, Set, Tuple
 
 from mas.library.telemetry.conversion import semconv
-from mas.library.telemetry.conversion.delegation import (
-    ensure_resumed_agent_call as _ensure_resumed_agent_call,
-)
-from mas.library.telemetry.conversion.delegation import (
-    resolve_agent_end_call_id as _resolve_agent_end_call_id,
-)
-from mas.library.telemetry.conversion.delegation import (
-    rewrite_delegate_tool_end as _rewrite_delegate_tool_end,
-)
-from mas.library.telemetry.conversion.delegation import (
-    rewrite_delegate_tool_start as _rewrite_delegate_tool_start,
-)
 from mas.library.telemetry.conversion.envelope import envelope_for_kind
 from mas.library.telemetry.conversion.exporter import OTEL_AVAILABLE
 from mas.library.telemetry.conversion.layers import ExportLayers, should_export_event
@@ -70,15 +63,27 @@ from mas.library.telemetry.exceptions import OtelSdkUnavailableError
 
 logger = logging.getLogger(__name__)
 
-# ``mas.status`` of a span still open when the events ended (a cut-off run).
-UNFINISHED_STATUS = "unfinished"
 
-
-class SpanIdReuse:
-    """Id generator that can force the next emitted span id."""
-
-    def reuse_span_id(self, span_id: int) -> None:
-        raise NotImplementedError
+def _epoch_seconds(value: Any) -> Optional[float]:
+    """Epoch seconds from a number, a numeric string or an ISO 8601 string; else None."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
 
 
 if OTEL_AVAILABLE:
@@ -155,7 +160,6 @@ class MasOtelConverter:
             "AgentCall",
             "LLMCall",
             "ToolCall",
-            "RealtimeSignal",
             "AgentLifecycleEvent",
             "ParallelGroup",
             # A SCOPE core class (execution layer), so exported without opting in.
@@ -174,6 +178,7 @@ class MasOtelConverter:
             "NetworkCall",
             "WorkflowTransition",
             "AgentCommunication",
+            "ThinkingCall",
         }
     )
 
@@ -191,16 +196,16 @@ class MasOtelConverter:
         extensions: bool | None = None,
         timestamp_offset_s: float = 0.0,
         session_uuid: str | None = None,
-        rewrite_tool_delegation: bool = True,
         agent_llm_models: Dict[str, str] | None = None,
-        id_generator: Any | None = None,
+        event_logger: Any | None = None,
     ) -> None:
         if not OTEL_AVAILABLE:
             raise OtelSdkUnavailableError()
         self.tracer = tracer
-        # Only used by emit_realtime_signal, and only if it exposes
-        # reuse_span_id() (see session.py's _SharedTraceIdGenerator).
-        self._id_generator = id_generator
+        if realtime and event_logger is None:
+            raise ValueError("realtime=True needs an event_logger (an OTel Logger) for the runtime events")
+        # OTel Logger the realtime runtime events are emitted on (LogRecords, as the SDK does).
+        self._event_logger = event_logger
         from mas.library.telemetry.conversion.topology import declared_mas_name
 
         self._app_name = declared_mas_name(app_name)
@@ -232,21 +237,8 @@ class MasOtelConverter:
         # span and popped _span_meta, so the *_start event's own name has
         # to survive somewhere else.
         self._realtime_entity_names: Dict[str, str] = {}
-        # call_id -> the "*_start" signal's own (int) span id, so the
-        # matching "*_completed"/"*_end" signal can reuse it (see
-        # emit_realtime_signal) instead of minting an unrelated one -- the
-        # two are otherwise two independent spans with no way to tell norm
-        # they describe the same logical call.
-        self._realtime_span_ids: Dict[str, int] = {}
-        self._last_agent_span_id: str = ""
-        self._last_agent_trace_id: str = ""
-        self._last_agent_id: str = ""
+        self._snapshot_version = 0
         self._agent_sequence: int = 0
-        # rewrite_tool_delegation: intercept delegate_to_<id> tools (default on).
-        self._rewrite_tool_delegation = bool(rewrite_tool_delegation)
-        # target agent_id → {caller, call_id} for the open rewritten handoff.
-        self._pending_delegations: Dict[str, Dict[str, str]] = {}
-        self._rewritten_delegate_ids: Set[str] = set()
         self._orphan_call_end_total: int = 0
         self._agent_llm_models: Dict[str, str] = {
             str(key): str(value) for key, value in (agent_llm_models or {}).items() if key and value
@@ -256,17 +248,14 @@ class MasOtelConverter:
         self._session_start_emitted: bool = False
         self._session_end_emitted: bool = False
         self._timestamp_offset_s = float(timestamp_offset_s or 0.0)
-        # parent AgentCall call_id → last user-facing output (user_response)
-        self._agent_outputs: Dict[str, str] = {}
         self._shared_trace_id: int | None = None
-        # After a rewritten delegate_to_*, the caller AgentCall is closed and
-        # the next LLM/user_response opens a new visit (LangGraph-style).
-        self._resume_pending: Dict[str, Dict[str, Any]] = {}
-        self._resume_ids: Dict[str, str] = {}
-        self._agent_visit_count: Dict[str, int] = {}
-        self._last_closed_agent_end_ns: Optional[int] = None
-        self._agent_end_ns: Dict[str, int] = {}
         self._mas_call_end_ts: Optional[float] = None
+        # ioa_observe.state.* of the mas_call_end record, for session.end.
+        self._session_state_attrs: Dict[str, Any] = {}
+        # owner call id -> point spans waiting for that call's span to start.
+        self._pending_annotations: Dict[str, list] = {}
+        # mas_call_start time: the session starts when the MAS run does.
+        self._mas_call_start_ts: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -276,13 +265,25 @@ class MasOtelConverter:
         """Dispatch a single native event record to the appropriate handler."""
         event = self._scope_event_call_ids(event)
         event = self._inherit_agent_id(event)
+        seconds = _epoch_seconds(event.get("timestamp"))
+        if seconds is not None and event.get("timestamp") != seconds:
+            event = {**event, "timestamp": seconds}  # every later read expects seconds
         self._seen_events.append(event)
         self._ensure_trace_root(self.ts_ns(event))
         kind = str(event.get("kind") or "")
+        if kind == "mas_call_start" and self._mas_call_start_ts is None:
+            ts = event.get("timestamp")
+            if isinstance(ts, (int, float)):
+                self._mas_call_start_ts = float(ts)
         if kind == "mas_call_end":
             ts = event.get("timestamp")
             if isinstance(ts, (int, float)):
                 self._mas_call_end_ts = float(ts)
+            self._session_state_attrs = {
+                **self._boundary_state_attrs(event),
+                # The run's outcome: session.end states it for the Session and its MASCall.
+                semconv.EXECUTION_SUCCESS: semconv.execution_success(event.get("status")),
+            }
         if not should_export_event(event, self._export_layers):
             self._maybe_end_session(kind)
             return
@@ -295,6 +296,7 @@ class MasOtelConverter:
         if explicit_session_id and explicit_session_id not in self._SENTINEL_RUN_IDS and not self._session_uuid_pinned:
             self._session_uuid = explicit_session_id
             self._session_uuid_pinned = True
+            self._restamp_open_session_ids()
         if self._converter_profile == "observe_sdk" and not self._session_start_emitted and explicit_session_id:
             # Trigger only on the event that actually carries a session id,
             # never merely because replay pre-resolved _session_uuid from a
@@ -312,34 +314,45 @@ class MasOtelConverter:
             self.emit_realtime_signal(event)
         self._maybe_end_session(kind)
 
-    def flush_open_spans(self, *, status: str = "success") -> None:
-        """End any spans still open so exporters receive them."""
-        for call_id in list(self._open_spans):
-            self.close_span(call_id, status=status)
-
     def finish(self, *, emit_graph: bool | None = None) -> None:
-        """Emit the end-of-run graph span (unless realtime) and close open spans.
+        """Emit the end-of-run graph span (unless realtime) and the session bookends.
 
         Live plugin flush and file replay both call this so graph vs realtime
-        is decided in one place. ``session.end`` is emitted here as a
-        fallback when the run never recorded ``mas_call_end``.
+        is decided in one place. ``session.end`` is emitted only on
+        ``mas_call_end``: a run that never recorded its end stays open.
+
+        A call that never reported its end stays open and is not exported, as
+        an OTel SDK never exports a span that was not ended. Its children name
+        it as their parent; a realtime consumer saw it start through its
+        ``*.started`` signal. No end time or status is made up for it, nor for
+        the session.
         """
         do_graph = (not self._realtime) if emit_graph is None else bool(emit_graph)
         if do_graph:
             self._emit_graph_bookend()
         for call_id in list(self._open_spans):
             if call_id != self._TRACE_ROOT_CALL_ID:
-                # Still open when the events ran out: the call never reported an end.
-                self.close_span(call_id, status=UNFINISHED_STATUS)
-        if self._converter_profile == "observe_sdk":
-            if not self._session_start_emitted:
-                self.emit_session_start()
-            self.emit_session_end()
+                self._drop_open_span(call_id)
+        self._flush_pending_annotations()
+        if self._converter_profile == "observe_sdk" and not self._session_start_emitted:
+            self.emit_session_start()
         if self._TRACE_ROOT_CALL_ID in self._open_spans:
             self.close_span(
                 self._TRACE_ROOT_CALL_ID,
                 end_ns=self._shifted_ts_ns(self._latest_event_ts()),
             )
+
+    def _restamp_open_session_ids(self) -> None:
+        """Stamp the session id, first learned now, on the spans already open.
+
+        The MAS run (``mas_call_start``) opens before any record names its
+        session; its span is still open, so it gets the session id it belongs to.
+        """
+        if not (self._app_name and self._session_uuid):
+            return
+        session_id = semconv.session_id_for(self._app_name, self._session_uuid)
+        for span, _token in self._open_spans.values():
+            span.set_attribute(semconv.SESSION_ID, session_id)
 
     def _emit_graph_bookend(self) -> None:
         if self._graph_emitted or not self._seen_events:
@@ -397,10 +410,10 @@ class MasOtelConverter:
         return context_api.Context()
 
     def _emit_generic_event(self, ev: Dict[str, Any]) -> None:
-        """Emit a span for any kind that has no dedicated handler.
+        """Emit an annotation point span for any kind that has no dedicated handler.
 
-        Start/end pairs become one interval span; everything else is a point
-        span. Disabled export layers still filter the event before this runs.
+        Every record is one point (a ``*_start`` / ``*_end`` pair is two). Disabled
+        export layers still filter the event before this runs.
         """
         kind = str(ev.get("kind") or "event")
         block, _, _ = envelope_for_kind(kind)
@@ -411,47 +424,15 @@ class MasOtelConverter:
             "trajectory": "CallAnnotation",
             "governance": "GovernanceEvent",
         }.get(block, "CallAnnotation")
-        attrs: Dict[str, Any] = {
-            "mas.boundary": boundary,
-            "mas.agent.id": self.agent_id(ev),
-            "mas.event.kind": kind,
-        }
+        attrs: Dict[str, Any] = {"mas.event.kind": kind}
         if boundary == "CallAnnotation":
             attrs["mas.annotation.kind"] = kind
         elif boundary == "GovernanceEvent":
             attrs["mas.governance.kind"] = kind
             if ev.get("outcome"):
                 attrs["mas.governance.outcome"] = ev.get("outcome")
-        call_id = ev.get("call_id")
-        if kind.endswith("_start"):
-            self.open_span(
-                self.span_key(ev),
-                boundary,
-                attrs,
-                ev.get("parent_call_id"),
-                start_ns=self.ts_ns(ev),
-            )
-            return
-        if kind.endswith("_end"):
-            key = self.span_key(ev)
-            if self.is_open(key):
-                extra = {}
-                if ev.get("status"):
-                    extra["mas.status"] = ev.get("status")
-                self.close_span(
-                    key,
-                    extra or None,
-                    status=ev.get("status", "success"),
-                    end_ns=self.ts_ns(ev),
-                )
-                return
-        self.point_span(
-            boundary,
-            attrs,
-            ev.get("parent_call_id"),
-            ts_ns=self.ts_ns(ev),
-            call_id=call_id,
-        )
+        # One point per record, as the native fold makes one annotation node per record.
+        self.emit_annotation(ev, boundary, attrs)
 
     def _root_call_id(self) -> str | None:
         for event in self._seen_events:
@@ -471,23 +452,20 @@ class MasOtelConverter:
         self._closed_call_ids.clear()
         self._run_id = ""
         self._session_uuid = str(uuid.uuid4())
+        self._snapshot_version = 0
         self._session_uuid_pinned = False
         self._agent_span_ids.clear()
-        self._last_agent_span_id = ""
-        self._last_agent_id = ""
         self._agent_sequence = 0
-        self._pending_delegations.clear()
-        self._rewritten_delegate_ids.clear()
         self._orphan_call_end_total = 0
         self._seen_events.clear()
         self._graph_emitted = False
         self._session_start_emitted = False
         self._session_end_emitted = False
-        self._agent_outputs.clear()
         self._shared_trace_id = None
-        self._last_closed_agent_end_ns = None
-        self._agent_end_ns.clear()
         self._mas_call_end_ts = None
+        self._mas_call_start_ts = None
+        self._session_state_attrs = {}
+        self._pending_annotations.clear()
 
     # ------------------------------------------------------------------
     # Primitive emission API (the SpanEmitter protocol handlers depend on)
@@ -512,28 +490,11 @@ class MasOtelConverter:
         tracking key never leaks into span attributes.
 
         Returns the new span's raw (int) span id, or ``None`` if nothing was
-        opened (filtered boundary, or the span context couldn't be read) --
-        used by :meth:`emit_realtime_signal` to make a later point span
-        reuse this exact id (see ``reuse_span_id`` on the active
-        ``id_generator``).
+        opened (filtered boundary, or the span context couldn't be read).
         """
         if not self._should_emit_span(str(attrs.get("mas.boundary") or "")):
             return None
         boundary_name = str(attrs.get("mas.boundary") or "")
-        if (
-            self._converter_profile == "observe_sdk"
-            and self._rewrite_tool_delegation
-            and boundary_name in {"LLMCall", "ToolCall"}
-        ):
-            self.ensure_resumed_agent_call(
-                {
-                    "agent_id": attrs.get("mas.agent.id"),
-                    "timestamp": (start_ns / 1e9) if start_ns else None,
-                    "parent_call_id": parent_call_id,
-                    "call_id": call_id,
-                    "input": attrs.get("mas.input") or attrs.get("mas.llm.messages") or "",
-                }
-            )
         if attach_to_root:
             ctx = self._observe_root_context() if self._converter_profile == "observe_sdk" else context_api.Context()
         else:
@@ -586,10 +547,6 @@ class MasOtelConverter:
             agent = str(attrs.get("mas.agent.id") or "")
             self._agent_span_ids[agent] = span_id
             self._agent_trace_ids[agent] = trace_id_hex
-            self._last_agent_span_id = span_id
-            self._last_agent_trace_id = trace_id_hex
-            if agent:
-                self._last_agent_id = agent
             if self._converter_profile == "observe_sdk":
                 # The real SDK stamps wall-clock time.time() here, which is
                 # fine for a live run (its span start_ns already *is* "now")
@@ -616,11 +573,14 @@ class MasOtelConverter:
                 )
         self._span_meta[call_id] = {
             "boundary": attrs.get("mas.boundary"),
+            "model": attrs.get("mas.llm.model"),
             "agent": attrs.get("mas.agent.id"),
             "tool_name": attrs.get("mas.tool.name"),
             "llm_messages": attrs.get("mas.llm.messages"),
             "span_id": span_id,
         }
+        if call_id in self._pending_annotations:
+            self._emit_pending_annotations(call_id)
         return raw_span_id
 
     def close_span(
@@ -659,14 +619,99 @@ class MasOtelConverter:
                 span.end(end_time=end_ns)
             else:
                 span.end()
-            if meta.get("boundary") == "AgentCall" and end_ns is not None:
-                prev = self._last_closed_agent_end_ns
-                self._last_closed_agent_end_ns = end_ns if prev is None else max(prev, end_ns)
-                closed_agent = str(meta.get("agent") or "")
-                if closed_agent:
-                    self._agent_end_ns[closed_agent] = end_ns
         finally:
             _safe_detach(token)
+
+    def _drop_open_span(self, call_id: str) -> None:
+        """Forget a span that never ended, without ending (so without exporting) it."""
+        _span, token = self._open_spans.pop(call_id)
+        self._span_meta.pop(call_id, None)
+        _safe_detach(token)
+
+    def span_model(self, call_id: str | None) -> str:
+        """The model of the open LLM call ``call_id`` (``""`` when unknown)."""
+        key = self._lookup_span_key(str(call_id or "")) if call_id else None
+        return str((self._span_meta.get(key or "") or {}).get("model") or "")
+
+    def open_span_attr(self, call_id: str | None, key: str) -> str:
+        """An attribute an open span was started with (``""`` when unset or not open)."""
+        resolved = self._lookup_span_key(str(call_id or "")) if call_id else None
+        opened = self._open_spans.get(resolved or "")
+        if opened is None:
+            return ""
+        return self._span_attr(opened[0], key)
+
+    def wire_span_id_of(self, call_id: str | None) -> str:
+        """The exported span id of the call ``call_id`` (open or ended), or ``""``."""
+        if not call_id:
+            return ""
+        key = self._lookup_span_key(str(call_id))
+        if key is None:
+            return ""
+        if key in self._open_spans:
+            return semconv.wire_span_id(self._open_spans[key][0].get_span_context().span_id)
+        ctx = self._closed_span_ctx.get(key)
+        return semconv.wire_span_id(ctx.span_id) if ctx is not None else ""
+
+    def emit_annotation(
+        self,
+        ev: Dict[str, Any],
+        boundary: str,
+        attrs: Dict[str, Any],
+        *,
+        fields: tuple[str, ...] = semconv.ANNOTATION_PAYLOAD_FIELDS,
+    ) -> None:
+        """One point span for one annotation record, as the native KG fold maps it.
+
+        ``mas.annotation.content`` is the record's payload (the ``fields`` it carries).
+        The point annotates the call the record is about, named by its span id
+        (``ioa_observe.annotates.span_id``, so a call that starts later is named too):
+        an interval record's (``*_start`` / ``*_end``) ``call_id`` is its own key, so
+        that is its ``parent_call_id``; a point record's own ``call_id`` names the call,
+        else its parent does.
+        """
+        out = {"mas.boundary": boundary, "mas.agent.id": self.agent_id(ev), **attrs}
+        payload = semconv.annotation_payload(ev, fields)
+        if payload:
+            out["mas.annotation.content"] = payload
+        kind = str(ev.get("kind") or "")
+        parent = ev.get("parent_call_id")
+        own = "" if kind.endswith(("_start", "_end")) else str(ev.get("call_id") or "")
+        target = own or str(parent or "")
+        if target:
+            self.point_span_annotating(target, boundary, out, parent, self.ts_ns(ev))
+        else:
+            self.point_span(boundary, out, parent, ts_ns=self.ts_ns(ev))
+
+    def point_span_annotating(
+        self,
+        owner_call_id: str,
+        name: str,
+        attrs: Dict[str, Any],
+        parent_call_id: str | None = None,
+        ts_ns: int | None = None,
+    ) -> None:
+        """A point span that ``ioa_observe.annotates.span_id`` the span of ``owner_call_id``.
+
+        The owner is named by its exported span id. When the owner's span has
+        not started yet, the point waits for it (with its own timestamp) and is
+        emitted when it starts; at :meth:`finish` a point whose owner never
+        started is emitted without the attribute.
+        """
+        owner_span_id = self.wire_span_id_of(owner_call_id)
+        if owner_span_id:
+            self.point_span(name, {**attrs, semconv.OBSERVE_ANNOTATES_SPAN_ID: owner_span_id}, parent_call_id, ts_ns)
+            return
+        self._pending_annotations.setdefault(str(owner_call_id), []).append((name, attrs, parent_call_id, ts_ns))
+
+    def _emit_pending_annotations(self, owner_call_id: str) -> None:
+        for name, attrs, parent_call_id, ts_ns in self._pending_annotations.pop(owner_call_id, []):
+            self.point_span_annotating(owner_call_id, name, attrs, parent_call_id, ts_ns)
+
+    def _flush_pending_annotations(self) -> None:
+        for owner in list(self._pending_annotations):
+            for name, attrs, parent_call_id, ts_ns in self._pending_annotations.pop(owner):
+                self.point_span(name, attrs, parent_call_id, ts_ns)
 
     def annotate_open_span(self, call_id: str | None, attrs: Dict[str, Any]) -> None:
         """Stamp attributes on an in-flight interval span (e.g. AgentCall output)."""
@@ -712,37 +757,87 @@ class MasOtelConverter:
         if meta.get("boundary") == "LLMCall":
             meta["llm_messages"] = encoded
 
-    def record_agent_output(self, call_id: str | None, text: str) -> None:
-        """Remember the last user-facing output for an open AgentCall."""
-        cleaned = str(text or "").strip()
-        if not call_id or not cleaned:
-            return
-        self._agent_outputs[str(call_id)] = cleaned
-        extra = {"mas.output": cleaned}
-        if self._converter_profile == "observe_sdk":
-            extra[semconv.IOA_ENTITY_OUTPUT] = cleaned
-        self.annotate_open_span(call_id, extra)
+    # -- explicit dataflow (ioa_observe.state.*) -------------------------------
+    # Each helper copies native ``state_*`` fields onto attributes. A missing
+    # field gives no attribute: nothing is inferred or filled in. Only the
+    # observe_sdk profile carries them (the raw profile stays unprefixed).
 
-    def agent_output_for(self, call_id: str | None) -> str:
-        if not call_id:
-            return ""
-        return self._agent_outputs.get(str(call_id), "")
+    @staticmethod
+    def _state_ids(value: Any) -> str:
+        """A State id, or the JSON list of member ids for a join."""
+        if isinstance(value, list):
+            return json.dumps(value)
+        return str(value)
 
-    def rewrite_delegate_tool_start(self, ev: Dict[str, Any]) -> bool:
-        """Remap ``delegate_to_*`` — see :mod:`.delegation`."""
-        return _rewrite_delegate_tool_start(self, ev)
+    @staticmethod
+    def _state_text(value: Any) -> str:
+        """A State's content as its producer stated it (strings are copied as-is)."""
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
 
-    def rewrite_delegate_tool_end(self, ev: Dict[str, Any]) -> bool:
-        """Remap ``delegate_to_*`` close — see :mod:`.delegation`."""
-        return _rewrite_delegate_tool_end(self, ev)
+    def state_start_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """Input and output id of a data element, from its START record.
 
-    def ensure_resumed_agent_call(self, ev: Dict[str, Any]) -> str | None:
-        """Open the next caller AgentCall after a rewritten delegation."""
-        return _ensure_resumed_agent_call(self, ev)
+        ``state_in`` / ``state_in_content`` is the input (a join's list for a
+        parallel-group aggregate); ``state_out`` is the output id. The output
+        content comes from the END record (:meth:`state_end_attrs`).
+        """
+        if self._converter_profile != "observe_sdk":
+            return {}
+        attrs: Dict[str, Any] = {}
+        if ev.get("state_in") not in (None, ""):
+            attrs[semconv.OBSERVE_STATE_INPUT_ID] = self._state_ids(ev["state_in"])
+        if ev.get("state_in_content") is not None:
+            attrs[semconv.OBSERVE_STATE_INPUT_CONTENT] = self._state_text(ev["state_in_content"])
+        if ev.get("state_out") not in (None, ""):
+            attrs[semconv.OBSERVE_STATE_OUTPUT_ID] = self._state_ids(ev["state_out"])
+        return attrs
 
-    def resolve_agent_end_call_id(self, ev: Dict[str, Any]) -> str:
-        """Map ``execution_end`` onto the live visit (original or resume)."""
-        return _resolve_agent_end_call_id(self, ev)
+    def state_end_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """Output content of a data element, from its END record."""
+        if self._converter_profile != "observe_sdk":
+            return {}
+        if ev.get("state_out_content") is None:
+            return {}
+        return {semconv.OBSERVE_STATE_OUTPUT_CONTENT: self._state_text(ev["state_out_content"])}
+
+    def agent_start_state_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """An agent visit's input: its first State (``execution_start`` ``state_out``)."""
+        if self._converter_profile != "observe_sdk":
+            return {}
+        attrs: Dict[str, Any] = {}
+        if ev.get("state_out") not in (None, ""):
+            attrs[semconv.OBSERVE_STATE_INPUT_ID] = self._state_ids(ev["state_out"])
+        if ev.get("state_out_content") is not None:
+            attrs[semconv.OBSERVE_STATE_INPUT_CONTENT] = self._state_text(ev["state_out_content"])
+        return attrs
+
+    def agent_end_state_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """An agent visit's output: its final State (``execution_end`` ``state_in``)."""
+        if self._converter_profile != "observe_sdk":
+            return {}
+        attrs: Dict[str, Any] = {}
+        if ev.get("state_in") not in (None, ""):
+            attrs[semconv.OBSERVE_STATE_OUTPUT_ID] = self._state_ids(ev["state_in"])
+        if ev.get("state_in_content") is not None:
+            attrs[semconv.OBSERVE_STATE_OUTPUT_CONTENT] = self._state_text(ev["state_in_content"])
+        return attrs
+
+    def _boundary_state_attrs(self, ev: Dict[str, Any]) -> Dict[str, Any]:
+        """The run's boundary States (``mas_call_end``), for ``session.end``."""
+        if self._converter_profile != "observe_sdk":
+            return {}
+        attrs: Dict[str, Any] = {}
+        if ev.get("state_in") not in (None, ""):
+            attrs[semconv.OBSERVE_STATE_INPUT_ID] = self._state_ids(ev["state_in"])
+        if ev.get("state_in_content") is not None:
+            attrs[semconv.OBSERVE_STATE_INPUT_CONTENT] = self._state_text(ev["state_in_content"])
+        if ev.get("state_out") not in (None, ""):
+            attrs[semconv.OBSERVE_STATE_OUTPUT_ID] = self._state_ids(ev["state_out"])
+        if ev.get("state_out_content") is not None:
+            attrs[semconv.OBSERVE_STATE_OUTPUT_CONTENT] = self._state_text(ev["state_out_content"])
+        return attrs
 
     def point_span(
         self,
@@ -754,7 +849,6 @@ class MasOtelConverter:
         *,
         attach_to_root: bool = False,
         events: list[tuple[str, Dict[str, Any]]] | None = None,
-        reuse_span_id: int | None = None,
     ) -> int | None:
         """Open and immediately close a point-in-time span.
 
@@ -762,12 +856,7 @@ class MasOtelConverter:
         closes -- e.g. the real SDK's ``agent_start_event``/``agent_end_event``
         spans each also carry a same-named nested event.
 
-        ``reuse_span_id``, if given, makes the *new* span reuse that exact
-        span id instead of a fresh random one (see ``emit_realtime_signal``
-        and ``_SharedTraceIdGenerator.reuse_span_id`` in session.py) --
-        requires an active ``id_generator`` that supports it; a no-op
-        otherwise. Returns the span's own (int) span id either way, so a
-        caller can pass it to a later, correlated point span.
+        Returns the span's own (int) span id.
         """
         if attrs.get("mas.boundary") == "CallAnnotation" and not self._annotation_enabled:
             return None
@@ -776,8 +865,6 @@ class MasOtelConverter:
         point_attrs = dict(attrs)
         if call_id:
             point_attrs["mas.call.id"] = call_id
-        if reuse_span_id is not None and isinstance(self._id_generator, SpanIdReuse):
-            self._id_generator.reuse_span_id(reuse_span_id)
         # set_call_id=False → the synthetic span_key is never written as an
         # attribute (it would be a random, non-deterministic value).
         raw_span_id = self.open_span(
@@ -805,7 +892,11 @@ class MasOtelConverter:
         """Observe-sdk ``session.start`` bookend."""
         if self._session_start_emitted:
             return
-        ts_ns = self.ts_ns(ev) if ev else self._shifted_ts_ns(self._earliest_event_ts())
+        if self._mas_call_start_ts is not None:
+            # The session starts with the MAS run, whichever record first named it.
+            ts_ns = self._shifted_ts_ns(self._mas_call_start_ts)
+        else:
+            ts_ns = self.ts_ns(ev) if ev else self._shifted_ts_ns(self._earliest_event_ts())
         ts_s = (ts_ns / 1_000_000_000) if ts_ns is not None else 0.0
         self._ensure_trace_root(ts_ns)
         self.point_span(
@@ -818,12 +909,12 @@ class MasOtelConverter:
         self._session_start_emitted = True
 
     def emit_session_end(self) -> None:
-        """Observe-sdk ``session.end`` bookend. Idempotent."""
-        if self._session_end_emitted or not self._session_start_emitted:
+        """Observe-sdk ``session.end`` bookend, at the run's ``mas_call_end``. Idempotent."""
+        if self._session_end_emitted or not self._session_start_emitted or self._mas_call_end_ts is None:
             return
-        ts_ns = self._shifted_ts_ns(self._session_end_event_ts())
+        ts_ns = self._shifted_ts_ns(self._mas_call_end_ts)
         ts_s = (ts_ns / 1_000_000_000) if ts_ns is not None else 0.0
-        attrs = self._session_span_attrs(ts_s, ended=True)
+        attrs = {**self._session_span_attrs(ts_s, ended=True), **self._session_state_attrs}
         self.point_span(
             semconv.SPAN_NAME_SESSION_END,
             attrs,
@@ -911,14 +1002,6 @@ class MasOtelConverter:
         ]
         return max(times) if times else None
 
-    def _session_end_event_ts(self) -> float | None:
-        """Bookend the session on the MAS run / last agent, not a later context event."""
-        if self._mas_call_end_ts is not None:
-            return self._mas_call_end_ts
-        if self._last_closed_agent_end_ns is not None:
-            return self._last_closed_agent_end_ns / 1_000_000_000 - self._timestamp_offset_s
-        return self._latest_event_ts()
-
     def emit_graph_span(
         self,
         topology: Dict[str, Any],
@@ -966,63 +1049,138 @@ class MasOtelConverter:
             attach_to_root=observe,
         )
 
-    def emit_realtime_signal(self, ev: Dict[str, Any]) -> None:
-        """Emit incremental observe-sdk realtime categories (opt-in).
+    # native kind -> ioa-observe runtime event name (ioa_observe.sdk.tracing.runtime_events)
+    _REALTIME_EVENT_NAMES: ClassVar[Dict[str, str]] = {
+        "mas_call_start": "TOPOLOGY_SESSION_STARTED",
+        "mas_call_end": "TOPOLOGY_SESSION_COMPLETED",
+        "execution_start": "TOPOLOGY_NODE_STARTED",
+        "execution_end": "TOPOLOGY_NODE_COMPLETED",
+        "tool_call_start": "TOOL_STARTED",
+        "tool_call_end": "TOOL_COMPLETED",
+        "llm_call_start": "LLM_STARTED",
+        "llm_call_end": "LLM_COMPLETED",
+    }
 
-        norm's realtime dispatch (``handlers/{tool,chat}.py``) requires the
-        same ``ioa_observe.entity.name`` / ``ioa_observe.agent.span_id``
-        fields a batch ``.tool``/``.chat`` span carries -- without them it
-        silently drops the signal (``entity_name`` empty -> early return).
-        A tool/LLM *_end event's own record never repeats the tool name or
-        model, so the ``*_start`` call's own tracked meta is the fallback.
+    def emit_realtime_signal(self, ev: Dict[str, Any]) -> None:
+        """Emit the ioa-observe runtime event for *ev* as an OTel LogRecord.
+
+        The record has the shape the ioa-observe SDK gives its own runtime
+        events: the body and event name are the event name, the attributes
+        are the flat event dict with the SDK's keys (``event.id``,
+        ``event.name``, ``event.time``, ``session.id``, ``application_id``,
+        ``agent.name``, ``tool.name`` / ``tool.type`` / ``tool.input`` /
+        ``tool.output`` / ``tool.status``, ``llm.name`` / ``llm.input`` /
+        ``llm.output`` / ``llm.call.id``, ``agent.input`` / ``agent.output``,
+        ``span.id``, ``trace.id``, ``ioa_observe.agent.span_id``), and the
+        record is stamped with the span of the call it reports. A
+        ``*.started`` and its ``*.completed`` name the same span, so a
+        realtime consumer (SCOPE norm ``otel_io_realtime``) folds them into
+        one call. The handler for *ev* has already run, so that span exists.
+
+        A ``*.started`` record also carries the attributes its span was
+        started with (the ``ioa_observe.state.*`` contract, ``gen_ai.request.*``,
+        ``mas.*``): a call that never ends is never exported as a span, and
+        this record is all a consumer gets of it. ``mas_call_start`` /
+        ``mas_call_end`` are the session's ``topology.session.started`` /
+        ``.completed``.
         """
+        member = self._REALTIME_EVENT_NAMES.get(str(ev.get("kind") or ""))
+        if not member or self._event_logger is None:
+            return
+        # The SDK is the `observe` extra: only the realtime emitter needs it.
+        from ioa_observe.sdk.tracing.runtime_events import RuntimeEvent, RuntimeEventName, identify_runtime_event
+
+        name = RuntimeEventName[member]
         kind = str(ev.get("kind") or "")
         agent = self.agent_id(ev)
-        mapping = {
-            "execution_start": "topology.node.started",
-            "execution_end": "topology.node.completed",
-            "tool_call_start": "tool.started",
-            "tool_call_end": "tool.completed",
-            "llm_call_start": "llm.started",
-            "llm_call_end": "llm.completed",
-        }
-        name = mapping.get(kind)
-        if not name:
-            return
         call_id = str(ev.get("call_id") or "")
-        attrs = {
-            "mas.boundary": "RealtimeSignal",
-            "event.name": name,
-            semconv.AGENT_ID: agent,
-            "mas.agent.id": agent,
-        }
-        if kind == "tool_call_start":
-            entity_name = str(ev.get("tool_name") or agent)
-            self._realtime_entity_names[call_id] = entity_name
-            attrs[semconv.IOA_ENTITY_NAME] = entity_name
-        elif kind == "llm_call_start":
-            entity_name = str(ev.get("model") or "") or agent
-            self._realtime_entity_names[call_id] = entity_name
-            attrs[semconv.IOA_ENTITY_NAME] = entity_name
-        elif kind in ("tool_call_end", "llm_call_end"):
-            attrs[semconv.IOA_ENTITY_NAME] = self._realtime_entity_names.pop(call_id, agent)
-        agent_span = self._agent_span_ids.get(agent)
-        if agent_span:
-            attrs[semconv.IOA_AGENT_SPAN_ID] = semconv.wire_span_id(agent_span)
+        span_key = self._lookup_span_key(call_id, agent) or call_id
+        span_hex = self.wire_span_id_of(span_key)
+        if not span_hex:
+            return  # the call's span was filtered out: there is nothing to report on
+        trace_hex = self._span_trace_hex(span_key)
+        when = self._shifted_ts_ns(_epoch_seconds(ev.get("timestamp")))
+        attrs: Dict[str, Any] = {}
+        if name.value.endswith(".started") and span_key in self._open_spans:
+            started = self._open_spans[span_key][0].attributes or {}
+            attrs.update({key: value for key, value in started.items() if value is not None})
+        attrs["agent.name"] = agent
+        session_id = None
         if self._app_name:
             attrs[semconv.APPLICATION_ID] = self._app_name
             if self._session_uuid:
-                attrs[semconv.SESSION_ID] = semconv.session_id_for(self._app_name, self._session_uuid)
-        reuse_id = self._realtime_span_ids.pop(call_id, None) if kind.endswith("_end") else None
-        raw_span_id = self.point_span(
-            name,
-            attrs,
-            ev.get("parent_call_id") or ev.get("call_id"),
-            ts_ns=self.ts_ns(ev),
-            reuse_span_id=reuse_id,
+                session_id = semconv.session_id_for(self._app_name, self._session_uuid)
+        agent_span = None if kind.startswith("mas_call") else self._agent_span_ids.get(agent)
+        if agent_span:
+            attrs[semconv.IOA_AGENT_SPAN_ID] = semconv.wire_span_id(agent_span)
+        if kind == "execution_start":
+            if ev.get("state_out_content") not in (None, "") or ev.get("input"):
+                attrs["agent.input"] = self._state_text(ev.get("state_out_content") or ev.get("input"))
+        elif kind == "execution_end":
+            output = ev.get("state_in_content") or ev.get("output")
+            if output not in (None, ""):
+                attrs["agent.output"] = self._state_text(output)
+        elif kind == "tool_call_start":
+            tool = str(ev.get("tool_name") or "")
+            self._realtime_entity_names[call_id] = tool
+            attrs["tool.name"] = tool
+            attrs["tool.type"] = str(ev.get("tool_type") or "function")
+            if ev.get("arguments") is not None:
+                attrs["tool.input"] = self._state_text(ev["arguments"])
+        elif kind == "tool_call_end":
+            attrs["tool.name"] = self._realtime_entity_names.pop(call_id, str(ev.get("tool_name") or ""))
+            attrs["tool.type"] = str(ev.get("tool_type") or "function")
+            output = ev.get("result") if ev.get("result") not in (None, "") else ev.get("output")
+            if output not in (None, ""):
+                attrs["tool.output"] = self._state_text(output)
+            attrs["tool.status"] = "error" if str(ev.get("status") or "") == "error" else "success"
+        elif kind in ("llm_call_start", "llm_call_end"):
+            if kind == "llm_call_start":
+                model = str(ev.get("model") or "") or self.llm_model_for(agent)
+                self._realtime_entity_names[call_id] = model
+                if ev.get("messages"):
+                    attrs["llm.input"] = self._state_text(ev["messages"])
+            else:
+                model = self._realtime_entity_names.pop(call_id, "")
+                output = ev.get("state_out_content") or ev.get("output")
+                if output not in (None, ""):
+                    attrs["llm.output"] = self._state_text(output)
+            provider, model_name = semconv.provider_and_model(model)
+            attrs["llm.name"] = model_name
+            attrs["llm.call.id"] = span_hex
+            attrs[semconv.GEN_AI_PROVIDER] = provider
+        self._snapshot_version += 1
+        event = RuntimeEvent(
+            name=name,
+            session_id=session_id,
+            snapshot_version=self._snapshot_version,
+            event_time=datetime.fromtimestamp((when or time.time_ns()) / 1e9, tz=timezone.utc),
+            attributes=attrs,
+            trace_id=int(trace_hex, 16) if trace_hex else None,
+            span_id=int(span_hex, 16),
         )
-        if kind.endswith("_start") and raw_span_id is not None:
-            self._realtime_span_ids[call_id] = raw_span_id
+        record_attrs = identify_runtime_event(event.to_otel_attributes())
+        from opentelemetry._logs import LogRecord, SeverityNumber  # type: ignore[import-not-found]
+
+        self._event_logger.emit(
+            LogRecord(
+                timestamp=when,
+                observed_timestamp=when,
+                trace_id=event.trace_id,
+                span_id=event.span_id,
+                severity_text="INFO",
+                severity_number=SeverityNumber.INFO,
+                body=name.value,
+                attributes=record_attrs,
+                event_name=name.value,
+            )
+        )
+
+    def _span_trace_hex(self, key: str) -> str:
+        if key in self._open_spans:
+            return semconv.wire_trace_id(self._open_spans[key][0].get_span_context().trace_id)
+        ctx = self._closed_span_ctx.get(key)
+        return semconv.wire_trace_id(ctx.trace_id) if ctx is not None else ""
 
     def emit_duplicate_start_annotation(self, ev: Dict[str, Any], kind: str) -> bool:
         """Mirror native KG: duplicate ``*_start`` while call open → CallAnnotation."""
@@ -1114,6 +1272,7 @@ class MasOtelConverter:
             "memory_retrieve_start",
             "rag_query_start",
             "skill_execution_start",
+            "thinking_start",
             "network_call_start",
             "workflow_transition_start",
             "agent_communication_start",
@@ -1215,15 +1374,9 @@ class MasOtelConverter:
         the Observe span tree went flat.
 
         Observe-sdk / SCOPE: ``*.chat`` and ``*.tool`` nest under the live
-        ``*.agent``. LangGraph (and norm) treat delegated ``*.agent`` spans
-        as siblings under ``invoke_agent``, linked by
-        ``ioa_observe.agent.previous`` — not as children of the caller.
+        ``*.agent``. A callee's ``*.agent`` nests under the TaskCall.
         """
         resolved = self._lookup_span_key(str(parent_call_id), agent_id) if parent_call_id else None
-        if parent_call_id and str(parent_call_id) in self._rewritten_delegate_ids:
-            resolved = None
-        if resolved and resolved in self._rewritten_delegate_ids:
-            resolved = None
         if self._converter_profile == "observe_sdk" and boundary in {
             "LLMCall",
             "ToolCall",
@@ -1300,7 +1453,12 @@ class MasOtelConverter:
     def _resolve_scoped_id(self, call_id: str, agent_id: str) -> str:
         """Apply agent ownership prefix for shared legacy ids (``*-exec``)."""
         prefixed = f"{agent_id}-{call_id}" if agent_id and not call_id.startswith(f"{agent_id}-") else ""
-        if prefixed and (prefixed in self._open_spans or prefixed in self._closed_call_ids):
+        if prefixed and (
+            prefixed in self._open_spans
+            or prefixed in self._closed_call_ids
+            # a wrapper interval of that call (span_key ``{call_id}:{kind}``)
+            or any(key.startswith(f"{prefixed}:") for key in self._open_spans)
+        ):
             return prefixed
         owner = self._call_id_agents.get(call_id)
         if owner:
@@ -1359,10 +1517,7 @@ class MasOtelConverter:
             tool_name = str(attrs.get("mas.tool.name") or "tool")
             return f"{tool_name}.{semconv.SPAN_SUFFIX_TOOL}"
         if boundary == "CallAnnotation":
-            kind = str(attrs.get("mas.annotation.kind") or "annotation")
-            if kind in {"routing", "routing_result"}:
-                kind = "routing_annotation"
-            return f"{agent}.{kind}"
+            return f"{agent}.{semconv.SPAN_SUFFIX_ANNOTATION}"
         if boundary == "ParallelGroup":
             return f"{agent}.parallel_group"
         if boundary == "ProcessingCall":
@@ -1370,8 +1525,7 @@ class MasOtelConverter:
             return f"{actor}.{semconv.SPAN_SUFFIX_PROCESSING}"
         if self._extensions:
             if boundary == "MemoryCall":
-                mem = str(attrs.get("mas.memory.type") or agent or "memory")
-                return f"{mem}.{semconv.SPAN_SUFFIX_MEMORY}"
+                return f"{agent}.{semconv.SPAN_SUFFIX_MEMORY}"
             if boundary == "ContextContribution":
                 return f"{agent}.{semconv.SPAN_SUFFIX_CONTEXT}"
             if boundary == "GovernanceEvent":
@@ -1381,6 +1535,10 @@ class MasOtelConverter:
                 return f"{skill}.{semconv.SPAN_SUFFIX_SKILL}"
             if boundary == "RAGQuery":
                 return f"{agent}.{semconv.SPAN_SUFFIX_RAG}"
+            if boundary == "ThinkingCall":
+                return f"{agent}.{semconv.SPAN_SUFFIX_THINKING}"
+            if boundary == "Worker":
+                return f"{agent}.{semconv.SPAN_SUFFIX_WORKER}"
         return name
 
     def _apply_profile_overlay_on_open(self, attrs: Dict[str, Any], start_ns: int | None) -> Dict[str, Any]:
@@ -1402,6 +1560,8 @@ class MasOtelConverter:
             "SkillCall": "skill",
             "SkillExecution": "skill",
             "RAGQuery": "rag",
+            "ThinkingCall": "thinking",
+            "Worker": "worker",
         }
         if boundary in kind_map:
             out.setdefault(semconv.IOA_SPAN_KIND, kind_map[boundary])
@@ -1412,10 +1572,13 @@ class MasOtelConverter:
             out.setdefault(semconv.IOA_WORKFLOW_NAME, self._app_name)
 
         agent = str(out.get("mas.agent.id") or "")
-        call_id = str(out.get("mas.call.id") or "")
         if agent:
             out.setdefault(semconv.AGENT_ID, agent)
-        if boundary in {"LLMCall", "ToolCall"} and agent:
+        if (
+            boundary
+            in {"LLMCall", "ToolCall", "ProcessingCall", "SkillCall", "SkillExecution", "MemoryCall", "RAGQuery"}
+            and agent
+        ):
             parent_span = self._agent_span_ids.get(agent)
             if parent_span:
                 out.setdefault(semconv.IOA_AGENT_SPAN_ID, semconv.wire_span_id(parent_span))
@@ -1425,44 +1588,30 @@ class MasOtelConverter:
 
         if boundary == "AgentCall":
             value = out.get("mas.input")
-            out.setdefault(
-                semconv.IOA_ENTITY_INPUT,
-                self._timeline_io("input", agent or "agent", call_id, value, wrap=True),
-            )
+            if value:
+                out.setdefault(semconv.IOA_ENTITY_INPUT, str(value))
             out.setdefault(semconv.IOA_ENTITY_NAME, agent or "agent")
-            pending = self._pending_delegations.pop(agent, None) if agent else None
-            # Caller agent_id from the intercepted delegate_to_<id> tool
-            # (or the previously opened AgentCall). Never a hardcoded name.
-            previous = str(pending.get("caller") or "") if pending else self._last_agent_id
-            if previous and previous != agent:
-                out.setdefault(semconv.IOA_AGENT_PREVIOUS, previous)
             self._agent_sequence += 1
             out.setdefault(semconv.IOA_AGENT_SEQUENCE, str(self._agent_sequence))
-            if self._last_agent_span_id:
-                out.setdefault(
-                    semconv.IOA_HANDOFF_SOURCE_SPAN_IDS,
-                    json.dumps([semconv.wire_span_id(self._last_agent_span_id)]),
-                )
-                if self._last_agent_trace_id:
-                    out.setdefault(
-                        semconv.IOA_HANDOFF_SOURCE_TRACE_IDS,
-                        json.dumps([semconv.wire_trace_id(self._last_agent_trace_id)]),
-                    )
 
         if boundary == "LLMCall":
             messages = out.get("mas.llm.messages")
-            llm_input = self._timeline_io("llm-input", agent or "llm", call_id, messages)
-            out.setdefault(semconv.IOA_ENTITY_INPUT, llm_input)
+            if messages:
+                out.setdefault(semconv.IOA_ENTITY_INPUT, str(messages))
             provider, model = semconv.provider_and_model(str(out.get("mas.llm.model") or ""))
             out.setdefault(semconv.GEN_AI_PROVIDER, provider)
             out.setdefault(semconv.GEN_AI_REQUEST_MODEL, model)
             out.setdefault(semconv.IOA_ENTITY_NAME, model)
             out.setdefault(semconv.GEN_AI_OPERATION_NAME, "chat")
+            effort = out.get("mas.llm.reasoning_effort")
+            if effort:
+                out.setdefault(semconv.GEN_AI_REQUEST_REASONING_EFFORT, str(effort))
             temp = out.get("mas.llm.temperature")
             if temp is not None:
                 out.setdefault(semconv.GEN_AI_REQUEST_TEMPERATURE, float(temp))
             first = self._first_llm_message(messages)
-            out.setdefault(semconv.GEN_AI_INPUT_MESSAGES, str(messages) if messages else llm_input)
+            if messages:
+                out.setdefault(semconv.GEN_AI_INPUT_MESSAGES, str(messages))
             if first:
                 role = first.get("role")
                 content = first.get("content")
@@ -1477,28 +1626,39 @@ class MasOtelConverter:
                 out.setdefault("tool_name", str(tool_name))
                 out.setdefault(semconv.IOA_ENTITY_NAME, str(tool_name))
             value = out.get("mas.tool.input")
-            tool_input = self._timeline_io("tool-input", str(tool_name or agent or "tool"), call_id, value)
-            out.setdefault(semconv.IOA_ENTITY_INPUT, tool_input)
-            out.setdefault(semconv.GEN_AI_TOOL_ARGUMENTS, str(value) if value else tool_input)
+            if value:
+                out.setdefault(semconv.IOA_ENTITY_INPUT, str(value))
+                out.setdefault(semconv.GEN_AI_TOOL_ARGUMENTS, str(value))
 
-        if self._extensions and boundary == "MemoryCall":
+        if self._extensions and boundary in {"MemoryCall", "RAGQuery"}:
             out.setdefault(
                 semconv.OBSERVE_MEMORY_OPERATION,
                 str(out.get("mas.memory.operation") or ""),
             )
             out.setdefault(semconv.OBSERVE_MEMORY_TYPE, str(out.get("mas.memory.type") or ""))
-            out.setdefault(
-                semconv.IOA_ENTITY_NAME,
-                str(out.get("mas.memory.type") or agent or "memory"),
-            )
+            # The memory store the call uses: its collection when the record names one.
+            store = str(out.get("mas.memory.collection") or "")
+            if store:
+                out.setdefault(semconv.IOA_ENTITY_NAME, store)
+            if out.get("mas.memory.input"):
+                out.setdefault(semconv.IOA_ENTITY_INPUT, str(out["mas.memory.input"]))
+        if self._extensions and boundary == "ThinkingCall":
+            provider, model = semconv.provider_and_model(str(out.get("mas.llm.model") or ""))
+            out.setdefault(semconv.GEN_AI_PROVIDER, provider)
+            out.setdefault(semconv.GEN_AI_REQUEST_MODEL, model)
         if boundary == "ProcessingCall":
             out.setdefault(semconv.OBSERVE_PROCESSING_ACTOR, agent)
+            out.setdefault(semconv.OBSERVE_PROCESSING_NAME, str(out.get("mas.processing.name") or "processing"))
+            out.setdefault(semconv.OBSERVE_PROCESSING_TYPE, str(out.get("mas.processing.type") or ""))
+            out.setdefault(semconv.IOA_ENTITY_INPUT, str(out.get("mas.processing.input") or ""))
             out.setdefault(semconv.IOA_ENTITY_NAME, agent or "processing")
         if self._extensions and boundary == "GovernanceEvent":
-            out.setdefault(
-                semconv.OBSERVE_GOVERNANCE_DECISION_TYPE,
-                str(out.get("mas.governance.decision") or out.get("mas.annotation.kind") or ""),
-            )
+            decision = out.get("mas.governance.decision_type")
+            if decision:
+                out.setdefault(semconv.OBSERVE_GOVERNANCE_DECISION_TYPE, str(decision))
+            policy = out.get("mas.governance.policy_name")
+            if policy:
+                out.setdefault(semconv.OBSERVE_GOVERNANCE_POLICY_ID, str(policy))
             out.setdefault(semconv.IOA_ENTITY_NAME, agent or "governance")
 
         return out
@@ -1515,23 +1675,13 @@ class MasOtelConverter:
     ) -> None:
         if self._converter_profile != "observe_sdk":
             return
-        failed = str(status or "").strip().lower() in {"error", "failed", "failure", UNFINISHED_STATUS}
-        span.set_attribute(semconv.EXECUTION_SUCCESS, "false" if failed else "true")
+        span.set_attribute(semconv.EXECUTION_SUCCESS, semconv.execution_success(status))
         boundary = str(meta.get("boundary") or "")
         if boundary == "AgentCall":
             value = extra.get("mas.output") or self._span_attr(span, semconv.IOA_ENTITY_OUTPUT)
             agent = str(meta.get("agent") or "agent")
-            # Always wrap: if Agent output equals the last child output,
-            # SCOPE skips the capability-chain-boundary and Inspect parks
-            # the Agent bar after the call row.
-            text = self._timeline_io(
-                "output",
-                agent,
-                call_id,
-                value,
-                wrap=True,
-            )
-            span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
+            if value:
+                span.set_attribute(semconv.IOA_ENTITY_OUTPUT, str(value))
             self.point_span(
                 semconv.SPAN_NAME_AGENT_END_EVENT,
                 {"mas.boundary": "AgentLifecycleEvent", "agent_id": agent},
@@ -1548,10 +1698,8 @@ class MasOtelConverter:
         if boundary == "LLMCall":
             value = extra.get("mas.llm.response")
             text = str(value).strip() if value else self._span_attr(span, semconv.GEN_AI_OUTPUT_MESSAGES)
-            if not text:
-                agent = str(meta.get("agent") or "llm")
-                text = self._timeline_io("llm-output", agent, call_id, "")
-            span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
+            if text:
+                span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
             span.set_attribute(semconv.GEN_AI_COMPLETION_CONTENT, text)
             span.set_attribute(semconv.GEN_AI_COMPLETION_ROLE, "assistant")
             span.set_attribute(semconv.GEN_AI_OUTPUT_MESSAGES, text)
@@ -1567,41 +1715,31 @@ class MasOtelConverter:
                 span.set_attribute(semconv.GEN_AI_USAGE_OUTPUT_TOKENS, int(output_tokens))
             if total_tokens is not None:
                 span.set_attribute(semconv.GEN_AI_USAGE_TOTAL_TOKENS, int(total_tokens))
+            reasoning_tokens = extra.get("metrics.token.reasoning")
+            if reasoning_tokens is not None:
+                span.set_attribute(semconv.GEN_AI_USAGE_REASONING_TOKENS, int(reasoning_tokens))
+            return
+        if boundary in {"MemoryCall", "RAGQuery"} and self._extensions:
+            output = extra.get("mas.memory.output")
+            if output:
+                span.set_attribute(semconv.IOA_ENTITY_OUTPUT, str(output))
+            return
+        if boundary == "ThinkingCall":
+            reasoning = extra.get("mas.thinking.text")
+            if reasoning:
+                span.set_attribute(semconv.IOA_ENTITY_OUTPUT, str(reasoning))
+            return
+        if boundary == "ProcessingCall":
+            messages = extra.get("mas.processing.messages")
+            text = str(messages) if messages else str(extra.get("mas.processing.output") or "")
+            span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
             return
         if boundary == "ToolCall":
             value = extra.get("mas.tool.output")
             text = str(value).strip() if value else self._span_attr(span, semconv.GEN_AI_TOOL_RESULT)
-            if not text:
-                tool = str(meta.get("tool_name") or meta.get("agent") or "tool")
-                text = self._timeline_io("tool-output", tool, call_id, "")
-            span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
-            span.set_attribute(semconv.GEN_AI_TOOL_RESULT, text)
-
-    @staticmethod
-    def _timeline_io(
-        kind: str,
-        identity: str,
-        call_id: str,
-        value: Any,
-        *,
-        wrap: bool = False,
-    ) -> str:
-        """Return real I/O when present, else a unique placeholder.
-
-        SCOPE ``bridge_states_if_mismatched`` is a no-op when neighbouring
-        State contents are equal. Cached traces often leave every output
-        blank, so every state becomes ``(no content recorded)``, capability-
-        chain-boundary bridges are skipped, and Inspect parks Session/MAS/
-        Agent bars after the call row. A per-span fallback keeps contents
-        distinct so the path stays connected. ``wrap=True`` keeps the real
-        text but prefixes it so an Agent's I/O cannot equal a child's.
-        """
-        text = str(value or "").strip()
-        if wrap:
-            return f"{kind}:{identity or 'span'}:{text or call_id or 'anon'}"
-        if text:
-            return text
-        return f"{kind}:{identity or 'span'}:{call_id or 'anon'}"
+            if text:
+                span.set_attribute(semconv.IOA_ENTITY_OUTPUT, text)
+                span.set_attribute(semconv.GEN_AI_TOOL_RESULT, text)
 
     @staticmethod
     def _span_attr(span: Any, key: str) -> str:
@@ -1626,4 +1764,4 @@ class MasOtelConverter:
         return None
 
 
-__all__ = ["MasOtelConverter", "SpanIdReuse"]
+__all__ = ["MasOtelConverter"]

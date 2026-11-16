@@ -100,18 +100,6 @@ class TestNeo4jProps:
 
 
 class TestIndexNodesByTypeUnknownWarning:
-    def test_task_call_does_not_warn(self, caplog) -> None:
-        """TaskCall is a real, dynamically-refined native node type (see
-        core/graph_builder._class_for_event's execution_* boundary
-        refinement) -- it must be in NATIVE_EXTENSION_NODE_TYPES, not just
-        reachable via HANDLERS, or every push of a trace containing one
-        logs a spurious unknown-node_type warning."""
-        from mas.library.kg.neo4j.push import _index_nodes_by_type
-
-        with caplog.at_level("WARNING"):
-            _index_nodes_by_type([{"id": "t1", "node_type": "TaskCall"}])
-        assert not caplog.records, [r.message for r in caplog.records]
-
     def test_genuine_unknown_type_warns(self, caplog) -> None:
         from mas.library.kg.neo4j.push import _index_nodes_by_type
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterator, List, Sequence
 
 from mas.library.kg.artifact import KGArtifact
+from mas.library.kg.core.event_mappings import parse_categories
 from mas.library.kg.core.graph_builder import (
     _load_ontology,
     _resolve_ontology_path,
@@ -17,6 +18,7 @@ from mas.library.kg.core.graph_builder import (
     extract_plot_events,
     normalize_events,
 )
+from mas.library.kg.core.native_graph_builder import NativeGraphBuilder, build_graph_realtime
 from mas.library.kg.exceptions import OtelFormatError
 
 logger = logging.getLogger(__name__)
@@ -89,20 +91,13 @@ def build_kg_document(
     *,
     run_id: str,
     ontology_path: str | Path | None = None,
-    include_infrastructure: bool = False,
-    include_trajectory: bool = False,
-    include_provenance: bool = False,
-    include_governance: bool = False,
-    include_annotation: bool = False,
-    include_native_extensions: bool = False,
+    categories: Any = None,
     all_attributes: bool = False,
     split_session_id: bool = True,
     app_name: str | None = None,
-    application_node: bool = False,
-    fill_synthesized_processing_defaults: bool = True,
     strict: bool = False,
     include_normalization_provenance: bool = False,
-    allow_heuristics: bool = False,
+    realtime: bool = False,
 ) -> Dict[str, Any]:
     """Normalize native events and extract ontology KG — canonical batch API.
 
@@ -115,19 +110,11 @@ def build_kg_document(
     ontology_path : str | Path | None
         Path to mas-ontology.ttl.  ``None`` → auto-resolved from the
         ``scope_ontology`` package.
-    include_infrastructure : bool, default False
-        Worker / endpoint presence events.
-    include_trajectory : bool, default False
-        Parallel groups, branches, and routing annotations (native
-        extensions; off to match SCOPE core).
-    include_provenance : bool, default False
-        Per-part context contributions (ContextContribution nodes).
-    include_governance : bool, default False
-        Policy, audit, and budget events.
-    include_annotation : bool, default False
-        Point CallAnnotation kinds. Off to match observe-sdk.
-    include_native_extensions : bool, default False
-        RAG, memory, and skill call kinds, plus ThinkingCall.
+    categories : None | str | iterable of str, default None
+        Opt-in categories added to the core output (default: none): ``capabilities``
+        (Skill, SkillCall, Memory, MemoryCall, RAGQuery), ``annotations`` (CallAnnotation,
+        GovernanceEvent, ContextContribution), ``worker`` (Worker), ``thinking``
+        (ThinkingCall); ``all`` enables every one. Comma-separated string or a list.
     all_attributes : bool, default False
         Keep native-only fields (callId, agentId, …). Default keeps the
         SCOPE attribute set so native and OTel KGs match.
@@ -142,9 +129,10 @@ def build_kg_document(
         When ``False``, keeps the legacy ``session-{run_id}`` behavior.
     app_name : str | None, default None
         Optional explicit application name override written on Session nodes.
-    application_node : bool, default False
-        If ``True``, emit one ``Application`` node per app and connect it to
-        all matching ``Session`` nodes via ``hasSession`` edges.
+    realtime : bool, default False
+        Fold the way a live consumer does: one event at a time, in arrival order, into a
+        long-lived builder, then ``finalize()``. The graph equals the batch one for events
+        in causal order; the batch path also sorts by timestamp.
     """
     ttl_path: Path | None
     try:
@@ -168,41 +156,42 @@ def build_kg_document(
         )
         ttl_path = None
         ontology = {}
-    normalized = normalize_events(
-        events,
-        ontology,
-        run_id,
-        include_infrastructure=include_infrastructure,
-        include_trajectory=include_trajectory,
-        include_provenance=include_provenance,
-        include_governance=include_governance,
-        include_annotation=include_annotation,
-        include_native_extensions=include_native_extensions,
-        strict=strict,
-    )
-    nodes, edges = extract_graph(
-        normalized,
-        split_session_id=split_session_id,
-        app_name_override=app_name,
-        application_node=application_node,
-        fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
-        allow_heuristics=allow_heuristics,
-        include_native_extensions=include_native_extensions,
-        all_attributes=all_attributes,
-    )
+    if realtime:
+        builder = NativeGraphBuilder(
+            ontology,
+            run_id,
+            categories=categories,
+            all_attributes=all_attributes,
+            strict=strict,
+            split_session_id=split_session_id,
+            app_name_override=app_name,
+        )
+        for event in events:
+            build_graph_realtime(builder, event)
+        normalized = events
+        nodes, edges = builder.finalize()
+    else:
+        normalized = normalize_events(
+            events,
+            ontology,
+            run_id,
+            categories=categories,
+            strict=strict,
+        )
+        nodes, edges = extract_graph(
+            normalized,
+            split_session_id=split_session_id,
+            app_name_override=app_name,
+            all_attributes=all_attributes,
+            categories=categories,
+        )
     metadata: Dict[str, Any] = {
         "events": len(normalized),
         "nodes": len(nodes),
         "edges": len(edges),
         "ontology_path": str(ttl_path) if ttl_path is not None else None,
-        "layers": {
-            "infrastructure": include_infrastructure,
-            "trajectory": include_trajectory,
-            "provenance": include_provenance,
-            "governance": include_governance,
-            "annotation": include_annotation,
-            "native_extensions": include_native_extensions,
-        },
+        "categories": sorted(parse_categories(categories)),
+        "realtime": realtime,
         "all_attributes": all_attributes,
         "plot_events": extract_plot_events(events),
     }
@@ -230,17 +219,13 @@ def build_kg_from_otel_spans(
     ontology_path: str | Path | None = None,
     include_normalization_provenance: bool = False,
     all_attributes: bool = False,
-    **_ignored: Any,
 ) -> Dict[str, Any]:
     """Convert OTel spans to a KG document via ``norm.normalize()``.
 
     ClickHouse-shaped rows (``SpanName`` / ``SpanAttributes``) and OTel SDK
     JSON (``name`` / ``context`` / ``attributes``) are both accepted. SDK
-    spans are reshaped mechanically; dispatch and handlers live in ``norm``.
-
-    Layer flags (``include_infrastructure``, ``allow_heuristics``, …) are
-    accepted for call-site compatibility and ignored: the OTel path does not
-    reimplement native-layer filtering.
+    spans are reshaped mechanically; dispatch and handlers live in ``norm``,
+    and its graph is returned untouched (``norm`` maps every span it is given).
     """
     from mas.library.kg.observability.otel_via_norm import detect_span_shape, normalize_otel
 
@@ -288,19 +273,13 @@ def build_kg_from_events_path(
     *,
     run_id: str | None = None,
     ontology_path: str | Path | None = None,
-    include_infrastructure: bool = False,
-    include_trajectory: bool = False,
-    include_provenance: bool = False,
-    include_governance: bool = False,
-    include_annotation: bool = False,
-    include_native_extensions: bool = False,
+    categories: Any = None,
     all_attributes: bool = False,
     split_session_id: bool = True,
     app_name: str | None = None,
-    application_node: bool = False,
-    fill_synthesized_processing_defaults: bool = True,
     strict: bool = False,
     include_normalization_provenance: bool = False,
+    realtime: bool = False,
 ) -> Dict[str, Any]:
     """Load events.jsonl and build kg.jsonld document.
 
@@ -316,19 +295,13 @@ def build_kg_from_events_path(
         events,
         run_id=run_id,
         ontology_path=ontology_path,
-        include_infrastructure=include_infrastructure,
-        include_trajectory=include_trajectory,
-        include_provenance=include_provenance,
-        include_governance=include_governance,
-        include_annotation=include_annotation,
-        include_native_extensions=include_native_extensions,
+        categories=categories,
         all_attributes=all_attributes,
         split_session_id=split_session_id,
         app_name=app_name,
-        application_node=application_node,
-        fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
         strict=strict,
         include_normalization_provenance=include_normalization_provenance,
+        realtime=realtime,
     )
     doc["metadata"]["source"] = str(p)
     return doc

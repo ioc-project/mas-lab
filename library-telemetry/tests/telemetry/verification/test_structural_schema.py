@@ -4,22 +4,9 @@
 
 from __future__ import annotations
 
-import pytest
 from mas.library.telemetry.verification import (
     validate_spans_json_schema,
     verify_otel_spans,
-)
-
-try:
-    import jsonschema  # noqa: F401
-
-    _HAS_JSONSCHEMA = True
-except ImportError:  # pragma: no cover
-    _HAS_JSONSCHEMA = False
-
-requires_jsonschema = pytest.mark.skipif(
-    not _HAS_JSONSCHEMA,
-    reason="jsonschema not installed (envelope validation is best-effort)",
 )
 
 
@@ -76,14 +63,12 @@ def test_missing_boundary_warns():
     assert any("mas_boundary_present" in w for w in r["warnings"])
 
 
-@requires_jsonschema
 def test_json_schema_ok():
     spans = [_span("AgentCall", "s1")]
     r = validate_spans_json_schema(spans)
     assert r["ok"], r["span_errors"]
 
 
-@requires_jsonschema
 def test_json_schema_missing_required_field():
     bad = {"name": "AgentCall"}  # no context / timestamps / attributes
     r = validate_spans_json_schema([bad])

@@ -92,18 +92,27 @@ def _events() -> list[dict]:
     ]
 
 
-def test_default_kg_drops_native_extension_nodes_and_deferred_edges() -> None:
+def test_default_kg_drops_deferred_edges() -> None:
     doc = build_kg_document(_events(), run_id="r1")
     types = {n.get("node_type") for n in doc["nodes"]}
-    assert "RAGQuery" not in types
     assert "AgentCall" in types
     assert "LLMCall" in types
     assert not {e.get("edge_type") for e in doc["edges"]} & DEFERRED_EDGE_TYPES
 
 
-def test_native_extensions_layer_keeps_rag_query() -> None:
-    doc = build_kg_document(_events(), run_id="r1", include_native_extensions=True)
-    assert any(n.get("node_type") == "RAGQuery" for n in doc["nodes"])
+def test_rag_query_is_a_memory_call_of_the_agent() -> None:
+    doc = build_kg_document(_events(), run_id="r1", categories="capabilities")
+    rag = next(n for n in doc["nodes"] if n.get("node_type") == "RAGQuery")
+    contains = [e for e in doc["edges"] if e["to_id"] == rag["id"]]
+    assert [e["edge_type"] for e in contains] == ["hasMemoryCall"]
+    assert not any(e["edge_type"] == "hasRAGQuery" for e in doc["edges"])
+
+
+def test_default_kg_has_no_rag_query() -> None:
+    doc = build_kg_document(_events(), run_id="r1")
+    assert not {"RAGQuery", "MemoryCall", "SkillCall", "Memory", "Skill"} & {
+        n.get("node_type") for n in doc["nodes"]
+    }
 
 
 def test_default_kg_keeps_only_scope_attributes() -> None:
@@ -135,7 +144,7 @@ def test_restrict_graph_drops_deferred_edges_even_with_all_attributes() -> None:
     edges = [
         {"edge_type": "hasLLMCall", "from_id": "a", "to_id": "b", "weight": 1},
         {"edge_type": "callsAgent", "from_id": "a", "to_id": "agent"},
-        {"edge_type": "usesTool", "from_id": "agent", "to_id": "tool"},
+        {"edge_type": "usesCapability", "from_id": "agent", "to_id": "tool"},
     ]
     out_nodes, out_edges = restrict_graph(nodes, edges, all_attributes=True)
     assert out_nodes[0]["callId"] == "c1"

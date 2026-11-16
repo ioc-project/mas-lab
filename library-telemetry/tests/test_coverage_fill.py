@@ -290,7 +290,9 @@ def test_converter_internals_scoping_and_flush(tmp_path):
             "agent_id": "alice",
             "status": "error",
         },
-        # note: 'shared'/'run' left open on purpose → flushed with success status
+        {"kind": "execution_end", "call_id": "shared", "timestamp": 1.4, "agent_id": "alice"},
+        {"kind": "execution_end", "call_id": "shared", "timestamp": 1.5, "agent_id": "bob"},
+        # 'run' never ends: it stays open and is not exported
     ]
     ep = tmp_path / "e.jsonl"
     ep.write_text("\n".join(json.dumps(e) for e in events))
@@ -298,6 +300,7 @@ def test_converter_internals_scoping_and_flush(tmp_path):
     replay_events_file(ep, op, service_name="svc", converter_profile="raw")
     spans = [json.loads(line) for line in op.read_text().splitlines() if line.strip()]
     assert sum(1 for s in spans if s["name"] == "AgentCall") == 2
+    assert not any(s["name"] == "TaskCall" for s in spans)
     tool = next(s for s in spans if s["name"] == "ToolCall")
     assert tool["attributes"]["mas.status"] == "error"
 

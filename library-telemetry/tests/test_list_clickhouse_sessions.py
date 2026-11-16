@@ -1,7 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tests for ListClickhouseSessionsStep — skipped unless the bench framework
-is installed (see tests/test_bench.py's requires_bench convention).
+"""Tests for ListClickhouseSessionsStep (needs the bench framework, part of the dev extra).
 
 Mocks urllib.request.urlopen and mas.lab.connections.resolve_clickhouse_conn
 directly (a lightweight HTTP GET, not the clickhouse_connect client), so no
@@ -10,20 +9,10 @@ real ClickHouse server or clickhouse-connect package is needed.
 
 from __future__ import annotations
 
-import importlib.util
 import urllib.error as _uerr
 
 import pytest
 
-
-def _has_bench() -> bool:
-    try:
-        return importlib.util.find_spec("mas.lab.benchmark.pipeline") is not None
-    except (ImportError, ModuleNotFoundError, ValueError):
-        return False
-
-
-requires_bench = pytest.mark.skipif(not _has_bench(), reason="bench extra not installed")
 pytestmark = pytest.mark.asyncio
 
 
@@ -45,7 +34,6 @@ def _step(mod, **config):
     return mod.ListClickhouseSessionsStep("list-sessions", config)
 
 
-@requires_bench
 class TestListClickhouseSessionsStep:
     async def test_dataset_id_required(self):
         from mas.library.telemetry.steps import list_clickhouse_sessions as mod

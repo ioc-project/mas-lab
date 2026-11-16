@@ -35,8 +35,7 @@ See also: [normalization.md](normalization.md), [native-telemetry.md](native-tel
 OTel spans (JSON / JSONL)                       mas.library.kg (first-party)                SCOPE norm
   - ClickHouse rows (SpanName, SpanAttributes)   detect_span_shape()                        normalize(rows)
   - OTel SDK spans (name, context, attributes) ->to_clickhouse_spans()  -- ClickHouse rows -> (nodes, edges)
-                                                  align_graph()  <---------------------------- nodes, edges
-                                                  KGArtifact -> kg.jsonld
+                                                  KGArtifact -> kg.jsonld  <------------------- nodes, edges
 ```
 
 `normalize_otel(spans)` in `observability/otel_via_norm.py`:
@@ -44,13 +43,13 @@ OTel spans (JSON / JSONL)                       mas.library.kg (first-party)    
 1. Detects the shape of the input (`detect_span_shape`).
 2. Reshapes SDK spans to ClickHouse rows (`to_clickhouse_spans`); ClickHouse rows pass through unchanged.
 3. Calls `norm.normalizer.normalize(rows)`, which returns `(nodes, edges)`.
-4. Passes the result through `core.ontology_align.align_graph`.
+4. Completes the graph with what the MAS Lab spans carry under `mas.*` and the installed `norm` does not read (`otel_completion`), aligns it (`ontology_align.align_graph`) and keeps the SCOPE model fields (`restrict_graph`).
 
-This library applies no heuristics, gap filling or event synthesis on the OTel path, and does not convert OTel back to `events.jsonl`.
+This library applies no heuristics beyond that completion and does not convert OTel back to `events.jsonl`. It works with the `norm` and `ioc-scope-ontology` that are released; the realtime runtime-events records the converter writes next to the spans are not folded into the KG yet.
 
 **Requirements.** `norm` is an optional extra (`pip install "library-kg[norm]"`, which currently installs `backend/norm` from the SCOPE repository on GitHub until it is published as a package). Without it, `run_normalize_otel` and `build_kg_from_otel_spans` log a warning and return an empty KG (zero nodes and edges, no error). Likewise, a span list whose shape is not recognised yields an empty KG with `otel_format: "unknown"`.
 
-**Run id.** `norm` derives application, session and agent ids from the spans (see [Section 4](#4-attributes-read-by-norm)). The `--run-id` / `run_id` argument is only recorded in the artifact (`run_id` field), not used to rewrite node ids. Native-path options (`strict`, `synthesize_llm_gaps`, `allow_heuristics`, `write_events`, `split_session_id`, `app_name`, ...) are accepted by `run_normalize_otel` for call-site compatibility and ignored.
+**Run id.** `norm` derives application, session and agent ids from the spans (see [Section 4](#4-attributes-read-by-norm)). The `--run-id` / `run_id` argument is only recorded in the artifact (`run_id` field), not used to rewrite node ids. `run_normalize_otel(spans_path, run_id, output_dir=None, *, include_normalization_provenance=False, dry_run=False, all_attributes=False)`.
 
 ## 2. Accepted span shapes
 
@@ -111,6 +110,7 @@ All attributes live in `SpanAttributes` (SDK: `attributes`). Values below are wh
 | `ioa_start_time` | Start time in epoch seconds (preferred); otherwise `Timestamp` is used |
 | `Duration` | Nanoseconds; end time is start plus duration |
 | `execution.success` | String `"true"` / `"false"`; otherwise success unless `StatusCode` is `Error` |
+| `mas.status` | `unfinished` for a span closed with no end event, `error` for a failed or cut-off call. Either reads as not successful, as in the native graph |
 | `SpanId`, `ParentSpanId` | Recorded on nodes and used to find the owning agent call |
 | `ioa_observe.agent.span_id` | Span id of the agent span that owns a `.chat` or `.tool` span |
 
@@ -156,19 +156,9 @@ All attributes live in `SpanAttributes` (SDK: `attributes`). Values below are wh
 
 MAS Lab instrumentation also writes `mas.boundary` (for example `Session`, `AgentCall`, `LLMCall`, `ToolCall`, `TaskCall`, `Graph`, `AgentLifecycleEvent`), `mas.call.id`, `mas.agent.id`, `mas.run.id`, `mas.status`, `mas.llm.*`, `mas.tool.*`, `ioa_observe.span.kind` (`agent`, `llm`, `tool`, `task`, `graph`) and `ioa_observe.workflow.name`. Stock `norm` dispatches on the span name, not on these, so they are provenance that `norm` currently does not read. The constants for them are in `observability/vocabulary.py`.
 
-### 4.8 Completion pass (`observability/otel_completion.py`)
-
-`run_normalize_otel` runs `norm` as published, then adds what the MAS Lab `mas.*` attributes carry and `norm` does not read, so the graph read from spans matches the graph read from native events:
-
-- **LLMCall:** `llmName` (`mas.llm.model`), `prompt` (`mas.llm.messages`, rendered as the native path renders it), `completion` (`mas.llm.response`), `toolCalls` (`mas.llm.tool_calls`), `maxTokens` and `offeredTools`.
-- **MASCall:** `success` and `duration` from the `TaskCall` span. `norm` builds the MASCall from the session alone and reports duration 0 and not successful.
-- **Trajectory:** `norm`'s own States, Transitions and Processing nodes (it chains consecutive spans without knowing what each call took in and returned) are dropped. The ProcessingCalls come from their `*.processing` spans (`mas.processing.name`, `.type`, `.input`, `.messages`, `.output`), and the same `synthesize_states_and_transitions` the native path runs rebuilds States and Transitions from the calls, with the same sibling chaining. Both paths therefore build the trajectory with one function.
-
-Only attributes are added to nodes `norm` made, except the MASCall outcome, which `norm` could only guess. Spans without these attributes (another producer) come out as `norm` made them. The trajectory is rebuilt only when the spans carry ProcessingCalls (every run from the current converter does); otherwise `norm`'s trajectory stays, since the calls alone say too little to chain.
-
 ## 5. Example spans
 
-Shipped in `library-kg/examples/trip-planner/otel_spans.jsonl` (18 spans) and `library-kg/examples/qa-agent/otel_spans.jsonl` (8 spans). Both are OTel SDK-shaped.
+Shipped in `library-kg/examples/trip-planner/otel_spans.jsonl` (126 spans) and `library-kg/examples/qa-agent/otel_spans.jsonl` (9 spans). Both are OTel SDK-shaped.
 
 An agent span (abridged):
 
@@ -196,7 +186,7 @@ An agent span (abridged):
 }
 ```
 
-The same file contains `session.start` / `session.end`, `<agent>.chat`, `<tool>.tool` (for example `lookup_schedule.tool`), `agent_start_event` / `agent_end_event`, `invoke_agent trip-planner` and `trip-planner.graph` spans. Span ids in these files are `0x`-prefixed hex strings; the reshape strips the prefix.
+The same file contains `session.start` / `session.end`, `<agent>.chat`, `<tool>.tool` (for example `get_fares.tool`), `agent_start_event` / `agent_end_event`, `invoke_agent trip-planner` and `trip-planner.graph` spans. Span ids in these files are `0x`-prefixed hex strings; the reshape strips the prefix.
 
 The ClickHouse row produced for a span by `mas-lab kg otel-to-events` has this shape (abridged):
 
@@ -221,8 +211,8 @@ mas-lab kg otel-to-events SPANS.jsonl --run-id RUN --output-dir OUT
 
 | Command | Notes |
 |---------|-------|
-| `kg otel-to-kg` | Options: `--run-id` (required), `--output-dir`, `--ontology-path`, `--dry-run`, plus `--no-strict`, `--no-synthesize`, `--no-fill-synthesized-processing-defaults`, `--write-events`, which are accepted and ignored on this path. |
-| `kg normalize --otel FILE` | Takes the same normalization options as the native path (`--include-*`, `--app-name`, ...), which are ignored for OTel input. Without `--run-id` the run id is taken from `--session-id`, else the first span's `mas.session.id`, `session.id` or `mas.run.id` attribute, else its trace id, else the file name. |
+| `kg otel-to-kg` | Options: `--run-id` (required), `--output-dir`, `--dry-run`. |
+| `kg normalize --otel FILE` | Takes the same normalization options as the native path (`--categories`, `--app-name`, ...), which are ignored for OTel input. Without `--run-id` the run id is taken from `--session-id`, else the first span's `mas.session.id`, `session.id` or `mas.run.id` attribute, else its trace id, else the file name. |
 | `kg otel-to-events` | Despite the name, it does not write `events.jsonl`. It writes ClickHouse-shaped rows to `OUT/otel_clickhouse.jsonl` and prints `{"spans_path", "span_count", "otel_format"}`. `--run-id` is required but unused; `--no-strict` and `--no-synthesize` are ignored. |
 
 ### Python
@@ -253,9 +243,9 @@ MAS Lab produces OTel spans from a run's `events.jsonl` with `library-telemetry`
 
 ## 7. Relationship to the native path
 
-`examples/qa-agent/` ships one run both ways: `events.jsonl` normalized with `run_normalize` (`kg-native.jsonld`), and its replayed `otel_spans.jsonl` normalized with `run_normalize_otel` (`kg-otel.jsonld`). For the core classes the two paths agree: calls, catalogs, `ProcessingCall` and the `State`/`Transition` trajectory come out alike for a MAS Lab run (see [4.8](#48-completion-pass-observabilityotel_completionpy); the lab `kg-path-compare` shows the rest). They still differ where the native path has more to read: it builds `Run` and the optional layers (annotations, governance, context contributions, memory, skill, RAG) from every event kind ([native-telemetry.md](native-telemetry.md)), which the OTel path only has when those spans are exported, and durations differ by the sub-millisecond ordering offsets the converter adds between spans.
+`examples/qa-agent/` ships one run both ways: `events.jsonl` normalized with `run_normalize` (`kg-native.jsonld`), and its replayed `otel_spans.jsonl` normalized with `run_normalize_otel` (`kg-otel.jsonld`). For the core classes the two paths agree: calls, catalogs, `ProcessingCall` and the `State`/`Transition` trajectory come out alike for a MAS Lab run (the lab `kg-path-compare` shows the rest). They differ where the native path has more to read: it builds the optional layers (annotations, governance, context contributions, memory, skill, RAG) from every event kind ([native-telemetry.md](native-telemetry.md)), which the OTel path only has when those spans are exported. Call names follow one rule on both paths: an `AgentCall` is named by its agent id, an `LLMCall` by the model name, a `ToolCall` by the tool name, a `ProcessingCall` by the processing name, a `SkillCall` by the skill name, a `MemoryCall` / `RAGQuery` by the memory name, a `ThinkingCall` by the model name, and an annotation (`CallAnnotation`, `GovernanceEvent`, `ContextContribution`) by its kind. Ids stay unique. Timestamps differ by the sub-millisecond offsets the converter adds between spans.
 
-`observability/path_equivalence.py` (`compare_native_and_otel`, modes `default` and `complete`) compares the two on a canonical subgraph; it is exercised by `tests/kg/test_native_otel_norm_equivalence.py`.
+`observability/path_equivalence.py` (`compare_trajectories(events, categories=None | "all", realtime=False | True)`) folds the same events both ways and compares them. The two graphs are identical on the delegation, categories and live trip-planner fixtures (default and all categories, batch and realtime) and, in realtime, on the cut-off fixture, where an unfinished call is open on both sides. No difference is pinned. A trace without the `ioa_observe.state.*` contract (another producer) has no trajectory.
 
 ## 8. Helper modules not on the OTel path
 

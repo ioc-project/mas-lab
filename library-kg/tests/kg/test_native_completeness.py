@@ -75,13 +75,8 @@ def test_real_trip_planner_fixture_is_complete_across_all_layers():
     doc = build_kg_document(
         events,
         run_id=run_id,
-        include_governance=True,
-        include_infrastructure=True,
-        include_provenance=True,
-        include_trajectory=True,
-        include_native_extensions=True,
+        categories="all",
         all_attributes=True,
-        include_annotation=True,
     )
     ok, violations = check_native_trace_completeness(events, doc["nodes"], run_id)
     assert ok, f"unaccounted events: {violations}"

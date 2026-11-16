@@ -2,7 +2,7 @@
 
 This walkthrough takes one multi-agent run, a travel planner, from its native `events.jsonl` to OpenTelemetry (OTel) spans that a collector and the SCOPE can ingest. It is for readers who want to run the full convert, verify, push, read-back chain once.
 
-Sample input: [`examples/travel-planner.events.jsonl`](examples/travel-planner.events.jsonl), a 14-event trace where a `moderator` routes to an `itinerary_agent` and a `budget_agent`.
+Sample input: [`examples/travel-planner.events.jsonl`](examples/travel-planner.events.jsonl), a live 1256-event trace (prompt: `Plan a 3-day trip from Celestia to Verdantia`) where a `moderator` delegates to an `itinerary_agent` and a `budget_agent`.
 
 ```bash
 uv pip install -e "library-telemetry[convert,verify]"
@@ -28,7 +28,7 @@ The command prints the span count:
 
 ```json
 {
-  "spans": 15,
+  "spans": 279,
   "output": "traces/otel_sdk_spans.jsonl"
 }
 ```
@@ -37,7 +37,7 @@ With the default `observe_sdk` profile, the span tree uses the names SCOPE expec
 
 - `invoke_agent travel-planner` (session root)
 - `moderator.agent`, `itinerary_agent.agent`, `budget_agent.agent`
-- `moderator.chat`, `route_search.tool`
+- `moderator.chat`, `get_fares.tool`
 - `agent_start_event` and `agent_end_event` lifecycle spans
 - `session.start`, `session.end`
 - `travel-planner.graph` (the topology span)
@@ -47,7 +47,7 @@ With the default `observe_sdk` profile, the span tree uses the names SCOPE expec
 Two behaviors matter for SCOPE:
 
 - The application name comes from the trace (`app_name: travel-planner`). Pass `--app-name` to override.
-- The converter emits a `<app>.graph` span that carries the agent topology on `gen_ai.ioa.graph` (nodes: `orchestrator, moderator, itinerary_agent, budget_agent`). Without it SCOPE cannot render the graph. See [docs/conversion.md](docs/conversion.md).
+- The converter emits a `<app>.graph` span that carries the agent topology on `gen_ai.ioa.graph` (nodes: `moderator, itinerary_agent, budget_agent`). Without it SCOPE cannot render the graph. See [docs/conversion.md](docs/conversion.md).
 
 The pipeline behind the command is [`pipelines/native-to-otel-json.yaml`](pipelines/native-to-otel-json.yaml):
 
@@ -101,7 +101,7 @@ A dry run needs no collector. It builds the OTLP batches and stops:
 
 ```bash
 mas-lab telemetry push traces/otel_sdk_spans.jsonl --infra infra/local-otel.yaml --dry-run
-# {"spans": 15, "batches": 1, "status": "dry-run", "detail": "15 spans -> http://localhost:4318/v1/traces", ...}
+# {"spans": 279, "batches": 1, "status": "dry-run", "detail": "279 spans -> http://localhost:4318/v1/traces", ...}
 ```
 
 The endpoint precedence is `--endpoint`, then the manifest, then `$OTEL_EXPORTER_OTLP_ENDPOINT`. The push uses only the standard library; see [docs/otlp-collector.md](docs/otlp-collector.md).

@@ -37,17 +37,6 @@ STRUCTURAL_CHECKS = [
     "layer_vocabulary",
 ]
 
-# SCOPE SHACL (mas-shapes.ttl + mas-shapes-custom.ttl) does not include the
-# former custom SPARQL rules these tests encode (Session.appName, processing
-# gate, temporal enclosure, inbound containment, leadsTo range).
-_SCOPE_SHACL_GAP = pytest.mark.skip(
-    reason=(
-        "SCOPE SHACL shapes do not include the custom SPARQL rules these "
-        "assertions encode; they remain documented gaps pending upstream "
-        "shapes."
-    )
-)
-
 
 def test_verifier_indexes_scope_ontology_namespaces() -> None:
     from mas.library.kg.core.verifier import _OntologyIndex
@@ -127,7 +116,7 @@ class TestRunValidateKgStructuralChecks:
             row["status"] == "error" and "missing" in row["detail"] and "argument" in row["detail"]
         )
 
-    @_SCOPE_SHACL_GAP
+    @pytest.mark.scope_next
     def test_shacl_orphaned_agent_call_reported_as_real_violation(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -151,8 +140,9 @@ class TestRunValidateKgStructuralChecks:
         result = excinfo.value.report
         assert result["error_count"] >= 1
         assert any(
-            "inbound containment or ownership edge" in r["detail"] for r in result["results"]
-        )  # noqa: E501
+            row["status"] == "error" and "inbound containment or ownership edge" in row["detail"]
+            for row in result["results"]
+        )
         assert not any(r["detail"] in {"True", "[]"} for r in result["results"])
 
     def test_unknown_node_type_reported_without_typeerror(self, tmp_path):
@@ -182,8 +172,6 @@ class TestRunValidateKgStructuralChecks:
         # Asserts a clean pass with no extra rows, which only holds when
         # shacl actually runs rather than reporting its own
         # pyshacl/rdflib-not-installed warning row.
-        pytest.importorskip("rdflib")
-        pytest.importorskip("pyshacl")
         from mas.library.kg.steps.validate_kg import run_validate_kg
 
         result = run_validate_kg(
@@ -277,241 +265,6 @@ class TestRunValidateKgStructuralChecks:
         assert shacl_rows[0]["status"] != "skipped"
         assert "not a well-formed SHACL PropertyShape" not in shacl_rows[0]["detail"]
 
-    @_SCOPE_SHACL_GAP
-    def test_shacl_session_app_name_check_fails_when_missing(self, tmp_path):
-        from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
-
-        doc = {
-            "nodes": [
-                {"id": "s1", "node_type": "Session", "sessionId": "s1", "runId": "r1"},
-                {"id": "run-1", "node_type": "Run", "runId": "r1"},
-                {
-                    "id": "st-in",
-                    "node_type": "State",
-                    "stateNodeId": "st-in",
-                    "contentHash": "h1",
-                    "semanticType": "initial",
-                    "content": "hello",
-                },  # noqa: E501
-                {
-                    "id": "st-out",
-                    "node_type": "State",
-                    "stateNodeId": "st-out",
-                    "contentHash": "h2",
-                    "semanticType": "final",
-                    "content": "world",
-                },  # noqa: E501
-                {
-                    "id": "t-1",
-                    "node_type": "Transition",
-                    "transitionId": "t-1",
-                    "edgeType": "sequential",
-                    "fromState": "st-in",
-                    "toState": "st-out",
-                },  # noqa: E501
-            ],
-            "edges": [
-                {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
-                {"edge_type": "hasInitialState", "from_id": "s1", "to_id": "st-in"},
-                {"edge_type": "hasFinalState", "from_id": "s1", "to_id": "st-out"},
-                {"edge_type": "inputTo", "from_id": "st-in", "to_id": "t-1"},
-                {"edge_type": "leadsTo", "from_id": "t-1", "to_id": "st-out"},
-                {"edge_type": "fromState", "from_id": "t-1", "to_id": "st-in"},
-                {"edge_type": "toState", "from_id": "t-1", "to_id": "st-out"},
-            ],
-        }
-        p = tmp_path / "kg.jsonld"
-        p.write_text(json.dumps(doc))
-
-        with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
-        result = excinfo.value.report
-        assert result["error_count"] == 1
-        assert any("maslab:appName" in r["detail"] for r in result["results"])
-
-    @_SCOPE_SHACL_GAP
-    def test_shacl_session_app_name_check_passes_when_present(self, tmp_path):
-        from mas.library.kg.steps.validate_kg import run_validate_kg
-
-        doc = {
-            "nodes": [
-                {
-                    "id": "s1",
-                    "node_type": "Session",
-                    "sessionId": "s1",
-                    "runId": "r1",
-                    "appName": "trip-planner",
-                },
-                {"id": "run-1", "node_type": "Run", "runId": "r1"},
-                {
-                    "id": "st-in",
-                    "node_type": "State",
-                    "stateNodeId": "st-in",
-                    "contentHash": "h1",
-                    "semanticType": "initial",
-                    "content": "hello",
-                },  # noqa: E501
-                {
-                    "id": "st-out",
-                    "node_type": "State",
-                    "stateNodeId": "st-out",
-                    "contentHash": "h2",
-                    "semanticType": "final",
-                    "content": "world",
-                },  # noqa: E501
-                {
-                    "id": "t-1",
-                    "node_type": "Transition",
-                    "transitionId": "t-1",
-                    "edgeType": "sequential",
-                    "fromState": "st-in",
-                    "toState": "st-out",
-                },  # noqa: E501
-            ],
-            "edges": [
-                {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
-                {"edge_type": "hasInitialState", "from_id": "s1", "to_id": "st-in"},
-                {"edge_type": "hasFinalState", "from_id": "s1", "to_id": "st-out"},
-                {"edge_type": "inputTo", "from_id": "st-in", "to_id": "t-1"},
-                {"edge_type": "leadsTo", "from_id": "t-1", "to_id": "st-out"},
-                {"edge_type": "fromState", "from_id": "t-1", "to_id": "st-in"},
-                {"edge_type": "toState", "from_id": "t-1", "to_id": "st-out"},
-            ],
-        }
-        p = tmp_path / "kg.jsonld"
-        p.write_text(json.dumps(doc))
-
-        result = run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
-        assert result["error_count"] == 0
-        assert result["results"] == [{"check": "shacl", "status": "pass", "detail": ""}]
-
-    @_SCOPE_SHACL_GAP
-    def test_shacl_does_not_require_callid_on_session(self, tmp_path):
-        from mas.library.kg.steps.validate_kg import run_validate_kg
-
-        doc = {
-            "nodes": [
-                {
-                    "id": "s1",
-                    "node_type": "Session",
-                    "sessionId": "s1",
-                    "runId": "r1",
-                    "appName": "test-app",
-                },
-                {"id": "run-1", "node_type": "Run", "runId": "r1"},
-                {
-                    "id": "st-in",
-                    "node_type": "State",
-                    "stateNodeId": "st-in",
-                    "contentHash": "h1",
-                    "semanticType": "initial",
-                    "content": "hello",
-                },  # noqa: E501
-                {
-                    "id": "st-out",
-                    "node_type": "State",
-                    "stateNodeId": "st-out",
-                    "contentHash": "h2",
-                    "semanticType": "final",
-                    "content": "world",
-                },  # noqa: E501
-                {
-                    "id": "t-1",
-                    "node_type": "Transition",
-                    "transitionId": "t-1",
-                    "edgeType": "sequential",
-                    "fromState": "st-in",
-                    "toState": "st-out",
-                },  # noqa: E501
-            ],
-            "edges": [
-                {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
-                {"edge_type": "hasInitialState", "from_id": "s1", "to_id": "st-in"},
-                {"edge_type": "hasFinalState", "from_id": "s1", "to_id": "st-out"},
-                {"edge_type": "inputTo", "from_id": "st-in", "to_id": "t-1"},
-                {"edge_type": "leadsTo", "from_id": "t-1", "to_id": "st-out"},
-                {"edge_type": "fromState", "from_id": "t-1", "to_id": "st-in"},
-                {"edge_type": "toState", "from_id": "t-1", "to_id": "st-out"},
-            ],
-        }
-        p = tmp_path / "kg.jsonld"
-        p.write_text(json.dumps(doc))
-
-        result = run_validate_kg(
-            p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full"
-        )  # noqa: E501
-        session_callid_errors = [
-            row
-            for row in result["results"]
-            if row["status"] == "error" and "callId" in row["detail"] and "Session" in row["detail"]
-        ]
-        if session_callid_errors:
-            pytest.skip("Bundled ontology version still requires Session.callId")
-        assert session_callid_errors == []
-
-    @_SCOPE_SHACL_GAP
-    def test_shacl_session_no_executionelement_inheritance(self, tmp_path):
-        from mas.library.kg.steps.validate_kg import run_validate_kg
-
-        doc = {
-            "nodes": [
-                {
-                    "id": "s1",
-                    "node_type": "Session",
-                    "sessionId": "s1",
-                    "appName": "trip-planner",
-                },
-                {"id": "run-1", "node_type": "Run", "runId": "run-1"},
-                {
-                    "id": "st-in",
-                    "node_type": "State",
-                    "stateNodeId": "st-in",
-                    "contentHash": "h1",
-                    "semanticType": "initial",
-                    "content": "hello",
-                },  # noqa: E501
-                {
-                    "id": "st-out",
-                    "node_type": "State",
-                    "stateNodeId": "st-out",
-                    "contentHash": "h2",
-                    "semanticType": "final",
-                    "content": "world",
-                },  # noqa: E501
-                {
-                    "id": "t-1",
-                    "node_type": "Transition",
-                    "transitionId": "t-1",
-                    "edgeType": "sequential",
-                    "fromState": "st-in",
-                    "toState": "st-out",
-                },  # noqa: E501
-            ],
-            "edges": [
-                {"edge_type": "contains", "from_id": "s1", "to_id": "run-1"},
-                {"edge_type": "hasInitialState", "from_id": "s1", "to_id": "st-in"},
-                {"edge_type": "hasFinalState", "from_id": "s1", "to_id": "st-out"},
-                {"edge_type": "inputTo", "from_id": "st-in", "to_id": "t-1"},
-                {"edge_type": "leadsTo", "from_id": "t-1", "to_id": "st-out"},
-                {"edge_type": "fromState", "from_id": "t-1", "to_id": "st-in"},
-                {"edge_type": "toState", "from_id": "t-1", "to_id": "st-out"},
-            ],
-        }
-        p = tmp_path / "kg.jsonld"
-        p.write_text(json.dumps(doc))
-
-        result = run_validate_kg(
-            p, checks=["shacl"], ontology_path=_scope_ontology_path(), warning_verbosity="full"
-        )  # noqa: E501
-        forbidden_session_attrs = {"callId", "runId", "executionId", "startTime", "endTime"}
-        inherited_rows = [
-            row
-            for row in result["results"]
-            if "Session" in row["detail"]
-            and any(attr in row["detail"] for attr in forbidden_session_attrs if attr != "runId")
-        ]
-        assert inherited_rows == []
-
     def test_shacl_session_requires_initial_and_final_state(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -540,21 +293,23 @@ class TestRunValidateKgStructuralChecks:
         assert any("mas:hasInitialState" in row["detail"] for row in result["results"])
         assert any("mas:hasFinalState" in row["detail"] for row in result["results"])
 
-    @_SCOPE_SHACL_GAP
+    @pytest.mark.scope_next
     def test_shacl_executionelement_can_carry_its_own_initial_and_final_state(self, tmp_path):
-        """The Session-level hasInitialState/hasFinalState requirement above
-        must not be satisfied by an ExecutionElement's own boundary states --
-        Session and its AgentCall/LLMCall/etc. children are validated
-        independently. Regression test for the bug where hasInitialState/
-        hasFinalState were only ever emitted on ExecutionElement (never on
-        Session): a KG with the edges on the AgentCall alone, and none on
-        Session, must still fail SessionShape's requirement."""
+        """The Session-level hasInitialState/hasFinalState requirement must not be satisfied
+        by an ExecutionElement's own boundary States: a KG with the edges on the AgentCall
+        alone, and none on the Session, still fails the Session boundary shape."""
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
         doc = {
             "nodes": [
-                {"id": "s1", "node_type": "Session", "sessionId": "s1", "appName": "demo"},
-                {"id": "run-1", "node_type": "Run", "runId": "run-1"},
+                {"id": "s1", "node_type": "Session", "sessionId": "s1"},
+                {
+                    "id": "mc",
+                    "node_type": "MASCall",
+                    "callId": "mc",
+                    "startTime": 0.0,
+                    "endTime": 2.0,
+                },
                 {
                     "id": "call-1",
                     "callId": "call-1",
@@ -563,26 +318,19 @@ class TestRunValidateKgStructuralChecks:
                     "startTime": 0.0,
                     "endTime": 1.0,
                 },
-                {
-                    "id": "st-in",
-                    "node_type": "State",
-                    "stateNodeId": "st-in",
-                    "contentHash": "h1",
-                    "semanticType": "initial",
-                },
+                {"id": "st-in", "node_type": "State", "stateNodeId": "st-in", "contentHash": "h1"},
                 {
                     "id": "st-out",
                     "node_type": "State",
                     "stateNodeId": "st-out",
                     "contentHash": "h2",
-                    "semanticType": "final",
                 },
             ],
             "edges": [
-                {"edge_type": "contains", "from_id": "run-1", "to_id": "s1"},
-                {"edge_type": "hasCall", "from_id": "run-1", "to_id": "call-1"},
-                # hasInitialState/hasFinalState on the ExecutionElement only --
-                # Session itself has neither.
+                {"edge_type": "hasMASCall", "from_id": "s1", "to_id": "mc"},
+                {"edge_type": "hasAgentCall", "from_id": "mc", "to_id": "call-1"},
+                {"edge_type": "belongsToMASCall", "from_id": "call-1", "to_id": "mc"},
+                # The boundary States sit on the AgentCall only; the Session has neither.
                 {"edge_type": "hasInitialState", "from_id": "call-1", "to_id": "st-in"},
                 {"edge_type": "hasFinalState", "from_id": "call-1", "to_id": "st-out"},
             ],
@@ -592,23 +340,11 @@ class TestRunValidateKgStructuralChecks:
 
         with pytest.raises(KGValidationError) as excinfo:
             run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
-        result = excinfo.value.report
+        details = [r["detail"] for r in excinfo.value.report["results"] if r["status"] == "error"]
+        assert any("Session must have exactly one mas:hasInitialState" in d for d in details)
+        assert any("Session must have exactly one mas:hasFinalState" in d for d in details)
 
-        session_state_errors = [
-            row
-            for row in result["results"]
-            if row["status"] == "error"
-            and (
-                "Session must have exactly one mas:hasInitialState" in row["detail"]
-                or "Session must have exactly one mas:hasFinalState" in row["detail"]
-            )
-        ]
-        assert session_state_errors, (
-            "Session-level hasInitialState/hasFinalState must be required "
-            "independently of whether an ExecutionElement child has its own"
-        )
-
-    @_SCOPE_SHACL_GAP
+    @pytest.mark.scope_next
     def test_shacl_rejects_state_to_state_leadsto(self, tmp_path):
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
@@ -645,97 +381,31 @@ class TestRunValidateKgStructuralChecks:
         result = excinfo.value.report
 
         assert result["error_count"] >= 1
+        # SCOPE reads the hop under RDFS inference (the domain of mas:leadsTo types the
+        # subject a Transition), so a State that leads somewhere is both: the disjointness
+        # shape reports it. Without inference, LeadsToSubjectShape reports the same mistake
+        # as "mas:leadsTo subjects must be mas:Transition".
         assert any(
-            "mas:leadsTo subjects must be mas:Transition" in row["detail"]
+            row["status"] == "error"
+            and "cannot be both a mas:State and a mas:Transition" in row["detail"]
             for row in result["results"]
-        )  # noqa: E501
+        )
 
-    @_SCOPE_SHACL_GAP
-    def test_shacl_processing_gate_rejects_agentcall_with_llm_but_no_processing(self, tmp_path):
-        from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
-
-        doc = {
-            "nodes": [
-                {"id": "run-1", "node_type": "Run", "runId": "run-1"},
-                {
-                    "id": "agent-1",
-                    "node_type": "AgentCall",
-                    "callId": "agent-1",
-                    "agentName": "planner",
-                    "inputContent": "in",
-                    "outputContent": "out",
-                },  # noqa: E501
-                {
-                    "id": "llm-1",
-                    "node_type": "LLMCall",
-                    "callId": "llm-1",
-                    "llmName": "planner",
-                    "prompt": "p",
-                    "completion": "c",
-                },  # noqa: E501
-                {
-                    "id": "st-a",
-                    "node_type": "State",
-                    "stateNodeId": "st-a",
-                    "contentHash": "h1",
-                    "semanticType": "initial",
-                },  # noqa: E501
-                {
-                    "id": "st-b",
-                    "node_type": "State",
-                    "stateNodeId": "st-b",
-                    "contentHash": "h2",
-                    "semanticType": "final",
-                },  # noqa: E501
-                {
-                    "id": "st-c",
-                    "node_type": "State",
-                    "stateNodeId": "st-c",
-                    "contentHash": "h3",
-                    "semanticType": "initial",
-                },  # noqa: E501
-                {
-                    "id": "st-d",
-                    "node_type": "State",
-                    "stateNodeId": "st-d",
-                    "contentHash": "h4",
-                    "semanticType": "final",
-                },  # noqa: E501
-            ],
-            "edges": [
-                {"edge_type": "hasCall", "from_id": "run-1", "to_id": "agent-1"},
-                {"edge_type": "contains", "from_id": "agent-1", "to_id": "llm-1"},
-                {"edge_type": "hasInitialState", "from_id": "agent-1", "to_id": "st-a"},
-                {"edge_type": "hasFinalState", "from_id": "agent-1", "to_id": "st-b"},
-                {"edge_type": "hasInitialState", "from_id": "llm-1", "to_id": "st-c"},
-                {"edge_type": "hasFinalState", "from_id": "llm-1", "to_id": "st-d"},
-            ],
-        }
-        p = tmp_path / "kg.jsonld"
-        p.write_text(json.dumps(doc))
-
-        with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
-        result = excinfo.value.report
-
-        assert result["error_count"] >= 1
-        assert any(
-            "must also contain a ProcessingCall" in row["detail"] for row in result["results"]
-        )  # noqa: E501
-
-    @_SCOPE_SHACL_GAP
-    def test_shacl_temporal_enclosure_rejects_non_enclosing_parent(self, tmp_path):
+    @pytest.mark.scope_next
+    def test_shacl_temporal_enclosure_warns_on_non_enclosing_parent(self, tmp_path):
+        """A parent's interval enclosing its child's is a Warning (clock skew between hosts is
+        a measurement artefact), not a Violation."""
         from mas.library.kg.steps.validate_kg import KGValidationError, run_validate_kg
 
         doc = {
             "nodes": [
                 {
-                    "id": "run-1",
-                    "node_type": "Run",
-                    "runId": "run-1",
+                    "id": "mc",
+                    "node_type": "MASCall",
+                    "callId": "mc",
                     "startTime": 2.0,
                     "endTime": 3.0,
-                },  # noqa: E501
+                },
                 {
                     "id": "child-1",
                     "node_type": "AgentCall",
@@ -743,21 +413,27 @@ class TestRunValidateKgStructuralChecks:
                     "agentName": "planner",
                     "startTime": 1.0,
                     "endTime": 4.0,
-                },  # noqa: E501
+                },
             ],
             "edges": [
-                {"edge_type": "contains", "from_id": "run-1", "to_id": "child-1"},
+                {"edge_type": "hasAgentCall", "from_id": "mc", "to_id": "child-1"},
             ],
         }
         p = tmp_path / "kg.jsonld"
         p.write_text(json.dumps(doc))
 
-        with pytest.raises(KGValidationError) as excinfo:
-            run_validate_kg(p, checks=["shacl"], ontology_path=_scope_ontology_path())
-        result = excinfo.value.report
-
-        assert result["error_count"] >= 1
-        assert any("timestamps must enclose" in row["detail"] for row in result["results"])
+        try:
+            result = run_validate_kg(
+                p,
+                checks=["shacl"],
+                ontology_path=_scope_ontology_path(),
+                warning_verbosity="full",
+            )
+        except KGValidationError as exc:  # the incomplete nodes also raise errors
+            result = exc.report
+        enclosure = [r for r in result["results"] if "timestamps must enclose" in r["detail"]]
+        assert enclosure
+        assert {r["status"] for r in enclosure} == {"warning"}
 
 
 class TestRunValidateKgResultNormalization:
