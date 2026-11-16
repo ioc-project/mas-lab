@@ -401,6 +401,40 @@ OSS has no `WorkflowContract.register_impl()`. Topology and workflow are declara
 
 ---
 
+### What each agent receives
+
+The MAS manifest is shorthand. `mas-ctl` compiles the next hops of each agent into its own spec, and the runtime reads only that:
+
+```yaml
+spec:
+  communication:          # how this agent reaches others: its next hops
+    peers:
+      - id: billing       # declared; the running spec may mark it `enabled: false`
+      - id: outage
+```
+
+An agent started alone sees only these next hops. A declared peer can be unavailable: an operator or the circuit
+breaker takes it out of the running spec (`disable_peer`), the model is no longer offered `delegate_to_<id>`,
+and governance blocks a call to it as *unavailable*. A peer that is not declared is blocked as *undeclared*.
+
+An agent does not need the MAS manifest or the compile step to run. Write `spec.communication.peers` in its own manifest and run it alone (`chat`, `tui`, `serve`). The spec names the peers and nothing about how to reach them: no protocol, no url. The [Flavour](flavour.md) maps each peer to infra rows with `bind.agents.<peer>` (a chain, or an endpoint row with a url), and the runtime links the agent to them. A declared peer the Flavour binds nothing for is reported in a warning and is not offered to the model.
+
+```yaml
+# agent: triage
+spec:
+  communication:
+    peers: [billing, outage]
+---
+# flavour
+spec:
+  bind:
+    agents:
+      billing: {agent_comm: [desk-node], usage: connect}
+      outage: {agent_comm: [outage-server], usage: connect}
+```
+
+Who receives the user message (`workflow.entry`) and channels stay in the MAS manifest.
+
 ## Standalone workflow manifest (`kind: Workflow`)
 
 Apps embed the workflow under `MAS.spec.workflow`. The standalone `kind: Workflow` manifest (`apiVersion: workflow/v1`) describes a workflow as a separate document with explicit routing edges.

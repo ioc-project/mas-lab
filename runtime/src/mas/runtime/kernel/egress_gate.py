@@ -216,6 +216,7 @@ def authorize_scheduled_egress(
         tool_name=q.pending_tool_name,
         tool_arguments=q.pending_tool_args,
         offered_tools=q.offered_tools,
+        running_spec=q.running_spec,
     )
 
     if decision == GovDecision.HITL:

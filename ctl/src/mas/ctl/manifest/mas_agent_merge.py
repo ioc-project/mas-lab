@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from mas.ctl.infra.identities import workflow_peers
 from mas.ctl.overlay.merge import (
     _ops_dict,
     _plugin_entry_key,
@@ -273,22 +274,39 @@ def _peer_manifests_for_ids(
     return out
 
 
+def compile_agent_spec(agent_manifest: dict[str, Any], workflow: dict[str, Any], *, agent_id: str = "") -> None:
+    """Write this agent's own next hops into its spec, in place.
+
+    The MAS manifest is shorthand. The runtime reads the agent's spec: ``spec.communication.peers`` lists the
+    next hops it may reach (each ``{id}``, which the running spec can mark unavailable). A spec that already
+    declares ``communication.peers`` keeps them.
+    """
+    spec = agent_manifest.setdefault("spec", {})
+    self_id = agent_id.strip() or str((agent_manifest.get("metadata") or {}).get("name") or "").strip()
+    if not self_id:
+        return  # no identity, no next hops to compile: the agent keeps the shorthand it was given
+    peers = [{"id": peer} for peer in workflow_peers({"spec": {"workflow": workflow}}, self_id)]
+    communication = spec.setdefault("communication", {})
+    if isinstance(communication, dict) and "peers" not in communication:
+        communication["peers"] = peers
+
+
 def enrich_entry_agent_for_delegation(
     agent_manifest: dict[str, Any],
     mas_config: dict[str, Any],
     *,
     manifest_dir: Path | None = None,
     mas_base_dir: Path | None = None,
+    agent_id: str = "",
 ) -> dict[str, Any]:
-    """Attach MAS ``workflow`` to the entry agent; resolve tool refs and peer descriptions."""
+    """Compile the agent's own next hops from the MAS ``workflow``; resolve tool refs and peer descriptions."""
     out = copy.deepcopy(agent_manifest)
     mas_spec = mas_config.get("spec", mas_config) if isinstance(mas_config, dict) else {}
     wf = mas_spec.get("workflow")
     if isinstance(wf, dict):
-        spec_out = out.setdefault("spec", {})
-        if spec_out.get("workflow") and spec_out.get("workflow") != wf:
-            logger.warning("entry agent spec.workflow replaced by MAS workflow (MAS topology wins)")
-        spec_out["workflow"] = copy.deepcopy(wf)
+        # the agent receives its own next hops; the MAS workflow itself stays in the MAS manifest
+        out.setdefault("spec", {}).pop("workflow", None)
+        compile_agent_spec(out, wf, agent_id=agent_id)
     if manifest_dir is not None:
         resolve_manifest_tool_refs(out, manifest_dir, inplace=True)
     return out

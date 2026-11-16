@@ -115,6 +115,36 @@ properties:
             - $ref: "./fragments/llm-model-entry.schema.yaml"
             - required: [model]
 
+      communication:
+        type: object
+        additionalProperties: false
+        description: >
+          How this agent reaches others. ``peers`` lists the next hops it may reach, each an id or
+          ``{id, enabled, disabled_by}``. mas-ctl writes it from the MAS workflow; an agent that declares it is
+          not read from the workflow again, so it can run alone. The running spec may mark a peer
+          ``enabled: false``: declared but unavailable.
+        x-merge:
+          strategy: replace
+        properties:
+          peers:
+            type: array
+            default: []
+            items:
+              oneOf:
+                - type: string
+                  minLength: 1
+                - type: object
+                  required: [id]
+                  additionalProperties: false
+                  properties:
+                    id:
+                      type: string
+                      minLength: 1
+                    enabled:
+                      type: boolean
+                    disabled_by:
+                      type: string
+
       design_pattern:
         description: >
           Reasoning strategy. String shorthand is the plugin name

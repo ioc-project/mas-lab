@@ -207,10 +207,7 @@ TOWN = ["classifier", "billing", "outage"]
 def _spec(**params: object) -> dict:
     return {
         "design_pattern": {"type": "state_machine", "params": params},
-        "workflow": {
-            "entry": "desk",
-            "nodes": [{"id": "desk", "delegates_to": TOWN}, *({"id": p} for p in TOWN)],
-        },
+        "communication": {"peers": TOWN},
     }
 
 

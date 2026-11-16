@@ -27,7 +27,7 @@ from mas.library.standard.lib.stack.handle import RunTurnFn as RunTurnFn
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute, build_agent_comm_routes
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
-from mas.runtime.boundary.delegation.policy import delegation_targets
+from mas.runtime.boundary.delegation.policy import communication_peers, delegation_targets
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +67,13 @@ def open_session_comm(
     run_turn: RunTurnFn,
     local_ids: list[str],
     handles: ChainHandles,
+    peers: dict[str, set[str]] | None = None,
 ) -> _SessionComm:
     """The links every entry point (run-mas, chat, tui, benchmark runs) gives its local agents.
 
     The chains opened for them go into ``handles``; the caller closes it when the session ends.
+    ``peers`` names each agent's next hops when there is no MAS to read them from (an agent run alone
+    reads them from its own spec).
     """
     local = registry.create("agent_comm", binding=None, run_turn=run_turn)
     if not has_chain(resolved):
@@ -82,30 +85,94 @@ def open_session_comm(
         run_turn=run_turn,
         local_ids=local_ids,
         handles=handles,
-        peers=peers_of(mas_config, agent_ids),
+        peers=peers if peers is not None else peers_of(mas_config, agent_ids),
     )
     return _SessionComm(local, handlers, routes)
 
 
+def direct_peer_routes(registry: Any, resolved: ResolvedInfra, names: list[str]) -> dict[str, AgentCommRoute]:
+    """The route to each of ``names`` that an infra Application row reaches directly (a url), by name.
+
+    A name with no used Application row is left out: it rides a Flavour chain or the in-process link.
+    """
+    routes: dict[str, AgentCommRoute] = {}
+    for name in names:
+        binding = resolved.applications.get(name)
+        if not isinstance(binding, dict) or not application_endpoint_is_used(binding):
+            continue
+        kind = str(binding.get("protocol") or binding.get("kind") or "").strip()
+        params = {key: binding[key] for key in ("url", "headers", "timeout") if key in binding}
+        if "url" not in params:
+            raise ValueError(f"infra Application endpoint for agent {name!r} requires url")
+        handler = registry.create("agent_comm", binding={"type": kind, "params": params})
+        routes[name] = AgentCommRoute(name, kind, handler)
+    return routes
+
+
+def standalone_peer_ids(manifest: dict[str, Any] | None, agent_id: str) -> list[str]:
+    """The next hops an agent run alone declares in its own ``spec.communication.peers``."""
+    return [p["id"] for p in communication_peers(manifest) or [] if p["id"] != agent_id]
+
+
 def open_single_agent_chains(
-    instance: Any, agent_id: str, resolved: ResolvedInfra | None, *, display: Any = None, verbose: int = 0
+    instance: Any,
+    agent_id: str,
+    resolved: ResolvedInfra | None,
+    *,
+    display: Any = None,
+    verbose: int = 0,
+    manifest: dict[str, Any] | None = None,
+    manifest_dir: Path | None = None,
 ) -> ChainHandles:
     """Link a one-agent session on the Flavour's chains, as run-mas links each of its agents.
 
-    The agent delegates to no one, so it joins a chain only when its
-    Application row serves it (``listen``); requests that arrive run a turn on
-    ``instance``. With no chain bound this opens nothing.
+    The agent joins a chain when its Application row serves it (``listen``); requests that arrive run a
+    turn on ``instance``. With ``manifest``, the peers its ``spec.communication.peers`` declares are
+    reached the way the Flavour binds them (a chain, or an Application row with a url), with no MAS
+    manifest involved. With no chain and no peer bound this opens nothing.
     """
     from mas.runtime.registry import get_registry
 
     handles = ChainHandles()
-    if not has_chain(resolved):
+    resolved = resolved or ResolvedInfra()
+    declared = standalone_peer_ids(manifest, agent_id)
+    registry = get_registry()
+    direct = direct_peer_routes(registry, resolved, declared)
+    if not has_chain(resolved) and not direct:
         return handles
     run_turn = make_workflow_send(
         SimpleNamespace(instances={agent_id: instance}, bus=None), display=display, verbose=verbose
     )
     try:
-        open_session_comm(get_registry(), resolved, None, run_turn=run_turn, local_ids=[agent_id], handles=handles)
+        comms = open_session_comm(
+            registry,
+            resolved,
+            None,
+            run_turn=run_turn,
+            local_ids=[agent_id],
+            handles=handles,
+            peers={agent_id: set(declared)} if declared else {},
+        )
+        routes = {**direct, **(comms.chain_routes.get(agent_id) or {})}
+        reachable = [peer for peer in declared if peer in routes]
+        for peer in declared:
+            if peer not in routes:
+                logger.warning(
+                    "agent %r declares peer %r, but the Flavour binds no chain or Application row for it",
+                    agent_id,
+                    peer,
+                )
+        if reachable:
+            engine = getattr(getattr(instance, "driver", None), "engine", None)
+            wire_entry_engine_delegation(
+                engine,
+                manifest or {},
+                manifest_dir or Path.cwd(),
+                comm=comms.comm_for(agent_id),
+                entry_agent_id=agent_id,
+                routes=routes,
+                peers=reachable,
+            )
     except Exception:
         handles.close()
         raise
@@ -264,6 +331,7 @@ def prepare_delegation_entry_session(
         compose.mas_config,
         manifest_dir=entry_manifest_dir,
         mas_base_dir=materialized.mas_base_dir,
+        agent_id=entry_id,
     )
     from mas.ctl.executor.subagent_spawner import ledger_from_engine
     from mas.runtime.engine.tools import spawn_subagent_params
@@ -398,22 +466,15 @@ def wire_peer_delegation(
     resolved = compose.resolved_infra or ResolvedInfra()
     local_ids = list(materialized.materialized.instances)
     comms = _session_comm(materialized, registry, run_turn=run_turn, local_ids=local_ids)
-    peer_routes: dict[str, AgentCommRoute] = {}
+    peer_names = []
     for peer in agency_agents:
         if not isinstance(peer, dict):
             continue
         name = str(peer.get("name") or peer.get("id") or "").strip()
         if not name:
             raise ValueError("spec.agency.agents entries require id")
-        binding = resolved.applications.get(name)
-        if not isinstance(binding, dict) or not application_endpoint_is_used(binding):
-            continue
-        kind = str(binding.get("protocol") or binding.get("kind") or "").strip()
-        params = {key: binding[key] for key in ("url", "headers", "timeout") if key in binding}
-        if "url" not in params:
-            raise ValueError(f"infra Application endpoint for agent {name!r} requires url")
-        handler = registry.create("agent_comm", binding={"type": kind, "params": params})
-        peer_routes[name] = AgentCommRoute(name, kind, handler)
+        peer_names.append(name)
+    peer_routes = direct_peer_routes(registry, resolved, peer_names)
 
     chained = {name for routes in comms.chain_routes.values() for name in routes}
     delegated_names = {
@@ -479,6 +540,7 @@ def wire_peer_delegation(
             compose.mas_config,
             manifest_dir=manifest_dir,
             mas_base_dir=materialized.mas_base_dir,
+            agent_id=agent_id,
         )
         from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
 

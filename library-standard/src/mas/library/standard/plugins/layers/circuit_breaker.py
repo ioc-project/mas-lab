@@ -40,6 +40,7 @@ from mas.runtime.reliability.log import LOGGER, extra
 LAYER = "circuit_breaker"
 _BY = LAYER
 _TOOL = "tool:"
+_PEER = "peer:"
 _FAILURE_CLASSES = {item.value: item for item in FailureClass}
 _KEYS = frozenset({"failure_threshold", "reset_timeout_s", "on", "enabled", "plugin"})
 
@@ -272,7 +273,10 @@ class CircuitBreakerLayer(LayerLifecycle):
         return self.policy.is_open((port or self._memory).read(LAYER, target), self._clock())
 
     def _withdraw_tool(self, port: RunningSpecPort, target: str) -> None:
-        """A tool that can be probed leaves the running spec while its circuit is open."""
+        """A tool that can be probed, or a declared peer, leaves the running spec while its circuit is open."""
+        if target.startswith(_PEER):
+            port.disable_peer(target[len(_PEER) :], by=_BY, reason=f"{LAYER} opened {target}")
+            return
         if not target.startswith(_TOOL):
             return
         name = target[len(_TOOL) :]
@@ -280,7 +284,9 @@ class CircuitBreakerLayer(LayerLifecycle):
             port.disable_tool(name, by=_BY, reason=f"{LAYER} opened {target}")
 
     def _restore_tool(self, port: RunningSpecPort, target: str) -> None:
-        if target.startswith(_TOOL):
+        if target.startswith(_PEER):
+            port.enable_peer(target[len(_PEER) :], by=_BY, reason=f"{LAYER} closed {target}")
+        elif target.startswith(_TOOL):
             port.enable_tool(target[len(_TOOL) :], by=_BY, reason=f"{LAYER} closed {target}")
 
     async def atick(self) -> None:
@@ -289,6 +295,11 @@ class CircuitBreakerLayer(LayerLifecycle):
         if not self.policy.enabled or "tool" not in self.call_kinds:
             return
         port = self._port()
+        for target, state in port.targets(LAYER).items():
+            if target.startswith(_PEER) and self.policy.probe_due(state, self._clock()):
+                # a peer has no probe: after the timeout it is offered again and the next call decides
+                self._step(port, target, lambda s, t=target: self.policy.admit(s, t, self._clock()), why="half-open")
+                port.enable_peer(target[len(_PEER) :], by=_BY, reason=f"{LAYER} half-open {target}")
         prober = tool_prober_for(self.inner)
         if prober is None:
             return

@@ -182,6 +182,7 @@ def tui_cmd(
             resolved_infra,
             flavour_spec,
             agent_id=agent_id,
+            manifest=agent_data,
         )
         obs_cfg = resolve_observability_config(
             events=events,
@@ -228,7 +229,13 @@ def tui_cmd(
         from mas.ctl.session.exposure import close_exposures, start_hosted_exposures
 
         served_id = require_agent_id_from_manifest(agent_data)
-        with single_agent_chains(instance, served_id, resolved_infra) as chains:
+        with single_agent_chains(
+            instance,
+            served_id,
+            resolved_infra,
+            manifest=agent_data,
+            manifest_dir=Path(session.manifest_dir) if session.manifest_dir else None,
+        ) as chains:
             controller.turn_guard = chains.turn_lock(served_id)  # a request over the chain waits for your turn
             agent_name = str((agent_data or {}).get("metadata", {}).get("name") or "")
             hosted = {agent_name: instance} if agent_name and agent_data else {}

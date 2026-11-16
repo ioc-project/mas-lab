@@ -73,6 +73,7 @@ Extension properties (`x-*`) are allowed and ignored by the runtime.
 | `context` | `object` | no | — | Named chunks injected into the system prompt. You choose the keys (`role`, `intent`, ...). See [`ContextChunk`](#contextchunk). |
 | `params` | `object` | no | `{}` | Free-form string key/value params forwarded to infra middleware. The kernel does not consume them. |
 | `models` | `ModelEntry[]` | no | `[]` | Preferred models for this agent. See [`ModelEntry`](#modelentry). |
+| `communication` | object | no | — | Next hops: `peers` is a list of ids or `{id, enabled}`. mas-ctl writes it from the MAS workflow, or you write it for an agent run alone; the Flavour binds each peer to infra. See [Delegation](#delegation). |
 | `design_pattern` | object \| null | no | `react` | Reasoning strategy. See [`DesignPattern`](#designpattern). |
 | `context_manager` | object | no | `summarising` | Keeps history inside the context window (the model's maximum input size). See [`ContextManager`](#contextmanager). |
 | `assembler` | string \| object \| null | no | `assembler` | Builds the LLM `messages[]` from context. |
@@ -860,6 +861,8 @@ Delegation means one agent hands a task to a peer through a tool call. In a MAS,
 - Each tool takes a `task` and an optional `context_id`.
 - The peer's `spec.description` is the tool description the delegating model sees. Write it from the delegator's point of view.
 - `spec.working_memory` decides whether the peer remembers earlier delegations.
+
+A peer is declared in `spec.communication.peers`, which mas-ctl compiles from the MAS workflow ([what each agent receives](mas.md#what-each-agent-receives)). The running spec can mark a declared peer unavailable (`enabled: false`); the model is then not offered its tool and governance blocks a call to it as *unavailable*. A peer that is not declared is blocked as *undeclared*.
 
 Topology and workflow modes: [mas.md](mas.md#workflow).
 

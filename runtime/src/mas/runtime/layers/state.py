@@ -52,6 +52,14 @@ class RunningSpecPort(Protocol):
         """Put back a tool *by* disabled. ``False`` when it is not listed or someone else disabled it."""
         ...
 
+    def disable_peer(self, name: str, *, by: str, reason: str) -> bool:
+        """Take peer *name* out of the peers the agent offers. ``False`` when the spec does not declare it."""
+        ...
+
+    def enable_peer(self, name: str, *, by: str, reason: str) -> bool:
+        """Put back a peer *by* disabled. ``False`` when it is not declared or someone else disabled it."""
+        ...
+
     def tool_probe(self, name: str) -> dict[str, Any] | None:
         """The arguments of the probe tool *name* declares in the spec, or ``None`` when it declares none."""
         ...
@@ -86,6 +94,12 @@ class MemorySpecPort:
         return False
 
     def enable_tool(self, name: str, *, by: str, reason: str) -> bool:
+        return False
+
+    def disable_peer(self, name: str, *, by: str, reason: str) -> bool:
+        return False
+
+    def enable_peer(self, name: str, *, by: str, reason: str) -> bool:
         return False
 
     def tool_probe(self, name: str) -> dict[str, Any] | None:
@@ -168,6 +182,20 @@ class SessionSpecPort:
         try:
             self._control.enable_tool(self._session_id, name=name, reason=reason, by=by)
         except ValueError:  # not listed, or disabled by someone else (SpecConflict is a ValueError)
+            return False
+        return True
+
+    def disable_peer(self, name: str, *, by: str, reason: str) -> bool:
+        try:
+            self._control.disable_peer(self._session_id, name=name, reason=reason, by=by)
+        except ValueError:  # the spec does not declare this peer
+            return False
+        return True
+
+    def enable_peer(self, name: str, *, by: str, reason: str) -> bool:
+        try:
+            self._control.enable_peer(self._session_id, name=name, reason=reason, by=by)
+        except ValueError:  # not declared, or disabled by someone else
             return False
         return True
 

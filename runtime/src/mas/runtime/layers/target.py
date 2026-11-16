@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from mas.runtime.boundary.delegation.policy import parse_delegate_tool_name
 from mas.runtime.engine.call_kinds import op_kind
 from mas.runtime.engine.infra_pipeline import call_api_base, call_ctx, call_model
 from mas.runtime.engine.tool_dispatch import IN_FLIGHT_TOOL, tool_is_idempotent
@@ -23,14 +24,19 @@ def tool_in_flight_name() -> str:
 
 
 def call_target(inner: Any, io: InvokeEngineIo) -> str | None:
-    """``tool:<name>`` or ``llm:<api base>``. ``None`` for a tool call whose tool is not known.
+    """``tool:<name>``, ``peer:<id>`` (a ``delegate_to_<id>`` call) or ``llm:<api base>``.
+
+    ``None`` for a tool call whose tool is not known.
 
     A layer keeps state per target; with no name there is no target, so such a call is passed through
     rather than pooled with every other nameless one.
     """
     if op_kind(io.op) == "tool":
         name = tool_in_flight_name()
-        return f"tool:{name}" if name else None
+        if not name:
+            return None
+        peer = parse_delegate_tool_name(name)
+        return f"peer:{peer}" if peer else f"tool:{name}"
     return f"llm:{call_api_base(inner) or call_model(inner) or 'llm'}"
 
 

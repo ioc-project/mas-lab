@@ -229,7 +229,7 @@ def test_a_pattern_sending_to_a_declared_peer_is_not_blocked_by_spec_tools() -> 
     from mas.runtime.kernel.config import KernelConfig
     from mas.runtime.kernel.coupling import GovDecision
 
-    spec = {"tools": ["calc"], "workflow": {"nodes": [{"id": "a", "delegates_to": ["b"]}, {"id": "b"}]}}
+    spec = {"tools": ["calc"], "communication": {"peers": ["b"]}}
     config = KernelConfig(agent_spec=spec, agent_id="a")
 
     def verdict(tool: str):

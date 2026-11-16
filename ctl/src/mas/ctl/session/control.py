@@ -891,6 +891,45 @@ class SessionControl:
     def enable_tool(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
         return self._spec_tool_delta("enable_tool", session_id, name=name, reason=reason, by=by)
 
+    @staticmethod
+    def _peer_disabled_by(spec: dict[str, Any], name: str) -> str | None:
+        communication = spec.get("communication")
+        for peer in (communication.get("peers") if isinstance(communication, dict) else None) or []:
+            if isinstance(peer, dict) and str(peer.get("id") or "") == name:
+                return str(peer["disabled_by"]) if peer.get("disabled_by") else None
+        return None
+
+    def _spec_peer_delta(self, method: str, session_id: str, *, name: str, reason: str, by: str) -> int:
+        session = self._require(method, session_id)
+        from mas.runtime.session.spec_revision import SpecDelta
+
+        payload = {"name": name, **({"by": by} if by else {})}
+        # a peer is put back only by whoever took it away
+        undo_by = method == "enable_peer" and bool(by)
+        rev = self._revise_spec(
+            session,
+            session_id,
+            SpecDelta(method, payload),
+            reason=reason,
+            observe=(lambda spec: self._peer_disabled_by(spec, name)) if undo_by else None,
+            expected=by if undo_by else None,
+            guarded=undo_by,
+        )
+        self._trace(
+            method,
+            session_id,
+            kind="spec_revised",
+            reason=reason,
+            payload={"revision": rev.revision, "hash": rev.content_hash, "peer": name},
+        )
+        return rev.revision
+
+    def disable_peer(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        return self._spec_peer_delta("disable_peer", session_id, name=name, reason=reason, by=by)
+
+    def enable_peer(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        return self._spec_peer_delta("enable_peer", session_id, name=name, reason=reason, by=by)
+
     def layer_state(self, session_id: str, *, layer: str) -> dict:
         self._require("layer_state", session_id)
         return self._manager.spec_log.layer_state(session_id, layer)

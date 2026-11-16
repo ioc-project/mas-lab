@@ -1684,3 +1684,70 @@ async def test_a_waiter_that_is_cancelled_does_not_leave_the_turn_guard_held() -
     assert not guard._lock.locked()
     async with guard.ahold():  # and the next turn gets in
         pass
+
+
+# --- an agent run alone reaches the peers its own spec declares -------------------------------------------------
+
+
+def _alone(agent_id: str, peers: list, resolved: ResolvedInfra, tmp_path: Path) -> list[dict]:
+    """``open_single_agent_chains`` for one agent with no MAS: the delegation wiring it asks for."""
+    from mas.ctl.executor.mas_session import open_single_agent_chains
+
+    manifest = {"metadata": {"name": agent_id}, "spec": {"communication": {"peers": peers}}}
+    wired: list[dict] = []
+    instance = SimpleNamespace(driver=SimpleNamespace(engine=MagicMock(inner=None)))
+    with patch("mas.ctl.executor.mas_session.make_workflow_send", return_value=lambda *a, **k: "ok"):
+        with patch(
+            "mas.ctl.executor.mas_session.wire_entry_engine_delegation", side_effect=lambda e, *a, **k: wired.append(k)
+        ):
+            handles = open_single_agent_chains(instance, agent_id, resolved, manifest=manifest, manifest_dir=tmp_path)
+    handles.close()
+    return wired
+
+
+def test_a_peer_the_flavour_binds_to_a_chain_is_reached_with_no_mas(tmp_path: Path, fake_node) -> None:
+    del fake_node
+    resolved = _bind(
+        {"agent_comm": ["desk-node"], "usage": "connect"},
+        agents=["triage", "billing"],
+    )
+    (wired,) = _alone("triage", ["billing"], resolved, tmp_path)
+    assert wired["entry_agent_id"] == "triage" and wired["peers"] == ["billing"]
+    assert wired["routes"]["billing"].handler is wired["comm"]
+
+
+def test_a_peer_the_flavour_binds_to_an_endpoint_row_is_reached_with_no_mas(tmp_path: Path) -> None:
+    resolved = _bind(
+        {"agents": {"outage": {"agent_comm": ["outage-server"], "usage": "connect"}}},
+        agents=["triage", "outage"],
+    )
+    (wired,) = _alone("triage", [{"id": "outage"}], resolved, tmp_path)
+    assert wired["peers"] == ["outage"]
+    assert wired["routes"]["outage"].kind == "a2a"
+
+
+def test_a_declared_peer_the_flavour_does_not_bind_is_warned_and_left_out(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    resolved = _bind(
+        {"agents": {"outage": {"agent_comm": ["outage-server"], "usage": "connect"}}},
+        agents=["triage", "outage", "billing"],
+    )
+    (wired,) = _alone("triage", ["outage", "billing"], resolved, tmp_path)
+    assert wired["peers"] == ["outage"]
+    assert "declares peer 'billing'" in caplog.text
+
+
+def test_an_agent_with_no_peer_and_no_chain_opens_nothing(tmp_path: Path) -> None:
+    assert _alone("triage", [], ResolvedInfra(), tmp_path) == []
+
+
+def test_the_flavour_can_bind_a_peer_that_only_the_agent_spec_names() -> None:
+    from mas.ctl.cli.chains import bind_or_exit
+
+    manifest = {"metadata": {"name": "triage"}, "spec": {"communication": {"peers": ["outage", "triage"]}}}
+    flavour = {"bind": {"agents": {"outage": {"agent_comm": ["outage-server"], "usage": "connect"}}}}
+    resolved = bind_or_exit(ResolvedInfra(applications=_rows()), flavour, agent_id="triage", manifest=manifest)
+    assert resolved.applications["outage"]["protocol"] == "a2a"
+    with pytest.raises(SystemExit):  # the same Flavour names an agent this session does not have
+        bind_or_exit(ResolvedInfra(applications=_rows()), flavour, agent_id="triage", manifest=None)

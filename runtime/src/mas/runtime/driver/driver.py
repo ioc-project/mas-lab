@@ -31,6 +31,7 @@ from mas.runtime.engine.ainvoke import ainvoke_call
 from mas.runtime.engine.exchange_preview import ExchangeSnapshot, tool_def_names
 from mas.runtime.engine.llm_request import sampling_temperature
 from mas.runtime.engine.simulated import SimulatedEngine
+from mas.runtime.engine.tools import current_spec_for_advertise
 from mas.runtime.kernel.envelope import LlmCallRequest
 from mas.runtime.kernel.inflight import pending_for_validate, register_inflight
 from mas.runtime.kernel.orchestrator import RuntimeKernel
@@ -420,6 +421,7 @@ class KernelDriver(Lifecycle):
 
         while queue and _within_auto_step_budget(auto_steps, self.max_auto_steps):
             ingress = queue.popleft()
+            self.kernel.q.running_spec = current_spec_for_advertise(self.ctx) or None if self.ctx is not None else None
             if not validate_ingress(
                 ingress,
                 last_correlation_id=(self.kernel.run.records[-1].correlation_id if self.kernel.run.records else 0),

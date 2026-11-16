@@ -225,10 +225,7 @@ async def test_peer_preempt_keeps_partials_and_applies_steer() -> None:
 def _machine_config(table: dict) -> KernelConfig:
     spec = {
         "design_pattern": {"type": "state_machine", "params": table},
-        "workflow": {
-            "entry": "desk",
-            "nodes": [{"id": "desk", "delegates_to": ["helper"]}, {"id": "helper"}],
-        },
+        "communication": {"peers": ["helper"]},
     }
     return KernelConfig(agent_spec=spec, agent_id="desk")
 

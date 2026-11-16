@@ -15,7 +15,16 @@ from typing import Any
 from mas.runtime.session.state import ManifestRef
 
 _ALLOWED_DELTAS = frozenset(
-    {"materialize", "disable_tool", "enable_tool", "set_pattern", "overlay_factor", "swap_layer_state"}
+    {
+        "materialize",
+        "disable_tool",
+        "enable_tool",
+        "disable_peer",
+        "enable_peer",
+        "set_pattern",
+        "overlay_factor",
+        "swap_layer_state",
+    }
 )
 
 # Where call layers keep what they learn at run time (a tripped breaker, say), inside the running spec.
@@ -209,6 +218,27 @@ def _apply_delta(spec: dict[str, Any], delta: SpecDelta) -> None:
             tool.pop("disabled_by", None)
             return
         raise ValueError(f"tool {name!r} is not in the current spec")
+    if delta.kind in {"disable_peer", "enable_peer"}:
+        name = str(delta.payload.get("name") or "")
+        if not name:
+            raise ValueError(f"{delta.kind} requires payload.name")
+        by = str(delta.payload.get("by") or "")
+        communication = spec.get("communication")
+        peers = communication.get("peers") if isinstance(communication, dict) else None
+        for index, peer in enumerate(peers or []):
+            entry = {"id": peer} if isinstance(peer, str) else peer
+            if not isinstance(entry, dict) or str(entry.get("id") or "") != name:
+                continue
+            if delta.kind == "disable_peer":
+                entry["enabled"] = False
+                if by:
+                    entry["disabled_by"] = by
+            else:
+                entry.pop("enabled", None)
+                entry.pop("disabled_by", None)
+            peers[index] = entry
+            return
+        raise ValueError(f"peer {name!r} is not declared in spec.communication.peers")
     if delta.kind == "set_pattern":
         spec["design_pattern"] = delta.payload.get("pattern")
         return

@@ -410,6 +410,7 @@ def chat_cmd(
             resolved_infra,
             flavour_spec,
             agent_id=agent_id,
+            manifest=agent_data,
         )
         obs_cfg = resolve_observability_config(
             events=events,
@@ -552,7 +553,15 @@ def chat_cmd(
         from mas.ctl.session.exposure import close_exposures, start_hosted_exposures
 
         served_id = require_agent_id_from_manifest(agent_data)
-        with single_agent_chains(instance, served_id, resolved_infra, display=display, verbose=verbose) as chains:
+        with single_agent_chains(
+            instance,
+            served_id,
+            resolved_infra,
+            display=display,
+            verbose=verbose,
+            manifest=agent_data,
+            manifest_dir=Path(session.manifest_dir) if session.manifest_dir else None,
+        ) as chains:
             controller.turn_guard = chains.turn_lock(served_id)  # a request over the chain waits for your turn
             hosted = {} if agent_name in {"", "n/a"} or not agent_data else {str(agent_name): instance}
             exposure_handles = start_hosted_exposures(

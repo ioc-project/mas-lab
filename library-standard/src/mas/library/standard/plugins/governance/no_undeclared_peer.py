@@ -1,12 +1,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Block leftover send to a dest that is not this agent's ``delegates_to``."""
+"""Block leftover send to a peer that is not declared (undeclared) or is declared but taken away (unavailable)."""
 
 from __future__ import annotations
 
 from mas.runtime.boundary.delegation.policy import (
     delegation_targets,
     parse_delegate_tool_name,
+    peer_unavailable_observation,
+    unavailable_peers,
 )
 from mas.runtime.boundary.gov.policy import EgressIntentView
 from mas.runtime.engine.tools import tool_entry_name
@@ -83,10 +85,17 @@ class NoUndeclaredPeerPlugin:
                 "this kernel has no agent id, so there is no delegates_to to check",
             )
         if dest in allowed:
+            away = unavailable_peers(intent.running_spec)
+            if dest in away:
+                return (
+                    GovDecision.BLOCK,
+                    PLUGIN_ID,
+                    peer_unavailable_observation(dest, [p for p in allowed if p not in away]),
+                )
             return (
                 GovDecision.ALLOW,
                 PLUGIN_ID,
-                f"peer {dest!r} is in this agent's delegates_to",
+                f"peer {dest!r} is declared and available",
             )
         reason = undeclared_peer_observation(dest, allowed)
         return GovDecision.BLOCK, PLUGIN_ID, reason
