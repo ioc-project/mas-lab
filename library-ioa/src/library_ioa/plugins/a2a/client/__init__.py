@@ -111,9 +111,16 @@ class A2AClient:
         payload.setdefault("status", "completed")
         return payload
 
-    async def aget_agent_card(self) -> dict[str, Any]:
-        """The agent card, fetched once and kept."""
-        return dict((await self._connection()).card_data or await (await self._connection()).fetch_card())
+    async def aget_agent_card(self, *, fresh: bool = False) -> dict[str, Any]:
+        """The agent card, fetched once and kept; ``fresh`` fetches it again (a health check)."""
+        connection = await self._connection()
+        if fresh:
+            return dict(await connection.fetch_card(force=True))
+        return dict(connection.card_data or await connection.fetch_card())
+
+    def reset(self) -> None:
+        """Forget what this loop kept for the remote agent; the next call connects afresh. Call it from the loop."""
+        self._connections.drop()
 
     def close(self) -> None:
         """Close the kept connections. Safe from any thread; does not wait."""
@@ -144,9 +151,9 @@ class _Connection:
         self._clients: dict[bool, Any] = {}
         self._lock = asyncio.Lock()
 
-    async def fetch_card(self) -> dict[str, Any]:
+    async def fetch_card(self, *, force: bool = False) -> dict[str, Any]:
         async with self._lock:
-            if self.card_data is None:
+            if self.card_data is None or force:
                 self.card_data = await self._owner._sdk_get_agent_card(self._http)
             return self.card_data
 

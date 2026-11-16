@@ -399,6 +399,21 @@ plugins:
       control_key: circuit_breaker
       deprecated_types: [circuit_breaker]
   - type: layer
+    name: health_probe
+    urn: mas.layer.health_probe
+    module: mas.library.standard.plugins.layers.health_probe
+    class: HealthProbeLayer
+    description: >
+      Proactive health check: every interval, probe the tools and peers the
+      spec declares probeable and take a failing one out of the running spec
+      until its probe passes again.
+    shortcuts:
+      - health_probe
+    attributes:
+      per: destination
+      call_kinds: [llm, tool]
+      priority: 50
+  - type: layer
     name: retry
     urn: mas.layer.retry
     module: mas.library.standard.plugins.layers.retry

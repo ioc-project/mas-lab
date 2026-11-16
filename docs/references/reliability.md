@@ -37,6 +37,7 @@ Code:
 - Engine helpers: `mas.runtime.reliability` (taxonomy, classify, infra retry).
 - LLM HTTP POST: the `llm_provider` plugin (`mas.library.standard.plugins.llm.http`); retry wraps that call, it is not a loop inside the client.
 - Circuit breaker layer: `mas.library.standard.plugins.layers.circuit_breaker`; its rules, state and probe all live in that one plugin. Its state lives in the running spec (`spec.layer_state`), changed only through the session's control handle and decided by its spec machine (no lock in the plugin); a tool that declares a `probe` is taken out of the spec while its circuit is open and put back when the probe passes.
+- Health probe layer: `mas.library.standard.plugins.layers.health_probe`. The breaker is reactive (it learns a target is down when a call fails); this layer is proactive. Every `interval_s` (default 30), at the next LLM call, it runs the probe each target declares: a tool with `probe: {arguments: {...}}`, or a peer with `probe: true` in `spec.communication.peers` (an A2A link fetches the remote agent card afresh; a link without a probe is skipped). A probe that fails takes the target out of the running spec (`enabled: false`, `disabled_by: health_probe`) and a probe that passes puts back only what this layer took away; a target the breaker or an operator disabled stays as it is. List `health_probe` on the infra pipeline next to `circuit_breaker`.
 - Logger: `mas.runtime.reliability`.
 
 ---

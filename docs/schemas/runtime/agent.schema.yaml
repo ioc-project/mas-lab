@@ -144,6 +144,11 @@ properties:
                       type: boolean
                     disabled_by:
                       type: string
+                    probe:
+                      type: boolean
+                      description: >
+                        Check this peer through its link on a schedule (the health_probe layer).
+                        A link without a probe is skipped.
 
       design_pattern:
         description: >

@@ -39,7 +39,7 @@ from mas.runtime.engine.textual_tool_calls import maybe_recover_textual_tool_cal
 from mas.runtime.engine.tool_dispatch import IN_FLIGHT_TOOL, InFlightTool, ToolExecutionError
 from mas.runtime.engine.tools import openai_tools
 from mas.runtime.layers.lifecycle import Lifecycle, acall_tick
-from mas.runtime.layers.probe import ToolProber
+from mas.runtime.layers.probe import PeerProber, ToolProber
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import classify_llm_failure, classify_llm_http_error
 from mas.runtime.schema.egress import InvokeEngineIo
@@ -61,7 +61,7 @@ class TruncatedCompletionError(RuntimeError):
 
 
 @dataclass
-class _InfraDispatchPort(ToolProber):
+class _InfraDispatchPort(ToolProber, PeerProber):
     """Innermost LLM/tool body for infra steps. Listed members only; not a public engine."""
 
     owns_call_identity: ClassVar[bool] = True
@@ -69,6 +69,9 @@ class _InfraDispatchPort(ToolProber):
 
     async def aprobe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
         await self.engine.aprobe_tool(name, arguments)
+
+    async def aprobe_peer(self, name: str) -> bool | None:
+        return await self.engine.aprobe_peer(name)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         return await self.engine._adispatch(io)
@@ -344,6 +347,13 @@ class LiveLlmEngine(Lifecycle):
         await acall_tick(self._tool_stack)
         for wrap in self._tool_destinations.values():
             await acall_tick(wrap)
+
+    async def aprobe_peer(self, name: str) -> bool | None:
+        """Check a peer through the delegation's link. Not a model call: no budget, no layers."""
+        probe = getattr(self.delegation, "aprobe", None)
+        if not callable(probe):
+            return None
+        return await probe(name, ctx=self.ctx)
 
     async def aprobe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
         """Run a tool the running spec took away, to see whether it is back. Not a model call: no budget, no layers."""

@@ -28,6 +28,16 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
         self.endpoint = url
         self._client = A2AClient(url=url, headers=headers, timeout=timeout)
 
+    async def aprobe(self, target_agent_id: str) -> bool:
+        """Fetch the remote agent card afresh: the peer answers, or this raises."""
+        del target_agent_id
+        try:
+            await self._client.aget_agent_card(fresh=True)
+        except Exception as exc:
+            self._client.reset()
+            raise AgentCommError(str(exc)) from exc
+        return True
+
     def stop(self) -> None:
         self._client.close()
 
