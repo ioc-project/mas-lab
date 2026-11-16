@@ -28,6 +28,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from google.protobuf.descriptor import FieldDescriptor
 
+from ..delivery import DeliveryController, DeliveryKind
+
 _DYNAMIC_PROTO_MESSAGES = {
     "google.protobuf.Any",
     "google.protobuf.ListValue",
@@ -47,17 +49,34 @@ _TERMINAL_TASK_STATES = {
 
 
 class _A2ARequestHandler(DefaultRequestHandler):
+    def __init__(self, *args: Any, delivery: DeliveryController | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.delivery = delivery
+
+    async def _release(self, result: Any, kind: DeliveryKind, params: Any, context: Any) -> Any:
+        if self.delivery is None or result is None:
+            return result
+        return await self.delivery.release(result, kind=kind, request=params, context=context)
+
+    async def on_get_task(self, params: Any, context: Any):
+        result = await super().on_get_task(params, context)
+        return await self._release(result, "get_task", params, context)
+
+    async def on_list_tasks(self, params: Any, context: Any):
+        result = await super().on_list_tasks(params, context)
+        for task in result.tasks:
+            task.CopyFrom(await self._release(task, "list_tasks", params, context))
+        return result
+
+    async def on_cancel_task(self, params: Any, context: Any):
+        result = await super().on_cancel_task(params, context)
+        return await self._release(result, "cancel_task", params, context)
+
     def _validate_required_extensions(self, context: Any) -> None:
-        required = {
-            extension.uri
-            for extension in self._agent_card.capabilities.extensions
-            if extension.required
-        }
+        required = {extension.uri for extension in self._agent_card.capabilities.extensions if extension.required}
         missing = required - context.requested_extensions
         if missing:
-            raise ExtensionSupportRequiredError(
-                f"Required extensions were not requested: {', '.join(sorted(missing))}"
-            )
+            raise ExtensionSupportRequiredError(f"Required extensions were not requested: {', '.join(sorted(missing))}")
 
     def _reject_unsupported_part_media(self, message: Any) -> None:
         accepted: set[str] = set()
@@ -78,15 +97,20 @@ class _A2ARequestHandler(DefaultRequestHandler):
     async def on_message_send(self, params: Any, context: Any):
         self._validate_required_extensions(context)
         self._reject_unsupported_part_media(params.message)
-        return await super().on_message_send(params, context)
+        result = await super().on_message_send(params, context)
+        return await self._release(result, "send", params, context)
 
     async def on_message_send_stream(self, params: Any, context: Any):
+        if self.delivery is not None:
+            raise UnsupportedOperationError("Streaming is disabled when a delivery policy is configured")
         self._validate_required_extensions(context)
         self._reject_unsupported_part_media(params.message)
         async for event in super().on_message_send_stream(params, context):
             yield event
 
     async def on_subscribe_to_task(self, params: Any, context: Any):
+        if self.delivery is not None:
+            raise UnsupportedOperationError("Streaming is disabled when a delivery policy is configured")
         try:
             async for event in super().on_subscribe_to_task(params, context):
                 yield event
@@ -94,11 +118,16 @@ class _A2ARequestHandler(DefaultRequestHandler):
             task = await self.task_store.get(params.id, context)
             if task is None or task.status.state not in _TERMINAL_TASK_STATES:
                 raise
-            raise UnsupportedOperationError(
-                "Cannot subscribe to a terminal task"
-            ) from error
+            raise UnsupportedOperationError("Cannot subscribe to a terminal task") from error
 
     async def aclose(self) -> None:
+        try:
+            if self.delivery is not None:
+                await self.delivery.aclose()
+        finally:
+            await self._close_handler()
+
+    async def _close_handler(self) -> None:
         try:
             await super().aclose()
         finally:
@@ -133,11 +162,7 @@ class _ClosingActiveTaskRegistry(ActiveTaskRegistry):
 
 def _remove_task_arg(active_task: ActiveTask) -> Any:
     """a2a-sdk 1.1 takes the task id string; 1.3 takes the task object."""
-    names = [
-        name
-        for name in inspect.signature(ActiveTaskRegistry._remove_task).parameters
-        if name != "self"
-    ]
+    names = [name for name in inspect.signature(ActiveTaskRegistry._remove_task).parameters if name != "self"]
     return active_task if names and names[0] != "task_id" else active_task.task_id
 
 
@@ -164,9 +189,7 @@ def _ignore_unknown_proto_fields(value: Any, descriptor: Any) -> Any:
             cleaned[name] = field_value
         elif is_repeated and isinstance(field_value, list):
             cleaned[name] = [
-                _ignore_unknown_proto_fields(item, message_type)
-                if isinstance(item, dict)
-                else item
+                _ignore_unknown_proto_fields(item, message_type) if isinstance(item, dict) else item
                 for item in field_value
             ]
         elif isinstance(field_value, dict):
@@ -220,9 +243,7 @@ def _coerce_agent_card(card: AgentCard | dict[str, Any]) -> AgentCard:
     if payload.get("agent_url"):
         documentation_url = payload["agent_url"]
     capabilities = _coerce_agent_capabilities(payload.get("capabilities", {}))
-    supported_interfaces = payload.get("supportedInterfaces") or payload.get(
-        "supported_interfaces"
-    )
+    supported_interfaces = payload.get("supportedInterfaces") or payload.get("supported_interfaces")
     if not supported_interfaces and agent_url:
         supported_interfaces = [
             AgentInterface(
@@ -244,14 +265,10 @@ def _coerce_agent_card(card: AgentCard | dict[str, Any]) -> AgentCard:
         capabilities=capabilities,
         supported_interfaces=supported_interfaces or [],
         default_input_modes=list(
-            payload.get("defaultInputModes")
-            or payload.get("default_input_modes")
-            or ["text/plain"]
+            payload.get("defaultInputModes") or payload.get("default_input_modes") or ["text/plain"]
         ),
         default_output_modes=list(
-            payload.get("defaultOutputModes")
-            or payload.get("default_output_modes")
-            or ["text/plain"]
+            payload.get("defaultOutputModes") or payload.get("default_output_modes") or ["text/plain"]
         ),
         skills=list(payload.get("skills") or []),
     )
@@ -264,21 +281,26 @@ def build_app(
     push_config_store: PushNotificationConfigStore | None = None,
     push_sender: PushNotificationSender | None = None,
     extended_agent_card: AgentCard | dict[str, Any] | None = None,
+    delivery: DeliveryController | None = None,
 ) -> FastAPI:
     """Build an SDK-backed A2A FastAPI app with the official JSON-RPC and agent-card routes."""
     card = _coerce_agent_card(agent_card)
+    if delivery is not None:
+        card = AgentCard.FromString(card.SerializeToString())
+        card.capabilities.streaming = False
+        if extended_agent_card is not None:
+            extended_agent_card = _coerce_agent_card(extended_agent_card)
+            extended_agent_card = AgentCard.FromString(extended_agent_card.SerializeToString())
+            extended_agent_card.capabilities.streaming = False
     task_store = InMemoryTaskStore()
     request_handler = _A2ARequestHandler(
+        delivery=delivery,
         agent_executor=executor,
         task_store=task_store,
         agent_card=card,
         push_config_store=push_config_store,
         push_sender=push_sender,
-        extended_agent_card=(
-            _coerce_agent_card(extended_agent_card)
-            if extended_agent_card is not None
-            else None
-        ),
+        extended_agent_card=(_coerce_agent_card(extended_agent_card) if extended_agent_card is not None else None),
     )
     request_handler._active_task_registry = _ClosingActiveTaskRegistry(
         agent_executor=executor,
@@ -295,6 +317,7 @@ def build_app(
 
     app = FastAPI(title=card.name, version=card.version, lifespan=lifespan)
     app.state.a2a_request_handler = request_handler
+    app.state.a2a_delivery = delivery
     app.state.a2a_agent_card = card
     card_etag = f'"{sha256(card.SerializeToString(deterministic=True)).hexdigest()}"'
     card_last_modified = format_datetime(datetime.now(timezone.utc), usegmt=True)
@@ -313,9 +336,7 @@ def build_app(
                         payload = await request.json()
                     except (json.JSONDecodeError, UnicodeDecodeError):
                         payload = {}
-                    return JSONResponse(
-                        build_error_response(payload.get("id"), error)
-                    )
+                    return JSONResponse(build_error_response(payload.get("id"), error))
                 error_payload = build_rest_error_payload(error)
                 return JSONResponse(
                     status_code=int(error_payload["error"]["code"]),
