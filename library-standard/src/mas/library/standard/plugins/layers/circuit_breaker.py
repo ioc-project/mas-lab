@@ -25,6 +25,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from mas.library.standard.lib.retry import as_classified
 from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.infra_pipeline import call_ctx
@@ -34,7 +35,6 @@ from mas.runtime.layers.target import call_target, classifier_for
 from mas.runtime.reliability.classes import CircuitOpenError, FailureClass
 from mas.runtime.reliability.classify import classify_tool_exception
 from mas.runtime.reliability.log import LOGGER, extra
-from mas.runtime.reliability.retry import as_classified
 
 LAYER = "circuit_breaker"
 _BY = LAYER
@@ -193,6 +193,7 @@ class CircuitBreakerLayer(LayerLifecycle):
     per = "destination"
     call_kinds = ("llm", "tool")
     priority = 60
+    observes_failures = True
 
     def __init__(self, inner: Any = None, *, clock: Callable[[], float] = time.time, **params: Any) -> None:
         self.inner = inner

@@ -50,6 +50,13 @@ class ResolvedInfra:
     # agent_usage is what this deployment does with it (connect, listen).
     agent_chains: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     agent_usage: dict[str, list[str]] = field(default_factory=dict)
+    stacks: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    # Flavour bind.llm / bind.tools default steps, and each agent's own when
+    # bind.agents.<id>.llm / .tools names a stack (else the default).
+    llm_stack: list[dict[str, Any]] = field(default_factory=list)
+    tool_stack: list[dict[str, Any]] = field(default_factory=list)
+    agent_llm_pipelines: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    agent_tool_pipelines: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 @dataclass

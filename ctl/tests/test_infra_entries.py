@@ -80,7 +80,7 @@ def test_infra_bundle_entries_loads_llm_proxy_cached(tmp_path: Path, monkeypatch
         if isinstance(step, dict)
     ]
     shared = [step for step in (merged.pipeline or []) if isinstance(step, dict)]
-    assert any(step.get("middleware") == "llm_cache" for step in shared + leaf_steps)
+    assert any(step.get("layer") == "llm_cache" for step in shared + leaf_steps)
     assert merged.proxy.api_base or merged.models.default_llm is not None or merged.name
 
     monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
@@ -98,7 +98,7 @@ kind: InfraMiddleware
 metadata:
   name: llm-cache-write
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   applies_to: [LLM_CALL]
   params:
     allow_read: true
@@ -120,14 +120,14 @@ def test_infra_override_creates_missing_schema_declared_param(tmp_path: Path):
     manifest = tmp_path / "cache.yaml"
     manifest.write_text(
         "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata:\n  name: cache\n"
-        "spec:\n  middleware: llm_cache\n  applies_to: [LLM_CALL]\n"
+        "spec:\n  layer: llm_cache\n  applies_to: [LLM_CALL]\n"
         "  params:\n    allow_read: true\n    raise_on_miss: true\n",
         encoding="utf-8",
     )
     infra = resolve_infra_refs(
         [str(manifest)],
         anchor=tmp_path,
-        overrides=("infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",),
+        overrides=("infra:spec.pipeline[layer=llm_cache].params.allow_write=true",),
     )
 
     params = infra.llm_proxy["pipeline"][0]["params"]
@@ -136,18 +136,36 @@ def test_infra_override_creates_missing_schema_declared_param(tmp_path: Path):
     assert params["raise_on_miss"] is True
 
 
+@pytest.mark.parametrize(
+    "address",
+    [
+        "infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",
+        "infra:spec.pipeline[middleware=llm_cache].params.allow_write=true",
+    ],
+)
+def test_old_step_addresses_still_reach_the_step(tmp_path: Path, address: str):
+    manifest = tmp_path / "cache.yaml"
+    manifest.write_text(
+        "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata:\n  name: cache\n"
+        "spec:\n  layer: llm_cache\n  params:\n    allow_read: true\n",
+        encoding="utf-8",
+    )
+    infra = resolve_infra_refs([str(manifest)], anchor=tmp_path, overrides=(address,))
+    assert infra.llm_proxy["pipeline"][0]["params"]["allow_write"] is True
+
+
 def test_infra_override_updates_cache_params_without_dropping_pipeline(tmp_path: Path):
     manifest = tmp_path / "cache.yaml"
     manifest.write_text(
         "apiVersion: infra/v1\nkind: InfraMiddleware\nmetadata:\n  name: cache\n"
-        "spec:\n  middleware: llm_cache\n  applies_to: [LLM_CALL]\n"
+        "spec:\n  layer: llm_cache\n  applies_to: [LLM_CALL]\n"
         "  params:\n    allow_read: true\n    allow_write: false\n    raise_on_miss: true\n",
         encoding="utf-8",
     )
     infra = resolve_infra_refs(
         [str(manifest)],
         anchor=tmp_path,
-        overrides=("infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",),
+        overrides=("infra:spec.pipeline[layer=llm_cache].params.allow_write=true",),
     )
 
     pipeline = infra.llm_proxy["pipeline"]
@@ -169,8 +187,8 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
         anchor=tmp_path,
         overrides=(
             'infra:spec.proxy.api_base="http://localhost:9100/v1"',
-            "infra:spec.interceptors[middleware=llm_cache].params.allow_write=true",
-            "infra:spec.interceptors[middleware=llm_cache].params.raise_on_miss=false",
+            "infra:spec.pipeline[layer=llm_cache].params.allow_write=true",
+            "infra:spec.pipeline[layer=llm_cache].params.raise_on_miss=false",
             'infra:spec.tool_servers[id=tools].url="http://localhost:9101/mcp"',
             'infra:spec.endpoints["peer"].url="http://localhost:9102/agent"',
             "infra:spec.runtime_engine.cache.write=true",
@@ -179,9 +197,9 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
 
     assert infra.llm_proxy["api_base"] == "http://localhost:9100/v1"
     pipeline = infra.llm_proxy["pipeline"]
-    assert [step["middleware"] for step in pipeline] == ["llm_cache"]
+    assert [step["layer"] for step in pipeline] == ["llm_cache"]
     leaf = next(iter(infra.llm_proxies.values()))
-    assert [step["middleware"] for step in leaf.get("pipeline") or []] == ["fault_inject"]
+    assert [step["layer"] for step in leaf.get("pipeline") or []] == ["fault_inject"]
     cache = LlmCacheMiddleware.wrap(object(), pipeline[0]["params"])
     assert cache.allow_read is True
     assert cache.allow_write is True
@@ -196,8 +214,8 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
 @pytest.mark.parametrize(
     "assignment",
     [
-        'infra:spec.interceptors[middleware=llm_cache].params.allow_write="false"',
-        "infra:spec.interceptors[middleware=llm_cache].params.allow_write=1",
+        'infra:spec.pipeline[layer=llm_cache].params.allow_write="false"',
+        "infra:spec.pipeline[layer=llm_cache].params.allow_write=1",
         'infra:spec.proxy.timeout="slow"',
     ],
 )
@@ -219,7 +237,7 @@ kind: InfraMiddleware
 metadata:
   name: llm-cache-write
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   applies_to: [LLM_CALL]
   params:
     cache_path: .cache/from-anchor.json
@@ -237,7 +255,7 @@ kind: InfraMiddleware
 metadata:
   name: llm-cache-write
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   applies_to: [LLM_CALL]
   params:
     cache_path: .cache/from-decoy-cwd.json
@@ -268,7 +286,7 @@ kind: InfraMiddleware
 metadata:
   name: decoy
 spec:
-  middleware: llm_cache
+  layer: llm_cache
   applies_to: [LLM_CALL]
   params:
     cache_path: .cache/decoy.json
@@ -287,7 +305,7 @@ def test_library_samples_llm_cache_write_resolves_cache_path():
         pytest.skip("library-samples/infra/llm-cache-write.yaml not in workspace")
     infra = resolve_infra_refs(["library-samples/infra/llm-cache-write.yaml"], anchor=repo)
     pipeline = infra.llm_proxy.get("pipeline") or []
-    assert pipeline and pipeline[0].get("middleware") == "llm_cache"
+    assert pipeline and pipeline[0].get("layer") == "llm_cache"
     cache_path = Path(pipeline[0]["params"]["cache_path"])
     expected = (repo / "library-samples" / "infra" / "cache" / "demo.llm-cache.json").resolve()
     assert cache_path == expected

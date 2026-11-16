@@ -28,7 +28,6 @@ types:
   - llm_provider
   - agent_comm
   - layer
-  - stack_layer
   - system_plugin
   - hitl_contract
   - user_io_contract
@@ -96,6 +95,18 @@ plugins:
     class: OpenAILLMProvider
     shortcuts:
       - openai
+  - type: layer
+    name: openai
+    urn: mas.layer.openai
+    module: mas.library.standard.plugins.llm.openai
+    class: OpenAILLMProvider
+    shortcuts:
+      - openai
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
   # Decorator around a routed protocol plugin — not claimed as spec.models[].kind
   - type: llm_provider
     name: cache
@@ -105,6 +116,8 @@ plugins:
     shortcuts:
       - cache
       - llm_cache
+    attributes:
+      wraps_provider: true
 
   # Default in-process Python spec.tools (used when spec.providers is omitted)
   - type: tool_provider
@@ -383,6 +396,7 @@ plugins:
       per: destination
       call_kinds: [llm, tool]
       priority: 60
+      control_key: circuit_breaker
       deprecated_types: [circuit_breaker]
   - type: layer
     name: retry
@@ -398,6 +412,28 @@ plugins:
       per: destination
       call_kinds: [llm, tool]
       priority: 80
+      control_key: retry
+      retry_overlay: true
+      default_steps:
+        - id: retry-llm
+          for: [llm]
+          per: destination
+          params:
+            max_attempts: 4
+            backoff_s: 0.5
+            backoff_multiplier: 2.0
+            jitter: true
+            retry_on: [transient, unavailable]
+        - id: retry-tool
+          for: [tool]
+          per: all
+          params:
+            max_attempts: 2
+            backoff_s: 0.5
+            backoff_multiplier: 2.0
+            jitter: true
+            retry_on: [transient, unavailable]
+            require_idempotent: true
   - type: hitl_contract
     name: registry
     urn: mas.hitl_contract.registry
@@ -484,7 +520,6 @@ plugins:
       per: destination
       call_kinds: [send, llm, tool]
       priority: 10
-      deprecated_types: [stack_layer]
   - type: layer
     name: drop
     urn: mas.layer.drop
@@ -496,7 +531,6 @@ plugins:
       per: destination
       call_kinds: [send, llm, tool]
       priority: 10
-      deprecated_types: [stack_layer]
   - type: layer
     name: fail
     urn: mas.layer.fail
@@ -508,7 +542,6 @@ plugins:
       per: destination
       call_kinds: [send, llm, tool]
       priority: 10
-      deprecated_types: [stack_layer]
   - type: layer
     name: corrupt
     urn: mas.layer.corrupt
@@ -520,7 +553,6 @@ plugins:
       per: destination
       call_kinds: [send]
       priority: 10
-      deprecated_types: [stack_layer]
   - type: layer
     name: replay
     urn: mas.layer.replay
@@ -532,7 +564,6 @@ plugins:
       per: destination
       call_kinds: [send]
       priority: 10
-      deprecated_types: [stack_layer]
   - type: hitl_responder
     name: auto_approve
     urn: mas.hitl_responder.auto_approve

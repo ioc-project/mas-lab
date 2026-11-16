@@ -201,7 +201,7 @@ class TestBoundedSubagentRecursion:
     """Connect the existing bounded-recursion YAML contract to SpawnLedger."""
 
     def test_spawn_ledger_satisfies_bounded_recursion_contract(self):
-        from mas.ctl.executor.spawn_ledger import SpawnLedger
+        from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
         contract_path = (
             Path(__file__).parent.parent.parent.parent / "components" / "core" / "contracts" / "bounded-recursion.yaml"

@@ -19,11 +19,10 @@ from mas.runtime.engine.llm_cache import (
 
 
 class CacheLLMProvider:
-    """LLMProvider decorator: disk cache in front of an inner protocol plugin.
+    """Deprecated: ``kind: cache`` shipped before the ``llm_cache`` layer. Use that layer.
 
-    Independent ``allow_read`` / ``allow_write`` match the ``llm_cache`` step
-    knobs. This wraps *chat completions*, not ``EngineContract.invoke`` —
-    preview-keyed EngineIoReturn replay stays on ``LlmCacheMiddleware``.
+    The engine path wraps a provider with the ``llm_cache`` layer
+    (``wrap_llm_provider_cache``), never with this class. Drop it in the next release.
     """
 
     provider_id = "cache"
@@ -39,6 +38,9 @@ class CacheLLMProvider:
         raise_on_miss: bool = False,
         **_: Any,
     ) -> None:
+        from mas.runtime.deprecation import warn_deprecated_once
+
+        warn_deprecated_once("llm-provider:cache", "llm_provider kind 'cache' is deprecated; use the llm_cache layer")
         if inner is None:
             raise ValueError("CacheLLMProvider requires an inner LLMProvider")
         self.inner = inner

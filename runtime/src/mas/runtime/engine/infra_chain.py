@@ -45,7 +45,7 @@ class BidirectionalInfraPipeline:
         registry = handlers or {}
         forward: list[tuple[str, MiddlewareHandler]] = []
         for step in steps:
-            name = str(step.get("middleware") or step.get("ref") or "middleware")
+            name = str(step.get("layer") or step.get("ref") or "layer")
             forward.append((name, registry.get(name, _passthrough)))
         return cls(forward_handlers=forward)
 

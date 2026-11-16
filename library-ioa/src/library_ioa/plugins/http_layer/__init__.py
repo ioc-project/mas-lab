@@ -2,6 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 """layer/http: an HTTP POST transport at the bottom of a stack."""
 
-from library_ioa.plugins.http_layer.transport import HttpLayer
+from library_ioa.plugins.http_layer.transport import HttpCallTransport, HttpLayer
 
-__all__ = ["HttpLayer"]
+__all__ = ["HttpCallTransport", "HttpLayer"]

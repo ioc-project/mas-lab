@@ -226,7 +226,7 @@ class LocalToolProvider:
         user: str = "",
         **kwargs: Any,
     ) -> Any:
-        if self.system_plugins is not None and self.system_plugins.claims(tool_name):
+        if self.system_plugins is not None and self.system_plugins.claims(tool_name, ctx):
             return self.system_plugins.call(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
         for instance in self._tool_instances:
             owns = False
@@ -286,7 +286,7 @@ class LocalToolProvider:
         in a thread). The tool sees the same sealed context either way, except
         a ``kernel_state`` tool, which gets the live ctx and runs inline.
         """
-        if self.system_plugins is not None and self.system_plugins.claims(tool_name):
+        if self.system_plugins is not None and self.system_plugins.claims(tool_name, ctx):
             result = self.system_plugins.call(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
             if inspect.isawaitable(result):
                 result = await result

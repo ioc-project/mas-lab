@@ -12,7 +12,6 @@ import pytest
 from mas.library.standard.plugins.layers.circuit_breaker import BreakerPolicy, CircuitBreakerLayer
 from mas.runtime.layers.state import MemorySpecPort
 from mas.runtime.reliability.classes import CircuitOpenError, FailureClass
-from mas.runtime.reliability.policy import ReliabilitySettings
 from mas.runtime.session import SpecConflict
 
 
@@ -42,8 +41,11 @@ def test_breaker_trips_on_unavailable() -> None:
 
 
 def test_absent_spec_adds_no_breaker() -> None:
-    ReliabilitySettings.from_spec(None)
-    ReliabilitySettings.from_spec({"control": {"circuit_breaker": None}})
+    from mas.runtime.layers.control import pipeline_from_agent_spec
+
+    assert not [s for s in pipeline_from_agent_spec(None, [], kind="llm") if s["layer"] == "circuit_breaker"]
+    spec = {"control": {"circuit_breaker": None}}
+    assert not [s for s in pipeline_from_agent_spec(spec, [], kind="llm") if s["layer"] == "circuit_breaker"]
 
 
 def test_enabled_false_never_opens() -> None:

@@ -35,15 +35,15 @@ def _tool_io() -> InvokeEngineIo:
 
 
 def test_undeclared_step_wraps_llm_only() -> None:
-    stamped = stamp_middleware_step({"middleware": "my_custom_audit"})
+    stamped = stamp_middleware_step({"layer": "my_custom_audit"})
     assert stamped["for"] == ["llm"]
     assert stamped["per"] == "destination"
     assert filter_pipeline_for_kind([stamped], "tool") == []
-    assert [step["middleware"] for step in filter_pipeline_for_kind([stamped], "llm")] == ["my_custom_audit"]
+    assert [step["layer"] for step in filter_pipeline_for_kind([stamped], "llm")] == ["my_custom_audit"]
 
 
 def test_empty_for_list_is_llm_not_every_kind() -> None:
-    stamped = stamp_middleware_step({"middleware": "my_custom_audit", "for": []})
+    stamped = stamp_middleware_step({"layer": "my_custom_audit", "for": []})
     assert stamped["for"] == ["llm"]
     assert filter_pipeline_for_kind([stamped], "tool") == []
 
@@ -53,7 +53,7 @@ def test_install_tool_pipeline_runs_on_tool_call() -> None:
     engine.install_tool_pipeline(
         [
             {
-                "middleware": "fault_inject",
+                "layer": "fault_inject",
                 "for": ["tool"],
                 "per": "all",
                 "params": {"rate": 1.0, "message": "injected fault"},
@@ -68,7 +68,7 @@ def test_install_tool_pipeline_runs_on_tool_call() -> None:
 
 def _dest_step(message: str) -> dict[str, object]:
     return {
-        "middleware": "fault_inject",
+        "layer": "fault_inject",
         "for": ["tool"],
         "per": "destination",
         "params": {"rate": 1.0, "message": message},
@@ -261,7 +261,7 @@ def test_apply_middleware_passes_call_kinds_into_wrap() -> None:
     wrapped = apply_middleware(
         _Inner(),
         {
-            "middleware": "fault_inject",
+            "layer": "fault_inject",
             "for": ["tool"],
             "params": {"rate": 1.0, "message": "tool fault"},
         },
@@ -415,7 +415,7 @@ def test_llm_call_does_not_run_tool_stack() -> None:
     engine.install_tool_pipeline(
         [
             {
-                "middleware": "fault_inject",
+                "layer": "fault_inject",
                 "for": ["tool"],
                 "per": "all",
                 "params": {"rate": 1.0, "message": "injected fault"},
@@ -438,4 +438,4 @@ def test_is_cache_middleware_false_when_registry_empty(monkeypatch) -> None:
             return None
 
     monkeypatch.setattr("mas.runtime.registry.get_registry", lambda: _Empty())
-    assert is_cache_middleware({"middleware": "llm_cache"}) is False
+    assert is_cache_middleware({"layer": "llm_cache"}) is False

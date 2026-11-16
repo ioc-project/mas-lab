@@ -8,7 +8,7 @@
 |-------|--------|
 | **ID** | `a2a-framing` |
 | **Kind** | `layer` (a protocol layer: above a transport, never at the bottom) |
-| **URN** | `mas.stack_layer.a2a-framing` |
+| **URN** | `mas.layer.a2a-framing` |
 | **Implementation** | `A2ALayer` in `library_ioa.plugins.a2a.layer` |
 | **Manifest keys** | an infra row `{protocol: a2a-framing}` that a Flavour binds above a transport row: `bind.agent_comm: [desk-node, desk-a2a]` |
 

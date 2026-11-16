@@ -8,14 +8,13 @@ from unittest.mock import MagicMock
 
 import httpx
 import pytest
+from mas.library.standard.lib.retry import RetryPolicy, acall_with_retry, call_with_retry
 from mas.library.standard.plugins.llm.http import (
     arequest_once,
     llm_status_is_retryable,
     request_once,
 )
 from mas.runtime.reliability.classify import classify_llm_failure, is_retryable_llm_http_error, is_tls_verify_failure
-from mas.runtime.reliability.policy import RetryPolicy
-from mas.runtime.reliability.retry import acall_with_retry, call_with_retry
 
 
 def _fast_retry(*, max_attempts: int = 4):

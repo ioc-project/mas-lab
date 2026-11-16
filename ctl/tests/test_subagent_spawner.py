@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.executor.subagent_spawner import (
     SubagentTemplate,
     load_subagent_templates,
@@ -23,6 +22,7 @@ from mas.runtime.boundary.context.working_memory_registry import (
 from mas.runtime.driver.driver import DriverTrace
 from mas.runtime.engine.tool_dispatch import execute_engine_tool
 from mas.runtime.schema.egress import EmitClientResponse
+from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
 def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):

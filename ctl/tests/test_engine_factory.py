@@ -132,6 +132,54 @@ def test_build_engine_cache_read_flag_inserts_llm_cache_step(monkeypatch, tmp_pa
     assert not isinstance(sel.engine.llm_provider, CacheLLMProvider)
 
 
+def test_build_engine_uses_the_agent_llm_stack(monkeypatch, tmp_path):
+    from mas.ctl.infra.bind import bind_flavour
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    desk_cache = tmp_path / "desk.json"
+    other_cache = tmp_path / "other.json"
+    infra = bind_flavour(
+        ResolvedInfra(
+            llm_proxy={"api_base": "http://127.0.0.1:9/v1", "api_key_env": "OPENAI_API_KEY", "pipeline": []},
+            stacks={
+                "desk-llm": [{"layer": "llm_cache", "for": ["llm"], "params": {"cache_path": str(desk_cache)}}],
+                "other-llm": [{"layer": "llm_cache", "for": ["llm"], "params": {"cache_path": str(other_cache)}}],
+            },
+        ),
+        {
+            "bind": {
+                "llm": {"stack": "other-llm"},
+                "agents": {"desk": {"llm": {"stack": "desk-llm"}}},
+            }
+        },
+        agent_ids=["desk", "other"],
+    )
+    desk = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+        cache_read_only=True,
+        agent_id="desk",
+    )
+    other = build_engine(
+        AutoCtxAssembler(),
+        {"spec": {"models": [{"model": "gpt-4o"}]}},
+        infra,
+        anchor=tmp_path,
+        cache_read_only=True,
+        agent_id="other",
+    )
+    desk_steps = list(getattr(desk.engine._infra_stack, "pipeline_steps", []) or [])
+    other_steps = list(getattr(other.engine._infra_stack, "pipeline_steps", []) or [])
+    assert any((step.get("params") or {}).get("cache_path") == str(desk_cache) for step in desk_steps)
+    assert any((step.get("params") or {}).get("cache_path") == str(other_cache) for step in other_steps)
+
+
 def test_build_engine_live_with_cache_still_requires_api_key(monkeypatch, tmp_path):
     """A readable cache does not excuse a missing key: a miss would fail mid-run."""
     from mas.ctl.infra.resolve import resolve_infra_refs
@@ -417,7 +465,7 @@ def test_build_engine_installs_infra_pipeline(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
     infra.llm_proxy["pipeline"] = [
-        {"middleware": "llm_cache", "params": {"allow_read": False, "allow_write": False}},
+        {"layer": "llm_cache", "params": {"allow_read": False, "allow_write": False}},
     ]
     sel = build_engine(
         AutoCtxAssembler(),
@@ -446,7 +494,7 @@ def test_build_engine_installs_tool_destinations(monkeypatch, tmp_path):
             "tools": ["alpha"],
             "pipeline": [
                 {
-                    "middleware": "fault_inject",
+                    "layer": "fault_inject",
                     "for": ["tool"],
                     "per": "destination",
                     "params": {"rate": 1.0, "message": "dest fault"},
@@ -483,7 +531,7 @@ def test_build_engine_installs_tool_pipeline(monkeypatch, tmp_path):
     infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
     infra.tool_pipeline = [
         {
-            "middleware": "fault_inject",
+            "layer": "fault_inject",
             "for": ["tool"],
             "per": "all",
             "params": {"rate": 1.0, "message": "injected fault"},
@@ -517,7 +565,7 @@ def test_strict_replay_false_when_registry_empty(monkeypatch):
         _strict_replay(
             {
                 "pipeline": [
-                    {"middleware": "llm_cache", "params": {"raise_on_miss": True}},
+                    {"layer": "llm_cache", "params": {"raise_on_miss": True}},
                 ]
             }
         )
@@ -599,7 +647,7 @@ def test_a_named_env_var_in_the_file_is_not_stolen_by_openai_base_url(monkeypatc
 def test_runtime_engine_cache_kill_switch_turns_off_an_infra_llm_cache_step():
     from mas.ctl.session.engine_factory import _ensure_llm_cache_pipeline
 
-    proxy = {"pipeline": [{"middleware": "llm_cache", "params": {"allow_read": True, "allow_write": True}}]}
+    proxy = {"pipeline": [{"layer": "llm_cache", "params": {"allow_read": True, "allow_write": True}}]}
     _ensure_llm_cache_pipeline(
         proxy,
         cache_read=False,

@@ -77,6 +77,7 @@ class InfraManifest:
     raw: dict[str, Any] = field(default_factory=dict)
     applications: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, dict[str, Any]] = field(default_factory=dict)
+    stacks: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path | str) -> InfraManifest:
@@ -109,8 +110,19 @@ class InfraManifest:
             api_key_env = str(proxy_raw.get("api_key_env") or "")
         else:
             api_key_env = "OPENAI_API_KEY"
+        name = str(meta.get("name", ""))
+        pipeline = _pipeline_from_spec(spec, where=str(name or kind or "infra"))
+        stacks: dict[str, list[dict[str, Any]]] = {}
+        if str(kind) == "Stack":
+            raw_layers = spec.get("layers") if spec.get("layers") is not None else spec.get("pipeline")
+            from mas.runtime.layers.compose import stamp_layer_step
+
+            pipeline = [
+                stamp_layer_step(item, where=name or "stack") for item in (raw_layers or []) if isinstance(item, dict)
+            ]
+            stacks = {name or "stack": list(pipeline)}
         return cls(
-            name=str(meta.get("name", "")),
+            name=name,
             kind=kind,
             proxy=ProxySpec(
                 api_base=str(proxy_raw.get("api_base", "") or ""),
@@ -127,11 +139,12 @@ class InfraManifest:
             model_access=dict(spec.get("model_access") or {}),
             protocol=str(spec.get("protocol") or "").strip(),
             tool_servers=[dict(item) for item in (spec.get("tool_servers") or []) if isinstance(item, dict)],
-            pipeline=_pipeline_from_spec(spec, where=str(meta.get("name") or kind or "infra")),
+            pipeline=pipeline,
             runtime_engine=dict(spec.get("runtime_engine") or {}),
             raw=data,
             applications=applications,
             providers=_providers_from_document(spec.get("providers")),
+            stacks=stacks,
         )
 
     def to_document(self) -> dict[str, Any]:
@@ -160,7 +173,7 @@ class InfraManifest:
             "model_access": dict(self.model_access),
             "tool_servers": list(self.tool_servers),
             "endpoints": {str(name): dict(endpoint) for name, endpoint in self.applications.items()},
-            "interceptors": self._document_interceptors(),
+            "pipeline": self._document_pipeline(),
             "runtime_engine": dict(self.runtime_engine),
         }
         if self.providers:
@@ -174,7 +187,7 @@ class InfraManifest:
             "spec": spec,
         }
 
-    def _document_interceptors(self) -> list[dict[str, Any]]:
+    def _document_pipeline(self) -> list[dict[str, Any]]:
         """Shared steps, plus cache steps hoisted from leaves for CLI addressing.
 
         Non-cache leaf steps stay under ``spec.providers`` so an override does

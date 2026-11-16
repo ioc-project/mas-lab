@@ -11,7 +11,7 @@ import pytest
 from mas.library.standard.plugins.llm.cache import CacheLLMProvider
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
 from mas.runtime.engine.infra_pipeline import wrap_llm_provider_pipeline
-from mas.runtime.layers.defaults import merge_default_retry
+from mas.runtime.layers.defaults import merge_default_steps
 from mas.runtime.registry.llm_provider_registry import (
     LLMProviderRegistry,
     iter_model_provider_specs,
@@ -24,7 +24,7 @@ from mas.runtime.registry.llm_provider_registry import (
 
 
 def _retrying(provider):
-    return wrap_llm_provider_pipeline(provider, merge_default_retry([], "llm"))
+    return wrap_llm_provider_pipeline(provider, merge_default_steps([], "llm"))
 
 
 def _protocol(provider):
@@ -74,8 +74,6 @@ def test_require_achat_completion_rejects_sync_only_provider():
 def test_llm_provider_kind_defaults_to_openai():
     assert llm_provider_kind({}) == "openai"
     assert llm_provider_kind({"protocol": "bedrock"}) == "bedrock"
-    assert llm_provider_kind({"protocol": "mock"}) == "openai"
-    assert protocol_kind_from_infra({"protocol": "mock"}) == "openai"
     assert protocol_kind_from_infra({"protocol": "cache"}) == "openai"
 
 
@@ -96,11 +94,9 @@ def test_iter_model_specs_groups_by_protocol_kind():
     assert by_kind["bedrock"] == ["claude-sonnet"]
 
 
-def test_iter_model_specs_rejects_cache_and_mock_as_protocol():
+def test_iter_model_specs_rejects_cache_as_protocol():
     with pytest.raises(ValueError, match="not a wire protocol"):
         iter_model_provider_specs({"spec": {"models": [{"model": "m", "kind": "cache"}]}})
-    with pytest.raises(ValueError, match="not a wire protocol"):
-        iter_model_provider_specs({"spec": {"models": [{"model": "m", "kind": "mock"}]}})
 
 
 def test_registry_routes_model_names_like_tools():
@@ -219,14 +215,14 @@ def test_llm_providers_from_manifest_wraps_per_leaf_pipeline():
                 "api_key_env": "ARM_KEY",
                 "allowed": ["provider-a/model-a"],
                 "protocol": "openai",
-                "pipeline": [{"middleware": "fault_inject", "params": {"rate": 1.0}}],
+                "pipeline": [{"layer": "fault_inject", "params": {"rate": 1.0}}],
             },
             "judge": {
                 "api_base": "https://judge.example/v1",
                 "api_key_env": "JUDGE_KEY",
                 "allowed": ["judge-model"],
                 "protocol": "openai",
-                "pipeline": [{"middleware": "llm_scheduler", "params": {"max_in_flight": 2}}],
+                "pipeline": [{"layer": "llm_scheduler", "params": {"max_in_flight": 2}}],
             },
         },
     )
@@ -265,8 +261,13 @@ def test_llm_providers_from_manifest_uses_models_kind():
 
 
 def test_registry_resolves_openai_and_cache():
+    from mas.runtime.registry import get_registry
+
     assert llm_provider_class("openai") is OpenAILLMProvider
     assert llm_provider_class("cache") is CacheLLMProvider
+    layer = get_registry().resolve_by_type("layer", "openai")
+    assert layer is not None
+    assert layer.load_class() is OpenAILLMProvider
 
 
 def test_openai_from_infra_spec_reads_proxy_and_protocol_fields():
@@ -340,6 +341,9 @@ def test_cache_provider_persists_tool_calls(tmp_path) -> None:
 
 
 def test_llm_provider_from_infra_wraps_cache(tmp_path) -> None:
+    from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
+    from mas.runtime.engine.infra_pipeline import PipedLLMProvider
+
     provider = llm_provider_from_infra(
         {"protocol": "openai", "api_base": "https://api.openai.com/v1"},
         wrap_cache=True,
@@ -347,8 +351,18 @@ def test_llm_provider_from_infra_wraps_cache(tmp_path) -> None:
         cache_read=True,
         cache_write=True,
     )
-    assert isinstance(provider, CacheLLMProvider)
-    assert isinstance(_protocol(provider.inner), OpenAILLMProvider)
+    assert isinstance(provider, PipedLLMProvider)
+    cur = getattr(provider, "_stack", provider)
+    cache = None
+    seen: set[int] = set()
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if isinstance(cur, LlmCacheMiddleware):
+            cache = cur
+            break
+        cur = getattr(cur, "inner", None)
+    assert cache is not None
+    assert isinstance(_protocol(provider), OpenAILLMProvider)
 
 
 class _FakeStreamResponse:
@@ -653,12 +667,12 @@ class _FlakyPostClient:
 
 
 def _silence_retry_sleep(monkeypatch) -> None:
-    monkeypatch.setattr("mas.runtime.reliability.retry.time.sleep", lambda _s: None)
+    monkeypatch.setattr("mas.library.standard.lib.retry.loop.time.sleep", lambda _s: None)
 
     async def _no_sleep(_s):
         return None
 
-    monkeypatch.setattr("mas.runtime.reliability.retry.asyncio.sleep", _no_sleep)
+    monkeypatch.setattr("mas.library.standard.lib.retry.loop.asyncio.sleep", _no_sleep)
 
 
 def test_openai_provider_retries_dropped_connection_then_succeeds(monkeypatch) -> None:

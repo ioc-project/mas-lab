@@ -21,7 +21,6 @@ types:
   - agent_comm
   - agent_expose
   - layer
-  - stack_layer
   - webserver
 
 plugins:
@@ -32,11 +31,33 @@ plugins:
     class: MCPToolProvider
     shortcuts:
       - mcp
+    attributes:
+      protocol_name: mcp
+      url_schemes: {mcp: http, mcps: https}
+      connect_as: tool_server
+      listen_hint: serve an MCP tool with mas-mcp
+  - type: layer
+    name: mcp
+    urn: mas.layer.mcp
+    module: library_ioa.plugins.mcp.layer
+    class: McpLayer
+    shortcuts:
+      - mcp
+    attributes:
+      per: destination
+      call_kinds: [tool]
+      priority: 0
+      protocol_layer: true
   - type: agent_comm
     name: a2a
     urn: mas.agent_comm.a2a
     module: library_ioa.plugins.a2a.agent_comm
     class: A2AAgentComm
+    attributes:
+      protocol_name: a2a
+      url_schemes: {a2a: http, a2as: https}
+      connect_as: endpoint
+      listen: true
   - type: agent_expose
     name: a2a
     urn: mas.agent_expose.a2a
@@ -44,35 +65,31 @@ plugins:
     class: A2AExposure
   - type: layer
     name: slim
-    urn: mas.stack_layer.slim
+    urn: mas.layer.slim
     module: library_ioa.plugins.slim.agent_comm
     class: SlimAgentComm
     shortcuts:
       - slim
     attributes:
       default_enabled: false
-      semantic: stack_layer
-      deprecated_types: [stack_layer]
   - type: layer
     name: a2a-framing
-    urn: mas.stack_layer.a2a-framing
+    urn: mas.layer.a2a-framing
     module: library_ioa.plugins.a2a.layer
     class: A2ALayer
     attributes:
       default_enabled: false
-      semantic: stack_layer
-      deprecated_types: [stack_layer]
   - type: layer
     name: http
-    urn: mas.stack_layer.http
+    urn: mas.layer.http
     module: library_ioa.plugins.http_layer.transport
     class: HttpLayer
     shortcuts:
       - http
     attributes:
       default_enabled: false
-      semantic: stack_layer
-      deprecated_types: [stack_layer]
+      role: transport
+      call_kinds: [send, llm, tool]
   - type: webserver
     name: uvicorn
     urn: mas.webserver.uvicorn

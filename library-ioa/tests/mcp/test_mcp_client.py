@@ -148,6 +148,27 @@ def test_headers_use_create_mcp_http_client() -> None:
     assert http_clients[0].exits == 1
 
 
+def test_provided_http_client_is_passed_to_streamable_http() -> None:
+    provided = object()
+    client = MCPClient(url="http://127.0.0.1:9001/mcp", http_client=provided)
+    captured: dict[str, object] = {}
+
+    def _factory(_url: str, **kw) -> _Transport:
+        captured["kwargs"] = kw
+        return _Transport()
+
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "t"})])])
+    with (
+        patch("library_ioa.plugins.mcp.client.create_mcp_http_client") as factory,
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+
+    factory.assert_not_called()
+    assert captured["kwargs"]["http_client"] is provided
+
+
 def test_timeout_does_not_create_custom_http_client() -> None:
     client = MCPClient(url="http://127.0.0.1:9001/mcp", timeout=30)
     captured: dict[str, object] = {}
@@ -272,6 +293,16 @@ def test_connect_then_disconnect_without_calls_is_harmless() -> None:
     client = MCPClient(url="http://127.0.0.1:9001/mcp")
     assert asyncio.run(client.connect()) is None
     assert asyncio.run(client.disconnect()) is None
+
+
+def test_hold_closed_off_the_loop_does_not_raise() -> None:
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+
+    async def make() -> object:
+        return client._hold(asyncio.get_running_loop().create_future(), asyncio.Event())
+
+    coro = asyncio.run(make())
+    coro.close()
 
 
 def test_connect_reuses_one_http_transport_on_the_same_loop() -> None:

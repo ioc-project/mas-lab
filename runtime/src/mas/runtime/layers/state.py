@@ -99,14 +99,14 @@ def transition(
     step: Callable[[dict[str, Any]], dict[str, Any]],
     *,
     why: str | Callable[[dict[str, Any], dict[str, Any]], str],
-    tries: int = 4,
+    tries: int = 64,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Move *target*'s state by *step*; the spec machine decides whether it applies. Returns ``(before, after)``.
 
     This is the one retry-on-conflict loop for every layer: when the machine answers ``CONFLICT`` (someone
-    changed the state first) the state is read again and *step* applied to that. When it answers ``BUSY``
-    (the session is checkpointing or over) the change does not stick and the call goes on. No layer carries
-    its own guard.
+    changed the state first; another writer advanced, so a bounded number of tries is enough) the state
+    is read again and *step* applied to that. When it answers ``BUSY`` (the session is checkpointing or
+    over) the change does not stick and the call goes on. No layer carries its own guard.
     """
     for _ in range(tries):
         before = port.read(layer, target)

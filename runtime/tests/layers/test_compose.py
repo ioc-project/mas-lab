@@ -6,10 +6,10 @@ import importlib
 from dataclasses import dataclass, field
 
 import pytest
+from mas.library.standard.lib.retry import RetryPolicy
 from mas.runtime.layers.compose import LayerLoadError, compose, layer_id, order_steps, split_pipeline_layers
-from mas.runtime.layers.defaults import default_pipeline_steps, merge_default_retry
+from mas.runtime.layers.defaults import default_pipeline_steps, merge_default_steps
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
-from mas.runtime.reliability.policy import RetryPolicy
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -92,7 +92,7 @@ def test_order_steps_higher_priority_is_outer() -> None:
 
 def test_documented_default_retry_matches_policy_and_fails_if_removed() -> None:
     steps = default_pipeline_steps()
-    assert steps, "runtime/layers/defaults.yaml pipeline is missing"
+    assert steps, "no layer row declares default_steps"
     llm = next(step for step in steps if "llm" in (step.get("for") or []))
     tools = next(step for step in steps if "tool" in (step.get("for") or []))
     assert llm["params"]["max_attempts"] == RetryPolicy.llm_default().max_attempts == 4
@@ -102,9 +102,9 @@ def test_documented_default_retry_matches_policy_and_fails_if_removed() -> None:
     assert tools["params"]["require_idempotent"] is True
 
 
-def test_merge_default_retry_does_not_duplicate() -> None:
-    first = merge_default_retry([], "llm")
-    second = merge_default_retry(first, "llm")
+def test_merge_default_steps_does_not_duplicate() -> None:
+    first = merge_default_steps([], "llm")
+    second = merge_default_steps(first, "llm")
     assert sum(1 for step in second if layer_id(step) == "retry") == 1
 
 
@@ -157,7 +157,7 @@ def test_overlay_retry_params_does_not_strip_stamps_on_other_steps() -> None:
     from mas.runtime.layers.control import overlay_retry_params
     from mas.runtime.layers.defaults import FROM_DEFAULTS
 
-    steps = merge_default_retry(
+    steps = merge_default_steps(
         [{"layer": "circuit_breaker", "for": ["llm"], FROM_DEFAULTS: True}],
         "llm",
     )
@@ -183,11 +183,11 @@ def test_every_step_has_an_id_an_experiment_can_address() -> None:
 def test_a_disabled_step_is_listed_but_does_not_wrap_and_the_default_does_not_return() -> None:
     inner = _CountingInner(fail_times=1)
     off = [{"id": "retry-llm", "layer": "retry", "for": ["llm"], "enabled": False}]
-    steps = merge_default_retry(off, "llm")
+    steps = merge_default_steps(off, "llm")
     assert [step["id"] for step in steps] == ["retry-llm"]  # no default added behind the disabled one
     with pytest.raises(ClassifiedFailure):  # one failure and nobody retries it
         compose(inner, steps, kind="llm").invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert inner.calls == 1
     on = _CountingInner(fail_times=1)
-    compose(on, merge_default_retry([], "llm"), kind="llm").invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    compose(on, merge_default_steps([], "llm"), kind="llm").invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert on.calls == 2

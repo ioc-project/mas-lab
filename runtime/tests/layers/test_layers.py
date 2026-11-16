@@ -356,7 +356,6 @@ def test_deprecated_plugin_types_still_resolve(caplog: pytest.LogCaptureFixture)
     caplog.set_level(logging.WARNING)
     registry = get_registry()
     assert registry.resolve_by_type("infra_middleware", "llm_cache") is not None
-    assert registry.resolve_by_type("stack_layer", "delay") is not None
     assert registry.resolve_by_type("circuit_breaker", "threshold") is not None
     registry.resolve_by_type("infra_middleware", "llm_cache")
     assert "deprecated" in caplog.text.lower()

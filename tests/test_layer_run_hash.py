@@ -11,7 +11,7 @@ from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.compose.runner import infra_cache_identity
 from mas.lab.benchmark.cache.trace_store import compute_run_hash
 from mas.runtime.layers.compose import layer_id
-from mas.runtime.layers.defaults import merge_default_retry
+from mas.runtime.layers.defaults import merge_default_steps
 
 _REPO = Path(__file__).resolve().parents[1]
 
@@ -27,7 +27,7 @@ def test_wrap_time_retry_does_not_change_compute_run_hash() -> None:
     config = {"agents": [{"id": "a", "llm_model": "m"}]}
     run_input = {"inputs": {"user": "hello"}}
     empty = compute_run_hash(config, run_input, "i", 0, {}, infra_info={"llm_proxy": {"pipeline": []}})
-    wrapped = merge_default_retry([], "llm")
+    wrapped = merge_default_steps([], "llm")
     after = compute_run_hash(config, run_input, "i", 0, {}, infra_info={"llm_proxy": {"pipeline": []}})
     assert empty == after
     assert wrapped

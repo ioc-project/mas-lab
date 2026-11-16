@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from typing import Any
 
 import yaml
 from mas.ctl.overrides.model import OverridePath, ParsedOverride, PathSegment
+from mas.runtime.engine.call_kinds import warn_legacy_key
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]*$")
 _CONFIG_ALIASES = {"config": "workspace"}
@@ -140,6 +142,23 @@ def _agent_segment(
     return None
 
 
+def _current_spellings(root: str, segments: list[PathSegment], source: str) -> list[PathSegment]:
+    """Old step addresses read as the new ones.
+
+    ``spec.interceptors`` is ``spec.pipeline`` and ``[middleware=X]`` is ``[layer=X]``.
+    """
+    out: list[PathSegment] = []
+    for position, segment in enumerate(segments):
+        if root == "infra" and segment.name == "interceptors" and position and segments[position - 1].name == "spec":
+            warn_legacy_key("interceptors", "pipeline", where=source)
+            segment = dataclasses.replace(segment, name="pipeline")
+        if isinstance(segment.selector, tuple) and segment.selector[0] == "middleware":
+            warn_legacy_key("middleware", "layer", where=source)
+            segment = dataclasses.replace(segment, selector=("layer", segment.selector[1]))
+        out.append(segment)
+    return out
+
+
 def _parse_path(raw: str, source: str) -> OverridePath:
     text = _normalize_colon(raw.strip().lstrip("."))
     parsed = [_parse_segment(part, source) for part in _split_path_segments(text)]
@@ -177,7 +196,7 @@ def _parse_path(raw: str, source: str) -> OverridePath:
         raise ValueError(f"override path must address a field under the session node, got {raw!r}")
     return OverridePath(
         root=root,
-        segments=tuple(rest),
+        segments=tuple(_current_spellings(root, rest, source)),
         parent=parent,
         target_name=target_name,
         wildcard_target=wildcard_target,

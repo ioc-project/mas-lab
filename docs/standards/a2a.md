@@ -20,6 +20,8 @@ The A2A plugins ship in `library-ioa` and use the official `a2a-sdk`.
 
 - `mas.agent_comm.a2a` is the outbound client.
 - `mas.agent_expose.a2a` is the server.
+- `a2a-framing` is the send protocol layer over `http` or `slim`. Send, tool,
+  and llm stacks are on [Communication stack](../references/comm-stack.md).
 
 Every live-agent entry point (`mas-ctl serve`, `chat`, `tui`, `run-mas`) uses
 the same `agent_expose` path (`mas.ctl.session.exposure`). Listen URLs come
@@ -166,3 +168,4 @@ spec:
 - [User guide: running agents through A2A](../user-guide.md#running-agents-through-a2a)
 - [Kernel operations](../references/kernel-primitives.md): sessions, steer, and the queue.
 - [Infra manifest](../manifests/infra.md)
+- [Communication stack](../references/comm-stack.md)

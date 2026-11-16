@@ -34,7 +34,7 @@ def _mw(path: Path, *, name: str, middleware: str, extra: str = "") -> Path:
         "kind: InfraMiddleware\n"
         f"metadata: {{name: {name}}}\n"
         "spec:\n"
-        f"  middleware: {middleware}\n"
+        f"  layer: {middleware}\n"
         f"{extra}",
         encoding="utf-8",
     )
@@ -132,7 +132,7 @@ def test_pipeline_and_interceptors_mix_is_an_error(tmp_path: Path) -> None:
         "  proxy: {api_base: https://arm.example/v1, api_key_env: KEY}\n"
         "  models: {allowed: [m]}\n"
         "  pipeline:\n"
-        "    - middleware: llm_scheduler\n"
+        "    - layer: llm_scheduler\n"
         "  interceptors:\n"
         "    - middleware: llm_cache\n",
         encoding="utf-8",
@@ -147,7 +147,7 @@ def test_cli_override_round_trip_cache_params(tmp_path: Path) -> None:
     infra = resolve_infra_refs(
         [str(arm), str(cache)],
         anchor=tmp_path,
-        overrides=("infra:spec.interceptors[middleware=llm_cache].params.allow_write=false",),
+        overrides=("infra:spec.pipeline[layer=llm_cache].params.allow_write=false",),
     )
     steps = list(infra.llm_proxy.get("pipeline") or [])
     assert steps

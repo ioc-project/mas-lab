@@ -15,18 +15,37 @@ reconciling the release notes with the code and docs currently on that branch.
 - `mas-lab init` writes `api_base: env:OPENAI_BASE_URL|<url>` so the file names the env var. `standard:openai` and the sample workspace do the same. A custom URL at init uses `<infra-name>_API_BASE` so a leftover `OPENAI_BASE_URL` does not steal the call.
 - Write a new tool as `async def on_execute_tool` (or `async def execute`). That one method is enough; the engine awaits it. A `def on_execute_tool` still works: the engine may run it in a worker thread. `on_aexecute_tool` still wins when present. The sync path finishes an async tool instead of returning a coroutine. Calling `call_tool` from a running loop raises; use `acall_tool`.
 - `gov_no_undeclared_peer` BLOCKs leftover `delegate_to_*` to a dest not in this agent's `delegates_to`. A user tool named `send` or a declared `delegate_to_<x>` tool is left alone. `with-hardened` names it. Send itself does not refuse.
+- openai and mcp ride http: `protocol: openai` plus a url is `[http, openai]`;
+  `protocol: mcp` plus a url is `[http, mcp]`. The openai plugin is the
+  chat-completions layer; the MCP client is the tool layer. The provider the
+  engine sees sits on top.
+- A `kind: Stack` infra row names those layers. Flavour `bind.llm` as `{stack: NAME}`
+  puts that stack on llm calls the way `bind.agent_comm` puts send on a chain.
+  `bind.tools` is wrap layers (retry, impair) on tool calls; `http` and `mcp`
+  belong on the tool-server row. `bind.agents.<id>.llm` /
+  `bind.agents.<id>.tools` pick that agent's stack.
+- Provider cache is the `llm_cache` layer around openai, not a second
+  chat-keyed wrapper.
+- `mas-ctl infra show` prints the sugar as the real steps. `--connect NAME=mcp://...`
+  is unchanged.
 
 ### Changed
 
 - The qa-agent example graphs use the ioc-project scope-ontology URIs.
 - `llm_call_start` carries the request: `model`, `messages`, offered tools, `max_tokens`, `temperature`. `llm_call_end` is the return: `output`, `finish_reason`, tokens, `tool_calls`, and `max_tokens` only when the sent cap differs. `model` on `llm_call_end` is no longer read.
 - `--cache-read` / `--cache-write` help now says the cache is off until those flags insert the `llm_cache` step. The default pipeline is retry only.
+- Samples, bundled libraries, docs and resolved steps write `layer:`, not `middleware:`. `infra show` lists `layer`, and the resolved infra document exposes `pipeline`, so `--override '.infra.spec.pipeline[layer=llm_cache]...'` addresses a step. `llm_cache` params are checked for a `layer:` step as for the old key.
+- The `stack_layer` plugin type is gone: the A2A, SLIM and http layer rows register as `layer` (URNs `mas.layer.*`).
 - The cache docs describe one LLM cache, the `llm_cache` step. The "built-in engine cache" sections are gone; `MAS_LLM_CACHE_READ` / `_WRITE` and `RuntimeEngine` `cache.read` / `write` insert that step.
 - `behavior.delegation_style: none` hides the leftover `delegate_to_*` tools from the LLM. The peers and the send path stay, so a linear, parallel, or single pattern can still send to the next agent.
 - Leftover `delegate_to_*` tools shown to the LLM are this agent's `delegates_to`. An empty list means none of those tools. An agent not listed in the workflow shows none. `workflow.entry` only names who receives the user message.
 
 ### Breaking
 
+- The runtime names no layer and ships no pipeline data: default steps, the `spec.control` bridge keys and the response-store layer come from attributes on library rows (`default_steps`, `control_key`, `retry_overlay`, `stores_llm_responses`). The fallback `openai` default protocol and the `mock` non-protocol name are gone; `protocol: mock` is no longer read as the default. `RetryPolicy` and the retry loop moved to `mas.library.standard.lib.retry`; `ReliabilitySettings` is gone (the `spec.control` keys are checked by the layer that answers to them). `--connect` / `--listen` schemes come from the protocol plugin's row (`protocol_name`, `url_schemes`, `connect_as`).
+- `retry` and `circuit_breaker` with `per: all` on the shared engine call raise at install; they never saw a failure there. A non-idempotent tool is no longer retried on a connect error either.
+- The `stack_layer` plugin type is gone (never used): register the layer as `layer`.
+- The step key is `layer:`. Resolved steps no longer carry `middleware`, and the resolved infra document exposes `pipeline`; `--override` addresses written `spec.interceptors[middleware=X]` still resolve, with a warning.
 - Code names the ontology SCOPE (`scope_models`, `ensure_scope_topology`, `scope_default`, `SCOPE_ONTOLOGY_EDITABLE`).
 - A pattern's next hop is this agent's `delegates_to`. The old fallbacks (`workflow.participants`, every other node, the agency list) are gone, and an agent with no `delegates_to` has no next hop (the pattern logs a warning and ends the turn). `behavior.delegation_style` does not affect a pattern's next hop.
 - `send` no longer refuses a target outside `delegates_to`; the model can only call peers that are offered, and `gov_no_undeclared_peer` (in `with-hardened`) blocks the rest. It does nothing when the kernel has no agent id.
@@ -129,6 +148,10 @@ reconciling the release notes with the code and docs currently on that branch.
   axis. `element_level_diff` (raw ids) is reported and does not decide
   `passed`.
 
+### Deprecated
+
+- The `llm_provider` kind `cache` (`CacheLLMProvider`) warns once. Use the `llm_cache` layer; [llm-cache.md](docs/manifests/llm-cache.md#deprecated-the-cache-provider-kind) shows the move. A file recorded with the old class must be recorded again. It goes in the next release.
+
 ### Fixed
 
 - The observe-sdk profile exports ProcessingCall as `*.processing` by default.
@@ -146,6 +169,18 @@ reconciling the release notes with the code and docs currently on that branch.
 - A `None` answer from `on_aexecute_tool` / an async `on_execute_tool` falls back to the legacy `execute` like the sync path does.
 - `mas-lab init` gives a second infra name with the same slug its own variable (`MY_PROVIDER_API_BASE_2`).
 - A LLM address taken from the shell (`OPENAI_BASE_URL`, `*_API_BASE`) logs one warning with its host: the API key is sent there.
+- Closing an MCP session after the event loop is gone does not raise.
+- The http call transport under `openai` and `mcp` keeps what the old clients had: the row's headers (an MCP bearer token reaches the server), redirects, a 120s LLM and a 30s/300s MCP timeout, the `verify_ssl` / `ca_bundle` TLS settings, and plain `http://` on an internal host. It holds one async client per event loop and closes them on stop. An OpenAI transport failure drops that transport's client.
+- Closing an MCP provider stops its http transport. Engine stop closes the tool provider. An SSE or stdio MCP row gets no http transport.
+- MCP `call_tool` refuses a name that is not advertised. An empty `tools` list is nobody.
+- A tool-server row may list `http` and `mcp`; the provider already built them. A Flavour `bind.tools` stack that names them is a bind error.
+- Binding a Flavour twice replaces its `bind.llm` / `bind.tools` stack instead of adding a second copy.
+- A cache answer replayed through the provider layers must be a completion; a bare JSON answer is an error, not a message.
+- `retry` for both llm and tool calls keeps the tool default (2 attempts, only for tools declared safe to repeat). `require_idempotent` blocks every failure class for a tool that is not idempotent. A bare `429` in a message is a rate limit; `4290` is not.
+- `retry` and `circuit_breaker` refuse `per: all` on the shared engine call, where they never saw a failure. The async llm path reports the failure class like the sync path.
+- A probe runs only for a tool declared idempotent, and off the event loop on the async path. A session refusal (`SessionPaused`, `ControlDenied`) is never retried. A spec conflict is retried up to 64 times, not 4.
+- `activate_skill`, `list_skill_files` and `read_skill_file` can be called through the local provider: a system plugin claims a tool from the turn context. A failed system-plugin load binds nothing.
+- A bad `subagents` setting (`max_depth`, `max_spawns`, `templates`) is a load error `mas-ctl validate` reports. `max_spawns: null` is unlimited.
 - The v0.2 blog post links to `aaif.io`.
 - An explicit pipeline retry keeps the params it named.
 - Session close stops the llm and tool call layers.
@@ -575,7 +610,7 @@ reconciling the release notes with the code and docs currently on that branch.
 - Deprecate agent `spec.control.retry` and `.circuit_breaker`: they still
   apply, warn once, and become steps around the call. Prefer a `retry` /
   `circuit_breaker` step.
-- Deprecate plugin types `infra_middleware`, `stack_layer`, and
+- Deprecate plugin types `infra_middleware` and
   `circuit_breaker`, and the pipeline key `middleware:`: each still loads,
   warns once, and names `layer`.
 - `{kind: system, name, params}` in `spec.tools`: list the plugin in `spec.system_plugins`.

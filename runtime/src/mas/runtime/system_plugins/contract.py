@@ -102,8 +102,9 @@ class SystemPluginBase:
     def bind(self, session: SessionContext) -> object:
         raise NotImplementedError(f"{type(self).__name__} must implement bind")
 
-    def claims(self, tool: str, *, state: object) -> bool:
-        return any(definition.name == tool for definition in self.tools())
+    def claims(self, tool: str, *, state: object, ctx: Any | None = None) -> bool:
+        """Whether this plugin owns *tool*. A plugin whose tool list depends on the session reads it from *ctx*."""
+        return any(definition.name == tool for definition in self.tools(ctx))
 
     def call(
         self,

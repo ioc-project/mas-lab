@@ -95,7 +95,11 @@ def test_the_chain_code_names_no_layer(module: str) -> None:
     source = (Path(__file__).resolve().parents[1] / "src/mas/ctl" / module).read_text(encoding="utf-8")
     literals = re.findall(r"[\"']([a-z0-9_-]+)[\"']", source)
     named = sorted(
-        {word for word in literals if word in {"slim", "a2a", "http", "local", "local-group", "agent-local"}}
+        {
+            word
+            for word in literals
+            if word in {"slim", "a2a", "http", "local", "local-group", "agent-local", "openai", "mcp"}
+        }
     )
     assert named == [], f"{module} names {named}"
 

@@ -54,7 +54,7 @@ class _EchoEngine:
 
 def test_wrap_call_stack_uses_cache(tmp_path):
     cache_path = tmp_path / "cache.json"
-    pipeline = [{"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}}]
+    pipeline = [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}]
     inner = _EchoEngine()
     engine = wrap_call_stack(inner, pipeline)
 
@@ -122,7 +122,7 @@ def test_llm_cache_raise_on_miss(tmp_path):
     engine = apply_middleware(
         _EchoEngine(),
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {"cache_path": str(cache_path), "raise_on_miss": True},
         },
     )
@@ -138,7 +138,7 @@ def test_llm_cache_read_only_skips_write(tmp_path):
     engine = apply_middleware(
         inner,
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {"cache_path": str(cache_path), "allow_write": False},
         },
     )
@@ -156,7 +156,7 @@ def test_llm_cache_write_only_skips_read(tmp_path):
     engine = apply_middleware(
         inner,
         {
-            "middleware": "llm_cache",
+            "layer": "llm_cache",
             "params": {"cache_path": str(cache_path), "allow_read": False, "allow_write": True},
         },
     )
@@ -171,7 +171,7 @@ def test_llm_cache_caches_post_tool_preview(tmp_path):
     inner = _EchoEngine(preview_text="history [tool call_id=call_1] result")
     engine = apply_middleware(
         inner,
-        {"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}},
+        {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}},
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     first = engine.invoke(io)
@@ -187,7 +187,7 @@ def test_live_engine_keeps_tool_setters_with_pipeline() -> None:
 
     engine = LiveLlmEngine(manifest=None, use_cache=False, llm_provider=_StubProvider())
     engine.install_infra_pipeline(
-        [{"middleware": "llm_cache", "params": {"allow_read": False, "allow_write": False}}],
+        [{"layer": "llm_cache", "params": {"allow_read": False, "allow_write": False}}],
     )
     engine.set_tool_for_correlation(3, "calc", {"expression": "2+2"})
     engine.set_scheduled_tool("web-search", {"query": "POTUS"})
@@ -200,12 +200,12 @@ def test_live_engine_keeps_tool_setters_with_pipeline() -> None:
 def test_infra_has_cache_step_ignores_scheduler() -> None:
     from mas.runtime.engine.infra_pipeline import infra_has_cache_step
 
-    assert infra_has_cache_step([{"middleware": "llm_scheduler", "params": {}}]) is False
-    assert infra_has_cache_step([{"middleware": "llm_cache", "params": {}}]) is True
+    assert infra_has_cache_step([{"layer": "llm_scheduler", "params": {}}]) is False
+    assert infra_has_cache_step([{"layer": "llm_cache", "params": {}}]) is True
     assert (
         infra_has_cache_step(
             [],
-            {"arm": {"pipeline": [{"middleware": "llm_cache", "params": {}}]}},
+            {"arm": {"pipeline": [{"layer": "llm_cache", "params": {}}]}},
         )
         is True
     )
@@ -214,13 +214,13 @@ def test_infra_has_cache_step_ignores_scheduler() -> None:
 def test_split_pipeline_layers_keeps_cache_common() -> None:
     common, per_leaf = split_pipeline_layers(
         [
-            {"middleware": "llm_cache", "params": {"allow_read": True}},
-            {"middleware": "fault_inject", "params": {"rate": 0.1}},
-            {"middleware": "llm_scheduler", "params": {"max_in_flight": 2}},
+            {"layer": "llm_cache", "params": {"allow_read": True}},
+            {"layer": "fault_inject", "params": {"rate": 0.1}},
+            {"layer": "llm_scheduler", "params": {"max_in_flight": 2}},
         ]
     )
-    assert [step["middleware"] for step in common] == ["llm_cache"]
-    assert [step["middleware"] for step in per_leaf] == ["fault_inject", "llm_scheduler"]
+    assert [step["layer"] for step in common] == ["llm_cache"]
+    assert [step["layer"] for step in per_leaf] == ["fault_inject", "llm_scheduler"]
 
 
 class _StubProvider:
@@ -244,9 +244,9 @@ class _StubProvider:
 @pytest.mark.parametrize(
     "step",
     [
-        {"middleware": "llm_scheduler", "params": {"max_in_flight": 2}},
-        {"middleware": "fault_inject", "params": {"rate": 0.0}},
-        {"middleware": "llm_cache", "params": {"allow_read": False, "allow_write": False}},
+        {"layer": "llm_scheduler", "params": {"max_in_flight": 2}},
+        {"layer": "fault_inject", "params": {"rate": 0.0}},
+        {"layer": "llm_cache", "params": {"allow_read": False, "allow_write": False}},
     ],
 )
 def test_piped_llm_provider_copy_and_deepcopy(step) -> None:
@@ -269,7 +269,7 @@ def test_wrap_llm_provider_pipeline_instantiates_fault_inject() -> None:
     inner = _StubProvider()
     wrapped = wrap_llm_provider_pipeline(
         inner,
-        [{"middleware": "fault_inject", "params": {"rate": 1.0, "message": "injected"}}],
+        [{"layer": "fault_inject", "params": {"rate": 1.0, "message": "injected"}}],
     )
     assert isinstance(wrapped, PipedLLMProvider)
     with pytest.raises(RuntimeError, match="injected"):
@@ -279,7 +279,7 @@ def test_wrap_llm_provider_pipeline_instantiates_fault_inject() -> None:
 
 def test_cache_key_includes_model(tmp_path) -> None:
     cache_path = tmp_path / "cache.json"
-    pipeline = [{"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}}]
+    pipeline = [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}]
     first = wrap_call_stack(
         _EchoEngine(preview_text="same-prompt", model="m-a", api_base="https://a.example/v1"),
         pipeline,
@@ -309,7 +309,7 @@ def test_legacy_middleware_cache_hits_with_one_leaf(tmp_path) -> None:
     inner = _EchoEngine(preview_text=preview, model="m-a", api_base="https://a.example/v1")
     engine = wrap_call_stack(
         inner,
-        [{"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}}],
+        [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}],
     )
     out = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert out.text == "old-hit"
@@ -339,7 +339,7 @@ def test_legacy_middleware_cache_misses_with_several_leaves(tmp_path) -> None:
     )
     engine = wrap_call_stack(
         inner,
-        [{"middleware": "llm_cache", "params": {"cache_path": str(cache_path)}}],
+        [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}],
     )
     out = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert out.text == "live-response-1"
@@ -349,12 +349,12 @@ def test_legacy_middleware_cache_misses_with_several_leaves(tmp_path) -> None:
 def test_split_pipeline_honours_explicit_per() -> None:
     common, per_leaf = split_pipeline_layers(
         [
-            {"middleware": "custom_limiter", "per": "all"},
-            {"middleware": "fault_inject", "params": {"rate": 0.1}},
+            {"layer": "custom_limiter", "per": "all"},
+            {"layer": "fault_inject", "params": {"rate": 0.1}},
         ]
     )
-    assert [step["middleware"] for step in common] == ["custom_limiter"]
-    assert [step["middleware"] for step in per_leaf] == ["fault_inject"]
+    assert [step["layer"] for step in common] == ["custom_limiter"]
+    assert [step["layer"] for step in per_leaf] == ["fault_inject"]
 
 
 def test_two_cache_steps_warn(caplog) -> None:
@@ -363,8 +363,8 @@ def test_two_cache_steps_warn(caplog) -> None:
     caplog.set_level(logging.WARNING)
     split_pipeline_layers(
         [
-            {"middleware": "llm_cache", "params": {}},
-            {"middleware": "llm_cache", "params": {"allow_read": False}},
+            {"layer": "llm_cache", "params": {}},
+            {"layer": "llm_cache", "params": {"allow_read": False}},
         ]
     )
     assert "llm_cache" in caplog.text
@@ -374,7 +374,7 @@ def test_wrap_llm_provider_skips_tool_steps() -> None:
     inner = _StubProvider()
     wrapped = wrap_llm_provider_pipeline(
         inner,
-        [{"middleware": "fault_inject", "for": "tool", "params": {"rate": 1.0}}],
+        [{"layer": "fault_inject", "for": "tool", "params": {"rate": 1.0}}],
     )
     assert wrapped is inner
     assert inner.chat_completion(model="m", messages=[])["content"] == "ok"
@@ -384,7 +384,7 @@ def test_wrap_tool_pipeline_skips_llm_steps() -> None:
     body = _EchoEngine()
     wrapped = wrap_tool_pipeline(
         body,
-        [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+        [{"layer": "llm_scheduler", "params": {"max_in_flight": 1}}],
     )
     assert wrapped is body
 
@@ -392,11 +392,11 @@ def test_wrap_tool_pipeline_skips_llm_steps() -> None:
 def test_two_leaf_schedulers_are_separate_instances() -> None:
     first = wrap_llm_provider_pipeline(
         _StubProvider(),
-        [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+        [{"layer": "llm_scheduler", "params": {"max_in_flight": 1}}],
     )
     second = wrap_llm_provider_pipeline(
         _StubProvider(),
-        [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
+        [{"layer": "llm_scheduler", "params": {"max_in_flight": 1}}],
     )
     assert isinstance(first, PipedLLMProvider)
     assert isinstance(second, PipedLLMProvider)

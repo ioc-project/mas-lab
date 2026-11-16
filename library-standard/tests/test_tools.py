@@ -366,7 +366,7 @@ async def test_acall_tool_falls_back_when_no_owner():
 @pytest.mark.asyncio
 async def test_acall_tool_system_plugin_uses_call_tool():
     class _Sys:
-        def claims(self, name):
+        def claims(self, name, ctx=None):
             return name == "sys"
 
         def call(self, name, arguments, context=None):
@@ -380,7 +380,7 @@ async def test_acall_tool_system_plugin_uses_call_tool():
 @pytest.mark.asyncio
 async def test_acall_tool_awaits_async_system_plugin():
     class _SysAsync:
-        def claims(self, name):
+        def claims(self, name, ctx=None):
             return name == "sys"
 
         async def call(self, name, arguments, context=None):

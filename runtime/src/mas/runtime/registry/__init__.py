@@ -458,6 +458,10 @@ class PluginRegistry:
             return key
         return self._aliases.get(key)
 
+    def entries_of_type(self, plugin_type: str) -> list[PluginEntry]:
+        """Every row registered under *plugin_type* (or one of its deprecated spellings), in registry order."""
+        return self._entries_for_type(plugin_type)
+
     def entries_named(self, name: str, plugin_types: str | Iterable[str] | None = None) -> list[PluginEntry]:
         """Every registered plugin whose URN, shortcut or alias is exactly *name*.
 

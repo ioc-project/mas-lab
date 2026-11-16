@@ -20,7 +20,7 @@ from mas.runtime.layers.base import LayerBase
 logger = logging.getLogger(__name__)
 
 LAYER_TYPE = "layer"
-LEGACY_LAYER_TYPES = ("infra_middleware", "stack_layer", "circuit_breaker")
+LEGACY_LAYER_TYPES = ("infra_middleware", "circuit_breaker")
 
 _SHARED_PER = "all"
 _DESTINATION_PER = "destination"
@@ -117,6 +117,33 @@ def _layer_entry_attributes(name: str) -> dict[str, Any]:
     return {}
 
 
+def layers_declaring(attr: str) -> list[tuple[str, Any]]:
+    """``(layer name, value)`` of every layer row whose attributes declare *attr*, in registry order.
+
+    The runtime never names a layer. A library row says what its layer is for (``stores_llm_responses``,
+    ``control_key``, ``default_steps``) and the runtime asks the registry which layers say so.
+    """
+    from mas.runtime.registry import get_registry
+
+    out: list[tuple[str, Any]] = []
+    for entry in get_registry().entries_of_type(LAYER_TYPE):
+        value = (entry.attributes or {}).get(attr)
+        if value not in (None, "", False, [], {}) and entry.shortcuts:
+            out.append((str(entry.shortcuts[0]).lower(), value))
+    return out
+
+
+def response_store_layer() -> str:
+    """The layer that stores llm responses (record and replay), as a library row declares it.
+
+    ``LayerLoadError`` when no installed library provides one: there is no cache without that plugin.
+    """
+    names = [name for name, _ in layers_declaring("stores_llm_responses")]
+    if not names:
+        raise LayerLoadError("no installed layer declares stores_llm_responses; install a library that provides one")
+    return names[0]
+
+
 def _declared(name: str, attr: str, read: Callable[[type[LayerBase]], Any]) -> Any:
     """What layer *name* declares: its class (when it derives from ``LayerBase``), else its library row's *attr*."""
     cls = _layer_class(name)
@@ -185,6 +212,7 @@ def stamp_layer_step(spec: dict[str, Any] | None, *, where: str = "") -> dict[st
         step["layer"] = str(step.get("middleware") or "").strip()
     elif "layer" not in step and layer_id(step):
         step["layer"] = layer_id(step)
+    step.pop("middleware", None)
     step["for"] = list(layer_call_kinds(step))
     step["per"] = layer_per(step)
     step["priority"] = layer_priority(step)
@@ -248,18 +276,77 @@ def is_scheduler_layer(spec: dict[str, Any] | None) -> bool:
     return bool(_declared(layer_id(spec), "paces_llm_calls", lambda c: c.paces_llm_calls))
 
 
+def observes_failures(spec: dict[str, Any] | None) -> bool:
+    """True for a layer that must see the inner call raise (retry, circuit breaker)."""
+    return bool(_declared(layer_id(spec), "observes_failures", lambda c: c.observes_failures))
+
+
+def layer_role(spec: dict[str, Any] | None) -> str:
+    """``transport`` (bottom), ``protocol`` (framing), or ``wrap`` (retry, cache, impair)."""
+    cls = _layer_class(layer_id(spec))
+    if cls is not None:
+        if bool(getattr(cls, "protocol_layer", False)):
+            return "protocol"
+        if getattr(cls, "needs_lower", True) is False:
+            return "transport"
+    attrs = _layer_entry_attributes(layer_id(spec))
+    if attrs.get("protocol_layer"):
+        return "protocol"
+    if str(attrs.get("role") or "").strip().lower() == "transport":
+        return "transport"
+    return "wrap"
+
+
+def declared_protocol_layers(plugin_type: str, kind: str, spec: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Steps a protocol plugin lists as sugar for ``protocol: <kind>`` plus a url."""
+    if not kind:
+        return []
+    from mas.runtime.registry import get_registry
+
+    info = get_registry().resolve_by_type(plugin_type, kind)
+    if info is None:
+        return []
+    try:
+        cls = info.load_class()
+    except (ImportError, AttributeError, TypeError):
+        return []
+    listed = getattr(cls, "protocol_layers", None)
+    if not callable(listed):
+        return []
+    out: list[dict[str, Any]] = []
+    for step in listed(spec) or []:
+        if isinstance(step, dict):
+            out.append(stamp_layer_step(step))
+    return out
+
+
+def merge_protocol_layers(
+    pipeline: list[dict[str, Any]] | None,
+    *,
+    plugin_type: str,
+    kind: str,
+    spec: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Put the protocol's own steps in front of *pipeline* when that pipeline omitted them."""
+    steps = [dict(step) for step in (pipeline or []) if isinstance(step, dict)]
+    have = {layer_id(step) for step in steps}
+    extra = [step for step in declared_protocol_layers(plugin_type, kind, spec) if layer_id(step) not in have]
+    return extra + steps
+
+
 def apply_layer(engine: Any, spec: dict[str, Any]) -> Any:
     """Wrap *engine* with one registered layer. An unknown or unloadable layer raises, never skips."""
     name = layer_id(spec)
     if not name:
         return engine
     plugin_cls = require_layer_class(name)
-    if not issubclass(plugin_cls, LayerBase):
+    wrapped = plugin_cls.wrap(engine, dict(spec.get("params") or {}), call_kinds=layer_call_kinds(spec))
+    if not isinstance(wrapped, LayerBase):
         warn_deprecated_once(
-            f"layer-base:{plugin_cls.__module__}.{plugin_cls.__qualname__}",
-            f"layer {name!r} ({plugin_cls.__qualname__}) does not derive from LayerBase",
+            f"layer-base:{type(wrapped).__module__}.{type(wrapped).__qualname__}",
+            f"layer {name!r} ({type(wrapped).__qualname__}) does not derive from LayerBase",
         )
-    return plugin_cls.wrap(engine, dict(spec.get("params") or {}), call_kinds=layer_call_kinds(spec))
+    return wrapped
 
 
 def compose(body: Any, pipeline: list[dict[str, Any]] | None, *, kind: str = "") -> Any:

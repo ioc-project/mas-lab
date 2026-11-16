@@ -407,8 +407,8 @@ def _is_ratelimit_error(exc: Exception) -> bool:
 
 
 def _mce_retry_policy():
+    from mas.library.standard.lib.retry import RetryPolicy
     from mas.runtime.reliability.classes import FailureClass
-    from mas.runtime.reliability.policy import RetryPolicy
 
     return RetryPolicy(
         max_attempts=_MCE_MAX_RETRIES + 1,
@@ -433,7 +433,7 @@ def _classify_mce_failure(exc: BaseException):
 
 
 def _call_with_mce_retry(fn, *, model: str):
-    from mas.runtime.reliability.retry import call_with_retry
+    from mas.library.standard.lib.retry import call_with_retry
 
     return call_with_retry(
         fn,

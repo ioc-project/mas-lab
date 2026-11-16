@@ -1,7 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 import pytest
-from mas.ctl.executor.spawn_ledger import SpawnLedger
+from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
 def test_spawn_ledger_enforces_session_wide_count_and_branch_depth():

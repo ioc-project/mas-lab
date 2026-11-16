@@ -28,7 +28,7 @@ An override never edits a file on disk. It patches the in-memory manifest for on
 
 ```text
 .mas.agent[planner].spec.context.role
-.infra.spec.interceptors[middleware=llm_cache].params.allow_write
+.infra.spec.pipeline[layer=llm_cache].params.allow_write
 .config.defaults.model
 ```
 
@@ -246,12 +246,12 @@ Walking the MAS YAML (`.mas.spec.agency.agents[id=planner].spec.tools`) still wo
 
 You cannot select a model through `.mas.spec`. Use `--model`, or the experiment's `models:` slots.
 
-Resolved infra exposes its ordered middleware chain as `spec.pipeline` (leftover address `spec.interceptors`), including each entry's `middleware`, `for`, and typed `params`:
+Resolved infra exposes its ordered layer chain as `spec.pipeline`, including each entry's `layer`, `for`, and typed `params`:
 
 ```bash
 mas-ctl chat agent.yaml --infra-ref infra/llm-cache.yaml \
-  --override '.infra.spec.interceptors[middleware=llm_cache].params.allow_write=true' \
-  --override '.infra.spec.interceptors[middleware=llm_cache].params.raise_on_miss=false'
+  --override '.infra.spec.pipeline[layer=llm_cache].params.allow_write=true' \
+  --override '.infra.spec.pipeline[layer=llm_cache].params.raise_on_miss=false'
 ```
 
 Infra overrides apply after merging infra refs, interceptors, and runtime profiles, and they keep the other resolved resources. Provider settings live under `spec.proxy`, MCP servers under `spec.tool_servers[id=...]`, A2A peers under `spec.endpoints["name"]`, and engine policy under `spec.runtime_engine`. See [override-stack.yaml](../schemas/examples/infra/override-stack.yaml) for a complete example.

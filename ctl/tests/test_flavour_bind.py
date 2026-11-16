@@ -15,7 +15,7 @@ from mas.ctl.compose.models import AgentBindSlice, EffectiveBindManifest, Placem
 from mas.ctl.compose.runner import ComposeResult
 from mas.ctl.executor.mas_session import MaterializedMas, wire_peer_delegation
 from mas.ctl.executor.stacks import ChainHandles
-from mas.ctl.infra.bind import BindError, bind_flavour
+from mas.ctl.infra.bind import BindError, apply_agent_call_stacks, bind_flavour
 from mas.ctl.infra.resolve import resolve_infra_refs
 from mas.ctl.session.flavour import FlavourError, resolve_flavour
 from mas.ctl.validate import validate_file
@@ -100,6 +100,227 @@ def test_bind_usage_hosts_every_agent_that_omits_its_own() -> None:
         {"agent_comm": ["desk-node"], "usage": ["connect", "listen"], "agents": {"outage": {"usage": "connect"}}}
     )
     assert resolved.agent_usage == {"triage": _BOTH, "billing": _BOTH, "outage": ["connect"]}
+
+
+def test_stack_kind_is_a_named_list_of_layers(tmp_path: Path) -> None:
+    path = tmp_path / "desk-llm.yaml"
+    path.write_text(
+        "apiVersion: infra/v1\n"
+        "kind: Stack\n"
+        "metadata: {name: desk-llm}\n"
+        "spec:\n"
+        "  layers:\n"
+        "    - {layer: retry, for: [llm]}\n"
+        "    - {layer: openai, for: [llm]}\n",
+        encoding="utf-8",
+    )
+    resolved = resolve_infra_refs([str(path)], anchor=tmp_path, catalog=True)
+    assert [step.get("layer") for step in resolved.stacks["desk-llm"]] == ["retry", "openai"]
+
+
+def test_stack_kind_validates(tmp_path: Path) -> None:
+    path = tmp_path / "desk-llm.yaml"
+    path.write_text(
+        "apiVersion: infra/v1\n"
+        "kind: Stack\n"
+        "metadata: {name: desk-llm}\n"
+        "spec:\n"
+        "  layers:\n"
+        "    - {layer: retry, for: [llm]}\n"
+        "    - {layer: openai, for: [llm]}\n",
+        encoding="utf-8",
+    )
+    result = validate_file(path, kind="infra", strict=True)
+    assert result.ok, result.issues
+
+
+def test_the_documented_stack_example_resolves_validates_and_binds(tmp_path: Path) -> None:
+    stack = tmp_path / "hardened-llm.yaml"
+    stack.write_text(
+        "apiVersion: infra/v1\nkind: Stack\nmetadata: {name: hardened-llm}\nspec:\n  layers:\n"
+        "    - layer: retry\n      for: [llm]\n      params: {max_attempts: 3}\n"
+        "    - layer: circuit_breaker\n      for: [llm]\n",
+        encoding="utf-8",
+    )
+    assert validate_file(stack, kind="infra", strict=True).ok
+    flavour = {"bind": {"llm": {"stack": "hardened-llm"}, "agents": {"planner": {"llm": {"stack": "hardened-llm"}}}}}
+    base = resolve_infra_refs([str(stack)], anchor=tmp_path, catalog=True)
+    bound = bind_flavour(base, flavour, agent_ids=["planner"])
+    assert [step["layer"] for step in bound.agent_llm_pipelines["planner"]] == ["retry", "circuit_breaker"]
+
+
+def test_bind_llm_does_not_invent_an_llm_endpoint() -> None:
+    steps = [{"layer": "retry", "for": ["llm"]}]
+    bound = bind_flavour(ResolvedInfra(stacks={"s": steps}), {"bind": {"llm": {"stack": "s"}}}, agent_ids=["a"])
+    assert not bound.llm_proxy
+    assert bound.llm_stack == steps
+
+
+def test_flavour_bind_llm_validates(tmp_path: Path) -> None:
+    path = tmp_path / "desk.yaml"
+    path.write_text(
+        "apiVersion: flavour/v1\nkind: Flavour\nmetadata: {name: desk}\nspec:\n  bind:\n    llm: {stack: desk-llm}\n",
+        encoding="utf-8",
+    )
+    result = validate_file(path, kind="flavour", strict=True)
+    assert result.ok, result.issues
+
+
+def test_bind_llm_stack_prepends_layers_to_the_llm_pipeline() -> None:
+    steps = [{"layer": "retry", "for": ["llm"]}, {"layer": "openai", "for": ["llm"]}]
+    resolved = bind_flavour(
+        ResolvedInfra(
+            applications=_rows(),
+            stacks={"desk-llm": steps},
+            llm_proxy={"pipeline": [{"layer": "llm_cache"}]},
+            llm_proxies={"arm": {"pipeline": [{"layer": "llm_cache"}]}},
+        ),
+        {"bind": {"llm": {"stack": "desk-llm"}}},
+        agent_ids=_DESK,
+    )
+    assert [step["layer"] for step in resolved.llm_proxy["pipeline"]] == ["retry", "openai", "llm_cache"]
+    assert [step["layer"] for step in resolved.llm_proxies["arm"]["pipeline"]] == ["retry", "openai", "llm_cache"]
+
+
+def test_bind_tools_stack_prepends_layers_to_the_tool_pipeline() -> None:
+    steps = [{"layer": "retry", "for": ["tool"]}]
+    resolved = bind_flavour(
+        ResolvedInfra(
+            applications=_rows(),
+            stacks={"desk-tools": steps},
+            tool_pipeline=[{"layer": "llm_cache"}],
+            tool_server_registry={"mcp-web": {"protocol": "mcp", "pipeline": []}},
+        ),
+        {"bind": {"tools": {"stack": "desk-tools"}}},
+        agent_ids=_DESK,
+    )
+    assert [step["layer"] for step in resolved.tool_pipeline] == ["retry", "llm_cache"]
+    assert [step["layer"] for step in resolved.tool_server_registry["mcp-web"]["pipeline"]] == ["retry"]
+
+
+def test_bind_llm_omitted_attaches_no_stack() -> None:
+    resolved = bind_flavour(
+        ResolvedInfra(applications=_rows(), stacks={"desk-llm": [{"layer": "retry"}]}, llm_proxy={"pipeline": []}),
+        {"bind": {"agent_comm": ["desk-node"]}},
+        agent_ids=_DESK,
+    )
+    assert resolved.llm_stack == []
+    assert resolved.llm_proxy["pipeline"] == []
+    assert resolved.agent_llm_pipelines == {}
+
+
+def test_bind_llm_unknown_stack_is_refused() -> None:
+    with pytest.raises(BindError, match="no Stack row"):
+        bind_flavour(
+            ResolvedInfra(applications=_rows()),
+            {"bind": {"llm": {"stack": "missing"}}},
+            agent_ids=_DESK,
+        )
+
+
+def test_bind_llm_list_of_names_is_refused() -> None:
+    with pytest.raises(BindError, match=r"bind.llm is \{stack: NAME\}"):
+        bind_flavour(
+            ResolvedInfra(applications=_rows(), stacks={"desk-llm": []}),
+            {"bind": {"llm": ["desk-llm"]}},
+            agent_ids=_DESK,
+        )
+
+
+def test_bind_agents_llm_replaces_the_session_stack_for_that_agent() -> None:
+    default = [{"layer": "retry", "for": ["llm"]}]
+    own = [{"layer": "llm_cache", "for": ["llm"]}]
+    resolved = bind_flavour(
+        ResolvedInfra(
+            applications=_rows(),
+            stacks={"desk-llm": default, "outage-llm": own},
+            llm_proxy={"pipeline": [{"layer": "delay"}]},
+        ),
+        {
+            "bind": {
+                "llm": {"stack": "desk-llm"},
+                "agents": {"outage": {"llm": {"stack": "outage-llm"}}},
+            }
+        },
+        agent_ids=_DESK,
+    )
+    assert [step["layer"] for step in resolved.llm_proxy["pipeline"]] == ["retry", "delay"]
+    assert [step["layer"] for step in resolved.agent_llm_pipelines["triage"]] == ["retry"]
+    assert [step["layer"] for step in resolved.agent_llm_pipelines["outage"]] == ["llm_cache"]
+    outage = apply_agent_call_stacks(resolved, "outage")
+    triage = apply_agent_call_stacks(resolved, "triage")
+    assert [step["layer"] for step in outage.llm_proxy["pipeline"]] == ["llm_cache", "delay"]
+    assert [step["layer"] for step in triage.llm_proxy["pipeline"]] == ["retry", "delay"]
+
+
+def test_bind_agents_tools_replaces_the_session_stack_for_that_agent() -> None:
+    default = [{"layer": "retry", "for": ["tool"]}]
+    own = [{"layer": "delay", "for": ["tool"]}]
+    resolved = bind_flavour(
+        ResolvedInfra(
+            applications=_rows(),
+            stacks={"desk-tools": default, "outage-tools": own},
+            tool_pipeline=[{"layer": "llm_cache"}],
+            tool_server_registry={"mcp-web": {"protocol": "mcp", "pipeline": []}},
+        ),
+        {
+            "bind": {
+                "tools": {"stack": "desk-tools"},
+                "agents": {"outage": {"tools": {"stack": "outage-tools"}}},
+            }
+        },
+        agent_ids=_DESK,
+    )
+    outage = apply_agent_call_stacks(resolved, "outage")
+    assert [step["layer"] for step in outage.tool_pipeline] == ["delay", "llm_cache"]
+    assert [step["layer"] for step in outage.tool_server_registry["mcp-web"]["pipeline"]] == ["delay"]
+
+
+def test_agents_from_manifest_lists_the_agent_llm_stack() -> None:
+    from mas.ctl.infra.show import agents_from_manifest
+
+    default = [{"layer": "retry", "for": ["llm"]}]
+    own = [{"layer": "llm_cache", "for": ["llm"]}]
+    resolved = bind_flavour(
+        ResolvedInfra(applications=_rows(), stacks={"desk-llm": default, "outage-llm": own}),
+        {
+            "bind": {
+                "llm": {"stack": "desk-llm"},
+                "agents": {"outage": {"llm": {"stack": "outage-llm"}}},
+            }
+        },
+        agent_ids=_DESK,
+    )
+    rows = {
+        row["id"]: row
+        for row in agents_from_manifest(
+            {
+                "kind": "MAS",
+                "spec": {"agency": {"agents": [{"id": "outage"}, {"id": "triage"}]}},
+            },
+            infra=resolved,
+        )
+    }
+    assert rows["outage"]["llm"] == ["llm_cache"]
+    assert rows["triage"]["llm"] == ["retry"]
+
+
+def test_flavour_bind_agent_llm_validates(tmp_path: Path) -> None:
+    path = tmp_path / "desk.yaml"
+    path.write_text(
+        "apiVersion: flavour/v1\n"
+        "kind: Flavour\n"
+        "metadata: {name: desk}\n"
+        "spec:\n"
+        "  bind:\n"
+        "    llm: {stack: desk-llm}\n"
+        "    agents:\n"
+        "      outage:\n"
+        "        llm: {stack: outage-llm}\n",
+        encoding="utf-8",
+    )
+    result = validate_file(path, kind="flavour", strict=True)
+    assert result.ok, result.issues
 
 
 def test_no_bind_leaves_released_agent_rows_as_they_are_and_links_no_agent() -> None:

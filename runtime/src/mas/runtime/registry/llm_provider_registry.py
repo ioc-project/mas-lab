@@ -6,8 +6,8 @@ Wire protocols (``openai`` now; ``bedrock`` later) are ``llm_provider`` plugins.
 ``spec.models[].kind`` claims which protocol owns which model name, the same
 way ``spec.providers[].kind`` claims which plugin owns which tool name.
 
-Cache is a decorator around the routed provider, not a protocol. Offline CI
-replays a recorded live provider through ``llm_cache`` (``raise_on_miss``).
+Cache is the ``llm_cache`` layer around the routed provider, not a protocol.
+Offline CI replays a recorded live provider through ``llm_cache`` (``raise_on_miss``).
 """
 
 from __future__ import annotations
@@ -19,7 +19,18 @@ from mas.runtime.contracts.tool_semantics import existing_attr
 from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.registry.llm_provider_protocol import require_achat_completion
 
-_NON_PROTOCOL_KINDS = frozenset({"cache", "llm_cache", "mock"})
+
+def _non_protocol_kinds() -> frozenset[str]:
+    """Names that wrap a provider and are not a wire protocol: provider rows marked ``wraps_provider``, and the
+    layers that store llm responses. A library row declares both; the runtime lists no name."""
+    from mas.runtime.layers.compose import layers_declaring
+    from mas.runtime.registry import get_registry
+
+    names = {name for name, _ in layers_declaring("stores_llm_responses")}
+    for entry in get_registry().entries_of_type("llm_provider"):
+        if (entry.attributes or {}).get("wraps_provider"):
+            names.update(str(token).lower() for token in entry.shortcuts)
+    return frozenset(names)
 
 
 def leaf_llm_kind(provider: Any) -> str:
@@ -29,7 +40,7 @@ def leaf_llm_kind(provider: Any) -> str:
     while current is not None and id(current) not in seen:
         seen.add(id(current))
         kind = str(existing_attr(current, "kind") or existing_attr(current, "provider_id") or "").strip().lower()
-        if kind in _NON_PROTOCOL_KINDS:
+        if kind in _non_protocol_kinds():
             current = existing_attr(current, "inner")
             continue
         if kind:
@@ -51,18 +62,21 @@ def llm_provider_class(kind: str) -> type:
 def default_llm_provider_kind() -> str:
     from mas.runtime.registry import get_registry
 
-    return get_registry().default_for("llm_provider") or "openai"
+    kind = get_registry().default_for("llm_provider")
+    if not kind:
+        raise ValueError("no llm_provider is the default: name spec.models[].kind, or install a library that sets one")
+    return kind
 
 
 def protocol_kind_from_infra(llm_proxy: dict[str, Any] | None) -> str:
     """Wire-protocol kind from resolved infra (never cache/mock)."""
     proxy = llm_proxy or {}
     kind = str(proxy.get("protocol") or "").strip()
-    if kind.lower() in _NON_PROTOCOL_KINDS:
+    if kind.lower() in _non_protocol_kinds():
         kind = ""
     if not kind:
         fallback = str(proxy.get("provider") or "").strip()
-        if fallback.lower() not in _NON_PROTOCOL_KINDS:
+        if fallback.lower() not in _non_protocol_kinds():
             kind = fallback
     return kind or default_llm_provider_kind()
 
@@ -252,7 +266,7 @@ def iter_model_provider_specs(
             ).strip()
             or default_kind
         )
-        if kind.lower() in _NON_PROTOCOL_KINDS:
+        if kind.lower() in _non_protocol_kinds():
             raise ValueError(
                 f"spec.models[].kind {kind!r} is not a wire protocol; "
                 "cache wraps the routed provider and is not claimed here"
@@ -445,6 +459,9 @@ def llm_providers_from_manifest(
             kind="llm",
             retry_overlay=retry_overlay if isinstance(retry_overlay, dict) else None,
         )
+        from mas.runtime.layers.compose import merge_protocol_layers
+
+        pipeline = merge_protocol_layers(pipeline, plugin_type="llm_provider", kind=kind, spec=payload)
         _, per_leaf = split_pipeline_layers(pipeline)
         provider = wrap_llm_provider_pipeline(
             instantiate_llm_provider(kind, payload),
@@ -470,21 +487,25 @@ def wrap_llm_provider_cache(
     cache_write: bool = True,
     cache_raise_on_miss: bool = False,
 ) -> Any:
-    """Decorator: disk cache in front of a routed protocol plugin (not a protocol)."""
+    """The engine ``llm_cache`` layer in front of a routed protocol plugin."""
     if inner is None:
         return inner
     kind = str(existing_attr(inner, "kind") or existing_attr(inner, "provider_id") or "").strip().lower()
-    if kind in _NON_PROTOCOL_KINDS:
+    if kind in _non_protocol_kinds():
         return inner
-    return instantiate_llm_provider(
-        "cache",
-        {
-            "inner": inner,
-            "cache_path": cache_path,
-            "allow_read": cache_read,
-            "allow_write": cache_write,
-            "raise_on_miss": cache_raise_on_miss,
-        },
+    from mas.runtime.engine.infra_pipeline import wrap_llm_provider_pipeline
+    from mas.runtime.layers.compose import response_store_layer
+
+    params: dict[str, Any] = {
+        "allow_read": cache_read,
+        "allow_write": cache_write,
+        "raise_on_miss": cache_raise_on_miss,
+    }
+    if cache_path is not None:
+        params["cache_path"] = str(cache_path)
+    return wrap_llm_provider_pipeline(
+        inner,
+        [{"layer": response_store_layer(), "for": ["llm"], "params": params}],
     )
 
 

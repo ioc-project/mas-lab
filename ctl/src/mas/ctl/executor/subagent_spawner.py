@@ -10,13 +10,13 @@ from typing import Any, Callable
 
 import yaml
 from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
-from mas.ctl.executor.spawn_ledger import SpawnLedger
 from mas.ctl.manifest.spec_bindings import SpecBindingError, parse_subagent_templates
 from mas.library.standard.plugins.tools.containment import containment_roots, resolve_under_roots
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.engine.tools import SPAWN_SUBAGENT_TOOL, spawn_subagent_params
 from mas.runtime.registry import get_registry
+from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
 def _resolve_engine_tool_class(name: str) -> type:

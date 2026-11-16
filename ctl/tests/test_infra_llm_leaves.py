@@ -82,7 +82,7 @@ def _middleware(path: Path, *, name: str, middleware: str, params: str = "") -> 
         "kind: InfraMiddleware\n"
         f"metadata: {{name: {name}}}\n"
         "spec:\n"
-        f"  middleware: {middleware}\n"
+        f"  layer: {middleware}\n"
         f"{params_block}",
         encoding="utf-8",
     )
@@ -112,9 +112,9 @@ def test_cache_is_common_other_steps_clone_per_leaf(tmp_path: Path) -> None:
         params="    max_in_flight: 2\n",
     )
     infra = resolve_infra_refs([str(arm), str(judge), str(cache), str(sched)], anchor=tmp_path)
-    assert [step["middleware"] for step in infra.llm_proxy["pipeline"]] == ["llm_cache"]
+    assert [step["layer"] for step in infra.llm_proxy["pipeline"]] == ["llm_cache"]
     for leaf in infra.llm_proxies.values():
-        assert [step["middleware"] for step in leaf.get("pipeline") or []] == ["llm_scheduler"]
+        assert [step["layer"] for step in leaf.get("pipeline") or []] == ["llm_scheduler"]
 
 
 def test_bundle_entry_pipeline_stays_on_that_leaf(tmp_path: Path) -> None:
@@ -147,7 +147,7 @@ def test_bundle_entry_pipeline_stays_on_that_leaf(tmp_path: Path) -> None:
         "      type: llm_provider\n"
         "      ref: arm.yaml\n"
         "      pipeline:\n"
-        "        - middleware: fault_inject\n"
+        "        - layer: fault_inject\n"
         "          params: {rate: 0.5}\n"
         "    - id: judge\n"
         "      type: llm_provider\n"
@@ -155,8 +155,8 @@ def test_bundle_entry_pipeline_stays_on_that_leaf(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     infra = resolve_infra_refs([str(bundle)], anchor=tmp_path)
-    assert [step["middleware"] for step in infra.llm_proxy["pipeline"]] == ["llm_cache"]
-    assert [step["middleware"] for step in infra.llm_proxies["arm"].get("pipeline") or []] == ["fault_inject"]
+    assert [step["layer"] for step in infra.llm_proxy["pipeline"]] == ["llm_cache"]
+    assert [step["layer"] for step in infra.llm_proxies["arm"].get("pipeline") or []] == ["fault_inject"]
     assert infra.llm_proxies["judge"].get("pipeline") in (None, [])
 
 
@@ -190,7 +190,7 @@ def test_cli_override_preserves_leaves(tmp_path: Path) -> None:
     assert infra.llm_proxies["judge"]["api_base"] == "https://judge.example/v1"
     assert infra.llm_proxies["judge"]["api_key_env"] == "JUDGE_KEY"
     for leaf in infra.llm_proxies.values():
-        assert [step["middleware"] for step in leaf.get("pipeline") or []] == ["llm_scheduler"]
+        assert [step["layer"] for step in leaf.get("pipeline") or []] == ["llm_scheduler"]
 
 
 def test_same_name_later_file_replaces(tmp_path: Path) -> None:
@@ -207,7 +207,7 @@ def test_same_name_later_file_replaces(tmp_path: Path) -> None:
         "spec:\n  protocol: openai\n"
         "  proxy: {api_base: https://new.example/v1, api_key_env: NEW_KEY}\n"
         "  models:\n    allowed: [new-model]\n"
-        "  interceptors:\n    - middleware: llm_scheduler\n      params: {max_in_flight: 3}\n",
+        "  interceptors:\n    - layer: llm_scheduler\n      params: {max_in_flight: 3}\n",
         encoding="utf-8",
     )
     infra = resolve_infra_refs([str(first), str(later)], anchor=tmp_path)
@@ -216,7 +216,7 @@ def test_same_name_later_file_replaces(tmp_path: Path) -> None:
     assert leaf["api_base"] == "https://new.example/v1"
     assert leaf["api_key_env"] == "NEW_KEY"
     assert leaf.get("allowed") == ["new-model"]
-    assert [step["middleware"] for step in leaf.get("pipeline") or []] == ["llm_scheduler"]
+    assert [step["layer"] for step in leaf.get("pipeline") or []] == ["llm_scheduler"]
 
 
 def test_unclaimed_model_with_several_leaves_is_error() -> None:

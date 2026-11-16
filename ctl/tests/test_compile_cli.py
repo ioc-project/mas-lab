@@ -21,9 +21,9 @@ TUTORIAL_2 = REPO_ROOT / "docs/tutorials/02-creating-a-mas"
     [
         (
             "InfraMiddleware",
-            {"middleware": "llm_cache", "params": {"allow_write": False}},
+            {"layer": "llm_cache", "params": {"allow_write": False}},
             "infra:spec.params.allow_write=true",
-            {"middleware": "llm_cache", "params": {"allow_write": True}},
+            {"layer": "llm_cache", "params": {"allow_write": True}},
         ),
         (
             "LLMProxy",

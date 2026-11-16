@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 import ssl
 import sys
 from pathlib import Path
@@ -89,7 +90,7 @@ def classify_http_exception(exc: BaseException, *, message: str = "") -> Classif
     if isinstance(exc, httpx.HTTPStatusError):
         return _classify_status(exc, operator=operator)
     lowered = text.lower()
-    if any(tok in lowered for tok in ("429", "rate limit", "too many", "quota")):
+    if re.search(r"\b429\b", lowered) or any(tok in lowered for tok in ("rate limit", "too many", "quota")):
         return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code="RATE_LIMIT")
     if any(marker in text for marker in _UNAVAILABLE_MARKERS):
         return ClassifiedFailure(operator, failure_class=FailureClass.UNAVAILABLE, code="CONNECT")
@@ -117,11 +118,15 @@ def _classify_status(exc: Any, *, operator: str) -> ClassifiedFailure:
 
 def classify_tool_exception(exc: BaseException) -> ClassifiedFailure:
     """Tool dispatch / implementation failure."""
+    from mas.runtime.boundary.control.contract import ControlDenied, SessionPaused
     from mas.runtime.engine.manifest_tool_provider import ManifestToolLoadError
     from mas.runtime.engine.tool_routing import ExplicitToolUnavailableError, UnclaimedToolError
 
     if isinstance(exc, (ClassifiedFailure, CircuitOpenError)):
         return exc
+    if isinstance(exc, (SessionPaused, ControlDenied)):
+        # A refusal by the session, not a tool fault: never retried, whatever its text says.
+        return ClassifiedFailure(str(exc), failure_class=FailureClass.APPLICATION, code="CONTROL")
     if type(exc).__name__ == "ToolExecutionError" and exc.__cause__ is not None:
         return classify_tool_exception(exc.__cause__)
     if isinstance(exc, (ManifestToolLoadError, UnclaimedToolError)):
@@ -183,7 +188,7 @@ def classify_llm_http_error(exc: BaseException) -> str:
             "LLM request failed: TLS certificate verification failed. "
             "Use the repo .venv (`task install-dev`, `direnv allow`). "
             "For corporate proxies set SSL_CERT_FILE or spec.infra llm_proxy.ca_bundle. "
-            f"On macOS CPython you may also { _macos_install_certificates_hint() }."
+            f"On macOS CPython you may also {_macos_install_certificates_hint()}."
         )
 
     if isinstance(exc, ssl.SSLError) or any(marker in str(exc) for marker in _TRANSIENT_MARKERS):

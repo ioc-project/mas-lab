@@ -50,6 +50,7 @@ properties:
       - Infrastructure
       - RuntimeEngine
       - ServiceBundle
+      - Stack
 
   metadata:
     type: object
@@ -161,13 +162,24 @@ properties:
       protocol:
         type: string
         description: >
-          Wire-protocol plugin kind for the LLMProvider registry
-          (``openai`` now; later ``bedrock``, …). Ollama and LiteLLM
-          proxies use ``openai``. Default is the library ``llm_provider``
-          default (openai). Not ``mock`` or ``cache`` — offline CI uses
-          ``llm_cache`` replay (``raise_on_miss``); cache wraps the routed
-          protocol plugin.
+          Sugar for a layer or a Stack. On an LLMProxy leaf this is the
+          wire-protocol plugin (``openai`` now; later ``bedrock``, …) and
+          expands to ``[http, openai]`` when a url is set. On a
+          ToolServerRegistry row, ``mcp`` plus a url expands to
+          ``[http, mcp]``. Ollama and LiteLLM proxies use ``openai``.
+          Default is the library ``llm_provider`` default. Not ``mock`` or
+          ``cache`` — offline CI uses ``llm_cache`` replay
+          (``raise_on_miss``); cache wraps the routed protocol plugin.
         default: openai
+
+      layers:
+        type: array
+        description: >
+          Stack kind: named layers, bottom first (transport then protocol
+          then wrap). ``protocol: openai`` on an LLMProxy stays sugar for
+          this list.
+        items:
+          $ref: "./fragments/infra-middleware-inline.schema.yaml"
 
       proxy:
         type: object

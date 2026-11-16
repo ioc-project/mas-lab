@@ -16,6 +16,11 @@ function or an MCP server answers.
 MCP client and server plugins ship in `library-ioa` and use the official
 Python SDK (`mcp>=2.2`). The console script is `mas-mcp`.
 
+The MCP client is a protocol layer over `http`. `protocol: mcp` plus a url
+is sugar for `[http, mcp]`. The tool provider that the engine sees sits on
+top of that layer. `--connect NAME=mcp://host:port/mcp#tool` still writes the
+same ToolServerRegistry row.
+
 A remote tool is a `ToolServerRegistry` entry:
 
 ```yaml
@@ -67,3 +72,4 @@ and [RESULTS.md](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/co
 - [kind: Tool](../manifests/tool.md)
 - [ToolContract](../references/tool-contract.md)
 - [Infra manifest](../manifests/infra.md)
+- [Communication stack](../references/comm-stack.md)

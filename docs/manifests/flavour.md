@@ -49,7 +49,7 @@ A new Flavour sets `bind` and, when it attaches Controls, `control`.
 | Key | What happens |
 |-----|------------------|
 | `agent_comm` | Accepted and read by nothing. The in-process link is the library default `agent_comm` plugin. How agents reach each other is `bind`. |
-| `tools` | Accepted and read by nothing. Tool exposure is configured through infra. |
+| `tools` | Accepted and read by nothing (leftover, not `bind.tools`). Tool exposure is infra. |
 | leftover `control` mapping | Accepted and read by nothing. Live Flavour `control` is a list of Control refs. See [control.md](control.md). |
 | `telemetry` | Accepted and read by nothing. |
 | `observability` | Accepted and read by nothing. Put it in a [Control](control.md). `--events*` is a shortcut on the run. `bind.events` names sink rows and adds those plugins. Native records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins. |
@@ -76,7 +76,7 @@ Its declared sections are:
 | `observability` | Deprecated and ignored. Observability is a Control entry or `--events*`. `bind.events` names sink rows. Native records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins. |
 | `control` | Control manifests this Flavour attaches: a list of `{ref, agents}`. `agents` is `$all` (default), `$entry`, `$not-entry`, `$delegates`, one agent id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`) — the same idea as `bind.agents.<id>` for one agent and the default `bind.agent_comm` chain for every agent. A leftover mapping is unread. |
 | `require_usage` | When true, every agent of the session must have a bind chain or an agent-keyed Application row. Bundled `prod` sets this. A file named `prod.yaml` does not. |
-| `tools` | Deprecated and ignored: leftover tool-exposure block. Tool exposure is configured through infra. |
+| `tools` | Deprecated and ignored leftover tool-exposure block (not `bind.tools`). Tool exposure is infra; `bind.tools` picks a Stack. |
 | `config` | Free-form deployment configuration. Never store secret values. |
 | `operator` | Operator/provisioner metadata. |
 
@@ -118,7 +118,35 @@ spec:
 | `bind.agents.<id>.agent_comm` | That agent's own chain, instead of the default. |
 | `bind.agents.<id>.usage` | `connect` (this deployment reaches the agent over its chain), `listen` (this deployment hosts it), or both. Omitted, it is `bind.usage`, else `connect`. It must be within the `usage` of every row of the chain. |
 | `bind.agents.<id>.params` | Overrides of a row's params for that agent: row name to `{param: value}`. A string value may hold `{agent}`. |
+| `bind.agents.<id>.llm` | That agent's llm stack, instead of `bind.llm`. `{stack: NAME}`. |
+| `bind.agents.<id>.tools` | That agent's tool stack, instead of `bind.tools`. `{stack: NAME}`. |
 | `bind.events` | Application row names of observability sinks this deployment uses. Each row adds the plugin its `protocol` names and gives it the row's own settings (not `url`, `secret_env` or the other endpoint keys). Native `events.jsonl` still records. `--no-events` and an explicit `--events-format` replace the set. |
+| `bind.llm` | `{stack: NAME}` naming a `kind: Stack` infra row. Default llm stack for every agent that omits its own. Those layers wrap llm calls the way `bind.agent_comm` wraps send. |
+| `bind.tools` | `{stack: NAME}` naming a `kind: Stack` infra row. Default wrap layers (retry, impair) for every agent that omits its own. `http` and `mcp` belong on the tool-server row (`protocol: mcp`), not this stack. |
+
+A Stack row is a list of layers, bottom first, that a Flavour picks by name:
+
+```yaml
+# infra/hardened-llm.yaml
+apiVersion: infra/v1
+kind: Stack
+metadata: {name: hardened-llm}
+spec:
+  layers:
+    - layer: retry
+      for: [llm]
+      params: {max_attempts: 3}
+    - layer: circuit_breaker
+      for: [llm]
+---
+# flavour
+spec:
+  bind:
+    llm: {stack: hardened-llm}
+    agents:
+      planner:
+        llm: {stack: hardened-llm}
+```
 
 Bundled names: `local` (in-process, the default) and `prod` (`require_usage`: every agent must have a bind chain or an agent-keyed Application row). `--connect` / `--listen` / `--bind` write agent-keyed Application rows; they are not copied into Flavour `bind`.
 

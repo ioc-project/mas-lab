@@ -14,9 +14,11 @@ use the Assistants API or the Responses API.
 
 ## How MAS-Lab implements it
 
-`OpenAILLMProvider` in `library-standard` is the `LLMProvider` plugin.
-It speaks the wire protocol with `httpx` (not the `openai` Python SDK). Infra
-selects it:
+`OpenAILLMProvider` in `library-standard` is the chat-completions layer over
+`http`. `protocol: openai` plus a url is sugar for `[http, openai]`. The
+engine still calls `chat_completion`; that adapter sits on top of the layer.
+It speaks `POST {api_base}/chat/completions` with `httpx` (not the `openai`
+Python SDK). Infra selects it:
 
 ```yaml
 # bundled as standard:openai
@@ -62,3 +64,4 @@ a compatible endpoint.
 - [LLM reasoning](../manifests/llm-reasoning.md)
 - [LLM model catalog](../manifests/llm-model-catalog.md)
 - [Contracts](../references/contracts.md) (`LLMProvider`)
+- [Communication stack](../references/comm-stack.md)
