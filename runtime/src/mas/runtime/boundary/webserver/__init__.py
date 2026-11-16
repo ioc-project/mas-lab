@@ -1,3 +1,3 @@
-from .protocol import WebServerContract, WebServerHandle
+from .protocol import TransportValidatingWebServer, WebServerContract, WebServerHandle, WebServerTransport
 
-__all__ = ["WebServerContract", "WebServerHandle"]
+__all__ = ["TransportValidatingWebServer", "WebServerContract", "WebServerHandle", "WebServerTransport"]
