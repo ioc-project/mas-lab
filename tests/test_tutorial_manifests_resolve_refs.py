@@ -20,11 +20,8 @@ _RUNTIME_GLOBS: list[tuple[str, str]] = [
 
 def _tutorial_ref_paths() -> list[tuple[Path, str]]:
     root = mas_lab_root()
-    if not root.is_dir():
-        pytest.skip("mas-lab not present", allow_module_level=True)
     tutorials = root / "docs" / "tutorials"
-    if not tutorials.is_dir():
-        pytest.skip("docs/tutorials missing", allow_module_level=True)
+    assert tutorials.is_dir(), tutorials
     out: list[tuple[Path, str]] = []
     for pattern, kind in _RUNTIME_GLOBS:
         for path in sorted(tutorials.glob(pattern)):

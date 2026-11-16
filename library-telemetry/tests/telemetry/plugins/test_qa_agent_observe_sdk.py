@@ -13,8 +13,6 @@ from pathlib import Path
 
 from mas.library.telemetry.conversion import semconv
 
-from tests.conftest import requires_otel
-
 PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 QA_EVENTS = PACKAGE_ROOT / "examples" / "qa-agent" / "events.jsonl"
 
@@ -35,7 +33,6 @@ def _name(span: dict) -> str:
     return str(span.get("name") or "")
 
 
-@requires_otel
 def test_qa_agent_live_plugin_emits_session_end_and_graph(tmp_path: Path) -> None:
     assert QA_EVENTS.is_file(), QA_EVENTS
 

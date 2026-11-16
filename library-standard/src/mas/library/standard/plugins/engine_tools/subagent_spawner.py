@@ -92,7 +92,7 @@ class SubagentSpawner(SubagentContract):
     def is_subagent_tool(self, tool_name: str) -> bool:
         return tool_name in SPAWN_SUBAGENT_NAMES
 
-    def claims(self, tool_name: str) -> bool:
+    def claims(self, tool_name: str, *, ctx: Any = None) -> bool:
         return self.is_subagent_tool(tool_name)
 
     async def acall(

@@ -61,7 +61,7 @@ Key behaviors:
 - `session.end` is emitted on `mas_call_end`, with `finish()` or plugin close as the fallback.
 - Explicit dataflow: under `observe_sdk`, the native `state_*` fields become `ioa_observe.state.input.*` and `ioa_observe.state.output.*` attributes on agent, chat, tool, processing and `session.end` spans. The converter copies them and never infers or fills an id or content. A `delegate_to_*` tool call is an ordinary tool span of the caller. See [conversion](docs/conversion.md#explicit-dataflow-ioa_observestate).
 
-The core (`conversion/`, `verification/`, `collector/`, `steps/`, `OtelSpanSet`) does not depend on `mas.lab.*`, `mas.ctl.*` or `mas.runtime.*`. Only the integration layers do: the live plugin (`plugins/otel_plugin.py`, imports `mas.runtime`) and the benchmark adapters (`bench.py`, `codecs.py`, `steps/list_clickhouse_sessions.py`, import `mas.lab`).
+The core (`conversion/`, `verification/`, `collector/`, `steps/`, `OtelSpanSet`) does not depend on `mas.lab.*`, `mas.ctl.*` or `mas.runtime.*`. Only the integration layers do: the live plugin (`plugins/otel_plugin.py`, imports `mas.runtime`) and the benchmark adapters (`bench.py`, `steps/list_clickhouse_sessions.py`, import `mas.lab`).
 
 ## Install
 
@@ -308,7 +308,6 @@ mas/library/telemetry/
 +-- pipeline.py            public batch API
 +-- lab_cli.py             mas-lab telemetry CLI component
 +-- bench.py               PipelineStep adapters (needs [bench])
-+-- codecs.py              span codecs for the benchmark framework
 +-- infra.py               OtelCollector / ClickHouse infra-manifest targets
 +-- plugins/otel_plugin.py live `otel` observability plugin
 +-- conversion/            events.jsonl -> OTel spans (needs the SDK)

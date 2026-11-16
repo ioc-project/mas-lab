@@ -17,8 +17,6 @@ not a single generic key.
 
 from __future__ import annotations
 
-from tests.conftest import requires_otel
-
 
 def _by_name(spans: list[dict], *, suffix: str = "", exact: str = "") -> list[dict]:
     out = []
@@ -37,7 +35,6 @@ def _first(spans: list[dict], *, suffix: str = "", exact: str = "") -> dict:
     return found[0]
 
 
-@requires_otel
 def test_raw_profile_default_has_no_observe_sdk_attributes(spans):
     """Regression guard: the default (raw) profile must stay untouched --
     no ioa_observe.*/traceloop.* leakage into the toy round-trip shape.
@@ -53,7 +50,6 @@ def test_raw_profile_default_has_no_observe_sdk_attributes(spans):
         assert not any(k.startswith("traceloop.") for k in s["attributes"])
 
 
-@requires_otel
 def test_observe_sdk_profile_uses_real_dotted_span_names(observe_sdk_spans):
     names = {s["name"] for s in observe_sdk_spans}
     assert "planner.agent" in names
@@ -65,7 +61,6 @@ def test_observe_sdk_profile_uses_real_dotted_span_names(observe_sdk_spans):
     assert "root" not in names
 
 
-@requires_otel
 def test_mas_call_maps_to_invoke_agent_name(observe_sdk_spans):
     """mas_call_start/end is observe-sdk's ``invoke_agent {app}`` workflow root."""
     names = {s["name"] for s in observe_sdk_spans}
@@ -74,7 +69,6 @@ def test_mas_call_maps_to_invoke_agent_name(observe_sdk_spans):
     assert not any(n.endswith(".task") and "orchestrator" in n for n in names)
 
 
-@requires_otel
 def test_routing_annotations_avoid_the_real_routing_dispatch_convention(tmp_path):
     """Regression guard: naming every CallAnnotation `{agent}.{kind}` (so
     consumers can tell them apart -- see
@@ -134,7 +128,6 @@ def test_routing_annotations_avoid_the_real_routing_dispatch_convention(tmp_path
     assert [s["attributes"]["mas.annotation.kind"] for s in annotations] == ["routing"]
 
 
-@requires_otel
 def test_llm_call_naming_has_no_agent_specific_hardcoding(tmp_path):
     """Regression guard: every LLMCall boundary maps to `.chat` consistently,
     regardless of agent name. A previous version special-cased
@@ -191,7 +184,6 @@ def test_llm_call_naming_has_no_agent_specific_hardcoding(tmp_path):
     assert "moderator.task" not in names
 
 
-@requires_otel
 def test_observe_sdk_profile_sets_entity_input_output_per_boundary(observe_sdk_spans):
     agent_span = _first(observe_sdk_spans, suffix=".agent")
     assert str(agent_span["attributes"].get("ioa_observe.entity.input") or "").endswith("solve the task")
@@ -210,14 +202,12 @@ def test_observe_sdk_profile_sets_entity_input_output_per_boundary(observe_sdk_s
     assert tool_span["attributes"].get("ioa_observe.entity.output") == "search results"
 
 
-@requires_otel
 def test_observe_sdk_profile_sets_span_kind(observe_sdk_spans):
     assert _first(observe_sdk_spans, suffix=".agent")["attributes"].get("ioa_observe.span.kind") == "agent"
     assert _first(observe_sdk_spans, suffix=".chat")["attributes"].get("ioa_observe.span.kind") == "llm"
     assert _first(observe_sdk_spans, suffix=".tool")["attributes"].get("ioa_observe.span.kind") == "tool"
 
 
-@requires_otel
 def test_observe_sdk_profile_sets_genai_semconv_prompt_and_completion(
     observe_sdk_spans,
 ):
@@ -240,7 +230,6 @@ def test_observe_sdk_profile_sets_genai_semconv_prompt_and_completion(
     assert llm_attrs.get("gen_ai.usage.total_tokens") == 15
 
 
-@requires_otel
 def test_brownfield_output_fields_reach_scope_attributes(tmp_path):
     """The agent's answer is its final State (execution_end.state_in_content);
     the tool answer is tool_call_end.output. Norm copies
@@ -333,7 +322,6 @@ def test_brownfield_output_fields_reach_scope_attributes(tmp_path):
     assert llm.get("gen_ai.request.model") == "gpt-4o"
 
 
-@requires_otel
 def test_tool_end_closes_call_id_remapped_to_another_agent(tmp_path):
     """A later agent reusing a live call_id gets ``{agent}-{id}``. The end
     event still carries the raw id and must close that remapped span."""
@@ -405,7 +393,6 @@ def test_tool_end_closes_call_id_remapped_to_another_agent(tmp_path):
     assert tools[0]["name"] == "lookup_schedule.tool"
 
 
-@requires_otel
 def test_observe_sdk_profile_sets_bare_tool_name_and_ioa_start_time(observe_sdk_spans):
     """Regression guard for two attributes a real external consumer
     (SCOPE norm's GenericParser) requires: `ioa_start_time` (a hard
@@ -418,7 +405,6 @@ def test_observe_sdk_profile_sets_bare_tool_name_and_ioa_start_time(observe_sdk_
         assert s["attributes"].get("ioa_start_time"), s["name"]
 
 
-@requires_otel
 def test_annotation_and_provenance_gate_independently(tmp_path):
     """`annotation` and `provenance` are two independent toggles.
 
@@ -497,7 +483,6 @@ def test_annotation_and_provenance_gate_independently(tmp_path):
     assert not any("parallel_group" in n for n in no_prov)
 
 
-@requires_otel
 def test_call_annotations_are_off_by_default(tmp_path):
     """Observe-sdk default matches noa-trip-planner: no CallAnnotation spans."""
     import json
@@ -544,7 +529,6 @@ def test_call_annotations_are_off_by_default(tmp_path):
     assert "planner.agent" in names
 
 
-@requires_otel
 def test_observe_sdk_profile_names_call_annotations_by_the_annotation_suffix(tmp_path):
     """Every CallAnnotation is ``{agent}.annotation``: norm dispatches the
     ``*.annotation`` suffix to CallAnnotation and reads the kind from
@@ -599,7 +583,6 @@ def test_observe_sdk_profile_names_call_annotations_by_the_annotation_suffix(tmp
     assert kinds == ["context_assembled"]
 
 
-@requires_otel
 def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
     """Norm walks ParentSpanId / ioa_observe.agent.span_id / *.graph.
 
@@ -763,7 +746,6 @@ def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
         assert end >= start
 
 
-@requires_otel
 def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
     """Norm attaches hasLLMCall only when ``ioa_observe.agent.span_id``
     equals ``AgentCall.spanId`` exactly. Both must be the OTLP/ClickHouse
@@ -845,7 +827,6 @@ def _convert_observe_sdk(events: list[dict]):
     return conv
 
 
-@requires_otel
 def test_observe_sdk_reads_model_from_start(tmp_path):
     events = [
         {
@@ -902,7 +883,6 @@ def test_observe_sdk_reads_model_from_start(tmp_path):
     assert "lookup_quote" in str(attrs.get("mas.llm.tools") or "")
 
 
-@requires_otel
 def test_observe_sdk_tool_call_text_matches_native_kg(tmp_path):
     events = [
         {"kind": "execution_start", "call_id": "exec", "timestamp": 1.0, "agent_id": "planner", "input": "hi"},
@@ -946,7 +926,6 @@ def _cut_off_events() -> list[dict]:
     ]
 
 
-@requires_otel
 def test_a_call_with_no_end_event_is_not_exported(tmp_path):
     """An OTel SDK never exports a span that did not end: no end time or status is made up."""
     import json
@@ -964,7 +943,6 @@ def test_a_call_with_no_end_event_is_not_exported(tmp_path):
     assert not any(s["attributes"].get("mas.status") == "unfinished" for s in spans)
 
 
-@requires_otel
 def test_a_call_that_ended_is_still_successful(tmp_path):
     end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "ok"}
     events = [*_cut_off_events(), end]
@@ -973,7 +951,6 @@ def test_a_call_that_ended_is_still_successful(tmp_path):
     assert attrs.get("execution.success") == "true"
 
 
-@requires_otel
 def test_the_cap_on_the_return_replaces_the_one_on_start(tmp_path):
     end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "ok"}
     events = [*_cut_off_events(), {**end, "max_tokens": 512}]
@@ -982,7 +959,6 @@ def test_the_cap_on_the_return_replaces_the_one_on_start(tmp_path):
     assert attrs.get("mas.llm.max_tokens") == 512
 
 
-@requires_otel
 def test_a_malformed_temperature_does_not_stop_the_conversion(tmp_path):
     end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "ok"}
     events = [*_cut_off_events(), end]
@@ -991,7 +967,6 @@ def test_a_malformed_temperature_does_not_stop_the_conversion(tmp_path):
     assert "mas.llm.temperature" not in attrs
 
 
-@requires_otel
 def test_an_llm_call_that_ended_in_error_is_not_reported_as_successful(tmp_path):
     end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "boom"}
     attrs = _replay_chat_attrs(tmp_path, [*_cut_off_events(), {**end, "status": "error"}])
@@ -999,7 +974,6 @@ def test_an_llm_call_that_ended_in_error_is_not_reported_as_successful(tmp_path)
     assert attrs.get("execution.success") == "false"
 
 
-@requires_otel
 def test_iso_and_numeric_string_timestamps_place_a_span_like_numbers(tmp_path):
     import json
 

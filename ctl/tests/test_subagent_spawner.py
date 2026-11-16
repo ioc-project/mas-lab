@@ -438,3 +438,24 @@ async def test_restore_keeps_the_ledger_the_spawner_holds(tmp_path: Path):
     bound.restore(saved)
     assert state.ledger is ledger and state.spawner.context.ledger is ledger
     assert ledger.spawn_count("session") == 0  # spend rolled back on the object the spawner uses
+
+
+def test_a_model_override_reaches_the_spawners_context(tmp_path: Path):
+    """`mas-ctl chat --model` must apply to the agents a subagent spawns."""
+    template = SubagentTemplate(
+        template_id="worker",
+        description="Review code",
+        path=tmp_path / "worker.yaml",
+        manifest={"apiVersion": "mas/v1", "kind": "Agent"},
+    )
+    spawner = make_subagent_spawner(
+        materialized=SimpleNamespace(instances={}, bus=InProcessCommBus()),
+        parent_agent_id="root",
+        session_id="session",
+        templates={"worker": template},
+        ledger=SpawnLedger(max_depth=1, max_spawns=1),
+        working_memory_registry=WorkingMemoryRegistry(),
+        model_override="other-model",
+    )
+
+    assert spawner.context.model_override == "other-model"

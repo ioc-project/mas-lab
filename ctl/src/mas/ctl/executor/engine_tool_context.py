@@ -51,6 +51,7 @@ class MaterializedEngineToolContext:
     parent_spec: dict[str, Any] | None = None
     entry_id: str = ""
     delegate_ids: tuple[str, ...] = ()
+    model_override: str | None = None
     _children: dict[str, _Child] = field(default_factory=dict, init=False, repr=False)
 
     @property
@@ -111,6 +112,7 @@ class MaterializedEngineToolContext:
                 parent_spec=self.parent_spec,
                 entry_id=self.entry_id,
                 delegate_ids=self.delegate_ids,
+                model_override=self.model_override,
             )
 
         self.ledger.enter(self.session_id, child_agent_id=child_id, parent_agent_id=self.parent_agent_id)
@@ -193,6 +195,7 @@ class MaterializedEngineToolContext:
                 parent_spec=self.parent_spec,
                 entry_id=self.entry_id or None,
                 delegate_ids=self.delegate_ids,
+                model_override=self.model_override,
             )
         )
         instance.driver.agent_id = child_id

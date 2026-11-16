@@ -233,7 +233,7 @@ class SendTool:
     def is_send_tool(self, tool_name: str) -> bool:
         return tool_name == SEND_TOOL_NAME or self.is_delegate_tool(tool_name)
 
-    def claims(self, tool_name: str) -> bool:
+    def claims(self, tool_name: str, *, ctx: Any = None) -> bool:
         return self.is_delegate_tool(tool_name)
 
     def _resolve(

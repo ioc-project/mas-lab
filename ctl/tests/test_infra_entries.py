@@ -67,8 +67,7 @@ def test_infra_bundle_entries_loads_llm_proxy_cached(tmp_path: Path, monkeypatch
     bundle = Path(__file__).resolve().parents[2] / (
         "library-standard/src/mas/library/standard/libs/standard/llm-proxy-cached.yaml"
     )
-    if not bundle.is_file():
-        pytest.skip("library-standard bundle not in workspace")
+    assert bundle.is_file(), "library-standard bundle not in workspace"
 
     ws = WorkspaceConfig.load(tmp_path)
     merged = _load_file(bundle, workspace=ws)
@@ -301,8 +300,7 @@ spec:
 def test_library_samples_llm_cache_write_resolves_cache_path():
     repo = Path(__file__).resolve().parents[2]
     manifest = repo / "library-samples" / "infra" / "llm-cache-write.yaml"
-    if not manifest.is_file():
-        pytest.skip("library-samples/infra/llm-cache-write.yaml not in workspace")
+    assert manifest.is_file(), "library-samples/infra/llm-cache-write.yaml not in workspace"
     infra = resolve_infra_refs(["library-samples/infra/llm-cache-write.yaml"], anchor=repo)
     pipeline = infra.llm_proxy.get("pipeline") or []
     assert pipeline and pipeline[0].get("layer") == "llm_cache"
@@ -315,8 +313,7 @@ def test_resolve_infra_uses_workspace_root_when_anchor_omitted():
     """Library/eval paths that pass workspace= only still resolve scheme refs."""
     repo = Path(__file__).resolve().parents[2]
     sample = repo / "library-samples" / "sample-workspace"
-    if not (sample / "config.yaml").is_file():
-        pytest.skip("library-samples/sample-workspace/config.yaml not in workspace")
+    assert (sample / "config.yaml").is_file(), "library-samples/sample-workspace/config.yaml not in workspace"
     ws = WorkspaceConfig.load(sample)
     assert ws.found and ws.root
     infra = resolve_infra_refs(["standard:openai"], workspace=ws)
@@ -329,8 +326,7 @@ def test_workspace_infra_refs_resolve_from_subdirectory():
     repo = Path(__file__).resolve().parents[2]
     tutorial = repo / "docs/tutorials/01-building-an-agent"
     sample = repo / "library-samples" / "sample-workspace"
-    if not (sample / "config.yaml").is_file():
-        pytest.skip("library-samples/sample-workspace/config.yaml not in workspace")
+    assert (sample / "config.yaml").is_file(), "library-samples/sample-workspace/config.yaml not in workspace"
     ws = WorkspaceConfig.load(sample)
     assert ws.found
     infra = resolve_infra_refs(
@@ -344,8 +340,7 @@ def test_workspace_infra_refs_resolve_from_subdirectory():
 def test_tool_server_registry_resolves_connection_defaults():
     repo = Path(__file__).resolve().parents[2]
     sample = repo / "library-samples" / "infra" / "mcp-localhost.yaml"
-    if not sample.is_file():
-        pytest.skip("library-samples/infra/mcp-localhost.yaml not in workspace")
+    assert sample.is_file(), "library-samples/infra/mcp-localhost.yaml not in workspace"
     infra = resolve_infra_refs([str(sample)], anchor=repo)
     server = infra.tool_server_registry["localhost-mcp-tools"]
     assert server["protocol"] == "mcp"

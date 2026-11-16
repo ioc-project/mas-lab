@@ -14,8 +14,6 @@ import types
 
 import pytest
 
-from tests.conftest import requires_otel
-
 # ── tool_name ────────────────────────────────────────────────────────────────
 
 
@@ -65,7 +63,6 @@ def test_pipeline_load_events(tmp_path):
     assert [e["kind"] for e in stream_events_jsonl(p)] == ["a", "b"]
 
 
-@requires_otel
 def test_pipeline_build_and_push(tmp_path, events_path):
     from mas.library.telemetry.pipeline import (
         build_span_set_from_events,
@@ -246,7 +243,6 @@ def test_converter_static_helpers():
 # ── converter edge scenarios (orphan end, dup start, governance, obs_wrap) ────
 
 
-@requires_otel
 def test_converter_internals_scoping_and_flush(tmp_path):
     """Cross-agent call-id reuse, self-parent collapse, and error-status flush."""
     from mas.library.telemetry.conversion.replay import replay_events_file
@@ -305,7 +301,6 @@ def test_converter_internals_scoping_and_flush(tmp_path):
     assert tool["attributes"]["mas.status"] == "error"
 
 
-@requires_otel
 def test_converter_edge_scenarios(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -396,7 +391,6 @@ def test_converter_edge_scenarios(tmp_path):
     assert any(s["name"] == "LLMCall" for s in spans)
 
 
-@requires_otel
 def test_replay_write_mapping_and_empty(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -426,7 +420,6 @@ def test_replay_write_mapping_and_empty(tmp_path):
 # ── OTLP push_file with SDK-span input ───────────────────────────────────────
 
 
-@requires_otel
 def test_otlp_push_and_convert_native_input(tmp_path, events_path):
     from mas.library.telemetry.collector.otlp import (
         convert_file_to_otlp_jsonl,

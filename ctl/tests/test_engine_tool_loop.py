@@ -45,3 +45,10 @@ def test_deprecated_kernel_config_path_does_not_take_dead_ingress_specs():
     assert "ingress_plugin_specs" not in params
     kernel = kernel_config_from_manifest({"spec": {}})
     assert kernel is not None
+
+
+def test_granted_system_plugins_enable_llm_tool_catalog():
+    """A grant in spec.system_plugins alone (no spec.tools) must reach the model."""
+    manifest = {"spec": {"system_plugins": ["inform_user"]}}
+    kernel = kernel_config_from_manifest(manifest)
+    assert engine_use_tool_loop(manifest, kernel) is True

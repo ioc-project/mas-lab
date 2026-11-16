@@ -114,6 +114,7 @@ def make_subagent_spawner(
     parent_spec: dict[str, Any] | None = None,
     entry_id: str = "",
     delegate_ids: tuple[str, ...] = (),
+    model_override: str | None = None,
 ) -> Any:
     """Build EngineToolContext, then instantiate the registered spawn plugin."""
     templates = dict(templates)
@@ -132,6 +133,7 @@ def make_subagent_spawner(
             parent_spec=parent_spec,
             entry_id=entry_id,
             delegate_ids=delegate_ids,
+            model_override=model_override,
         )
     return _resolve_engine_tool_class(SPAWN_SUBAGENT_TOOL)(
         parent_agent_id=parent_agent_id,
@@ -173,6 +175,7 @@ def wire_subagent_spawning(
     parent_spec: dict[str, Any] | None = None,
     entry_id: str = "",
     delegate_ids: tuple[str, ...] = (),
+    model_override: str | None = None,
 ) -> Any | None:
     """Attach the spawner contract only when the tools entry declares it."""
     spec = manifest.get("spec") or {}
@@ -234,6 +237,7 @@ def wire_subagent_spawning(
         parent_spec=parent_spec,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        model_override=model_override,
     )
     if state is not None:
         state.spawner = spawner

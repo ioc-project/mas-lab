@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 from mas.library.telemetry.conversion.replay import _replay_delay_s, replay_events_file
 
-pytest.importorskip("opentelemetry.sdk")
-
 
 def test_replay_delay_instant_and_speed_factor() -> None:
     assert _replay_delay_s(1.0, 3.0, 0) == 0.0

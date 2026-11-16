@@ -1031,15 +1031,8 @@ def test_dotted_agent_id_is_refused() -> None:
 
 
 @pytest.mark.slim
-async def test_real_node_frame_crosses() -> None:
-    """Needs slim-bindings and a node on 127.0.0.1:46357 (tutorial 7, step 3, starts one)."""
-    import socket
-
-    pytest.importorskip("slim_bindings")
-    try:
-        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
-    except OSError:
-        pytest.skip("no SLIM node on 127.0.0.1:46357")
+async def test_real_node_frame_crosses(slim_url: str) -> None:
+    """Against an in-process SLIM node (``slim_url``)."""
     seen: list[tuple[str, str]] = []
 
     async def run_turn(agent_id: str, task: str, *_args: object) -> str:
@@ -1048,7 +1041,7 @@ async def test_real_node_frame_crosses() -> None:
 
     desk = _Desk(
         identity="acme/lab/mas",
-        url="http://127.0.0.1:46357",
+        url=slim_url,
         secret=_SECRET,
         timeout_s=5.0,
         run_turn=run_turn,
@@ -1067,15 +1060,8 @@ async def test_real_node_frame_crosses() -> None:
 
 
 @pytest.mark.slim
-async def test_real_node_a2a_layer_over_slim() -> None:
+async def test_real_node_a2a_layer_over_slim(slim_url: str) -> None:
     """``[slim, a2a]`` on the real node: an A2A request crosses, the answer comes back, a failed turn is an error."""
-    import socket
-
-    pytest.importorskip("slim_bindings")
-    try:
-        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
-    except OSError:
-        pytest.skip("no SLIM node on 127.0.0.1:46357")
 
     async def run_turn(agent_id: str, task: str, *rest: object) -> str:
         if task == "boom":
@@ -1084,7 +1070,7 @@ async def test_real_node_a2a_layer_over_slim() -> None:
 
     slim = {
         "type": "slim",
-        "params": {"url": "http://127.0.0.1:46357", "identity": "acme/lab/a2a", "secret": _SECRET, "timeout_s": 5.0},
+        "params": {"url": slim_url, "identity": "acme/lab/a2a", "secret": _SECRET, "timeout_s": 5.0},
     }
     handle = StackHandle("a2a-real", [slim, {"type": "a2a-framing"}], run_turn)
     try:
@@ -1098,20 +1084,13 @@ async def test_real_node_a2a_layer_over_slim() -> None:
 
 
 @pytest.mark.slim
-async def test_real_node_two_stacks_in_one_process() -> None:
-    import socket
-
-    pytest.importorskip("slim_bindings")
-    try:
-        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
-    except OSError:
-        pytest.skip("no SLIM node on 127.0.0.1:46357")
+async def test_real_node_two_stacks_in_one_process(slim_url: str) -> None:
 
     async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         return f"ok:{agent_id}:{task}"
 
     def desk(identity: str) -> _Desk:
-        return _Desk(identity=identity, url="http://127.0.0.1:46357", secret=_SECRET, timeout_s=5.0, run_turn=run_turn)
+        return _Desk(identity=identity, url=slim_url, secret=_SECRET, timeout_s=5.0, run_turn=run_turn)
 
     one, two = desk("acme/lab/mas"), desk("acme/lab/other")
     try:
@@ -1125,23 +1104,14 @@ async def test_real_node_two_stacks_in_one_process() -> None:
 
 
 @pytest.mark.slim
-async def test_real_node_two_actors_one_namespace() -> None:
+async def test_real_node_two_actors_one_namespace(slim_url: str) -> None:
     """Two actors on one identity, as two processes would be."""
-    import socket
-
-    pytest.importorskip("slim_bindings")
-    try:
-        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
-    except OSError:
-        pytest.skip("no SLIM node on 127.0.0.1:46357")
 
     async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         return f"ok:{agent_id}:{task}"
 
     def desk() -> _Desk:
-        return _Desk(
-            identity="acme/lab/mas", url="http://127.0.0.1:46357", secret=_SECRET, timeout_s=5.0, run_turn=run_turn
-        )
+        return _Desk(identity="acme/lab/mas", url=slim_url, secret=_SECRET, timeout_s=5.0, run_turn=run_turn)
 
     one, two = desk(), desk()
     try:
@@ -1538,15 +1508,8 @@ async def test_a_reply_that_never_comes_ends_at_the_reply_timeout() -> None:
 
 
 @pytest.mark.slim
-async def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for() -> None:
+async def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for(slim_url: str) -> None:
     """On a real node: a -> b -> c, and a turn longer than the I/O timeout still returns."""
-    import socket
-
-    pytest.importorskip("slim_bindings")
-    try:
-        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
-    except OSError:
-        pytest.skip("no SLIM node on 127.0.0.1:46357")
     links: dict[str, SlimAgentComm] = {}
 
     async def run_turn(agent_id: str, task: str, *_args: object) -> str:
@@ -1559,7 +1522,7 @@ async def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for() -> N
 
     desk = _Desk(
         identity="acme/lab/mas",
-        url="http://127.0.0.1:46357",
+        url=slim_url,
         secret=_SECRET,
         timeout_s=0.5,
         run_turn=run_turn,
@@ -1765,19 +1728,13 @@ def test_the_slim_grammar_refuses_an_agent_id_or_identity_before_anything_connec
 
 
 @pytest.mark.slim
-def test_real_node_idle_listen_is_an_idle_read() -> None:
+def test_real_node_idle_listen_is_an_idle_read(slim_url: str) -> None:
     """The real bindings' idle ``listen_for_session`` error is what ``_is_idle_timeout`` treats as idle."""
     import datetime
-    import socket
 
     from library_ioa.plugins.slim.inbound import _is_idle_timeout
 
-    pytest.importorskip("slim_bindings")
-    try:
-        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
-    except OSError:
-        pytest.skip("no SLIM node on 127.0.0.1:46357")
-    desk = _Desk(identity="acme/lab/idle", url="http://127.0.0.1:46357", secret=_SECRET, timeout_s=2.0)
+    desk = _Desk(identity="acme/lab/idle", url=slim_url, secret=_SECRET, timeout_s=2.0)
     try:
         link = desk.link("a")
         with pytest.raises(AgentCommError) as err:

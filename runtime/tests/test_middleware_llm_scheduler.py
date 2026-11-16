@@ -149,6 +149,7 @@ def test_policy_keys_shard_by_model(tmp_path: Path) -> None:
     install_policy(policy)
     started = threading.Event()
     release_first = threading.Event()
+    b_entered = threading.Event()
     order: list[str] = []
 
     def _a() -> None:
@@ -162,14 +163,15 @@ def test_policy_keys_shard_by_model(tmp_path: Path) -> None:
         started.wait(timeout=2)
         with llm_slot(model="b", policy=policy):
             order.append("b")
+            b_entered.set()
 
     ta = threading.Thread(target=_a)
     tb = threading.Thread(target=_b)
     ta.start()
     tb.start()
     started.wait(timeout=2)
-    time.sleep(0.05)
-    assert "b" in order
+    assert b_entered.wait(timeout=2), "model b waited behind model a's slot"
+    assert "a-out" not in order
     release_first.set()
     ta.join()
     tb.join()

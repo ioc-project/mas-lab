@@ -47,6 +47,7 @@ import importlib.resources
 import importlib.util
 import json
 import os
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -400,9 +401,10 @@ def _ancestor_named_libraries(*anchors: Path | None) -> dict[str, Path]:
 
 
 _REGISTERED_LAB_DIRS: list[Path] = []
+_LAB_DIRS_LOCK = threading.Lock()
 
 
-def register_lab_dir(lab_dir: Path) -> None:
+def register_lab_dir(lab_dir: Path) -> int | None:
     """Make *lab_dir*'s lab-local libraries visible whatever the process cwd.
 
     Discovery walks up from the caller's anchors and from ``Path.cwd()``. A
@@ -414,16 +416,36 @@ def register_lab_dir(lab_dir: Path) -> None:
 
     Roots accumulate for the life of the process. When two registered labs
     declare a library of the same name, the one registered last wins.
+
+    Returns the position the root held before (``None`` if it was new), for
+    :func:`restore_lab_dir`.
     """
     resolved = Path(lab_dir).resolve()
-    if resolved in _REGISTERED_LAB_DIRS:
-        _REGISTERED_LAB_DIRS.remove(resolved)
-    _REGISTERED_LAB_DIRS.append(resolved)
+    with _LAB_DIRS_LOCK:
+        previous = _REGISTERED_LAB_DIRS.index(resolved) if resolved in _REGISTERED_LAB_DIRS else None
+        if previous is not None:
+            _REGISTERED_LAB_DIRS.remove(resolved)
+        _REGISTERED_LAB_DIRS.append(resolved)
+    return previous
+
+
+def restore_lab_dir(lab_dir: Path, previous: int | None) -> None:
+    """Undo one :func:`register_lab_dir`: drop the root, or put it back where it was.
+
+    Only this root moves; the other roots keep their order.
+    """
+    resolved = Path(lab_dir).resolve()
+    with _LAB_DIRS_LOCK:
+        if resolved in _REGISTERED_LAB_DIRS:
+            _REGISTERED_LAB_DIRS.remove(resolved)
+        if previous is not None:
+            _REGISTERED_LAB_DIRS.insert(min(previous, len(_REGISTERED_LAB_DIRS)), resolved)
 
 
 def unregister_lab_dirs() -> None:
     """Forget every lab root added by :func:`register_lab_dir`."""
-    _REGISTERED_LAB_DIRS.clear()
+    with _LAB_DIRS_LOCK:
+        _REGISTERED_LAB_DIRS.clear()
 
 
 def _search_starts(*anchors: Path | None) -> list[Path]:
@@ -433,7 +455,8 @@ def _search_starts(*anchors: Path | None) -> list[Path]:
     raw: list[Path | None] = list(anchors) if anchors else []
     # Most recently registered first: the lab just loaded wins a name that an
     # earlier lab in the same long-lived process also declared.
-    raw.extend(reversed(_REGISTERED_LAB_DIRS))
+    with _LAB_DIRS_LOCK:
+        raw.extend(reversed(_REGISTERED_LAB_DIRS))
     raw.append(Path.cwd())
     for anchor in raw:
         if anchor is None:

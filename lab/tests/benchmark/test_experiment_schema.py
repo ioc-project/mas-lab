@@ -119,7 +119,6 @@ def test_dataset_path_without_name_validates() -> None:
 
 
 def test_former_and_canonical_dataset_items_validate() -> None:
-    pytest.importorskip("jsonschema")
     former = {
         "apiVersion": "lab/v1",
         "kind": "Dataset",

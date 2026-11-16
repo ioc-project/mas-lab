@@ -18,8 +18,7 @@ _AGENT = (
 
 
 def _chat(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    if not MAS_CTL.is_file():
-        pytest.skip("mas-ctl CLI not in venv")
+    assert MAS_CTL.is_file(), "mas-ctl CLI not in venv"
     (tmp_path / "agent.yaml").write_text(_AGENT, encoding="utf-8")
     return subprocess.run(
         [str(MAS_CTL), "chat", "agent.yaml", *flags, "-q", "hi"],
@@ -32,8 +31,7 @@ def _chat(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
 
 @pytest.mark.parametrize("command", ["chat", "tui", "serve", "run-mas", "compile", "infra resolved"])
 def test_the_control_flag_exists_on_every_session_command(command: str) -> None:
-    if not MAS_CTL.is_file():
-        pytest.skip("mas-ctl CLI not in venv")
+    assert MAS_CTL.is_file(), "mas-ctl CLI not in venv"
     out = subprocess.run([str(MAS_CTL), *command.split(), "--help"], capture_output=True, text=True, timeout=60).stdout
     assert "--control REF[@SELECTOR]" in out
     if command not in {"compile", "infra resolved"}:
@@ -44,8 +42,7 @@ def test_the_control_flag_exists_on_every_session_command(command: str) -> None:
 
 
 def test_no_control_dir_is_listed_on_chat_and_serve() -> None:
-    if not MAS_CTL.is_file():
-        pytest.skip("mas-ctl CLI not in venv")
+    assert MAS_CTL.is_file(), "mas-ctl CLI not in venv"
     for command in ("chat", "serve"):
         out = subprocess.run([str(MAS_CTL), command, "--help"], capture_output=True, text=True, timeout=60).stdout
         assert "--no-control-dir" in out
@@ -74,8 +71,7 @@ def test_an_unknown_events_sink_row_is_one_error_line(tmp_path: Path) -> None:
 
 
 def test_compile_control_does_not_copy_governance(tmp_path: Path) -> None:
-    if not MAS_CTL.is_file():
-        pytest.skip("mas-ctl CLI not in venv")
+    assert MAS_CTL.is_file(), "mas-ctl CLI not in venv"
     (tmp_path / "agent.yaml").write_text(_AGENT, encoding="utf-8")
     (tmp_path / "gov.yaml").write_text(
         "apiVersion: control/v1\nkind: Control\nmetadata: {name: gov}\nspec:\n  governance: [sample_governance]\n",
@@ -94,8 +90,7 @@ def test_compile_control_does_not_copy_governance(tmp_path: Path) -> None:
 
 
 def test_compile_flavour_control_does_not_copy_governance(tmp_path: Path) -> None:
-    if not MAS_CTL.is_file():
-        pytest.skip("mas-ctl CLI not in venv")
+    assert MAS_CTL.is_file(), "mas-ctl CLI not in venv"
     (tmp_path / "agent.yaml").write_text(_AGENT, encoding="utf-8")
     (tmp_path / "gov.yaml").write_text(
         "apiVersion: control/v1\nkind: Control\nmetadata: {name: gov}\nspec:\n  governance: [sample_governance]\n",

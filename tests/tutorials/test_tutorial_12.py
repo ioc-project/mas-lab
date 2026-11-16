@@ -8,7 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from tutorial_support import T12, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from fake_openai import FakeOpenAI, last_role, offered_tools, text, tool_call
+from tutorial_support import T12, load_yaml, run_cli, tutorial_copy
 
 
 class TestManifestValidation:
@@ -131,29 +132,55 @@ class TestSpawnDispatch:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Live mas-ctl chat (real LLM)
+# mas-ctl chat against a fake OpenAI endpoint
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = live_tutorial_chat
+
+def _delegate_script(body):
+    """Parent calls create_subagent, the reviewer child answers, the parent relays the verdict."""
+    if "create_subagent" not in offered_tools(body):
+        return text("Reviewer verdict: LGTM, the function is correct.")
+    if last_role(body) == "tool":
+        return text(f"The reviewer said: {body['messages'][-1]['content']}")
+    return tool_call("create_subagent", {"template": "reviewer", "task": "Check `def add(a, b): return a + b`."})
 
 
-@_LIVE
-class TestLiveSubagentChat:
-    def test_parent_delegates_to_reviewer(self):
-        r = run_cli(
-            [
-                "mas-ctl",
-                "chat",
-                "agent.yaml",
-                "--no-cache-read",
-                "--model",
-                "gpt-4o",
-                "--trace",
-                "-q",
-                "Ask the reviewer to check: `def add(a, b): return a + b`.",
-            ],
-            cwd=T12,
-            timeout=120,
-            extra_env=live_cli_env(),
-        )
+class TestSubagentChat:
+    def test_chat_offers_create_subagent_to_the_model(self, tmp_path):
+        """A grant in ``spec.system_plugins`` alone (no ``spec.tools``) puts the tool in the model request."""
+        with FakeOpenAI(lambda _body: text("Nothing to review.")) as fake:
+            r = run_cli(
+                ["mas-ctl", "chat", "agent.yaml", "--no-cache-read", "--model", "gpt-4o", "-q", "Review my change."],
+                cwd=tutorial_copy(T12, tmp_path),
+                timeout=120,
+                extra_env=fake.env(),
+            )
         assert r.returncode == 0, r.stderr
+        assert fake.bodies
+        offered = fake.bodies[0]["tools"]
+        spawn = next(tool["function"] for tool in offered if tool["function"]["name"] == "create_subagent")
+        assert spawn["parameters"]["properties"]["template"]["enum"] == ["reviewer"]
+
+    def test_parent_delegates_to_reviewer(self, tmp_path):
+        with FakeOpenAI(_delegate_script) as fake:
+            r = run_cli(
+                [
+                    "mas-ctl",
+                    "chat",
+                    "agent.yaml",
+                    "--no-cache-read",
+                    "--model",
+                    "gpt-4o",
+                    "-q",
+                    "Ask the reviewer to check: `def add(a, b): return a + b`.",
+                ],
+                cwd=tutorial_copy(T12, tmp_path),
+                timeout=120,
+                extra_env=fake.env(),
+            )
+        assert r.returncode == 0, r.stderr
+        assert "not wired" not in f"{r.stdout}{r.stderr}"
+        tool_results = [str(b["messages"][-1]["content"]) for b in fake.bodies if last_role(b) == "tool"]
+        assert tool_results
+        assert "LGTM" in tool_results[0]
+        assert "LGTM" in r.stdout

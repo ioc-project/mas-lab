@@ -5,21 +5,20 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
+import opentelemetry.sdk  # noqa: F401  (part of the [dev] extra; a missing install fails here)
 import pytest
 
+# test-only helpers shared with the other library suites; shipped in no package
+_SUPPORT = Path(__file__).resolve().parents[2] / "tests" / "support"
+if str(_SUPPORT) not in sys.path:
+    sys.path.insert(0, str(_SUPPORT))
+
+import scope_next  # noqa: E402
+
 FIXTURES = Path(__file__).parent / "fixtures"
-
-# opentelemetry-sdk is optional; conversion tests skip cleanly when it is absent.
-try:
-    import opentelemetry.sdk  # noqa: F401
-
-    OTEL_AVAILABLE = True
-except ImportError:  # pragma: no cover
-    OTEL_AVAILABLE = False
-
-requires_otel = pytest.mark.skipif(not OTEL_AVAILABLE, reason="opentelemetry-sdk not installed")
 
 
 @pytest.fixture
@@ -36,8 +35,6 @@ def events(events_path: Path) -> list[dict]:
 @pytest.fixture
 def spans_path(tmp_path: Path, events_path: Path) -> Path:
     """Replay the fixture events to an otel_sdk_spans.jsonl and return its path."""
-    if not OTEL_AVAILABLE:  # pragma: no cover
-        pytest.skip("opentelemetry-sdk not installed")
     from mas.library.telemetry.conversion.replay import replay_events_file
 
     out = tmp_path / "otel_sdk_spans.jsonl"
@@ -59,8 +56,6 @@ def spans(spans_path: Path) -> list[dict]:
 @pytest.fixture
 def observe_sdk_spans(tmp_path: Path, events_path: Path) -> list[dict]:
     """Replay canonical events with the observe_sdk converter profile."""
-    if not OTEL_AVAILABLE:  # pragma: no cover
-        pytest.skip("opentelemetry-sdk not installed")
     from mas.library.telemetry.conversion.replay import replay_events_file
 
     out = tmp_path / "observe_sdk_spans.jsonl"
@@ -74,20 +69,13 @@ def observe_sdk_spans(tmp_path: Path, events_path: Path) -> list[dict]:
     return [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
 
 
-# Tests marked ``scope_next`` exercise SCOPE ontology and ``norm`` changes that are not released.
-# They are off; run them against a SCOPE that has the changes with ``pytest --scope-next``.
 def pytest_addoption(parser):
-    parser.addoption("--scope-next", action="store_true", default=False, help="run the scope_next tests")
+    scope_next.add_option(parser)
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "scope_next: needs unreleased SCOPE changes; run with --scope-next")
+    scope_next.add_marker(config)
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--scope-next"):
-        return
-    skip = pytest.mark.skip(reason="needs unreleased SCOPE changes (run with --scope-next)")
-    for item in items:
-        if "scope_next" in item.keywords:
-            item.add_marker(skip)
+    scope_next.skip_unless_enabled(config, items)

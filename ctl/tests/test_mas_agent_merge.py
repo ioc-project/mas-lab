@@ -375,9 +375,9 @@ def test_apply_agency_entry_overlay_skills_op_add_keeps_agent_skills():
     from mas.ctl.manifest.mas_agent_merge import apply_agency_entry_overlay
 
     manifest = {"metadata": {"name": "d"}, "spec": {"skills": ["settlement-protocol"]}}
-    entry = {"id": "d", "skills": {"$op": {"add": ["l9-accord-v2-receiver"]}}}
+    entry = {"id": "d", "skills": {"$op": {"add": ["peer-receiver"]}}}
     merged = apply_agency_entry_overlay(manifest, entry)
-    assert merged["spec"]["skills"] == ["settlement-protocol", "l9-accord-v2-receiver"]
+    assert merged["spec"]["skills"] == ["settlement-protocol", "peer-receiver"]
 
 
 def test_apply_agency_entry_overlay_skills_op_add_dedups():

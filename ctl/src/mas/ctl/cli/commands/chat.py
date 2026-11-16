@@ -523,6 +523,28 @@ def chat_cmd(
                 manifest_content=agent_data or {},
             )
         controller.managed_session = managed_session
+        # Without this a granted create_subagent is advertised but has no spawner behind it.
+        from types import SimpleNamespace
+
+        from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
+
+        try:
+            wire_subagent_spawning(
+                getattr(instance.driver, "engine", None),
+                materialized=SimpleNamespace(instances={agent_id: instance}, bus=None),
+                manifest=agent_data or {},
+                manifest_dir=session.manifest_dir if manifest else None,
+                parent_agent_id=agent_id,
+                session_id=managed_session.session_id,
+                display=display,
+                verbose=verbose,
+                flavour_spec=flavour_spec,
+                entry_id=agent_id,
+                model_override=model,
+            )
+        except ValueError as exc:  # a grant with no templates, or a bad template reference
+            click.echo(f"error: {exc}", err=True)
+            raise SystemExit(1) from None
         display.on_system(f"session_id: {managed_session.session_id}")
 
         control_host = None

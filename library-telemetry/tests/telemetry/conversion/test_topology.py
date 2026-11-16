@@ -17,8 +17,6 @@ from mas.library.telemetry.conversion.topology import (
     topology_dynamism,
 )
 
-from tests.conftest import requires_otel
-
 _EVENTS = [
     {
         "kind": "mas_call_start",
@@ -187,7 +185,6 @@ def test_require_mas_name_raises_when_missing():
         require_mas_name("", "  ", None)
 
 
-@requires_otel
 def test_create_otel_export_service_name_is_not_identity(tmp_path):
     from mas.library.telemetry.conversion.session import create_otel_export
 
@@ -198,7 +195,6 @@ def test_create_otel_export_service_name_is_not_identity(tmp_path):
         )
 
 
-@requires_otel
 def test_replay_service_name_is_not_identity(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -249,7 +245,6 @@ def test_declared_mas_name_rejects_filesystem_path():
 # ── graph span through replay (golden, needs OTel SDK) ───────────────────────
 
 
-@requires_otel
 def test_replay_emits_graph_span(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -284,7 +279,6 @@ def test_replay_emits_graph_span(tmp_path):
     assert g["parent_id"] == root["context"]["span_id"]
 
 
-@requires_otel
 def test_explicit_app_name_overrides(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -304,7 +298,6 @@ def test_explicit_app_name_overrides(tmp_path):
     )
 
 
-@requires_otel
 def test_push_native_app_name_overwrites_service_name(tmp_path):
     from mas.library.telemetry.collector.otlp import push_file
 
@@ -321,7 +314,6 @@ def test_push_native_app_name_overwrites_service_name(tmp_path):
     assert result["service_name"] == "sample-app"
 
 
-@requires_otel
 def test_push_native_derives_app_name_when_unset(tmp_path):
     from mas.library.telemetry.collector.otlp import push_file
 
@@ -337,7 +329,6 @@ def test_push_native_derives_app_name_when_unset(tmp_path):
     assert result["service_name"] == "travel-planner"
 
 
-@requires_otel
 def test_emit_graph_false_suppresses(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -349,7 +340,6 @@ def test_emit_graph_false_suppresses(tmp_path):
     assert not any(s["name"].endswith(".graph") for s in spans)
 
 
-@requires_otel
 def test_path_app_name_is_rejected(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -365,7 +355,6 @@ def test_path_app_name_is_rejected(tmp_path):
         )
 
 
-@requires_otel
 def test_session_end_emitted_on_mas_call_end(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -391,7 +380,6 @@ def test_session_end_emitted_on_mas_call_end(tmp_path):
     assert names.index(next(n for n in names if n.endswith(".graph"))) < names.index("session.end")
 
 
-@requires_otel
 def test_no_session_end_without_mas_call_end(tmp_path):
     """A run that never recorded its end stays open: no session.end is made up."""
     from mas.library.telemetry.conversion.replay import replay_events_file
@@ -405,7 +393,6 @@ def test_no_session_end_without_mas_call_end(tmp_path):
     assert names.count("session.end") == 0
 
 
-@requires_otel
 def test_finish_does_not_duplicate_session_end(tmp_path):
     from mas.library.telemetry.conversion.session import create_otel_export
 

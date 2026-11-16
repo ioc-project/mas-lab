@@ -95,6 +95,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- `EngineToolContract.claims` takes the turn context: `claims(tool_name, *, ctx=None)`. A custom engine tool that defines `claims(tool_name)` must accept `ctx`.
 - The runtime names no layer and ships no pipeline data: default steps, the `spec.control` bridge keys and the response-store layer come from attributes on library rows (`default_steps`, `control_key`, `retry_overlay`, `stores_llm_responses`). The fallback `openai` default protocol and the `mock` non-protocol name are gone; `protocol: mock` is no longer read as the default. `RetryPolicy` and the retry loop moved to `mas.library.standard.lib.retry`; `ReliabilitySettings` is gone (the `spec.control` keys are checked by the layer that answers to them). `--connect` / `--listen` schemes come from the protocol plugin's row (`protocol_name`, `url_schemes`, `connect_as`).
 - `retry` and `circuit_breaker` with `per: all` on the shared engine call raise at install; they never saw a failure there. A non-idempotent tool is no longer retried on a connect error either.
 - The `stack_layer` plugin type is gone (never used): register the layer as `layer`.
@@ -212,6 +213,16 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- A tool a system plugin offers from the live turn context is claimed and run: the engine's tool dispatch passes the turn context to every engine tool's `claims(tool_name, *, ctx=None)`, so skill tools execute. Their result is formatted as text like any other tool result (a dict result used to fail with a validation error).
+- An agent whose tools come only from `spec.system_plugins` gets the tool loop.
+- `mas-ctl chat` wires the subagent spawner and passes `--model` to the child agents it starts.
+- `mas-lab benchmark pipeline run` stops with the library's error when a lab's library fails to load, instead of failing later on an unknown step.
+- Removed the unused `mas.library.telemetry.codecs` span codecs; `library-lab` alone provides the `otel_traces` codecs.
+- The default test run is offline: model calls go to a fake server, SLIM tests to an in-process node. Tests that need a network, Docker or keys live in `tests/functional` (`task test-functional`) and are not run by CI.
+- A lab whose library fails to register is dropped whole (none of its libraries stay registered), so it no longer breaks every lab loaded after it, even when the working directory is inside it; a failed library manifest restores the registry and no longer keeps its package name claimed.
+- `mas-lab benchmark pipeline run` resolves a lab's own `library.yaml` steps from any directory, like the controller.
+- The cot, react and reflection moderator overlays set `params.max_steps`, and the reflection overlay selects the reflection pattern.
+- Removed the `inject_lab_context` alias. `register_lab_dir` returns the position the root held before, and `restore_lab_dir` undoes one registration. Both are safe to call from several threads.
 - Native and OTel knowledge graphs of one run now agree (calls, states, transitions, edges, session and MAS-call intervals, `Run`). The native fold keeps an agent's `user_response` as its output instead of the context transcript, starts a resumed visit when its delegate returned, and closes a cut-off call at the last event (OTel did so at the replay's wall clock). OTel links every call to the calls that enclose it, names the run, and takes the session and MAS-call interval from the task span. `boundary_egress` is mapped on both paths. `compare_trajectories` checks it field by field.
 - A run that raises or is cancelled closes the engine calls it left open.
 - The qa-agent example traces and graphs and the Tutorial 1 sample trace are recaptured with the current event shapes. `observability-otel-json.yaml` loads again (the otel plugin declares `output_path` as a run path).

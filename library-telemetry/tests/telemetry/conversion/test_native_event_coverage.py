@@ -13,12 +13,9 @@ from mas.library.telemetry.conversion.layers import ExportLayers
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
 from mas.library.telemetry.verification.spanspec import SpanValidator
 
-from tests.conftest import requires_otel
-
 SAMPLES = Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
 
 
-@requires_otel
 def test_unknown_kind_emits_span_when_execution_enabled(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -45,7 +42,6 @@ def test_unknown_kind_emits_span_when_execution_enabled(tmp_path):
     assert kinds == {"totally_novel_kind"}
 
 
-@requires_otel
 def test_trip_planner_sample_emits_observe_sdk_spans_and_validates(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
     from mas.library.telemetry.steps.verify_spans import run_verify_spans

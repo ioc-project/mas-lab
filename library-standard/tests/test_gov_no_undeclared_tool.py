@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 from mas.library.standard.plugins.governance.no_undeclared_tool import (
     PLUGIN_ID,
@@ -195,7 +194,6 @@ def test_mwe_agent_spec_matches_offered_tools() -> None:
 
 
 def test_sample_agent_validates() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_file
 
     result = validate_file(SAMPLE / "agent.yaml", kind="agent", strict=True, resolve_refs=True)

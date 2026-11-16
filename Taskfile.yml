@@ -31,12 +31,13 @@ tasks:
     run: once
     summary: |
       One-time after clone (or when pyproject.toml changes). Same as install plus
-      library-samples (app/dataset registry), library-kg[norm] (the native-vs-OTel parity tests need it), library-telemetry[observe] (the realtime runtime events), pyarrow, and pytest tooling.
+      library-samples (app/dataset registry), library-ioa[slim] (the in-process SLIM node of the SLIM tests), library-kg[norm,validation] (the native-vs-OTel parity tests and the SHACL validation tests need them), library-telemetry[observe] (the realtime runtime events), pyarrow, and pytest tooling.
     cmds:
       - task: install
       - uv pip install -e library-samples
       - uv pip install -e "library-skills[all]"
-      - uv pip install -e "library-kg[norm]"
+      - uv pip install -e "library-ioa[slim]"
+      - uv pip install -e "library-kg[norm,validation]"
       - uv pip install -e "library-telemetry[observe]"
       - uv pip install pytest pytest-asyncio pytest-cov pytest-timeout "import-linter>=2.16" pyyaml click python-dotenv jsonschema httpx httpx2 certifi truststore pyarrow opentelemetry-sdk opentelemetry-exporter-otlp-proto-http ruff
 
@@ -442,6 +443,12 @@ tasks:
     cmds:
       - task: verify-unit
       - "{{.VENV}}/pytest tests/tutorials/ tests/test_lab_smoke_benchmark.py -v"
+
+  test-functional:
+    desc: "Run functional tests (network / Docker / keys); never run in CI"
+    deps: [install-dev]
+    cmds:
+      - "{{.VENV}}/pytest tests/functional -m functional -v"
 
   install-all:
     desc: "Install ALL MAS packages including optional extras (non-minimal). Run from repo root."

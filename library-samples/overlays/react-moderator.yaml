@@ -11,5 +11,5 @@ spec:
       moderator:
         design_pattern:
           type: react
-          config:
+          params:
             max_steps: 40

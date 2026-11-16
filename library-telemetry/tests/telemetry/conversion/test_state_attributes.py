@@ -16,8 +16,6 @@ from pathlib import Path
 from mas.library.telemetry.conversion import semconv
 from mas.library.telemetry.conversion.replay import replay_events_file
 
-from tests.conftest import requires_otel
-
 IN_ID = "ioa_observe.state.input.id"
 IN_CONTENT = "ioa_observe.state.input.content"
 OUT_ID = "ioa_observe.state.output.id"
@@ -234,7 +232,6 @@ def _single_agent_events() -> list[dict]:
     ]
 
 
-@requires_otel
 def test_single_agent_chain_links_every_element(tmp_path):
     spans = _replay(tmp_path, _single_agent_events())
     agent = _named(spans, "agent.agent")
@@ -263,7 +260,6 @@ def test_single_agent_chain_links_every_element(tmp_path):
     assert prev_content == _attrs(agent)[OUT_CONTENT]
 
 
-@requires_otel
 def test_single_agent_session_end_carries_the_boundary_states(tmp_path):
     spans = _replay(tmp_path, _single_agent_events())
     session_end = _named(spans, semconv.SPAN_NAME_SESSION_END)
@@ -274,13 +270,11 @@ def test_single_agent_session_end_carries_the_boundary_states(tmp_path):
     assert attrs[OUT_CONTENT] == "done"
 
 
-@requires_otel
 def test_raw_profile_carries_no_state_attributes(tmp_path):
     spans = _replay(tmp_path, _single_agent_events(), profile="raw")
     assert not any(k.startswith("ioa_observe.state.") for s in spans for k in _attrs(s))
 
 
-@requires_otel
 def test_no_span_has_a_wrapper_or_placeholder(tmp_path):
     spans = _replay(tmp_path, _single_agent_events())
     for span in spans:
@@ -295,7 +289,6 @@ def test_no_span_has_a_wrapper_or_placeholder(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@requires_otel
 def test_parallel_group_aggregate_joins_member_states(tmp_path):
     events = [
         {"kind": "mas_call_start", "call_id": "run", "agent_id": "mas", "timestamp": 1.0},
@@ -414,7 +407,6 @@ def test_parallel_group_aggregate_joins_member_states(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@requires_otel
 def test_delegation_joins_caller_tool_and_callee_visit(tmp_path):
     tool_input = '[{"arguments":{"task":"x"},"toolName":"delegate_to_schedule"}]'
     events = [
@@ -579,7 +571,6 @@ def test_delegation_joins_caller_tool_and_callee_visit(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@requires_otel
 def test_real_trace_every_input_state_is_produced(tmp_path):
     spans = _replay(tmp_path, _real_events())
     produced: set[str] = set()

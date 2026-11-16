@@ -57,7 +57,7 @@ class EngineToolContext(Protocol):
 class EngineToolContract(Protocol):
     """Claim and execute one orchestration-level tool call."""
 
-    def claims(self, tool_name: str) -> bool: ...
+    def claims(self, tool_name: str, *, ctx: Any = None) -> bool: ...
 
     async def acall(
         self,

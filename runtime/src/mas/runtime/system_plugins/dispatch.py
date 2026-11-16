@@ -16,8 +16,8 @@ class SystemPluginDispatcher:
     def __init__(self, bound: BoundSystemPlugins) -> None:
         self.bound = bound
 
-    def claims(self, tool_name: str) -> bool:
-        return self.bound.claims(tool_name)
+    def claims(self, tool_name: str, *, ctx: Any = None) -> bool:
+        return self.bound.claims(tool_name, ctx=ctx)
 
     @staticmethod
     def _context(ctx: Any, user: str, correlation_id: int, caller_call_id: str) -> CallContext:

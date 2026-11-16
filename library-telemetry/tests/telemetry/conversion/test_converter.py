@@ -6,10 +6,7 @@ from __future__ import annotations
 
 import json
 
-from tests.conftest import requires_otel
 
-
-@requires_otel
 def test_span_tree_and_names(spans):
     # Default layers = structure + execution + semantic + trajectory (governance OFF).
     names = sorted(s["name"] for s in spans)
@@ -21,7 +18,6 @@ def test_span_tree_and_names(spans):
     assert "GovernanceEvent" not in names  # governance layer off by default
 
 
-@requires_otel
 def test_exactly_one_root(spans):
     roots = [s for s in spans if not s.get("parent_id")]
     assert len(roots) == 1
@@ -30,7 +26,6 @@ def test_exactly_one_root(spans):
     assert task["parent_id"] == roots[0]["context"]["span_id"]
 
 
-@requires_otel
 def test_call_ids_and_parent_linking(spans):
     by_call = {s["attributes"].get("mas.call.id"): s for s in spans}
     assert {"run", "a1", "l1", "t1"} <= set(by_call)
@@ -40,7 +35,6 @@ def test_call_ids_and_parent_linking(spans):
     assert a1["parent_id"] == run["context"]["span_id"]
 
 
-@requires_otel
 def test_llm_tokens_and_response(spans):
     llm = next(s for s in spans if s["name"] == "LLMCall")
     a = llm["attributes"]
@@ -49,14 +43,12 @@ def test_llm_tokens_and_response(spans):
     assert "here is the plan" in a["mas.llm.response"]
 
 
-@requires_otel
 def test_app_name_overlay(spans):
     for s in spans:
         assert s["attributes"].get("application_id") == "test-app"
         assert s["attributes"].get("session.name") == "test-app"
 
 
-@requires_otel
 def test_governance_layer_off_by_default(tmp_path, events_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -67,7 +59,6 @@ def test_governance_layer_off_by_default(tmp_path, events_path):
     assert not any(s["name"] == "GovernanceEvent" for s in spans)
 
 
-@requires_otel
 def test_deterministic_replay(tmp_path, events_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
@@ -78,7 +69,6 @@ def test_deterministic_replay(tmp_path, events_path):
     assert a.read_text() == b.read_text()
 
 
-@requires_otel
 def test_sdk_unavailable_error_is_typed():
     # Construction failure path is covered indirectly; assert the class exists.
     from mas.library.telemetry.exceptions import (

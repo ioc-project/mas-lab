@@ -11,7 +11,7 @@
 | **URN** | `mas.layer.slim` |
 | **Implementation** | `SlimAgentComm` in `library_ioa.plugins.slim.agent_comm`; shared service `SlimService` in `library_ioa.plugins.slim.service` |
 | **Extra** | `slim` of `library-ioa/` (`slim-bindings>=2.2,<3`) |
-| **Status** | Group tests use in-process fake bindings that route replies by app name, as a node does. A real node is pytest marker `slim`; unicast and anycast sends return the peer's reply (slim-bindings 2.2 plus a node on 127.0.0.1:46357). |
+| **Status** | Group tests use in-process fake bindings that route replies by app name, as a node does. Tests marked `slim` run against an in-process node from slim-bindings 2.2 on a free loopback port; unicast and anycast sends return the peer's reply. |
 
 `slim` is a transport layer. Declare the node as an infra row with
 `url`, a three-part `identity` and `secret_env`, and bind it in a

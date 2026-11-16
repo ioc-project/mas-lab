@@ -20,7 +20,7 @@ from mas.library.skills.plugins import (
     NativeSkillPlugin,
 )
 
-from .conftest import HAS_ADK, HAS_DEEPAGENTS, MISSING_EXTRA_REASON, make_skill
+from .conftest import make_skill
 
 ADK_LOAD_PATCH = "google.adk.skills.load_skill_from_dir"
 
@@ -209,9 +209,6 @@ class TestNativeSkillPluginFunctional(PluginBehaviourTests):
 # ---------------------------------------------------------------------------
 # LangChainSkillPlugin functional tests (deepagents + FilesystemBackend)
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(not HAS_DEEPAGENTS, reason=MISSING_EXTRA_REASON)
 class TestLangChainSkillPluginFunctional(PluginBehaviourTests):
     """Uses real deepagents._list_skills + FilesystemBackend on real skill dirs."""
 
@@ -286,9 +283,6 @@ class TestLangChainSkillPluginFunctional(PluginBehaviourTests):
 # ---------------------------------------------------------------------------
 # ADKSkillPlugin functional tests (real google.adk.skills)
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(not HAS_ADK, reason=MISSING_EXTRA_REASON)
 class TestADKSkillPluginFunctional(PluginBehaviourTests):
     """Uses real google.adk.skills.load_skill_from_dir on real skill dirs."""
 
@@ -352,7 +346,6 @@ class TestCrossPluginConsistency:
 
     PLUGINS = [LangChainSkillPlugin, ADKSkillPlugin]
 
-    @pytest.mark.skipif(not (HAS_DEEPAGENTS and HAS_ADK), reason=MISSING_EXTRA_REASON)
     def test_same_skill_discovered_by_all(self, tmp_path):
         make_skill(tmp_path, "common-skill", description="Shared skill.")
         for cls in self.PLUGINS:
@@ -361,7 +354,6 @@ class TestCrossPluginConsistency:
             assert "common-skill" in skills, f"{cls.__name__} missed common-skill"
             assert skills["common-skill"].description == "Shared skill."
 
-    @pytest.mark.skipif(not (HAS_DEEPAGENTS and HAS_ADK), reason=MISSING_EXTRA_REASON)
     def test_path_traversal_blocked_by_all(self, tmp_path):
         make_skill(tmp_path, "s", description="S.")
         for cls in self.PLUGINS:

@@ -151,7 +151,7 @@ async def test_execute_engine_tool_routes_ordered_contract_before_manifest_provi
     calls = []
 
     class EngineTool:
-        def claims(self, tool_name):
+        def claims(self, tool_name, *, ctx=None):
             return tool_name == "create_subagent"
 
         def call(self, tool_name, arguments, **kwargs):

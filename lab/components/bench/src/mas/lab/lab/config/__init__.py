@@ -115,7 +115,7 @@ from .execution import (
 )
 from .experiment_base import MASRunBase
 from .lab_config import LabConfig
-from .lab_context import LabContext, discover_lab_context, inject_lab_context, inject_lab_libraries
+from .lab_context import LabContext, discover_lab_context, inject_lab_libraries
 from .mas_experiment import MASExperimentConfig
 from .pipeline import (
     ArtifactSpec,
@@ -154,7 +154,6 @@ __all__ = [
     "split_legacy_execution",
     "discover_lab_context",
     "discover_scenario_stems",
-    "inject_lab_context",
     "inject_lab_libraries",
     "list_artifact_types",
     "load_scenario_config",

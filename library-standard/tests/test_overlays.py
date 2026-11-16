@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 OVERLAYS = Path(__file__).resolve().parents[1] / "src" / "mas" / "library" / "standard" / "overlays"
@@ -74,7 +73,6 @@ def test_observability_native_sets_events_jsonl() -> None:
 
 
 def test_hardened_control_validates() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_file
 
     control = validate_file(CONTROLS / "with-hardened.yaml", kind="control")
@@ -151,7 +149,6 @@ def test_hardened_then_native_keeps_both() -> None:
 
 
 def test_controls_dir_holds_only_controls_that_name_no_absolute_path() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.session.flavour_control import absolute_path_findings
     from mas.ctl.validate import validate_file
 

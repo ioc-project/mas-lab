@@ -8,10 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-pytest.importorskip("mas.library.skills", reason="requires the skills library")
-
 from mas.ctl.session.controller import ConversationConfig, SessionController
 from mas.library.skills.lib.registry import SkillRecord, SkillRegistry
 from mas.library.skills.lib.session import SkillSessionState

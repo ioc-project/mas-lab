@@ -151,7 +151,6 @@ async def test_unknown_id_lists_available(tmp_path: Path) -> None:
 
 
 def test_metrics_schema_accepts_details() -> None:
-    pytest.importorskip("jsonschema")
     import jsonschema
 
     schema_path = Path(__file__).resolve().parents[2] / "docs" / "schemas" / "lab" / "artefacts" / "metrics.schema.json"

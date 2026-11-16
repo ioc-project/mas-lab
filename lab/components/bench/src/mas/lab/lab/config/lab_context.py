@@ -9,7 +9,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
-from mas.library_roots import find_ancestor_with_file, register_lab_dir
+from mas.library_roots import (
+    find_ancestor_with_file,
+    register_lab_dir,
+    restore_lab_dir,
+)
 from mas.runtime.constants import LAB_CONFIG_FILENAME
 from mas.runtime.registry import register_new_library_plugins
 
@@ -150,8 +154,14 @@ def inject_lab_libraries(lab_context: LabContext) -> None:
     is elsewhere, such as the controller daemon.
     """
     if lab_context.lab_yaml and lab_context.lab_dir:
-        register_lab_dir(lab_context.lab_dir)
-        register_new_library_plugins()
+        previous = register_lab_dir(lab_context.lab_dir)
+        try:
+            register_new_library_plugins(only_under=lab_context.lab_dir)
+        except Exception:
+            # A lab that cannot register must not break every later lab: its root goes
+            # back where it was, so the lab that was current still is.
+            restore_lab_dir(lab_context.lab_dir, previous)
+            raise
     if lab_context.lab_dir:
         lab_dir = str(lab_context.lab_dir.resolve())
         if lab_dir not in sys.path:
@@ -175,7 +185,3 @@ def inject_lab_libraries(lab_context: LabContext) -> None:
 
     for plugin in lab_context.plugins:
         _apply_plugin(plugin, anchor)
-
-
-# Backward-compatible alias
-inject_lab_context = inject_lab_libraries

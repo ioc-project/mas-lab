@@ -104,6 +104,40 @@ def test_evaluate_treats_new_kernel_file_without_xml_as_uncovered(gate):
     assert "brand_new.py:1" in report
 
 
+def test_evaluate_skips_files_that_coverage_omits(gate):
+    coverage = gate.parse_cobertura(COBERTURA)
+    path = "lab/components/bench/src/mas/lab/benchmark/pipeline/cli.py"
+    prefixes = ("lab/components/bench/src/mas/lab/benchmark/pipeline/",)
+    omit = gate.coverage_omit_patterns()
+    assert gate.is_omitted_path(path, omit)
+    code, report = gate.evaluate(coverage, {path: {1, 2}}, 90, prefixes, omit)
+    assert code == 0 and "skipping gate" in report
+    # the same file with no omit list is still counted as uncovered
+    code, _ = gate.evaluate(coverage, {path: {1, 2}}, 90, prefixes)
+    assert code == 1
+
+
+_OMIT_CASES = [
+    "lab/components/bench/src/mas/lab/benchmark/pipeline/cli.py",
+    "lab/components/core/src/mas/lab/cli.py",
+    "ctl/src/mas/ctl/cli/commands/chat.py",
+    "runtime/src/mas/runtime/kernel/engine.py",
+    "lab/components/controller/src/mas/lab/controller/fastapi_app.py",
+    "a/mas/labx/cli.py",
+    "a/b/__main__.py",
+]
+
+
+def test_omit_globs_match_the_way_coverage_matches_them(gate):
+    omit = gate.coverage_omit_patterns()
+    assert gate.is_omitted_path("lab/components/core/src/mas/lab/cli.py", omit)  # ``**/`` spans no directory
+    assert not gate.is_omitted_path("a/mas/labx/cli.py", omit)
+    files = pytest.importorskip("coverage.files")
+    matcher = files.GlobMatcher(list(omit))
+    for path in _OMIT_CASES:
+        assert gate.is_omitted_path(path, omit) == matcher.match("/repo/" + path), path
+
+
 def test_evaluate_prefix_limits_measured_trees(gate):
     coverage = gate.parse_cobertura(COBERTURA)
     changed = {

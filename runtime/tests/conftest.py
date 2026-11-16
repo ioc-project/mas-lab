@@ -65,5 +65,4 @@ def require_samples_library() -> None:
     """Skip when the ``samples`` manifest library entry point is not installed."""
     from mas.runtime.package_refs import resolve_library_scheme_root
 
-    if resolve_library_scheme_root("samples") is None:
-        pytest.skip("samples library not installed")
+    assert resolve_library_scheme_root("samples") is not None, "samples library not installed"

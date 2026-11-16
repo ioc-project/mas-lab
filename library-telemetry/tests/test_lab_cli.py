@@ -8,13 +8,9 @@ import json
 import sys
 import types
 
-import pytest
-
-click = pytest.importorskip("click")
+import click
 from click.testing import CliRunner  # noqa: E402
 from mas.library.telemetry.lab_cli import TelemetryCliComponent, telemetry_group  # noqa: E402
-
-from tests.conftest import requires_otel  # noqa: E402
 
 runner = CliRunner()
 
@@ -98,7 +94,6 @@ def test_push_dry_run(tmp_path):
     assert body["session_id"].startswith("app_")
 
 
-@requires_otel
 def test_convert(tmp_path, events_path):
     out = tmp_path / "spans.jsonl"
     result = runner.invoke(
@@ -118,7 +113,6 @@ def test_convert(tmp_path, events_path):
     assert json.loads(result.output)["spans"] > 0
 
 
-@requires_otel
 def test_convert_realtime(tmp_path, events_path):
     import json as _json
 

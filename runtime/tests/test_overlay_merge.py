@@ -564,13 +564,13 @@ def _skills(merged: dict, agent_id: str, overlay: dict):
 
 def test_merge_mas_overlay_not_entry_skips_chair():
     overlay = _overlay(
-        {"agents": {"$not-entry": {"skills": {"$op": {"add": ["l9-concord-v2-receiver"]}}}}},
+        {"agents": {"$not-entry": {"skills": {"$op": {"add": ["peer-receiver"]}}}}},
         target_kind="MAS",
     )
     merged = merge_overlay(_trip_mas_with_delegates(), overlay)
     assert "spec" not in {item["id"]: item for item in merged["spec"]["agency"]["agents"]}["moderator"]
-    assert _skills(merged, "finance", overlay) == ["l9-concord-v2-receiver"]
-    assert _skills(merged, "deal_desk", overlay) == ["l9-concord-v2-receiver"]
+    assert _skills(merged, "finance", overlay) == ["peer-receiver"]
+    assert _skills(merged, "deal_desk", overlay) == ["peer-receiver"]
 
 
 def test_merge_mas_overlay_all_then_entry_stacks():
@@ -578,8 +578,8 @@ def test_merge_mas_overlay_all_then_entry_stacks():
         {
             "agents": {
                 "$all": {"budget": {"max_llm_calls": 40}},
-                "$entry": {"skills": {"$op": {"add": ["l9-concord-v2-orchestrator"]}}},
-                "$not-entry": {"skills": {"$op": {"add": ["l9-concord-v2-receiver"]}}},
+                "$entry": {"skills": {"$op": {"add": ["peer-orchestrator"]}}},
+                "$not-entry": {"skills": {"$op": {"add": ["peer-receiver"]}}},
             }
         },
         target_kind="MAS",
@@ -590,18 +590,18 @@ def test_merge_mas_overlay_all_then_entry_stacks():
     assert "spec" not in by_id["finance"]
     assert _patches(overlay, merged)["moderator"]["budget"] == {"max_llm_calls": 40}
     assert _patches(overlay, merged)["finance"]["budget"] == {"max_llm_calls": 40}
-    assert _skills(merged, "moderator", overlay) == ["l9-concord-v2-orchestrator"]
-    assert _skills(merged, "finance", overlay) == ["l9-concord-v2-receiver"]
+    assert _skills(merged, "moderator", overlay) == ["peer-orchestrator"]
+    assert _skills(merged, "finance", overlay) == ["peer-receiver"]
 
 
 def test_merge_mas_overlay_delegates_matches_workflow_edges():
     overlay = _overlay(
-        {"agents": {"$delegates": {"skills": {"$op": {"add": ["l9-concord-v2-receiver"]}}}}},
+        {"agents": {"$delegates": {"skills": {"$op": {"add": ["peer-receiver"]}}}}},
         target_kind="MAS",
     )
     merged = merge_overlay(_trip_mas_with_delegates(), overlay)
-    assert _skills(merged, "finance", overlay) == ["l9-concord-v2-receiver"]
-    assert _skills(merged, "deal_desk", overlay) == ["l9-concord-v2-receiver"]
+    assert _skills(merged, "finance", overlay) == ["peer-receiver"]
+    assert _skills(merged, "deal_desk", overlay) == ["peer-receiver"]
     assert "spec" not in {item["id"]: item for item in merged["spec"]["agency"]["agents"]}["moderator"]
 
 

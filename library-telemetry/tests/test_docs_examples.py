@@ -10,12 +10,9 @@ from __future__ import annotations
 
 import json
 
-from tests.conftest import requires_otel
-
 # ── README "Batch functions (start here)" + "Quick start" ────────────────────
 
 
-@requires_otel
 def test_readme_quickstart_from_events(tmp_path, events_path):
     # README §Quick start — "End-to-end: events.jsonl → verified OTel spans"
     from mas.library.telemetry import OtelSpanSet
@@ -29,7 +26,6 @@ def test_readme_quickstart_from_events(tmp_path, events_path):
     assert any(str(n).endswith(".graph") for n in names)
 
 
-@requires_otel
 def test_readme_batch_functions(tmp_path, events_path):
     # README §Quick start — "Batch functions (start here)"
     from mas.library.telemetry.pipeline import (
@@ -46,7 +42,6 @@ def test_readme_batch_functions(tmp_path, events_path):
     assert push["status"] == "dry-run"
 
 
-@requires_otel
 def test_readme_convert_only(tmp_path, events_path):
     # README §Quick start — "Convert only (offline replay)"
     from mas.library.telemetry.conversion import replay_events_file
@@ -80,7 +75,6 @@ def test_readme_verify_spanspec_only():
     assert report.conformance("L3") in {"full", "passing", "failing"}
 
 
-@requires_otel
 def test_readme_compare_parity(tmp_path, events_path):
     # README §Quick start — "Compare two span sets (parity)"
     from mas.library.telemetry import OtelSpanSet
@@ -100,7 +94,6 @@ def test_docs_conversion_registered_kinds():
     assert len(registered_kinds()) >= 53
 
 
-@requires_otel
 def test_docs_conversion_graph_span(tmp_path):
     # docs/conversion.md — the <app>.graph topology span (SCOPE-required)
     from mas.library.telemetry.conversion.replay import replay_events_file

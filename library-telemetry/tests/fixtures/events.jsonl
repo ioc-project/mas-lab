@@ -1,11 +1,11 @@
-{"kind": "mas_call_start", "call_id": "run", "timestamp": 1700000000.0, "run_id": "r1", "session_id": "sess-1", "agent_id": "orchestrator"}
-{"kind": "execution_start", "call_id": "a1", "parent_call_id": "run", "timestamp": 1700000000.1, "agent_id": "planner", "input": "solve the task"}
-{"kind": "llm_call_start", "call_id": "l1", "parent_call_id": "a1", "timestamp": 1700000000.2, "agent_id": "planner", "model": "gpt-4o", "messages": [{"role": "user", "content": "plan"}], "temperature": 0.2}
-{"kind": "llm_call_end", "call_id": "l1", "timestamp": 1700000000.5, "agent_id": "planner", "response": {"content": "here is the plan", "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}, "finish_reason": "stop"}
-{"kind": "tool_call_start", "call_id": "t1", "parent_call_id": "a1", "timestamp": 1700000000.6, "agent_id": "planner", "tool_name": "web_search", "arguments": {"query": "mas"}, "tool_category": "data"}
-{"kind": "tool_call_end", "call_id": "t1", "timestamp": 1700000000.8, "agent_id": "planner", "result": "search results"}
-{"kind": "memory_store_start", "call_id": "m1", "parent_call_id": "a1", "timestamp": 1700000000.82, "agent_id": "planner", "memory_type": "episodic", "data": "note"}
-{"kind": "memory_store_end", "call_id": "m1", "timestamp": 1700000000.83, "agent_id": "planner"}
-{"kind": "governance_checked", "timestamp": 1700000000.85, "parent_call_id": "a1", "agent_id": "planner", "hook": "pre_tool", "outcome": "allowed", "checks_passed": 2}
-{"kind": "execution_end", "call_id": "a1", "timestamp": 1700000000.9, "agent_id": "planner", "output": "done"}
-{"kind": "mas_call_end", "call_id": "run", "timestamp": 1700000001.0, "agent_id": "orchestrator", "result": "final answer"}
+{"kind":"mas_call_start","call_id":"run","timestamp":1700000000.0,"run_id":"r1","session_id":"sess-1","agent_id":"orchestrator"}
+{"kind":"execution_start","call_id":"a1","parent_call_id":"run","timestamp":1700000000.1,"agent_id":"planner","input":"solve the task","state_out":"a1#0","state_out_content":"solve the task"}
+{"kind":"llm_call_start","call_id":"l1","parent_call_id":"a1","timestamp":1700000000.2,"agent_id":"planner","model":"gpt-4o","messages":[{"role":"user","content":"plan"}],"temperature":0.2,"state_in":"a1#0","state_in_content":"solve the task","state_out":"a1#1"}
+{"kind":"llm_call_end","call_id":"l1","timestamp":1700000000.5,"agent_id":"planner","response":{"content":"here is the plan","usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}},"finish_reason":"stop","state_in":"a1#0","state_in_content":"solve the task","state_out":"a1#1","state_out_content":"here is the plan"}
+{"kind":"tool_call_start","call_id":"t1","parent_call_id":"a1","timestamp":1700000000.6,"agent_id":"planner","tool_name":"web_search","arguments":{"query":"mas"},"tool_category":"data","state_in":"a1#1","state_in_content":"here is the plan","state_out":"a1#2"}
+{"kind":"tool_call_end","call_id":"t1","timestamp":1700000000.8,"agent_id":"planner","result":"search results","state_in":"a1#1","state_in_content":"here is the plan","state_out":"a1#2","state_out_content":"search results"}
+{"kind":"memory_store_start","call_id":"m1","parent_call_id":"a1","timestamp":1700000000.82,"agent_id":"planner","memory_type":"episodic","data":"note","state_in":"a1#2","state_in_content":"search results","state_out":"a1#3"}
+{"kind":"memory_store_end","call_id":"m1","timestamp":1700000000.83,"agent_id":"planner","state_in":"a1#2","state_in_content":"search results","state_out":"a1#3","state_out_content":"done"}
+{"kind":"governance_checked","timestamp":1700000000.85,"parent_call_id":"a1","agent_id":"planner","hook":"pre_tool","outcome":"allowed","checks_passed":2}
+{"kind":"execution_end","call_id":"a1","timestamp":1700000000.9,"agent_id":"planner","output":"done","state_in":"a1#3","state_out":"a1#3","state_in_content":"done"}
+{"kind":"mas_call_end","call_id":"run","timestamp":1700000001.0,"agent_id":"orchestrator","result":"final answer"}

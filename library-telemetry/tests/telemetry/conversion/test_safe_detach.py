@@ -11,9 +11,6 @@ import threading
 
 import pytest
 from mas.library.telemetry.conversion.converter import _safe_detach
-from mas.library.telemetry.conversion.exporter import OTEL_AVAILABLE
-
-pytestmark = pytest.mark.skipif(not OTEL_AVAILABLE, reason="opentelemetry-sdk not installed")
 
 
 def test_safe_detach_from_another_thread_is_silent(caplog: pytest.LogCaptureFixture) -> None:

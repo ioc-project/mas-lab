@@ -13,8 +13,6 @@ import json
 
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
 
-from tests.conftest import requires_otel
-
 # Minimal field bag covering the union of what handlers read (unused keys are
 # ignored by handlers that don't need them).
 _FIELDS = {
@@ -68,7 +66,6 @@ _FIELDS = {
 }
 
 
-@requires_otel
 def test_every_registered_kind_converts(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 
