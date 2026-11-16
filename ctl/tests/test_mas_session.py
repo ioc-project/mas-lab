@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -18,7 +19,6 @@ from mas.ctl.executor.mas_session import (
     resolve_entry_pattern_plugin_id,
     wire_peer_delegation,
 )
-from mas.library.standard.lib.stack.handle import SessionTurn
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryConfig,
     reset_working_memory_registry,
@@ -355,7 +355,7 @@ def _fake_materialized_for_send(agent_ids: list[str]) -> SimpleNamespace:
     return SimpleNamespace(instances=instances, bus=None)
 
 
-def test_send_gives_each_delegation_invocation_a_unique_turn_id():
+async def test_send_gives_each_delegation_invocation_a_unique_turn_id():
     """Regression: repeated delegation to the SAME agent within one turn used
     to always resolve to turn_id="u1" when turn_id was omitted. caller_call_id
     (already a real, globally-unique id per delegation invocation) is reused
@@ -369,24 +369,23 @@ def test_send_gives_each_delegation_invocation_a_unique_turn_id():
         text = "ok"
         awaiting_hitl = False
 
-    def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
+    async def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
         captured_turn_ids.append(turn_id)
         return _FakeResult()
 
-    with patch("mas.ctl.executor.mas_session.SessionController.run_turn", _fake_run_turn):
+    with patch("mas.ctl.executor.mas_session.SessionController.arun_turn", _fake_run_turn):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
-            assert isinstance(send, SessionTurn)  # a chain link can await it (``asend``)
-            send("schedule_agent", "turn 1", caller_call_id="deleg-call-aaa")
-            send("schedule_agent", "turn 2", caller_call_id="deleg-call-bbb")
-            send("schedule_agent", "turn 3", caller_call_id="deleg-call-ccc")
+            await send("schedule_agent", "turn 1", caller_call_id="deleg-call-aaa")
+            await send("schedule_agent", "turn 2", caller_call_id="deleg-call-bbb")
+            await send("schedule_agent", "turn 3", caller_call_id="deleg-call-ccc")
 
     assert len(captured_turn_ids) == 3
     assert len(set(captured_turn_ids)) == 3, captured_turn_ids
     assert captured_turn_ids == ["deleg-call-aaa", "deleg-call-bbb", "deleg-call-ccc"]
 
 
-def test_send_reuses_session_controller_so_trace_plugins_do_not_stack():
+async def test_send_reuses_session_controller_so_trace_plugins_do_not_stack():
     """A new SessionController per send() subscribed a fresh CliTrace plugin
     on the reused specialist driver. Later replies printed N times with
     different +offsets from stale turn_start_mono baselines."""
@@ -406,22 +405,22 @@ def test_send_reuses_session_controller_so_trace_plugins_do_not_stack():
         text = "ok"
         awaiting_hitl = False
 
-    def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
+    async def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
         return _FakeResult()
 
     with patch.object(RealController, "__init__", _counting_init):
-        with patch("mas.ctl.executor.mas_session.SessionController.run_turn", _fake_run_turn):
+        with patch("mas.ctl.executor.mas_session.SessionController.arun_turn", _fake_run_turn):
             with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
                 send = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
-                send("revenue_ops", "turn 1", caller_call_id="c1")
-                send("revenue_ops", "turn 2", caller_call_id="c2")
-                send("revenue_ops", "turn 3", caller_call_id="c3")
+                await send("revenue_ops", "turn 1", caller_call_id="c1")
+                await send("revenue_ops", "turn 2", caller_call_id="c2")
+                await send("revenue_ops", "turn 3", caller_call_id="c3")
 
     assert len(constructed) == 1
     assert constructed[0].caller_agent_id == "moderator"
 
 
-def test_send_sequential_workflow_calls_without_caller_call_id_still_get_unique_turn_ids():
+async def test_send_sequential_workflow_calls_without_caller_call_id_still_get_unique_turn_ids():
     """Sequential-workflow steps (no caller_call_id — not a delegation) must
     still get distinct turn_ids across repeated calls to the same agent, via
     the per-closure monotonic fallback counter — not an heuristic guess, an
@@ -433,15 +432,15 @@ def test_send_sequential_workflow_calls_without_caller_call_id_still_get_unique_
         text = "ok"
         awaiting_hitl = False
 
-    def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
+    async def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
         captured_turn_ids.append(turn_id)
         return _FakeResult()
 
-    with patch("mas.ctl.executor.mas_session.SessionController.run_turn", _fake_run_turn):
+    with patch("mas.ctl.executor.mas_session.SessionController.arun_turn", _fake_run_turn):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(materialized, display=None, verbose=0, from_agent="worker")
-            send("worker", "step 1")
-            send("worker", "step 2")
+            await send("worker", "step 1")
+            await send("worker", "step 2")
 
     assert len(set(captured_turn_ids)) == 2, captured_turn_ids
 
@@ -465,19 +464,19 @@ def _capturing_run_turn(captured_session_ids: list[str]):
         text = "ok"
         awaiting_hitl = False
 
-    def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
+    async def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
         captured_session_ids.append(self.session_id)
         return _FakeResult()
 
     return _fake_run_turn
 
 
-def test_make_workflow_send_threads_explicit_session_id_into_every_delegate():
+async def test_make_workflow_send_threads_explicit_session_id_into_every_delegate():
     materialized = _fake_materialized_for_send(["moderator", "schedule_agent"])
     captured: list[str] = []
     fake_run_turn = _capturing_run_turn(captured)
 
-    with patch("mas.ctl.executor.mas_session.SessionController.run_turn", fake_run_turn):
+    with patch("mas.ctl.executor.mas_session.SessionController.arun_turn", fake_run_turn):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(
                 materialized,
@@ -486,13 +485,13 @@ def test_make_workflow_send_threads_explicit_session_id_into_every_delegate():
                 from_agent="moderator",
                 session_id="entry-session-abc",
             )
-            send("schedule_agent", "q1", caller_call_id="c1")
-            send("schedule_agent", "q2", caller_call_id="c2")
+            await send("schedule_agent", "q1", caller_call_id="c1")
+            await send("schedule_agent", "q2", caller_call_id="c2")
 
     assert captured == ["entry-session-abc", "entry-session-abc"]
 
 
-def test_make_workflow_send_mints_one_session_id_and_reuses_it_when_none_given():
+async def test_make_workflow_send_mints_one_session_id_and_reuses_it_when_none_given():
     """No session_id passed in -> make_workflow_send mints exactly one and
     every delegate call within THIS closure reuses it (still shared across
     the closure's whole lifetime, just not tied to any caller's value)."""
@@ -500,11 +499,11 @@ def test_make_workflow_send_mints_one_session_id_and_reuses_it_when_none_given()
     captured: list[str] = []
     fake_run_turn = _capturing_run_turn(captured)
 
-    with patch("mas.ctl.executor.mas_session.SessionController.run_turn", fake_run_turn):
+    with patch("mas.ctl.executor.mas_session.SessionController.arun_turn", fake_run_turn):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
-            send("schedule_agent", "q1", caller_call_id="c1")
-            send("schedule_agent", "q2", caller_call_id="c2")
+            await send("schedule_agent", "q1", caller_call_id="c1")
+            await send("schedule_agent", "q2", caller_call_id="c2")
 
     assert len(captured) == 2
     assert captured[0] == captured[1]
@@ -513,17 +512,17 @@ def test_make_workflow_send_mints_one_session_id_and_reuses_it_when_none_given()
     uuid.UUID(captured[0])  # a real minted uuid, not a placeholder
 
 
-def test_two_separate_workflow_send_closures_get_different_session_ids_when_unspecified():
+async def test_two_separate_workflow_send_closures_get_different_session_ids_when_unspecified():
     materialized = _fake_materialized_for_send(["moderator", "schedule_agent"])
     captured: list[str] = []
     fake_run_turn = _capturing_run_turn(captured)
 
-    with patch("mas.ctl.executor.mas_session.SessionController.run_turn", fake_run_turn):
+    with patch("mas.ctl.executor.mas_session.SessionController.arun_turn", fake_run_turn):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send_a = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
-            send_a("schedule_agent", "q1", caller_call_id="c1")
+            await send_a("schedule_agent", "q1", caller_call_id="c1")
             send_b = make_workflow_send(materialized, display=None, verbose=0, from_agent="moderator")
-            send_b("schedule_agent", "q2", caller_call_id="c2")
+            await send_b("schedule_agent", "q2", caller_call_id="c2")
 
     assert captured[0] != captured[1]
 
@@ -547,14 +546,14 @@ def _capturing_working_memory_key_run_turn(captured: list[str]):
     test_session_controller_working_memory.py -- this file only needs to
     prove make_workflow_send resolves and passes the right key through."""
 
-    def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
+    async def _fake_run_turn(self, prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
         captured.append(self._working_memory_key())
         return SimpleNamespace(text="ok", awaiting_hitl=False)
 
     return _fake_run_turn
 
 
-def test_send_passes_session_id_as_the_default_working_memory_key():
+async def test_send_passes_session_id_as_the_default_working_memory_key():
     """No context_id given -> the constructed SessionController's working
     memory syncs under the session's default bucket (session_id)."""
     reset_working_memory_registry()
@@ -563,19 +562,19 @@ def test_send_passes_session_id_as_the_default_working_memory_key():
     materialized = SimpleNamespace(instances={"schedule_agent": _fake_instance_with_ctx()}, bus=None)
 
     with patch(
-        "mas.ctl.executor.mas_session.SessionController.run_turn",
+        "mas.ctl.executor.mas_session.SessionController.arun_turn",
         _capturing_working_memory_key_run_turn(captured),
     ):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(
                 materialized, display=None, verbose=0, from_agent="moderator", session_id=session_id
             )
-            send("schedule_agent", "Please generate Foo", caller_call_id="c1")
+            await send("schedule_agent", "Please generate Foo", caller_call_id="c1")
 
     assert captured == [session_id]
 
 
-def test_send_passes_context_id_as_the_working_memory_key_when_given():
+async def test_send_passes_context_id_as_the_working_memory_key_when_given():
     """An explicit context_id (LLM-chosen, via the delegate tool's optional
     context_id argument) overrides the session default as the working-memory
     bucket key -- lets a moderator run more than one context with the same
@@ -586,34 +585,34 @@ def test_send_passes_context_id_as_the_working_memory_key_when_given():
     materialized = SimpleNamespace(instances={"schedule_agent": _fake_instance_with_ctx()}, bus=None)
 
     with patch(
-        "mas.ctl.executor.mas_session.SessionController.run_turn",
+        "mas.ctl.executor.mas_session.SessionController.arun_turn",
         _capturing_working_memory_key_run_turn(captured),
     ):
         with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
             send = make_workflow_send(
                 materialized, display=None, verbose=0, from_agent="moderator", session_id=session_id
             )
-            send("schedule_agent", "plan a Paris trip", caller_call_id="c1", context_id="trip-paris")
-            send("schedule_agent", "plan a Tokyo trip", caller_call_id="c2", context_id="trip-tokyo")
-            send("schedule_agent", "plan a Rome trip", caller_call_id="c3")  # no context_id
+            await send("schedule_agent", "plan a Paris trip", caller_call_id="c1", context_id="trip-paris")
+            await send("schedule_agent", "plan a Tokyo trip", caller_call_id="c2", context_id="trip-tokyo")
+            await send("schedule_agent", "plan a Rome trip", caller_call_id="c3")  # no context_id
 
     assert captured == ["trip-paris", "trip-tokyo", session_id]
 
 
-def test_workflow_send_closures_own_distinct_working_memory_registries():
+async def test_workflow_send_closures_own_distinct_working_memory_registries():
     registries = []
     materialized = SimpleNamespace(
         instances={"schedule_agent": _fake_instance_with_ctx()},
         bus=None,
     )
 
-    def capture_registry(self, _prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
+    async def capture_registry(self, _prompt, *, turn_id=None, parent_call_id="", auto_hitl=True):
         registries.append(self.working_memory_registry)
         return SimpleNamespace(text="ok", awaiting_hitl=False)
 
     with (
         patch(
-            "mas.ctl.executor.mas_session.SessionController.run_turn",
+            "mas.ctl.executor.mas_session.SessionController.arun_turn",
             capture_registry,
         ),
         patch("mas.ctl.executor.mas_session.turn_failed", return_value=False),
@@ -632,8 +631,8 @@ def test_workflow_send_closures_own_distinct_working_memory_registries():
             from_agent="moderator",
             session_id="same-id",
         )
-        first("schedule_agent", "first", caller_call_id="first-call")
-        second("schedule_agent", "second", caller_call_id="second-call")
+        await first("schedule_agent", "first", caller_call_id="first-call")
+        await second("schedule_agent", "second", caller_call_id="second-call")
 
     assert len(registries) == 2
     assert registries[0] is not registries[1]
@@ -682,7 +681,7 @@ def test_prepare_delegation_entry_session_mints_session_id_when_none_given(tmp_p
     assert prepared_with_session.session_id == "given-session-id"
 
 
-def test_a_request_from_another_agent_to_the_entry_is_not_shown_as_the_user():
+async def test_a_request_from_another_agent_to_the_entry_is_not_shown_as_the_user():
     """A request that reaches the entry over a chain carries the caller's call id. It runs under the
     agent's label: shown with the user's display it read "You: <request>" next to the input prompt."""
     import io
@@ -703,16 +702,19 @@ def test_a_request_from_another_agent_to_the_entry_is_not_shown_as_the_user():
 
     user_display = StdoutConversationDisplay(out=io.StringIO(), agent_label="billing")
     with patch.object(RealController, "__init__", _init):
-        with patch("mas.ctl.executor.mas_session.SessionController.run_turn", lambda self, *a, **k: _Result()):
+        with patch(
+            "mas.ctl.executor.mas_session.SessionController.arun_turn",
+            lambda self, *a, **k: asyncio.sleep(0, _Result()),
+        ):
             with patch("mas.ctl.executor.mas_session.turn_failed", return_value=False):
                 peer = make_workflow_send(
                     _fake_materialized_for_send(["billing"]), display=user_display, verbose=0, from_agent="billing"
                 )
-                peer("billing", "refund?", 0, "triage-call-1")
+                await peer("billing", "refund?", 0, "triage-call-1")
                 own = make_workflow_send(
                     _fake_materialized_for_send(["billing"]), display=user_display, verbose=0, from_agent="billing"
                 )
-                own("billing", "step one")
+                await own("billing", "step one")
     assert displays[0] is not user_display and displays[0]._user_prompt_echoed and displays[0]._agent_label == "billing"
     assert displays[1] is user_display  # a sequential step of the entry itself keeps the session display
 

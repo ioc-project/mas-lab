@@ -248,14 +248,14 @@ def _canned_instance(trace=None, calls=None):
 
     instance = _stop_instance()
     instance.conversation_factory = None
-    original = instance.run_user_text
+    original = instance.arun_user_text
 
-    def run_user_text(text, **kwargs):
+    async def arun_user_text(text, **kwargs):
         if calls is not None:
             calls.append((text, kwargs))
-        return trace if trace is not None else original(text, **kwargs)
+        return trace if trace is not None else await original(text, **kwargs)
 
-    instance.run_user_text = run_user_text  # type: ignore[method-assign]
+    instance.arun_user_text = arun_user_text  # type: ignore[method-assign]
     return instance, DriverTrace
 
 
@@ -316,11 +316,11 @@ def _stop_instance():
 
     engine = SimulatedEngine(llm_next_step=lambda _cid: "STOP", stop_text="ok")
 
-    def invoke(io):
+    async def ainvoke(io):
         time.sleep(0.02)
-        return SimulatedEngine.invoke(engine, io)
+        return await SimulatedEngine.ainvoke(engine, io)
 
-    engine.invoke = invoke  # type: ignore[method-assign]
+    engine.ainvoke = ainvoke  # type: ignore[method-assign]
     instance = RuntimeInstance.from_parts(engine=engine, config=KernelConfig())
     instance.capture_session_baseline()
     instance.conversation_factory = _stop_instance
@@ -396,20 +396,20 @@ def test_a2a_each_conversation_gets_its_own_engine_and_they_run_together() -> No
 
     def build():
         instance = _stop_instance()
-        inner = instance.driver.engine.invoke
+        inner = instance.driver.engine.ainvoke
 
-        def watched(io):
+        async def watched(io):
             nonlocal inside, overlap
             with guard:
                 inside += 1
                 overlap = max(overlap, inside)
             try:
-                return inner(io)
+                return await inner(io)
             finally:
                 with guard:
                     inside -= 1
 
-        instance.driver.engine.invoke = watched  # type: ignore[method-assign]
+        instance.driver.engine.ainvoke = watched  # type: ignore[method-assign]
         instance.conversation_factory = build
         return instance
 

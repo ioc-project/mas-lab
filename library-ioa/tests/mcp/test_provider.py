@@ -166,7 +166,7 @@ def test_discover_maps_contract() -> None:
     assert second[0]["name"] == first[0]["name"]
 
 
-def test_explicit_claim_skips_live_list() -> None:
+async def test_explicit_claim_skips_live_list() -> None:
     client = _Client(
         tools=[
             {"name": "web-search", "description": "a"},
@@ -181,38 +181,38 @@ def test_explicit_claim_skips_live_list() -> None:
     registry.register_provider(provider)
     registry.initialize()
     assert client.list_calls == 0
-    out = registry.call_tool("other-tool", {})
+    out = await registry.acall_tool("other-tool", {})
     assert out["is_error"] is False
     assert out["result"] == "4"
 
 
-def test_call_tool_maps_result_and_errors() -> None:
+async def test_call_tool_maps_result_and_errors() -> None:
     provider = MCPToolProvider(_Client(), provider_name="calc")
-    mapped = provider.call_tool("calculator", {"expression": "2 + 2"})
+    mapped = await provider.acall_tool("calculator", {"expression": "2 + 2"})
     assert mapped["status"] == "ok"
     assert mapped["result"] == "4"
     assert mapped["is_error"] is False
 
     failing = MCPToolProvider(_Client(call_error=RuntimeError("boom")))
-    err = failing.call_tool("calculator", {})
+    err = await failing.acall_tool("calculator", {})
     assert err["status"] == "error"
     assert err["is_error"] is True
     assert err["type"] == "RuntimeError"
     assert "boom" in err["error"]
 
 
-def test_call_tool_marks_protocol_error_payload() -> None:
+async def test_call_tool_marks_protocol_error_payload() -> None:
     provider = MCPToolProvider(_Client(result={"content": [{"type": "text", "text": "nope"}], "isError": True}))
-    mapped = provider.call_tool("calculator", {})
+    mapped = await provider.acall_tool("calculator", {})
     assert mapped["is_error"] is True
     assert mapped["tool"] == "calculator"
     assert mapped["result"] == "nope"
 
 
-def test_call_tool_forwards_optional_timeout() -> None:
+async def test_call_tool_forwards_optional_timeout() -> None:
     client = _Client()
     provider = MCPToolProvider(client, timeout=2.5)
-    provider.call_tool("calculator", {})
+    await provider.acall_tool("calculator", {})
     assert client.call_kwargs["timeout_seconds"] == 2.5
 
 
@@ -222,14 +222,14 @@ def test_discover_failure_raises_not_swallowed() -> None:
         provider.discover_tools()
 
 
-def test_has_tools_and_registry_star_init() -> None:
+async def test_has_tools_and_registry_star_init() -> None:
     provider = MCPToolProvider(_Client(), provider_name="calc-server")
     assert provider.has_tools() is True
     registry = ToolProviderRegistry()
     registry.register_provider(provider)
     tools = registry.list_tools()
     assert any(tool["name"] == "calculator" for tool in tools)
-    result = registry.call_tool("calculator", {"expression": "2 + 2"})
+    result = await registry.acall_tool("calculator", {"expression": "2 + 2"})
     assert result["result"] == "4"
 
 

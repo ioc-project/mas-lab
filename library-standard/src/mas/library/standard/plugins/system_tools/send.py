@@ -16,6 +16,7 @@ from typing import Any, Protocol
 from weakref import WeakKeyDictionary
 
 from mas.library.standard.lib.comm.payload import intents_honoured_by
+from mas.library.standard.lib.comm.send_async import asend_via
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
@@ -319,61 +320,6 @@ class SendTool:
             extra["headers"] = dict(headers)
         return extra
 
-    def send(
-        self,
-        target_agent_id: str,
-        message: str,
-        *,
-        intent: str = "task",
-        mode: str = "",
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        ctx: SendToolContext | None = None,
-    ) -> str:
-        prepared = self._prepare(target_agent_id, message, intent=intent, ctx=ctx)
-        if isinstance(prepared, str):
-            return prepared
-        communication, protocol, payload, kind = prepared
-        extra = self._send_kwargs(
-            communication,
-            "send",
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-            headers=headers,
-            intent=kind,
-            mode=mode,
-        )
-        try:
-            result = communication.send(target_agent_id, payload, **extra)
-        except AgentCommError as exc:
-            return f"[send] agent {target_agent_id!r} via {protocol} failed: {exc}"
-        except KeyError:
-            return f"[send] agent {target_agent_id!r} not available on bus"
-        except RuntimeError as exc:
-            return f"[send] agent {target_agent_id!r} failed: {exc}"
-        return result
-
-    def delegate(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-    ) -> str:
-        return self.send(
-            target_agent_id,
-            task,
-            intent="task",
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-        )
-
     async def asend(
         self,
         target_agent_id: str,
@@ -391,8 +337,7 @@ class SendTool:
         if isinstance(prepared, str):
             return prepared
         communication, protocol, payload, kind = prepared
-        asend = getattr(communication, "asend", None)
-        method = "asend" if callable(asend) else "send"
+        method = "asend" if callable(getattr(communication, "asend", None)) else "send"
         extra = self._send_kwargs(
             communication,
             method,
@@ -404,10 +349,7 @@ class SendTool:
             mode=mode,
         )
         try:
-            if method == "asend":
-                result = await asend(target_agent_id, payload, **extra)
-            else:
-                result = communication.send(target_agent_id, payload, **extra)
+            result = await asend_via(communication, target_agent_id, payload, **extra)
         except AgentCommError as exc:
             return f"[send] agent {target_agent_id!r} via {protocol} failed: {exc}"
         except KeyError:
@@ -462,33 +404,6 @@ class SendTool:
             str(args.get("context_id") or "").strip(),
         )
 
-    def call_delegate_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any] | None,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        ctx: SendToolContext | None = None,
-    ) -> str:
-        if not self.is_send_tool(tool_name):
-            return f"[send] not a send tool: {tool_name!r}"
-        parsed = self._args_to_send(tool_name, arguments)
-        if isinstance(parsed, str):
-            return parsed
-        target, message, intent, context_id = parsed
-        return self.send(
-            target,
-            message,
-            intent=intent,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-            ctx=ctx,
-        )
-
-    call_send_tool = call_delegate_tool
-
     async def acall_delegate_tool(
         self,
         tool_name: str,
@@ -516,30 +431,13 @@ class SendTool:
 
     acall_send_tool = acall_delegate_tool
 
-    def on_execute_tool(self, tool_name: str, arguments: dict[str, Any], **kwargs: Any) -> str:
-        return self.call_delegate_tool(
+    async def on_execute_tool(self, tool_name: str, arguments: dict[str, Any], **kwargs: Any) -> str:
+        return await self.acall_delegate_tool(
             tool_name,
             arguments,
             correlation_id=int(kwargs.get("correlation_id") or 0),
             caller_call_id=str(kwargs.get("caller_call_id") or ""),
             ctx=kwargs.get("ctx"),
-        )
-
-    def call(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any] | None,
-        *,
-        ctx: SendToolContext | None = None,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-    ) -> str:
-        return self.call_delegate_tool(
-            tool_name,
-            arguments,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            ctx=ctx,
         )
 
     async def acall(
@@ -576,7 +474,7 @@ class SendPlugin(InstanceSystemPlugin):
     def claims(self, tool: str, *, state: object, ctx: Any | None = None) -> bool:
         return isinstance(state, SendTool) and state.offers(tool)
 
-    def call(
+    async def acall(
         self,
         tool: str,
         args: Mapping[str, Any],
@@ -586,7 +484,7 @@ class SendPlugin(InstanceSystemPlugin):
     ) -> Any:
         if not isinstance(state, SendTool) or not state.offers(tool):
             raise UnknownSystemToolError(tool)
-        return state.call(
+        return await state.acall(
             tool,
             dict(args),
             ctx=context.ctx,

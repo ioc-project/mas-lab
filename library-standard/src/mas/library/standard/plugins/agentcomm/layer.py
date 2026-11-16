@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
 from typing import Any, ClassVar, cast
 
 from mas.library.standard.lib.comm.capabilities import capability_set, read_capabilities
+from mas.library.standard.lib.comm.send_async import asend_via
 from mas.library.standard.lib.comm.send_context import align_send
+from mas.runtime.aio import await_on_loop, run_sync, warn_sync_plugin
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 
 
@@ -57,29 +58,6 @@ class BoundLayer:
             return
         self._stopped = True
 
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str:
-        if headers is not None or context is not None:
-            headers, context = align_send(headers, context)
-        return self._require().send(
-            target_agent_id,
-            task,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-            headers=headers,
-            context=context,
-        )
-
     async def asend(
         self,
         target_agent_id: str,
@@ -93,9 +71,10 @@ class BoundLayer:
     ) -> str:
         if headers is not None or context is not None:
             headers, context = align_send(headers, context)
-        fn = getattr(self._require(), "asend", None)
-        if callable(fn):
-            return await cast(Awaitable[str], fn(
+        if type(self).send is not BoundLayer.send:
+            warn_sync_plugin(self, "send", "asend")
+            return await run_sync(
+                self.send,
                 target_agent_id,
                 task,
                 correlation_id=correlation_id,
@@ -103,8 +82,9 @@ class BoundLayer:
                 context_id=context_id,
                 headers=headers,
                 context=context,
-            ))
-        return self.send(
+            )
+        return await asend_via(
+            self._require(),
             target_agent_id,
             task,
             correlation_id=correlation_id,
@@ -112,6 +92,36 @@ class BoundLayer:
             context_id=context_id,
             headers=headers,
             context=context,
+        )
+
+    def send(
+        self,
+        target_agent_id: str,
+        task: str,
+        *,
+        correlation_id: int = 0,
+        caller_call_id: str = "",
+        context_id: str = "",
+        headers: dict[str, str] | None = None,
+        context: SendContext | None = None,
+    ) -> str:
+        """The sync view of :meth:`asend`, for a sync layer that sends down. Never call it from async code."""
+        if headers is not None or context is not None:
+            headers, context = align_send(headers, context)
+        return cast(
+            str,
+            await_on_loop(
+                asend_via(
+                    self._require(),
+                    target_agent_id,
+                    task,
+                    correlation_id=correlation_id,
+                    caller_call_id=caller_call_id,
+                    context_id=context_id,
+                    headers=headers,
+                    context=context,
+                )
+            ),
         )
 
     def __getattr__(self, name: str) -> Any:

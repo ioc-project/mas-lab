@@ -8,19 +8,24 @@ import inspect
 from typing import Any, Protocol, runtime_checkable
 
 
-class MissingLLMProviderAsyncContract(TypeError):
-    """Raised when an ``llm_provider`` plugin omits ``achat_completion``.
+class MissingLLMProviderContract(TypeError):
+    """Raised when an ``llm_provider`` plugin has neither ``achat_completion`` nor ``chat_completion``."""
 
-    The async engine awaits the provider directly on one cooperative event
-    loop. A missing method must fail at load/register time — never by
-    running ``chat_completion`` on a worker thread, which would break the
-    lock-free shared-state argument for ``SpawnLedger``, ``InProcessCommBus``,
-    and ``WorkingMemoryRegistry``.
-    """
+
+MissingLLMProviderAsyncContract = MissingLLMProviderContract
+
+
+def _is_async(method: Any) -> bool:
+    fn = method.__func__ if inspect.ismethod(method) else method
+    return inspect.iscoroutinefunction(fn)
 
 
 def require_achat_completion(provider: Any, *, name: str = "") -> None:
-    """Reject a provider class or instance that lacks the async contract method."""
+    """Reject a provider class or instance that has no completion method at all.
+
+    ``achat_completion`` is the form to write. A provider that only has the sync ``chat_completion`` is
+    still accepted: :func:`adapt_llm_provider` runs it on a worker thread and warns once.
+    """
     label = (
         name
         or getattr(provider, "urn", None)
@@ -28,18 +33,44 @@ def require_achat_completion(provider: Any, *, name: str = "") -> None:
         or getattr(provider, "__name__", None)
         or type(provider).__name__
     )
-    method = getattr(provider, "achat_completion", None)
-    if not callable(method):
-        raise MissingLLMProviderAsyncContract(
-            f"llm_provider {label!r} is missing required method achat_completion "
-            "(async twin of chat_completion). Silent worker-thread fallback is not supported."
+    amethod = getattr(provider, "achat_completion", None)
+    if callable(amethod):
+        if not _is_async(amethod):
+            raise MissingLLMProviderContract(
+                f"llm_provider {label!r} defines achat_completion but it is not async "
+                "(must be `async def achat_completion`)."
+            )
+        return
+    if not callable(getattr(provider, "chat_completion", None)):
+        raise MissingLLMProviderContract(
+            f"llm_provider {label!r} must define `async def achat_completion` (or the sync chat_completion)."
         )
-    fn = method.__func__ if inspect.ismethod(method) else method
-    if not inspect.iscoroutinefunction(fn):
-        raise MissingLLMProviderAsyncContract(
-            f"llm_provider {label!r} defines achat_completion but it is not async "
-            "(must be `async def achat_completion`, matching chat_completion)."
-        )
+
+
+class SyncLLMProvider:
+    """A provider that only has ``chat_completion``, awaited through the worker threads."""
+
+    def __init__(self, provider: Any) -> None:
+        self._provider = provider
+
+    async def achat_completion(self, **kwargs: Any) -> dict[str, Any]:
+        from mas.runtime.aio import run_sync, warn_sync_plugin
+
+        warn_sync_plugin(self._provider, "chat_completion", "achat_completion")
+        return await run_sync(self._provider.chat_completion, **kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "_provider":  # not set yet (copy, unpickle): do not recurse
+            raise AttributeError(name)
+        return getattr(self._provider, name)
+
+
+def adapt_llm_provider(provider: Any, *, name: str = "") -> Any:
+    """The provider the engine awaits: itself when async, else wrapped around its sync method."""
+    require_achat_completion(provider, name=name)
+    if callable(getattr(provider, "achat_completion", None)):
+        return provider
+    return SyncLLMProvider(provider)
 
 
 @runtime_checkable
@@ -53,23 +84,23 @@ class LLMProvider(Protocol):
     The engine assembles messages and parses the returned OpenAI-shaped
     assistant message; it does not own vendor HTTP.
 
-    ``achat_completion`` is required — the plan-04 async path awaits it
-    directly. Providers that only implement the sync method are rejected at
-    plugin load / instantiation, not adapted onto a worker thread.
+    ``achat_completion`` is what to write: the engine awaits it directly. A provider that only
+    implements the sync ``chat_completion`` still works; it runs on the worker threads
+    (``engine.sync_threads``) and the runtime warns once.
 
     Optional leaf identity: ``kind``, ``api_base``, ``api_key_env``. A
     provider that omits them still runs; the leaf pipeline treats missing
     values as empty.
     """
 
-    def chat_completion(
+    async def achat_completion(
         self,
         *,
         model: str,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.7,
-        max_tokens: int | None = None,
+        max_tokens: int = 2000,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Return an OpenAI-shaped assistant ``message`` dict.
@@ -82,17 +113,4 @@ class LLMProvider(Protocol):
         **dynamic (per call)** — ``stream``, ``stream_options``, ``on_stream_chunk``,
         ``api_key``, ``tool_choice``, ``extra_headers``, ``extra_query``.
         """
-        ...
-
-    async def achat_completion(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2000,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        """Async twin of :meth:`chat_completion` — same arguments and result shape."""
         ...

@@ -166,25 +166,6 @@ class SubagentsPlugin(InstanceSystemPlugin):
             raise UnknownSystemToolError(tool)
         return getattr(state, "spawner", None)
 
-    def call(
-        self,
-        tool: str,
-        args: Mapping[str, Any],
-        *,
-        state: object,
-        context: CallContext,
-    ) -> Any:
-        spawner = self._spawner(tool, state)
-        if spawner is None:
-            return SpawnSubagentTool().on_execute_tool(tool, dict(args), ctx=context.ctx)
-        return spawner.call(
-            tool,
-            dict(args),
-            ctx=context.ctx,
-            correlation_id=context.correlation_id,
-            caller_call_id=context.caller_call_id,
-        )
-
     async def acall(
         self,
         tool: str,

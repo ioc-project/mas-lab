@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 from mas.library.standard.plugins.context.summarizer import SUMMARIZE_INSTRUCTIONS, LlmSummarizer
+from mas.runtime.aio import settle
 from mas.runtime.contracts.cm_factory import CMFactory
 
 SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "context" / "summarizer-override"
@@ -70,14 +71,14 @@ class _Engine:
         return "ok"
 
 
-def test_factory_loads_example_model_and_instructions() -> None:
+async def test_factory_loads_example_model_and_instructions() -> None:
     engine = _Engine()
     cm = CMFactory.create(manifest=_agent(), engine=engine)
     plugin = cm._summarizer
     assert isinstance(plugin, LlmSummarizer)
     assert plugin.model == "gpt-4o-mini"
     assert plugin.instructions == _expected_instructions()
-    text = plugin.summarize([{"role": "user", "content": "hi"}])
+    text = await settle(plugin.summarize([{"role": "user", "content": "hi"}]))
     assert text == "ok"
     assert engine.seen[0][0][0]["content"] == _expected_instructions()
     assert engine.seen[0][1] == "gpt-4o-mini"

@@ -24,59 +24,59 @@ def _obs(*events: str) -> ObservabilityOperator:
     return ObservabilityOperator()
 
 
-def test_n_turns_accumulate_in_committed_messages() -> None:
+async def test_n_turns_accumulate_in_committed_messages() -> None:
     ctx = AutoCtxAssembler()
     for n in range(3):
         q = f"Question {n}?"
         a = f"Answer {n}."
         ctx.note_user_input(q)
         ctx.record_assistant_message(a)
-        ctx.note_agent_response(a)
+        await ctx.note_agent_response(a)
     assert len(ctx.turn_history) == 3
     roles = [m["role"] for m in ctx.committed_messages]
     assert roles.count("user") == 3
     assert roles.count("assistant") == 3
     ctx.note_user_input("Follow-up?")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert sum(1 for m in messages if m["role"] == "user") >= 4
 
 
-def test_tool_trajectory_committed_and_visible_on_next_turn() -> None:
+async def test_tool_trajectory_committed_and_visible_on_next_turn() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"q": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content="Maxence Postu is POTUS")
-    ctx.note_agent_response("Maxence Postu is POTUS.")
+    await ctx.note_agent_response("Maxence Postu is POTUS.")
 
     ctx.note_user_input("Who was POTUS before?")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert any(m.get("role") == "tool" and "Maxence" in str(m.get("content")) for m in messages)
     assert messages[-1]["content"] == "Who was POTUS before?"
 
 
-def test_in_turn_wm_cleared_on_new_turn() -> None:
+async def test_in_turn_wm_cleared_on_new_turn() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("Q1")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={})
     ctx.record_tool_result(call_id="call_1", content="search hit")
     assert ctx.working_memory.messages
-    ctx.note_agent_response("A1")
+    await ctx.note_agent_response("A1")
     assert not ctx.working_memory.messages
 
     ctx.note_user_input("Q2")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     wm_roles = [m["role"] for m in ctx.working_memory.messages]
     assert wm_roles == []
     assert any(m.get("role") == "tool" for m in messages)
 
 
-def test_context_mutations_are_logged() -> None:
+async def test_context_mutations_are_logged() -> None:
     op = ObservabilityOperator()
     ctx = AutoCtxAssembler(observability=op)
     ctx.note_user_input("Hi")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={})
     ctx.record_tool_result(call_id="call_1", content="result")
-    ctx.note_agent_response("done")
+    await ctx.note_agent_response("done")
 
     kinds = [e.kind for e in op.events]
     assert ObsEventKind.CONTEXT_MUTATION in kinds
@@ -87,21 +87,21 @@ def test_context_mutations_are_logged() -> None:
     assert "turn_commit" in actions
 
 
-def test_context_assembly_logged_per_llm_call() -> None:
+async def test_context_assembly_logged_per_llm_call() -> None:
     op = ObservabilityOperator()
     ctx = AutoCtxAssembler(observability=op, last_user_text="Who is POTUS?")
     ctx._assembly_correlation_id = 7
     ctx.record_assistant_tool_call(call_id="call_7", tool_name="web-search", arguments={})
     ctx.record_tool_result(call_id="call_7", content="Steered answer")
 
-    assemble_llm_messages(ctx, correlation_id=7)
+    await assemble_llm_messages(ctx, correlation_id=7)
     assembled = [e for e in op.events if e.kind == ObsEventKind.CONTEXT_ASSEMBLED]
     assert assembled
     assert assembled[-1].correlation_id == 7
     assert assembled[-1].payload.get("message_count", 0) >= 3
 
 
-def test_native_transform_emits_trajectory_events() -> None:
+async def test_native_transform_emits_trajectory_events() -> None:
     from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 
     op = ObservabilityOperator()
@@ -109,7 +109,7 @@ def test_native_transform_emits_trajectory_events() -> None:
     ctx._assembly_correlation_id = 3
     ctx.record_assistant_tool_call(call_id="call_3", tool_name="web-search", arguments={})
     ctx.record_tool_result(call_id="call_3", content="R")
-    assemble_llm_messages(ctx, correlation_id=3)
+    await assemble_llm_messages(ctx, correlation_id=3)
     op.record_engine_llm_return(correlation_id=3, text="A")
 
     transform = NativeObservabilityTransform()
@@ -138,7 +138,7 @@ def test_native_transform_emits_trajectory_events() -> None:
 
 
 @pytest.mark.timeout(60)
-def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
+async def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
     from mas.ctl.adapters.hitl_terminal import ScriptedHitlTerminal
     from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
     from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
@@ -179,9 +179,9 @@ def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
         hitl_terminal=EgressSkip(default=HitlResolveChoice.ALLOW),
         config=ConversationConfig(single_turn=False),
     )
-    pending = controller.run_turn("Who is POTUS?", auto_hitl=False)
+    pending = await controller.arun_turn("Who is POTUS?", auto_hitl=False)
     req = pending.trace.hitl_requests[-1]
-    controller.submit_hitl(
+    await controller.asubmit_hitl(
         HitlResolve(
             request_id=req.request_id,
             resolution=HitlResolveChoice.SKIP,
@@ -191,14 +191,14 @@ def test_hitl_turn_commit_preserves_history_for_turn_two() -> None:
     )
     assert any(m.get("role") == "tool" for m in instance.driver.ctx.committed_messages)
 
-    controller.run_turn("Follow-up?", auto_hitl=False)
-    messages = assemble_llm_messages(instance.driver.ctx, manifest=base)
+    await controller.arun_turn("Follow-up?", auto_hitl=False)
+    messages = await assemble_llm_messages(instance.driver.ctx, manifest=base)
     assert any(steer in str(m.get("content")) for m in messages)
     assert any(e.kind == ObsEventKind.CONTEXT_MUTATION for e in op.events)
     close_observability(controller)
 
 
-def test_multilevel_trajectory_consumes_context_events() -> None:
+async def test_multilevel_trajectory_consumes_context_events() -> None:
     pytest.importorskip("mas.lab.plots.multilevel_trajectory")
     from mas.lab.plots.multilevel_trajectory import _build_call_records, _collect_context_provenance
     from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
@@ -208,7 +208,7 @@ def test_multilevel_trajectory_consumes_context_events() -> None:
     ctx._assembly_correlation_id = 5
     op.record_context_mutation(action="turn_start", turn_index=1)
     op.record_engine_io(correlation_id=5, op="LLM_CALL")
-    assemble_llm_messages(ctx, correlation_id=5)
+    await assemble_llm_messages(ctx, correlation_id=5)
     op.record_engine_llm_return(correlation_id=5, text="A")
 
     transform = NativeObservabilityTransform()

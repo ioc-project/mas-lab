@@ -91,11 +91,11 @@ def test_inform_user_tool_raises_signal_with_expected_fields():
     assert signal.metadata == {"round": 2}
 
 
-def test_inform_user_wrapper_registers_update_in_registry_fallback(empty_tool_tree: Path, monkeypatch):
+async def test_inform_user_wrapper_registers_update_in_registry_fallback(empty_tool_tree: Path, monkeypatch):
     provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=USER_IO)
     ctx = _FakeCtx()
 
-    result = provider.call_tool(
+    result = await provider.acall_tool(
         "inform_user",
         {"message": "Still reviewing renewal economics."},
         ctx=ctx,
@@ -114,7 +114,7 @@ def test_inform_user_wrapper_registers_update_in_registry_fallback(empty_tool_tr
     assert registry.get_pending_user_updates_for_session(ctx.session_id) == {}
 
 
-def test_inform_user_wrapper_routes_through_user_io_contract(empty_tool_tree: Path):
+async def test_inform_user_wrapper_routes_through_user_io_contract(empty_tool_tree: Path):
     calls = []
 
     class _FakeUserIOContract:
@@ -130,7 +130,7 @@ def test_inform_user_wrapper_routes_through_user_io_contract(empty_tool_tree: Pa
     )
     ctx = _FakeCtx()
 
-    result = provider.call_tool(
+    result = await provider.acall_tool(
         "inform_user",
         {"message": "Progress update via contract."},
         ctx=ctx,
@@ -146,7 +146,7 @@ def test_inform_user_wrapper_routes_through_user_io_contract(empty_tool_tree: Pa
     assert registry.get_pending_user_updates_for_session(ctx.session_id) == {}
 
 
-def test_request_human_input_still_auto_resolves_in_batch_mode(empty_tool_tree: Path):
+async def test_request_human_input_still_auto_resolves_in_batch_mode(empty_tool_tree: Path):
     """Regression check: refactoring the wrapper into a shared base class must not
     change the auto-resolve behavior for request_human_input."""
     from mas.library.standard.plugins.hitl.contracts import AutoResolveHitlContract
@@ -156,7 +156,7 @@ def test_request_human_input_still_auto_resolves_in_batch_mode(empty_tool_tree: 
     )
     ctx = _FakeCtx()
 
-    result = provider.call_tool(
+    result = await provider.acall_tool(
         "request_human_input",
         {
             "question": "Approve 20% discount?",

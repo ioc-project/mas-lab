@@ -12,9 +12,10 @@ from mas.runtime.schema.ingress import EngineIoReturn
 
 @runtime_checkable
 class EngineContract(Protocol):
-    """Invoke engine I/O requested by kernel egress (M_model / M_tool)."""
+    """Invoke engine I/O requested by kernel egress (M_model / M_tool).
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn: ...
+    The runtime awaits ``ainvoke``. An engine that only has a blocking ``invoke`` is run in a worker thread.
+    """
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn: ...
 
@@ -26,7 +27,7 @@ class CompactionSummarizeEngine(Protocol):
     ``model`` selects the summary LLM. Default is this engine's agent model.
     """
 
-    def summarize_messages(
+    async def asummarize_messages(
         self,
         messages: list[dict[str, Any]],
         *,

@@ -54,7 +54,7 @@ Each layer owns one thing:
 | Agent manifest | Prompt, model, tools, skills |
 | `Application` infra | Endpoint id, protocol, URL, headers, exposure |
 
-Delegation always goes through `AgentCommContract.send(target_agent_id, task, ...)`.
+Delegation always goes through `await AgentCommContract.asend(target_agent_id, task, ...)`.
 The local plugin runs an in-process agent. The A2A plugin sends the same task through an A2A client.
 
 ![Local and A2A communication share AgentCommContract](tutorial-05.1-logic-infra-contract.svg)

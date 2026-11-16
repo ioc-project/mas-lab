@@ -100,6 +100,7 @@ from mas.library.standard.plugins.context.token_budget import (
     estimate_tool_tokens,
     trim_messages_to_budget,
 )
+from mas.runtime.aio import settle
 from mas.runtime.boundary.context.assembly_cache import cached_context_manager
 from mas.runtime.boundary.context.chunk_meta import PIN_EPHEMERAL, PIN_NEVER
 from mas.runtime.boundary.context.dp_inject import system_context_lines
@@ -310,7 +311,7 @@ class ContextAssemblerPlugin(BasePlugin):
                     engine = getattr(driver, "engine", None)
                 self._conv_strategy = CMFactory.create(manifest=manifest, engine=engine)
 
-    def assemble_messages(
+    async def assemble_messages(
         self,
         ctx: Any,
         *,
@@ -351,9 +352,7 @@ class ContextAssemblerPlugin(BasePlugin):
         store = getattr(ctx, "working_memory", None)
         wm_messages: List[Dict[str, Any]] = []
         if isinstance(store, WorkingMemoryStore) and store.messages:
-            wm_messages = bounded_working_memory_tail(
-                store.messages, working_memory_slice_limit(manifest)
-            )
+            wm_messages = bounded_working_memory_tail(store.messages, working_memory_slice_limit(manifest))
 
         fixed_context_tokens = (
             estimate_tokens(messages)
@@ -362,23 +361,24 @@ class ContextAssemblerPlugin(BasePlugin):
             + estimate_tool_tokens(tools)
         )
         cm = cached_context_manager(ctx, manifest)
-        managed = cm.manage_history(
-            past,
-            context_manager_history_budget_hint(
-                manifest,
-                resolved_model=resolved_model,
-                context_window_override=context_window,
-                completion_tokens_override=completion_tokens,
-                fixed_context_tokens=fixed_context_tokens,
-            ),
+        managed = await settle(
+            cm.manage_history(
+                past,
+                context_manager_history_budget_hint(
+                    manifest,
+                    resolved_model=resolved_model,
+                    context_window_override=context_window,
+                    completion_tokens_override=completion_tokens,
+                    fixed_context_tokens=fixed_context_tokens,
+                ),
+            )
         )
         if managed != past:
             apply_request_view(ctx, managed, manifest=manifest)
         pinned_ids = {
             str(part.get("section_id") or "")
             for part in part_usage
-            if part.get("section_id")
-            and (part.get("pin_policy") == PIN_NEVER or part.get("pinned"))
+            if part.get("section_id") and (part.get("pin_policy") == PIN_NEVER or part.get("pinned"))
         }
         messages.extend(drop_prefix_duplicates(managed, pinned_ids))
         if last_user_text:
@@ -407,11 +407,11 @@ class ContextAssemblerPlugin(BasePlugin):
 
         return sanitize_provider_messages(messages)
 
-    def compact_committed_history(self, ctx: Any, *, manifest: Optional[Dict[str, Any]] = None) -> None:
+    async def compact_committed_history(self, ctx: Any, *, manifest: Optional[Dict[str, Any]] = None) -> None:
         """Fold the covering set after a turn commit; next request is re-assembled."""
-        compact_request_view(ctx, manifest=manifest if manifest is not None else self._manifest)
+        await compact_request_view(ctx, manifest=manifest if manifest is not None else self._manifest)
 
-    def on_pre_llm_call(self, hook_data: Dict[str, Any], **_: Any) -> Dict[str, Any]:
+    async def on_pre_llm_call(self, hook_data: Dict[str, Any], **_: Any) -> Dict[str, Any]:
         """Called by PluginRegistry before every LLM call.
 
         Step 1 — Conversation history management (always runs):
@@ -428,7 +428,7 @@ class ContextAssemblerPlugin(BasePlugin):
 
         # Step 1: conversation history management — always applied.
         # _apply_conversation_strategy writes _last_summarized_turns on self.
-        messages = self._apply_conversation_strategy(messages)
+        messages = await self._apply_conversation_strategy(messages)
         hook_data["messages"] = messages
         summarized = getattr(self, "_last_summarized_turns", 0)
         if summarized:
@@ -672,7 +672,7 @@ class ContextAssemblerPlugin(BasePlugin):
     # Conversation-history helper
     # ------------------------------------------------------------------
 
-    def _apply_conversation_strategy(
+    async def _apply_conversation_strategy(
         self,
         messages: List[Dict[str, str]],
     ) -> List[Dict[str, str]]:
@@ -707,7 +707,7 @@ class ContextAssemblerPlugin(BasePlugin):
         past = turn_msgs[:last_user_idx]
         current_and_after = turn_msgs[last_user_idx:]
 
-        managed_past = self._conv_strategy.manage_history(past, self._token_budget or 0)
+        managed_past = await settle(self._conv_strategy.manage_history(past, self._token_budget or 0))
         # Detect summarisation: if managed_past is shorter than past, turns
         # were either removed (SlidingWindowConversation) or compressed into a
         # summary block (SummarizingConversation).  Store on self so

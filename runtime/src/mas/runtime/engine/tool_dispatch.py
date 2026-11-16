@@ -10,6 +10,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from mas.runtime.aio import run_sync, warn_sync_plugin
 from mas.runtime.engine.manifest_tool_provider import ManifestToolLoadError
 from mas.runtime.engine.tool_routing import ExplicitToolUnavailableError, UnclaimedToolError
 
@@ -54,22 +55,6 @@ class _DelegationEngineTool:
             return bool(offers(tool_name))
         return self.delegation.is_delegate_tool(tool_name)
 
-    def call(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any = None,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-    ) -> str:
-        return self.delegation.call_delegate_tool(
-            tool_name,
-            arguments,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-        )
-
     async def acall(
         self,
         tool_name: str,
@@ -79,18 +64,14 @@ class _DelegationEngineTool:
         correlation_id: int = 0,
         caller_call_id: str = "",
     ) -> str:
-        adelegate = getattr(self.delegation, "acall_delegate_tool", None)
-        if callable(adelegate):
-            return await adelegate(
-                tool_name,
-                arguments,
-                correlation_id=correlation_id,
-                caller_call_id=caller_call_id,
-            )
-        return self.call(
+        acall = getattr(self.delegation, "acall_delegate_tool", None)
+        if callable(acall):
+            return await acall(tool_name, arguments, correlation_id=correlation_id, caller_call_id=caller_call_id)
+        warn_sync_plugin(self.delegation, "call_delegate_tool", "acall_delegate_tool")
+        return await run_sync(
+            self.delegation.call_delegate_tool,
             tool_name,
             arguments,
-            ctx=ctx,
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
         )
@@ -142,46 +123,6 @@ def tool_is_idempotent(tool: str, spec: dict[str, Any] | None) -> bool:
     return False
 
 
-def _dispatch_once(
-    tool: str,
-    *,
-    delegation: DelegationContract | None,
-    engine_contracts: tuple[EngineToolContract, ...] | list[EngineToolContract],
-    ctx: Any,
-    user: str,
-    arguments: dict[str, Any] | None,
-    tool_provider: ManifestToolProvider | None,
-    correlation_id: int,
-    caller_call_id: str,
-) -> str:
-    contracts = list(engine_contracts)
-    if delegation is not None:
-        contracts.insert(0, _DelegationEngineTool(delegation))
-    for contract in contracts:
-        if contract.claims(tool):
-            return contract.call(
-                tool,
-                arguments or {},
-                ctx=ctx,
-                correlation_id=correlation_id,
-                caller_call_id=caller_call_id,
-            )
-    if tool_provider is None:
-        raise ToolExecutionError(f"No manifest tool provider configured; cannot execute {tool!r}")
-    try:
-        from mas.runtime.engine.tool_workers import provider_ctx
-
-        result = tool_provider.call_tool(
-            tool,
-            arguments or {},
-            ctx=provider_ctx(tool_provider, ctx),
-            user=user,
-        )
-    except (ManifestToolLoadError, UnclaimedToolError, ExplicitToolUnavailableError) as exc:
-        raise ToolExecutionError(str(exc)) from exc
-    return format_tool_result(result, ctx=ctx, call_id=caller_call_id)
-
-
 async def _acall_provider(
     provider: Any,
     tool: str,
@@ -216,45 +157,6 @@ async def _acall_provider(
     except (ManifestToolLoadError, UnclaimedToolError, ExplicitToolUnavailableError) as exc:
         raise ToolExecutionError(str(exc)) from exc
     return format_tool_result(result, ctx=ctx, call_id=caller_call_id)
-
-
-def execute_engine_tool(
-    tool: str,
-    *,
-    delegation: DelegationContract | None = None,
-    engine_contracts: tuple[EngineToolContract, ...] | list[EngineToolContract] = (),
-    ctx: Any = None,
-    user: str = "",
-    arguments: dict[str, Any] | None = None,
-    tool_provider: ManifestToolProvider | None = None,
-    correlation_id: int = 0,
-    caller_call_id: str = "",
-    sandbox: Any = None,
-) -> str:
-    from mas.runtime.reliability.classes import ClassifiedFailure
-    from mas.runtime.reliability.classify import classify_tool_exception
-
-    box = _sandbox_for(ctx, sandbox)
-
-    def _body() -> str:
-        return _dispatch_once(
-            tool,
-            delegation=delegation,
-            engine_contracts=engine_contracts,
-            ctx=ctx,
-            user=user,
-            arguments=arguments,
-            tool_provider=tool_provider,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-        )
-
-    try:
-        return box.run(_body, tool_name=tool)
-    except ClassifiedFailure:
-        raise
-    except Exception as exc:
-        raise classify_tool_exception(exc) from exc
 
 
 async def aexecute_engine_tool(
@@ -310,32 +212,28 @@ async def aexecute_engine_tool(
         contracts = list(engine_contracts)
         if delegation is not None:
             contracts.insert(0, _DelegationEngineTool(delegation))
-        claimed_sync = False
         for contract in contracts:
             if contract.claims(tool):
-                acall = getattr(contract, "acall", None)
-                if callable(acall):
-                    return await acall(
+                call = getattr(contract, "acall", None)
+                if callable(call):
+                    return await call(
                         tool,
                         arguments or {},
                         ctx=ctx,
                         correlation_id=correlation_id,
                         caller_call_id=caller_call_id,
                     )
-                claimed_sync = True
-                break
-        if claimed_sync or tool_provider is None:
-            return _dispatch_once(
-                tool,
-                delegation=delegation,
-                engine_contracts=engine_contracts,
-                ctx=ctx,
-                user=user,
-                arguments=arguments,
-                tool_provider=tool_provider,
-                correlation_id=correlation_id,
-                caller_call_id=caller_call_id,
-            )
+                warn_sync_plugin(contract, "call", "acall")
+                return await run_sync(
+                    contract.call,
+                    tool,
+                    arguments or {},
+                    ctx=ctx,
+                    correlation_id=correlation_id,
+                    caller_call_id=caller_call_id,
+                )
+        if tool_provider is None:
+            raise ToolExecutionError(f"No manifest tool provider configured; cannot execute {tool!r}")
         return await _acall_provider(
             tool_provider,
             tool,

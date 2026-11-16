@@ -18,7 +18,6 @@ import httpx
 from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.library.standard.plugins.llm.http import (
     arequest_once,
-    request_once,
     resolve_ssl_verify,
 )
 from mas.runtime.boundary.context.assemble import llm_tool_choice
@@ -78,7 +77,6 @@ class OpenAILLMProvider(LayerLifecycle):
         self.extra_body = dict(extra_body or {})
         self.http_timeout = http_timeout
         self.inner = inner
-        self._client: httpx.Client | None = None
         self._aclient: httpx.AsyncClient | None = None
 
     def _timeout(self) -> float:
@@ -89,40 +87,13 @@ class OpenAILLMProvider(LayerLifecycle):
             return float(self.http_timeout)
         return 120.0
 
-    def _get_client(self) -> Any:
-        """The http layer's client when this protocol sits on one, else a keep-alive pool."""
-        if self.inner is not None:
-            return self.inner.client
-        if self._client is None:
-            self._client = httpx.Client(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
-        return self._client
-
     def _get_async_client(self) -> Any:
-        """Async twin of :meth:`_get_client`."""
+        """The http layer's async client when this protocol sits on one, else a keep-alive pool."""
         if self.inner is not None:
             return self.inner.aclient
         if self._aclient is None:
             self._aclient = httpx.AsyncClient(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
         return self._aclient
-
-    def _discard_client_after_transport_failure(self, exc: BaseException) -> None:
-        """Drop the pooled client after a transport-level failure.
-
-        A network change (wifi/VPN switch, interface change, ...) can leave
-        pooled keep-alive sockets bound to a now-dead route; retrying on the
-        same pool can just hang or fail again. Force a brand-new client (and
-        DNS/connect) on the next attempt. HTTP-status failures (429/5xx) keep
-        the pool — the connection itself was fine.
-        """
-        if not isinstance(exc, httpx.TransportError):
-            return
-        if self.inner is not None:
-            self.inner.discard_client()
-        if self._client is None:
-            return
-        client, self._client = self._client, None
-        with contextlib.suppress(Exception):
-            client.close()
 
     async def _adiscard_client_after_transport_failure(self, exc: BaseException) -> None:
         """Async twin of :meth:`_discard_client_after_transport_failure`."""
@@ -135,17 +106,6 @@ class OpenAILLMProvider(LayerLifecycle):
         client, self._aclient = self._aclient, None
         with contextlib.suppress(Exception):
             await client.aclose()
-
-    def _reraise_stream_failure(self, exc: BaseException, *, emitted_any: bool) -> None:
-        """Retry a stream only if no chunk has already been shown."""
-        self._discard_client_after_transport_failure(exc)
-        if emitted_any:
-            raise ClassifiedFailure(
-                "stream failed after output was already shown",
-                failure_class=FailureClass.APPLICATION,
-                code="STREAM_PARTIAL",
-            ) from exc
-        raise exc
 
     async def _areraise_stream_failure(self, exc: BaseException, *, emitted_any: bool) -> None:
         """Async twin of :meth:`_reraise_stream_failure`."""
@@ -227,15 +187,6 @@ class OpenAILLMProvider(LayerLifecycle):
         )
         return inst
 
-    def invoke(self, io: Any) -> Any:
-        from mas.runtime.engine.infra_pipeline import _PROVIDER_CALL, _provider_result_return
-
-        payload = _PROVIDER_CALL.get()
-        if not isinstance(payload, dict):
-            raise RuntimeError("openai layer invoked without a chat_completion in flight")
-        call = {key: value for key, value in payload.items() if key != "_result"}
-        return _provider_result_return(io, payload, self.chat_completion(**call))
-
     async def ainvoke(self, io: Any) -> Any:
         from mas.runtime.engine.infra_pipeline import _PROVIDER_CALL, _provider_result_return
 
@@ -244,65 +195,6 @@ class OpenAILLMProvider(LayerLifecycle):
             raise RuntimeError("openai layer invoked without a chat_completion in flight")
         call = {key: value for key, value in payload.items() if key != "_result"}
         return _provider_result_return(io, payload, await self.achat_completion(**call))
-
-    def chat_completion(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.7,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        stream: bool | None = None,
-        on_stream_chunk: Callable[[str], None] | None = None,
-        api_key: str | None = None,
-        reasoning_effort: str | None = None,
-        reasoning: ReasoningSettings | dict[str, Any] | None = None,
-        extra_body: dict[str, Any] | None = None,
-        extra_headers: dict[str, Any] | None = None,
-        extra_query: dict[str, Any] | None = None,
-        sampling: dict[str, Any] | None = None,
-        tool_choice: Any = None,
-        stream_options: dict[str, Any] | None = None,
-        **_: Any,
-    ) -> dict[str, Any]:
-        key = api_key if api_key is not None else os.environ.get(self.api_key_env, "")
-        if not key:
-            raise RuntimeError(f"Missing API key env {self.api_key_env} for live LLM.")
-        use_stream = self.stream if stream is None else stream
-        settings = coerce_reasoning_settings(
-            reasoning if reasoning is not None else self.reasoning, effort=reasoning_effort
-        )
-        try:
-            return self._post_chat(
-                model=model,
-                messages=messages,
-                tools=tools,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                max_completion_tokens=max_completion_tokens,
-                api_key=key,
-                stream=use_stream,
-                on_stream_chunk=on_stream_chunk,
-                reasoning=settings,
-                extra_body=extra_body,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                sampling=sampling,
-                tool_choice=tool_choice,
-                stream_options=stream_options,
-            )
-        except ClassifiedFailure:
-            raise
-        except Exception as exc:
-            logger.debug("OpenAI-compatible LLM call failed", exc_info=True)
-            classified = classify_llm_failure(exc)
-            raise ClassifiedFailure(
-                classify_llm_http_error(exc),
-                failure_class=classified.failure_class,
-                code=classified.code,
-            ) from exc
 
     async def achat_completion(
         self,
@@ -438,64 +330,6 @@ class OpenAILLMProvider(LayerLifecycle):
             message["finish_reason"] = finish_reason
         return sanitize_assistant_message(message, exclude=reasoning.exclude)
 
-    def _post_chat(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        temperature: float,
-        max_tokens: int | None,
-        max_completion_tokens: int | None,
-        api_key: str,
-        stream: bool,
-        on_stream_chunk: Callable[[str], None] | None,
-        reasoning: ReasoningSettings,
-        extra_body: dict[str, Any] | None = None,
-        extra_headers: dict[str, Any] | None = None,
-        extra_query: dict[str, Any] | None = None,
-        sampling: dict[str, Any] | None = None,
-        tool_choice: Any = None,
-        stream_options: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        url, payload, headers, query = self._build_chat_request(
-            model=model,
-            messages=messages,
-            tools=tools,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_completion_tokens=max_completion_tokens,
-            api_key=api_key,
-            reasoning=reasoning,
-            extra_body=extra_body,
-            extra_headers=extra_headers,
-            extra_query=extra_query,
-            sampling=sampling,
-            tool_choice=tool_choice,
-            stream_options=stream_options,
-        )
-        if stream:
-            return self._chat_completion_streamed(
-                url,
-                payload,
-                headers,
-                on_stream_chunk=on_stream_chunk,
-                reasoning=reasoning,
-                params=query,
-            )
-        resp = request_once(
-            self._get_client(),
-            "POST",
-            url,
-            json=payload,
-            headers=headers,
-            params=query,
-            get_client=self._get_client,
-            on_failure=self._discard_client_after_transport_failure,
-        )
-        resp.raise_for_status()
-        return self._message_from_completion(resp.json(), reasoning)
-
     async def _apost_chat(
         self,
         *,
@@ -553,92 +387,6 @@ class OpenAILLMProvider(LayerLifecycle):
         )
         resp.raise_for_status()
         return self._message_from_completion(resp.json(), reasoning)
-
-    def _chat_completion_streamed(
-        self,
-        url: str,
-        payload: dict[str, Any],
-        headers: dict[str, str],
-        *,
-        on_stream_chunk: Callable[[str], None] | None,
-        reasoning: ReasoningSettings,
-        params: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """SSE-streamed variant — same OpenAI-compatible message shape.
-
-        A dropped connection / timeout is only retried while nothing has yet
-        been surfaced to ``on_stream_chunk`` — once the caller has seen
-        partial output, re-sending the request would duplicate/corrupt it.
-        """
-        stream_payload = dict(payload)
-        stream_payload["stream"] = True
-
-        content_parts: list[str] = []
-        tool_call_accum: dict[int, dict[str, Any]] = {}
-        finish_reason = ""
-        usage: dict[str, Any] = {}
-        think_filter = ThinkTagStreamFilter() if reasoning.exclude else None
-        emitted_any = False
-        try:
-            with self._get_client().stream("POST", url, json=stream_payload, headers=headers, params=params) as resp:
-                resp.raise_for_status()
-                for raw_line in resp.iter_lines():
-                    line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
-                    if not line.startswith("data:"):
-                        continue
-                    data_str = line[len("data:") :].strip()
-                    if not data_str or data_str == "[DONE]":
-                        continue
-                    try:
-                        chunk = json.loads(data_str)
-                    except (TypeError, ValueError):
-                        continue
-                    if isinstance(chunk.get("usage"), dict):
-                        usage = chunk["usage"]
-                    choices = chunk.get("choices") or []
-                    if not choices:
-                        continue
-                    choice = choices[0]
-                    fr = choice.get("finish_reason")
-                    if fr:
-                        finish_reason = fr
-                    delta = choice.get("delta") or {}
-                    text = delta.get("content")
-                    if text:
-                        if think_filter is not None:
-                            text = think_filter.feed(text)
-                        if text:
-                            content_parts.append(text)
-                            emitted_any = True
-                            if callable(on_stream_chunk):
-                                try:
-                                    on_stream_chunk(text)
-                                except Exception:
-                                    logger.exception("on_stream_chunk callback failed")
-                    for tc in delta.get("tool_calls") or []:
-                        emitted_any = True
-                        idx = int(tc.get("index", 0) or 0)
-                        slot = tool_call_accum.setdefault(
-                            idx, {"id": "", "type": "function", "function": {"name": "", "arguments": ""}}
-                        )
-                        if tc.get("id"):
-                            slot["id"] = tc["id"]
-                        fn = tc.get("function") or {}
-                        if fn.get("name"):
-                            slot["function"]["name"] += fn["name"]
-                        if fn.get("arguments"):
-                            slot["function"]["arguments"] += fn["arguments"]
-        except Exception as exc:
-            self._reraise_stream_failure(exc, emitted_any=emitted_any)
-
-        message: dict[str, Any] = {"content": "".join(content_parts) or None}
-        if tool_call_accum:
-            message["tool_calls"] = [tool_call_accum[i] for i in sorted(tool_call_accum)]
-        if usage:
-            message["usage"] = usage
-        if finish_reason:
-            message["finish_reason"] = finish_reason
-        return sanitize_assistant_message(message, exclude=reasoning.exclude)
 
     async def _achat_completion_streamed(
         self,

@@ -56,20 +56,20 @@ def test_default_cm_is_summarising():
     assert cm._summarizer.__class__.__name__ == "LlmSummarizer"
 
 
-def test_cm_assembly_includes_working_memory_after_user():
+async def test_cm_assembly_includes_working_memory_after_user():
     ctx = AutoCtxAssembler(last_user_text="Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"q": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content="Donald Trump is president.")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert [m["role"] for m in messages] == ["user", "assistant", "tool"]
 
 
-def test_build_messages_includes_tool_results():
+async def test_build_messages_includes_tool_results():
     ctx = AutoCtxAssembler(last_user_text="Who is current POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"q": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content="Donald Trump is president.")
     engine = LiveLlmEngine(ctx=ctx, manifest={"spec": {"tools": ["web-search"]}})
-    msgs = engine._build_messages()
+    msgs = await engine._abuild_messages()
     assert any(m["role"] == "tool" for m in msgs)
     assert msgs[-1]["role"] == "tool"
 
@@ -491,16 +491,16 @@ def test_hitl_skip_synthetic_result_projects_from_delta():
     assert tool_msgs[0]["tool_call_id"] == "call_5"
 
 
-def test_turn_commit_preserves_tool_trajectory_for_follow_up():
+async def test_turn_commit_preserves_tool_trajectory_for_follow_up():
     ctx = AutoCtxAssembler()
     ctx.note_user_input("Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"query": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content='[{"body": "Donald Trump is the 47th president."}]')
     ctx.record_assistant_message("Donald Trump is the current President.")
-    ctx.note_agent_response("Donald Trump is the current President.")
+    await ctx.note_agent_response("Donald Trump is the current President.")
 
     ctx.note_user_input("Why did you say Biden?")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     roles = [m["role"] for m in messages]
     assert roles.count("tool") == 1
     assert "assistant" in roles

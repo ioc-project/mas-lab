@@ -4,14 +4,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
 
 from mas.library.standard.lib.comm.capabilities import capability_set, merge_capabilities
 from mas.library.standard.lib.stack.envelope import Envelope
 from mas.library.standard.lib.stack.errors import StackError
+from mas.runtime.aio import await_on_loop, run_sync, warn_sync_plugin
 
-Handler = Callable[[Envelope], Any]
+Handler = Callable[[Envelope], Awaitable[Any]]
 """An inbound handler: one received request envelope in, the reply payload out."""
 
 
@@ -123,10 +124,18 @@ class Layer(ChainMember):
     def serve(self, handler: Handler) -> Handler:
         return handler
 
-    def send(self, envelope: Envelope) -> Any:
-        return self._require().send(envelope)
-
     async def asend(self, envelope: Envelope) -> Any:
+        if type(self).send is not Layer.send:
+            # a layer written sync: its ``send`` runs on the worker threads and reaches the layer below through
+            # ``self._require().send(...)``, which hands the call back to the event loop
+            warn_sync_plugin(self, "send", "asend")
+            return await run_sync(self.send, envelope)
         if not self.needs_lower:
-            return self.send(envelope)
+            raise StackError(f"{type(self).__name__} does not implement asend")
         return await self._require().asend(envelope)
+
+    def send(self, envelope: Envelope) -> Any:
+        """The sync view of :meth:`asend`, for a sync layer that sends down. Never call it from async code."""
+        if not self.needs_lower:
+            raise StackError(f"{type(self).__name__} does not implement send or asend")
+        return await_on_loop(self._require().asend(envelope))

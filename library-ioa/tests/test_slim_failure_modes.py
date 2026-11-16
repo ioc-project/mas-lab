@@ -47,8 +47,8 @@ def test_a_second_send_to_one_target_waits_for_the_first_reply() -> None:
     slim_fake.FakeSession.publish_async = counting  # type: ignore[method-assign]
     try:
         results: dict[str, str] = {}
-        first = threading.Thread(target=lambda: results.update(one=a.send("b", "one")))
-        second = threading.Thread(target=lambda: results.update(two=a.send("b", "two")))
+        first = threading.Thread(target=lambda: results.update(one=asyncio.run(a.asend("b", "one"))))
+        second = threading.Thread(target=lambda: results.update(two=asyncio.run(a.asend("b", "two"))))
         first.start()
         _wait_until(lambda: len(published) == 1)
         second.start()
@@ -62,35 +62,35 @@ def test_a_second_send_to_one_target_waits_for_the_first_reply() -> None:
     assert results == {"one": "re:one", "two": "re:two"}
 
 
-def test_a_reply_that_arrives_after_the_timeout_does_not_answer_the_next_request() -> None:
+async def test_a_reply_that_arrives_after_the_timeout_does_not_answer_the_next_request() -> None:
     FakeWorld.reset()
     desk = _desk(timeout_s=0.25, reply_timeout_s=0.3)
     a, b = desk.link("a"), desk.link("b")
     _set_run_turn(b, lambda task: (time.sleep(0.8) if task == "first" else None, f"re:{task}")[1])
     with pytest.raises(AgentCommError):
-        a.send("b", "first")
+        await a.asend("b", "first")
     time.sleep(1.0)  # the late reply is now waiting on the old session
-    assert a.send("b", "second") == "re:second"
+    assert (await a.asend("b", "second")) == "re:second"
 
 
-def test_a_reply_larger_than_the_limit_is_refused() -> None:
+async def test_a_reply_larger_than_the_limit_is_refused() -> None:
     FakeWorld.reset()
     desk = _desk(timeout_s=0.5, max_message_size=100)
     a, b = desk.link("a"), desk.link("b")
     _set_run_turn(b, lambda task: "x" * 100_000)
     with pytest.raises(AgentCommError, match="peer handler failed"):
-        a.send("b", "hi")
+        await a.asend("b", "hi")
 
 
 @pytest.mark.parametrize("target", ["b c", "b\nc", "b//c", "", "b|c"])
-def test_a_target_that_is_not_a_name_never_reaches_the_node(target: str) -> None:
+async def test_a_target_that_is_not_a_name_never_reaches_the_node(target: str) -> None:
     FakeWorld.reset()
     a = _desk().link("a")
     with pytest.raises(AgentCommError):
-        a.send(target, "x")
+        await a.asend(target, "x")
 
 
-def test_after_five_read_failures_the_link_reconnects_and_a_send_still_works(
+async def test_after_five_read_failures_the_link_reconnects_and_a_send_still_works(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     FakeWorld.reset()
@@ -110,7 +110,7 @@ def test_after_five_read_failures_the_link_reconnects_and_a_send_still_works(
     monkeypatch.setattr(slim_fake.FakeApp, "listen_for_session_async", flaky)
     _wait_until(lambda: count["n"] >= 5, timeout=5)
     _wait_until(lambda: a._app is not None and a._app is not old_app and not a._need_reconnect, timeout=5)
-    assert a.send("b", "hi") == "ack:hi"
+    assert (await a.asend("b", "hi")) == "ack:hi"
     assert a._actor.failed is False
 
 
@@ -146,7 +146,7 @@ def test_a_peer_that_sends_faster_than_the_agent_answers_waits(monkeypatch: pyte
         return task
 
     _set_run_turn(senders[2], handle)
-    threads = [threading.Thread(target=lambda s=s: s.send("b", "x")) for s in senders[:2]]
+    threads = [threading.Thread(target=lambda s=s: asyncio.run(s.asend("b", "x"))) for s in senders[:2]]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -223,14 +223,14 @@ def test_an_awaited_call_that_times_out_is_cancelled_on_the_loop() -> None:
     _wait_until(lambda: state == ["cancelled"])
 
 
-def test_an_awaited_call_on_a_stopped_actor_is_refused() -> None:
+async def test_an_awaited_call_on_a_stopped_actor_is_refused() -> None:
     FakeWorld.reset()
     desk = _desk()
     desk.link("a")
     actor = desk._actor
     desk.close()
     with pytest.raises(AgentCommError, match="stopped"):
-        asyncio.run(actor.asubmit(asyncio.sleep(0), timeout=1))
+        await actor.asubmit(asyncio.sleep(0), timeout=1)
 
 
 def test_a_link_can_be_stopped_twice_and_before_it_started() -> None:
@@ -258,7 +258,7 @@ def test_no_slim_module_imports_a_private_name_from_another() -> None:
     assert named == []
 
 
-def test_actor_refuses_calls_once_failed_or_stopped_and_reports_its_endpoint() -> None:
+async def test_actor_refuses_calls_once_failed_or_stopped_and_reports_its_endpoint() -> None:
     FakeWorld.reset()
     actor = ConnectionActor(endpoint="http://127.0.0.1:46357")
     assert "46357" in repr(actor)
@@ -275,7 +275,7 @@ def test_actor_refuses_calls_once_failed_or_stopped_and_reports_its_endpoint() -
     pending.close()
     pending = _noop()
     with pytest.raises(AgentCommError, match="failed"):
-        asyncio.run(actor.asubmit(pending, timeout=0.1))
+        await actor.asubmit(pending, timeout=0.1)
     actor.mark_failed()
     actor.failed = False
     pending = _noop()
@@ -288,7 +288,7 @@ def test_actor_refuses_calls_once_failed_or_stopped_and_reports_its_endpoint() -
         actor.submit(pending)
     pending.close()
     with pytest.raises(AgentCommError, match="not connected"):
-        asyncio.run(actor.open_connection("x"))
+        await actor.open_connection("x")
 
 
 def test_a_start_that_raises_from_the_node_is_a_failed_link(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -320,7 +320,7 @@ def test_disconnect_errors_on_close_do_not_raise() -> None:
     actor.close_connection(service, conn_id)
 
 
-def test_a_failed_or_stopped_link_refuses_start_and_send() -> None:
+async def test_a_failed_or_stopped_link_refuses_start_and_send() -> None:
     FakeWorld.reset()
     desk = _desk()
     a = desk.link("a")
@@ -329,14 +329,14 @@ def test_a_failed_or_stopped_link_refuses_start_and_send() -> None:
     with pytest.raises(AgentCommError, match="failed"):
         a.start()
     with pytest.raises(AgentCommError, match="failed"):
-        a.send("b", "x")
+        await a.asend("b", "x")
     a._actor.failed = False
     a.stop()
     a.stop()
     with pytest.raises(AgentCommError, match="stopped"):
-        a.send("b", "x")
+        await a.asend("b", "x")
     with pytest.raises(AgentCommError, match="stopped"):
-        asyncio.run(a.asend("b", "x"))
+        await a.asend("b", "x")
 
 
 def test_submit_from_the_loop_thread_is_refused() -> None:

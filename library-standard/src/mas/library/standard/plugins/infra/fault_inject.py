@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.runtime.engine.ainvoke import ainvoke_call, apreview_call
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
@@ -62,21 +63,10 @@ class FaultInjectMiddleware(LayerLifecycle):
     def _draw(self) -> float:
         return self._rng.random() if self._rng is not None else random.random()
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        head = await apreview_call(self.inner, op, correlation_id=correlation_id)
         label = f"[fault_inject middleware rate={self.rate}]"
         return f"{label}\n{head}".strip() if head else label
-
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and self._draw() < self.rate:
-            code = self.status_codes[0] if self.status_codes else 503
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="ERROR",
-                next_step="STOP",
-                text=f"{code}: {self.message}",
-            )
-        return self.inner.invoke(io)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if call_kind_matches(io.op, self.call_kinds) and self.rate > 0 and self._draw() < self.rate:
@@ -87,4 +77,4 @@ class FaultInjectMiddleware(LayerLifecycle):
                 next_step="STOP",
                 text=f"{code}: {self.message}",
             )
-        return await self.inner.ainvoke(io)
+        return await ainvoke_call(self.inner, io)

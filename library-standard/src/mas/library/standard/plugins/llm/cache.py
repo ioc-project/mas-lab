@@ -69,48 +69,6 @@ class CacheLLMProvider:
             raise_on_miss=spec.get("raise_on_miss", params.get("raise_on_miss", False)) is True,
         )
 
-    def chat_completion(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.7,
-        max_tokens: int | None = None,
-        **kwargs: Any,
-    ) -> dict[str, Any]:
-        params = completion_cache_params(temperature=temperature, max_tokens=max_tokens, **kwargs)
-        if self.allow_read:
-            content, cached_usage, _source = lookup_response(self._cache, model, messages, tools=tools, params=params)
-            cached = assistant_message_from_cache_content(content)
-            if cached is not None:
-                if cached_usage:
-                    cached["usage"] = cached_usage
-                cached["_mas_cache_status"] = "hit"
-                return cached
-            if self.raise_on_miss:
-                key = llm_cache_key(model, messages, tools, params=params)
-                raise RuntimeError(
-                    f"llm_cache miss (raise_on_miss=true) for key {key}: "
-                    "no recorded answer for this prompt. To call the model, "
-                    "turn read-only mode off (no --cache-read-only, no "
-                    "`cache: read-only` in config.yaml) and set an API key."
-                )
-        message = self.inner.chat_completion(
-            model=model,
-            messages=messages,
-            tools=tools,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs,
-        )
-        if self.allow_read:
-            message = dict(message)
-            message["_mas_cache_status"] = "miss"
-        if self.allow_write and self.cache_path:
-            self._persist_message(model, messages, tools, message, params=params)
-        return message
-
     async def achat_completion(
         self,
         *,

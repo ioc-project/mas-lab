@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from types import SimpleNamespace
 
@@ -59,17 +60,17 @@ def _session(manager: SessionManager, session_id: str = "s1", *, plugin: object 
     return manager.create(instance, controller, {"name": "agent", "spec": {}}, session_id=session_id)
 
 
-def test_peer_steer_trace_actor_is_the_sender_not_admin() -> None:
+async def test_peer_steer_trace_actor_is_the_sender_not_admin() -> None:
     manager = SessionManager()
     _session(manager, "worker-sess")
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "worker-sess"},
     )
-    assert comm.send("worker", "nudge", context=SendContext(intent="steer")) == "delivered"
+    assert (await comm.asend("worker", "nudge", context=SendContext(intent="steer"))) == "delivered"
     events = [event for event in manager.control_events if event.method == "steer"]
     assert events
     assert events[0].actor == "planner"
@@ -82,18 +83,18 @@ def test_peer_steer_trace_actor_is_the_sender_not_admin() -> None:
         scoped.steer("other-sess", text="no")
 
 
-def test_peer_after_steer_does_not_jump_operator_queue() -> None:
+async def test_peer_after_steer_does_not_jump_operator_queue() -> None:
     manager = SessionManager()
     _session(manager, "worker-sess")
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     admin.enqueue_input("worker-sess", text="OPERATOR queued turn", source="user")
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "worker-sess"},
     )
-    comm.send("worker", "peer turn", context=SendContext(intent="steer"))
+    await comm.asend("worker", "peer turn", context=SendContext(intent="steer"))
     labelled = label_untrusted_peer("peer turn", sender="planner", intent="steer")
     texts = [item.text for item in admin.inspect_queue("worker-sess").items]
     assert texts[0] == "OPERATOR queued turn"
@@ -102,7 +103,7 @@ def test_peer_after_steer_does_not_jump_operator_queue() -> None:
     assert sources == ["user", "peer"]
 
 
-def test_peer_idle_preempt_is_queued_and_does_not_block() -> None:
+async def test_peer_idle_preempt_is_queued_and_does_not_block() -> None:
     manager = SessionManager()
     session = _session(manager, "worker-sess", plugin=_LLM)
 
@@ -113,39 +114,38 @@ def test_peer_idle_preempt_is_queued_and_does_not_block() -> None:
     session.instance.feed = boom
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "worker-sess"},
     )
     assert (
-        comm.send(
+        await comm.asend(
             "worker",
             "start over",
             context=SendContext(intent="steer", mode="preempt"),
         )
-        == "delivered"
-    )
+    ) == "delivered"
     assert session.instance.fed == []
     queued = admin.inspect_queue("worker-sess").items
     assert queued[0].source == "peer"
     assert queued[0].action == "steer"
 
 
-def test_unknown_session_is_an_agent_comm_error() -> None:
+async def test_unknown_session_is_an_agent_comm_error() -> None:
     manager = SessionManager()
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "no-such-session"},
     )
     with pytest.raises(AgentCommError, match="unknown session"):
-        comm.send("worker", "nudge", context=SendContext(intent="steer"))
+        await comm.asend("worker", "nudge", context=SendContext(intent="steer"))
 
 
-def test_denied_steer_is_an_agent_comm_error() -> None:
+async def test_denied_steer_is_an_agent_comm_error() -> None:
     class _Deny:
         capability = ControlCapability(
             actor="planner",
@@ -158,12 +158,12 @@ def test_denied_steer_is_an_agent_comm_error() -> None:
             raise ControlDenied("steer", session_id, reason="no")
 
     with pytest.raises(AgentCommError, match="denied"):
-        LocalAgentComm(
-            lambda *_a, **_k: "ok",
+        await LocalAgentComm(
+            lambda *_a, **_k: asyncio.sleep(0, "ok"),
             agent_id="planner",
             control=_Deny(),
             steer_peers={"worker": "worker-sess"},
-        ).send("worker", "nudge", context=SendContext(intent="steer"))
+        ).asend("worker", "nudge", context=SendContext(intent="steer"))
 
 
 def test_overprivileged_control_without_manager_is_rejected() -> None:
@@ -175,26 +175,26 @@ def test_overprivileged_control_without_manager_is_rejected() -> None:
         peer_steer_control(admin, actor="planner", session_id="worker-sess")
 
 
-def test_deterministic_preempt_is_refused() -> None:
+async def test_deterministic_preempt_is_refused() -> None:
     manager = SessionManager()
     _session(manager, "worker-sess", plugin=DeterministicLinearPlugin())
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "worker-sess"},
     )
     with pytest.raises(AgentCommError, match="does not support steer mode 'preempt'"):
-        comm.send(
+        await comm.asend(
             "worker",
             "cut",
             context=SendContext(intent="steer", mode="preempt"),
         )
-    assert comm.send("worker", "later", context=SendContext(intent="steer")) == "delivered"
+    assert (await comm.asend("worker", "later", context=SendContext(intent="steer"))) == "delivered"
 
 
-def test_pause_only_control_cannot_steer() -> None:
+async def test_pause_only_control_cannot_steer() -> None:
     manager = SessionManager()
     _session(manager, "s-worker")
     _session(manager, "other")
@@ -207,30 +207,30 @@ def test_pause_only_control_cannot_steer() -> None:
         )
     )
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=pause_only,
         steer_peers={"worker": "s-worker"},
     )
     with pytest.raises(AgentCommError, match="not allowed"):
-        comm.send("worker", "nudge", context=SendContext(intent="steer"))
+        await comm.asend("worker", "nudge", context=SendContext(intent="steer"))
     assert not [event for event in manager.control_events if event.method == "steer"]
 
 
-def test_peer_preempt_does_not_jump_operator_while_busy() -> None:
+async def test_peer_preempt_does_not_jump_operator_while_busy() -> None:
     manager = SessionManager()
     session = _session(manager, "s-worker", plugin=_LLM)
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     admin.enqueue_input("s-worker", text="OPERATOR queued turn", source="user")
     session.controller.inflight = True
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "s-worker"},
     )
-    comm.send("worker", "peer steer", context=SendContext(intent="steer", mode="preempt"))
-    comm.send("worker", "peer turn", context=SendContext(intent="steer", mode="replace"))
+    await comm.asend("worker", "peer steer", context=SendContext(intent="steer", mode="preempt"))
+    await comm.asend("worker", "peer turn", context=SendContext(intent="steer", mode="replace"))
     items = admin.inspect_queue("s-worker").items
     assert [(item.source, item.action) for item in items] == [
         ("user", "turn"),
@@ -253,22 +253,22 @@ def test_steer_sender_and_source_come_from_capability() -> None:
     assert items[0].actor == "llm-agent"
 
 
-def test_paused_session_queues_after_and_refuses_preempt() -> None:
+async def test_paused_session_queues_after_and_refuses_preempt() -> None:
     manager = SessionManager()
     _session(manager, "s-worker", plugin=_LLM)
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     admin.pause("s-worker", reason="hold")
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "s-worker"},
     )
     labelled = label_untrusted_peer("nudge", sender="planner", intent="steer")
-    assert comm.send("worker", "nudge", context=SendContext(intent="steer")) == "delivered"
+    assert (await comm.asend("worker", "nudge", context=SendContext(intent="steer"))) == "delivered"
     assert admin.inspect_queue("s-worker").items[0].text == labelled
     with pytest.raises(AgentCommError, match="paused"):
-        comm.send("worker", "cut", context=SendContext(intent="steer", mode="preempt"))
+        await comm.asend("worker", "cut", context=SendContext(intent="steer", mode="preempt"))
     with pytest.raises(SessionPaused, match="paused"):
         admin.steer("s-worker", text="cut", mode="preempt")
 
@@ -292,7 +292,7 @@ def test_unknown_pattern_allows_after_only() -> None:
     assert admin.inspect_queue("s-worker").items[0].text == "later"
 
 
-def test_deterministic_runtime_instance_after_steer_reaches_the_turn() -> None:
+async def test_deterministic_runtime_instance_after_steer_reaches_the_turn() -> None:
     instance = RuntimeInstance.from_parts(
         config=KernelConfig(),
         engine=SimulatedEngine(llm_next_step=lambda _cid: "STOP", stop_text="ok"),
@@ -328,14 +328,14 @@ def test_deterministic_runtime_instance_after_steer_reaches_the_turn() -> None:
     )
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": "s-linear"},
     )
     labelled = label_untrusted_peer("nudge", sender="planner", intent="steer")
-    assert comm.send("worker", "nudge", context=SendContext(intent="steer")) == "delivered"
-    result = session.controller.run_turn("", auto_hitl=False)
+    assert (await comm.asend("worker", "nudge", context=SendContext(intent="steer"))) == "delivered"
+    result = await session.controller.arun_turn("", auto_hitl=False)
     first_user = next(step.ingress for step in result.trace.steps if isinstance(step.ingress, UserInputReceived))
     assert first_user.sender == "planner"
     assert first_user.intent == "steer"

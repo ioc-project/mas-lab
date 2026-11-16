@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable
 from typing import Any
 
@@ -26,25 +25,25 @@ class RecordingLower(Layer):
     def capabilities(self) -> dict[str, bool]:
         return dict(self._flags)
 
-    def send(self, envelope: Envelope) -> Any:
+    async def asend(self, envelope: Envelope) -> Any:
         self.seen.append(envelope)
         return self.answer
 
 
-def check_layer(make: Callable[[], Layer], *, lower_answer: Any = "ok", expect: Any = "ok") -> None:
+async def check_layer(make: Callable[[], Layer], *, lower_answer: Any = "ok", expect: Any = "ok") -> None:
     """A layer above the bottom: unbound send fails, lifecycle is idempotent, capabilities only grow,
-    a plain send reaches the layer below, sync and async agree.
+    a plain send reaches the layer below.
 
     The layer below answers ``lower_answer``; the layer must return ``expect``. A
     protocol layer passes the framed answer its decoder reads (for ``a2a``, a
     JSON-RPC response) and the reply text it should decode to."""
     unbound = make()
     try:
-        unbound.send(Envelope(payload="x"))
+        await unbound.asend(Envelope(payload="x"))
     except StackError:
         pass
     else:
-        raise AssertionError("an unbound layer must raise StackError on send")
+        raise AssertionError("an unbound layer must raise StackError on asend")
 
     lower = RecordingLower(lower_answer, unicast=True, e2e=True)
     layer = make()
@@ -61,17 +60,13 @@ def check_layer(make: Callable[[], Layer], *, lower_answer: Any = "ok", expect: 
         assert caps[name] or not value, f"layer turned capability {name!r} off"
 
     env = Envelope(payload="hello", headers={"h": "1"}, meta={"target": "b"})
-    answer = layer.send(env)
+    answer = await layer.asend(env)
     assert answer == expect
     assert lower.seen, "the send never reached the layer below"
     assert lower.seen[-1].meta["target"] == "b"
 
-    seen_before = len(lower.seen)
-    assert asyncio.run(layer.asend(env)) == expect
-    assert len(lower.seen) > seen_before
 
-
-def check_transport(
+async def check_transport(
     make: Callable[[], Layer],
     *,
     envelope: Envelope,
@@ -79,7 +74,7 @@ def check_transport(
     delivered: Callable[[], int] | None = None,
 ) -> None:
     """A bottom layer: it needs nothing below, start and stop are idempotent, its capability flags
-    are the known set of booleans, a send reaches the peer and returns ``reply``, and ``asend`` agrees.
+    are the known set of booleans, a send reaches the peer and returns ``reply``.
 
     ``make`` builds the transport; ``envelope`` is a send its peer answers with
     ``reply``. ``delivered`` counts what the peer received, so the check can see
@@ -96,12 +91,9 @@ def check_transport(
     assert all(isinstance(value, bool) for value in caps.values())
 
     before = delivered() if delivered is not None else 0
-    assert layer.send(envelope) == reply
+    assert await layer.asend(envelope) == reply
     if delivered is not None:
         assert delivered() == before + 1, "the send did not reach the peer exactly once"
-    assert asyncio.run(layer.asend(envelope)) == reply
-    if delivered is not None:
-        assert delivered() == before + 2, "the async send did not reach the peer exactly once"
 
     layer.stop()
     layer.stop()
@@ -117,11 +109,6 @@ class FailingLayer(Layer):
         super().__init__()
         self.targets = frozenset(targets)
         self.message = message
-
-    def send(self, envelope: Envelope) -> Any:
-        if str(envelope.meta.get("target") or "") in self.targets:
-            raise StackError(self.message)
-        return super().send(envelope)
 
     async def asend(self, envelope: Envelope) -> Any:
         if str(envelope.meta.get("target") or "") in self.targets:

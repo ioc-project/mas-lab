@@ -18,6 +18,7 @@ from mas.library.standard.plugins.context.provider_payload import (
     tool_call_pairs,
 )
 from mas.library.standard.plugins.context.token_budget import trim_messages_to_budget
+from mas.runtime.aio import settle
 
 
 def _tool_turn(call_id: str = "call_1", *, content: str = "result") -> list[dict[str, Any]]:
@@ -145,14 +146,14 @@ def test_sanitize_rebinds_hitl_steering_tool_to_preceding_assistant() -> None:
     assert_provider_payload(out)
 
 
-def test_stack_trim_plus_sanitize_is_provider_safe() -> None:
+async def test_stack_trim_plus_sanitize_is_provider_safe() -> None:
     past = _tool_turn("call_0") + _tool_turn("call_1")
-    trimmed = StackConversation(max_messages=3).manage_history(past, budget_tokens=0)
+    trimmed = await settle(StackConversation(max_messages=3).manage_history(past, budget_tokens=0))
     out = sanitize_provider_messages(trimmed)
     assert_provider_payload(out)
 
 
-def test_sliding_window_keeps_whole_user_turn_with_parallel_tools() -> None:
+async def test_sliding_window_keeps_whole_user_turn_with_parallel_tools() -> None:
     """max_turns=1 must keep both results of a parallel call, not only the last row."""
     past = _tool_turn("old") + [
         {"role": "user", "content": "q"},
@@ -168,21 +169,21 @@ def test_sliding_window_keeps_whole_user_turn_with_parallel_tools() -> None:
         {"role": "tool", "tool_call_id": "b", "content": "rb"},
         {"role": "assistant", "content": "done"},
     ]
-    out = SlidingWindowConversation(max_turns=1).manage_history(past, budget_tokens=0)
+    out = await settle(SlidingWindowConversation(max_turns=1).manage_history(past, budget_tokens=0))
     assert [m.get("tool_call_id") for m in out if m.get("role") == "tool"] == ["a", "b"]
     assert_provider_payload(out)
 
 
-def test_sliding_window_plus_sanitize_is_provider_safe() -> None:
+async def test_sliding_window_plus_sanitize_is_provider_safe() -> None:
     past: list[dict[str, Any]] = []
     for i in range(6):
         past.extend(_tool_turn(f"call_{i}"))
-    trimmed = SlidingWindowConversation(max_turns=1).manage_history(past, budget_tokens=0)
+    trimmed = await settle(SlidingWindowConversation(max_turns=1).manage_history(past, budget_tokens=0))
     out = sanitize_provider_messages(trimmed)
     assert_provider_payload(out)
 
 
-def test_summarizing_conversation_plus_sanitize_is_provider_safe() -> None:
+async def test_summarizing_conversation_plus_sanitize_is_provider_safe() -> None:
     past: list[dict[str, Any]] = []
     for i in range(6):
         past.extend(_tool_turn(f"call_{i}"))
@@ -191,44 +192,44 @@ def test_summarizing_conversation_plus_sanitize_is_provider_safe() -> None:
         keep_turns=1,
         summarize_fn=lambda msgs: "summary of earlier turns",
     )
-    trimmed = cm.manage_history(past, budget_tokens=0)
+    trimmed = await settle(cm.manage_history(past, budget_tokens=0))
     out = sanitize_provider_messages(trimmed)
     assert_provider_payload(out)
     assert trimmed[-4:] == past[-4:]
     assert trimmed[0]["role"] == "system"
 
 
-def test_summarizing_keeps_last_round_verbatim_without_summarize_fn() -> None:
+async def test_summarizing_keeps_last_round_verbatim_without_summarize_fn() -> None:
     past: list[dict[str, Any]] = []
     for i in range(4):
         past.extend(_tool_turn(f"call_{i}", content=f"result-{i}"))
     last_round = past[-4:]
     cm = SummarizingConversation(summary_threshold=1, keep_turns=1)
-    out = cm.manage_history(past, budget_tokens=0)
+    out = await settle(cm.manage_history(past, budget_tokens=0))
     assert out == last_round
     assert_provider_payload(out)
 
 
-def test_summarizing_under_budget_does_not_touch_history() -> None:
+async def test_summarizing_under_budget_does_not_touch_history() -> None:
     past = _tool_turn("call_old") + _tool_turn("call_new")
     cm = SummarizingConversation(
         summary_threshold=1,
         keep_turns=1,
         summarize_fn=lambda msgs: "should not run",
     )
-    assert cm.manage_history(past, budget_tokens=10_000) == past
+    assert await settle(cm.manage_history(past, budget_tokens=10_000)) == past
 
 
-def test_sliding_window_accepts_keep_turns_alias() -> None:
+async def test_sliding_window_accepts_keep_turns_alias() -> None:
     past: list[dict[str, Any]] = []
     for i in range(4):
         past.extend(_tool_turn(f"call_{i}"))
-    out = SlidingWindowConversation(keep_turns=1).manage_history(past, budget_tokens=0)
+    out = await settle(SlidingWindowConversation(keep_turns=1).manage_history(past, budget_tokens=0))
     assert out == past[-4:]
     assert_provider_payload(out)
 
 
-def test_summarizing_hysteresis_reuses_summary_on_the_next_call() -> None:
+async def test_summarizing_hysteresis_reuses_summary_on_the_next_call() -> None:
     """Committed history is still the full list; without a cache we would
     re-summarize the same older turns on every LLM call."""
     calls: list[int] = []
@@ -243,19 +244,19 @@ def test_summarizing_hysteresis_reuses_summary_on_the_next_call() -> None:
     past = fat(0) + fat(1) + fat(2)
     high = SummarizingConversation._estimate_tokens(past) - 1
     cm = SummarizingConversation(keep_turns=1, hysteresis_ratio=0.2, summarize_fn=summarize)
-    first = cm.manage_history(past, high)
+    first = await settle(cm.manage_history(past, high))
     assert len(calls) == 1
     assert first[0]["role"] == "system"
-    assert cm.manage_history(past, high) == first
+    assert await settle(cm.manage_history(past, high)) == first
     assert len(calls) == 1
     grown = past + fat(3)
-    reused = cm.manage_history(grown, high)
+    reused = await settle(cm.manage_history(grown, high))
     assert len(calls) == 1
     assert reused[0]["content"] == first[0]["content"]
     assert_provider_payload(reused)
 
 
-def test_summarizing_hysteresis_does_not_reuse_a_different_prefix() -> None:
+async def test_summarizing_hysteresis_does_not_reuse_a_different_prefix() -> None:
     """Same compressed-turn count, different conversation — do not attach
     the previous summary. This is the WM-restore / context_id case."""
     calls: list[str] = []
@@ -270,16 +271,16 @@ def test_summarizing_hysteresis_does_not_reuse_a_different_prefix() -> None:
     cm = SummarizingConversation(keep_turns=1, hysteresis_ratio=0.2, summarize_fn=summarize)
     first_past = fat("alpha") + fat("beta") + fat("gamma")
     high = SummarizingConversation._estimate_tokens(first_past) - 1
-    first = cm.manage_history(first_past, high)
+    first = await settle(cm.manage_history(first_past, high))
     assert len(calls) == 1
     other_past = fat("other-a") + fat("other-b") + fat("other-c")
-    second = cm.manage_history(other_past, high)
+    second = await settle(cm.manage_history(other_past, high))
     assert len(calls) == 2
     assert first[0]["content"] != second[0]["content"]
     assert "SUM-2" in second[0]["content"]
 
 
-def test_summarizing_recompacts_after_hysteresis_ceiling() -> None:
+async def test_summarizing_recompacts_after_hysteresis_ceiling() -> None:
     calls: list[int] = []
 
     def summarize(msgs: list[dict[str, Any]]) -> str:
@@ -292,11 +293,11 @@ def test_summarizing_recompacts_after_hysteresis_ceiling() -> None:
     past = fat(0) + fat(1) + fat(2)
     high = SummarizingConversation._estimate_tokens(past) - 1
     cm = SummarizingConversation(keep_turns=1, hysteresis_ratio=0.0, summarize_fn=summarize)
-    cm.manage_history(past, high)
+    await settle(cm.manage_history(past, high))
     assert len(calls) == 1
     for i in range(3, 12):
         past = past + fat(i)
-        cm.manage_history(past, high)
+        await settle(cm.manage_history(past, high))
         if len(calls) == 2:
             break
     assert len(calls) == 2
@@ -320,29 +321,29 @@ def test_trim_with_structural_pin_tail() -> None:
 # --- slice-boundary pairing (orphan tool at the cut) ---
 
 
-def test_pr55_stack_slice_orphan_tool_at_front() -> None:
+async def test_pr55_stack_slice_orphan_tool_at_front() -> None:
     """Stack trim used to slice mid-group; manage_history must return a valid payload."""
     past = _tool_turn("call_0") + _tool_turn("call_1")
-    trimmed = StackConversation(max_messages=2).manage_history(past, budget_tokens=0)
+    trimmed = await settle(StackConversation(max_messages=2).manage_history(past, budget_tokens=0))
     assert_provider_payload(trimmed)
 
 
-def test_pr55_stack_various_max_messages_never_violate_invariant() -> None:
+async def test_pr55_stack_various_max_messages_never_violate_invariant() -> None:
     past: list[dict[str, Any]] = []
     for i in range(10):
         past.extend(_tool_turn(f"call_{i}"))
     for max_msgs in range(1, 20):
-        trimmed = StackConversation(max_messages=max_msgs).manage_history(past, budget_tokens=0)
+        trimmed = await settle(StackConversation(max_messages=max_msgs).manage_history(past, budget_tokens=0))
         declared, returned = tool_call_pairs(trimmed)
         assert returned <= declared
         assert_provider_payload(trimmed)
 
 
-def test_pr55_sliding_window_split_exchange() -> None:
+async def test_pr55_sliding_window_split_exchange() -> None:
     past: list[dict[str, Any]] = []
     for i in range(8):
         past.extend(_tool_turn(f"call_{i}"))
-    trimmed = SlidingWindowConversation(max_turns=2).manage_history(past, budget_tokens=0)
+    trimmed = await settle(SlidingWindowConversation(max_turns=2).manage_history(past, budget_tokens=0))
     out = sanitize_provider_messages(trimmed)
     assert_provider_payload(out)
 
@@ -357,7 +358,7 @@ def test_pr55_token_budget_many_sizes_on_tool_history() -> None:
         assert_provider_payload(out)
 
 
-def test_pr55_assembler_end_to_end_with_live_tool_exchange() -> None:
+async def test_pr55_assembler_end_to_end_with_live_tool_exchange() -> None:
     plugin = ContextAssemblerPlugin(conversation_strategy=StackConversation(max_messages=6))
     history = _tool_turn("call_0") + _tool_turn("call_1") + _tool_turn("call_2")
     history.append({"role": "user", "content": "current question"})
@@ -368,7 +369,7 @@ def test_pr55_assembler_end_to_end_with_live_tool_exchange() -> None:
             "tool_calls": [{"id": "call_live", "function": {"name": "f", "arguments": "{}"}}],
         }
     )
-    out = plugin._apply_conversation_strategy(history)
+    out = await plugin._apply_conversation_strategy(history)
     declared, returned = tool_call_pairs(out)
     assert "call_live" in declared
     assert returned <= declared

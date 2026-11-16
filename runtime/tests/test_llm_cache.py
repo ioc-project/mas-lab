@@ -89,30 +89,27 @@ class _StubProvider:
         self.message = message
         self.calls = 0
 
-    def chat_completion(self, **kwargs):
+    async def achat_completion(self, **kwargs):
         self.calls += 1
         return dict(self.message)
 
-    async def achat_completion(self, **kwargs):
-        return self.chat_completion(**kwargs)
 
-
-def test_cache_provider_misses_when_reasoning_changes(tmp_path) -> None:
+async def test_cache_provider_misses_when_reasoning_changes(tmp_path) -> None:
     inner = _StubProvider({"role": "assistant", "content": "a"})
     provider = CacheLLMProvider(inner, cache_path=tmp_path / "c.json", allow_read=True, allow_write=True)
     messages = [{"role": "user", "content": "hi"}]
-    provider.chat_completion(model="gpt-5", messages=messages, api_key="k", reasoning={"effort": "low"})
+    await provider.achat_completion(model="gpt-5", messages=messages, api_key="k", reasoning={"effort": "low"})
     inner.message = {"role": "assistant", "content": "b"}
-    out = provider.chat_completion(model="gpt-5", messages=messages, api_key="k", reasoning={"effort": "high"})
+    out = await provider.achat_completion(model="gpt-5", messages=messages, api_key="k", reasoning={"effort": "high"})
     assert out["content"] == "b"
     assert inner.calls == 2
-    replay = provider.chat_completion(model="gpt-5", messages=messages, api_key="k", reasoning={"effort": "low"})
+    replay = await provider.achat_completion(model="gpt-5", messages=messages, api_key="k", reasoning={"effort": "low"})
     assert replay["content"] == "a"
     assert replay["_mas_cache_status"] == "hit"
     assert inner.calls == 2
 
 
-def test_live_llm_wraps_cache_provider_when_cache_path_set(tmp_path) -> None:
+async def test_live_llm_wraps_cache_provider_when_cache_path_set(tmp_path) -> None:
     cache_path = tmp_path / "llm-cache.json"
     inner = _StubProvider({"role": "assistant", "content": "fresh-response"})
     engine = LiveLlmEngine(
@@ -123,7 +120,7 @@ def test_live_llm_wraps_cache_provider_when_cache_path_set(tmp_path) -> None:
         cache_write=True,
     )
     assert _llm_cache_layer(engine.llm_provider) is not None
-    out = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="", tools=None)
+    out = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="", tools=None)
     assert out["content"] == "fresh-response"
     assert cache_path.is_file()
     assert inner.calls == 1
@@ -136,11 +133,11 @@ def test_live_llm_wraps_cache_provider_when_cache_path_set(tmp_path) -> None:
         cache_read=False,
         cache_write=True,
     )
-    second._chat_completion([{"role": "user", "content": "hi"}], api_key="", tools=None)
+    await second._achat_completion([{"role": "user", "content": "hi"}], api_key="", tools=None)
     assert inner2.calls == 1
 
 
-def test_live_llm_cache_read_hit_skips_inner(tmp_path) -> None:
+async def test_live_llm_cache_read_hit_skips_inner(tmp_path) -> None:
     cache_path = tmp_path / "llm-cache.json"
     writer_inner = _StubProvider({"role": "assistant", "content": "cached-response"})
     writer = LiveLlmEngine(
@@ -150,7 +147,7 @@ def test_live_llm_cache_read_hit_skips_inner(tmp_path) -> None:
         cache_read=False,
         cache_write=True,
     )
-    writer._chat_completion([{"role": "user", "content": "hello"}], api_key="", tools=None)
+    await writer._achat_completion([{"role": "user", "content": "hello"}], api_key="", tools=None)
 
     reader_inner = _StubProvider({"role": "assistant", "content": "live"})
     reader = LiveLlmEngine(
@@ -160,12 +157,12 @@ def test_live_llm_cache_read_hit_skips_inner(tmp_path) -> None:
         cache_read=True,
         cache_write=False,
     )
-    out = reader._chat_completion([{"role": "user", "content": "hello"}], api_key="", tools=None)
+    out = await reader._achat_completion([{"role": "user", "content": "hello"}], api_key="", tools=None)
     assert out["content"] == "cached-response"
     assert reader_inner.calls == 0
 
 
-def test_live_engine_reports_provider_cache_hit(tmp_path) -> None:
+async def test_live_engine_reports_provider_cache_hit(tmp_path) -> None:
     cache_path = tmp_path / "llm-cache.json"
     writer = LiveLlmEngine(
         llm_provider=_StubProvider({"role": "assistant", "content": "cached-response"}),
@@ -174,7 +171,7 @@ def test_live_engine_reports_provider_cache_hit(tmp_path) -> None:
         cache_read=False,
         cache_write=True,
     )
-    writer.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await writer.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
 
     reader_inner = _StubProvider({"role": "assistant", "content": "live"})
     reader = LiveLlmEngine(
@@ -184,14 +181,14 @@ def test_live_engine_reports_provider_cache_hit(tmp_path) -> None:
         cache_read=True,
         cache_write=False,
     )
-    ret = reader.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    ret = await reader.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "cached-response"
     assert ret.cache_status == "hit"
     assert ret.cache_layer == "provider_cache"
     assert reader_inner.calls == 0
 
 
-def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
+async def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
     cache_path = tmp_path / "llm-cache.json"
     tool_calls = [
         {
@@ -211,7 +208,7 @@ def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
         cache_write=True,
         use_tool_loop=True,
     )
-    engine._chat_completion([{"role": "user", "content": "hi"}], api_key="", tools=[{"type": "function"}])
+    await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="", tools=[{"type": "function"}])
 
     reader_inner = _StubProvider({"role": "assistant", "content": "miss"})
     reader = LiveLlmEngine(
@@ -222,7 +219,7 @@ def test_live_llm_cache_persists_tool_calls(tmp_path) -> None:
         cache_write=False,
         use_tool_loop=True,
     )
-    out = reader._chat_completion([{"role": "user", "content": "hi"}], api_key="", tools=[{"type": "function"}])
+    out = await reader._achat_completion([{"role": "user", "content": "hi"}], api_key="", tools=[{"type": "function"}])
     assert out["tool_calls"][0]["function"]["name"] == "demo_tool"
     assert reader_inner.calls == 0
 

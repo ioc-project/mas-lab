@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from mas.runtime.engine.protocol import CompactionSummarizeEngine
@@ -28,8 +28,7 @@ def context_manager_binding_from_compaction(compaction: dict[str, Any]) -> dict[
     cm_type = _STRATEGY_TO_CM_TYPE.get(strategy)
     if cm_type is None:
         raise ValueError(
-            f"unknown working_memory.compaction.strategy: {strategy!r} "
-            f"(expected one of {sorted(_STRATEGY_TO_CM_TYPE)})"
+            f"unknown working_memory.compaction.strategy: {strategy!r} (expected one of {sorted(_STRATEGY_TO_CM_TYPE)})"
         )
     param_keys = _STRATEGY_PARAM_KEYS.get(strategy, ())
     params = {k: compaction[k] for k in param_keys if k in compaction}
@@ -52,11 +51,11 @@ def resolve_working_memory_context_manager(spec: dict[str, Any]) -> dict[str, An
     return context_manager_binding_from_compaction(compaction)
 
 
-def build_llm_summarize_fn(engine: CompactionSummarizeEngine) -> Callable[[list[dict[str, Any]]], str]:
-    """Return ``engine.summarize_messages`` (test helper / escape hatch)."""
+def build_llm_summarize_fn(engine: CompactionSummarizeEngine) -> Callable[[list[dict[str, Any]]], Awaitable[str]]:
+    """Return ``engine.asummarize_messages`` (test helper / escape hatch)."""
     if not isinstance(engine, CompactionSummarizeEngine):
         raise TypeError(f"{type(engine).__name__} does not implement CompactionSummarizeEngine")
-    return engine.summarize_messages
+    return engine.asummarize_messages
 
 
 def apply_working_memory_compaction(spec: dict[str, Any], *, engine: Any = None) -> None:

@@ -20,17 +20,20 @@ class _FakeStreamResponse:
     def raise_for_status(self) -> None:
         return None
 
-    def iter_lines(self):
-        return iter(self._lines)
+    async def aiter_lines(self):
+        for line in self._lines:
+            yield line
 
-    def __enter__(self) -> "_FakeStreamResponse":
+    async def __aenter__(self) -> "_FakeStreamResponse":
         return self
 
-    def __exit__(self, *exc: object) -> None:
+    async def __aexit__(self, *exc: object) -> None:
         return None
 
 
 class _FakeClient:
+    is_closed = False
+
     def __init__(self, lines: list[str], **_: object) -> None:
         self._lines = lines
 
@@ -38,10 +41,7 @@ class _FakeClient:
         assert method == "POST"
         return _FakeStreamResponse(self._lines)
 
-    def __enter__(self) -> "_FakeClient":
-        return self
-
-    def __exit__(self, *exc: object) -> None:
+    async def aclose(self) -> None:
         return None
 
 
@@ -50,10 +50,10 @@ def _sse(chunk: dict) -> str:
 
 
 def _install_fake_client(monkeypatch: pytest.MonkeyPatch, lines: list[str]) -> None:
-    monkeypatch.setattr("httpx.Client", lambda **kwargs: _FakeClient(lines, **kwargs))
+    monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: _FakeClient(lines, **kwargs))
 
 
-def test_streamed_content_is_reassembled_and_forwarded_chunk_by_chunk(monkeypatch):
+async def test_streamed_content_is_reassembled_and_forwarded_chunk_by_chunk(monkeypatch):
     lines = [
         _sse({"choices": [{"delta": {"content": "Hel"}}]}),
         _sse({"choices": [{"delta": {"content": "lo, "}}]}),
@@ -67,7 +67,7 @@ def test_streamed_content_is_reassembled_and_forwarded_chunk_by_chunk(monkeypatc
     ctx = SimpleNamespace(on_stream_chunk=received.append)
     engine = LiveLlmEngine(ctx=ctx, stream=True, use_cache=False)
 
-    message = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
+    message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert received == ["Hel", "lo, ", "world."]
     assert message["content"] == "Hello, world."
@@ -76,7 +76,7 @@ def test_streamed_content_is_reassembled_and_forwarded_chunk_by_chunk(monkeypatc
     assert "tool_calls" not in message
 
 
-def test_streamed_tool_calls_are_accumulated_across_chunks_and_not_forwarded(monkeypatch):
+async def test_streamed_tool_calls_are_accumulated_across_chunks_and_not_forwarded(monkeypatch):
     lines = [
         _sse(
             {
@@ -114,7 +114,7 @@ def test_streamed_tool_calls_are_accumulated_across_chunks_and_not_forwarded(mon
     ctx = SimpleNamespace(on_stream_chunk=received.append)
     engine = LiveLlmEngine(ctx=ctx, stream=True, use_cache=False)
 
-    message = engine._chat_completion(
+    message = await engine._achat_completion(
         [{"role": "user", "content": "weather in paris"}], api_key="k", tools=[{"type": "function"}]
     )
 
@@ -130,27 +130,27 @@ def test_streamed_tool_calls_are_accumulated_across_chunks_and_not_forwarded(mon
     assert message["finish_reason"] == "tool_calls"
 
 
-def test_streaming_works_with_no_on_stream_chunk_installed(monkeypatch):
+async def test_streaming_works_with_no_on_stream_chunk_installed(monkeypatch):
     lines = [_sse({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}), "data: [DONE]"]
     _install_fake_client(monkeypatch, lines)
 
     engine = LiveLlmEngine(ctx=SimpleNamespace(), stream=True, use_cache=False)
-    message = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
+    message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert message["content"] == "ok"
 
 
-def test_streaming_with_no_ctx_at_all(monkeypatch):
+async def test_streaming_with_no_ctx_at_all(monkeypatch):
     lines = [_sse({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}), "data: [DONE]"]
     _install_fake_client(monkeypatch, lines)
 
     engine = LiveLlmEngine(ctx=None, stream=True, use_cache=False)
-    message = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
+    message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert message["content"] == "ok"
 
 
-def test_on_stream_chunk_exception_does_not_break_the_call(monkeypatch):
+async def test_on_stream_chunk_exception_does_not_break_the_call(monkeypatch):
     lines = [
         _sse({"choices": [{"delta": {"content": "a"}}]}),
         _sse({"choices": [{"delta": {"content": "b"}, "finish_reason": "stop"}]}),
@@ -162,12 +162,12 @@ def test_on_stream_chunk_exception_does_not_break_the_call(monkeypatch):
         raise RuntimeError("boom")
 
     engine = LiveLlmEngine(ctx=SimpleNamespace(on_stream_chunk=boom), stream=True, use_cache=False)
-    message = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
+    message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert message["content"] == "ab"
 
 
-def test_ignores_malformed_and_empty_sse_lines(monkeypatch):
+async def test_ignores_malformed_and_empty_sse_lines(monkeypatch):
     lines = [
         "",
         "event: ping",
@@ -178,7 +178,7 @@ def test_ignores_malformed_and_empty_sse_lines(monkeypatch):
     _install_fake_client(monkeypatch, lines)
 
     engine = LiveLlmEngine(ctx=SimpleNamespace(), stream=True, use_cache=False)
-    message = engine._chat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
+    message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert message["content"] == "fine"
 

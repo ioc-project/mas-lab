@@ -7,12 +7,12 @@ from __future__ import annotations
 import json
 import random
 import threading
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.runtime.engine.ainvoke import ainvoke_call, apreview_call
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.llm_cache import (
     load_cache,
@@ -127,73 +127,15 @@ class LlmCacheMiddleware(LayerLifecycle):
                 return
         self._cache = load_cache(self.cache_path) if mode == "replace" else _cache_for_path(self.cache_path)
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        head = await apreview_call(self.inner, op, correlation_id=correlation_id)
         label = "[llm_cache middleware]"
         return f"{label}\n{head}".strip() if head else label
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if not (self.allow_read or self.allow_write) or not call_kind_matches(io.op, self.call_kinds):
-            return self.inner.invoke(io)
-        # Exactly one exchange_preview() call per invoke(): LiveLlmEngine's
-        # preview resets ctx._assembly_correlation_id as a side effect, so
-        # calling it more than once here (as the old separate tool-results
-        # check + cache-key computation did) corrupted textual tool-call
-        # parsing correlation state on every cached turn.
-        # No tool-results skip: the cache key is the full preview text
-        # (conversation so far, including any prior tool result), so a
-        # different tool outcome naturally produces a different key and a
-        # fresh miss -- there is nothing to protect against by excluding
-        # these turns, and skipping them defeats caching a whole agentic
-        # turn, where the useful answer is almost always the post-tool-call
-        # completion.
-        preview = self._preview(io)
-        key, cached = self._lookup(preview)
-        if self.allow_read and cached is not None:
-            self._simulate_replay_delay()
-            if self.allow_write and key not in self._cache:
-                self._cache[key] = cached
-                self._persist()
-            ret = middleware_cache_deserialize(cached, io.correlation_id)
-            return ret.model_copy(
-                update={
-                    "cache_status": "hit",
-                    "cache_layer": "infra_llm_cache",
-                    "cache_events": [{"layer": "infra_llm_cache", "status": "hit"}],
-                }
-            )
-        if self.allow_read and self.raise_on_miss:
-            self._log_miss(key, preview)
-            self._record_strict_miss(io)
-            shown = preview if len(preview) <= 4000 else preview[:4000] + "\n…"
-            raise RuntimeError(f"llm_cache miss (raise_on_miss=true) for key {key}\n{shown}")
-        ret = self.inner.invoke(io)
-        if self.allow_read:
-            events = [*ret.cache_events, {"layer": "infra_llm_cache", "status": "miss"}]
-            ret = ret.model_copy(
-                update={
-                    "cache_status": "miss",
-                    "cache_layer": "infra_llm_cache",
-                    "cache_events": events,
-                }
-            )
-        if (
-            self.allow_write
-            and ret.response_kind == "MODEL_TEXT"
-            and ret.next_step in {"STOP", "TOOL_CALL", "PARALLEL_TOOL_CALLS"}
-        ):
-            self._cache[key] = middleware_cache_serialize(
-                ret,
-                include_preview=self.include_preview,
-                preview=preview,
-            )
-            self._persist()
-        return ret
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not (self.allow_read or self.allow_write) or not call_kind_matches(io.op, self.call_kinds):
-            return await self.inner.ainvoke(io)
-        preview = self._preview(io)
+            return await ainvoke_call(self.inner, io)
+        preview = await self._apreview(io)
         key, cached = self._lookup(preview)
         if self.allow_read and cached is not None:
             await self._asimulate_replay_delay()
@@ -213,7 +155,7 @@ class LlmCacheMiddleware(LayerLifecycle):
             self._record_strict_miss(io)
             shown = preview if len(preview) <= 4000 else preview[:4000] + "\n…"
             raise RuntimeError(f"llm_cache miss (raise_on_miss=true) for key {key}\n{shown}")
-        ret = await self.inner.ainvoke(io)
+        ret = await ainvoke_call(self.inner, io)
         if self.allow_read:
             events = [*ret.cache_events, {"layer": "infra_llm_cache", "status": "miss"}]
             ret = ret.model_copy(
@@ -235,13 +177,6 @@ class LlmCacheMiddleware(LayerLifecycle):
             )
             self._persist()
         return ret
-
-    def _simulate_replay_delay(self) -> None:
-        lo = max(0.0, self.replay_delay_min_s)
-        hi = max(lo, self.replay_delay_max_s)
-        if hi <= 0:
-            return
-        time.sleep(random.uniform(lo, hi))
 
     async def _asimulate_replay_delay(self) -> None:
         lo = max(0.0, self.replay_delay_min_s)
@@ -275,8 +210,8 @@ class LlmCacheMiddleware(LayerLifecycle):
                 cache_status="miss",
             )
 
-    def _preview(self, io: InvokeEngineIo) -> str:
-        return str(self.inner.exchange_preview("LLM_CALL", correlation_id=io.correlation_id) or "")
+    async def _apreview(self, io: InvokeEngineIo) -> str:
+        return await apreview_call(self.inner, "LLM_CALL", correlation_id=io.correlation_id)
 
     def _lookup(self, preview: str) -> tuple[str, Any | None]:
         from mas.runtime.engine.llm_cache import cache_route_from_engine, lookup_preview_cache

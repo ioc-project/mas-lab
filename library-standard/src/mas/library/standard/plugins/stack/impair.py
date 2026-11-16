@@ -17,6 +17,7 @@ from typing import Any, ClassVar
 
 from mas.library.standard.lib.stack import Envelope, Layer
 from mas.library.standard.lib.stack.errors import StackSendError
+from mas.runtime.engine.ainvoke import ainvoke_call
 from mas.runtime.layers.base import LayerBase
 from mas.runtime.layers.lifecycle import Lifecycle, call_start, call_stop
 from mas.runtime.schema.egress import InvokeEngineIo
@@ -114,16 +115,6 @@ class ImpairLayer(Layer, LayerBase):
     def _drop_error(self) -> Exception:
         return StackSendError("dropped")
 
-    def send(self, envelope: Envelope) -> Any:
-        self._before()
-        if self._dropped():
-            raise self._drop_error()
-        env = self._transform(envelope)
-        result = None
-        for _ in range(self._repeats()):
-            result = self._require().send(env)
-        return result
-
     async def asend(self, envelope: Envelope) -> Any:
         await self._abefore()
         if self._dropped():
@@ -134,30 +125,17 @@ class ImpairLayer(Layer, LayerBase):
             result = await self._require().asend(env)
         return result
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        from mas.runtime.engine.call_kinds import call_kind_matches
-
-        if not call_kind_matches(io.op, self.call_kinds):
-            return self.inner.invoke(io)
-        self._before()
-        if self._dropped():
-            raise self._drop_error()
-        result = None
-        for _ in range(self._repeats()):
-            result = self.inner.invoke(io)
-        return result
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         from mas.runtime.engine.call_kinds import call_kind_matches
 
         if not call_kind_matches(io.op, self.call_kinds):
-            return await self.inner.ainvoke(io)
+            return await ainvoke_call(self.inner, io)
         await self._abefore()
         if self._dropped():
             raise self._drop_error()
         result = None
         for _ in range(self._repeats()):
-            result = await self.inner.ainvoke(io)
+            result = await ainvoke_call(self.inner, io)
         return result
 
 

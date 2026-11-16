@@ -17,7 +17,7 @@ from typing import Any
 
 from mas.runtime.contracts.tool_semantics import existing_attr
 from mas.runtime.layers.lifecycle import Lifecycle
-from mas.runtime.registry.llm_provider_protocol import require_achat_completion
+from mas.runtime.registry.llm_provider_protocol import adapt_llm_provider, require_achat_completion
 
 
 def _non_protocol_kinds() -> frozenset[str]:
@@ -94,16 +94,11 @@ def instantiate_llm_provider(
     cls = llm_provider_class(kind)
     require_achat_completion(cls, name=kind)
     payload = dict(spec or {})
-    provider: Any
     for name in ("from_provider_spec", "from_infra_spec"):
         factory = getattr(cls, name, None)
         if callable(factory):
-            provider = factory(payload)
-            require_achat_completion(provider, name=kind)
-            return provider
-    provider = cls()
-    require_achat_completion(provider, name=kind)
-    return provider
+            return adapt_llm_provider(factory(payload), name=kind)
+    return adapt_llm_provider(cls(), name=kind)
 
 
 def canonical_model_name(model: str, leaf: dict[str, Any] | None) -> str:
@@ -315,7 +310,7 @@ class LLMProviderRegistry(Lifecycle):
     """Registry mapping model names to the protocol plugin that owns them.
 
     Same calling shape as :class:`ToolProviderRegistry`: register plugins, then
-    ``chat_completion(model=...)`` is a lookup. ``models: "*"`` is the default
+    ``achat_completion(model=...)`` is a lookup. ``models: "*"`` is the default
     owner for any name that was not claimed explicitly.
     """
 
@@ -330,10 +325,7 @@ class LLMProviderRegistry(Lifecycle):
         *,
         models: str | tuple[str, ...] | list[str] = "*",
     ) -> None:
-        chat = existing_attr(provider, "chat_completion")
-        if not callable(chat):
-            raise TypeError(f"LLM provider must implement chat_completion, got {type(provider)}")
-        require_achat_completion(provider, name=type(provider).__name__)
+        provider = adapt_llm_provider(provider, name=type(provider).__name__)
         claim: str | tuple[str, ...]
         if models == "*" or models is None:
             claim = "*"
@@ -396,15 +388,12 @@ class LLMProviderRegistry(Lifecycle):
         inner = self._star or (self._bindings[0][0] if self._bindings else None)
         return str(existing_attr(inner, "kind") or existing_attr(inner, "provider_id") or "")
 
-    def chat_completion(self, *, model: str, **kwargs: Any) -> dict[str, Any]:
-        return self.provider_for(model).chat_completion(model=model, **kwargs)
-
     async def achat_completion(self, *, model: str, **kwargs: Any) -> dict[str, Any]:
         return await self.provider_for(model).achat_completion(model=model, **kwargs)
 
 
 def enforce_llm_provider_async_contract(reg: Any) -> None:
-    """Fail plugin load if any ``llm_provider`` class omits ``achat_completion``."""
+    """Fail plugin load if any ``llm_provider`` class has no completion method."""
     from mas.runtime.registry import PluginUnavailable
 
     for entry in reg.get_by_category("llm_provider"):

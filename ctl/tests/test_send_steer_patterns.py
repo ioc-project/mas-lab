@@ -103,7 +103,7 @@ def _live_session(pattern: str, session_id: str, *, engine: object | None = None
     )
     admin = manager.control(capability=ControlCapability(actor="admin", surface="admin"))
     comm = LocalAgentComm(
-        lambda *_a, **_k: "ok",
+        lambda *_a, **_k: asyncio.sleep(0, "ok"),
         agent_id="planner",
         control=admin,
         steer_peers={"worker": session_id},
@@ -112,10 +112,10 @@ def _live_session(pattern: str, session_id: str, *, engine: object | None = None
 
 
 @pytest.mark.parametrize("pattern", ALL_PATTERNS)
-def test_peer_after_steer_is_applied_or_queued(pattern: str) -> None:
+async def test_peer_after_steer_is_applied_or_queued(pattern: str) -> None:
     _manager, session, admin, comm = _live_session(pattern, f"s-{pattern}")
     labelled = label_untrusted_peer("nudge", sender="planner", intent="steer")
-    assert comm.send("worker", "nudge", context=SendContext(intent="steer")) == "delivered"
+    assert (await comm.asend("worker", "nudge", context=SendContext(intent="steer"))) == "delivered"
     steer_events = [
         event for event in admin.events if event.method == "steer" and event.session_id == session.session_id
     ]
@@ -126,7 +126,7 @@ def test_peer_after_steer_is_applied_or_queued(pattern: str) -> None:
     assert queued
     assert queued[0].text == labelled
     assert queued[0].source == "peer"
-    result = session.controller.run_turn("", auto_hitl=False)
+    result = await session.controller.arun_turn("", auto_hitl=False)
     kinds = [step.ingress.__class__.__name__ for step in result.trace.steps]
     assert "UserInputReceived" in kinds
     assembled = [item for step in result.trace.steps for item in step.egress if isinstance(item, RequestCtxAssembly)]
@@ -139,12 +139,12 @@ def test_peer_after_steer_is_applied_or_queued(pattern: str) -> None:
 
 
 @pytest.mark.parametrize("pattern", DETERMINISTIC_PATTERNS)
-def test_deterministic_preempt_is_refused_not_dropped(pattern: str) -> None:
+async def test_deterministic_preempt_is_refused_not_dropped(pattern: str) -> None:
     _manager, session, _admin, comm = _live_session(pattern, f"d-{pattern}")
     with pytest.raises(AgentCommError, match="does not support steer mode 'preempt'"):
-        comm.send("worker", "cut", context=SendContext(intent="steer", mode="preempt"))
+        await comm.asend("worker", "cut", context=SendContext(intent="steer", mode="preempt"))
     with pytest.raises(AgentCommError, match="does not support steer mode 'replace'"):
-        comm.send("worker", "cut", context=SendContext(intent="steer", mode="replace"))
+        await comm.asend("worker", "cut", context=SendContext(intent="steer", mode="replace"))
     assert session.controller.turn_queue.peek(session.session_id) == []
 
 
@@ -191,13 +191,12 @@ async def test_peer_preempt_keeps_partials_and_applies_steer() -> None:
     assert has_inflight("stream-react")
     seen: list[object] = []
     assert (
-        comm.send(
+        await comm.asend(
             "worker",
             "Answer Lyon.",
             context=SendContext(intent="steer", mode="preempt"),
         )
-        == "delivered"
-    )
+    ) == "delivered"
     result = await asyncio.wait_for(task, timeout=5)
     for step in result.trace.steps:
         if isinstance(step.ingress, OperatorSteerReceived):
@@ -277,7 +276,7 @@ async def _steer_during_model_call(table: dict, mode: str) -> tuple[str, _HangTh
         if has_inflight("machine-steer"):
             break
     assert has_inflight("machine-steer")
-    assert comm.send("worker", "now wrap up", context=SendContext(intent="steer", mode=mode)) == "delivered"
+    assert (await comm.asend("worker", "now wrap up", context=SendContext(intent="steer", mode=mode))) == "delivered"
     result = await asyncio.wait_for(task, timeout=5)
     return result.responses[-1].content, engine
 

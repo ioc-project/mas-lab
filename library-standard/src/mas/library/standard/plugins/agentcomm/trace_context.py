@@ -57,28 +57,6 @@ class TraceContextLayer(BoundLayer):
         if lower is not None:
             self.bind(lower)
 
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str:
-        incoming = headers if headers is not None else (context.headers if context else None)
-        return super().send(
-            target_agent_id,
-            task,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-            headers=_with_trace(incoming),
-            context=context,
-        )
-
     async def asend(
         self,
         target_agent_id: str,

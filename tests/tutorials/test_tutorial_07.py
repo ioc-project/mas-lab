@@ -8,6 +8,7 @@ the node checks run over the in-process fake of the SLIM bindings.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -151,15 +152,15 @@ class TestMixedTransports:
 
 
 class TestOverTheNode:
-    def test_a_delegation_crosses_the_node(self, monkeypatch):
+    async def test_a_delegation_crosses_the_node(self, monkeypatch):
         """Step 3 offline: the tutorial's Flavour and rows, through the ``delegate_to_*`` tool the model calls."""
         from mas.library.standard.plugins.system_tools.send import SendTool
         from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
-        from mas.runtime.engine.tool_dispatch import execute_engine_tool
+        from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
         with _desk("slim", monkeypatch) as (fake, desk):
             triage = desk.link("triage")
-            desk.link("billing", run_turn=lambda agent, task, *_: f"{agent}: {task}")
+            desk.link("billing", run_turn=lambda agent, task, *_: asyncio.sleep(0, f"{agent}: {task}"))
             ctx = SimpleNamespace(
                 agent_id="triage",
                 manifest=None,
@@ -168,7 +169,7 @@ class TestOverTheNode:
                 delegation_peer_descriptions=None,
                 send_peer_descriptions=None,
             )
-            reply = execute_engine_tool(
+            reply = await aexecute_engine_tool(
                 "delegate_to_billing",
                 engine_contracts=[SendTool(allowed_peers=["billing"])],
                 ctx=ctx,
@@ -177,16 +178,16 @@ class TestOverTheNode:
             assert reply == "billing: I was charged twice"
             assert any(b"charged twice" in frame for frame in fake.FakeWorld.default().frames)
 
-    def test_a2a_above_the_node_through_the_tool_the_model_calls(self, monkeypatch):
+    async def test_a2a_above_the_node_through_the_tool_the_model_calls(self, monkeypatch):
         """Step 5, A2A over the node: ``delegate_to_billing`` through ``execute_engine_tool`` with ``SendTool``,
         over the tutorial's Flavour on the in-process fake node; an inform is refused by the same tool."""
         from mas.library.standard.plugins.system_tools.send import SendTool
         from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
-        from mas.runtime.engine.tool_dispatch import execute_engine_tool
+        from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
         with _desk("a2a-over-slim", monkeypatch) as (fake, desk):
             triage = desk.link("triage")
-            desk.link("billing", run_turn=lambda agent, task, *_: f"{agent}: {task}")
+            desk.link("billing", run_turn=lambda agent, task, *_: asyncio.sleep(0, f"{agent}: {task}"))
             ctx = SimpleNamespace(
                 agent_id="triage",
                 manifest=None,
@@ -197,10 +198,10 @@ class TestOverTheNode:
             )
             tool = SendTool(allowed_peers=["billing"])
 
-            def call(name: str, **arguments: object) -> str:
-                return execute_engine_tool(name, engine_contracts=[tool], ctx=ctx, arguments=arguments)
+            async def call(name: str, **arguments: object) -> str:
+                return await aexecute_engine_tool(name, engine_contracts=[tool], ctx=ctx, arguments=arguments)
 
-            reply = call("delegate_to_billing", task="I was charged twice", context_id="case-12")
+            reply = await call("delegate_to_billing", task="I was charged twice", context_id="case-12")
             assert reply == "billing: I was charged twice"
             request, answer = (json.loads(frame) for frame in fake.FakeWorld.default().frames[:2])
             rpc = json.loads(request["task"])
@@ -210,10 +211,10 @@ class TestOverTheNode:
             assert json.loads(answer["task"])["result"]["message"]["parts"] == [{"text": reply}]
             sent = len(fake.FakeWorld.default().frames)
             # the model's tool only delegates (intent task): an intent argument is refused before any send
-            refused = call("delegate_to_billing", task="fyi", intent="inform")
+            refused = await call("delegate_to_billing", task="fyi", intent="inform")
             assert refused == "[send] extra arguments ['intent'] not allowed on 'delegate_to_billing'"
             # an inform from Python (the path a design pattern takes) is refused by the A2A layer of the chain
-            refused = tool.send("billing", "fyi", intent="inform", ctx=ctx)
+            refused = await tool.asend("billing", "fyi", intent="inform", ctx=ctx)
             assert "intent 'inform' is not supported" in refused
             assert len(fake.FakeWorld.default().frames) == sent  # nothing left for the node
 
@@ -230,7 +231,7 @@ class TestAnAgentOnItsOwnChain:
         # triage sends to both, so it joins both chains, once each
         assert rows["triage"]["identity"] == "acme/lab/desk/triage, acme/lab/desk-a2a/triage"
 
-    def test_triage_reaches_billing_over_a2a_and_outage_plainly(self, monkeypatch):
+    async def test_triage_reaches_billing_over_a2a_and_outage_plainly(self, monkeypatch):
         import slim_node_fake as fake
         from library_ioa.plugins.slim.actor import ConnectionActor
         from mas.ctl.executor.stacks import ChainHandles, chain_links
@@ -256,14 +257,14 @@ class TestAnAgentOnItsOwnChain:
             handlers, routes = chain_links(
                 None,
                 resolved,
-                run_turn=lambda agent, task, *_: f"{agent}: {task}",
+                run_turn=lambda agent, task, *_: asyncio.sleep(0, f"{agent}: {task}"),
                 local_ids=["triage", "billing", "outage"],
                 handles=handles,
                 peers=peers_of(mas, agency_ids(mas)),
             )
             assert set(handles) == {"desk-node", "desk-node-a2a+desk-a2a"}
-            assert routes["triage"]["billing"].handler.send("billing", "refund?") == "billing: refund?"
-            assert routes["triage"]["outage"].handler.send("outage", "down?") == "outage: down?"
+            assert await routes["triage"]["billing"].handler.asend("billing", "refund?") == "billing: refund?"
+            assert await routes["triage"]["outage"].handler.asend("outage", "down?") == "outage: down?"
             frames = [frame.decode("utf-8", "replace") for frame in fake.FakeWorld.default().frames]
             assert any("SendMessage" in frame and "refund?" in frame for frame in frames)
             assert any("down?" in frame and "SendMessage" not in frame for frame in frames)

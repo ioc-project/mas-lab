@@ -110,8 +110,5 @@ class Stack:
     def _stamped(envelope: Envelope) -> Envelope:
         return envelope.with_(headers={"traceparent": child_traceparent(envelope.headers.get("traceparent"))})
 
-    def send(self, envelope: Envelope) -> Any:
-        return self._top.send(self._stamped(envelope))
-
     async def asend(self, envelope: Envelope) -> Any:
         return await self._top.asend(self._stamped(envelope))

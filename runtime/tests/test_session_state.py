@@ -1,5 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,11 +22,11 @@ class _Store:
         return Path("session.checkpoint.json")
 
 
-def test_session_checkpoint_captures_kernel_memory_manifest_and_lineage() -> None:
+async def test_session_checkpoint_captures_kernel_memory_manifest_and_lineage() -> None:
     registry = WorkingMemoryRegistry()
     ctx = AutoCtxAssembler()
     ctx.note_user_input("hello")
-    ctx.note_agent_response("world")
+    await ctx.note_agent_response("world")
     ctx.working_memory.record_assistant_tool_call(
         call_id="tool-call-current",
         tool_name="lookup",
@@ -195,7 +196,7 @@ def test_backtrack_restores_state_truncates_history_and_steers() -> None:
     instance = SimpleNamespace(load_checkpoint=lambda snapshot: restored.update(snapshot))
     controller = SimpleNamespace(
         _turn=9,
-        run_turn=lambda text, *, auto_hitl: steering.append((text, auto_hitl)),
+        run_turn=lambda text, *, auto_hitl: asyncio.sleep(0, steering.append((text, auto_hitl))),
     )
     controller.restore_turn = lambda n: setattr(controller, "_turn", int(n))
     registry = WorkingMemoryRegistry()

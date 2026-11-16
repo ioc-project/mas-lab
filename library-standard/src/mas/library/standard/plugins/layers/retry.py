@@ -7,8 +7,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from mas.library.standard.lib.retry import RetryPolicy, acall_with_retry, call_with_retry
+from mas.library.standard.lib.retry import RetryPolicy, acall_with_retry
 from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.runtime.engine.ainvoke import ainvoke_call, apreview_call
 from mas.runtime.engine.call_kinds import call_kind_matches, op_kind
 from mas.runtime.layers.target import call_is_idempotent, call_target, classifier_for
 from mas.runtime.schema.egress import InvokeEngineIo
@@ -53,30 +54,19 @@ class RetryLayer(LayerLifecycle):
             wrapped.call_kinds = call_kinds
         return wrapped
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        head = await apreview_call(self.inner, op, correlation_id=correlation_id)
         label = f"[retry max_attempts={self.policy.max_attempts}]"
         return f"{label}\n{head}".strip() if head else label
 
     def _policy_of(self, io: InvokeEngineIo) -> RetryPolicy:
         return self.tool_policy if op_kind(io.op) == "tool" else self.policy
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if not call_kind_matches(io.op, self.call_kinds):
-            return self.inner.invoke(io)
-        return call_with_retry(
-            lambda: self.inner.invoke(io),
-            policy=self._policy_of(io),
-            classify=classifier_for(io),
-            target=call_target(self.inner, io) or "",
-            idempotent=call_is_idempotent(self.inner, io),
-        )
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not call_kind_matches(io.op, self.call_kinds):
-            return await self.inner.ainvoke(io)
+            return await ainvoke_call(self.inner, io)
         return await acall_with_retry(
-            lambda: self.inner.ainvoke(io),
+            lambda: ainvoke_call(self.inner, io),
             policy=self._policy_of(io),
             classify=classifier_for(io),
             target=call_target(self.inner, io) or "",

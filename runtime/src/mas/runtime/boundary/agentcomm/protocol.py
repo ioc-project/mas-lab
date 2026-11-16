@@ -100,18 +100,6 @@ class AgentCommContract(Protocol):
     intent; only the link sets sender.
     """
 
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str: ...
-
     async def asend(
         self,
         target_agent_id: str,

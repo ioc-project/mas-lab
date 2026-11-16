@@ -23,7 +23,7 @@ class _Inner(Lifecycle):
     started: int = 0
     stopped: int = 0
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self.calls += 1
         return EngineIoReturn(
             correlation_id=io.correlation_id,
@@ -31,9 +31,6 @@ class _Inner(Lifecycle):
             next_step="STOP",
             text="ok",
         )
-
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
 
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         return "inner"
@@ -103,11 +100,11 @@ def test_default_llm_and_tool_retry_with_no_manifest() -> None:
     assert "RetryLayer" in _chain_names(engine.llm_provider)
 
 
-def test_breaker_opens_and_half_opens() -> None:
+async def test_breaker_opens_and_half_opens() -> None:
     from mas.library.standard.plugins.layers.circuit_breaker import CircuitBreakerLayer
 
     class Boom(_Inner):
-        def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+        async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
             self.calls += 1
             raise ClassifiedFailure("down", failure_class=FailureClass.UNAVAILABLE, code="UNAVAILABLE")
 
@@ -119,9 +116,9 @@ def test_breaker_opens_and_half_opens() -> None:
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     with pytest.raises(ClassifiedFailure):
-        layer.invoke(io)
+        await layer.ainvoke(io)
     with pytest.raises(CircuitOpenError):
-        layer.invoke(io)
+        await layer.ainvoke(io)
     now = {"t": 100.0}
     inner2 = Boom()
     layer2 = CircuitBreakerLayer(
@@ -132,16 +129,16 @@ def test_breaker_opens_and_half_opens() -> None:
         on=["unavailable"],
     )
     with pytest.raises(ClassifiedFailure):
-        layer2.invoke(io)
+        await layer2.ainvoke(io)
     with pytest.raises(CircuitOpenError):
-        layer2.invoke(io)
+        await layer2.ainvoke(io)
     now["t"] = 131.0
     with pytest.raises(ClassifiedFailure):
-        layer2.invoke(io)
+        await layer2.ainvoke(io)
     assert inner2.calls == 2
 
 
-def test_cache_hit_skips_inner(tmp_path) -> None:
+async def test_cache_hit_skips_inner(tmp_path) -> None:
     from mas.library.standard.plugins.infra.fault_inject import FaultInjectMiddleware
     from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
 
@@ -153,8 +150,8 @@ def test_cache_hit_skips_inner(tmp_path) -> None:
         call_kinds=("llm",),
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    cache.invoke(io)
-    cache.invoke(io)
+    await cache.ainvoke(io)
+    await cache.ainvoke(io)
     assert inner.calls == 1
 
 

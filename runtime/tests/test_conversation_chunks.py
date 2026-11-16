@@ -87,45 +87,45 @@ def test_from_dict_none_returns_empty_store() -> None:
     assert store.chunks == {}
 
 
-def test_assembly_uses_chunk_projection_over_flat_committed() -> None:
+async def test_assembly_uses_chunk_projection_over_flat_committed() -> None:
     ctx = AutoCtxAssembler(last_user_text="follow-up")
     ctx.committed_messages = [{"role": "user", "content": "stale"}]
     ctx.conversation_chunks.append_turn(_turn("from-chunk", "answer"))
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert any(m.get("content") == "from-chunk" for m in messages)
     assert not any(m.get("content") == "stale" for m in messages)
     assert messages[-1]["content"] == "follow-up"
 
 
-def test_assembly_chunk_projection_is_provider_safe() -> None:
+async def test_assembly_chunk_projection_is_provider_safe() -> None:
     ctx = AutoCtxAssembler(last_user_text="next")
     ctx.conversation_chunks.append_turn(_tool_turn("call_a"))
     ctx.conversation_chunks.append_turn(_tool_turn("call_b"))
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert_provider_payload(messages)
 
 
-def test_assembly_does_not_rewrite_chunks() -> None:
+async def test_assembly_does_not_rewrite_chunks() -> None:
     ctx = AutoCtxAssembler(last_user_text="q")
     ctx.conversation_chunks.append_turn(_turn("a", "b" * 500))
-    assemble_llm_messages(ctx)
-    assemble_llm_messages(ctx)
+    await assemble_llm_messages(ctx)
+    await assemble_llm_messages(ctx)
     assert not ctx.conversation_chunks.summary_chunk_id
     assert len(ctx.conversation_chunks.order) == 1
 
 
-def test_turn_commit_keeps_chunks_while_under_keep_turns() -> None:
+async def test_turn_commit_keeps_chunks_while_under_keep_turns() -> None:
     ctx = AutoCtxAssembler()
     for i in range(4):
         ctx.note_user_input(f"q{i}")
-        ctx.note_agent_response("x" * 200)
+        await ctx.note_agent_response("x" * 200)
     assert len(ctx.conversation_chunks.order) == 4
     projected = ctx.conversation_chunks.project_messages()
     assert projected[0]["role"] == "user"
     assert projected[0]["content"] == "q0"
 
 
-def test_turn_commit_folds_when_under_token_budget_keeps_archive() -> None:
+async def test_turn_commit_folds_when_under_token_budget_keeps_archive() -> None:
     """Short chats never fold. Archive still holds every leaf."""
     ctx = AutoCtxAssembler(
         manifest={
@@ -139,7 +139,7 @@ def test_turn_commit_folds_when_under_token_budget_keeps_archive() -> None:
     )
     for i in range(6):
         ctx.note_user_input(f"q{i}")
-        ctx.note_agent_response(f"a{i}")
+        await ctx.note_agent_response(f"a{i}")
     users = [m.get("content") for m in ctx.committed_messages if m.get("role") == "user"]
     assert users == [f"q{i}" for i in range(6)]
     store = ctx.conversation_chunks
@@ -150,11 +150,11 @@ def test_turn_commit_folds_when_under_token_budget_keeps_archive() -> None:
     assert "q5" in blob
 
 
-def test_turn_commit_default_keeps_full_short_chat() -> None:
+async def test_turn_commit_default_keeps_full_short_chat() -> None:
     ctx = AutoCtxAssembler()
     for i in range(12):
         ctx.note_user_input(f"q{i}")
-        ctx.note_agent_response(f"a{i}")
+        await ctx.note_agent_response(f"a{i}")
     contents = [m.get("content") for m in ctx.committed_messages]
     assert "q0" in contents
     assert "q11" in contents
@@ -162,7 +162,7 @@ def test_turn_commit_default_keeps_full_short_chat() -> None:
     assert ctx.conversation_chunks.covers_archive()
 
 
-def test_turn_commit_bounds_sliding_window() -> None:
+async def test_turn_commit_bounds_sliding_window() -> None:
     ctx = AutoCtxAssembler(
         manifest={
             "spec": {
@@ -175,7 +175,7 @@ def test_turn_commit_bounds_sliding_window() -> None:
     )
     for i in range(8):
         ctx.note_user_input(f"q{i}")
-        ctx.note_agent_response(f"a{i}")
+        await ctx.note_agent_response(f"a{i}")
     users = [m.get("content") for m in ctx.committed_messages if m.get("role") == "user"]
     assert users == ["q5", "q6", "q7"]
     store = ctx.conversation_chunks
@@ -188,7 +188,7 @@ def test_turn_commit_bounds_sliding_window() -> None:
     ]
 
 
-def test_turn_commit_bounds_stack_max_messages() -> None:
+async def test_turn_commit_bounds_stack_max_messages() -> None:
     ctx = AutoCtxAssembler(
         manifest={
             "spec": {
@@ -201,7 +201,7 @@ def test_turn_commit_bounds_stack_max_messages() -> None:
     )
     for i in range(6):
         ctx.note_user_input(f"q{i}")
-        ctx.note_agent_response(f"a{i}")
+        await ctx.note_agent_response(f"a{i}")
     assert len(ctx.committed_messages) == 4
     contents = [m.get("content") for m in ctx.committed_messages]
     assert "q0" not in contents
@@ -211,12 +211,12 @@ def test_turn_commit_bounds_stack_max_messages() -> None:
     assert "q0" in json.dumps(store.to_dict())
 
 
-def test_tool_trajectory_preserved_in_message_chunk() -> None:
+async def test_tool_trajectory_preserved_in_message_chunk() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="search", arguments={})
     ctx.record_tool_result(call_id="call_1", content="Donald Trump")
-    ctx.note_agent_response("Donald Trump is POTUS.")
+    await ctx.note_agent_response("Donald Trump is POTUS.")
     chunk_ids = [cid for cid in ctx.conversation_chunks.order]
     assert len(chunk_ids) == 1
     chunk = ctx.conversation_chunks.chunks[chunk_ids[0]]
@@ -224,42 +224,42 @@ def test_tool_trajectory_preserved_in_message_chunk() -> None:
     assert_provider_payload(chunk.messages)
 
 
-def test_snapshot_round_trips_chunk_store() -> None:
+async def test_snapshot_round_trips_chunk_store() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("hello")
-    ctx.note_agent_response("world")
+    await ctx.note_agent_response("world")
     snap = snapshot_ctx(ctx)
     other = AutoCtxAssembler()
     restore_ctx(other, snap)
     assert other.conversation_chunks.project_messages() == ctx.conversation_chunks.project_messages()
 
 
-def test_working_memory_snapshot_carries_chunks_dict() -> None:
+async def test_working_memory_snapshot_carries_chunks_dict() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("a")
-    ctx.note_agent_response("b")
+    await ctx.note_agent_response("b")
     snap = snapshot_ctx(ctx)
     assert snap.conversation_chunks is not None
     assert snap.conversation_chunks["order"]
 
 
-def test_restore_empty_snapshot_clears_chunks() -> None:
+async def test_restore_empty_snapshot_clears_chunks() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("a")
-    ctx.note_agent_response("b")
+    await ctx.note_agent_response("b")
     restore_ctx(ctx, WorkingMemorySnapshot())
     assert ctx.conversation_chunks.order == []
 
 
-def test_multi_session_chunk_stores_are_independent() -> None:
+async def test_multi_session_chunk_stores_are_independent() -> None:
     ctx_a = AutoCtxAssembler(session_id="a")
     ctx_b = AutoCtxAssembler(session_id="b")
     ctx_a.note_user_input("A")
-    ctx_a.note_agent_response("a")
+    await ctx_a.note_agent_response("a")
     ctx_b.note_user_input("B")
-    ctx_b.note_agent_response("b")
+    await ctx_b.note_agent_response("b")
     assert ctx_a.conversation_chunks.order != ctx_b.conversation_chunks.order
-    msgs_a = assemble_llm_messages(ctx_a, manifest={"spec": {}})
-    msgs_b = assemble_llm_messages(ctx_b, manifest={"spec": {}})
+    msgs_a = await assemble_llm_messages(ctx_a, manifest={"spec": {}})
+    msgs_b = await assemble_llm_messages(ctx_b, manifest={"spec": {}})
     assert any("A" in str(m.get("content")) for m in msgs_a)
     assert any("B" in str(m.get("content")) for m in msgs_b)

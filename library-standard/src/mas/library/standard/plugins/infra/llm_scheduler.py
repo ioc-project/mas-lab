@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.runtime.engine.ainvoke import ainvoke_call, apreview_call
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.llm_scheduler import (
     SchedulerPolicy,
-    acquire,
     acquire_async,
     infer_model,
     infer_provider,
@@ -54,33 +54,19 @@ class LlmSchedulerMiddleware(LayerLifecycle):
             wrapped.call_kinds = call_kinds
         return wrapped
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         pol = self.policy
         label = (
             f"[llm_scheduler max_in_flight={pol.max_in_flight} rpm={pol.requests_per_minute}]"
             if pol
             else "[llm_scheduler]"
         )
-        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+        head = await apreview_call(self.inner, op, correlation_id=correlation_id)
         return f"{label}\n{head}".strip() if head else label
-
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if not call_kind_matches(io.op, self.call_kinds) or self.policy is None or not self.policy.enabled():
-            return self.inner.invoke(io)
-        key = acquire(
-            model=infer_model(self.inner),
-            provider=infer_provider(self.inner, self.policy.provider),
-            user=self.policy.user,
-            policy=self.policy,
-        )
-        try:
-            return self.inner.invoke(io)
-        finally:
-            release(key, policy=self.policy)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not call_kind_matches(io.op, self.call_kinds) or self.policy is None or not self.policy.enabled():
-            return await self.inner.ainvoke(io)
+            return await ainvoke_call(self.inner, io)
         key = await acquire_async(
             model=infer_model(self.inner),
             provider=infer_provider(self.inner, self.policy.provider),
@@ -88,6 +74,6 @@ class LlmSchedulerMiddleware(LayerLifecycle):
             policy=self.policy,
         )
         try:
-            return await self.inner.ainvoke(io)
+            return await ainvoke_call(self.inner, io)
         finally:
             release(key, policy=self.policy)

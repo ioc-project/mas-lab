@@ -25,9 +25,9 @@ class _SnapshotEngine:
         )
 
 
-def test_llm_request_record_keeps_messages_not_pretty_print():
+async def test_llm_request_record_keeps_messages_not_pretty_print():
     q = SimpleNamespace(pending_tools_by_cid={}, pending_tool_name="", pending_tool_args={})
-    rec, tracked = _engine_invoke_record(
+    rec, tracked = await _engine_invoke_record(
         InvokeEngineIo(correlation_id=1, op="LLM_CALL"),
         engine=_SnapshotEngine(),
         q=q,
@@ -47,13 +47,13 @@ def test_llm_request_record_keeps_messages_not_pretty_print():
     assert "[tools]" not in rec.text
 
 
-def test_tool_call_record_keeps_name_and_arguments():
+async def test_tool_call_record_keeps_name_and_arguments():
     q = SimpleNamespace(
         pending_tools_by_cid={2: ("web-search", {"query": "current POTUS"})},
         pending_tool_name="",
         pending_tool_args={},
     )
-    rec, tracked = _engine_invoke_record(
+    rec, tracked = await _engine_invoke_record(
         InvokeEngineIo(correlation_id=2, op="TOOL_CALL"),
         engine=None,
         q=q,
@@ -72,13 +72,13 @@ def test_tool_call_record_keeps_name_and_arguments():
     assert "args=" not in rec.text
 
 
-def test_tool_call_does_not_infer_skill_from_name():
+async def test_tool_call_does_not_infer_skill_from_name():
     q = SimpleNamespace(
         pending_tools_by_cid={3: ("activate_skill", {"name": "answer-formatting"})},
         pending_tool_name="",
         pending_tool_args={},
     )
-    rec, tracked = _engine_invoke_record(
+    rec, tracked = await _engine_invoke_record(
         InvokeEngineIo(correlation_id=3, op="TOOL_CALL"),
         engine=None,
         q=q,
@@ -100,7 +100,7 @@ class _AdvertiseEngine:
         self.tool_provider = SimpleNamespace(list_tools=lambda ctx=None: specs)
 
 
-def test_tool_call_binds_advertised_semantics():
+async def test_tool_call_binds_advertised_semantics():
     q = SimpleNamespace(
         pending_tools_by_cid={4: ("activate_skill", {"name": "answer-formatting"})},
         pending_tool_name="",
@@ -114,7 +114,7 @@ def test_tool_call_binds_advertised_semantics():
             }
         ]
     )
-    rec, tracked = _engine_invoke_record(
+    rec, tracked = await _engine_invoke_record(
         InvokeEngineIo(correlation_id=4, op="TOOL_CALL"),
         engine=engine,
         q=q,

@@ -5,6 +5,7 @@ and the transport conformance check."""
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -23,14 +24,14 @@ from mas.library.standard.plugins.system_tools.send import SendTool
 from mas.library.standard.testing.layer_conformance import FailingLayer, RecordingLower, check_transport
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
-from mas.runtime.engine.tool_dispatch import execute_engine_tool
+from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
 
 class _Redact(Layer):
     """Drops one header before the send leaves: the redaction case ``drop_headers`` exists for."""
 
-    def send(self, envelope):
-        return super().send(envelope.with_(drop_headers=["Authorization"]))
+    async def asend(self, envelope):
+        return await super().asend(envelope.with_(drop_headers=["Authorization"]))
 
 
 def test_drop_headers_removes_keys_after_the_merge_and_ignores_case() -> None:
@@ -45,9 +46,9 @@ def test_drop_headers_removes_keys_after_the_merge_and_ignores_case() -> None:
         env.with_(drop_headers="authorization")
 
 
-def test_a_redaction_layer_keeps_a_header_off_the_wire() -> None:
+async def test_a_redaction_layer_keeps_a_header_off_the_wire() -> None:
     lower = RecordingLower()
-    Stack([lower, _Redact()]).send(Envelope(payload="x", headers={"authorization": "secret", "a": "1"}))
+    await Stack([lower, _Redact()]).asend(Envelope(payload="x", headers={"authorization": "secret", "a": "1"}))
     sent = dict(lower.seen[-1].headers)
     assert "authorization" not in sent
     assert sent["a"] == "1" and "traceparent" in sent
@@ -60,8 +61,8 @@ class _Frame(Layer):
         super().__init__()
         self.tag = tag
 
-    def send(self, envelope):
-        return super().send(envelope.with_(payload=f"{self.tag}({envelope.payload})"))
+    async def asend(self, envelope):
+        return await super().asend(envelope.with_(payload=f"{self.tag}({envelope.payload})"))
 
     def serve(self, handler):
         def unframe(envelope):
@@ -85,7 +86,7 @@ class _Wire(Layer):
         self.handler = handler
         return handler
 
-    def send(self, envelope):
+    async def asend(self, envelope):
         return envelope.payload
 
 
@@ -101,7 +102,7 @@ def test_serve_wraps_the_handler_top_first_and_hands_the_chain_to_the_transport(
 
 def test_a_link_without_serve_refuses_a_protocol_layer_above_it() -> None:
     class Plain:
-        def send(self, target, task, **_):
+        async def asend(self, target, task, **_):
             return task
 
     with pytest.raises(StackError, match="cannot pass inbound requests"):
@@ -127,7 +128,7 @@ def _room(*upper: dict) -> StackHandle:
     return StackHandle(
         "room",
         [{"type": "local-group", "params": {"identity": "acme/lab/mas"}}, *upper],
-        run_turn=lambda agent, task, *_: f"{agent}:{task}",
+        run_turn=lambda agent, task, *_: asyncio.sleep(0, asyncio.sleep(0, f"{agent}:{task}")),
         registry=_Registry(),
     )
 
@@ -136,22 +137,18 @@ def _failing(*targets: str, message: str) -> dict:
     return {"type": "failing", "params": {"targets": targets, "message": message}}
 
 
-def test_layer_errors_come_out_as_agent_comm_errors_with_the_cause() -> None:
-    import asyncio
-
+async def test_layer_errors_come_out_as_agent_comm_errors_with_the_cause() -> None:
     failing = _room(_failing("b", message="broken"))
     a = failing.link("a")
     failing.link("b")
     with pytest.raises(StackSendError, match="broken") as failed:
-        a.send("b", "x")
+        await a.asend("b", "x")
     assert isinstance(failed.value, AgentCommError)
     assert isinstance(failed.value.__cause__, StackError) and not isinstance(failed.value.__cause__, AgentCommError)
-    with pytest.raises(StackSendError, match="broken"):
-        asyncio.run(a.asend("b", "x"))
     failing.close()
 
 
-def test_a_failed_send_comes_back_from_the_model_facing_tool_as_a_failure_string() -> None:
+async def test_a_failed_send_comes_back_from_the_model_facing_tool_as_a_failure_string() -> None:
     """The ``delegate_to_b`` tool through ``execute_engine_tool``, as an engine runs it."""
     handle = _room(_failing("b", message="b link down"))
     a = handle.link("a")
@@ -165,15 +162,13 @@ def test_a_failed_send_comes_back_from_the_model_facing_tool_as_a_failure_string
         send_peer_descriptions=None,
     )
     tool = SendTool(allowed_peers=["b"])
-    result = execute_engine_tool("delegate_to_b", engine_contracts=[tool], ctx=ctx, arguments={"task": "refund"})
+    result = await aexecute_engine_tool("delegate_to_b", engine_contracts=[tool], ctx=ctx, arguments={"task": "refund"})
     assert result == "[send] agent 'b' via local-group failed: b link down"
-    import asyncio
-
-    assert asyncio.run(tool.acall("delegate_to_b", {"task": "refund"}, ctx=ctx)) == result
+    assert await tool.acall("delegate_to_b", {"task": "refund"}, ctx=ctx) == result
     handle.close()
 
 
-def test_send_intents_are_the_ones_every_layer_honours() -> None:
+async def test_send_intents_are_the_ones_every_layer_honours() -> None:
     class TaskOnly(Layer):
         def honoured_send_intents(self) -> frozenset[str]:
             return frozenset({"task"})
@@ -184,20 +179,22 @@ def test_send_intents_are_the_ones_every_layer_honours() -> None:
     fabric = LocalGroupFabric()
     comm = StackAgentComm([LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric), TaskOnly()])
     assert comm.honoured_send_intents() == frozenset({"task"})
-    assert "intent 'inform' is not supported" in SendTool(comm=comm, allowed_peers=["b"]).send(
-        "b", "x", intent="inform"
+    assert "intent 'inform' is not supported" in (
+        await SendTool(comm=comm, allowed_peers=["b"]).asend("b", "x", intent="inform")
     )
 
 
-def test_local_group_passes_the_transport_check() -> None:
+async def test_local_group_passes_the_transport_check() -> None:
     fabric = LocalGroupFabric()
     seen: list[str] = []
 
-    def turn(agent: str, task: str, *_: object) -> str:
+    async def turn(agent: str, task: str, *_: object) -> str:
         seen.append(task)
         return f"{agent}:{task}"
 
     LocalGroupAgentComm(turn, name="acme/lab/mas/b", fabric=fabric).start()
     a = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric)
     envelope = Envelope(payload="ping", meta={"target": "b", "intent": "task", "context": SendContext()})
-    check_transport(lambda: LinkLayer(a), envelope=envelope, reply="acme/lab/mas/b:ping", delivered=lambda: len(seen))
+    await check_transport(
+        lambda: LinkLayer(a), envelope=envelope, reply="acme/lab/mas/b:ping", delivered=lambda: len(seen)
+    )

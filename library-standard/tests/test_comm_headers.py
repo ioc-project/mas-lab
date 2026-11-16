@@ -43,18 +43,18 @@ def test_bound_headers_always_validates() -> None:
             pass
 
 
-def test_header_names_are_case_insensitive() -> None:
+async def test_header_names_are_case_insensitive() -> None:
     assert validate_headers({"Traceparent": "00-aa-bb-01", "K": "v"}) == {
         "traceparent": "00-aa-bb-01",
         "k": "v",
     }
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
-    LocalAgentComm(run_turn).send("b", "t", headers={"Authorization": "secret"})
+    await LocalAgentComm(run_turn).asend("b", "t", headers={"Authorization": "secret"})
     assert seen[-1] == {"authorization": "secret"}
     assert "Authorization" not in seen[-1]
     assert hop_headers({"Traceparent": "00-aa-bb-01", "Authorization": "secret"}) == {
@@ -72,18 +72,18 @@ def test_validate_headers_caps_count_and_total() -> None:
         validate_headers(bulky)
 
 
-def test_authorization_and_mas_headers_do_not_hop() -> None:
+async def test_authorization_and_mas_headers_do_not_hop() -> None:
     leaked: list[dict[str, str]] = []
 
     def run_b(*_args: object) -> str:
         leaked.append(get_headers())
         return "ok"
 
-    def run_a(*_args: object) -> str:
-        LocalAgentComm(run_b).send("c", "next")
+    async def run_a(*_args: object) -> str:
+        await LocalAgentComm(run_b).asend("c", "next")
         return "ok"
 
-    LocalAgentComm(run_a).send(
+    await LocalAgentComm(run_a).asend(
         "b",
         "first",
         headers={"authorization": "secret", "mas.intent": "task", "traceparent": "00-aa-bb-01"},
@@ -101,16 +101,16 @@ def test_merge_headers_explicit_beats_ambient() -> None:
     assert merged["traceparent"] == explicit
 
 
-def test_explicit_headers_still_win_on_this_hop() -> None:
+async def test_explicit_headers_still_win_on_this_hop() -> None:
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
     comm = LocalAgentComm(run_turn)
     with bound_headers({"authorization": "from-ambient"}):
-        comm.send("b", "t", headers={"k": "v", "authorization": "explicit"})
+        await comm.asend("b", "t", headers={"k": "v", "authorization": "explicit"})
     assert seen[-1]["k"] == "v"
     assert seen[-1]["authorization"] == "explicit"
     assert get_headers() == {}
@@ -132,65 +132,44 @@ def test_hop_headers_allowlist() -> None:
     }
 
 
-def test_local_agent_comm_sets_headers_for_the_turn() -> None:
+async def test_local_agent_comm_sets_headers_for_the_turn() -> None:
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
     comm = LocalAgentComm(run_turn)
-    assert comm.send("b", "t", headers={"k": "v"}) == "ok"
+    assert (await comm.asend("b", "t", headers={"k": "v"})) == "ok"
     assert seen[-1] == {"k": "v"}
     assert get_headers() == {}
 
 
-def test_ambient_headers_reset_after_handler_error() -> None:
-    def run_turn(*_args: object) -> str:
+async def test_ambient_headers_reset_after_handler_error() -> None:
+    async def run_turn(*_args: object) -> str:
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError, match="boom"):
-        LocalAgentComm(run_turn).send("b", "t", headers={"k": "v"})
+        await LocalAgentComm(run_turn).asend("b", "t", headers={"k": "v"})
     assert get_headers() == {}
 
 
-def test_asend_sets_headers_for_the_turn() -> None:
-    import asyncio
-
-    seen: list[dict[str, str]] = []
-
-    class _Run:
-        def __call__(self, *_args: object) -> str:
-            raise AssertionError("sync send should not run")
-
-        async def asend(self, *_args: object) -> str:
-            seen.append(get_headers())
-            return "ok"
-
-    async def _go() -> str:
-        return await LocalAgentComm(_Run()).asend("b", "t", headers={"k": "v"})
-
-    assert asyncio.run(_go()) == "ok"
-    assert seen[-1] == {"k": "v"}
-    assert get_headers() == {}
-
-
-def test_w3c_tracestate_does_not_fail_a_send(
+async def test_w3c_tracestate_does_not_fail_a_send(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     legal = ",".join(f"v{i}=s{i}" for i in range(17))
     over = ",".join(f"v{i}=s{i}" for i in range(33))
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
     comm = LocalAgentComm(run_turn)
-    assert comm.send("b", "t", headers={"tracestate": legal}) == "ok"
+    assert (await comm.asend("b", "t", headers={"tracestate": legal})) == "ok"
     assert seen[-1]["tracestate"] == legal
     with caplog.at_level(logging.DEBUG, logger="mas.library.standard.lib.comm.headers"):
-        assert comm.send("b", "t", headers={"tracestate": over, "k": "v"}) == "ok"
+        assert (await comm.asend("b", "t", headers={"tracestate": over, "k": "v"})) == "ok"
     assert "tracestate" not in seen[-1]
     assert seen[-1]["k"] == "v"
     assert "dropping tracestate" in caplog.text

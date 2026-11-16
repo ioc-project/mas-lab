@@ -128,7 +128,7 @@ def test_middleware_cache_roundtrip_parallel_tools():
     assert restored.parallel_tools[0].tool_name == "a"
 
 
-def test_llm_cache_middleware_caches_tool_call_response(tmp_path):
+async def test_llm_cache_middleware_caches_tool_call_response(tmp_path):
     cache_path = tmp_path / "cache.json"
     inner = _SequenceEngine(
         preview_text="[user]\n  Who is POTUS?",
@@ -148,8 +148,8 @@ def test_llm_cache_middleware_caches_tool_call_response(tmp_path):
         {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}},
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    first = engine.invoke(io)
-    second = engine.invoke(io)
+    first = await engine.ainvoke(io)
+    second = await engine.ainvoke(io)
     assert first.next_step == "TOOL_CALL"
     assert first.tool_name == "lookup"
     assert first.cache_status == "miss"
@@ -165,7 +165,7 @@ def test_llm_cache_middleware_caches_tool_call_response(tmp_path):
     assert any(isinstance(v, dict) and v.get("next_step") == "TOOL_CALL" for v in data.values())
 
 
-def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
+async def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
     cache_path = tmp_path / "cache.json"
     previews = [
         "[user]\n  Who is POTUS?",
@@ -180,8 +180,8 @@ def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
     )
     io1 = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     io2 = InvokeEngineIo(correlation_id=2, op="LLM_CALL")
-    record.invoke(io1)
-    record.invoke(io2)
+    await record.ainvoke(io1)
+    await record.ainvoke(io2)
     assert len(json.loads(cache_path.read_text(encoding="utf-8"))) == 2
 
     replay_inner = _TrajectoryEngine(previews=previews)
@@ -197,8 +197,8 @@ def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
             },
         },
     )
-    r1 = replay.invoke(io1)
-    r2 = replay.invoke(io2)
+    r1 = await replay.ainvoke(io1)
+    r2 = await replay.ainvoke(io2)
     assert r1.next_step == "TOOL_CALL"
     assert r2.next_step == "STOP"
     assert r2.text == "The current president is cached."
@@ -207,7 +207,7 @@ def test_llm_cache_trajectory_replay_is_all_hits(tmp_path):
     assert replay_inner.calls == 0
 
 
-def test_llm_cache_include_preview_stores_exchange_text(tmp_path):
+async def test_llm_cache_include_preview_stores_exchange_text(tmp_path):
     cache_path = tmp_path / "cache.json"
     preview = "[user]\n  hello"
     inner = _SequenceEngine(
@@ -228,13 +228,13 @@ def test_llm_cache_include_preview_stores_exchange_text(tmp_path):
             "params": {"cache_path": str(cache_path), "include_preview": True},
         },
     )
-    engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     entry = next(iter(json.loads(cache_path.read_text(encoding="utf-8")).values()))
     assert isinstance(entry, dict)
     assert entry["_preview"] == preview
 
 
-def test_llm_cache_backward_compatible_plain_string_entries(tmp_path):
+async def test_llm_cache_backward_compatible_plain_string_entries(tmp_path):
     import hashlib
 
     cache_path = tmp_path / "cache.json"
@@ -249,13 +249,13 @@ def test_llm_cache_backward_compatible_plain_string_entries(tmp_path):
         inner,
         {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}},
     )
-    ret = engine.invoke(InvokeEngineIo(correlation_id=5, op="LLM_CALL"))
+    ret = await engine.ainvoke(InvokeEngineIo(correlation_id=5, op="LLM_CALL"))
     assert ret.text == "plain answer"
     assert ret.next_step == "STOP"
     assert inner.calls == 0
 
 
-def test_raise_on_miss_records_cache_lookup_without_llm_return(tmp_path):
+async def test_raise_on_miss_records_cache_lookup_without_llm_return(tmp_path):
     cache_path = tmp_path / "cache.json"
     inner = _SequenceEngine(
         preview_text="not recorded",
@@ -276,14 +276,14 @@ def test_raise_on_miss_records_cache_lookup_without_llm_return(tmp_path):
         },
     )
     with pytest.raises(RuntimeError, match="llm_cache miss"):
-        engine.invoke(InvokeEngineIo(correlation_id=7, op="LLM_CALL"))
+        await engine.ainvoke(InvokeEngineIo(correlation_id=7, op="LLM_CALL"))
     event = next(event for event in observability.events if event.kind == ObsEventKind.CACHE_LOOKUP)
     assert event.correlation_id == 7
     assert event.payload["cache_layer"] == "infra_llm_cache"
     assert event.payload["cache_status"] == "miss"
 
 
-def test_peer_engine_middleware_instances_do_not_clobber_cache(tmp_path):
+async def test_peer_engine_middleware_instances_do_not_clobber_cache(tmp_path):
     """MAS peer agents each wrap LiveLlmEngine; persist must keep both keys."""
     cache_path = tmp_path / "cache.json"
     inner_a = _SequenceEngine(
@@ -311,7 +311,7 @@ def test_peer_engine_middleware_instances_do_not_clobber_cache(tmp_path):
         ],
     )
     spec = {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}
-    apply_middleware(inner_a, spec).invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
-    apply_middleware(inner_b, spec).invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await apply_middleware(inner_a, spec).ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await apply_middleware(inner_b, spec).ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     data = json.loads(cache_path.read_text(encoding="utf-8"))
     assert len(data) == 2

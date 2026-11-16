@@ -95,24 +95,24 @@ def test_apply_request_view_folds_covering_set_and_trims_turn_history() -> None:
     assert ctx.turn_history == []
 
 
-def test_compact_committed_history_is_noop_until_the_window_is_exceeded() -> None:
+async def test_compact_committed_history_is_noop_until_the_window_is_exceeded() -> None:
     store = ConversationChunkStore()
     store.append_turn(_turn("q0", "a0"))
     ctx = _ctx(store=store)
     ctx._assembly_cm = _KeepTail()
     ctx._assembly_cm_manifest = None
     covering = list(store.order)
-    compact_committed_history(ctx)
+    await compact_committed_history(ctx)
     assert store.order == covering
     store.append_turn(_turn("q1", "a1"))
     store.append_turn(_turn("q2", "a2"))
-    compact_committed_history(ctx)
+    await compact_committed_history(ctx)
     assert [m["content"] for m in request_history(ctx)] == ["q2", "a2"]
-    compact_committed_history(_ctx(store=ConversationChunkStore()))
+    await compact_committed_history(_ctx(store=ConversationChunkStore()))
     plugin_ctx = _ctx(store=ConversationChunkStore())
     plugin_ctx._assembly_cm = _KeepTail()
     plugin_ctx._assembly_cm_manifest = None
-    ContextAssemblerPlugin().compact_committed_history(plugin_ctx)
+    await ContextAssemblerPlugin().compact_committed_history(plugin_ctx)
 
 
 def test_configure_archive_store_uses_ctx_path_and_skips_missing_configure(tmp_path: Path) -> None:
@@ -138,7 +138,7 @@ def test_tool_group_len_is_zero_outside_the_list() -> None:
     assert tool_group_len([{"role": "user", "content": "q"}], index=3) == 0
 
 
-def test_assembler_sends_projected_messages_and_updates_covering_set() -> None:
+async def test_assembler_sends_projected_messages_and_updates_covering_set() -> None:
     store = ConversationChunkStore()
     store.append_turn(_turn("q0", "a0"))
     store.append_turn(_turn("q1", "a1"))
@@ -146,7 +146,7 @@ def test_assembler_sends_projected_messages_and_updates_covering_set() -> None:
     ctx = _ctx(store=store, last_user_text="now")
     ctx._assembly_cm = _KeepTail()
     ctx._assembly_cm_manifest = None
-    messages = ContextAssemblerPlugin().assemble_messages(ctx)
+    messages = await ContextAssemblerPlugin().assemble_messages(ctx)
     contents = [m["content"] for m in messages if m.get("role") in {"user", "assistant"}]
     assert "q0" not in contents
     assert contents[-3:] == ["q2", "a2", "now"]

@@ -69,15 +69,3 @@ async def test_adispatch_engine_batch_runs_tool_calls_concurrently():
     assert engine.max_in_flight == 2
     # Two 50ms calls overlapping should finish well under the sequential 100ms.
     assert elapsed < 0.15
-
-
-def test_sync_dispatch_engine_batch_stays_sequential():
-    kernel = RuntimeKernel()
-    engine = _DelayedEngine(delay=0.02)
-    driver = KernelDriver(kernel=kernel, engine=engine)
-    q = kernel.q
-    q.pending_tools_by_cid[1] = ("alpha", {"n": 1})
-    q.pending_tools_by_cid[2] = ("beta", {"n": 2})
-    driver._dispatch_engine_batch(_batch(), DriverTrace())
-    assert engine.max_in_flight == 0
-    assert engine.order == [1, 2]

@@ -15,6 +15,7 @@ the default) or from a file. Neither reads the environment.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import sys
 import threading
 from collections.abc import Callable, Sequence
@@ -102,7 +103,7 @@ def _send(args: argparse.Namespace, stdin: TextIO) -> int:
     stack = _stack(args, lambda *_: "", stdin)
     try:
         sender = stack.link(args.sender)
-        print(sender.send(args.target, args.task))
+        print(asyncio.run(sender.asend(args.target, args.task)))
     finally:
         stack.close()
     return 0

@@ -14,6 +14,7 @@ from typing import Any
 from mas.library.standard.lib.comm.headers import bound_headers
 from mas.library.standard.lib.stack.agent_comm import inbound_envelope
 from mas.library.standard.lib.stack.errors import StackError
+from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, bound_inbound
 
 from library_ioa.plugins.slim.actor import MAX_READ_ERRORS
@@ -35,14 +36,14 @@ HANDLING_LINK: contextvars.ContextVar[Any] = contextvars.ContextVar("slim_handli
 class SlimInbound:
     """Listen, drain, and dispatch inbound SLIM frames onto the link."""
 
-    def _on_inbound(self, msg: Any) -> bytes | None:
+    async def _on_inbound(self, msg: Any) -> bytes | None:
         token = HANDLING_LINK.set(self)
         try:
-            return self._dispatch_inbound(msg)
+            return await self._dispatch_inbound(msg)
         finally:
             HANDLING_LINK.reset(token)
 
-    def _dispatch_inbound(self, msg: Any) -> bytes | None:
+    async def _dispatch_inbound(self, msg: Any) -> bytes | None:
         raw = msg.payload if isinstance(msg.payload, (bytes, bytearray)) else str(msg.payload).encode("utf-8")
         if len(raw) > self.max_message_size + ENVELOPE_SLACK:
             logger.warning("slim inbound frame of %d bytes exceeds the size limit", len(raw))
@@ -75,9 +76,9 @@ class SlimInbound:
                         logger.warning("slim request for %s refused: %s", self.name, NOT_SERVED)
                         return json.dumps({"kind": "error", "error": NOT_SERVED}).encode("utf-8")
                     if handler is None:
-                        reply = self._handle_request(**request)
+                        reply = await self._handle_request(**request)
                     else:  # a layer above decodes the request (a stack's inbound chain)
-                        reply = str(handler(inbound_envelope(**request, intent=intent, headers=headers)))
+                        reply = str(await acall(handler, inbound_envelope(**request, intent=intent, headers=headers)))
                 return json.dumps({"kind": "reply", "task": reply}).encode("utf-8")
             except StackError as exc:
                 if "no turn to serve" in str(exc):
@@ -103,7 +104,7 @@ class SlimInbound:
                 cb(message)
         return None
 
-    def _handle_request(
+    async def _handle_request(
         self,
         task: str,
         *,
@@ -113,7 +114,7 @@ class SlimInbound:
         context_id: str = "",
     ) -> str:
         del sender
-        return self._run_turn(self.local_agent_id, task, correlation_id, caller_call_id, context_id)
+        return await acall(self._run_turn, self.local_agent_id, task, correlation_id, caller_call_id, context_id)
 
     async def _aadopt_pending(self) -> None:
         while True:
@@ -215,7 +216,7 @@ class SlimInbound:
     async def _serve_frame(self, session: Any, msg: Any, lock: asyncio.Lock) -> None:
         async with lock:
             try:
-                reply = await asyncio.get_running_loop().run_in_executor(None, self._on_inbound, msg)
+                reply = await self._on_inbound(msg)
             except Exception:
                 logger.exception("slim inbound frame failed")
                 reply = json.dumps({"kind": "error", "error": HANDLER_ERROR}).encode("utf-8")

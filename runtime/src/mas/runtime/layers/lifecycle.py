@@ -22,7 +22,7 @@ class Lifecycle:
         """What this object can do, as flags. A wrap layer merges the flags of the call below it."""
         return {}
 
-    def tick(self) -> None:
+    async def atick(self) -> None:
         """Periodic work, run by the engine before each LLM call (a breaker probing a tool it took away)."""
         return None
 
@@ -33,10 +33,10 @@ def call_start(target: object) -> None:
         target.start()
 
 
-def call_tick(target: object) -> None:
+async def acall_tick(target: object) -> None:
     """Run the periodic work of *target* when it is a :class:`Lifecycle`."""
     if isinstance(target, Lifecycle):
-        target.tick()
+        await target.atick()
 
 
 def call_stop(target: object) -> None:

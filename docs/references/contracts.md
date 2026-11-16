@@ -56,7 +56,7 @@ A plugin in this category never receives the materialized run or the comm bus. I
 
 | Member | Purpose |
 | --- | --- |
-| `run_turn(agent_id, task, ...)` | Run one turn on an agent of this run. |
+| `await arun_turn(agent_id, task, ...)` | Run one turn on an agent of this run. |
 | `spawn_instance(manifest, *, template_id, manifest_dir=None)` | Materialize a child and return its minted id. |
 | `teardown_instance(agent_id)` | Release the child, its working memory, and its ledger depth. |
 | `depth` | Current spawn depth for the session. |

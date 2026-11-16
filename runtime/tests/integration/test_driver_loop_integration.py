@@ -67,9 +67,9 @@ def test_driver_attaches_own_call_id_to_tool_call_invocation():
     seen_ios: list = []
 
     class _RecordingEngine(SimulatedEngine):
-        def invoke(self, io):
+        async def ainvoke(self, io):
             seen_ios.append(io)
-            return super().invoke(io)
+            return await super().ainvoke(io)
 
     engine = _RecordingEngine(
         llm_next_step=lambda cid: "TOOL_CALL" if cid == 1 else "STOP",
@@ -93,9 +93,9 @@ def test_driver_attaches_parent_call_id_to_tool_call_invocation():
     seen_ios: list = []
 
     class _RecordingEngine(SimulatedEngine):
-        def invoke(self, io):
+        async def ainvoke(self, io):
             seen_ios.append(io)
-            return super().invoke(io)
+            return await super().ainvoke(io)
 
     engine = _RecordingEngine(
         llm_next_step=lambda cid: "TOOL_CALL" if cid == 1 else "STOP",
@@ -133,7 +133,7 @@ def test_driver_parallel_tool_call_siblings_share_one_parent_call_id():
     seen_ios: list = []
 
     class _ParallelEngine(SimulatedEngine):
-        def invoke(self, io):
+        async def ainvoke(self, io):
             seen_ios.append(io)
             if io.op == "LLM_CALL" and io.correlation_id == 1:
                 return EngineIoReturn(

@@ -71,14 +71,14 @@ class TestTemplateLoading:
 class TestSpawnDispatch:
     """End-to-end engine-tool dispatch using the tutorial's own agent/reviewer pair."""
 
-    def test_spawn_subagent_runs_the_reviewer_template_and_tears_down(self):
+    async def test_spawn_subagent_runs_the_reviewer_template_and_tears_down(self):
         from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext  # noqa: F401
         from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
         from mas.ctl.placement.bus.inproc import InProcessCommBus
         from mas.ctl.session.controller import TurnResult
         from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
         from mas.runtime.driver.driver import DriverTrace
-        from mas.runtime.engine.tool_dispatch import execute_engine_tool
+        from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
         from mas.runtime.schema.egress import EmitClientResponse
         from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
@@ -92,7 +92,7 @@ class TestSpawnDispatch:
             def __init__(self, **_kwargs):
                 pass
 
-            def run_turn(self, task, *, turn_id, parent_call_id):
+            async def arun_turn(self, task, *, turn_id, parent_call_id):
                 controller_calls.append((task, turn_id, parent_call_id))
                 return TurnResult(
                     trace=DriverTrace(),
@@ -117,7 +117,7 @@ class TestSpawnDispatch:
             controller_factory=Controller,
         )
 
-        result = execute_engine_tool(
+        result = await aexecute_engine_tool(
             "create_subagent",
             engine_contracts=engine.engine_tool_contracts,
             arguments={"template": "reviewer", "task": "Review the new pagination code."},

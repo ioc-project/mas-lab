@@ -40,58 +40,50 @@ def test_invalid_w3c_parent_starts_a_new_root() -> None:
             assert trace_id != "0" * 32
 
 
-def test_mixed_case_traceparent_is_recognised() -> None:
+async def test_mixed_case_traceparent_is_recognised() -> None:
     parent = "00-" + "c" * 32 + "-" + "d" * 16 + "-01"
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
-    TraceContextLayer(LocalAgentComm(run_turn)).send("b", "t", headers={"Traceparent": parent})
+    await TraceContextLayer(LocalAgentComm(run_turn)).asend("b", "t", headers={"Traceparent": parent})
     child = seen[-1]["traceparent"]
     assert "Traceparent" not in seen[-1]
     assert child.split("-")[1] == "c" * 32
     assert child.split("-")[2] != "d" * 16
 
 
-def test_unbound_trace_context_raises() -> None:
+async def test_unbound_trace_context_raises() -> None:
     with pytest.raises(AgentCommError, match="unbound"):
-        TraceContextLayer().send("b", "t")
+        await TraceContextLayer().asend("b", "t")
 
 
-def test_asend_mints_child_span() -> None:
-    import asyncio
-
+async def test_asend_mints_child_span() -> None:
     seen: list[dict[str, str]] = []
 
     class _Run:
-        def __call__(self, *_args: object) -> str:
-            raise AssertionError("sync send should not run")
-
-        async def asend(self, *_args: object) -> str:
+        async def __call__(self, *_args: object) -> str:
             seen.append(get_headers())
             return "ok"
 
     parent = "00-" + "e" * 32 + "-" + "f" * 16 + "-01"
 
-    async def _go() -> str:
-        return await TraceContextLayer(LocalAgentComm(_Run())).asend("b", "t", headers={"traceparent": parent})
-
-    assert asyncio.run(_go()) == "ok"
+    assert await TraceContextLayer(LocalAgentComm(_Run())).asend("b", "t", headers={"traceparent": parent}) == "ok"
     assert seen[-1]["traceparent"].split("-")[1] == "e" * 32
 
 
-def test_trace_context_mints_child_span_on_send() -> None:
+async def test_trace_context_mints_child_span_on_send() -> None:
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
     parent = "00-" + "c" * 32 + "-" + "d" * 16 + "-01"
     layer = TraceContextLayer(LocalAgentComm(run_turn))
-    assert layer.send("b", "t", headers={"traceparent": parent, "k": "v"}) == "ok"
+    assert (await layer.asend("b", "t", headers={"traceparent": parent, "k": "v"})) == "ok"
     child = seen[-1]["traceparent"]
     assert child.split("-")[1] == "c" * 32
     assert child.split("-")[2] != "d" * 16

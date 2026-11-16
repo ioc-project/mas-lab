@@ -230,10 +230,10 @@ class _Engine:
         self.batch_sizes: list[int] = []
         self.on_call: Callable[[], None] | None = None
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "LLM_CALL":
             ctx = self.instance.driver.ctx
-            messages = assemble_llm_messages(ctx, manifest={})
+            messages = await assemble_llm_messages(ctx, manifest={})
             self.systems.append(next((m["content"] for m in messages if m["role"] == "system"), ""))
             answer = self.llm.pop(0)
             return answer.model_copy(update={"correlation_id": io.correlation_id})
@@ -252,9 +252,6 @@ class _Engine:
         return EngineIoReturn(
             correlation_id=io.correlation_id, response_kind="TOOL_RESULT", next_step="STOP", text=text
         )
-
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
 
 
 def _instance(engine: _Engine, _parallel: bool = True, **params: object) -> RuntimeInstance:
@@ -582,8 +579,8 @@ def test_a_react_state_can_call_tools_before_it_answers() -> None:
     )
 
     class _Tooling(_Engine):
-        def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-            out = super().invoke(io)
+        async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+            out = await super().ainvoke(io)
             if io.op == "TOOL_CALL":  # after a tool result a ReAct loop asks the model again
                 return out.model_copy(update={"next_step": "LLM_CALL"})
             return out

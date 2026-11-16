@@ -73,7 +73,7 @@ class _Body(Lifecycle, ToolProber):
     def stop(self) -> None:
         self.log.append("stop")
 
-    def tick(self) -> None:
+    async def atick(self) -> None:
         self.ticks += 1
 
     def capabilities(self) -> dict[str, bool]:
@@ -82,16 +82,13 @@ class _Body(Lifecycle, ToolProber):
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         return ""
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self.calls += 1
         if self.fail:
             raise _down()
         return _ok(io)
 
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
-
-    def probe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
+    async def aprobe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
         self.probed.append((name, dict(arguments)))
         if self.probe_fails:
             raise _down("still down")
@@ -129,16 +126,16 @@ class _Port(MemorySpecPort):
 # ── circuit breaker ──────────────────────────────────────────────────────────
 
 
-def test_breaker_lets_calls_through_then_fails_fast_and_async_agrees() -> None:
+async def test_breaker_lets_calls_through_then_fails_fast_and_async_agrees() -> None:
     body = _Body(fail=True)
     layer = CircuitBreakerLayer.wrap(body, {"failure_threshold": 2, "reset_timeout_s": 30}, call_kinds=("llm",))
     for _ in range(2):
         with pytest.raises(ClassifiedFailure):
-            layer.invoke(_llm())
+            await layer.ainvoke(_llm())
     with pytest.raises(CircuitOpenError):
-        layer.invoke(_llm())
+        await layer.ainvoke(_llm())
     with pytest.raises(CircuitOpenError):
-        asyncio.run(layer.ainvoke(_llm()))
+        await layer.ainvoke(_llm())
     assert body.calls == 2
     assert layer.enabled and layer.failure_threshold == 2 and layer.reset_timeout_s == 30
     assert layer.on == (FailureClass.UNAVAILABLE,)
@@ -153,25 +150,27 @@ def test_breaker_async_failures_and_successes_are_recorded() -> None:
     assert asyncio.run(healthy.ainvoke(_llm())).text == "ok"
 
 
-def test_breaker_passes_other_kinds_and_nameless_tools_through() -> None:
+async def test_breaker_passes_other_kinds_and_nameless_tools_through() -> None:
     body = _Body(fail=True)
     layer = CircuitBreakerLayer(inner=body, failure_threshold=1, reset_timeout_s=30)
     layer.call_kinds = ("llm",)
     with pytest.raises(ClassifiedFailure):
-        layer.invoke(_tool())  # not a kind this layer wraps
+        await layer.ainvoke(_tool())  # not a kind this layer wraps
     with pytest.raises(ClassifiedFailure):
-        asyncio.run(layer.ainvoke(_tool()))
+        await layer.ainvoke(_tool())
     both = CircuitBreakerLayer(inner=body, failure_threshold=1, reset_timeout_s=30)
     for _ in range(2):  # no tool announced: no target, so no breaker opens
         with pytest.raises(ClassifiedFailure):
-            both.invoke(_tool())
+            await both.ainvoke(_tool())
     with pytest.raises(ClassifiedFailure):
-        asyncio.run(both.ainvoke(_tool()))
+        await both.ainvoke(_tool())
 
 
-def test_breaker_reports_itself_in_the_exchange_preview() -> None:
-    assert CircuitBreakerLayer(inner=_Previewing("below")).exchange_preview("LLM_CALL") == "[circuit_breaker]\nbelow"
-    assert CircuitBreakerLayer(inner=_Previewing("")).exchange_preview("LLM_CALL") == "[circuit_breaker]"
+async def test_breaker_reports_itself_in_the_exchange_preview() -> None:
+    assert (
+        await CircuitBreakerLayer(inner=_Previewing("below")).aexchange_preview("LLM_CALL")
+    ) == "[circuit_breaker]\nbelow"
+    assert (await CircuitBreakerLayer(inner=_Previewing("")).aexchange_preview("LLM_CALL")) == "[circuit_breaker]"
 
 
 @pytest.mark.parametrize(
@@ -206,7 +205,7 @@ def test_only_a_failed_probe_opens_the_circuit_for_a_class_outside_on() -> None:
     assert off.after_failure({}, "t", FailureClass.UNAVAILABLE, 1.0) == {}
 
 
-def test_an_opened_tool_with_a_probe_leaves_the_spec_and_comes_back_when_the_probe_passes() -> None:
+async def test_an_opened_tool_with_a_probe_leaves_the_spec_and_comes_back_when_the_probe_passes() -> None:
     now = {"t": 1000.0}
     body = _Body()
     port = _Port(probe={"q": "ping"})
@@ -214,17 +213,17 @@ def test_an_opened_tool_with_a_probe_leaves_the_spec_and_comes_back_when_the_pro
     layer._port = lambda: port  # type: ignore[method-assign]
     layer.record_failure("tool:lookup", FailureClass.UNAVAILABLE, port)
     assert port.disabled == ["lookup"]
-    layer.tick()  # not yet due
+    await layer.atick()  # not yet due
     assert body.probed == []
     now["t"] = 1031.0
-    layer.tick()
+    await layer.atick()
     assert body.probed == [("lookup", {"q": "ping"})]
     assert port.enabled == ["lookup"]
     assert port.read("circuit_breaker", "tool:lookup") == {}
     assert body.ticks >= 2  # the layer ticks the body below it as well
 
 
-def test_a_probe_that_fails_keeps_the_tool_out_and_waits_another_timeout() -> None:
+async def test_a_probe_that_fails_keeps_the_tool_out_and_waits_another_timeout() -> None:
     now = {"t": 1000.0}
     body = _Body(probe_fails=True)
     port = _Port(probe={})
@@ -232,15 +231,15 @@ def test_a_probe_that_fails_keeps_the_tool_out_and_waits_another_timeout() -> No
     layer._port = lambda: port  # type: ignore[method-assign]
     layer.record_failure("tool:lookup", FailureClass.UNAVAILABLE, port)
     now["t"] = 1031.0
-    layer.tick()
+    await layer.atick()
     assert port.enabled == []
     assert port.read("circuit_breaker", "tool:lookup")["opened_at"] == 1031.0
     now["t"] = 1040.0
-    layer.tick()
+    await layer.atick()
     assert len(body.probed) == 1  # not due again yet
 
 
-def test_tick_skips_what_it_cannot_probe() -> None:
+async def test_tick_skips_what_it_cannot_probe() -> None:
     now = {"t": 2000.0}
     port = _Port(probe=None)  # the spec declares no probe for this tool
     body = _Body()
@@ -250,25 +249,25 @@ def test_tick_skips_what_it_cannot_probe() -> None:
     layer.record_failure("llm:x", FailureClass.UNAVAILABLE, port)
     assert port.disabled == []  # no probe, so the tool stays offered
     now["t"] = 2010.0
-    layer.tick()
+    await layer.atick()
     assert body.probed == []
     no_prober = CircuitBreakerLayer(inner=_Previewing(""), failure_threshold=1, clock=lambda: now["t"])
     no_prober._port = lambda: port  # type: ignore[method-assign]
-    no_prober.tick()
+    await no_prober.atick()
     llm_only = CircuitBreakerLayer(inner=body, failure_threshold=1)
     llm_only.call_kinds = ("llm",)
-    llm_only.tick()
-    CircuitBreakerLayer(inner=body, enabled=False).tick()
+    await llm_only.atick()
+    await CircuitBreakerLayer(inner=body, enabled=False).atick()
 
 
-def test_a_tool_call_that_keeps_failing_is_recorded_under_its_name() -> None:
+async def test_a_tool_call_that_keeps_failing_is_recorded_under_its_name() -> None:
     layer = CircuitBreakerLayer(inner=_Body(fail=True), failure_threshold=1, reset_timeout_s=30)
     token = IN_FLIGHT_TOOL.set(InFlightTool(owner=1, name="lookup", arguments={}))
     try:
         with pytest.raises(ClassifiedFailure):
-            layer.invoke(_tool())
+            await layer.ainvoke(_tool())
         with pytest.raises(CircuitOpenError):
-            layer.invoke(_tool())
+            await layer.ainvoke(_tool())
     finally:
         IN_FLIGHT_TOOL.reset(token)
     assert layer.is_open("tool:lookup")
@@ -277,7 +276,7 @@ def test_a_tool_call_that_keeps_failing_is_recorded_under_its_name() -> None:
 # ── lifecycle base ───────────────────────────────────────────────────────────
 
 
-def test_layer_lifecycle_binds_starts_and_stops_once_and_merges_capabilities() -> None:
+async def test_layer_lifecycle_binds_starts_and_stops_once_and_merges_capabilities() -> None:
     body = _Body()
 
     class Mine(LayerLifecycle):
@@ -290,7 +289,7 @@ def test_layer_lifecycle_binds_starts_and_stops_once_and_merges_capabilities() -
     layer.start()
     layer.stop()
     layer.stop()
-    layer.tick()
+    await layer.atick()
     assert body.log == ["start", "stop"] and body.ticks == 1
     assert layer.capabilities() == {"body": True, "mine": True}
     assert LayerLifecycle().own_capabilities() == {}
@@ -302,15 +301,15 @@ def test_layer_lifecycle_binds_starts_and_stops_once_and_merges_capabilities() -
 # ── retry ────────────────────────────────────────────────────────────────────
 
 
-def test_retry_layer_wraps_previews_and_passes_other_kinds_through() -> None:
+async def test_retry_layer_wraps_previews_and_passes_other_kinds_through() -> None:
     body = _Body()
     layer = RetryLayer.wrap(body, {"max_attempts": 2, "backoff_s": 0, "jitter": False}, call_kinds=("llm",))
     assert layer.call_kinds == ("llm",)
-    assert layer.exchange_preview("LLM_CALL") == "[retry max_attempts=2]"
-    assert layer.invoke(_tool()).text == "ok"  # a tool call is not this layer's kind
-    assert asyncio.run(layer.ainvoke(_tool())).text == "ok"
-    assert layer.invoke(_llm()).text == "ok"
-    assert RetryLayer(inner=_Previewing("below")).exchange_preview("LLM_CALL").endswith("below")
+    assert (await layer.aexchange_preview("LLM_CALL")) == "[retry max_attempts=2]"
+    assert (await layer.ainvoke(_tool())).text == "ok"  # a tool call is not this layer's kind
+    assert (await layer.ainvoke(_tool())).text == "ok"
+    assert (await layer.ainvoke(_llm())).text == "ok"
+    assert (await RetryLayer(inner=_Previewing("below")).aexchange_preview("LLM_CALL")).endswith("below")
 
 
 # ── impair layers ────────────────────────────────────────────────────────────
@@ -322,52 +321,48 @@ def _bound(layer: Any) -> tuple[Any, RecordingLower]:
     return layer, lower
 
 
-def test_impair_layers_act_on_a_send() -> None:
+async def test_impair_layers_act_on_a_send() -> None:
     layer, _ = _bound(DropLayer(probability=1.0))
     with pytest.raises(StackSendError):
-        layer.send(Envelope(payload="x"))
-    with pytest.raises(StackSendError):
-        asyncio.run(layer.asend(Envelope(payload="x")))
+        await layer.asend(Envelope(payload="x"))
     layer, _ = _bound(FailLayer(message="boom"))
     with pytest.raises(StackSendError, match="boom"):
-        layer.send(Envelope(payload="x"))
-    with pytest.raises(StackSendError, match="boom"):
-        asyncio.run(layer.asend(Envelope(payload="x")))
+        await layer.asend(Envelope(payload="x"))
     layer, lower = _bound(CorruptLayer(suffix="!"))
-    layer.send(Envelope(payload="a"))
-    layer.send(Envelope(payload=b"b"))
-    layer.send(Envelope(payload=3))
+    await layer.asend(Envelope(payload="a"))
+    await layer.asend(Envelope(payload=b"b"))
+    await layer.asend(Envelope(payload=3))
     assert [e.payload for e in lower.seen] == ["a!", b"b!", 3]
     layer, lower = _bound(ReplayLayer(times=3))
-    layer.send(Envelope(payload="x"))
+    await layer.asend(Envelope(payload="x"))
     assert len(lower.seen) == 3
     layer, lower = _bound(DelayLayer(ms=1))
-    layer.send(Envelope(payload="x"))
+    await layer.asend(Envelope(payload="x"))
     assert len(lower.seen) == 1
 
 
-def test_impair_layers_act_on_llm_calls_and_honour_call_kinds() -> None:
+async def test_impair_layers_act_on_llm_calls_and_honour_call_kinds() -> None:
     body = _Body()
     drop = DropLayer(probability=1.0)
     drop.bind(body)
     with pytest.raises(StackSendError):
-        drop.invoke(_llm())
+        await drop.ainvoke(_llm())
     with pytest.raises(StackSendError):
-        asyncio.run(drop.ainvoke(_llm()))
+        await drop.ainvoke(_llm())
     drop.call_kinds = ("tool",)
-    assert drop.invoke(_llm()).text == "ok"  # an llm call is not a kind this layer wraps
-    assert asyncio.run(drop.ainvoke(_llm())).text == "ok"
+    assert (await drop.ainvoke(_llm())).text == "ok"  # an llm call is not a kind this layer wraps
+    assert (await drop.ainvoke(_llm())).text == "ok"
     delay = DelayLayer(seconds=0)
     delay.bind(body)
-    assert delay.invoke(_llm()).text == "ok"
-    assert asyncio.run(delay.ainvoke(_llm())).text == "ok"
+    assert (await delay.ainvoke(_llm())).text == "ok"
+    assert (await delay.ainvoke(_llm())).text == "ok"
     replay = ReplayLayer(times=2)
     replay.bind(body)
     replay.call_kinds = ("llm",)
     before = body.calls
-    replay.invoke(_llm())
+    await replay.ainvoke(_llm())
     assert body.calls == before + 2
-    assert asyncio.run(replay.ainvoke(_llm())).text == "ok"
+    assert (await replay.ainvoke(_llm())).text == "ok"
 
 
 def test_impair_layers_refuse_bad_params_and_report_capabilities() -> None:

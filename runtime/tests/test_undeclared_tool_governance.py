@@ -108,8 +108,8 @@ def test_undeclared_tool_block_is_fed_back_not_fatal() -> None:
     """BLOCK on TOOL_CALL injects a tool observation and continues the LLM loop."""
 
     class _Engine(SimulatedEngine):
-        def invoke(self, io):
-            ret = super().invoke(io)
+        async def ainvoke(self, io):
+            ret = await super().ainvoke(io)
             if io.op == "LLM_CALL":
                 return ret.model_copy(update={"offered_tools": ["get_metrics", "get_logs"]})
             return ret
@@ -141,8 +141,8 @@ def test_block_on_a_system_plugin_call_is_a_tool_observation() -> None:
     """BLOCK on a system-plugin tool name reaches the model as a tool observation."""
 
     class _Engine(SimulatedEngine):
-        def invoke(self, io):
-            ret = super().invoke(io)
+        async def ainvoke(self, io):
+            ret = await super().ainvoke(io)
             if io.op == "LLM_CALL":
                 return ret.model_copy(update={"offered_tools": ["get_metrics"]})
             return ret
@@ -213,8 +213,8 @@ def test_undeclared_tool_block_is_in_native_events_jsonl(tmp_path: Path) -> None
     """The sample agent scenario's BLOCK must show up in native events.jsonl."""
 
     class _Engine(SimulatedEngine):
-        def invoke(self, io):
-            ret = super().invoke(io)
+        async def ainvoke(self, io):
+            ret = await super().ainvoke(io)
             if io.op == "LLM_CALL":
                 return ret.model_copy(update={"offered_tools": ["get_metrics", "get_logs"]})
             return ret

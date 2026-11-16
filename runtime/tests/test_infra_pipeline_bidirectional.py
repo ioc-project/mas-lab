@@ -39,7 +39,7 @@ class _EchoEngine:
     def reset_turn_state(self) -> None:
         return None
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self.calls += 1
         return EngineIoReturn(
             correlation_id=io.correlation_id,
@@ -48,22 +48,19 @@ class _EchoEngine:
             text=f"live-response-{self.calls}",
         )
 
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
 
-
-def test_wrap_call_stack_uses_cache(tmp_path):
+async def test_wrap_call_stack_uses_cache(tmp_path):
     cache_path = tmp_path / "cache.json"
     pipeline = [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}]
     inner = _EchoEngine()
     engine = wrap_call_stack(inner, pipeline)
 
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    first = engine.invoke(io)
+    first = await engine.ainvoke(io)
     assert first.text == "live-response-1"
     assert inner.calls == 1
 
-    second = engine.invoke(io)
+    second = await engine.ainvoke(io)
     assert second.text == "live-response-1"
     assert inner.calls == 1
     assert cache_path.is_file()
@@ -108,16 +105,16 @@ def test_write_mode_append_keeps_existing_keys(tmp_path):
     assert "old" in engine._cache
 
 
-def test_bidirectional_engine_backward_reply_passthrough():
+async def test_bidirectional_engine_backward_reply_passthrough():
     echo = _EchoEngine()
     inner = LlmCacheMiddleware(inner=echo, allow_read=False, allow_write=False)
     facade = BidirectionalPipelineEngine(inner=inner, pipeline_steps=[])
     io = InvokeEngineIo(correlation_id=2, op="LLM_CALL")
-    ret = facade.invoke(io)
+    ret = await facade.ainvoke(io)
     assert ret.text == "live-response-1"
 
 
-def test_llm_cache_raise_on_miss(tmp_path):
+async def test_llm_cache_raise_on_miss(tmp_path):
     cache_path = tmp_path / "cache.json"
     engine = apply_middleware(
         _EchoEngine(),
@@ -128,11 +125,11 @@ def test_llm_cache_raise_on_miss(tmp_path):
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     with pytest.raises(RuntimeError, match="llm_cache miss") as excinfo:
-        engine.invoke(io)
+        await engine.ainvoke(io)
     assert "echo:LLM_CALL" in str(excinfo.value)
 
 
-def test_llm_cache_read_only_skips_write(tmp_path):
+async def test_llm_cache_read_only_skips_write(tmp_path):
     cache_path = tmp_path / "cache.json"
     inner = _EchoEngine()
     engine = apply_middleware(
@@ -143,14 +140,14 @@ def test_llm_cache_read_only_skips_write(tmp_path):
         },
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    engine.invoke(io)
+    await engine.ainvoke(io)
     assert inner.calls == 1
-    engine.invoke(io)
+    await engine.ainvoke(io)
     assert inner.calls == 2
     assert not cache_path.exists()
 
 
-def test_llm_cache_write_only_skips_read(tmp_path):
+async def test_llm_cache_write_only_skips_read(tmp_path):
     cache_path = tmp_path / "cache.json"
     inner = _EchoEngine()
     engine = apply_middleware(
@@ -161,12 +158,12 @@ def test_llm_cache_write_only_skips_read(tmp_path):
         },
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    engine.invoke(io)
-    engine.invoke(io)
+    await engine.ainvoke(io)
+    await engine.ainvoke(io)
     assert inner.calls == 2
 
 
-def test_llm_cache_caches_post_tool_preview(tmp_path):
+async def test_llm_cache_caches_post_tool_preview(tmp_path):
     cache_path = tmp_path / "cache.json"
     inner = _EchoEngine(preview_text="history [tool call_id=call_1] result")
     engine = apply_middleware(
@@ -174,8 +171,8 @@ def test_llm_cache_caches_post_tool_preview(tmp_path):
         {"layer": "llm_cache", "params": {"cache_path": str(cache_path)}},
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    first = engine.invoke(io)
-    second = engine.invoke(io)
+    first = await engine.ainvoke(io)
+    second = await engine.ainvoke(io)
     assert first.text == "live-response-1"
     assert second.text == "live-response-1"
     assert inner.calls == 1
@@ -232,13 +229,10 @@ class _StubProvider:
     def __init__(self) -> None:
         self.calls = 0
 
-    def chat_completion(self, **kwargs):
+    async def achat_completion(self, **kwargs):
         self.calls += 1
         self.last_kwargs = kwargs
         return {"role": "assistant", "content": "ok"}
-
-    async def achat_completion(self, **kwargs):
-        return self.chat_completion(**kwargs)
 
 
 @pytest.mark.parametrize(
@@ -249,7 +243,7 @@ class _StubProvider:
         {"layer": "llm_cache", "params": {"allow_read": False, "allow_write": False}},
     ],
 )
-def test_piped_llm_provider_copy_and_deepcopy(step) -> None:
+async def test_piped_llm_provider_copy_and_deepcopy(step) -> None:
     import copy
     import pickle
 
@@ -258,14 +252,14 @@ def test_piped_llm_provider_copy_and_deepcopy(step) -> None:
         _ = piped.not_a_real_attr
     assert "__getattr__" not in type(piped).__dict__
     cloned = copy.copy(piped)
-    assert cloned.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert (await cloned.achat_completion(model="m", messages=[]))["content"] == "ok"
     deep = copy.deepcopy(piped)
-    assert deep.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert (await deep.achat_completion(model="m", messages=[]))["content"] == "ok"
     restored = pickle.loads(pickle.dumps(piped))
-    assert restored.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert (await restored.achat_completion(model="m", messages=[]))["content"] == "ok"
 
 
-def test_wrap_llm_provider_pipeline_instantiates_fault_inject() -> None:
+async def test_wrap_llm_provider_pipeline_instantiates_fault_inject() -> None:
     inner = _StubProvider()
     wrapped = wrap_llm_provider_pipeline(
         inner,
@@ -273,11 +267,11 @@ def test_wrap_llm_provider_pipeline_instantiates_fault_inject() -> None:
     )
     assert isinstance(wrapped, PipedLLMProvider)
     with pytest.raises(RuntimeError, match="injected"):
-        wrapped.chat_completion(model="m", messages=[{"role": "user", "content": "hi"}])
+        await wrapped.achat_completion(model="m", messages=[{"role": "user", "content": "hi"}])
     assert inner.calls == 0
 
 
-def test_cache_key_includes_model(tmp_path) -> None:
+async def test_cache_key_includes_model(tmp_path) -> None:
     cache_path = tmp_path / "cache.json"
     pipeline = [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}]
     first = wrap_call_stack(
@@ -285,10 +279,10 @@ def test_cache_key_includes_model(tmp_path) -> None:
         pipeline,
     )
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    assert first.invoke(io).text == "live-response-1"
+    assert (await first.ainvoke(io)).text == "live-response-1"
     second_inner = _EchoEngine(preview_text="same-prompt", model="m-b", api_base="https://b.example/v1")
     second = wrap_call_stack(second_inner, pipeline)
-    out = second.invoke(io)
+    out = await second.ainvoke(io)
     assert out.text == "live-response-1"
     assert second_inner.calls == 1
 
@@ -298,7 +292,7 @@ def test_wrap_llm_provider_pipeline_empty_returns_inner() -> None:
     assert wrap_llm_provider_pipeline(inner, []) is inner
 
 
-def test_legacy_middleware_cache_hits_with_one_leaf(tmp_path) -> None:
+async def test_legacy_middleware_cache_hits_with_one_leaf(tmp_path) -> None:
     import json
 
     from mas.runtime.engine.llm_cache import bind_route_cache_key, legacy_preview_cache_key
@@ -311,7 +305,7 @@ def test_legacy_middleware_cache_hits_with_one_leaf(tmp_path) -> None:
         inner,
         [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}],
     )
-    out = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    out = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert out.text == "old-hit"
     assert inner.calls == 0
     stored = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -320,7 +314,7 @@ def test_legacy_middleware_cache_hits_with_one_leaf(tmp_path) -> None:
     assert stored[routed] == "old-hit" or "old-hit" in stored.values()
 
 
-def test_legacy_middleware_cache_misses_with_several_leaves(tmp_path) -> None:
+async def test_legacy_middleware_cache_misses_with_several_leaves(tmp_path) -> None:
     import json
 
     from mas.runtime.engine.llm_cache import legacy_preview_cache_key
@@ -341,7 +335,7 @@ def test_legacy_middleware_cache_misses_with_several_leaves(tmp_path) -> None:
         inner,
         [{"layer": "llm_cache", "params": {"cache_path": str(cache_path)}}],
     )
-    out = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    out = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert out.text == "live-response-1"
     assert inner.calls == 1
 
@@ -370,14 +364,14 @@ def test_two_cache_steps_warn(caplog) -> None:
     assert "llm_cache" in caplog.text
 
 
-def test_wrap_llm_provider_skips_tool_steps() -> None:
+async def test_wrap_llm_provider_skips_tool_steps() -> None:
     inner = _StubProvider()
     wrapped = wrap_llm_provider_pipeline(
         inner,
         [{"layer": "fault_inject", "for": "tool", "params": {"rate": 1.0}}],
     )
     assert wrapped is inner
-    assert inner.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert (await inner.achat_completion(model="m", messages=[]))["content"] == "ok"
 
 
 def test_wrap_tool_pipeline_skips_llm_steps() -> None:
@@ -389,7 +383,7 @@ def test_wrap_tool_pipeline_skips_llm_steps() -> None:
     assert wrapped is body
 
 
-def test_two_leaf_schedulers_are_separate_instances() -> None:
+async def test_two_leaf_schedulers_are_separate_instances() -> None:
     first = wrap_llm_provider_pipeline(
         _StubProvider(),
         [{"layer": "llm_scheduler", "params": {"max_in_flight": 1}}],
@@ -401,5 +395,5 @@ def test_two_leaf_schedulers_are_separate_instances() -> None:
     assert isinstance(first, PipedLLMProvider)
     assert isinstance(second, PipedLLMProvider)
     assert first._stack is not second._stack
-    assert first.chat_completion(model="m", messages=[])["content"] == "ok"
-    assert second.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert (await first.achat_completion(model="m", messages=[]))["content"] == "ok"
+    assert (await second.achat_completion(model="m", messages=[]))["content"] == "ok"

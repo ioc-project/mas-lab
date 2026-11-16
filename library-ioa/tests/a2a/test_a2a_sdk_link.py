@@ -4,51 +4,39 @@
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
 
-def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
+async def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
     client = Mock()
-    client.send_message.return_value = {
-        "status": "completed",
-        "result": "remote response",
-    }
+    client.asend_message = AsyncMock(return_value={"status": "completed", "result": "remote response"})
     plugin = A2AAgentComm.__new__(A2AAgentComm)
     plugin._client = client
 
     assert isinstance(plugin, AgentCommContract)
-    assert plugin.send("worker", "task", headers={"traceparent": "00-aa-bb-01"}) == "remote response"
-    assert plugin.send("worker", "task", context=SendContext(headers={"k": "v"}, sender="evil")) == "remote response"
-    assert asyncio.run(plugin.asend("worker", "task", headers={"baggage": "k=v"})) == "remote response"
-    client.send_message.assert_called_with(
+    assert (await plugin.asend("worker", "task", headers={"traceparent": "00-aa-bb-01"})) == "remote response"
+    assert (
+        await plugin.asend("worker", "task", context=SendContext(headers={"k": "v"}, sender="evil"))
+    ) == "remote response"
+    assert await plugin.asend("worker", "task", headers={"baggage": "k=v"}) == "remote response"
+    client.asend_message.assert_called_with(
         "task",
         context_id="",
         metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
     )
-    assert client.send_message.call_count == 3
+    assert client.asend_message.call_count == 3
 
 
-def test_a2a_refuses_inform_and_ask() -> None:
+async def test_a2a_refuses_inform_and_ask() -> None:
     client = Mock()
     plugin = A2AAgentComm.__new__(A2AAgentComm)
     plugin._client = client
     assert plugin.honoured_send_intents() == frozenset({"task"})
     for intent in ("inform", "ask", "steer"):
         with pytest.raises(AgentCommError, match="not supported"):
-            plugin.send("worker", "fyi", context=SendContext(intent=intent))
-    client.send_message.assert_not_called()
-
-
-def test_a2a_asend_refuses_non_task_intent() -> None:
-    client = Mock()
-    plugin = A2AAgentComm.__new__(A2AAgentComm)
-    plugin._client = client
-    for intent in ("inform", "ask", "steer"):
-        with pytest.raises(AgentCommError, match="not supported"):
-            asyncio.run(plugin.asend("worker", "fyi", context=SendContext(intent=intent)))
-    client.send_message.assert_not_called()
+            await plugin.asend("worker", "fyi", context=SendContext(intent=intent))
+    client.asend_message.assert_not_called()

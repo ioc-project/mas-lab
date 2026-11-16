@@ -98,9 +98,9 @@ def _build_options(manifest: dict, manifest_dir: Path) -> InstantiationOptions:
     )
 
 
-def _system_prompt(instance) -> str:
+async def _system_prompt(instance) -> str:
     ctx = instance.driver.ctx
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     sys_msg = next((m for m in messages if m.get("role") == "system"), None)
     return sys_msg["content"] if sys_msg else ""
 
@@ -166,8 +166,8 @@ class TestWithoutSkills:
         options = _build_options(_manifest_base(), QUICKSTART)
         self.instance, _ = instantiate_runtime(options)
 
-    def test_no_skill_catalog_in_prompt(self):
-        prompt = _system_prompt(self.instance)
+    async def test_no_skill_catalog_in_prompt(self):
+        prompt = await _system_prompt(self.instance)
         assert "Available Skills" not in prompt
         assert "answer-expert" not in prompt
 
@@ -209,14 +209,14 @@ class TestWithSkills:
 
     # -- Tier 1: catalog in system prompt ------------------------------------
 
-    def test_skill_catalog_in_system_prompt(self):
+    async def test_skill_catalog_in_system_prompt(self):
         """Tier 1: catalog (name + description) appears in the assembled system prompt."""
-        prompt = _system_prompt(self.instance)
+        prompt = await _system_prompt(self.instance)
         assert "Available Skills" in prompt, "catalog header must be in system prompt"
         assert "answer-expert" in prompt, "skill name must be in catalog"
 
-    def test_description_in_catalog(self):
-        prompt = _system_prompt(self.instance)
+    async def test_description_in_catalog(self):
+        prompt = await _system_prompt(self.instance)
         assert "activate_skill" in prompt
         assert any(kw in prompt.lower() for kw in ["factual", "knowledge"]), (
             "skill when-to-use description must appear in the catalog"
@@ -224,9 +224,9 @@ class TestWithSkills:
         assert "HIGH / MEDIUM / LOW" not in prompt
         assert "one-sentence summary" not in prompt.lower()
 
-    def test_full_body_not_in_system_prompt(self):
+    async def test_full_body_not_in_system_prompt(self):
         """Tier 1 only — full SKILL.md body NOT eagerly injected."""
-        prompt = _system_prompt(self.instance)
+        prompt = await _system_prompt(self.instance)
         # These strings appear only in the body, not in name/description
         assert "Anti-patterns" not in prompt
         assert "## Format rules" not in prompt
@@ -282,12 +282,12 @@ class TestWithSkills:
 
     # -- Key assertion: system prompt DIFFERS from baseline ------------------
 
-    def test_system_prompt_differs_from_baseline(self):
+    async def test_system_prompt_differs_from_baseline(self):
         """The system prompt WITH skills must differ from WITHOUT — observable change."""
         base_opts = _build_options(_manifest_base(), QUICKSTART)
         base_instance, _ = instantiate_runtime(base_opts)
-        base_prompt = _system_prompt(base_instance)
-        skills_prompt = _system_prompt(self.instance)
+        base_prompt = await _system_prompt(base_instance)
+        skills_prompt = await _system_prompt(self.instance)
 
         assert skills_prompt != base_prompt, "system prompt must differ when skills are applied"
         assert len(skills_prompt) > len(base_prompt), "skills prompt must be longer (catalog was added)"

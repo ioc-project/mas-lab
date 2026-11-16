@@ -27,6 +27,7 @@ from typing import Any
 
 from mas.library.standard.lib.retry import as_classified
 from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.runtime.engine.ainvoke import ainvoke_call, apreview_call
 from mas.runtime.engine.call_kinds import call_kind_matches
 from mas.runtime.engine.infra_pipeline import call_ctx
 from mas.runtime.layers.probe import tool_prober_for
@@ -282,9 +283,9 @@ class CircuitBreakerLayer(LayerLifecycle):
         if target.startswith(_TOOL):
             port.enable_tool(target[len(_TOOL) :], by=_BY, reason=f"{LAYER} closed {target}")
 
-    def tick(self) -> None:
+    async def atick(self) -> None:
         """Probe every tool this layer took away whose circuit has been open for ``reset_timeout_s``."""
-        super().tick()
+        await super().atick()
         if not self.policy.enabled or "tool" not in self.call_kinds:
             return
         port = self._port()
@@ -298,19 +299,21 @@ class CircuitBreakerLayer(LayerLifecycle):
             arguments = port.tool_probe(name)
             if arguments is None:
                 continue
-            self._probe(port, prober, target, name, arguments)
+            await self._probe(port, prober, target, name, arguments)
 
-    def _probe(self, port: RunningSpecPort, prober: Any, target: str, name: str, arguments: dict[str, Any]) -> None:
+    async def _probe(
+        self, port: RunningSpecPort, prober: Any, target: str, name: str, arguments: dict[str, Any]
+    ) -> None:
         self._step(port, target, lambda s: self.policy.admit(s, target, self._clock()), why="half-open")
         try:
-            prober.probe_tool(name, arguments)
+            await prober.aprobe_tool(name, arguments)
         except Exception as exc:
             self.record_failure(target, as_classified(exc, classify_tool_exception).failure_class, port)
             return
         self.record_success(target, port)
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        head = str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        head = await apreview_call(self.inner, op, correlation_id=correlation_id)
         label = "[circuit_breaker]"
         return f"{label}\n{head}".strip() if head else label
 
@@ -324,28 +327,13 @@ class CircuitBreakerLayer(LayerLifecycle):
         self.before_call(target, port)
         return target, port
 
-    def invoke(self, io: Any) -> Any:
-        entered = self._enter(io)
-        if entered is None:
-            return self.inner.invoke(io)
-        target, port = entered
-        try:
-            result = self.inner.invoke(io)
-        except CircuitOpenError:
-            raise
-        except Exception as exc:
-            self.record_failure(target, as_classified(exc, classifier_for(io)).failure_class, port)
-            raise
-        self.record_success(target, port)
-        return result
-
     async def ainvoke(self, io: Any) -> Any:
         entered = self._enter(io)
         if entered is None:
-            return await self.inner.ainvoke(io)
+            return await ainvoke_call(self.inner, io)
         target, port = entered
         try:
-            result = await self.inner.ainvoke(io)
+            result = await ainvoke_call(self.inner, io)
         except CircuitOpenError:
             raise
         except Exception as exc:

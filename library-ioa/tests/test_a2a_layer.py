@@ -121,11 +121,11 @@ def test_a_completed_task_with_no_artifacts_reads_the_agent_history() -> None:
     assert decode_response(json.dumps(empty)) == ""
 
 
-def test_the_layer_refuses_a_non_string_payload_and_a_bad_inbound_frame() -> None:
+async def test_the_layer_refuses_a_non_string_payload_and_a_bad_inbound_frame() -> None:
     layer = A2ALayer()
 
     class Lower:
-        def send(self, envelope: Envelope) -> str:
+        async def asend(self, envelope: Envelope) -> str:
             del envelope
             return json.dumps(
                 {"jsonrpc": "2.0", "id": "1", "result": {"message": {"role": "ROLE_AGENT", "parts": [{"text": "x"}]}}}
@@ -133,12 +133,12 @@ def test_the_layer_refuses_a_non_string_payload_and_a_bad_inbound_frame() -> Non
 
     layer.bind(Lower())
     with pytest.raises(AgentCommError, match="must be a string"):
-        layer.send(Envelope(payload={"not": "text"}, meta={"intent": "task"}))
-    answer = layer.serve(lambda envelope: envelope.payload)
-    invalid = json.loads(answer(Envelope(payload='{"jsonrpc":"1.0","id":7,"method":"SendMessage"}')))
+        await layer.asend(Envelope(payload={"not": "text"}, meta={"intent": "task"}))
+    answer = layer.serve(lambda envelope: asyncio.sleep(0, envelope.payload))
+    invalid = json.loads(await answer(Envelope(payload='{"jsonrpc":"1.0","id":7,"method":"SendMessage"}')))
     assert invalid["error"]["code"] == -32600
     bad_params = json.loads(
-        answer(
+        await answer(
             Envelope(
                 payload=json.dumps(
                     {
@@ -154,7 +154,7 @@ def test_the_layer_refuses_a_non_string_payload_and_a_bad_inbound_frame() -> Non
     assert bad_params["error"]["code"] == -32602
     seen: list[int] = []
 
-    def capture(envelope: Envelope) -> str:
+    async def capture(envelope: Envelope) -> str:
         seen.append(int(envelope.meta["correlation_id"]))
         return "ok"
 
@@ -172,7 +172,7 @@ def test_the_layer_refuses_a_non_string_payload_and_a_bad_inbound_frame() -> Non
             },
         }
     )
-    reply = json.loads(layer.serve(capture)(Envelope(payload=framed)))
+    reply = json.loads(await layer.serve(capture)(Envelope(payload=framed)))
     assert seen == [0]
     assert reply["result"]["message"]["parts"][0]["text"] == "ok"
 
@@ -202,7 +202,7 @@ def test_a_completed_task_reads_its_artifacts_then_its_status_text() -> None:
     assert decode_response(json.dumps(status)) == "done"
 
 
-def test_the_a2a_layer_conforms() -> None:
+async def test_the_a2a_layer_conforms() -> None:
     reply = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -210,23 +210,23 @@ def test_the_a2a_layer_conforms() -> None:
             "result": {"message": {"messageId": "m", "role": "ROLE_AGENT", "parts": [{"text": "ok"}]}},
         }
     )
-    check_layer(A2ALayer, lower_answer=reply, expect="ok")
+    await check_layer(A2ALayer, lower_answer=reply, expect="ok")
 
 
 # --- over SLIM --------------------------------------------------------------------------------------------------
 
 
-def test_a2a_over_slim_round_trip_carries_unicode_ids_and_the_context() -> None:
+async def test_a2a_over_slim_round_trip_carries_unicode_ids_and_the_context() -> None:
     seen: list[tuple] = []
 
-    def run_turn(agent: str, task: str, *rest: object) -> str:
+    async def run_turn(agent: str, task: str, *rest: object) -> str:
         seen.append((agent, task, *rest))
         return f"{agent} répond: {task} ✓"
 
     handle = _a2a_over_slim(run_turn)
     triage = handle.link("triage")
     handle.link("billing")
-    reply = triage.send(
+    reply = await triage.asend(
         "billing", "facturé deux fois — 二重請求", correlation_id=7, caller_call_id="call-9", context_id="ctx-42"
     )
     assert reply == "billing répond: facturé deux fois — 二重請求 ✓"
@@ -241,65 +241,67 @@ def test_a2a_over_slim_round_trip_carries_unicode_ids_and_the_context() -> None:
     assert response["id"] == rpc["id"]
     assert response["result"]["message"]["contextId"] == "ctx-42"
     assert response["result"]["message"]["role"] == "ROLE_AGENT"
-    assert asyncio.run(triage.asend("billing", "async")) == "billing répond: async ✓"
+    assert await triage.asend("billing", "async") == "billing répond: async ✓"
 
 
-def test_a2a_over_slim_without_a_context_id_gets_a_new_one() -> None:
+async def test_a2a_over_slim_without_a_context_id_gets_a_new_one() -> None:
     contexts: list[str] = []
 
-    def run_turn(agent: str, task: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
+    async def run_turn(agent: str, task: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         contexts.append(context_id)
         return "ok"
 
     handle = _a2a_over_slim(run_turn)
     handle.link("b")
-    assert handle.link("a").send("b", "x") == "ok"
+    assert (await handle.link("a").asend("b", "x")) == "ok"
     assert contexts and contexts[0]
 
 
-def test_a_failing_handler_is_a_failed_task_and_the_caller_gets_an_agent_comm_error(
+async def test_a_failing_handler_is_a_failed_task_and_the_caller_gets_an_agent_comm_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    def run_turn(agent: str, task: str, *_: object) -> str:
+    async def run_turn(agent: str, task: str, *_: object) -> str:
         raise RuntimeError("database password is hunter2")
 
     handle = _a2a_over_slim(run_turn)
     handle.link("b")
     with pytest.raises(AgentCommError, match="remote A2A task failed: Agent execution failed") as raised:
-        handle.link("a").send("b", "x")
+        await handle.link("a").asend("b", "x")
     assert "hunter2" not in str(raised.value)  # the error text stays with the server
     response = json.loads(_frames()[1]["task"])
     assert response["result"]["task"]["status"]["state"] == "TASK_STATE_FAILED"
 
 
-def test_only_the_task_intent_goes_out_and_nothing_leaves_for_another() -> None:
+async def test_only_the_task_intent_goes_out_and_nothing_leaves_for_another() -> None:
     handle = _a2a_over_slim(lambda *_: "ok")
     a = handle.link("a")
     handle.link("b")
     assert a.honoured_send_intents() == frozenset({"task"})
     for intent in ("inform", "ask"):
         with pytest.raises(AgentCommError, match=f"intent {intent!r} is not supported"):
-            a.send("b", "x", context=SendContext(intent=intent))
+            await a.asend("b", "x", context=SendContext(intent=intent))
     assert FakeWorld.default().frames == []
 
 
-def test_a_plain_frame_on_an_a2a_stack_is_a_json_rpc_parse_error() -> None:
+async def test_a_plain_frame_on_an_a2a_stack_is_a_json_rpc_parse_error() -> None:
     handle = _a2a_over_slim(lambda *_: "never")
     b = handle.link("b")._layers[0].link
     assert b._serve_handler is not None
-    answer = json.loads(b._serve_handler(Envelope(payload="not json")))
+    answer = json.loads(await b._serve_handler(Envelope(payload="not json")))
     assert answer["error"]["code"] == -32700
-    other = json.loads(b._serve_handler(Envelope(payload=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "GetTask"}))))
+    other = json.loads(
+        await b._serve_handler(Envelope(payload=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "GetTask"})))
+    )
     assert other["error"]["code"] == -32601
 
 
-def test_a_plain_slim_stack_installs_no_inbound_chain() -> None:
+async def test_a_plain_slim_stack_installs_no_inbound_chain() -> None:
     handle = StackHandle("desk", [_SLIM], lambda agent, task, *_: f"{agent}:{task}")
     _HANDLES.append(handle)
     a = handle.link("a")
     handle.link("b")
     assert a._layers[0].link._serve_handler is None
-    assert a.send("b", "plain") == "b:plain"
+    assert (await a.asend("b", "plain")) == "b:plain"
     assert _frames()[0]["task"] == "plain"
 
 
@@ -310,7 +312,7 @@ def test_a2a_over_local_group_is_refused_because_local_group_cannot_serve_the_la
     handle.close()
 
 
-def test_the_slim_layer_as_a_stack_wires_it_passes_the_transport_check() -> None:
+async def test_the_slim_layer_as_a_stack_wires_it_passes_the_transport_check() -> None:
     """The bottom layer a ``StackHandle`` builds for ``slim`` (the link in its ``LinkLayer``), checked as it is."""
     seen: list[str] = []
     handle = StackHandle("desk", [_SLIM], lambda agent, task, *_: seen.append(task) or f"{agent}:{task}")
@@ -319,10 +321,10 @@ def test_the_slim_layer_as_a_stack_wires_it_passes_the_transport_check() -> None
     handle.link("b")
     assert isinstance(bottom, LinkLayer) and type(bottom.link).__name__ == "SlimAgentComm"
     envelope = Envelope(payload="ping", meta={"target": "b", "intent": "task"})
-    check_transport(lambda: bottom, envelope=envelope, reply="b:ping", delivered=lambda: len(seen))
+    await check_transport(lambda: bottom, envelope=envelope, reply="b:ping", delivered=lambda: len(seen))
 
 
-def test_the_a2a_layer_above_slim_as_a_stack_wires_it_passes_the_layer_check() -> None:
+async def test_the_a2a_layer_above_slim_as_a_stack_wires_it_passes_the_layer_check() -> None:
     handle = StackHandle("desk", [_SLIM, _A2A], lambda agent, task, *_: f"{agent}:{task}")
     _HANDLES.append(handle)
     upper = handle.link("a")._layers[1]
@@ -330,7 +332,7 @@ def test_the_a2a_layer_above_slim_as_a_stack_wires_it_passes_the_layer_check() -
     framed = json.dumps(
         {"jsonrpc": "2.0", "id": "1", "result": {"message": {"role": "ROLE_AGENT", "parts": [{"text": "ok"}]}}}
     )
-    check_layer(lambda: A2ALayer(), lower_answer=framed, expect="ok")
+    await check_layer(lambda: A2ALayer(), lower_answer=framed, expect="ok")
 
 
 # --- over HTTP ----------------------------------------------------------------------------------------------------
@@ -373,27 +375,27 @@ def exposed_agent():
         thread.join(timeout=10)
 
 
-def test_a2a_over_http_reaches_the_a2a_exposure(exposed_agent) -> None:
+async def test_a2a_over_http_reaches_the_a2a_exposure(exposed_agent) -> None:
     url, calls = exposed_agent
     handle = StackHandle("remote", [{"type": "http", "params": {"url": url}}, _A2A])
     _HANDLES.append(handle)
     triage = handle.link("triage")
-    assert triage.send("billing", "héllo ✓", correlation_id=5, caller_call_id="c-1", context_id="ctx-7") == (
+    assert (await triage.asend("billing", "héllo ✓", correlation_id=5, caller_call_id="c-1", context_id="ctx-7")) == (
         "served: héllo ✓"
     )
     call = calls[-1]
     assert call["session_id"] == "ctx-7"
     assert call["upstream_correlation_id"] == 5
     assert call["parent_call_id"] == "c-1"
-    assert asyncio.run(triage.asend("billing", "again")) == "served: again"
+    assert await triage.asend("billing", "again") == "served: again"
     with pytest.raises(AgentCommError, match="remote A2A task failed") as raised:
-        triage.send("billing", "boom")
+        await triage.asend("billing", "boom")
     assert "server side detail" not in str(raised.value)
     with pytest.raises(AgentCommError, match="not supported"):
-        triage.send("billing", "x", context=SendContext(intent="inform"))
+        await triage.asend("billing", "x", context=SendContext(intent="inform"))
 
 
-def test_the_http_transport_passes_the_transport_check_and_reports_http_errors() -> None:
+async def test_the_http_transport_passes_the_transport_check_and_reports_http_errors() -> None:
     bodies: list[tuple[bytes, dict[str, str]]] = []
 
     class Echo(BaseHTTPRequestHandler):
@@ -416,7 +418,7 @@ def test_the_http_transport_passes_the_transport_check_and_reports_http_errors()
     url = f"http://127.0.0.1:{server.server_address[1]}/rpc"
     try:
         envelope = Envelope(payload="ping ✓", headers={"traceparent": "00-" + "a" * 32 + "-" + "b" * 16 + "-01"})
-        check_transport(
+        await check_transport(
             lambda: HttpLayer(url=url, headers={"x-static": "1"}),
             envelope=envelope,
             reply="echo:ping ✓",
@@ -428,21 +430,21 @@ def test_the_http_transport_passes_the_transport_check_and_reports_http_errors()
         assert headers["content-type"] == "application/json"
         layer = HttpLayer(url=url)
         with pytest.raises(AgentCommError, match="sends text or bytes"):
-            layer.send(Envelope(payload={"not": "bytes"}))
+            await layer.asend(Envelope(payload={"not": "bytes"}))
         with pytest.raises(AgentCommError, match="answered 503"):
-            layer.send(Envelope(payload="down"))
+            await layer.asend(Envelope(payload="down"))
         layer.stop()
         with pytest.raises(AgentCommError, match="stopped"):
-            layer.send(Envelope(payload="late"))
+            await layer.asend(Envelope(payload="late"))
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
     with pytest.raises(AgentCommError, match="ConnectError"):
-        HttpLayer(url=url, timeout=1).send(Envelope(payload="nobody"))
+        await HttpLayer(url=url, timeout=1).asend(Envelope(payload="nobody"))
 
 
-def test_the_http_transport_caps_the_reply_and_never_shows_the_url_query() -> None:
+async def test_the_http_transport_caps_the_reply_and_never_shows_the_url_query() -> None:
     class Big(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802
             self.rfile.read(int(self.headers.get("content-length") or 0))
@@ -461,26 +463,26 @@ def test_the_http_transport_caps_the_reply_and_never_shows_the_url_query() -> No
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
-        assert HttpLayer(url=f"{base}/ok", max_message_size=64).send(Envelope(payload="a")) == "x" * 64
+        assert (await HttpLayer(url=f"{base}/ok", max_message_size=64).asend(Envelope(payload="a"))) == "x" * 64
         with pytest.raises(AgentCommError, match="is over 63 bytes"):
-            HttpLayer(url=f"{base}/ok", max_message_size=63).send(Envelope(payload="a"))
+            await HttpLayer(url=f"{base}/ok", max_message_size=63).asend(Envelope(payload="a"))
         layer = HttpLayer(url=f"{base}/fail?sig=hidden#frag")
         with pytest.raises(AgentCommError, match="answered 500") as err:
-            layer.send(Envelope(payload="a"))
+            await layer.asend(Envelope(payload="a"))
         assert "hidden" not in str(err.value) and "hidden" not in repr(layer)
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
     with pytest.raises(AgentCommError) as err:
-        HttpLayer(url=f"{base}/gone?sig=hidden", timeout=1).send(Envelope(payload="a"))
+        await HttpLayer(url=f"{base}/gone?sig=hidden", timeout=1).asend(Envelope(payload="a"))
     assert "hidden" not in str(err.value)
     for bad in (0, -1, True, "1"):
         with pytest.raises(AgentCommError, match="max_message_size"):
             HttpLayer(url=base, max_message_size=bad)  # type: ignore[arg-type]
 
 
-def test_the_http_transport_sends_each_header_once_whatever_its_spelling() -> None:
+async def test_the_http_transport_sends_each_header_once_whatever_its_spelling() -> None:
     seen: list[dict[str, list[str]]] = []
 
     class Record(BaseHTTPRequestHandler):
@@ -501,7 +503,7 @@ def test_the_http_transport_sends_each_header_once_whatever_its_spelling() -> No
     url = f"http://127.0.0.1:{server.server_address[1]}"
     layer = HttpLayer(url=url, headers={"Content-Type": "text/plain", "X-Static": "1"})
     try:
-        layer.send(Envelope(payload="hi", headers={"x-static": "2"}))
+        await layer.asend(Envelope(payload="hi", headers={"x-static": "2"}))
     finally:
         layer.stop()
         server.shutdown()
@@ -523,12 +525,12 @@ def test_the_http_transport_refuses_a_header_it_could_not_send_as_one_line(heade
 
 
 @pytest.mark.parametrize("name", ["Host", "content-length", "Transfer-Encoding", "connection"])
-def test_the_http_transport_refuses_a_framing_header_from_a_row_or_a_send(name: str) -> None:
+async def test_the_http_transport_refuses_a_framing_header_from_a_row_or_a_send(name: str) -> None:
     with pytest.raises(AgentCommError, match="sets .* itself"):
         HttpLayer(url="http://127.0.0.1:9", headers={name: "x"})
     layer = HttpLayer(url="http://127.0.0.1:9")
     with pytest.raises(AgentCommError, match="sets .* itself"):
-        layer.send(Envelope(payload="hi", headers={name: "x"}))  # refused before anything connects
+        await layer.asend(Envelope(payload="hi", headers={name: "x"}))  # refused before anything connects
     layer.stop()
 
 

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -66,7 +67,7 @@ class Wire(Layer):
     def stop(self) -> None:
         EVENTS.append(f"{self.agent_id}.stop")
 
-    def send(self, envelope: Envelope) -> Any:
+    async def asend(self, envelope: Envelope) -> Any:
         return f"{self.name}->{envelope.meta['target']}:{envelope.payload}"
 
 
@@ -80,15 +81,15 @@ class Plain(Layer):
         self.flavour = flavour
         self.name = name
 
-    def send(self, envelope: Envelope) -> Any:
+    async def asend(self, envelope: Envelope) -> Any:
         return f"{self.flavour}:{envelope.payload}"
 
 
 class Upper(Layer):
     """Not a transport: needs a layer below."""
 
-    def send(self, envelope: Envelope) -> Any:
-        return "upper:" + str(super().send(envelope))
+    async def asend(self, envelope: Envelope) -> Any:
+        return "upper:" + str(await super().asend(envelope))
 
 
 class Registry:
@@ -156,14 +157,14 @@ def test_construction_checks_layers_and_transport() -> None:
     assert EVENTS == []  # nothing started
 
 
-def test_each_agent_gets_its_own_started_stack_and_identity() -> None:
+async def test_each_agent_gets_its_own_started_stack_and_identity() -> None:
     handle = _handle()
     a = handle.link("buyer")
     b = handle.link("seller")
     assert a is not b
     assert a is handle.link("buyer")  # cached
-    assert a.send("seller", "quote") == "upper:acme/lab/mas/buyer->seller:quote"
-    assert b.send("buyer", "offer") == "upper:acme/lab/mas/seller->buyer:offer"
+    assert (await a.asend("seller", "quote")) == "upper:acme/lab/mas/buyer->seller:quote"
+    assert (await b.asend("buyer", "offer")) == "upper:acme/lab/mas/seller->buyer:offer"
     wire_a = a._layers[0]
     assert (wire_a.name, wire_a.agent_id) == ("acme/lab/mas/buyer", "buyer")
     assert a._layers[1] is not b._layers[1]
@@ -211,18 +212,18 @@ def test_a_failing_link_stop_still_closes_the_service() -> None:
     assert Wire.made[0].closed == 1
 
 
-def test_run_turn_is_called_with_the_agent_id() -> None:
+async def test_run_turn_is_called_with_the_agent_id() -> None:
     seen: list[tuple[str, str]] = []
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         seen.append((agent_id, task))
         return "ok"
 
     handle = _handle(run_turn=run_turn)
     turn = handle.link("buyer")._layers[0].run_turn
-    assert turn("acme/lab/mas/buyer", "hi", 0, "", "") == "ok"
-    override = handle.link("seller", run_turn=lambda agent_id, task, *_: f"own:{agent_id}")
-    assert override._layers[0].run_turn("whatever", "x") == "own:seller"
+    assert await turn("acme/lab/mas/buyer", "hi", 0, "", "") == "ok"
+    override = handle.link("seller", run_turn=lambda agent_id, task, *_: asyncio.sleep(0, f"own:{agent_id}"))
+    assert await override._layers[0].run_turn("whatever", "x") == "own:seller"
     assert seen == [("buyer", "hi")]
 
 
@@ -247,9 +248,9 @@ def test_a_layer_says_which_agent_ids_it_refuses() -> None:
     assert agent_id_refusal(Plain, {}, "a.b") == ""  # a layer with neither takes any id
 
 
-def test_a_layer_without_a_service_takes_every_param() -> None:
+async def test_a_layer_without_a_service_takes_every_param() -> None:
     handle = StackHandle("s", [_layer("plain", flavour="x")], registry=Registry())
-    assert handle.link("a").send("b", "hi") == "x:hi"
+    assert (await handle.link("a").asend("b", "hi")) == "x:hi"
     bad = StackHandle("s", [_layer("plain", typo=1)], registry=Registry())
     with pytest.raises(StackError, match="layer 'plain'"):
         bad.link("a")
@@ -275,14 +276,16 @@ def test_a_failed_service_start_closes_the_services_already_started() -> None:
         del Registry.classes["second"]
 
 
-def test_real_registry_resolves_local_group_with_its_identity() -> None:
+async def test_real_registry_resolves_local_group_with_its_identity() -> None:
     handle = StackHandle(
-        "room", [_layer("local-group", identity="acme/lab/mas")], run_turn=lambda agent, task, *_: f"{agent}:{task}"
+        "room",
+        [_layer("local-group", identity="acme/lab/mas")],
+        run_turn=lambda agent, task, *_: asyncio.sleep(0, f"{agent}:{task}"),
     )
     a = handle.link("a")
     handle.link("b")
     assert a._layers[0].link.name == "acme/lab/mas/a"
-    assert a.send("b", "x") == "b:x"
+    assert (await a.asend("b", "x")) == "b:x"
     handle.close()
     with pytest.raises(StackError, match="three-part"):
         StackHandle("room", [_layer("local-group", identity="acme/lab")]).link("a")
@@ -296,23 +299,6 @@ def test_a_class_that_declares_no_hook_is_a_plain_chain_member() -> None:
     assert agent_id_refusal(LocalAgentComm, {}, "any.thing") == ""
     assert listen_refusal([LocalAgentComm]) == ""
     assert is_direct_link(LocalAgentComm)  # no ChainMember hooks: one agent at its own address
-
-
-def test_only_a_session_turn_gives_the_link_an_async_path() -> None:
-    import asyncio
-
-    from mas.library.standard.lib.stack.handle import SessionTurn
-
-    async def acall(agent_id: str, task: str, *_args: object) -> str:
-        return f"async:{agent_id}:{task}"
-
-    handle = _handle()
-    plain = handle.link("buyer", run_turn=lambda agent_id, task, *_: f"sync:{agent_id}:{task}")._layers[0].run_turn
-    assert not isinstance(plain, SessionTurn)
-    both = handle.link("seller", run_turn=SessionTurn(lambda agent_id, task, *_: "sync", acall))._layers[0].run_turn
-    assert isinstance(both, SessionTurn)
-    assert both("acme/lab/mas/seller", "x") == "sync"
-    assert asyncio.run(both.asend("acme/lab/mas/seller", "x")) == "async:seller:x"
 
 
 def test_a_failing_link_stop_and_a_failing_service_close_raise_the_link_error() -> None:
@@ -347,9 +333,11 @@ def test_a_layer_that_fails_to_start_leaves_no_layer_of_the_stack_running() -> N
     assert EVENTS[-1] == "service.close"
 
 
-def test_the_inbound_chain_calls_the_turn_of_the_agent_it_serves() -> None:
+async def test_the_inbound_chain_calls_the_turn_of_the_agent_it_serves() -> None:
     from mas.library.standard.lib.stack.agent_comm import turn_handler
 
     handler = turn_handler(lambda agent_id, task, *args: f"{agent_id}:{task}:{args}", "billing")
-    reply = handler(Envelope(payload="refund", meta={"correlation_id": 3, "caller_call_id": "c", "context_id": "x"}))
+    reply = await handler(
+        Envelope(payload="refund", meta={"correlation_id": 3, "caller_call_id": "c", "context_id": "x"})
+    )
     assert reply == "billing:refund:(3, 'c', 'x')"

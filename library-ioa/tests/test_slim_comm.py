@@ -122,9 +122,9 @@ def _svc(url: str = "http://127.0.0.1:46357", **kwargs: object) -> SlimService:
 
 
 def _set_run_turn(link: SlimAgentComm, handler) -> None:
-    def _turn(agent_id: str, task: str, *_args: object, **_kw: object) -> str:
+    async def _turn(agent_id: str, task: str, *_args: object, **_kw: object) -> str:
         del agent_id
-        return handler(task)
+        return await asyncio.to_thread(handler, task)
 
     link._run_turn = _turn
 
@@ -175,20 +175,20 @@ def test_capabilities_omit_isolation_and_reliable() -> None:
     assert caps["unicast"] is True
 
 
-def test_check_agent_comm_on_fake_bindings() -> None:
+async def test_check_agent_comm_on_fake_bindings() -> None:
     links = _triple()
 
     def on_request(index: int, handler) -> None:
         _set_run_turn(links[index], handler)
 
-    check_agent_comm(links, on_request=on_request)
+    await check_agent_comm(links, on_request=on_request)
 
 
-def test_headers_cross_the_serialised_envelope() -> None:
+async def test_headers_cross_the_serialised_envelope() -> None:
     a, b, _c = _triple()
     seen: list[dict[str, str]] = []
     _set_run_turn(b, lambda task, **_kw: seen.append(get_headers()) or f"ok:{task}")
-    assert a.send("b", "t", headers={"k": "v"}) == "ok:t"
+    assert (await a.asend("b", "t", headers={"k": "v"})) == "ok:t"
     assert seen == [{"k": "v"}]
     a.create_channel("room", members=["a", "b", "c"], options={})
     got: list[dict[str, str]] = []
@@ -198,25 +198,25 @@ def test_headers_cross_the_serialised_envelope() -> None:
     assert get_headers() == {}
 
 
-def test_anycast_is_sticky() -> None:
+async def test_anycast_is_sticky() -> None:
     links = _triple()
     a, _b, _c = links
-    first = a.send("acme/lab/mas", "ping")
+    first = await a.asend("acme/lab/mas", "ping")
     assert first == "ack:ping"
-    a.send("acme/lab/mas", "again")
+    await a.asend("acme/lab/mas", "again")
     session = a._p2p["acme/lab/mas"]
     assert session.bound_instance
     assert a._sticky.get("acme/lab/mas")
 
 
-def test_anycast_seed_picks_a_stable_instance() -> None:
+async def test_anycast_seed_picks_a_stable_instance() -> None:
     FakeWorld.reset(seed=0)
     first = [_link("a"), _link("b"), _link("c")]
-    first[0].send("acme/lab/mas", "ping")
+    await first[0].asend("acme/lab/mas", "ping")
     bound_zero = first[0]._p2p["acme/lab/mas"].bound_instance
     FakeWorld.reset(seed=1)
     second = [_link("a"), _link("b"), _link("c")]
-    second[0].send("acme/lab/mas", "ping")
+    await second[0].asend("acme/lab/mas", "ping")
     bound_one = second[0]._p2p["acme/lab/mas"].bound_instance
     assert bound_zero
     assert bound_one
@@ -284,9 +284,9 @@ def test_wrong_secret_and_short_secret() -> None:
         _desk(url="http://127.0.0.1:1").link("a")
 
 
-def test_forged_sender_is_ignored() -> None:
+async def test_forged_sender_is_ignored() -> None:
     a, b, _c = _triple()
-    assert a.send("b", "t") == "ack:t"
+    assert (await a.asend("b", "t")) == "ack:t"
     a.create_channel("room", members=["a", "b"], options={})
     published: list[str] = []
     b.subscribe(lambda msg: published.append(str(msg["sender"])))
@@ -294,26 +294,26 @@ def test_forged_sender_is_ignored() -> None:
     _wait_until(lambda: published == ["a"])
 
 
-def test_oversize_missing_peer_and_stop() -> None:
+async def test_oversize_missing_peer_and_stop() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
     a.max_message_size = 4
     with pytest.raises(AgentCommError, match="max size"):
-        a.send("b", "too-big")
+        await a.asend("b", "too-big")
     with pytest.raises(AgentCommError, match="no peer"):
-        a.send("missing-peer", "x")
+        await a.asend("missing-peer", "x")
     service = a._service
     a.stop()
     assert service is not None
     assert service.connected is False
     with pytest.raises(AgentCommError, match="stopped"):
-        a.send("b", "x")
+        await a.asend("b", "x")
     _DESKS[-1].close()
     assert service.connected is False
     del b
 
 
-def test_handler_error_reaches_the_caller(caplog: pytest.LogCaptureFixture) -> None:
+async def test_handler_error_reaches_the_caller(caplog: pytest.LogCaptureFixture) -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
 
@@ -323,11 +323,11 @@ def test_handler_error_reaches_the_caller(caplog: pytest.LogCaptureFixture) -> N
     _set_run_turn(b, _boom)
     with caplog.at_level(logging.ERROR):
         with pytest.raises(AgentCommError, match="peer handler failed") as raised:
-            a.send("b", "x")
+            await a.asend("b", "x")
     assert "hunter2" not in str(raised.value)
     assert "peer handler failed" in str(raised.value)
     assert "hunter2" in caplog.text
-    wire = b._on_inbound(
+    wire = await b._on_inbound(
         type(
             "Msg",
             (),
@@ -343,7 +343,7 @@ def test_handler_error_reaches_the_caller(caplog: pytest.LogCaptureFixture) -> N
     assert b"peer handler failed" in wire
 
 
-def test_asend_does_not_block_the_running_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_asend_does_not_block_the_running_loop(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
     from slim_node_fake import FakeSession
@@ -369,11 +369,11 @@ def test_asend_does_not_block_the_running_loop(monkeypatch: pytest.MonkeyPatch) 
         await task
         return result
 
-    assert asyncio.run(_go()) == "ack:ping"
+    assert await _go() == "ack:ping"
     assert ticks == [1]
 
 
-def test_first_asend_does_not_block_on_start(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_first_asend_does_not_block_on_start(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
     from slim_node_fake import FakeService
@@ -400,24 +400,24 @@ def test_first_asend_does_not_block_on_start(monkeypatch: pytest.MonkeyPatch) ->
         await task
         return result
 
-    assert asyncio.run(_go()) == "ack:ping"
+    assert await _go() == "ack:ping"
     assert ticks == [1]
 
 
-def test_send_passes_timedelta_timeout() -> None:
+async def test_send_passes_timedelta_timeout() -> None:
     import datetime
 
     FakeWorld.reset()
     a, b, _c = _triple()
-    a.send("b", "ping")
+    await a.asend("b", "ping")
     session = next(iter(a._p2p.values()))
     assert isinstance(session.last_timeout, datetime.timedelta)
 
 
-def test_stop_closes_shared_p2p_session_once() -> None:
+async def test_stop_closes_shared_p2p_session_once() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
-    a.send("b", "ping")
+    await a.asend("b", "ping")
     session = next(iter(a._p2p.values()))
     a._p2p["alias"] = session
     a._groups["also"] = session
@@ -454,7 +454,7 @@ def test_adopt_ignores_session_without_channel() -> None:
     assert a._groups["room"] is room
 
 
-def test_idle_inbound_loop_does_not_spin() -> None:
+async def test_idle_inbound_loop_does_not_spin() -> None:
     import asyncio
     import time
 
@@ -474,13 +474,12 @@ def test_idle_inbound_loop_does_not_spin() -> None:
         except asyncio.CancelledError:
             pass
 
-    asyncio.run(_go())
+    await _go()
     used = time.process_time() - start
     assert used < 0.15
 
 
-def test_session_publish_requires_completion_wait() -> None:
-    import asyncio
+async def test_session_publish_requires_completion_wait() -> None:
 
     from slim_node_fake import FakeService, Name, SessionConfig, SessionType
 
@@ -499,13 +498,13 @@ def test_session_publish_requires_completion_wait() -> None:
         with pytest.raises(slim_fake.SessionError, match="no peer"):
             await ctx.session.publish_async(b"x")
 
-    asyncio.run(_go())
+    await _go()
 
 
-def test_stop_closes_sessions() -> None:
+async def test_stop_closes_sessions() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
-    a.send("b", "ping")
+    await a.asend("b", "ping")
     a.create_channel("room", members=["a", "b"], options={})
     p2p = next(iter(a._p2p.values()))
     group = a._groups["room"]
@@ -514,10 +513,10 @@ def test_stop_closes_sessions() -> None:
     assert group.closed is True
 
 
-def test_stop_swallows_session_close_errors() -> None:
+async def test_stop_swallows_session_close_errors() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
-    a.send("b", "ping")
+    await a.asend("b", "ping")
 
     async def _boom_binding(_session: object) -> None:
         raise slim_fake.SessionError("already closed")
@@ -525,7 +524,7 @@ def test_stop_swallows_session_close_errors() -> None:
     a._app.delete_session_async = _boom_binding  # type: ignore[method-assign]
     a.stop()
     with pytest.raises(AgentCommError, match="stopped"):
-        a.send("b", "x")
+        await a.asend("b", "x")
 
 
 def test_https_without_secure_factory_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -572,7 +571,7 @@ def test_inbound_loop_adopts_invited_session() -> None:
     assert b'"kind": "reply"' in session.published_to[0]
 
 
-def test_inbound_loop_logs_and_keeps_running(caplog: pytest.LogCaptureFixture) -> None:
+async def test_inbound_loop_logs_and_keeps_running(caplog: pytest.LogCaptureFixture) -> None:
     import asyncio
 
     FakeWorld.reset()
@@ -593,7 +592,7 @@ def test_inbound_loop_logs_and_keeps_running(caplog: pytest.LogCaptureFixture) -
         with caplog.at_level(logging.ERROR):
             await asyncio.wait_for(a._inbound_loop(), timeout=1)
 
-    asyncio.run(_go())
+    await _go()
     assert "listen boom" in caplog.text
 
 
@@ -624,7 +623,7 @@ def test_listen_thread_adopts_invited_session() -> None:
     assert _DESKS[-1]._actor.thread is None
 
 
-def test_start_without_injected_bindings_uses_loaded_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_start_without_injected_bindings_uses_loaded_fake(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "library_ioa.plugins.slim.actor.load_slim_bindings",
         lambda: slim_fake,
@@ -634,7 +633,7 @@ def test_start_without_injected_bindings_uses_loaded_fake(monkeypatch: pytest.Mo
     a = desk.link("a")
     b = desk.link("b")
     assert a._listening and a._actor.thread is not None and a._actor.thread.is_alive()
-    assert a.send("b", "hello") == "ack:hello"
+    assert (await a.asend("b", "hello")) == "ack:hello"
     a.stop()
     b.stop()
     with pytest.raises(TypeError, match="bindings"):
@@ -767,7 +766,7 @@ def test_name_capabilities_and_session_helpers() -> None:
     assert "secret" not in inspect.signature(SlimAgentComm.__init__).parameters  # the service holds it
 
 
-def test_directed_publish_and_unknown_channel() -> None:
+async def test_directed_publish_and_unknown_channel() -> None:
     def _hello(task: str, **_kw: object) -> str:
         return f"hi:{task}"
 
@@ -775,7 +774,7 @@ def test_directed_publish_and_unknown_channel() -> None:
     a = _link("a", on_request=_hello)
     b = _link("b", on_request=_hello)
     c = _link("c", on_request=_hello)
-    assert a.send("b", "ping") == "hi:ping"
+    assert (await a.asend("b", "ping")) == "hi:ping"
     a.create_channel("room", members=["a", "b", "c"], options={"max_retries": 1})
     seen: list[str] = []
     b.subscribe(lambda msg: seen.append(str(msg["payload"])))
@@ -789,13 +788,12 @@ def test_directed_publish_and_unknown_channel() -> None:
         a.members("no-such")
 
 
-def test_channel_membership_async_and_lazy_start() -> None:
-    import asyncio
+async def test_channel_membership_async_and_lazy_start() -> None:
 
     FakeWorld.reset()
     a, b, c = _triple()
     assert "task" in a.honoured_send_intents()
-    assert asyncio.run(a.asend("b", "ping")) == "ack:ping"
+    assert await a.asend("b", "ping") == "ack:ping"
     a.create_channel("room", members=["a"], options={})
     a.invite("room", "b")
     assert "b" in a.members("room")
@@ -821,8 +819,8 @@ def test_channel_membership_async_and_lazy_start() -> None:
     lazy = SlimAgentComm(_turn, name="acme/lab/mas/z", service=remote)
     peer = SlimAgentComm(_ack, name="acme/lab/mas/y", service=remote)
     peer.start()
-    assert lazy.send("y", "go") == "ack:go"
-    y_reply = peer.send("z", "ask")
+    assert (await lazy.asend("y", "go")) == "ack:go"
+    y_reply = await peer.asend("z", "ask")
     assert y_reply == "turn:ask"
 
     async def _go() -> None:
@@ -837,14 +835,13 @@ def test_channel_membership_async_and_lazy_start() -> None:
         with pytest.raises(AgentCommError, match="threaded"):
             a._run(_boom())
 
-    asyncio.run(_go())
+    await _go()
     peer.stop()
     lazy.stop()
     actor.stop()
 
 
-def test_fake_session_helpers() -> None:
-    import asyncio
+async def test_fake_session_helpers() -> None:
     import datetime
 
     from slim_node_fake import FakeService, Name, SessionConfig, SessionType
@@ -882,25 +879,25 @@ def test_fake_session_helpers() -> None:
         with pytest.raises(AgentCommError, match="org/ns/svc"):
             Name.from_string("ab")
 
-    asyncio.run(_go())
+    await _go()
 
 
 def _replying_desk(seen: list[tuple[str, str]]) -> _Desk:
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         seen.append((agent_id, task))
         return f"ok:{agent_id}:{task}"
 
     return _desk(run_turn=run_turn)
 
 
-def test_reply_routes_between_agents_on_one_service() -> None:
+async def test_reply_routes_between_agents_on_one_service() -> None:
     """The fake routes replies by app name like a real node; a shared app name has no route."""
     FakeWorld.reset()
     seen: list[tuple[str, str]] = []
     desk = _replying_desk(seen)
     a = desk.link("a")
     desk.link("b")
-    assert a.send("b", "hello") == "ok:b:hello"
+    assert (await a.asend("b", "hello")) == "ok:b:hello"
     assert seen == [("b", "hello")]
 
 
@@ -914,13 +911,13 @@ def test_each_agent_has_its_own_app_name() -> None:
     assert {app._name.svc for app in world.by_service["acme/lab/mas"]} == {"mas.a", "mas.b"}
 
 
-def test_anycast_reaches_a_peer_on_the_bare_service() -> None:
+async def test_anycast_reaches_a_peer_on_the_bare_service() -> None:
     FakeWorld.reset()
     seen: list[tuple[str, str]] = []
     desk = _replying_desk(seen)
     a = desk.link("a")
     desk.link("b")
-    assert a.send("acme/lab/mas", "any") == "ok:b:any"
+    assert (await a.asend("acme/lab/mas", "any")) == "ok:b:any"
     assert seen == [("b", "any")]
 
 
@@ -948,7 +945,7 @@ def test_failed_start_returns_its_lease(monkeypatch: pytest.MonkeyPatch) -> None
     assert _SHARED_LOOP._refs == 0
 
 
-def test_stop_from_the_loop_thread_returns_the_lease() -> None:
+async def test_stop_from_the_loop_thread_returns_the_lease() -> None:
     actor = _actor()
     actor.start()
     done = threading.Event()
@@ -989,15 +986,15 @@ def test_stop_cancels_only_its_own_in_flight_calls() -> None:
     other.stop()
 
 
-def test_send_reaches_a_peer_served_by_another_actor() -> None:
+async def test_send_reaches_a_peer_served_by_another_actor() -> None:
     """Two actors on one namespace stand for two processes: no shared instance ids."""
     FakeWorld.reset()
     one, two = _desk(), _desk()
     a = one.link("a")
     b = two.link("b")
-    assert a.send("b", "hi") == "ack:hi"
-    assert b.send("a", "back") == "ack:back"
-    assert a.send("acme/lab/mas", "any") == "ack:any"
+    assert (await a.asend("b", "hi")) == "ack:hi"
+    assert (await b.asend("a", "back")) == "ack:back"
+    assert (await a.asend("acme/lab/mas", "any")) == "ack:any"
 
 
 def test_dotted_service_is_refused() -> None:
@@ -1005,7 +1002,7 @@ def test_dotted_service_is_refused() -> None:
         _desk(identity="acme/lab/mas.x").start()
 
 
-def test_two_stacks_share_one_loop() -> None:
+async def test_two_stacks_share_one_loop() -> None:
     """slim-bindings has one global loop; a second desk must not break the first."""
     FakeWorld.reset()
     one = _desk(identity="acme/lab/one")
@@ -1013,17 +1010,17 @@ def test_two_stacks_share_one_loop() -> None:
     a, b = one.link("a"), one.link("b")
     c, _d = two.link("c"), two.link("d")
     assert one._actor.thread is two._actor.thread
-    assert a.send("b", "x") == "ack:x"
-    assert c.send("d", "y") == "ack:y"
+    assert (await a.asend("b", "x")) == "ack:x"
+    assert (await c.asend("d", "y")) == "ack:y"
     two.close()
-    assert a.send("b", "z") == "ack:z"
-    assert b.send("a", "w") == "ack:w"
+    assert (await a.asend("b", "z")) == "ack:z"
+    assert (await b.asend("a", "w")) == "ack:w"
     one.close()
     assert one._actor.thread is None
     assert one._actor._loop is None
     again = _desk(identity="acme/lab/three")
     first, _second = again.link("a"), again.link("b")
-    assert first.send("b", "v") == "ack:v"
+    assert (await first.asend("b", "v")) == "ack:v"
 
 
 def test_dotted_agent_id_is_refused() -> None:
@@ -1034,7 +1031,7 @@ def test_dotted_agent_id_is_refused() -> None:
 
 
 @pytest.mark.slim
-def test_real_node_frame_crosses() -> None:
+async def test_real_node_frame_crosses() -> None:
     """Needs slim-bindings and a node on 127.0.0.1:46357 (tutorial 7, step 3, starts one)."""
     import socket
 
@@ -1045,7 +1042,7 @@ def test_real_node_frame_crosses() -> None:
         pytest.skip("no SLIM node on 127.0.0.1:46357")
     seen: list[tuple[str, str]] = []
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         seen.append((agent_id, task))
         return f"ok:{agent_id}:{task}"
 
@@ -1059,18 +1056,18 @@ def test_real_node_frame_crosses() -> None:
     try:
         a = desk.link("a")
         desk.link("b")
-        result = a.send("b", "hello")
+        result = await a.asend("b", "hello")
         assert ("b", "hello") in seen
         assert result == "ok:b:hello"
-        assert a.send("acme/lab/mas", "any") == "ok:b:any"
+        assert (await a.asend("acme/lab/mas", "any")) == "ok:b:any"
         with pytest.raises(AgentCommError, match="no peer answers"):
-            a.send("nobody", "x")
+            await a.asend("nobody", "x")
     finally:
         desk.close()
 
 
 @pytest.mark.slim
-def test_real_node_a2a_layer_over_slim() -> None:
+async def test_real_node_a2a_layer_over_slim() -> None:
     """``[slim, a2a]`` on the real node: an A2A request crosses, the answer comes back, a failed turn is an error."""
     import socket
 
@@ -1080,7 +1077,7 @@ def test_real_node_a2a_layer_over_slim() -> None:
     except OSError:
         pytest.skip("no SLIM node on 127.0.0.1:46357")
 
-    def run_turn(agent_id: str, task: str, *rest: object) -> str:
+    async def run_turn(agent_id: str, task: str, *rest: object) -> str:
         if task == "boom":
             raise RuntimeError("turn failed")
         return f"{agent_id}:{task}:{rest[-1]}"
@@ -1093,15 +1090,15 @@ def test_real_node_a2a_layer_over_slim() -> None:
     try:
         a = handle.link("a")
         handle.link("b")
-        assert a.send("b", "héllo ✓", context_id="ctx-real") == "b:héllo ✓:ctx-real"
+        assert (await a.asend("b", "héllo ✓", context_id="ctx-real")) == "b:héllo ✓:ctx-real"
         with pytest.raises(AgentCommError, match="remote A2A task failed"):
-            a.send("b", "boom")
+            await a.asend("b", "boom")
     finally:
         handle.close()
 
 
 @pytest.mark.slim
-def test_real_node_two_stacks_in_one_process() -> None:
+async def test_real_node_two_stacks_in_one_process() -> None:
     import socket
 
     pytest.importorskip("slim_bindings")
@@ -1110,7 +1107,7 @@ def test_real_node_two_stacks_in_one_process() -> None:
     except OSError:
         pytest.skip("no SLIM node on 127.0.0.1:46357")
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         return f"ok:{agent_id}:{task}"
 
     def desk(identity: str) -> _Desk:
@@ -1120,15 +1117,15 @@ def test_real_node_two_stacks_in_one_process() -> None:
     try:
         a, _b = one.link("a"), one.link("b")
         d, _e = two.link("d"), two.link("e")
-        assert a.send("b", "1") == "ok:b:1"
-        assert d.send("e", "2") == "ok:e:2"
+        assert (await a.asend("b", "1")) == "ok:b:1"
+        assert (await d.asend("e", "2")) == "ok:e:2"
     finally:
         one.close()
         two.close()
 
 
 @pytest.mark.slim
-def test_real_node_two_actors_one_namespace() -> None:
+async def test_real_node_two_actors_one_namespace() -> None:
     """Two actors on one identity, as two processes would be."""
     import socket
 
@@ -1138,7 +1135,7 @@ def test_real_node_two_actors_one_namespace() -> None:
     except OSError:
         pytest.skip("no SLIM node on 127.0.0.1:46357")
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         return f"ok:{agent_id}:{task}"
 
     def desk() -> _Desk:
@@ -1149,8 +1146,8 @@ def test_real_node_two_actors_one_namespace() -> None:
     one, two = desk(), desk()
     try:
         a, b = one.link("a"), two.link("b")
-        assert a.send("b", "1") == "ok:b:1"
-        assert b.send("a", "2") == "ok:a:2"
+        assert (await a.asend("b", "1")) == "ok:b:1"
+        assert (await b.asend("a", "2")) == "ok:a:2"
     finally:
         one.close()
         two.close()
@@ -1169,21 +1166,21 @@ def test_local_id_and_app_names() -> None:
     assert instance_uuid(instance_uuid("buyer")) == instance_uuid("buyer")
 
 
-def test_send_to_unstarted_peer_is_no_peer() -> None:
+async def test_send_to_unstarted_peer_is_no_peer() -> None:
     FakeWorld.reset()
     desk = _desk()
     a = desk.link("a")
     with pytest.raises(AgentCommError, match="no peer"):
-        a.send("b", "hello")
+        await a.asend("b", "hello")
     desk.link("b")
-    assert a.send("b", "hello") == "ack:hello"
+    assert (await a.asend("b", "hello")) == "ack:hello"
 
 
-def test_send_puts_call_and_context_on_the_wire() -> None:
+async def test_send_puts_call_and_context_on_the_wire() -> None:
     a, b, _c = _triple()
     seen: list[tuple[object, ...]] = []
 
-    def run_turn(
+    async def run_turn(
         agent_id: str,
         task: str,
         correlation_id: int,
@@ -1194,48 +1191,48 @@ def test_send_puts_call_and_context_on_the_wire() -> None:
         return f"ok:{task}"
 
     b._run_turn = run_turn
-    assert a.send("b", "hello", correlation_id=7, caller_call_id="parent", context_id="ctx-1") == "ok:hello"
+    assert (await a.asend("b", "hello", correlation_id=7, caller_call_id="parent", context_id="ctx-1")) == "ok:hello"
     assert seen == [("b", "hello", 7, "parent", "ctx-1", InboundSend(sender=a.agent_id, intent="task"))]
 
 
-def test_inform_and_ask_cross_the_envelope() -> None:
+async def test_inform_and_ask_cross_the_envelope() -> None:
     a, b, _c = _triple()
     seen: list[tuple[object, ...]] = []
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         del agent_id
         seen.append((task, inbound_send()))
         return f"ok:{task}"
 
     b._run_turn = run_turn
     labelled = label_untrusted_peer("fyi", sender=a.name, intent="inform")
-    assert a.send("b", "fyi", context=SendContext(intent="inform")) == "delivered"
+    assert (await a.asend("b", "fyi", context=SendContext(intent="inform"))) == "delivered"
     assert seen == [(labelled, InboundSend(sender=a.agent_id, intent="inform"))]
     seen.clear()
     asked = label_untrusted_peer("q?", sender=a.name, intent="ask")
-    assert a.send("b", "q?", context=SendContext(intent="ask")) == f"ok:{asked}"
+    assert (await a.asend("b", "q?", context=SendContext(intent="ask"))) == f"ok:{asked}"
     assert seen == [(asked, InboundSend(sender=a.agent_id, intent="ask"))]
     with pytest.raises(AgentCommError, match="not supported"):
-        a.send("b", "nudge", context=SendContext(intent="steer"))
+        await a.asend("b", "nudge", context=SendContext(intent="steer"))
 
 
-def test_bad_inbound_bytes_are_a_generic_error() -> None:
+async def test_bad_inbound_bytes_are_a_generic_error() -> None:
     a, b, _c = _triple()
     msg = SimpleNamespace(
         payload=b"not-json{{{",
         context=SimpleNamespace(source_name=slim_fake.Name("acme", "lab", "mas")),
     )
-    reply = b._on_inbound(msg)
+    reply = await b._on_inbound(msg)
     body = json.loads(reply.decode("utf-8"))
     assert body["kind"] == "error"
-    assert a.send("b", "hello") == "ack:hello"
+    assert (await a.asend("b", "hello")) == "ack:hello"
 
 
-def test_run_turn_receives_the_agency_id() -> None:
+async def test_run_turn_receives_the_agency_id() -> None:
     FakeWorld.reset()
     seen: list[str] = []
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         seen.append(agent_id)
         return f"ok:{task}"
 
@@ -1243,12 +1240,12 @@ def test_run_turn_receives_the_agency_id() -> None:
     a = desk.link("a")
     b = SlimAgentComm(run_turn, name="acme/lab/mas/b", service=desk._service, agent_id="desk-b")
     b.start()
-    assert a.send("b", "t") == "ok:t"
+    assert (await a.asend("b", "t")) == "ok:t"
     assert seen == ["desk-b"]
     seen.clear()
     c = SlimAgentComm(run_turn, name="acme/lab/mas/c", service=desk._service)
     c.start()
-    assert a.send("c", "u") == "ok:u"
+    assert (await a.asend("c", "u")) == "ok:u"
     assert seen == ["c"]
 
 
@@ -1288,7 +1285,7 @@ def test_stop_does_not_cancel_listen_loop_tasks_from_another_thread() -> None:
     assert main_ident not in cancelled_from
 
 
-def test_stop_while_send_in_flight() -> None:
+async def test_stop_while_send_in_flight() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
 
@@ -1299,9 +1296,9 @@ def test_stop_while_send_in_flight() -> None:
     _set_run_turn(b, _slow)
     errors: list[str] = []
 
-    def _send() -> None:
+    async def _send() -> None:
         try:
-            a.send("b", "ping")
+            await a.asend("b", "ping")
         except AgentCommError as exc:
             errors.append(str(exc))
 
@@ -1312,10 +1309,10 @@ def test_stop_while_send_in_flight() -> None:
     worker.join(timeout=3.0)
     assert worker.is_alive() is False
     with pytest.raises(AgentCommError, match="stopped"):
-        a.send("b", "again")
+        await a.asend("b", "again")
 
 
-def test_stop_from_inbound_handler(caplog: pytest.LogCaptureFixture) -> None:
+async def test_stop_from_inbound_handler(caplog: pytest.LogCaptureFixture) -> None:
     import gc
 
     FakeWorld.reset()
@@ -1327,7 +1324,7 @@ def test_stop_from_inbound_handler(caplog: pytest.LogCaptureFixture) -> None:
 
     _set_run_turn(b, _handler)
     caplog.set_level("ERROR")
-    assert a.send("b", "x") == "ok:x"
+    assert (await a.asend("b", "x")) == "ok:x"
     _wait_until(lambda: b._app is None and not b._frames)
     gc.collect()  # a frame task that failed after the reply would log "Task exception was never retrieved"
     assert [rec.getMessage() for rec in caplog.records if rec.levelname == "ERROR"] == []
@@ -1391,7 +1388,7 @@ def test_reader_backs_off_then_reconnects(monkeypatch: pytest.MonkeyPatch) -> No
     assert sleeps == [0.05, 0.1, 0.2, 0.25]
 
 
-def test_one_loop_many_links() -> None:
+async def test_one_loop_many_links() -> None:
     FakeWorld.reset()
     shared = _svc(timeout_s=0.5)
     actor = shared.actor
@@ -1400,7 +1397,7 @@ def test_one_loop_many_links() -> None:
     a.start()
     b.start()
     assert len(actor._connections) == 2  # one node connection per link, on one loop
-    assert a.send("b", "hello") == "ack:hello"
+    assert (await a.asend("b", "hello")) == "ack:hello"
     a.stop()
     b.stop()
     actor.stop()
@@ -1436,13 +1433,13 @@ def test_handle_close_stops_the_actor() -> None:
     assert desk._actor._loop is None
 
 
-def test_secret_never_in_inbound_events() -> None:
+async def test_secret_never_in_inbound_events() -> None:
     FakeWorld.reset()
     events: list[dict] = []
     a = _link("a")
     b = _link("b")
     a.subscribe(lambda msg: events.append(dict(msg)))
-    assert b.send("a", "hello") == "ack:hello"
+    assert (await b.asend("a", "hello")) == "ack:hello"
     blob = repr(events) + repr(a) + repr(b)
     assert _SECRET not in blob
     assert "secret=" not in repr(a)
@@ -1488,15 +1485,15 @@ def test_only_http_and_https_are_accepted_and_the_message_says_so() -> None:
 # --- handlers run off the SLIM loop ---------------------------------------------------------
 
 
-def test_a_handler_can_send_to_another_agent() -> None:
+async def test_a_handler_can_send_to_another_agent() -> None:
     FakeWorld.reset()
     a, b, c = _triple()
     _set_run_turn(c, lambda task: f"c saw {task}")
-    _set_run_turn(b, lambda task: b.send("c", f"via b: {task}"))  # a -> b -> c
-    assert a.send("b", "hi") == "c saw via b: hi"
+    _set_run_turn(b, lambda task: asyncio.run(b.asend("c", f"via b: {task}")))  # a -> b -> c
+    assert (await a.asend("b", "hi")) == "c saw via b: hi"
 
 
-def test_a_slow_handler_does_not_stop_the_other_agents_of_the_process() -> None:
+async def test_a_slow_handler_does_not_stop_the_other_agents_of_the_process() -> None:
     FakeWorld.reset()
     a, b, c = _triple()
     gate = threading.Event()
@@ -1510,38 +1507,38 @@ def test_a_slow_handler_does_not_stop_the_other_agents_of_the_process() -> None:
     _set_run_turn(b, slow)
     _set_run_turn(c, lambda task: f"fast:{task}")
     results: list[str] = []
-    sender = threading.Thread(target=lambda: results.append(a.send("b", "x")))
+    sender = threading.Thread(target=lambda: results.append(asyncio.run(a.asend("b", "x"))))
     sender.start()
     assert started.wait(timeout=5)
-    assert a.send("c", "y") == "fast:y"  # b's turn is still running; the loop is free
+    assert (await a.asend("c", "y")) == "fast:y"  # b's turn is still running; the loop is free
     gate.set()
     sender.join(timeout=10)
     assert results == ["slow:x"]
 
 
-def test_the_reply_wait_is_longer_than_the_io_timeout() -> None:
+async def test_the_reply_wait_is_longer_than_the_io_timeout() -> None:
     FakeWorld.reset()
     desk = _desk(timeout_s=0.5)
     a, b = desk.link("a"), desk.link("b")
     _set_run_turn(b, lambda task: (time.sleep(1.5), f"late:{task}")[1])  # longer than timeout_s, a normal turn
-    assert a.send("b", "x") == "late:x"
+    assert (await a.asend("b", "x")) == "late:x"
     assert a.reply_timeout_s == 120.0
     assert _desk(timeout_s=0.5, reply_timeout_s=7.0).link("z").reply_timeout_s == 7.0
 
 
-def test_a_reply_that_never_comes_ends_at_the_reply_timeout() -> None:
+async def test_a_reply_that_never_comes_ends_at_the_reply_timeout() -> None:
     FakeWorld.reset()
     desk = _desk(timeout_s=0.2, reply_timeout_s=0.5)
     a, b = desk.link("a"), desk.link("b")
     _set_run_turn(b, lambda task: (time.sleep(3), task)[1])
     started = time.monotonic()
     with pytest.raises(AgentCommError):
-        a.send("b", "x")
+        await a.asend("b", "x")
     assert time.monotonic() - started < 2.5
 
 
 @pytest.mark.slim
-def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for() -> None:
+async def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for() -> None:
     """On a real node: a -> b -> c, and a turn longer than the I/O timeout still returns."""
     import socket
 
@@ -1552,9 +1549,9 @@ def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for() -> None:
         pytest.skip("no SLIM node on 127.0.0.1:46357")
     links: dict[str, SlimAgentComm] = {}
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         if agent_id == "b":
-            return links["b"].send("c", f"via b: {task}")
+            return await links["b"].asend("c", f"via b: {task}")
         if agent_id == "c":
             time.sleep(1.5)  # longer than timeout_s below
             return f"c saw {task}"
@@ -1569,7 +1566,7 @@ def test_real_node_a_handler_can_send_and_a_slow_turn_is_waited_for() -> None:
     )
     try:
         links.update({name: desk.link(name) for name in ("a", "b", "c")})
-        assert links["a"].send("b", "hi") == "c saw via b: hi"
+        assert (await links["a"].asend("b", "hi")) == "c saw via b: hi"
     finally:
         desk.close()
 
@@ -1626,35 +1623,37 @@ def _slim_stack(*upper: object, run_turn=None) -> StackHandle:
     return handle
 
 
-def test_a_slim_stack_passes_every_send() -> None:
+async def test_a_slim_stack_passes_every_send() -> None:
     FakeWorld.reset()
-    stack = _slim_stack(run_turn=lambda agent_id, task, *_: f"ok:{agent_id}:{task}")
+    stack = _slim_stack(run_turn=lambda agent_id, task, *_: asyncio.sleep(0, f"ok:{agent_id}:{task}"))
     a = stack.link("a")
     stack.link("b")
-    assert a.send("b", "quote") == "ok:b:quote"
+    assert (await a.asend("b", "quote")) == "ok:b:quote"
     assert any(b"quote" in frame for frame in FakeWorld.default().frames)
 
 
-def test_a_failing_layer_on_a_slim_stack_raises_and_no_frame_leaves() -> None:
+async def test_a_failing_layer_on_a_slim_stack_raises_and_no_frame_leaves() -> None:
     from mas.library.standard.lib.stack import StackSendError
     from mas.library.standard.testing.layer_conformance import FailingLayer
 
     FakeWorld.reset()
-    stack = _slim_stack(lambda: FailingLayer(targets=("b",), message="b refused"), run_turn=lambda *_: "ok")
+    stack = _slim_stack(
+        lambda: FailingLayer(targets=("b",), message="b refused"), run_turn=lambda *_: asyncio.sleep(0, "ok")
+    )
     a = stack.link("a")
     stack.link("b")
     stack.link("c")
     with pytest.raises(StackSendError, match="b refused"):
-        a.send("b", "lost")
+        await a.asend("b", "lost")
     assert not any(b"lost" in frame for frame in FakeWorld.default().frames)
-    assert a.send("c", "kept") == "ok"  # the layer refuses b only
+    assert (await a.asend("c", "kept")) == "ok"  # the layer refuses b only
 
 
-def test_every_send_on_a_slim_stack_carries_a_child_traceparent() -> None:
+async def test_every_send_on_a_slim_stack_carries_a_child_traceparent() -> None:
     FakeWorld.reset()
     seen: list[dict] = []
 
-    def run_turn(agent_id: str, task: str, *_: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_: object) -> str:
         seen.append(get_headers())
         return "ok"
 
@@ -1662,8 +1661,8 @@ def test_every_send_on_a_slim_stack_carries_a_child_traceparent() -> None:
     a = stack.link("a")
     stack.link("b")
     parent = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
-    assert a.send("b", "x", headers={"traceparent": parent}) == "ok"
-    assert a.send("b", "y") == "ok"
+    assert (await a.asend("b", "x", headers={"traceparent": parent})) == "ok"
+    assert (await a.asend("b", "y")) == "ok"
     first, second = seen[0]["traceparent"].split("-"), seen[1]["traceparent"].split("-")
     assert first[1] == "a" * 32 and first[2] != "b" * 16  # same trace, new span
     assert len(second[1]) == 32  # no parent: a new root
@@ -1681,13 +1680,13 @@ def test_each_agent_on_a_slim_stack_has_its_own_stack_and_name() -> None:
     assert a.fabric_id == b.fabric_id
 
 
-def test_an_oversized_inbound_frame_is_refused_before_it_is_parsed() -> None:
+async def test_an_oversized_inbound_frame_is_refused_before_it_is_parsed() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
     called: list[str] = []
     _set_run_turn(b, lambda task: called.append(task) or "ok")
     big = json.dumps({"kind": "request", "task": "x" * (b.max_message_size + 100_000)}).encode()
-    reply = b._on_inbound(
+    reply = await b._on_inbound(
         SimpleNamespace(payload=big, context=SimpleNamespace(source_name=slim_fake.Name("acme", "lab", "a")))
     )
     assert json.loads(reply) == {"kind": "error", "error": "peer handler failed"}
@@ -1695,7 +1694,7 @@ def test_an_oversized_inbound_frame_is_refused_before_it_is_parsed() -> None:
     small = json.dumps({"kind": "request", "task": "fine"}).encode()
     assert (
         json.loads(
-            b._on_inbound(
+            await b._on_inbound(
                 SimpleNamespace(payload=small, context=SimpleNamespace(source_name=slim_fake.Name("acme", "lab", "a")))
             )
         )["task"]
@@ -1703,11 +1702,11 @@ def test_an_oversized_inbound_frame_is_refused_before_it_is_parsed() -> None:
     )
 
 
-def test_a_finished_session_reader_is_dropped() -> None:
+async def test_a_finished_session_reader_is_dropped() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
     _set_run_turn(b, lambda task: f"ok:{task}")
-    assert a.send("b", "x") == "ok:x"
+    assert (await a.asend("b", "x")) == "ok:x"
     _wait_until(lambda: len(b._readers) >= 1)
     served = [s for s in FakeWorld.default().sessions if s.owner is b._app]
     assert served, "b should hold the session a opened"
@@ -1717,32 +1716,32 @@ def test_a_finished_session_reader_is_dropped() -> None:
     assert b._readers == []
 
 
-def test_closing_the_stack_stops_its_thread_and_the_links_refuse_to_send() -> None:
+async def test_closing_the_stack_stops_its_thread_and_the_links_refuse_to_send() -> None:
     FakeWorld.reset()
     desk = _desk()
     a, b = desk.link("a"), desk.link("b")
     _set_run_turn(b, lambda task: f"ok:{task}")
-    assert a.send("b", "x") == "ok:x"
+    assert (await a.asend("b", "x")) == "ok:x"
     names_before = {t.name for t in threading.enumerate()}
     assert "slim-link" in names_before
     desk.close()
     _wait_until(lambda: not any(t.name == "slim-link" and t.is_alive() for t in threading.enumerate()), timeout=5.0)
     assert not any(t.name == "slim-link" and t.is_alive() for t in threading.enumerate())
     with pytest.raises(AgentCommError, match="stopped|failed|not started"):
-        a.send("b", "again")
+        await a.asend("b", "again")
 
 
-def test_a_new_stack_works_after_the_previous_one_was_closed() -> None:
+async def test_a_new_stack_works_after_the_previous_one_was_closed() -> None:
     FakeWorld.reset()
     first = _desk()
     a, b = first.link("a"), first.link("b")
     _set_run_turn(b, lambda task: f"first:{task}")
-    assert a.send("b", "1") == "first:1"
+    assert (await a.asend("b", "1")) == "first:1"
     first.close()
     second = _desk()
     c, d = second.link("c"), second.link("d")
     _set_run_turn(d, lambda task: f"second:{task}")
-    assert c.send("d", "2") == "second:2"
+    assert (await c.asend("d", "2")) == "second:2"
     second.close()
 
 

@@ -18,6 +18,8 @@ import json
 import logging
 from typing import Any
 
+from mas.runtime.aio import settle
+
 _log = logging.getLogger(__name__)
 
 
@@ -55,7 +57,7 @@ class LlmSummarizer:
     ``experiment.models.summarizer`` → resolved turn model. ``params.model``
     overrides that default (a ``spec.models[].id`` or a LiteLLM string,
     resolved by ``CMFactory`` before ``bind_engine``). ``instructions``
-    overrides the package system prompt. Without ``summarize_messages`` this
+    overrides the package system prompt. Without ``asummarize_messages`` this
     degrades to drop and logs a warning.
     """
 
@@ -111,13 +113,17 @@ class LlmSummarizer:
             "override" if self._instructions else "default",
         )
 
-    def summarize(self, messages: list[dict[str, Any]]) -> str | None:
+    async def summarize(self, messages: list[dict[str, Any]]) -> str | None:
         engine = self._engine
-        fn = getattr(engine, "summarize_messages", None) if engine is not None else None
+        fn = (
+            getattr(engine, "asummarize_messages", None) or getattr(engine, "summarize_messages", None)
+            if engine is not None
+            else None
+        )
         if not callable(fn):
             if not self._warned_no_engine:
                 _log.warning(
-                    "summarizer llm has no engine.summarize_messages; "
+                    "summarizer llm has no engine.asummarize_messages; "
                     "older turns will be dropped. Bind the agent engine or set summarizer: drop."
                 )
                 self._warned_no_engine = True
@@ -129,9 +135,9 @@ class LlmSummarizer:
         text: Any
         override = self._resolved_model
         if override and _accepts_kwarg(fn, "model"):
-            text = fn(prompt, model=override)
+            text = await settle(fn(prompt, model=override))
         else:
-            text = fn(prompt)
+            text = await settle(fn(prompt))
         if not isinstance(text, str):
             return None
         stripped = text.strip()

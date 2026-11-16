@@ -31,11 +31,11 @@ def assert_unique_tool_names(plugins: Sequence[SystemPluginBase]) -> None:
             seen[definition.name] = plugin.name
 
 
-def assert_unknown_tool_raises(factory: PluginFactory, session: SessionContext | None = None) -> None:
+async def assert_unknown_tool_raises(factory: PluginFactory, session: SessionContext | None = None) -> None:
     plugin = factory()
     state = plugin.bind(session or SessionContext())
     try:
-        plugin.call("__not_a_tool__", {}, state=state, context=CallContext())
+        await plugin.acall("__not_a_tool__", {}, state=state, context=CallContext())
     except UnknownSystemToolError:
         return
     raise AssertionError(f"{type(plugin).__name__}.call did not raise UnknownSystemToolError")

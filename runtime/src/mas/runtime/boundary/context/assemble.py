@@ -15,6 +15,7 @@ import inspect
 import json
 from typing import Any
 
+from mas.runtime.aio import settle
 from mas.runtime.boundary.context.archive import ConversationChunkStore
 from mas.runtime.boundary.context.assembly_cache import cached_assembler
 from mas.runtime.boundary.context.provider_invariant import assert_provider_payload
@@ -27,10 +28,7 @@ def _accepts_keyword(fn: Any, name: str) -> bool:
         parameters = inspect.signature(fn).parameters.values()
     except (TypeError, ValueError):
         return False
-    return any(
-        parameter.name == name or parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters
-    )
+    return any(parameter.name == name or parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters)
 
 
 def _archive_request_meta(ctx: Any, messages: list[dict[str, Any]]) -> dict[str, Any]:
@@ -98,7 +96,7 @@ def _remember_assembly(ctx: Any, key: tuple[Any, ...]) -> bool:
     return True
 
 
-def assemble_llm_messages(
+async def assemble_llm_messages(
     ctx: Any,
     *,
     manifest: dict | None = None,
@@ -112,10 +110,7 @@ def assemble_llm_messages(
     plugin = cached_assembler(ctx, manifest)
     assemble = getattr(plugin, "assemble_messages", None)
     if not callable(assemble):
-        raise TypeError(
-            f"{type(plugin).__name__} is not a context assembler "
-            "(missing assemble_messages)"
-        )
+        raise TypeError(f"{type(plugin).__name__} is not a context assembler (missing assemble_messages)")
     assemble_kwargs: dict[str, Any] = {
         "manifest": manifest,
         "correlation_id": correlation_id,
@@ -128,16 +123,14 @@ def assemble_llm_messages(
     ):
         if _accepts_keyword(assemble, name):
             assemble_kwargs[name] = value
-    messages = assemble(ctx, **assemble_kwargs)
+    messages = await settle(assemble(ctx, **assemble_kwargs))
     assert_provider_payload(messages)
 
     archive_meta = _archive_request_meta(ctx, messages)
     obs = getattr(ctx, "observability", None)
     cid = correlation_id or int(getattr(ctx, "_assembly_correlation_id", 0) or 0)
     tool_names = _openai_tool_names(tools)
-    if obs is not None and messages and not _remember_assembly(
-        ctx, _assembly_key(cid, messages, tool_names)
-    ):
+    if obs is not None and messages and not _remember_assembly(ctx, _assembly_key(cid, messages, tool_names)):
         obs = None
     context_usage = record_context_assembly(
         obs,
@@ -163,14 +156,14 @@ def assemble_llm_messages(
     return messages
 
 
-def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None:
+async def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None:
     """Ask the assembler plugin to rewrite stored history to its recency cap."""
     resolved = manifest if manifest is not None else getattr(ctx, "manifest", None)
     plugin = cached_assembler(ctx, resolved)
     compact = getattr(plugin, "compact_committed_history", None)
     if not callable(compact):
         return
-    compact(ctx, manifest=resolved)
+    await settle(compact(ctx, manifest=resolved))
 
 
 def llm_request_tools(

@@ -23,6 +23,7 @@ from a2a.types import Role, SendMessageRequest, SendMessageResponse, TaskState
 from google.protobuf.json_format import MessageToDict, ParseDict, ParseError
 from mas.library.standard.lib.comm.payload import normalize_send_intent
 from mas.library.standard.lib.stack import Envelope, Handler, Layer
+from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
 logger = logging.getLogger(__name__)
@@ -160,19 +161,16 @@ class A2ALayer(Layer):
         )
         return envelope.with_(payload=body, headers={VERSION_HEADER: PROTOCOL_VERSION}, meta={"intent": "task"})
 
-    def send(self, envelope: Envelope) -> Any:
-        return decode_response(self._require().send(self._encode(envelope)))
-
     async def asend(self, envelope: Envelope) -> Any:
         return decode_response(await super().asend(self._encode(envelope)))
 
     def serve(self, handler: Handler) -> Handler:
-        def answer(envelope: Envelope) -> str:
-            return self._answer(envelope, handler)
+        async def answer(envelope: Envelope) -> str:
+            return await self._answer(envelope, handler)
 
         return answer
 
-    def _answer(self, envelope: Envelope, handler: Handler) -> str:
+    async def _answer(self, envelope: Envelope, handler: Handler) -> str:
         raw = envelope.payload
         text = raw.decode("utf-8") if isinstance(raw, (bytes, bytearray)) else raw
         try:
@@ -209,7 +207,7 @@ class A2ALayer(Layer):
             },
         )
         try:
-            reply = handler(inner)
+            reply = await acall(handler, inner)
         except Exception:
             logger.exception("A2A request handler failed")
             return _failed(request_id, context_id)

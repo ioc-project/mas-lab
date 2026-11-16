@@ -53,17 +53,17 @@ def test_assembler_is_cached_per_ctx_and_manifest_identity() -> None:
     assert other is not first
 
 
-def test_dispatcher_rejects_plugin_without_assemble_messages(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dispatcher_rejects_plugin_without_assemble_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = AutoCtxAssembler(last_user_text="hi")
     monkeypatch.setattr(
         "mas.runtime.boundary.context.assemble.cached_assembler",
         lambda _ctx, _manifest: object(),
     )
     with pytest.raises(TypeError, match="assemble_messages"):
-        assemble_llm_messages(ctx)
+        await assemble_llm_messages(ctx)
 
 
-def test_kernel_asserts_pairing_if_plugin_returns_an_unpaired_payload() -> None:
+async def test_kernel_asserts_pairing_if_plugin_returns_an_unpaired_payload() -> None:
     ctx = AutoCtxAssembler(last_user_text="q")
     plugin = cached_assembler(ctx, None)
 
@@ -79,10 +79,10 @@ def test_kernel_asserts_pairing_if_plugin_returns_an_unpaired_payload() -> None:
 
     plugin.assemble_messages = unpaired  # type: ignore[method-assign]
     with pytest.raises(ProviderPayloadError, match="tool results"):
-        assemble_llm_messages(ctx)
+        await assemble_llm_messages(ctx)
 
 
-def test_engine_build_messages_does_not_call_on_pre_llm_call() -> None:
+async def test_engine_build_messages_does_not_call_on_pre_llm_call() -> None:
     """Live path is assemble_messages, not the legacy pre-LLM hook."""
     ctx = AutoCtxAssembler(last_user_text="hi")
     engine = LiveLlmEngine(ctx=ctx, manifest={"spec": {}})
@@ -91,32 +91,32 @@ def test_engine_build_messages_does_not_call_on_pre_llm_call() -> None:
         "on_pre_llm_call",
         side_effect=AssertionError("on_pre_llm_call must not run on the engine path"),
     ):
-        messages = engine._build_messages()
+        messages = await engine._abuild_messages()
     assert messages[-1]["content"] == "hi"
     assert_provider_payload(messages)
 
 
-def test_engine_build_messages_pairs_committed_history_and_live_wm() -> None:
+async def test_engine_build_messages_pairs_committed_history_and_live_wm() -> None:
     ctx = AutoCtxAssembler(last_user_text="follow-up")
     ctx.committed_messages = _tool_turn("call_old")
     ctx.record_assistant_tool_call(call_id="call_live", tool_name="search", arguments={})
     ctx.record_tool_result(call_id="call_live", content="now")
     engine = LiveLlmEngine(ctx=ctx, manifest={"spec": {"context_manager": {"type": "stack"}}})
-    messages = engine._build_messages()
+    messages = await engine._abuild_messages()
     assert_provider_payload(messages)
     assert any(m.get("tool_call_id") == "call_old" for m in messages)
     assert any(m.get("tool_call_id") == "call_live" for m in messages)
     assert messages[-1]["role"] == "tool"
 
 
-def test_assemble_messages_uses_manifest_cm_not_plugin_ctor_strategy() -> None:
+async def test_assemble_messages_uses_manifest_cm_not_plugin_ctor_strategy() -> None:
     """Engine assembly resolves CM from the manifest, not ContextAssemblerPlugin(conversation_strategy=...)."""
     plugin = ContextAssemblerPlugin(conversation_strategy=StackConversation(max_messages=1))
     past: list[dict[str, Any]] = []
     for i in range(4):
         past.extend(_tool_turn(f"call_{i}"))
     ctx = AutoCtxAssembler(last_user_text="now", committed_messages=past)
-    messages = plugin.assemble_messages(
+    messages = await plugin.assemble_messages(
         ctx,
         manifest={
             "spec": {
@@ -166,14 +166,14 @@ def test_context_manager_cache_reuses_instance_for_hysteresis() -> None:
     assert first is second
 
 
-def test_assembler_plugin_compacts_committed_history() -> None:
+async def test_assembler_plugin_compacts_committed_history() -> None:
     ctx = AutoCtxAssembler(
         last_user_text="now",
         manifest={"spec": {"context_manager": {"type": "sliding_window", "params": {"window_size": 1}}}},
     )
     for i in range(3):
         ctx.note_user_input(f"u{i}")
-        ctx.note_agent_response(f"a{i}")
+        await ctx.note_agent_response(f"a{i}")
     turns = [m["content"] for m in ctx.committed_messages if m.get("role") == "user"]
     assert turns == ["u2"]
     plugin = cached_assembler(ctx, ctx.manifest)

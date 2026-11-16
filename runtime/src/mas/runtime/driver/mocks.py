@@ -111,7 +111,7 @@ class AutoCtxAssembler:
             committed_count=len(self.committed_messages),
         )
 
-    def note_agent_response(self, text: str) -> None:
+    async def note_agent_response(self, text: str) -> None:
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
         committed_before = len(self.committed_messages)
@@ -136,7 +136,7 @@ class AutoCtxAssembler:
             self.conversation_chunks.append_turn(turn_messages)
             from mas.runtime.boundary.context.assemble import compact_committed_history
 
-            compact_committed_history(self)
+            await compact_committed_history(self)
         record_context_mutation(
             self.observability,
             action="turn_commit",

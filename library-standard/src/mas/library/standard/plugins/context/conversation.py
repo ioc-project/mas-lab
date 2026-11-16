@@ -27,6 +27,7 @@ from typing import Any, Callable
 
 from mas.library.standard.lib.context.payload import split_user_turns, start_of_tool_group
 from mas.library.standard.lib.context.pinned_history import split_pinned_prefix
+from mas.runtime.aio import settle
 from mas.runtime.contracts.context_manager_contract import ContextManagerContract
 from mas.runtime.spec.defaults import DEFAULT_HYSTERESIS_RATIO, DEFAULT_KEEP_TURNS
 
@@ -211,10 +212,7 @@ class SummarizingConversation(ContextManagerContract):
     def _summary_block(self, n_compressed: int, text: str) -> dict[str, Any]:
         return {
             "role": "system",
-            "content": (
-                f"[Conversation summary — {n_compressed} earlier exchange(s)]\n"
-                f"{text}"
-            ),
+            "content": (f"[Conversation summary — {n_compressed} earlier exchange(s)]\n{text}"),
         }
 
     def _cached_view(self, turns: list[list[dict[str, Any]]]) -> list[dict[str, Any]] | None:
@@ -228,7 +226,7 @@ class SummarizingConversation(ContextManagerContract):
             return suffix
         return [self._summary_block(n, self._cached_summary)] + suffix
 
-    def manage_history(
+    async def manage_history(
         self,
         past: list[dict[str, Any]],
         budget_tokens: int,
@@ -294,7 +292,7 @@ class SummarizingConversation(ContextManagerContract):
             return verbatim_msgs
 
         try:
-            summary_text = self._summarize_fn(to_compress_msgs)
+            summary_text = await settle(self._summarize_fn(to_compress_msgs))
         except Exception as exc:
             _log.warning(
                 "SummarizingConversation: summarize_fn failed (%s); keeping last %d turn(s) verbatim",

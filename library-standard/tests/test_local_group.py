@@ -21,7 +21,7 @@ from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.agentcomm.local_group import LocalGroupAgentComm, LocalGroupFabric
 from mas.library.standard.plugins.agentcomm.stack import StackAgentComm
 from mas.library.standard.plugins.agentcomm.trace_context import TraceContextLayer
-from mas.library.standard.testing.agent_comm_checks import check_agent_comm, check_agent_comm_async
+from mas.library.standard.testing.agent_comm_checks import check_agent_comm
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 
 
@@ -68,12 +68,12 @@ def test_local_link_base_reads_subclass_capability_flags() -> None:
     assert _Group().capabilities()["unicast"] is True
 
 
-def test_check_agent_comm_against_local_group() -> None:
+async def test_check_agent_comm_against_local_group() -> None:
     _, links = _links(3)
-    check_agent_comm(links, on_request=_on_request(links))
+    await check_agent_comm(links, on_request=_on_request(links))
 
 
-def test_a_send_that_does_not_reply_in_time_fails() -> None:
+async def test_a_send_that_does_not_reply_in_time_fails() -> None:
     import time
 
     fabric = LocalGroupFabric()
@@ -85,25 +85,19 @@ def test_a_send_that_does_not_reply_in_time_fails() -> None:
 
     LocalGroupAgentComm(name="acme/lab/mas/b", fabric=fabric, on_request=hang)
     with pytest.raises(AgentCommError, match="reply timed out"):
-        a.send("b", "hi")
+        await a.asend("b", "hi")
 
 
-@pytest.mark.asyncio
-async def test_check_agent_comm_async_against_local_group() -> None:
-    _, links = _links(2)
-    await check_agent_comm_async(links)
-
-
-def test_check_agent_comm_against_stack_and_trace_context() -> None:
+async def test_check_agent_comm_against_stack_and_trace_context() -> None:
     _, links = _links(3)
     stacked = [StackAgentComm(layers=[link, TraceContextLayer()]) for link in links]
-    check_agent_comm(stacked, on_request=_on_request(links))
+    await check_agent_comm(stacked, on_request=_on_request(links))
 
 
-def test_stack_injects_fabric_and_run_turn() -> None:
+async def test_stack_injects_fabric_and_run_turn() -> None:
     fabric = LocalGroupFabric(deterministic=True)
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         del agent_id
         return f"turn:{task}"
 
@@ -118,61 +112,33 @@ def test_stack_injects_fabric_and_run_turn() -> None:
         run_turn=run_turn,
     )
     assert b.agent_id == "acme/lab/mas/b"
-    assert a.send("b", "hi") == "turn:hi"
+    assert (await a.asend("b", "hi")) == "turn:hi"
 
 
-def test_run_turn_is_the_handler() -> None:
+async def test_run_turn_is_the_handler() -> None:
     seen: list[tuple[str, str, int, str, str]] = []
 
-    def run_turn(agent_id: str, task: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
+    async def run_turn(agent_id: str, task: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
         seen.append((agent_id, task, correlation_id, caller_call_id, context_id))
         return f"turn:{task}"
 
     fabric = LocalGroupFabric(deterministic=True)
     a = LocalGroupAgentComm(run_turn, name="acme/lab/mas/a", fabric=fabric)
     b = LocalGroupAgentComm(run_turn, name="acme/lab/mas/b", fabric=fabric)
-    assert a.send("b", "hello", correlation_id=7, caller_call_id="call-9", context_id="ctx") == "turn:hello"
+    assert (await a.asend("b", "hello", correlation_id=7, caller_call_id="call-9", context_id="ctx")) == "turn:hello"
     assert seen == [(b.agent_id, "hello", 7, "call-9", "ctx")]
     assert b.agent_id == "acme/lab/mas/b"
 
 
-@pytest.mark.asyncio
-async def test_asend_uses_run_turn_asend() -> None:
-    class Handler:
-        def __init__(self) -> None:
-            self.sync = 0
-            self.async_calls: list[tuple[str, str, int, str, str]] = []
-
-        def __call__(self, agent_id: str, task: str, correlation_id: int, caller_call_id: str, context_id: str) -> str:
-            self.sync += 1
-            return f"sync:{task}"
-
-        async def asend(
-            self, agent_id: str, task: str, correlation_id: int, caller_call_id: str, context_id: str
-        ) -> str:
-            self.async_calls.append((agent_id, task, correlation_id, caller_call_id, context_id))
-            return f"async:{task}"
-
-    handler = Handler()
-    fabric = LocalGroupFabric(deterministic=True)
-    a = LocalGroupAgentComm(handler, name="acme/lab/mas/a", fabric=fabric)
-    b = LocalGroupAgentComm(handler, name="acme/lab/mas/b", fabric=fabric)
-    assert await a.asend("b", "hello", correlation_id=7, caller_call_id="call-9", context_id="ctx") == "async:hello"
-    assert handler.sync == 0
-    assert handler.async_calls == [(b.agent_id, "hello", 7, "call-9", "ctx")]
-    assert a.send("b", "sync-path") == "sync:sync-path"
-    assert handler.sync == 1
-
-
-def test_no_handler_raises_instead_of_acking() -> None:
+async def test_no_handler_raises_instead_of_acking() -> None:
     fabric = LocalGroupFabric(deterministic=True)
     a = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric, on_request=_ack)
     LocalGroupAgentComm(name="acme/lab/mas/b", fabric=fabric)
     with pytest.raises(AgentCommError, match="no handler"):
-        a.send("b", "ping")
+        await a.asend("b", "ping")
 
 
-def test_string_fabric_is_rejected_and_sessions_do_not_share_state() -> None:
+async def test_string_fabric_is_rejected_and_sessions_do_not_share_state() -> None:
     with pytest.raises(AgentCommError, match="LocalGroupFabric"):
         LocalGroupAgentComm(name="acme/lab/mas/a", fabric="default")  # type: ignore[arg-type]
     first = LocalGroupFabric(deterministic=True)
@@ -181,12 +147,12 @@ def test_string_fabric_is_rejected_and_sessions_do_not_share_state() -> None:
     second = LocalGroupFabric(deterministic=True)
     a2 = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=second, on_request=_ack)
     LocalGroupAgentComm(name="acme/lab/mas/b", fabric=second, on_request=_ack)
-    assert a2.send("b", "hi") == "ack:hi"
+    assert (await a2.asend("b", "hi")) == "ack:hi"
     assert not hasattr(LocalGroupFabric, "named")
     assert not hasattr(LocalGroupFabric, "reset")
 
 
-def test_stop_unregisters_drains_and_rejects() -> None:
+async def test_stop_unregisters_drains_and_rejects() -> None:
     fabric, (a, b) = _links(2, fabric=LocalGroupFabric(inbox_limit=8, deterministic=True))
     seen: list[str] = []
     b.subscribe(lambda msg: seen.append(str(msg["payload"])))
@@ -199,13 +165,13 @@ def test_stop_unregisters_drains_and_rejects() -> None:
     assert b.name not in fabric.nodes
     assert list(b._inbox) == []
     with pytest.raises(AgentCommError, match="no peer"):
-        a.send("b", "late")
+        await a.asend("b", "late")
     with pytest.raises(AgentCommError, match="stopped"):
-        b.send("a", "late")
+        await b.asend("a", "late")
     with pytest.raises(AgentCommError, match="stopped"):
         b.publish(channel, "late")
     LocalGroupAgentComm(name=b.name, fabric=fabric, on_request=_ack)
-    assert a.send("b", "again") == "ack:again"
+    assert (await a.asend("b", "again")) == "ack:again"
 
 
 def test_stack_starts_the_link_once() -> None:
@@ -229,7 +195,7 @@ def test_stack_starts_the_link_once() -> None:
     assert link._stops == 1
 
 
-def test_sender_comes_from_the_link() -> None:
+async def test_sender_comes_from_the_link() -> None:
     _, (a, b) = _links(2)
     seen: list[str] = []
 
@@ -239,19 +205,19 @@ def test_sender_comes_from_the_link() -> None:
 
     b._on_request = handler
     forged = SendContext(headers={"k": "v"}, sender="forged")
-    assert a.send("b", "hi", context=forged) == "ack:hi"
+    assert (await a.asend("b", "hi", context=forged)) == "ack:hi"
     assert seen == [a.agent_id]
     assert a.agent_id == "acme/lab/mas/a"
 
 
-def test_redaction_layer_can_drop_baggage() -> None:
+async def test_redaction_layer_can_drop_baggage() -> None:
     class Redact(BoundLayer):
-        def send(self, target_agent_id: str, task: str, **kwargs: Any) -> str:
+        async def asend(self, target_agent_id: str, task: str, **kwargs: Any) -> str:
             headers, context = align_send(kwargs.get("headers"), kwargs.get("context"))
             headers.pop("baggage", None)
             kwargs["headers"] = headers
             kwargs["context"] = context
-            return super().send(target_agent_id, task, **kwargs)
+            return await super().asend(target_agent_id, task, **kwargs)
 
     _, (a, b, _c) = _links(3)
     stacked = StackAgentComm(layers=[a, Redact()])
@@ -263,19 +229,19 @@ def test_redaction_layer_can_drop_baggage() -> None:
 
     b._on_request = handler
     hop = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
-    assert stacked.send(b.agent_id, "x", headers={"traceparent": hop, "baggage": "secret=1"}) == "ack:x"
+    assert (await stacked.asend(b.agent_id, "x", headers={"traceparent": hop, "baggage": "secret=1"})) == "ack:x"
     # the stack mints a child span on the same trace
     assert seen[0]["traceparent"].split("-")[1] == hop.split("-")[1]
     assert seen[0]["traceparent"].split("-")[2] != hop.split("-")[2]
     assert "baggage" not in seen[0]
 
 
-def test_authorization_does_not_ride_the_next_send() -> None:
+async def test_authorization_does_not_ride_the_next_send() -> None:
     _, (a, b, c) = _links(3)
     hopped: list[dict[str, str]] = []
 
-    def on_b(task: str, **_kw: Any) -> str:
-        return b.send("c", f"fwd:{task}")
+    async def on_b(task: str, **_kw: Any) -> str:
+        return await b.asend("c", f"fwd:{task}")
 
     def on_c(task: str, **_kw: Any) -> str:
         hopped.append(get_headers())
@@ -283,7 +249,9 @@ def test_authorization_does_not_ride_the_next_send() -> None:
 
     b._on_request = on_b
     c._on_request = on_c
-    a.send("b", "hi", headers={"authorization": "secret", "traceparent": "00-" + "a" * 32 + "-" + "b" * 16 + "-01"})
+    await a.asend(
+        "b", "hi", headers={"authorization": "secret", "traceparent": "00-" + "a" * 32 + "-" + "b" * 16 + "-01"}
+    )
     assert "authorization" not in hopped[0]
     assert "traceparent" in hopped[0]
 
@@ -298,7 +266,7 @@ def test_send_context_copy_and_pickle() -> None:
         loaded.headers["k"] = "nope"  # type: ignore[index]
 
 
-def test_headers_are_copied_per_receiver() -> None:
+async def test_headers_are_copied_per_receiver() -> None:
     _, (a, b, c) = _links(3)
     channel = a.create_channel("room", members=["a", "b", "c"], options={})
     got: list[dict[str, str]] = []
@@ -308,7 +276,7 @@ def test_headers_are_copied_per_receiver() -> None:
     assert got == [{"k": "v"}, {"k": "v"}]
     seen: list[dict[str, str]] = []
     b._on_request = lambda task, **_kw: seen.append(get_headers()) or f"ack:{task}"
-    assert a.send("b", "t", headers={"k": "turn"}) == "ack:t"
+    assert (await a.asend("b", "t", headers={"k": "turn"})) == "ack:t"
     assert seen == [{"k": "turn"}]
     assert get_headers() == {}
 
@@ -327,7 +295,7 @@ def test_capabilities_are_honest() -> None:
     assert caps["persistent_groups"] is False
 
 
-def test_anycast_is_sticky_and_seedable() -> None:
+async def test_anycast_is_sticky_and_seedable() -> None:
     def on_request(task: str, **kw: Any) -> str:
         return str(kw["agent_id"])
 
@@ -335,26 +303,26 @@ def test_anycast_is_sticky_and_seedable() -> None:
     LocalGroupAgentComm(name="acme/lab/worker/i1", fabric=fabric, on_request=on_request)
     LocalGroupAgentComm(name="acme/lab/worker/i2", fabric=fabric, on_request=on_request)
     chooser = LocalGroupAgentComm(name="acme/lab/client/c", fabric=fabric, on_request=_ack)
-    seen = {chooser.send("acme/lab/worker", "who") for _ in range(8)}
+    seen = {(await chooser.asend("acme/lab/worker", "who")) for _ in range(8)}
     assert len(seen) == 1
     fabric_b = LocalGroupFabric(seed=7, deterministic=True)
     LocalGroupAgentComm(name="acme/lab/worker/i1", fabric=fabric_b, on_request=on_request)
     LocalGroupAgentComm(name="acme/lab/worker/i2", fabric=fabric_b, on_request=on_request)
     chooser_b = LocalGroupAgentComm(name="acme/lab/client/c", fabric=fabric_b, on_request=_ack)
-    assert chooser_b.send("acme/lab/worker", "who") == next(iter(seen))
+    assert (await chooser_b.asend("acme/lab/worker", "who")) == next(iter(seen))
 
 
-def test_namespace_isolation() -> None:
+async def test_namespace_isolation() -> None:
     fabric = LocalGroupFabric(seed=1, deterministic=True)
     a = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric, on_request=_ack)
     LocalGroupAgentComm(name="acme/lab/mas/b", fabric=fabric, on_request=_ack)
     other = LocalGroupAgentComm(name="other/lab/mas/a", fabric=fabric, on_request=_ack)
     LocalGroupAgentComm(name="other/lab/mas/b", fabric=fabric, on_request=_ack)
-    assert a.send("b", "ping") == "ack:ping"
+    assert (await a.asend("b", "ping")) == "ack:ping"
     with pytest.raises(AgentCommError, match="isolat"):
-        a.send("other/lab/mas/b", "ping")
+        await a.asend("other/lab/mas/b", "ping")
     with pytest.raises(AgentCommError, match="isolat"):
-        other.send("acme/lab/mas/b", "ping")
+        await other.asend("acme/lab/mas/b", "ping")
     channel = a.create_channel("room", members=["a", "b"], options={})
     with pytest.raises(AgentCommError):
         other.publish(channel, "nope")
@@ -516,7 +484,7 @@ async def test_asyncio_stress_and_asend_parity() -> None:
     a, *peers = links
     replies = await asyncio.gather(*[a.asend(peer.instance, "ping") for peer in peers])
     assert replies == ["ack:ping"] * 11
-    assert await a.asend("b", "z") == a.send("b", "z")
+    assert await a.asend("b", "z") == (await a.asend("b", "z"))
 
 
 def test_drop_oldest_closed_channel_and_name_errors() -> None:
@@ -556,14 +524,14 @@ def test_name_rejects_empty_parts_and_illegal_characters() -> None:
         namespace_of(("only",))
 
 
-def test_headers_reject_newline_and_oversize() -> None:
+async def test_headers_reject_newline_and_oversize() -> None:
     _, (a, _b) = _links(2)
     with pytest.raises(AgentCommError, match="control"):
-        a.send("b", "t", headers={"k": "v\n"})
+        await a.asend("b", "t", headers={"k": "v\n"})
     with pytest.raises(AgentCommError, match="too many"):
-        a.send("b", "t", headers={f"h{i}": "v" for i in range(MAX_HEADER_COUNT + 1)})
+        await a.asend("b", "t", headers={f"h{i}": "v" for i in range(MAX_HEADER_COUNT + 1)})
     with pytest.raises(AgentCommError, match="too long"):
-        a.send("b", "t", headers={"k": "x" * (MAX_HEADER_VALUE + 1)})
+        await a.asend("b", "t", headers={"k": "x" * (MAX_HEADER_VALUE + 1)})
     with pytest.raises(AgentCommError, match="mapping"):
         validate_headers(["not", "a", "mapping"])  # type: ignore[arg-type]
     with pytest.raises(AgentCommError, match="must be strings"):
@@ -585,12 +553,12 @@ def test_channel_history_is_bounded() -> None:
     assert fabric_drop.channels[f"{c.namespace}/{room}"].history[-1]["payload"] == _labelled(c, "newer")
 
 
-def test_ambiguous_names_existing_channel_and_private_fabric() -> None:
+async def test_ambiguous_names_existing_channel_and_private_fabric() -> None:
     fabric = LocalGroupFabric(deterministic=True)
     a = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric, on_request=_ack)
     LocalGroupAgentComm(name="acme/lab/other/a", fabric=fabric, on_request=_ack)
     with pytest.raises(AgentCommError, match="ambiguous"):
-        a.send("a", "x")
+        await a.asend("a", "x")
     channel = a.create_channel("room", members=["acme/lab/mas/a"], options={})
     assert a.create_channel("room", members=["a"], options={}) == "room"
     with pytest.raises(AgentCommError, match="no peer"):
@@ -599,10 +567,10 @@ def test_ambiguous_names_existing_channel_and_private_fabric() -> None:
     with pytest.raises(AgentCommError, match="unsupported"):
         a.invite(channel, "acme/lab")
     with pytest.raises(AgentCommError, match="no peer"):
-        a.send("acme/lab/missing", "who")
+        await a.asend("acme/lab/missing", "who")
     solo = LocalGroupAgentComm(name="acme/lab/empty/x", on_request=_ack)
     with pytest.raises(AgentCommError, match="no peer"):
-        solo.send("a", "x")
+        await solo.asend("a", "x")
     a.close_channel("room")
     assert a.create_channel("room", members=["acme/lab/mas/a"], options={}) == "room"
 
@@ -647,45 +615,45 @@ def fabric_history(link: LocalGroupAgentComm, key: str) -> list[dict[str, Any]]:
     return link.fabric.channels[key].history
 
 
-def test_none_task_is_an_agent_comm_error() -> None:
+async def test_none_task_is_an_agent_comm_error() -> None:
     _, (a, _b) = _links(2)
     with pytest.raises(AgentCommError, match="string"):
-        a.send("b", None)  # type: ignore[arg-type]
+        await a.asend("b", None)  # type: ignore[arg-type]
 
 
-def test_missing_peer_and_anycast_isolation() -> None:
+async def test_missing_peer_and_anycast_isolation() -> None:
     fabric = LocalGroupFabric(seed=1, deterministic=True)
     a = LocalGroupAgentComm(name="acme/lab/mas/a", fabric=fabric, on_request=_ack)
     LocalGroupAgentComm(name="other/lab/worker/i1", fabric=fabric, on_request=_ack)
     with pytest.raises(AgentCommError, match="isolat"):
-        a.send("other/lab/worker", "who")
+        await a.asend("other/lab/worker", "who")
     with pytest.raises(AgentCommError, match="isolat"):
-        a.send("other/lab/mas/b", "x")
+        await a.asend("other/lab/mas/b", "x")
     with pytest.raises(AgentCommError, match="isolat"):
         a.invite(a.create_channel("room", members=["a"], options={}), "other/lab/mas/x")
     with pytest.raises(AgentCommError, match="unsupported name"):
-        a.send("acme/lab", "x")
+        await a.asend("acme/lab", "x")
     ghost = a.create_channel("ghost", members=["a", "nobody"], options={})
     a.publish(ghost, "skip-missing")
 
 
-def test_local_agent_comm_stays_the_session_bus() -> None:
-    def run_turn(target: str, task: str, *_args: object) -> str:
+async def test_local_agent_comm_stays_the_session_bus() -> None:
+    async def run_turn(target: str, task: str, *_args: object) -> str:
         del target
         return f"bus:{task}"
 
     local = LocalAgentComm(run_turn)
-    assert local.send("peer", "x") == "bus:x"
+    assert (await local.asend("peer", "x")) == "bus:x"
     assert not hasattr(local, "create_channel")
     assert not hasattr(local, "publish")
 
 
-def test_a_local_group_stack_runs_the_turn_with_the_short_id() -> None:
+async def test_a_local_group_stack_runs_the_turn_with_the_short_id() -> None:
     from mas.library.standard.lib.stack import StackHandle
 
     seen: list[str] = []
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
         seen.append(agent_id)
         return f"ok:{agent_id}:{task}"
 
@@ -693,7 +661,7 @@ def test_a_local_group_stack_runs_the_turn_with_the_short_id() -> None:
     stack.link("moderator")
     stack.link("schedule_agent")
     try:
-        result = stack.link("moderator").send("schedule_agent", "quote")
+        result = await stack.link("moderator").asend("schedule_agent", "quote")
         assert result == "ok:schedule_agent:quote"
         assert seen == ["schedule_agent"]
     finally:

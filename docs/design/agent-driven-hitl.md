@@ -66,7 +66,7 @@ A host that talks to the user (a UI, a chat bridge, a control client) uses the r
 - `clear_session(session_id)`.
 - `subscribe_user_update` and `get_pending_user_updates_for_session`: the `inform_user` channel.
 
-The delegation contract is unchanged. A delegate still returns text. In multi-agent runs, `mas_session.send()` also records agents that ended a turn with a pending registry request in `state["pending_hitl_agents"]`.
+The delegation contract is unchanged. A delegate still returns text. In multi-agent runs, the session turn (`make_workflow_send`) also records agents that ended a turn with a pending registry request in `state["pending_hitl_agents"]`.
 
 ## Not implemented
 

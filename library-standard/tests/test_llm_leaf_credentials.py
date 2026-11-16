@@ -48,7 +48,7 @@ def _serve(label: str) -> ThreadingHTTPServer:
     return httpd
 
 
-def test_leaf_call_uses_that_leaf_api_key(monkeypatch) -> None:
+async def test_leaf_call_uses_that_leaf_api_key(monkeypatch) -> None:
     arm_http = _serve("from-arm")
     judge_http = _serve("from-judge")
     try:
@@ -73,7 +73,7 @@ def test_leaf_call_uses_that_leaf_api_key(monkeypatch) -> None:
                 },
             },
         )
-        out = provider.chat_completion(
+        out = await provider.achat_completion(
             model="m-b",
             messages=[{"role": "user", "content": "hi"}],
         )

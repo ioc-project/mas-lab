@@ -86,11 +86,11 @@ def test_system_plugin_tools_are_listed_before_application_tools(tmp_path: Path)
     assert names.index("inform_user") < names.index("calc_clone")
 
 
-def test_user_tool_named_send_runs_when_send_plugin_is_loaded(tmp_path: Path) -> None:
+async def test_user_tool_named_send_runs_when_send_plugin_is_loaded(tmp_path: Path) -> None:
     """``send`` is not an advertised tool name; a user tool with that name is not hijacked."""
     from types import SimpleNamespace
 
-    from mas.runtime.engine.tool_dispatch import execute_engine_tool
+    from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
     from mas.runtime.system_plugins.dispatch import SystemPluginDispatcher
 
     _write_named_tool(tmp_path, module="send_clone", class_name="SendClone", tool_name="send", result="user-send")
@@ -104,7 +104,7 @@ def test_user_tool_named_send_runs_when_send_plugin_is_loaded(tmp_path: Path) ->
     local = provider._local_provider()
     bound = local.system_plugins
     engine = SimpleNamespace(engine_tool_contracts=(SystemPluginDispatcher(bound),))
-    result = execute_engine_tool(
+    result = await aexecute_engine_tool(
         "send",
         arguments={},
         engine_contracts=engine.engine_tool_contracts,
@@ -113,11 +113,11 @@ def test_user_tool_named_send_runs_when_send_plugin_is_loaded(tmp_path: Path) ->
     assert result == "user-send"
 
 
-def test_user_tool_named_delegate_to_peer_runs_when_send_does_not_advertise_it(tmp_path: Path) -> None:
+async def test_user_tool_named_delegate_to_peer_runs_when_send_does_not_advertise_it(tmp_path: Path) -> None:
     """``send`` claims only advertised ``delegate_to_<id>`` names, not every such spelling."""
     from types import SimpleNamespace
 
-    from mas.runtime.engine.tool_dispatch import execute_engine_tool
+    from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
     from mas.runtime.system_plugins.dispatch import SystemPluginDispatcher
 
     _write_named_tool(
@@ -137,7 +137,7 @@ def test_user_tool_named_delegate_to_peer_runs_when_send_does_not_advertise_it(t
     bound = provider._local_provider().system_plugins
     assert not bound.claims("delegate_to_worker")
     engine = SimpleNamespace(engine_tool_contracts=(SystemPluginDispatcher(bound),))
-    result = execute_engine_tool(
+    result = await aexecute_engine_tool(
         "delegate_to_worker",
         arguments={"task": "go"},
         engine_contracts=engine.engine_tool_contracts,

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 from collections.abc import Iterator, Mapping
@@ -19,9 +18,10 @@ from mas.ctl.infra.identities import (
     chain_name,
     has_chain,
 )
+from mas.ctl.session.turn_guard import TurnGuard
 from mas.library.standard.lib.stack import StackHandle
-from mas.library.standard.lib.stack.handle import RunTurnFn, SessionTurn
-from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+from mas.library.standard.lib.stack.handle import RunTurnFn
+from mas.runtime.aio import settle
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
 
 logger = logging.getLogger(__name__)
@@ -47,36 +47,27 @@ class ChainHandles(Mapping[str, StackHandle]):
 
     def __init__(self, turn_wait_s: float = 120.0) -> None:
         self._handles: dict[str, StackHandle] = {}
-        self._turn_locks: dict[str, threading.RLock] = {}
+        self._turn_locks: dict[str, TurnGuard] = {}
         self._turn_locks_guard = threading.Lock()
         self.turn_wait_s = float(turn_wait_s)
 
-    def turn_lock(self, agent_id: str) -> threading.RLock:
-        """The lock every turn of ``agent_id`` in this session holds: the session turn is not reentrant.
+    def turn_lock(self, agent_id: str) -> TurnGuard:
+        """The guard every turn of ``agent_id`` in this session holds: the session turn is not reentrant.
 
-        Re-entrant on one thread, so a turn that comes back to its own agent on the same thread
-        (an in-process call) still runs as before; a turn from another thread waits up to
-        ``turn_wait_s``, then the request fails.
+        Re-entrant along one call chain, so a turn that comes back to its own agent (an in-process call)
+        still runs as before; any other turn waits up to ``turn_wait_s``, then the request fails.
         """
         with self._turn_locks_guard:
-            return self._turn_locks.setdefault(str(agent_id), threading.RLock())
+            return self._turn_locks.setdefault(str(agent_id), TurnGuard(str(agent_id), self.turn_wait_s))
 
-    def serialized(self, run_turn: RunTurnFn) -> SessionTurn:
-        """``run_turn`` that runs one turn at a time per agent; awaiting it runs the turn on a worker thread."""
+    def serialized(self, run_turn: RunTurnFn) -> RunTurnFn:
+        """``run_turn`` that runs one turn at a time per agent."""
 
-        def call(agent_id: str, *args: Any, **kwargs: Any) -> str:
-            lock = self.turn_lock(agent_id)
-            if not lock.acquire(timeout=self.turn_wait_s):
-                raise AgentCommError(f"agent {agent_id!r} did not become free in {self.turn_wait_s:.0f}s")
-            try:
-                return run_turn(agent_id, *args, **kwargs)
-            finally:
-                lock.release()
+        async def turn(agent_id: str, *args: Any, **kwargs: Any) -> str:
+            async with self.turn_lock(agent_id).ahold():
+                return await settle(run_turn(agent_id, *args, **kwargs))
 
-        async def acall(agent_id: str, *args: Any, **kwargs: Any) -> str:
-            return await asyncio.to_thread(call, agent_id, *args, **kwargs)
-
-        return SessionTurn(call, acall)
+        return turn
 
     def __getitem__(self, name: str) -> StackHandle:
         return self._handles[name]

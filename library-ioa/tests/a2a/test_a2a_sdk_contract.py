@@ -105,8 +105,8 @@ def test_importing_library_ioa_pins_a2a_telemetry_before_sdk_import() -> None:
 
 
 def test_sdk_backed_a2a_contract_is_available() -> None:
-    assert hasattr(A2AClient, "get_agent_card")
-    assert hasattr(A2AClient, "send_message")
+    assert hasattr(A2AClient, "aget_agent_card")
+    assert hasattr(A2AClient, "asend_message")
     assert hasattr(MasLabAgentExecutor, "execute")
 
     app = build_app(
@@ -133,7 +133,7 @@ def test_sdk_backed_a2a_contract_is_available() -> None:
         assert response.headers["last-modified"]
 
 
-def test_mas_a2a_cli_sends_one_message_and_closes_client(
+def test_mas_a2a_cli_sends_one_message(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -143,12 +143,9 @@ def test_mas_a2a_cli_sends_one_message_and_closes_client(
         def __init__(self, *, url: str, transport: str) -> None:
             calls.append(("init", url, transport))
 
-        def send_message(self, message: str) -> dict[str, str]:
+        async def asend_message(self, message: str) -> dict[str, str]:
             calls.append(("send", message, ""))
             return {"status": "completed", "result": "hello back"}
-
-        def close(self) -> None:
-            calls.append(("close", "", ""))
 
     monkeypatch.setattr(a2a_cli, "A2AClient", FakeA2AClient)
 
@@ -167,7 +164,6 @@ def test_mas_a2a_cli_sends_one_message_and_closes_client(
     assert calls == [
         ("init", "http://127.0.0.1:41242", "JSONRPC"),
         ("send", "hello", ""),
-        ("close", "", ""),
     ]
     assert '"result": "hello back"' in capsys.readouterr().out
 
@@ -684,12 +680,9 @@ def test_exposed_agent_can_delegate_outbound_over_a2a(transport: str | None) -> 
     try:
         assert peer_started.wait(timeout=10)
 
-        def delegate(prompt: str, **_: Any) -> dict[str, str]:
+        async def delegate(prompt: str, **_: Any) -> dict[str, str]:
             client = A2AClient(url=peer_url, transport=transport)
-            try:
-                result = client.send_message(prompt)
-            finally:
-                client.close()
+            result = await client.asend_message(prompt)
             return {"text": str(result.get("result") or "")}
 
         exposed_app = A2AExposure().build_app(

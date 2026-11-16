@@ -97,7 +97,7 @@ def test_http_inner_is_none_without_the_runtime_or_when_the_layer_will_not_load(
     assert _http_inner(binding) is None
 
 
-def test_mcp_session_uses_the_row_headers_and_the_http_transport() -> None:
+async def test_mcp_session_uses_the_row_headers_and_the_http_transport() -> None:
     spec = {
         "name": "demo",
         "protocol": "mcp",
@@ -111,21 +111,21 @@ def test_mcp_session_uses_the_row_headers_and_the_http_transport() -> None:
     with first, second:
         provider = MCPToolProvider.from_provider_spec(spec)
         try:
-            assert provider.call_tool("echo", {"q": 1})
+            assert await provider.acall_tool("echo", {"q": 1})
         finally:
             provider.close()
     assert isinstance(seen[0], httpx.AsyncClient) and seen[0].headers["authorization"] == "Bearer x"
     assert session.call_tool.await_count == 1
 
 
-def test_call_tool_refuses_a_name_not_advertised_and_an_empty_list_is_nobody() -> None:
+async def test_call_tool_refuses_a_name_not_advertised_and_an_empty_list_is_nobody() -> None:
     for tools in (["echo"], []):
         spec = {"name": "demo", "protocol": "mcp", "url": "https://mcp.example/mcp", "tools": tools}
         session = _Session()
         first, second = _provider(spec, session)
         with first, second:
             provider = MCPToolProvider.from_provider_spec(spec)
-            result = provider.call_tool("other", {"q": 1})
+            result = await provider.acall_tool("other", {"q": 1})
             provider.close()
         assert session.call_tool.await_count == 0
         assert result["is_error"] and "other" in result["content"]

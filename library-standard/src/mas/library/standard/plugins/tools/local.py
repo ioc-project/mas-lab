@@ -27,7 +27,8 @@ from mas.library.standard.plugins.tools.containment import (
 )
 from mas.runtime.contracts.tool_contract import ToolContract, overlay_tool_advertise
 from mas.runtime.contracts.user_communication_contract import HITLContract, UserIOContract
-from mas.runtime.engine.tool_workers import arun_sync_tool, ctx_for_tool, run_awaitable
+from mas.runtime.driver.sync_bridge import SyncBridge
+from mas.runtime.engine.tool_workers import arun_sync_tool, ctx_for_tool
 from mas.runtime.manifest.schema import ToolDocument
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
 from mas.runtime.system_plugins import (
@@ -105,11 +106,6 @@ def _is_async(fn: Any) -> bool:
     return inspect.iscoroutinefunction(inspect.unwrap(fn))
 
 
-def _finished(result: Any) -> Any:
-    """The value of a tool call: an ``async def`` tool is run to completion on the sync path."""
-    return run_awaitable(result) if inspect.isawaitable(result) else result
-
-
 class LocalToolProvider:
     """In-process Python tools loaded from ``spec.tools``.
 
@@ -139,6 +135,7 @@ class LocalToolProvider:
         self._tool_instances: list[Any] = []
         self._tool_contracts: dict[str, dict[str, Any]] = {}
         self.system_plugins: BoundSystemPlugins | None = None
+        self._bridge = SyncBridge()
 
     @classmethod
     def from_provider_spec(cls, spec: dict[str, Any]) -> "LocalToolProvider":
@@ -217,8 +214,13 @@ class LocalToolProvider:
                 raise ManifestToolLoadError(f"Tool instance {instance!r} failed to describe itself: {exc}") from exc
         return result
 
-    def call_tool(
+    def call_tool(self, tool_name: str, arguments: dict[str, Any], **kwargs: Any) -> Any:
+        """A sync caller's way in: runs :meth:`acall_tool` on this provider's own loop."""
+        return self._bridge.run(self.acall_tool(tool_name, arguments, **kwargs))
+
+    def _run_owner(
         self,
+        owner: Any,
         tool_name: str,
         arguments: dict[str, Any],
         *,
@@ -226,48 +228,25 @@ class LocalToolProvider:
         user: str = "",
         **kwargs: Any,
     ) -> Any:
-        if self.system_plugins is not None and self.system_plugins.claims(tool_name, ctx):
-            return self.system_plugins.call(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
-        for instance in self._tool_instances:
-            owns = False
-            legacy_match = False
-            try:
-                specs = instance.on_collect_tools(ctx=ctx)
-                owns = any(s.get("name") == tool_name for s in (specs or []))
-            except NotImplementedError:
-                pass
-            except Exception:
-                raise
-            if not owns:
-                try:
-                    legacy_match = instance.get_name() == tool_name
-                except Exception:
-                    legacy_match = False
-            if not owns and not legacy_match:
-                continue
-            try:
-                result = _finished(
-                    instance.on_execute_tool(tool_name, arguments, ctx=ctx_for_tool(instance, ctx), user=user, **kwargs)
-                )
-                if result is not None:
-                    return result
-                if owns:
-                    return ""
-            except NotImplementedError:
-                if legacy_match:
-                    try:
-                        return _finished(instance.execute(**arguments))
-                    except NotImplementedError:
-                        continue
-                continue
-            except Exception:
-                raise
-            if legacy_match:
-                try:
-                    return _finished(instance.execute(**arguments))
-                except NotImplementedError:
-                    continue
-        raise ManifestToolLoadError(f"Tool {tool_name!r} not found in local provider")
+        """One sync tool owner, called where the deployment says (inline or in a thread)."""
+        try:
+            result = owner.on_execute_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+        except NotImplementedError:
+            result = None
+        if result is not None:
+            return result
+        try:
+            listed = any(spec.get("name") == tool_name for spec in (owner.on_collect_tools(ctx=ctx) or []))
+        except NotImplementedError:
+            listed = False
+        execute = getattr(owner, "execute", None)
+        if listed or not callable(execute):
+            return ""
+        try:
+            legacy = execute(**arguments)
+        except NotImplementedError:
+            return ""
+        return "" if legacy is None else legacy
 
     async def acall_tool(
         self,
@@ -287,13 +266,10 @@ class LocalToolProvider:
         a ``kernel_state`` tool, which gets the live ctx and runs inline.
         """
         if self.system_plugins is not None and self.system_plugins.claims(tool_name, ctx):
-            result = self.system_plugins.call(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
-            if inspect.isawaitable(result):
-                result = await result
-            return result
+            return await self.system_plugins.acall(tool_name, arguments, context=CallContext(ctx=ctx, user=user))
         owner = self._owner_of(tool_name, ctx)
         if owner is None:
-            return self.call_tool(tool_name, arguments, ctx=ctx, user=user, **kwargs)
+            raise ManifestToolLoadError(f"Tool {tool_name!r} not found in local provider")
         aexec = getattr(owner, "on_aexecute_tool", None)
         if callable(aexec):
             result = aexec(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
@@ -303,11 +279,17 @@ class LocalToolProvider:
         exec_fn = getattr(owner, "on_execute_tool", None)
         execute = getattr(owner, "execute", None)
         if callable(exec_fn) and (_is_async(exec_fn) or _is_async(execute)):
-            result = exec_fn(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
-            if inspect.isawaitable(result):
-                result = await result
+            try:
+                result = exec_fn(tool_name, arguments, ctx=ctx_for_tool(owner, ctx), user=user, **kwargs)
+                if inspect.isawaitable(result):
+                    result = await result
+            except NotImplementedError:
+                result = None
             return await self._none_result(owner, tool_name, arguments, ctx) if result is None else result
-        return await arun_sync_tool(self.call_tool, tool_name, arguments, owner=owner, ctx=ctx, user=user, **kwargs)
+        result = await arun_sync_tool(
+            self._run_owner, owner, tool_name, arguments, owner=owner, ctx=ctx, user=user, **kwargs
+        )
+        return await result if inspect.isawaitable(result) else result
 
     async def _none_result(self, owner: Any, tool_name: str, arguments: dict[str, Any], ctx: Any) -> Any:
         """What ``call_tool`` does when ``on_execute_tool`` returns ``None``, for the async path.

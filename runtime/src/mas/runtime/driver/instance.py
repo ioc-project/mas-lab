@@ -227,6 +227,15 @@ class RuntimeInstance(Lifecycle):
     def abort(self, *, reason: str = "") -> DriverTrace:
         return self.driver.feed(LifecycleAbort(reason=reason))
 
+    async def apause(self, *, reason: str = "") -> DriverTrace:
+        return await self.driver.afeed(LifecyclePause(reason=reason))
+
+    async def aresume(self) -> DriverTrace:
+        return await self.driver.afeed(LifecycleResume())
+
+    async def aabort(self, *, reason: str = "") -> DriverTrace:
+        return await self.driver.afeed(LifecycleAbort(reason=reason))
+
     def feed(self, event: IngressSymbol) -> DriverTrace:
         return self.driver.feed(event)
 

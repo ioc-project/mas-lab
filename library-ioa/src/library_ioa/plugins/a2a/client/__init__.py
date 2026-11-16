@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -10,6 +9,7 @@ from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.helpers import new_text_message
 from a2a.types import Role, SendMessageRequest
 from google.protobuf.json_format import MessageToDict
+from mas.runtime.aio import LoopCache
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class A2AClient:
         self.timeout = timeout or 10.0
         self.transport = transport
         self._agent_card_cache: dict[str, Any] | None = None
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mas-a2a")
+        self._connections = LoopCache()
 
     def _normalize_sdk_payload(self, payload: Any) -> dict[str, Any]:
         if hasattr(payload, "model_dump"):
@@ -66,6 +66,9 @@ class A2AClient:
         self._agent_card_cache = data
         return dict(data)
 
+    async def _connection(self) -> "_Connection":
+        return self._connections.get(lambda: _Connection(self))
+
     async def _sdk_send_message(
         self,
         message: str,
@@ -74,58 +77,52 @@ class A2AClient:
         metadata: dict[str, str] | None = None,
         stream: bool = False,
     ) -> dict[str, Any]:
-        async with httpx.AsyncClient(
-            headers=self.headers,
-            timeout=self.timeout,
-        ) as httpx_client:
-            resolver = A2ACardResolver(httpx_client=httpx_client, base_url=self.url)
-            card = await resolver.get_agent_card()
-            grpc_channel_factory = None
-            if self.transport == "GRPC":
-                import grpc
+        try:
+            return await self._send_once(message, context_id=context_id, metadata=metadata, stream=stream)
+        except Exception:
+            # a card or client kept from before the failure may be stale (the peer restarted, its card changed)
+            self._connections.drop()
+            raise
 
-                grpc_channel_factory = grpc.aio.insecure_channel
-            config = ClientConfig(
-                streaming=bool(stream),
-                httpx_client=httpx_client,
-                grpc_channel_factory=grpc_channel_factory,
-                supported_protocol_bindings=[self.transport] if self.transport else [],
-                use_client_preference=self.transport is not None,
+    async def _send_once(
+        self,
+        message: str,
+        *,
+        context_id: str,
+        metadata: dict[str, str] | None,
+        stream: bool,
+    ) -> dict[str, Any]:
+        client = await (await self._connection()).client(bool(stream))
+        request = SendMessageRequest(
+            message=new_text_message(
+                message,
+                context_id=context_id or None,
+                role=Role.ROLE_USER,
             )
-            client = await create_client(agent=card, client_config=config)
-            request = SendMessageRequest(
-                message=new_text_message(
-                    message,
-                    context_id=context_id or None,
-                    role=Role.ROLE_USER,
-                )
-            )
-            if metadata:
-                request.message.metadata.update(metadata)
-            chunks: list[Any] = []
-            try:
-                async for chunk in client.send_message(request):
-                    chunks.append(chunk)
-            finally:
-                await client.close()
-
+        )
+        if metadata:
+            request.message.metadata.update(metadata)
+        chunks: list[Any] = []
+        async for chunk in client.send_message(request):
+            chunks.append(chunk)
         if not chunks:
             return {"status": "completed", "result": ""}
         payload = self._normalize_sdk_payload(chunks[-1])
         payload.setdefault("status", "completed")
         return payload
 
-    def get_agent_card(self) -> dict[str, Any]:
-        async def load() -> dict[str, Any]:
-            async with httpx.AsyncClient(
-                headers=self.headers,
-                timeout=self.timeout,
-            ) as httpx_client:
-                return await self._sdk_get_agent_card(httpx_client)
+    async def aget_agent_card(self) -> dict[str, Any]:
+        """The agent card, fetched once and kept."""
+        return dict((await self._connection()).card_data or await (await self._connection()).fetch_card())
 
-        return self._run_sync(load())
+    def close(self) -> None:
+        """Close the kept connections. Safe from any thread; does not wait."""
+        self._connections.close()
 
-    def send_message(
+    async def aclose(self) -> None:
+        self.close()
+
+    async def asend_message(
         self,
         message: str,
         *,
@@ -133,19 +130,51 @@ class A2AClient:
         metadata: dict[str, str] | None = None,
         stream: bool = False,
     ) -> dict[str, Any]:
-        return self._run_sync(
-            self._sdk_send_message(
-                message,
-                context_id=context_id,
-                metadata=metadata,
-                stream=stream,
+        return await self._sdk_send_message(message, context_id=context_id, metadata=metadata, stream=stream)
+
+
+class _Connection:
+    """What one event loop keeps for one remote agent: an HTTP client, its card and the SDK client per binding."""
+
+    def __init__(self, owner: A2AClient) -> None:
+        self._owner = owner
+        self._http = httpx.AsyncClient(headers=owner.headers, timeout=owner.timeout)
+        self._card: Any = None
+        self.card_data: dict[str, Any] | None = None
+        self._clients: dict[bool, Any] = {}
+        self._lock = asyncio.Lock()
+
+    async def fetch_card(self) -> dict[str, Any]:
+        async with self._lock:
+            if self.card_data is None:
+                self.card_data = await self._owner._sdk_get_agent_card(self._http)
+            return self.card_data
+
+    async def client(self, streaming: bool) -> Any:
+        async with self._lock:
+            found = self._clients.get(streaming)
+            if found is not None:
+                return found
+            if self._card is None:
+                resolver = A2ACardResolver(httpx_client=self._http, base_url=self._owner.url)
+                self._card = await resolver.get_agent_card()
+            owner = self._owner
+            grpc_channel_factory = None
+            if owner.transport == "GRPC":
+                import grpc
+
+                grpc_channel_factory = grpc.aio.insecure_channel
+            config = ClientConfig(
+                streaming=streaming,
+                httpx_client=self._http,
+                grpc_channel_factory=grpc_channel_factory,
+                supported_protocol_bindings=[owner.transport] if owner.transport else [],
+                use_client_preference=owner.transport is not None,
             )
-        )
+            found = self._clients[streaming] = await create_client(agent=self._card, client_config=config)
+            return found
 
-    def close(self) -> None:
-        self._executor.shutdown(wait=True)
-
-    def _run_sync(self, coroutine: Any) -> Any:
-        """Run SDK I/O off the caller loop, including from an async executor."""
-        future = self._executor.submit(asyncio.run, coroutine)
-        return future.result()
+    async def aclose(self) -> None:
+        for client in self._clients.values():
+            await client.close()
+        await self._http.aclose()

@@ -40,6 +40,8 @@ def normalize_runtime_engine_spec(spec: dict[str, Any]) -> dict[str, Any]:
             out["tool_worker"] = engine["tool_worker"]
         if "tool_concurrency" in engine:
             out["tool_concurrency"] = engine["tool_concurrency"]
+        if "sync_threads" in engine:
+            out["sync_threads"] = engine["sync_threads"]
     for key in ("stream", "parallel", "cache"):
         if key in spec:
             out[key] = spec[key]
@@ -64,6 +66,8 @@ def apply_runtime_engine_to_kernel(
     if "tool_concurrency" in runtime_engine:
         raw = runtime_engine["tool_concurrency"]
         cfg = replace(cfg, tool_concurrency=None if raw is None else int(raw))
+    if "sync_threads" in runtime_engine:
+        cfg = replace(cfg, sync_threads=max(1, int(runtime_engine["sync_threads"])))
     if "parallel" in runtime_engine:
         cfg = replace(cfg, parallel_tool_calls=bool(runtime_engine["parallel"]))
     return cfg

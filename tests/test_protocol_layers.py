@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -24,32 +25,38 @@ def _chat_handler(recorded: dict):
     return handler
 
 
-def test_openai_over_http_matches_direct(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_async_transport(http: HttpCallTransport, transport: httpx.MockTransport) -> None:
+    """Give the http layer an async client on the running loop that answers from *transport*."""
+    loop = asyncio.get_running_loop()
+    http._aclients[id(loop)] = (loop, httpx.AsyncClient(transport=transport))
+
+
+async def test_openai_over_http_matches_direct(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded = {"choices": [{"message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}]}
     monkeypatch.setenv("K", "secret")
     transport = httpx.MockTransport(_chat_handler(recorded))
     direct = OpenAILLMProvider(api_base="http://127.0.0.1:9/v1", api_key_env="K")
-    direct._client = httpx.Client(transport=transport)
+    direct._aclient = httpx.AsyncClient(transport=transport)
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
     assert isinstance(http, HttpCallTransport)
-    http._client = httpx.Client(transport=transport)
+    _use_async_transport(http, transport)
     layered = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
     kwargs = {"model": "m", "messages": [{"role": "user", "content": "q"}]}
-    assert layered.chat_completion(**kwargs) == direct.chat_completion(**kwargs)
+    assert (await layered.achat_completion(**kwargs)) == (await direct.achat_completion(**kwargs))
 
 
-def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     recorded = {"choices": [{"message": {"role": "assistant", "content": "cached"}, "finish_reason": "stop"}]}
     monkeypatch.setenv("K", "secret")
     transport = httpx.MockTransport(_chat_handler(recorded))
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
-    http._client = httpx.Client(transport=transport)
+    _use_async_transport(http, transport)
     inner = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
     cache_path = tmp_path / "c.json"
     from mas.runtime.registry.llm_provider_registry import wrap_llm_provider_cache
 
     writer = wrap_llm_provider_cache(inner, cache_path=cache_path, cache_read=False, cache_write=True)
-    written = writer.chat_completion(model="m", messages=[{"role": "user", "content": "q"}])
+    written = await writer.achat_completion(model="m", messages=[{"role": "user", "content": "q"}])
     reader_http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
 
     def boom(request: httpx.Request) -> httpx.Response:
@@ -58,7 +65,7 @@ def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: pytest.
     reader_http._client = httpx.Client(transport=httpx.MockTransport(boom))
     reader_inner = OpenAILLMProvider.wrap(reader_http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
     reader = wrap_llm_provider_cache(reader_inner, cache_path=cache_path, cache_read=True, cache_write=False)
-    cached = reader.chat_completion(model="m", messages=[{"role": "user", "content": "q"}])
+    cached = await reader.achat_completion(model="m", messages=[{"role": "user", "content": "q"}])
     assert cached["content"] == written["content"]
     assert cached.get("_mas_cache_status") == "hit"
 
@@ -112,7 +119,7 @@ class _Transport:
         return False
 
 
-def test_mcp_over_http_matches_old_provider() -> None:
+async def test_mcp_over_http_matches_old_provider() -> None:
     spec = {
         "name": "demo",
         "protocol": "mcp",
@@ -136,7 +143,7 @@ def test_mcp_over_http_matches_old_provider() -> None:
         layered = MCPToolProvider(layer.wrapper, provider_name="demo", tools_claim=["echo"], inner=layer)
         try:
             assert layered.list_tools() == old.list_tools()
-            assert old.call_tool("echo", {"q": 1}) == layered.call_tool("echo", {"q": 1})
+            assert (await old.acall_tool("echo", {"q": 1})) == (await layered.acall_tool("echo", {"q": 1}))
         finally:
             old.close()
             layered.close()
@@ -145,7 +152,7 @@ def test_mcp_over_http_matches_old_provider() -> None:
     assert old.inner is not None
 
 
-def test_send_stamps_traceparent() -> None:
+async def test_send_stamps_traceparent() -> None:
     seen: list[Envelope] = []
 
     class Wire(Layer):
@@ -155,7 +162,7 @@ def test_send_stamps_traceparent() -> None:
             seen.append(envelope)
             return "ok"
 
-    Stack([Wire()]).send(Envelope(payload="hi"))
+    await Stack([Wire()]).asend(Envelope(payload="hi"))
     assert seen and "traceparent" in dict(seen[0].headers)
 
 
@@ -179,7 +186,7 @@ def test_apply_layer_http_for_llm_is_layerbase(caplog: pytest.LogCaptureFixture)
     assert "LayerBase" not in caplog.text
 
 
-def test_wrap_llm_provider_cache_is_the_cache_layer_and_keys_on_the_chat(tmp_path) -> None:
+async def test_wrap_llm_provider_cache_is_the_cache_layer_and_keys_on_the_chat(tmp_path) -> None:
     from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
     from mas.library.standard.plugins.llm.cache import CacheLLMProvider
     from mas.runtime.registry.llm_provider_registry import wrap_llm_provider_cache
@@ -212,10 +219,10 @@ def test_wrap_llm_provider_cache_is_the_cache_layer_and_keys_on_the_chat(tmp_pat
             break
         cur = getattr(cur, "inner", None)
     assert cache is not None
-    first = wrapped.chat_completion(model="m", messages=[{"role": "user", "content": "a"}])
-    second = wrapped.chat_completion(model="m", messages=[{"role": "user", "content": "b"}])
+    first = await wrapped.achat_completion(model="m", messages=[{"role": "user", "content": "a"}])
+    second = await wrapped.achat_completion(model="m", messages=[{"role": "user", "content": "b"}])
     assert inner.calls == ["a", "b"]
-    replay = wrapped.chat_completion(model="m", messages=[{"role": "user", "content": "a"}])
+    replay = await wrapped.achat_completion(model="m", messages=[{"role": "user", "content": "a"}])
     assert inner.calls == ["a", "b"]
     assert first["content"] == "a"
     assert second["content"] == "b"
@@ -245,7 +252,7 @@ def test_openai_from_infra_does_not_leave_a_second_live_http_inner(monkeypatch: 
     assert provider.inner is created[0]
 
 
-def test_mcp_call_tool_refuses_a_name_not_in_tools() -> None:
+async def test_mcp_call_tool_refuses_a_name_not_in_tools() -> None:
     spec = {"name": "demo", "protocol": "mcp", "url": "http://127.0.0.1:9/mcp", "tools": ["echo"]}
     session = _Session()
     with (
@@ -255,14 +262,14 @@ def test_mcp_call_tool_refuses_a_name_not_in_tools() -> None:
         provider = MCPToolProvider.from_provider_spec(spec)
         names = [row["name"] for row in provider.list_tools()]
         assert names == ["echo"]
-        result = provider.call_tool("other", {"q": 1})
+        result = await provider.acall_tool("other", {"q": 1})
     assert session.call_tool.await_count == 0
     text = result if isinstance(result, str) else str(result)
     assert "echo" in names
     assert "other" in text.lower() or "not" in text.lower() or "unclaim" in text.lower()
 
 
-def test_mcp_empty_tools_list_is_nobody() -> None:
+async def test_mcp_empty_tools_list_is_nobody() -> None:
     spec = {"name": "demo", "protocol": "mcp", "url": "http://127.0.0.1:9/mcp", "tools": []}
     session = _Session()
     with (
@@ -271,7 +278,7 @@ def test_mcp_empty_tools_list_is_nobody() -> None:
     ):
         provider = MCPToolProvider.from_provider_spec(spec)
         assert provider.list_tools() == []
-        result = provider.call_tool("echo", {"q": 1})
+        result = await provider.acall_tool("echo", {"q": 1})
     assert session.call_tool.await_count == 0
     text = result if isinstance(result, str) else str(result)
     assert text
@@ -421,14 +428,14 @@ def test_a_replayed_json_answer_is_not_taken_for_a_completion() -> None:
         _completion_from_cached_text("plain text")
 
 
-def test_provider_exchange_preview_is_the_chat_cache_key() -> None:
+async def test_provider_exchange_preview_is_the_chat_cache_key() -> None:
     from mas.runtime.engine.infra_pipeline import _PROVIDER_CALL, _ProviderCallEngine
     from mas.runtime.engine.llm_cache import completion_cache_params, llm_cache_key
 
     payload = {"model": "m", "messages": [{"role": "user", "content": "q"}], "temperature": 0.2, "max_tokens": 5}
     token = _PROVIDER_CALL.set(payload)
     try:
-        key = _ProviderCallEngine(inner=object()).exchange_preview("LLM_CALL")
+        key = await _ProviderCallEngine(inner=object()).aexchange_preview("LLM_CALL")
     finally:
         _PROVIDER_CALL.reset(token)
     expected = llm_cache_key(

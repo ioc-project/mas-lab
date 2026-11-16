@@ -20,7 +20,7 @@ class _CountingInner:
     calls: int = 0
     error: Exception | None = field(default=None, repr=False)
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self.calls += 1
         if self.calls <= self.fail_times:
             raise self.error or ClassifiedFailure(
@@ -30,14 +30,11 @@ class _CountingInner:
             )
         return EngineIoReturn(correlation_id=io.correlation_id, response_kind="MODEL_TEXT", next_step="STOP", text="ok")
 
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
-
     def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         return f"inner:{op}"
 
 
-def test_retry_outside_breaker_makes_more_inner_calls_than_inside() -> None:
+async def test_retry_outside_breaker_makes_more_inner_calls_than_inside() -> None:
     """Retry wrapping the breaker retries probes; breaker wrapping retry counts one failure."""
     from mas.library.standard.plugins.layers.circuit_breaker import CircuitBreakerLayer
     from mas.library.standard.plugins.layers.retry import RetryLayer
@@ -53,7 +50,7 @@ def test_retry_outside_breaker_makes_more_inner_calls_than_inside() -> None:
         call_kinds=("llm",),
     )
     with pytest.raises(ClassifiedFailure):
-        stack_outside.invoke(io)
+        await stack_outside.ainvoke(io)
 
     inner_inside = _CountingInner(fail_times=10)
     stack_inside = CircuitBreakerLayer.wrap(
@@ -62,7 +59,7 @@ def test_retry_outside_breaker_makes_more_inner_calls_than_inside() -> None:
         call_kinds=("llm",),
     )
     with pytest.raises(ClassifiedFailure):
-        stack_inside.invoke(io)
+        await stack_inside.ainvoke(io)
 
     assert inner_outside.calls != inner_inside.calls
     assert inner_outside.calls == 2
@@ -180,14 +177,16 @@ def test_every_step_has_an_id_an_experiment_can_address() -> None:
     assert [step["id"] for step in default_pipeline_steps()] == ["retry-llm", "retry-tool"]
 
 
-def test_a_disabled_step_is_listed_but_does_not_wrap_and_the_default_does_not_return() -> None:
+async def test_a_disabled_step_is_listed_but_does_not_wrap_and_the_default_does_not_return() -> None:
     inner = _CountingInner(fail_times=1)
     off = [{"id": "retry-llm", "layer": "retry", "for": ["llm"], "enabled": False}]
     steps = merge_default_steps(off, "llm")
     assert [step["id"] for step in steps] == ["retry-llm"]  # no default added behind the disabled one
     with pytest.raises(ClassifiedFailure):  # one failure and nobody retries it
-        compose(inner, steps, kind="llm").invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+        await compose(inner, steps, kind="llm").ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert inner.calls == 1
     on = _CountingInner(fail_times=1)
-    compose(on, merge_default_steps([], "llm"), kind="llm").invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await compose(on, merge_default_steps([], "llm"), kind="llm").ainvoke(
+        InvokeEngineIo(correlation_id=1, op="LLM_CALL")
+    )
     assert on.calls == 2

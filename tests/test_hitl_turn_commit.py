@@ -26,7 +26,7 @@ def _tutorial_manifest() -> tuple[dict, dict]:
 
 
 @pytest.mark.timeout(60)
-def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
+async def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
     """Operator console path: run_turn pauses at HITL; submit_hitl must call note_agent_response."""
     from mas.ctl.adapters.hitl_terminal import ScriptedHitlTerminal
     from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
@@ -62,7 +62,7 @@ def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
         config=ConversationConfig(single_turn=False),
     )
 
-    pending = controller.run_turn("Who is current POTUS ?", auto_hitl=False)
+    pending = await controller.arun_turn("Who is current POTUS ?", auto_hitl=False)
     assert pending.awaiting_hitl
     # _finalize_turn folds working memory into committed history even while
     # paused at HITL (see its own docstring, and
@@ -74,7 +74,7 @@ def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
     assert any(m.get("role") == "assistant" and m.get("tool_calls") for m in early_committed)
 
     request = pending.trace.hitl_requests[-1]
-    done = controller.submit_hitl(
+    done = await controller.asubmit_hitl(
         HitlResolve(
             request_id=request.request_id,
             resolution=HitlResolveChoice.SKIP,
@@ -89,8 +89,8 @@ def test_submit_hitl_commits_tool_trajectory_for_next_turn() -> None:
     assert committed, "expected turn commit after submit_hitl"
     assert any(m.get("role") == "tool" and steer in str(m.get("content")) for m in committed)
 
-    controller.run_turn("Who is current POTUS in 2026 ?", auto_hitl=False)
-    messages = assemble_llm_messages(instance.driver.ctx, manifest=manifest)
+    await controller.arun_turn("Who is current POTUS in 2026 ?", auto_hitl=False)
+    messages = await assemble_llm_messages(instance.driver.ctx, manifest=manifest)
     roles = [m.get("role") for m in messages]
     assert roles.count("tool") >= 1
     assert any(steer in str(m.get("content")) for m in messages)

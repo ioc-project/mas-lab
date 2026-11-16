@@ -187,7 +187,7 @@ def test_deployment_only_mcp_server_is_not_a_client_provider():
     assert provider_origin(providers[0]) == "local"
 
 
-def test_local_provider_discovers_tools_from_infra_tools_dir(tmp_path: Path):
+async def test_local_provider_discovers_tools_from_infra_tools_dir(tmp_path: Path):
     repo = Path(__file__).resolve().parents[2]
     sample_tools = repo / "library-samples/tools"
     tools_dir = tmp_path / "tools"
@@ -205,10 +205,10 @@ def test_local_provider_discovers_tools_from_infra_tools_dir(tmp_path: Path):
     )
 
     assert "calc" in {tool["name"] for tool in provider.list_tools()}
-    assert provider.call_tool("calc", {"expression": "2 + 3"})["result"] == 5
+    assert (await provider.acall_tool("calc", {"expression": "2 + 3"}))["result"] == 5
 
 
-def test_star_claim_replaces_local_same_name_keeps_other_local():
+async def test_star_claim_replaces_local_same_name_keeps_other_local():
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
 
     class _Local:
@@ -244,11 +244,11 @@ def test_star_claim_replaces_local_same_name_keeps_other_local():
     tools = {t["name"]: t for t in provider.list_tools()}
     assert tools["web-search"]["description"] == "remote-web-search"
     assert tools["calc"]["description"] == "local-calc"
-    assert provider.call_tool("web-search", {}) == {"source": "remote", "name": "web-search"}
-    assert provider.call_tool("calc", {}) == {"source": "local", "name": "calc"}
+    assert (await provider.acall_tool("web-search", {})) == {"source": "remote", "name": "web-search"}
+    assert (await provider.acall_tool("calc", {})) == {"source": "local", "name": "calc"}
 
 
-def test_mcp_provider_does_not_fallback_to_local_without_local_selection():
+async def test_mcp_provider_does_not_fallback_to_local_without_local_selection():
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
     from mas.runtime.engine.tool_routing import UnclaimedToolError
 
@@ -269,10 +269,10 @@ def test_mcp_provider_does_not_fallback_to_local_without_local_selection():
     provider = ManifestToolProvider(overlay_providers=[_Remote()])
     assert [tool["name"] for tool in provider.list_tools()] == ["web-search"]
     with pytest.raises(UnclaimedToolError, match="calc"):
-        provider.call_tool("calc", {})
+        await provider.acall_tool("calc", {})
 
 
-def test_explicit_tools_list_does_not_steal_unlisted_local():
+async def test_explicit_tools_list_does_not_steal_unlisted_local():
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
 
     class _Local:
@@ -304,7 +304,7 @@ def test_explicit_tools_list_does_not_steal_unlisted_local():
     tools = {t["name"]: t for t in provider.list_tools()}
     assert tools["web-search"]["description"] == "local"
     assert tools["other-tool"]["description"] == "remote-other"
-    assert provider.call_tool("web-search", {}) == {"source": "local"}
+    assert (await provider.acall_tool("web-search", {})) == {"source": "local"}
 
 
 def test_discovery_failure_does_not_fall_back_to_local():
@@ -337,7 +337,7 @@ def test_discovery_failure_does_not_fall_back_to_local():
         provider.list_tools()
 
 
-def test_star_claim_queries_discover_before_routing():
+async def test_star_claim_queries_discover_before_routing():
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
 
     class _Local:
@@ -371,11 +371,11 @@ def test_star_claim_queries_discover_before_routing():
     ext = _Ext()
     provider = ManifestToolProvider(overlay_providers=[ext, LocalToolClaim()])
     provider._add_instance(_Local(), None)
-    assert provider.call_tool("web-search", {}) == {"source": "remote"}
+    assert (await provider.acall_tool("web-search", {})) == {"source": "remote"}
     assert ext.discover_calls >= 1
 
 
-def test_explicit_claim_does_not_query_discover_for_routing():
+async def test_explicit_claim_does_not_query_discover_for_routing():
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
 
     class _Local:
@@ -404,11 +404,11 @@ def test_explicit_claim_does_not_query_discover_for_routing():
 
     provider = ManifestToolProvider(overlay_providers=[_Ext(), LocalToolClaim()])
     provider._add_instance(_Local(), None)
-    assert provider.call_tool("web-search", {}) == {"source": "remote"}
-    assert provider.call_tool("calc", {}) == {"source": "local", "name": "calc"}
+    assert (await provider.acall_tool("web-search", {})) == {"source": "remote"}
+    assert (await provider.acall_tool("calc", {})) == {"source": "local", "name": "calc"}
 
 
-def test_registry_register_does_not_discover():
+async def test_registry_register_does_not_discover():
     class _Star:
         provider_name = "search"
         tools_claim = "*"
@@ -434,7 +434,7 @@ def test_registry_register_does_not_discover():
     assert star.discover_calls == 0
     registry.initialize()
     assert star.discover_calls == 1
-    assert registry.call_tool("web-search", {}) == {"ok": True}
+    assert (await registry.acall_tool("web-search", {})) == {"ok": True}
 
 
 def test_registry_explicit_missing_name_raises_at_init():

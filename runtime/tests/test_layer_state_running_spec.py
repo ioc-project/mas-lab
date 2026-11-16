@@ -32,7 +32,7 @@ class _Down(ToolProber):
         self.calls += 1
         raise ClassifiedFailure("down", failure_class=FailureClass.UNAVAILABLE, code="UNAVAILABLE")
 
-    def probe_tool(self, name: str, arguments: Any) -> None:
+    async def aprobe_tool(self, name: str, arguments: Any) -> None:
         self.probes.append((name, dict(arguments)))
         if not self.back:
             raise ClassifiedFailure("still down", failure_class=FailureClass.UNAVAILABLE, code="TOOL_UNAVAILABLE")
@@ -50,10 +50,10 @@ def _llm_call() -> InvokeEngineIo:
     return InvokeEngineIo(correlation_id=1, op="LLM_CALL")
 
 
-def _tool_call(layer: CircuitBreakerLayer, name: str) -> None:
+async def _tool_call(layer: CircuitBreakerLayer, name: str) -> None:
     token = IN_FLIGHT_TOOL.set(InFlightTool(owner=1, name=name, arguments={}))
     try:
-        layer.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+        await layer.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
     finally:
         IN_FLIGHT_TOOL.reset(token)
 
@@ -90,13 +90,13 @@ def test_a_stale_swap_is_refused_not_merged() -> None:
     assert manager.get(sid).spec_revision == 1  # the refused write made no revision
 
 
-def test_tripping_the_breaker_revises_the_running_spec_and_traces_it() -> None:
+async def test_tripping_the_breaker_revises_the_running_spec_and_traces_it() -> None:
     manager, sid = _manager_with_session()
     session = manager.get(sid)
     layer, body = _breaker(session.instance.driver.ctx)
     for _ in range(2):
         with pytest.raises(ClassifiedFailure):
-            layer.invoke(_llm_call())
+            await layer.ainvoke(_llm_call())
     spec = manager.spec_log.current_spec(sid)
     [(target, state)] = spec["layer_state"]["circuit_breaker"].items()
     assert target.startswith("llm:") and state["failures"] == 2 and state["opened_at"] > 0
@@ -105,11 +105,11 @@ def test_tripping_the_breaker_revises_the_running_spec_and_traces_it() -> None:
     assert [e.actor for e in events] == ["layers", "layers"] and events[-1].kind == "spec_revised"
     assert "circuit_breaker opened" in events[-1].reason
     with pytest.raises(CircuitOpenError):
-        layer.invoke(_llm_call())
+        await layer.ainvoke(_llm_call())
     assert body.calls == 2  # the open circuit did not reach the body
 
 
-def test_a_tripped_breaker_is_restored_with_the_snapshot() -> None:
+async def test_a_tripped_breaker_is_restored_with_the_snapshot() -> None:
     manager, sid = _manager_with_session()
     session = manager.get(sid)
     ctx = session.instance.driver.ctx
@@ -117,31 +117,31 @@ def test_a_tripped_breaker_is_restored_with_the_snapshot() -> None:
     layer, _ = _breaker(ctx)
     for _ in range(2):
         with pytest.raises(ClassifiedFailure):
-            layer.invoke(_llm_call())
+            await layer.ainvoke(_llm_call())
     with pytest.raises(CircuitOpenError):
-        layer.invoke(_llm_call())
+        await layer.ainvoke(_llm_call())
     session.restore_snapshot(origin)  # what-if: go back to before the failures
     assert "layer_state" not in manager.spec_log.current_spec(sid)
     fresh, body = _breaker(ctx)
     with pytest.raises(ClassifiedFailure):  # closed again: the call reaches the body
-        fresh.invoke(_llm_call())
+        await fresh.ainvoke(_llm_call())
     assert body.calls == 1
 
 
-def test_a_second_layer_instance_sees_the_state_the_first_recorded() -> None:
+async def test_a_second_layer_instance_sees_the_state_the_first_recorded() -> None:
     manager, sid = _manager_with_session()
     ctx = manager.get(sid).instance.driver.ctx
     first, _ = _breaker(ctx)
     for _ in range(2):
         with pytest.raises(ClassifiedFailure):
-            first.invoke(_llm_call())
+            await first.ainvoke(_llm_call())
     second, body = _breaker(ctx)
     with pytest.raises(CircuitOpenError):
-        second.invoke(_llm_call())
+        await second.ainvoke(_llm_call())
     assert body.calls == 0
 
 
-def test_the_session_refuses_spec_changes_while_it_checkpoints_and_the_call_goes_on() -> None:
+async def test_the_session_refuses_spec_changes_while_it_checkpoints_and_the_call_goes_on() -> None:
     manager, sid = _manager_with_session()
     session = manager.get(sid)
     handle = session.instance.driver.ctx.layer_control
@@ -151,34 +151,34 @@ def test_the_session_refuses_spec_changes_while_it_checkpoints_and_the_call_goes
     assert any(e.denied and e.method == "spec_delta" for e in manager.control_events)
     layer, body = _breaker(session.instance.driver.ctx)
     with pytest.raises(ClassifiedFailure):  # the breaker could not record, and the failure still reaches the caller
-        layer.invoke(_llm_call())
+        await layer.ainvoke(_llm_call())
     assert body.calls == 1 and session.spec_revision == 0
     session.status = SessionStatus.ACTIVE
 
 
-def test_a_down_tool_with_a_probe_leaves_the_spec_and_comes_back_when_the_probe_passes() -> None:
+async def test_a_down_tool_with_a_probe_leaves_the_spec_and_comes_back_when_the_probe_passes() -> None:
     manager, sid = _manager_with_session(_SPEC_WITH_PROBE)
     session = manager.get(sid)
     now = {"t": 1000.0}
     layer, body = _breaker(session.instance.driver.ctx, clock=lambda: now["t"], kinds=("tool",))
     for _ in range(2):
         with pytest.raises(ClassifiedFailure):
-            _tool_call(layer, "lookup")
+            await _tool_call(layer, "lookup")
     spec = manager.spec_log.current_spec(sid)
     assert "lookup" in disabled_tool_names(spec)  # the model no longer sees it
     assert spec["tools"][0]["disabled_by"] == "circuit_breaker"
-    layer.tick()  # too early: nothing to probe yet
+    await layer.atick()  # too early: nothing to probe yet
     assert body.probes == []
     now["t"] = 1031.0
-    layer.tick()  # still down: the probe fails, the circuit opens again
+    await layer.atick()  # still down: the probe fails, the circuit opens again
     assert body.probes == [("lookup", {"q": "ping"})]
     assert "lookup" in disabled_tool_names(manager.spec_log.current_spec(sid))
     now["t"] = 1040.0
-    layer.tick()  # not due again yet
+    await layer.atick()  # not due again yet
     assert len(body.probes) == 1
     body.back = True
     now["t"] = 1070.0
-    layer.tick()  # back: the circuit closes and the tool returns to the spec
+    await layer.atick()  # back: the circuit closes and the tool returns to the spec
     spec = manager.spec_log.current_spec(sid)
     assert "lookup" not in disabled_tool_names(spec) and "disabled_by" not in spec["tools"][0]
     assert "layer_state" not in spec
@@ -186,18 +186,18 @@ def test_a_down_tool_with_a_probe_leaves_the_spec_and_comes_back_when_the_probe_
     assert reasons == ["circuit_breaker opened tool:lookup", "circuit_breaker closed tool:lookup"]
 
 
-def test_a_tool_without_a_probe_stays_in_the_spec_when_its_circuit_opens() -> None:
+async def test_a_tool_without_a_probe_stays_in_the_spec_when_its_circuit_opens() -> None:
     manager, sid = _manager_with_session(_SPEC_WITH_PROBE)
     layer, _ = _breaker(manager.get(sid).instance.driver.ctx, kinds=("tool",))
     for _ in range(2):
         with pytest.raises(ClassifiedFailure):
-            _tool_call(layer, "plain")
+            await _tool_call(layer, "plain")
     assert disabled_tool_names(manager.spec_log.current_spec(sid)) == frozenset()
     with pytest.raises(CircuitOpenError):
-        _tool_call(layer, "plain")
+        await _tool_call(layer, "plain")
 
 
-def test_the_breaker_does_not_put_back_a_tool_an_operator_disabled() -> None:
+async def test_the_breaker_does_not_put_back_a_tool_an_operator_disabled() -> None:
     manager, sid = _manager_with_session(_SPEC_WITH_PROBE)
     session = manager.get(sid)
     admin = manager.control()
