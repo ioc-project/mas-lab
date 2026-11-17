@@ -109,7 +109,8 @@ multilevel_trajectory_kg_plotter = "mas.library.kg.plots:MultilevelTrajectoryKGP
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "--tb=short -q"
+# deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
+addopts = "--tb=short -q -p no:deepeval"
 
 [tool.coverage.run]
 source = ["mas/library/kg"]
