@@ -9,14 +9,23 @@ from collections.abc import Callable
 
 from mas.library.standard.lib.observability.native.tool_name import resolve_tool_name
 from mas.library.standard.lib.observability.native.transform import (
-    _SYNTHETIC_SPAN_DURATION_S,
     TransformContext,
+    _canonical_json,
     _event_kind,
     _interval_call_id,
     _resolve_call_id,
+    _state_close,
+    _state_fields,
+    _state_new_id,
+    _state_open,
+    _state_set_content,
     _with_parent,
+    register_tool_call,
 )
 from mas.runtime.schema.observability import ObsEventKind
+
+# A thinking interval's call id is its LLM call's id plus this suffix.
+THINKING_CALL_SUFFIX = "#think"
 
 
 def dispatch_boundary(record: dict, *, ctx: TransformContext) -> list[dict]:
@@ -43,7 +52,7 @@ def _llm_request_fields(payload: dict) -> dict:
     """The request an ENGINE_IO payload carries, as ``llm_call_start`` fields.
 
     ``llm_call_start`` is the request: ``model``, ``messages``, offered
-    ``tools`` (names), ``max_tokens``, ``temperature``. Unset values are left
+    ``tools`` (names), ``max_tokens``, ``temperature``, ``reasoning_effort``. Unset values are left
     out. ``llm_call_end`` never repeats them.
     """
     fields: dict = {}
@@ -51,12 +60,25 @@ def _llm_request_fields(payload: dict) -> dict:
         fields["messages"] = payload["messages"]
     if payload.get("model"):
         fields["model"] = payload["model"]
-    for name in ("max_tokens", "temperature"):
+    for name in ("max_tokens", "temperature", "reasoning_effort"):
         if payload.get(name) is not None:
             fields[name] = payload[name]
     if isinstance(payload.get("tools"), list):
         fields["tools"] = list(payload["tools"])
     return fields
+
+
+def _memory_store_fields(payload: dict, ctx: TransformContext) -> dict:
+    """The memory store a MEMORY_OP uses: ``memory_name`` / ``memory_type``.
+
+    A MEMORY_OP that names its store keeps that name. Otherwise the op is the
+    kernel memory contract (``ContractKind.MEMORY``) of the agent that issued
+    it, i.e. that agent's working memory, named ``<agent_id>.working_memory``.
+    """
+    name = str(payload.get("memory_name") or payload.get("collection") or "")
+    if name:
+        return {"memory_name": name, "memory_type": str(payload.get("memory_type") or "")}
+    return {"memory_name": f"{ctx.agent_id}.working_memory", "memory_type": "working"}
 
 
 def _boundary_engine_io(
@@ -73,31 +95,51 @@ def _boundary_engine_io(
     key = (cid, op)
     if op == "MEMORY_OP" and key not in ctx._seen_engine_ops:
         ctx._seen_engine_ops.add(key)
+        call_id = _resolve_call_id(record, ctx, cid, "MEMORY_OP")
         rec = {
             "kind": "memory_call_start",
             **base,
-            "call_id": _resolve_call_id(record, ctx, cid, "MEMORY_OP"),
+            "call_id": call_id,
             "timestamp": ts,
+            **_memory_store_fields(payload, ctx),
+            **_state_fields(_state_open(ctx, call_id)),
         }
         out.append(_with_parent(rec, record, ctx))
     if op == "LLM_CALL" and key not in ctx._seen_engine_ops:
         ctx._seen_engine_ops.add(key)
+        call_id = _resolve_call_id(record, ctx, cid, "LLM_CALL")
         rec = {
             "kind": "llm_call_start",
             **base,
-            "call_id": _resolve_call_id(record, ctx, cid, "LLM_CALL"),
+            "call_id": call_id,
             "timestamp": ts,
+            **_state_fields(_state_open(ctx, call_id)),
         }
         rec.update(_llm_request_fields(payload))
         out.append(_with_parent(rec, record, ctx))
     if op == "TOOL_CALL" and key not in ctx._seen_engine_ops:
         ctx._seen_engine_ops.add(key)
+        call_id = _resolve_call_id(record, ctx, cid, "TOOL_CALL")
+        pair = _state_open(ctx, call_id)
+        # Every tool call is registered so a delegate's user_input can find its caller.
+        register_tool_call(
+            ctx.shared,
+            call_id,
+            {
+                "agent_id": ctx.agent_id,
+                "exec_call_id": ctx.exec_call_id,
+                "state_in": pair["state_in"],
+                "state_in_content": pair["state_in_content"],
+                "state_out": pair["state_out"],
+            },
+        )
         tool_rec: dict = {
             "kind": "tool_call_start",
             **base,
-            "call_id": _resolve_call_id(record, ctx, cid, "TOOL_CALL"),
+            "call_id": call_id,
             "timestamp": ts,
             "tool_name": resolve_tool_name(payload),
+            **_state_fields(pair),
         }
         args = payload.get("tool_arguments")
         if isinstance(args, dict) and args:
@@ -105,6 +147,8 @@ def _boundary_engine_io(
         out.append(_with_parent(tool_rec, record, ctx))
     if op == "SPAWN" and key not in ctx._seen_engine_ops:
         ctx._seen_engine_ops.add(key)
+        # A spawn moves no State: a child visit under it must not wait for a tool registration.
+        register_tool_call(ctx.shared, _resolve_call_id(record, ctx, cid, "SPAWN"), None)
         spawn_rec: dict = {
             "kind": "spawn_start",
             "category": payload.get("category") or "spawn.subagent",
@@ -163,6 +207,11 @@ def _boundary_engine_io_return(
         for field in ("cache_status", "cache_layer", "cache_events"):
             if payload.get(field) is not None:
                 rec[field] = payload[field]
+        # Model text if any, else the structured tool calls of a tool-use turn.
+        llm_content = str(rec.get("output") or "")
+        if not llm_content and rec.get("tool_calls"):
+            llm_content = _canonical_json(rec["tool_calls"])
+        rec.update(_state_close(ctx, rec["call_id"], llm_content))
         out.append(_with_parent(rec, record, ctx))
     if op == "TOOL_CALL" and key not in ctx._seen_engine_returns:
         ctx._seen_engine_returns.add(key)
@@ -176,6 +225,7 @@ def _boundary_engine_io_return(
         }
         if payload.get("response_kind") == "ERROR":
             rec["status"] = "error"
+        rec.update(_state_close(ctx, rec["call_id"], str(rec["output"] or "")))
         out.append(_with_parent(rec, record, ctx))
     if op == "MEMORY_OP" and key not in ctx._seen_engine_returns:
         ctx._seen_engine_returns.add(key)
@@ -185,7 +235,9 @@ def _boundary_engine_io_return(
             "call_id": _resolve_call_id(record, ctx, cid, "MEMORY_OP"),
             "timestamp": ts,
             "output": payload.get("text", ""),
+            **_memory_store_fields(payload, ctx),
         }
+        rec.update(_state_close(ctx, rec["call_id"], str(rec["output"] or "")))
         out.append(_with_parent(rec, record, ctx))
     if op == "SPAWN" and key not in ctx._seen_engine_returns:
         ctx._seen_engine_returns.add(key)
@@ -202,6 +254,7 @@ def _boundary_engine_io_return(
             if payload.get(key_name):
                 rec[key_name] = payload[key_name]
         out.append(_with_parent(rec, record, ctx))
+    out.extend(_flush_closed_groups(ctx, ts, record))
     return out
 
 
@@ -257,52 +310,10 @@ def _boundary_envelope_activity(
             else {}
         ),
     }
-    if activity == "wait_state":
-        wait_link_id = str(payload.get("wait_link_id") or f"wait-{cid}")
-        wait_role = str(payload.get("wait_role") or ("WAIT" if boundary == "start" else "RESUME")).upper()
-        wait_note = str(payload.get("wait_note") or "")
-        wait_scope = str(payload.get("wait_scope") or "")
-        wait_call_id = (
-            _interval_call_id(
-                ctx,
-                cid,
-                f"PROCESSING_CALL:wait_state:{wait_role}:{wait_link_id}",
-            )
-            if cid
-            else ""
-        )
-        p_start = {
-            "kind": "processing_call_start",
-            **base,
-            "timestamp": ts,
-            "call_id": wait_call_id,
-            "processing_name": "wait" if wait_role == "WAIT" else "resume",
-            "processing_type": "wait_state",
-            "wait_link_id": wait_link_id,
-            "wait_role": wait_role,
-            "wait_scope": wait_scope,
-            "wait_note": wait_note,
-            **({"input": wait_note} if wait_note else {}),
-        }
-        p_end = {
-            "kind": "processing_call_end",
-            **base,
-            "timestamp": ts + _SYNTHETIC_SPAN_DURATION_S,
-            "call_id": wait_call_id,
-            "processing_name": "wait" if wait_role == "WAIT" else "resume",
-            "processing_type": "wait_state",
-            "wait_link_id": wait_link_id,
-            "wait_role": wait_role,
-            "wait_scope": wait_scope,
-            "wait_note": wait_note,
-            **({"output": wait_note} if wait_note else {}),
-            "synthetic": True,
-        }
-        return [
-            _with_parent(p_start, record, ctx),
-            _with_parent(rec, record, ctx),
-            _with_parent(p_end, record, ctx),
-        ]
+    if native_kind.removesuffix(f"_{boundary}") in _CHECK_ACTIVITIES:
+        return [_check_record(rec, record, ctx, activity)]
+    # wait_state and parallel_group are control markers, not processing: only
+    # their plain start/end records are emitted (no ProcessingCall companions).
     if activity != "parallel_group":
         return [_with_parent(rec, record, ctx)]
 
@@ -320,39 +331,104 @@ def _boundary_envelope_activity(
     )
 
     if boundary == "start":
-        proc_start = {
-            "kind": "processing_call_start",
-            **base,
-            "timestamp": ts,
-            "call_id": proc_call_id,
-            "processing_name": "parallel fork",
-            "processing_type": "parallel_group",
-            "group_id": group_id,
-            "tool_count": tool_count,
-            "tools": tools,
-            "input": f"fork {tool_count} parallel tool call{'s' if tool_count != 1 else ''}",
-        }
-        return [
-            _with_parent(proc_start, record, ctx),
-            _with_parent(rec, record, ctx),
-        ]
+        # Members started before the group ends read this State as their input.
+        # No ProcessingCall here: the fork moves no data.
+        ctx._state_group = {"group_in": ctx._state_current, "members": []}
+        return [_with_parent(rec, record, ctx)]
 
-    proc_end = {
-        "kind": "processing_call_end",
-        **base,
-        "timestamp": ts,
-        "call_id": proc_call_id,
-        "processing_name": "parallel aggregation",
-        "processing_type": "parallel_group",
-        "group_id": group_id,
-        "tool_count": tool_count,
-        "tools": tools,
-        "output": f"aggregate {tool_count} parallel tool result{'s' if tool_count != 1 else ''}",
+    # The group end marker comes before its members' returns. The join is real processing
+    # of the members' outputs, so it is emitted when the last member has returned.
+    group = ctx._state_group or {"members": []}
+    ctx._state_group = None
+    group.update(
+        base=base,
+        proc_call_id=proc_call_id,
+        group_id=group_id,
+        tools=tools,
+        tool_count=tool_count,
+    )
+    out = [_with_parent(rec, record, ctx)]
+    if all(m.get("closed") for m in group["members"]):
+        out.extend(_aggregate_records(ctx, group, ts, record))
+    else:
+        ctx._state_pending_groups.append(group)
+    return out
+
+
+# Checks that bracket a call (authorize before it, validate after it): ProcessingCalls.
+_CHECK_ACTIVITIES = frozenset(
+    {
+        "governance_authorize",
+        "governance_validate",
+        "obs_wrap_gov_authorize",
+        "obs_wrap_gov_validate",
     }
-    return [
-        _with_parent(rec, record, ctx),
-        _with_parent(proc_end, record, ctx),
-    ]
+)
+
+
+def _check_record(rec: dict, record: dict, ctx: TransformContext, activity: str) -> dict:
+    """A check bracket: its real parent, the call it checks, and the State it reads.
+
+    A check runs in the agent visit, before (authorize) or after (validate) the call it
+    checks, not inside that call: its parent is the visit, and the checked call is
+    ``checked_call_id``. It reads one State and lets it through unchanged: authorize the
+    State the checked call consumes (the visit's current State, or its parallel group's
+    input), validate the checked call's output State. ``state_in`` and ``state_out`` are
+    that State.
+    """
+    checked = str(record.get("parent_call_id") or "")
+    parent = ctx.exec_call_id or ctx.mas_call_id
+    if parent:
+        rec["parent_call_id"] = parent
+    if checked:
+        rec["checked_call_id"] = checked
+    pair = ctx._state_by_call.get(checked) if checked else None
+    if activity.endswith("validate") and pair is not None:
+        state = pair["state_out"]
+    elif ctx._state_group is not None:
+        state = ctx._state_group["group_in"]
+    else:
+        state = ctx._state_current
+    if state:
+        content = ctx._state_contents.get(state, "")
+        rec.update(state_in=state, state_in_content=content, state_out=state, state_out_content=content)
+    return rec
+
+
+def _aggregate_records(ctx: TransformContext, group: dict, ts: float, record: dict) -> list[dict]:
+    """The `aggregate` ProcessingCall of a parallel group: N member outputs become one State."""
+    members = group["members"]
+    join_state = _state_new_id(ctx)
+    ctx._state_current = join_state
+    member_contents = _canonical_json([m["state_out_content"] for m in members])
+    ctx._state_contents[join_state] = member_contents
+    proc_fields = {
+        "call_id": group["proc_call_id"],
+        "processing_name": "aggregate",
+        "processing_type": "parallel_group",
+        "group_id": group["group_id"],
+        "tool_count": group["tool_count"],
+        "tools": group["tools"],
+        "input": member_contents,
+        "output": member_contents,
+        "state_in": [m["state_out"] for m in members],
+        "state_in_content": member_contents,
+        "state_out": join_state,
+        "state_out_content": member_contents,
+    }
+    proc_start = {"kind": "processing_call_start", **group["base"], "timestamp": ts, **proc_fields}
+    proc_end = {"kind": "processing_call_end", **group["base"], "timestamp": ts, **proc_fields}
+    return [_with_parent(proc_start, record, ctx), _with_parent(proc_end, record, ctx)]
+
+
+def _flush_closed_groups(ctx: TransformContext, ts: float, record: dict) -> list[dict]:
+    """Emit the aggregate of every ended parallel group whose members have all returned."""
+    out: list[dict] = []
+    for group in list(ctx._state_pending_groups):
+        if all(m.get("closed") for m in group["members"]):
+            ctx._state_pending_groups.remove(group)
+            out.extend(_aggregate_records(ctx, group, ts, record))
+    return out
 
 
 def _context_assembly_operation(messages: list[dict]) -> str:
@@ -386,6 +462,46 @@ def _add_provenance_fields(event: dict, seg: dict, is_rag: bool) -> None:
         event["synthesis_rule_id"] = seg["synthesis_rule_id"]
 
 
+def _boundary_llm_thinking(
+    record: dict,
+    *,
+    ctx: TransformContext,
+    cid: int,
+    base: dict,
+    payload: dict,
+    ts: float,
+) -> list[dict]:
+    """``thinking_start`` / ``thinking_end``: the reasoning interval of one LLM call.
+
+    Emitted as the runtime reports each boundary: the start at the first
+    reasoning delta, the end at the first answer delta (or the end of the
+    stream). The timestamp is the one the runtime took when it happened
+    (``at``). The interval reads the LLM call's prompt State (``state_in`` of
+    that call) and writes its own State ``<llm_call_id>#think#0``, whose
+    content is the reasoning text (on the end record).
+    """
+    boundary = str(payload.get("boundary") or "")
+    if boundary not in ("start", "end"):
+        return []
+    llm_call_id = _resolve_call_id(record, ctx, cid, "LLM_CALL")
+    at = payload.get("at")
+    rec: dict = {
+        "kind": f"thinking_{boundary}",
+        **base,
+        "timestamp": float(at) if isinstance(at, (int, float)) else ts,
+        "call_id": f"{llm_call_id}{THINKING_CALL_SUFFIX}",
+        "parent_call_id": llm_call_id,
+    }
+    pair = ctx._state_by_call.get(llm_call_id)
+    if pair is not None:
+        rec["state_in"] = pair["state_in"]
+        rec["state_in_content"] = pair["state_in_content"]
+    rec["state_out"] = f"{llm_call_id}{THINKING_CALL_SUFFIX}#0"
+    if boundary == "end":
+        rec["state_out_content"] = str(payload.get("text") or "")
+    return [rec]
+
+
 def _boundary_context_assembled(
     record: dict,
     *,
@@ -413,12 +529,21 @@ def _boundary_context_assembled(
     }
     if _archive_view_id:
         _proc_common["archive_view_id"] = _archive_view_id
-    _proc_start = {"kind": "processing_call_start", "timestamp": ts, **_proc_common}
+    _asm_content = _canonical_json(_asm_msgs)
+    _proc_pair = _state_open(ctx, _proc_call_id)
+    _state_set_content(ctx, _proc_pair, _asm_content)
+    _proc_start = {
+        "kind": "processing_call_start",
+        "timestamp": ts,
+        **_proc_common,
+        **_state_fields(_proc_pair, _asm_content if _asm_msgs else None),
+    }
     _proc_end = {
         "kind": "processing_call_end",
-        "timestamp": ts + _SYNTHETIC_SPAN_DURATION_S,
-        "synthetic": True,
+        # The runtime reports context assembly at one instant: zero duration.
+        "timestamp": ts,
         **_proc_common,
+        **_state_fields(_proc_pair, _asm_content),
     }
 
     _ca: dict = {
@@ -457,6 +582,8 @@ def _boundary_context_assembled(
             "agent_id": agent_id,
             "timestamp": ts,
             "llm_call_id": llm_call_id,
+            # The part is contributed to the prompt of this LLM call: its owner.
+            **({"parent_call_id": llm_call_id} if llm_call_id else {}),
             "part_id": seg.get("part_id", ""),
             "source": seg.get("source", ""),
             "section_id": seg.get("section_id", ""),
@@ -468,38 +595,8 @@ def _boundary_context_assembled(
             "role": seg.get("role", ""),
         }
         _add_provenance_fields(cpc_event, seg, is_rag)
-        out.append(cpc_event)
+        out.append(cpc_event if llm_call_id else _with_parent(cpc_event, record, ctx))
 
-        # Emit RAG query events if mechanism is RAG
-        if is_rag:
-            rag_call_id = f"rag-{cid}-{seg.get('part_id', '')[:8]}"
-            out.extend(
-                [
-                    _with_parent(
-                        {
-                            "kind": "rag_query_start",
-                            **base,
-                            "timestamp": ts,
-                            "call_id": rag_call_id,
-                            "query": seg.get("content_preview", ""),
-                        },
-                        record,
-                        ctx,
-                    ),
-                    _with_parent(
-                        {
-                            "kind": "rag_query_end",
-                            **base,
-                            "timestamp": ts + _SYNTHETIC_SPAN_DURATION_S,
-                            "call_id": rag_call_id,
-                            "results_count": 1,
-                            "synthetic": True,
-                        },
-                        record,
-                        ctx,
-                    ),
-                ]
-            )
     return out
 
 
@@ -554,11 +651,11 @@ def _boundary_context_mutation(
             {
                 "kind": "state_update_end",
                 **base,
-                "timestamp": ts + _SYNTHETIC_SPAN_DURATION_S,
+                # A working-memory mutation is reported at one instant: zero duration.
+                "timestamp": ts,
                 "call_id": state_call_id,
                 "update_type": action,
                 "content_preview": payload.get("content_preview", ""),
-                "synthetic": True,
             },
             record,
             ctx,
@@ -575,14 +672,13 @@ def _boundary_client_response(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    return [
-        {
-            "kind": "client_response",
-            **base,
-            "timestamp": ts,
-            "finish_reason": payload.get("finish_reason", "stop"),
-        }
-    ]
+    rec = {
+        "kind": "client_response",
+        **base,
+        "timestamp": ts,
+        "finish_reason": payload.get("finish_reason", "stop"),
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_hitl_request(
@@ -594,15 +690,14 @@ def _boundary_hitl_request(
     payload: dict,
     ts: float,
 ) -> list[dict]:
-    return [
-        {
-            "kind": "hitl_gate",
-            **base,
-            "timestamp": ts,
-            "question": payload.get("question", ""),
-            "policy_name": payload.get("policy_name", ""),
-        }
-    ]
+    rec = {
+        "kind": "hitl_gate",
+        **base,
+        "timestamp": ts,
+        "question": payload.get("question", ""),
+        "policy_name": payload.get("policy_name", ""),
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_hitl_resolve(
@@ -616,17 +711,16 @@ def _boundary_hitl_resolve(
 ) -> list[dict]:
     """The human's actual answer to a HITL gate — without this, only the
     question (hitl_gate) reaches the trace; what was decided is lost."""
-    return [
-        {
-            "kind": "hitl_resolve",
-            **base,
-            "timestamp": ts,
-            "resolution": payload.get("resolution", ""),
-            "answer": payload.get("answer"),
-            "operator_id": payload.get("operator_id") or record.get("actor_id") or "",
-            "steering": payload.get("steering") or "",
-        }
-    ]
+    rec = {
+        "kind": "hitl_resolve",
+        **base,
+        "timestamp": ts,
+        "resolution": payload.get("resolution", ""),
+        "answer": payload.get("answer"),
+        "operator_id": payload.get("operator_id") or record.get("actor_id") or "",
+        "steering": payload.get("steering") or "",
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_governance_decision(
@@ -644,18 +738,17 @@ def _boundary_governance_decision(
     reason arrive only on the "after" checkpoint (see GovEnvelopeMachine)."""
     if not payload.get("decision"):
         return []
-    return [
-        {
-            "kind": "governance_decision",
-            **base,
-            "timestamp": ts,
-            "hook": payload.get("hook", ""),
-            "checkpoint": payload.get("checkpoint", ""),
-            "decision": payload.get("decision", ""),
-            "reason": payload.get("reason", ""),
-            "policy_name": payload.get("policy_name", ""),
-        }
-    ]
+    rec = {
+        "kind": "governance_decision",
+        **base,
+        "timestamp": ts,
+        "hook": payload.get("hook", ""),
+        "checkpoint": payload.get("checkpoint", ""),
+        "decision": payload.get("decision", ""),
+        "reason": payload.get("reason", ""),
+        "policy_name": payload.get("policy_name", ""),
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_error(
@@ -670,15 +763,19 @@ def _boundary_error(
     """A boundary error the kernel raised (e.g. retry budget exhausted — the
     circuit-breaker signal). Previously dropped entirely from the native trace."""
     return [
-        {
-            "kind": "boundary_error",
-            **base,
-            "timestamp": ts,
-            "code": payload.get("code", ""),
-            "recoverable": payload.get("recoverable", True),
-            "message": payload.get("message", ""),
-            "parent_call_id": payload.get("parent_call_id"),
-        }
+        _with_parent(
+            {
+                "kind": "boundary_error",
+                **base,
+                "timestamp": ts,
+                "code": payload.get("code", ""),
+                "recoverable": payload.get("recoverable", True),
+                "message": payload.get("message", ""),
+                **({"parent_call_id": payload["parent_call_id"]} if payload.get("parent_call_id") else {}),
+            },
+            record,
+            ctx,
+        )
     ]
 
 
@@ -692,14 +789,13 @@ def _boundary_context_steer(
     ts: float,
 ) -> list[dict]:
     """Operator mid-run steering request (interactive sessions only)."""
-    return [
-        {
-            "kind": "context_steer",
-            **base,
-            "timestamp": ts,
-            "collect_id": payload.get("collect_id", ""),
-        }
-    ]
+    rec = {
+        "kind": "context_steer",
+        **base,
+        "timestamp": ts,
+        "collect_id": payload.get("collect_id", ""),
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_egress_misc(
@@ -714,14 +810,13 @@ def _boundary_egress_misc(
     """Catch-all for egress kernel symbols with no dedicated native kind
     (e.g. NoOp). Kept for completeness — no _KIND_BASE_TO_TYPE mapping, so it
     never appears as a call-lane bar."""
-    return [
-        {
-            "kind": "boundary_egress",
-            **base,
-            "timestamp": ts,
-            "egress_kind": payload.get("egress_kind", ""),
-        }
-    ]
+    rec = {
+        "kind": "boundary_egress",
+        **base,
+        "timestamp": ts,
+        "egress_kind": payload.get("egress_kind", ""),
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_ingress_misc(
@@ -736,14 +831,13 @@ def _boundary_ingress_misc(
     """Catch-all for ingress kernel symbols with no dedicated native kind.
     Kept for completeness — no _KIND_BASE_TO_TYPE mapping, so it never appears
     as a call-lane bar."""
-    return [
-        {
-            "kind": "boundary_ingress",
-            **base,
-            "timestamp": ts,
-            "ingress_kind": payload.get("ingress_kind", ""),
-        }
-    ]
+    rec = {
+        "kind": "boundary_ingress",
+        **base,
+        "timestamp": ts,
+        "ingress_kind": payload.get("ingress_kind", ""),
+    }
+    return [_with_parent(rec, record, ctx)]
 
 
 def _boundary_control(
@@ -797,6 +891,7 @@ _BOUNDARY_KIND_HANDLERS: dict[str, _BoundaryHandler] = {
     ObsEventKind.ENGINE_IO_RETURN.value: _boundary_engine_io_return,
     ObsEventKind.ENVELOPE_ACTIVITY.value: _boundary_envelope_activity,
     ObsEventKind.CONTEXT_ASSEMBLED.value: _boundary_context_assembled,
+    ObsEventKind.LLM_THINKING.value: _boundary_llm_thinking,
     ObsEventKind.CACHE_LOOKUP.value: _boundary_cache_lookup,
     ObsEventKind.CONTEXT_MUTATION.value: _boundary_context_mutation,
     ObsEventKind.CLIENT_RESPONSE.value: _boundary_client_response,

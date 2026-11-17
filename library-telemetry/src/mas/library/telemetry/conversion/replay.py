@@ -90,7 +90,6 @@ def replay_events_file(
     replay_speed: float = 0.0,
     shift_to_now: bool = False,
     new_session_id: bool = False,
-    rewrite_tool_delegation: bool = True,
     agent_llm_models: Dict[str, str] | None = None,
 ) -> int:
     """Replay ``events.jsonl`` to OTel spans via :func:`create_otel_export`."""
@@ -112,25 +111,24 @@ def replay_events_file(
     timestamp_offset_s = 0.0
     if shift_to_now:
         first = next(
-            (
-                float(event["timestamp"])
-                for event in events
-                if isinstance(event.get("timestamp"), (int, float))
-            ),
+            (float(event["timestamp"]) for event in events if isinstance(event.get("timestamp"), (int, float))),
             None,
         )
         if first is not None:
             timestamp_offset_s = time.time() - first
 
-    session_uuid = str(uuid.uuid4()) if new_session_id else next(
-        (
-            str(event.get("session_id") or "").strip()
-            for event in events
-            if str(event.get("session_id") or "").strip()
-            and str(event.get("session_id") or "").strip()
-            not in {"local", "unknown"}
-        ),
-        None,
+    session_uuid = (
+        str(uuid.uuid4())
+        if new_session_id
+        else next(
+            (
+                str(event.get("session_id") or "").strip()
+                for event in events
+                if str(event.get("session_id") or "").strip()
+                and str(event.get("session_id") or "").strip() not in {"local", "unknown"}
+            ),
+            None,
+        )
     )
 
     # Default replay keeps a path+MAS-name seed so files stay stable. A new
@@ -153,7 +151,6 @@ def replay_events_file(
         annotation_enabled=annotation_enabled,
         timestamp_offset_s=timestamp_offset_s,
         session_uuid=session_uuid,
-        rewrite_tool_delegation=rewrite_tool_delegation,
         agent_llm_models=agent_llm_models,
     )
     # Seeded IDs make replay files stable; they must not leak into session.id
@@ -219,9 +216,7 @@ def _read_events(path: Path) -> "list[Dict[str, Any]]":
     # moderator visit starts after the specialist ends.
     events.sort(
         key=lambda event: (
-            float(event["timestamp"])
-            if isinstance(event.get("timestamp"), (int, float))
-            else float("inf"),
+            float(event["timestamp"]) if isinstance(event.get("timestamp"), (int, float)) else float("inf"),
         )
     )
     return events
@@ -250,9 +245,7 @@ def _write_mapping(
     }
     sidecar = output_path.with_suffix(output_path.suffix + ".mapping.json")
     try:
-        sidecar.write_text(
-            json.dumps(record, ensure_ascii=True, indent=2), encoding="utf-8"
-        )
+        sidecar.write_text(json.dumps(record, ensure_ascii=True, indent=2), encoding="utf-8")
     except Exception:  # pragma: no cover - defensive
         logger.debug("could not write mapping sidecar: %s", sidecar, exc_info=True)
 

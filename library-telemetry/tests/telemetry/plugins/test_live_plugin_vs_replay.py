@@ -32,8 +32,6 @@ _VOLATILE_ATTRS = {
     "mas.session.id",
     "ioa_observe.agent.span_id",
     "ioa_observe.agent.trace_id",
-    "ioa_observe.handoff.source.span_ids",
-    "ioa_observe.handoff.source.trace_ids",
 }
 _VOLATILE_SPAN_KEYS = {
     "context",
@@ -160,8 +158,7 @@ def _assert_same_otel_json(live_path: Path, replay_path: Path) -> None:
 )
 @requires_otel
 def test_live_otel_plugin_json_matches_replay_pipeline(tmp_path: Path, events_path: Path, app_name: str) -> None:
-    if not events_path.is_file():
-        pytest.skip(f"sample trace not present: {events_path}")
+    assert events_path.is_file(), events_path
     events = _load_events(events_path)
     assert events, f"empty trace: {events_path}"
 

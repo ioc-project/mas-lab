@@ -224,7 +224,7 @@ Same as check 2 for edges.
 
 ### Check 4: `check_call_depth`
 
-Computes the maximum containment nesting depth by walking containment edges from the roots (nodes that no containment edge points to). Containment edges are `contains`, `hasCall`, and the ontology properties the builders emit: `hasAgentCall`, `hasLLMCall`, `hasToolCall`, `hasMASCall`, `hasProcessingCall`, `hasMemoryCall`, `hasSkillCall`, `hasRAGQuery`, `contributesTo`, `annotates` (`CONTAINMENT_EDGE_TYPES` in `mas.library.kg.core.ontology_align`). A shallow candidate suggests truncated or missing sub-calls. Passes when `candidate_depth >= reference_depth`.
+Computes the maximum containment nesting depth by walking containment edges from the roots (nodes that no containment edge points to). Containment edges are `hasAgentCall`, `hasLLMCall`, `hasToolCall`, `hasMASCall`, `hasProcessingCall`, `hasMemoryCall`, `hasSkillCall`, `hasThinkingCall`, `containsCall`, `annotates` (`CONTAINMENT_EDGE_TYPES` in `mas.library.kg.core.compare`). A shallow candidate suggests truncated or missing sub-calls. Passes when `candidate_depth >= reference_depth`.
 
 ```python
 {"name": "call_depth", "passed": False, "reference_depth": 4, "candidate_depth": 2}

@@ -17,8 +17,6 @@ not a single generic key.
 
 from __future__ import annotations
 
-import pytest
-
 from tests.conftest import requires_otel
 
 
@@ -131,7 +129,9 @@ def test_routing_annotations_avoid_the_real_routing_dispatch_convention(tmp_path
     spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
     names = {s["name"] for s in spans}
     assert not any(n.endswith(".routing") for n in names), names
-    assert "moderator.routing_annotation" in names
+    # Every CallAnnotation is ``{agent}.annotation`` (norm's suffix); the kind is an attribute.
+    annotations = [s for s in spans if s["name"] == "moderator.annotation"]
+    assert [s["attributes"]["mas.annotation.kind"] for s in annotations] == ["routing"]
 
 
 @requires_otel
@@ -242,10 +242,10 @@ def test_observe_sdk_profile_sets_genai_semconv_prompt_and_completion(
 
 @requires_otel
 def test_brownfield_output_fields_reach_scope_attributes(tmp_path):
-    """Live trip-planner traces put the answer on user_response.content and
-    tool_call_end.output -- not execution_end.output / tool_call_end.result.
-    Norm copies ioa_observe.entity.output / gen_ai.output.messages into
-    Session/Agent/LLM State; without this fold the UI shows no content."""
+    """The agent's answer is its final State (execution_end.state_in_content);
+    the tool answer is tool_call_end.output. Norm copies
+    ioa_observe.entity.output / gen_ai.output.messages into Session/Agent/LLM
+    State; without this fold the UI shows no content."""
     import json
 
     from mas.library.telemetry.conversion.replay import replay_events_file
@@ -310,6 +310,9 @@ def test_brownfield_output_fields_reach_scope_attributes(tmp_path):
                     "timestamp": 1.6,
                     "agent_id": "moderator",
                     "status": "ok",
+                    # The agent's output is its final State, not user_response.
+                    "state_in": "mod#2",
+                    "state_in_content": '{"found": true, "origin": "A"}',
                 },
             ]
         )
@@ -450,6 +453,7 @@ def test_annotation_and_provenance_gate_independently(tmp_path):
             "group_id": "g1",
             "agent_ids": ["a", "b"],
         },
+        {"kind": "parallel_group_end", "call_id": "pg1", "timestamp": 1.18, "agent_id": "planner", "group_id": "g1"},
         {
             "kind": "execution_end",
             "call_id": "a1",
@@ -477,19 +481,19 @@ def test_annotation_and_provenance_gate_independently(tmp_path):
         return [json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()]
 
     default = _names({})
-    assert not any(n.endswith(".routing_annotation") for n in default)
+    assert not any(n.endswith(".annotation") for n in default)
     assert any("parallel_group" in n for n in default)
     # annotation=True is required for CallAnnotation on observe_sdk.
     with_ann = _names({"annotation": True})
-    assert any(n.endswith(".routing_annotation") for n in with_ann)
+    assert any(n.endswith(".annotation") for n in with_ann)
     assert any("parallel_group" in n for n in with_ann)
     # annotation=False drops CallAnnotation; ParallelGroup stays on.
     no_ann = _names({"annotation": False})
-    assert not any(n.endswith(".routing_annotation") for n in no_ann)
+    assert not any(n.endswith(".annotation") for n in no_ann)
     assert any("parallel_group" in n for n in no_ann)
     # provenance=False drops trajectory events before they reach the handler.
     no_prov = _names({"provenance": False, "annotation": True})
-    assert any(n.endswith(".routing_annotation") for n in no_prov)
+    assert any(n.endswith(".annotation") for n in no_prov)
     assert not any("parallel_group" in n for n in no_prov)
 
 
@@ -536,29 +540,15 @@ def test_call_annotations_are_off_by_default(tmp_path):
     )  # default export_layers
     names = {json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()}
     assert "CallAnnotation" not in names
-    assert "planner.routing_annotation" not in names
+    assert "planner.annotation" not in names
     assert "planner.agent" in names
 
 
 @requires_otel
-def test_observe_sdk_profile_gives_call_annotations_distinguishable_names(tmp_path):
-    """Regression guard: every point-span kind (routing, context updates,
-    compaction, checkpoints, duplicate-start annotations, ...) previously
-    shared the literal span name "CallAnnotation", indistinguishable by any
-    name-suffix-dispatching consumer (confirmed against SCOPE norm's
-    GenericParser, which resolved every one of them to
-    entity_type="other"/"unknown"). Real consumers must be able to tell a
-    context update apart from a compaction apart from anything else by name
-    alone -- not by ``mas.annotation.kind`` alone, which no name-suffix
-    dispatcher reads.
-
-    Uses ``context_assembled`` (semantic layer, exported by default) rather
-    than ``governance_checked``: governance events (a) are on the
-    governance layer, off by default, and (b) already get a distinct
-    literal span name ("GovernanceEvent") upstream of ``_compat_span_name``,
-    so they never shared the "CallAnnotation" collapse this test guards
-    against in the first place.
-    """
+def test_observe_sdk_profile_names_call_annotations_by_the_annotation_suffix(tmp_path):
+    """Every CallAnnotation is ``{agent}.annotation``: norm dispatches the
+    ``*.annotation`` suffix to CallAnnotation and reads the kind from
+    ``mas.annotation.kind`` (never the literal "CallAnnotation" name)."""
     import json
 
     from mas.library.telemetry.conversion.replay import replay_events_file
@@ -602,9 +592,11 @@ def test_observe_sdk_profile_gives_call_annotations_distinguishable_names(tmp_pa
         converter_profile="observe_sdk",
         export_layers={"annotation": True},
     )
-    names = {json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()}
+    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+    names = {s["name"] for s in spans}
     assert "CallAnnotation" not in names
-    assert "planner.context_assembled" in names
+    kinds = [s["attributes"]["mas.annotation.kind"] for s in spans if s["name"] == "planner.annotation"]
+    assert kinds == ["context_assembled"]
 
 
 @requires_otel
@@ -742,9 +734,8 @@ def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
     moderator = by_name["moderator.agent"]
     schedule = by_name["schedule_agent.agent"]
     invoke = next(s for s in spans if s["name"].startswith("invoke_agent "))
-    # LangGraph (and norm) treat delegated *.agent as siblings under
-    # invoke_agent, linked by ioa_observe.agent.previous — not as children
-    # of the caller agent.
+    # A delegated *.agent is a sibling under invoke_agent, not a child of the
+    # caller agent.
     assert schedule["parent_id"] == invoke["context"]["span_id"]
     assert moderator["parent_id"] == invoke["context"]["span_id"]
     chat = by_name["moderator.chat"]
@@ -773,286 +764,6 @@ def test_observe_sdk_nests_delegate_agent_and_closes_blank_processing(tmp_path):
 
 
 @requires_otel
-def test_rewrite_tool_delegation_turns_delegate_to_into_agent_previous(tmp_path):
-    """MAS-lab encodes handoff as ``delegate_to_<id>`` tool calls. Observe-sdk
-    / LangGraph traces the same thing as ``ioa_observe.agent.previous`` on
-    the target ``*.agent`` — not as a ``*.tool``. Default rewrite is on."""
-    import json
-
-    from mas.library.telemetry.conversion.replay import replay_events_file
-
-    events = [
-        {
-            "kind": "execution_start",
-            "call_id": "mod",
-            "timestamp": 1.0,
-            "agent_id": "moderator",
-            "input": "Plan a trip",
-        },
-        {
-            "kind": "tool_call_start",
-            "call_id": "del",
-            "parent_call_id": "mod",
-            "timestamp": 1.1,
-            "agent_id": "moderator",
-            "tool_name": "delegate_to_schedule_agent",
-            "arguments": {"task": "lookup"},
-        },
-        {
-            "kind": "execution_start",
-            "call_id": "sched",
-            "parent_call_id": "del",
-            "timestamp": 1.2,
-            "agent_id": "schedule_agent",
-            "input": "lookup",
-        },
-        {
-            "kind": "tool_call_start",
-            "call_id": "lookup",
-            "parent_call_id": "sched",
-            "timestamp": 1.3,
-            "agent_id": "schedule_agent",
-            "tool_name": "lookup_schedule",
-            "arguments": {"origin": "A"},
-        },
-        {
-            "kind": "tool_call_end",
-            "call_id": "lookup",
-            "timestamp": 1.4,
-            "agent_id": "schedule_agent",
-            "output": "{}",
-        },
-        {
-            "kind": "execution_end",
-            "call_id": "sched",
-            "timestamp": 1.5,
-            "agent_id": "schedule_agent",
-            "status": "ok",
-        },
-        {
-            "kind": "tool_call_end",
-            "call_id": "del",
-            "timestamp": 1.6,
-            "agent_id": "moderator",
-            "output": "done",
-        },
-        {
-            "kind": "execution_end",
-            "call_id": "mod",
-            "timestamp": 1.7,
-            "agent_id": "moderator",
-            "status": "ok",
-        },
-    ]
-    events_path = tmp_path / "events.jsonl"
-    events_path.write_text("\n".join(json.dumps(e) for e in events) + "\n")
-    out = tmp_path / "spans.jsonl"
-    replay_events_file(events_path, out, app_name="trip-planner", converter_profile="observe_sdk")
-    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
-    names = [s["name"] for s in spans]
-    assert "delegate_to_schedule_agent.tool" not in names
-    assert "lookup_schedule.tool" in names
-    schedule = _first(spans, exact="schedule_agent.agent")
-    assert schedule["attributes"].get("ioa_observe.agent.previous") == "moderator"
-    assert schedule["attributes"].get("ioa_observe.agent.sequence")
-    assert schedule["attributes"].get("ioa_observe.handoff.source.span_ids")
-    moderator_spans = [s for s in spans if s.get("name") == "moderator.agent"]
-    assert moderator_spans
-
-    off = tmp_path / "off.jsonl"
-    replay_events_file(
-        events_path,
-        off,
-        app_name="trip-planner",
-        converter_profile="observe_sdk",
-        rewrite_tool_delegation=False,
-    )
-    off_names = {json.loads(line)["name"] for line in off.read_text().splitlines() if line.strip()}
-    assert "delegate_to_schedule_agent.tool" in off_names
-
-
-@requires_otel
-def test_agent_previous_is_caller_derived_not_hardcoded(tmp_path):
-    """``ioa_observe.agent.previous`` is the caller ``agent_id``, not a
-    hardcoded ``moderator`` string. LangGraph observe-sdk does the same
-    with the prior node identity."""
-    import json
-
-    from mas.library.telemetry.conversion.replay import replay_events_file
-
-    events = [
-        {
-            "kind": "execution_start",
-            "call_id": "orch",
-            "timestamp": 1.0,
-            "agent_id": "orchestrator",
-            "input": "go",
-        },
-        {
-            "kind": "tool_call_start",
-            "call_id": "del",
-            "parent_call_id": "orch",
-            "timestamp": 1.1,
-            "agent_id": "orchestrator",
-            "tool_name": "delegate_to_researcher",
-        },
-        {
-            "kind": "execution_start",
-            "call_id": "res",
-            "parent_call_id": "del",
-            "timestamp": 1.2,
-            "agent_id": "researcher",
-            "input": "look up",
-        },
-        {
-            "kind": "execution_end",
-            "call_id": "res",
-            "timestamp": 1.3,
-            "agent_id": "researcher",
-            "status": "ok",
-        },
-        {
-            "kind": "tool_call_end",
-            "call_id": "del",
-            "timestamp": 1.4,
-            "agent_id": "orchestrator",
-        },
-        {
-            "kind": "execution_end",
-            "call_id": "orch",
-            "timestamp": 1.5,
-            "agent_id": "orchestrator",
-            "status": "ok",
-        },
-    ]
-    events_path = tmp_path / "events.jsonl"
-    events_path.write_text("\n".join(json.dumps(e) for e in events) + "\n")
-    out = tmp_path / "spans.jsonl"
-    replay_events_file(events_path, out, app_name="lab", converter_profile="observe_sdk")
-    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
-    researcher = _first(spans, exact="researcher.agent")
-    assert researcher["attributes"].get("ioa_observe.agent.previous") == "orchestrator"
-    assert researcher["attributes"].get("ioa_observe.agent.previous") != "moderator"
-    assert "delegate_to_researcher.tool" not in {s["name"] for s in spans}
-
-
-@requires_otel
-def test_rewrite_splits_caller_agent_visit_after_delegate(tmp_path):
-    """A MAS turn that delegates must emit a second caller ``*.agent``
-    after the specialist returns (LangGraph re-enters the moderator).
-    One long caller span makes Inspect end the session on the specialist."""
-    import json
-
-    from mas.library.telemetry.conversion.replay import replay_events_file
-
-    events = [
-        {
-            "kind": "execution_start",
-            "call_id": "mod-exec",
-            "timestamp": 1.0,
-            "agent_id": "moderator",
-            "input": "plan a trip",
-        },
-        {
-            "kind": "llm_call_start",
-            "call_id": "llm1",
-            "parent_call_id": "mod-exec",
-            "timestamp": 1.1,
-            "agent_id": "moderator",
-            "messages": [{"role": "user", "content": "plan a trip"}],
-        },
-        {
-            "kind": "llm_call_end",
-            "call_id": "llm1",
-            "timestamp": 1.2,
-            "agent_id": "moderator",
-            "output": "delegate",
-        },
-        {
-            "kind": "tool_call_start",
-            "call_id": "del",
-            "parent_call_id": "mod-exec",
-            "timestamp": 1.3,
-            "agent_id": "moderator",
-            "tool_name": "delegate_to_schedule_agent",
-        },
-        {
-            "kind": "execution_start",
-            "call_id": "sched-exec",
-            "parent_call_id": "del",
-            "timestamp": 1.4,
-            "agent_id": "schedule_agent",
-            "input": "look up",
-        },
-        {
-            "kind": "llm_call_start",
-            "call_id": "llm2",
-            "parent_call_id": "mod-exec",
-            "timestamp": 1.7,
-            "agent_id": "moderator",
-            "messages": [{"role": "user", "content": "trains at 3pm"}],
-        },
-        {
-            "kind": "llm_call_end",
-            "call_id": "llm2",
-            "timestamp": 1.8,
-            "agent_id": "moderator",
-            "output": "here is your itinerary",
-        },
-        {
-            "kind": "user_response",
-            "call_id": "u1-resp",
-            "parent_call_id": "mod-exec",
-            "timestamp": 1.9,
-            "agent_id": "moderator",
-            "content": "here is your itinerary",
-        },
-        {
-            "kind": "execution_end",
-            "call_id": "mod-exec",
-            "timestamp": 2.0,
-            "agent_id": "moderator",
-        },
-        {
-            "kind": "tool_call_end",
-            "call_id": "del",
-            "timestamp": 2.1,
-            "agent_id": "moderator",
-        },
-        {
-            "kind": "execution_end",
-            "call_id": "sched-exec",
-            "timestamp": 2.2,
-            "agent_id": "schedule_agent",
-            "output": "trains at 3pm",
-        },
-    ]
-    events_path = tmp_path / "events.jsonl"
-    events_path.write_text("\n".join(json.dumps(e) for e in events) + "\n")
-    out = tmp_path / "spans.jsonl"
-    replay_events_file(events_path, out, app_name="trip-planner", converter_profile="observe_sdk")
-    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
-    moderators = [s for s in spans if s.get("name") == "moderator.agent"]
-    assert len(moderators) == 2, [s.get("name") for s in spans]
-    first, second = sorted(moderators, key=lambda s: s.get("start_time") or "")
-    assert second["attributes"].get("ioa_observe.agent.previous") == "schedule_agent"
-    chats = [s for s in spans if s.get("name") == "moderator.chat"]
-    assert len(chats) == 2
-    first_span = str(first["context"]["span_id"]).removeprefix("0x")
-    second_span = str(second["context"]["span_id"]).removeprefix("0x")
-    chat_parents = {
-        str((c.get("attributes") or {}).get("ioa_observe.agent.span_id") or "").removeprefix("0x") for c in chats
-    }
-    assert first_span in chat_parents
-    assert second_span in chat_parents
-    last_agent = max(
-        (s for s in spans if str(s.get("name") or "").endswith(".agent")),
-        key=lambda s: s.get("start_time") or "",
-    )
-    assert last_agent.get("name") == "moderator.agent"
-
-
-@requires_otel
 def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
     """Norm attaches hasLLMCall only when ``ioa_observe.agent.span_id``
     equals ``AgentCall.spanId`` exactly. Both must be the OTLP/ClickHouse
@@ -1066,17 +777,18 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
     events = (
         Path(__file__).resolve().parents[4] / "library-samples" / "apps" / "trip-planner" / "traces" / "events.jsonl"
     )
-    if not events.exists():
-        pytest.skip("trip-planner events missing")
+    assert events.exists(), events
     out = tmp_path / "spans.jsonl"
     replay_events_file(events, out, app_name="trip-planner", converter_profile="observe_sdk")
     spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
     agents = [s for s in spans if str(s.get("name", "")).endswith(".agent")]
     by_sid = {wire_span_id(s["context"]["span_id"]): s for s in agents}
     moderators = [s for s in agents if s.get("name") == "moderator.agent"]
-    assert len(moderators) == 2
-    last_agent = max(agents, key=lambda s: s.get("start_time") or "")
-    assert last_agent.get("name") == "moderator.agent"
+    # A delegating turn is one visit: delegate_to_* is a tool span, not a visit split.
+    assert len(moderators) == 1
+    # The moderator's one visit outlives the specialists it delegated to.
+    last_ending = max(agents, key=lambda s: s.get("end_time") or "")
+    assert last_ending.get("name") == "moderator.agent"
     for chat in [s for s in spans if str(s.get("name", "")).endswith(".chat")]:
         stamped = wire_span_id(chat["attributes"].get("ioa_observe.agent.span_id"))
         parent = by_sid.get(stamped)
@@ -1086,7 +798,9 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
     chats = [s for s in spans if str(s.get("name", "")).endswith(".chat")]
     assert chats
     assert all(str((s.get("attributes") or {}).get("gen_ai.request.model") or "") for s in chats)
-    assert all(
+    # A turn with no text (a bare tool-use turn in this older trace) carries no
+    # output attribute: the converter writes no placeholder for it.
+    assert any(
         (s.get("attributes") or {}).get("ioa_observe.entity.output")
         or (s.get("attributes") or {}).get("gen_ai.output.messages")
         for s in chats
@@ -1096,7 +810,7 @@ def test_observe_sdk_agent_span_id_matches_exported_span_id(tmp_path):
     assert "unknown" not in models
     assert any(
         (s.get("attributes") or {}).get("gen_ai.input.messages")
-        and "Plan a trip" in str((s.get("attributes") or {}).get("gen_ai.input.messages"))
+        and "Plan a 3-day trip" in str((s.get("attributes") or {}).get("gen_ai.input.messages"))
         for s in chats
     )
 
@@ -1127,7 +841,7 @@ def _convert_observe_sdk(events: list[dict]):
     )
     for event in events:
         conv.process_event(event)
-    conv.flush_open_spans()
+    conv.finish()
     return conv
 
 
@@ -1233,10 +947,21 @@ def _cut_off_events() -> list[dict]:
 
 
 @requires_otel
-def test_a_call_with_no_end_event_is_not_reported_as_successful(tmp_path):
-    attrs = _replay_chat_attrs(tmp_path, _cut_off_events())
-    assert attrs.get("mas.status") == "unfinished"
-    assert attrs.get("execution.success") == "false"
+def test_a_call_with_no_end_event_is_not_exported(tmp_path):
+    """An OTel SDK never exports a span that did not end: no end time or status is made up."""
+    import json
+
+    from mas.library.telemetry.conversion.replay import replay_events_file
+
+    events_path = tmp_path / "events.jsonl"
+    events_path.write_text("\n".join(json.dumps(e) for e in _cut_off_events()))
+    out = tmp_path / "spans.jsonl"
+    replay_events_file(events_path, out, app_name="test-app", converter_profile="observe_sdk")
+    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+    names = [s["name"] for s in spans]
+    assert not any(n.endswith(".chat") for n in names), names
+    assert not any(n.endswith(".agent") for n in names), names
+    assert not any(s["attributes"].get("mas.status") == "unfinished" for s in spans)
 
 
 @requires_otel
@@ -1259,28 +984,11 @@ def test_the_cap_on_the_return_replaces_the_one_on_start(tmp_path):
 
 @requires_otel
 def test_a_malformed_temperature_does_not_stop_the_conversion(tmp_path):
-    events = _cut_off_events()
+    end = {"kind": "llm_call_end", "call_id": "llm", "timestamp": 1.2, "agent_id": "planner", "output": "ok"}
+    events = [*_cut_off_events(), end]
     events[1].update(temperature="auto", max_tokens="")
     attrs = _replay_chat_attrs(tmp_path, events)
     assert "mas.llm.temperature" not in attrs
-
-
-@requires_otel
-def test_an_unfinished_span_passes_the_span_spec(tmp_path):
-    import json
-
-    from mas.library.telemetry.conversion.replay import replay_events_file
-    from mas.library.telemetry.verification import SpanValidator
-
-    events_path = tmp_path / "events.jsonl"
-    events_path.write_text("\n".join(json.dumps(e) for e in _cut_off_events()))
-    out = tmp_path / "spans.jsonl"
-    replay_events_file(events_path, out, app_name="test-app", converter_profile="observe_sdk")
-    spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
-    assert any(s["attributes"].get("mas.status") == "unfinished" for s in spans)
-
-    report = SpanValidator().validate_file(out, strictness="complete")
-    assert not [v for v in report.violations if "mas.status" in str(v)], report.violations
 
 
 @requires_otel
@@ -1289,3 +997,28 @@ def test_an_llm_call_that_ended_in_error_is_not_reported_as_successful(tmp_path)
     attrs = _replay_chat_attrs(tmp_path, [*_cut_off_events(), {**end, "status": "error"}])
     assert attrs.get("mas.status") == "error"
     assert attrs.get("execution.success") == "false"
+
+
+@requires_otel
+def test_iso_and_numeric_string_timestamps_place_a_span_like_numbers(tmp_path):
+    import json
+
+    from mas.library.telemetry.conversion.replay import replay_events_file
+
+    def spans_for(stamp):
+        events = [
+            {"kind": "execution_start", "call_id": "exec", "agent_id": "a", "timestamp": stamp(1)},
+            {"kind": "execution_end", "call_id": "exec", "agent_id": "a", "timestamp": stamp(3)},
+        ]
+        path = tmp_path / f"{id(stamp)}.jsonl"
+        path.write_text("\n".join(json.dumps(e) for e in events))
+        out = tmp_path / f"{id(stamp)}-spans.jsonl"
+        replay_events_file(path, out, app_name="t", converter_profile="observe_sdk")
+        rows = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
+        return next(r for r in rows if r["name"].endswith(".agent"))
+
+    base = 1767225600.0  # 2026-01-01T00:00:00Z
+    numeric = spans_for(lambda s: base + s)
+    iso = spans_for(lambda s: f"2026-01-01T00:00:0{s}Z")
+    assert iso["start_time"] == numeric["start_time"]
+    assert iso["end_time"] == numeric["end_time"]

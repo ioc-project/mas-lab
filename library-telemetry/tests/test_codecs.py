@@ -6,17 +6,12 @@ from __future__ import annotations
 
 import importlib.util
 
-import pytest
-
 
 def _has_codec_base() -> bool:
     try:
         return importlib.util.find_spec("mas.lab.benchmark.codecs.base") is not None
     except (ImportError, ModuleNotFoundError, ValueError):
         return False
-
-
-requires_codec_base = pytest.mark.skipif(not _has_codec_base(), reason="bench extra not installed")
 
 
 def test_core_does_not_require_codec_base():
@@ -27,7 +22,6 @@ def test_core_does_not_require_codec_base():
     assert "mas.library.telemetry.codecs" not in sys.modules or _has_codec_base()
 
 
-@requires_codec_base
 def test_codec_class_attrs():
     from mas.library.telemetry.codecs import ClickHouseSpansCodec, OtlpSpansCodec
 

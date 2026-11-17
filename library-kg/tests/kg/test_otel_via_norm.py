@@ -154,7 +154,7 @@ def test_norm_accepts_realistic_converter_output() -> None:
     assert types & {"AgentCall", "LLMCall", "ToolCall", "Session", "MASCall", "Agent", "LLM"}
 
 
-def test_build_kg_connects_agent_states_through_handoff() -> None:
+def test_build_kg_connects_agent_states_through_handoff(request) -> None:
     """Inspect's Execution Timeline path-finds Agent initial->final through
     call-level transitions. That path only exists when hasLLMCall attaches
     and capability-chain-boundary bridges are not skipped -- exercised here
@@ -162,6 +162,8 @@ def test_build_kg_connects_agent_states_through_handoff() -> None:
     single-span fixture.
     """
     pytest.importorskip("norm")
+    if request.config.getoption("--scope-next"):
+        pytest.skip("covers the released norm's handoff reconstruction")
     from norm.ioa_observe.build import build_kg
 
     if not _TRIP_PLANNER_SPANS.is_file():

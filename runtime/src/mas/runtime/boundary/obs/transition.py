@@ -71,6 +71,18 @@ class TransitionEvent:
         return out
 
 
+# Kernel records emitted while a call runs. They are owned by that call (their
+# parent) and have no call id of their own.
+ENCLOSED_KINDS = frozenset(
+    {
+        ObsEventKind.BOUNDARY_INGRESS,
+        ObsEventKind.BOUNDARY_EGRESS,
+        ObsEventKind.CLIENT_RESPONSE,
+        ObsEventKind.CONTEXT_STEER,
+    }
+)
+
+
 def _contract_id(event: ObservabilityEvent) -> str:
     mid = event.machine_id or ""
     if mid in _CONTRACT_BY_MACHINE:
@@ -123,6 +135,8 @@ def _phase(event: ObservabilityEvent) -> str:
         if boundary in ("start", "end"):
             return boundary
         return "event"
+    if event.kind == ObsEventKind.LLM_THINKING:
+        return str(payload.get("boundary") or "event")
     if event.kind == ObsEventKind.ENGINE_IO:
         return "start"
     if event.kind == ObsEventKind.ENGINE_IO_RETURN:
@@ -149,7 +163,7 @@ def boundary_event_to_transition(
     cid = event.correlation_id
     op = payload.get("op", "")
     resolved_call_id = call_id
-    if resolved_call_id is None:
+    if resolved_call_id is None and event.kind not in ENCLOSED_KINDS:
         if cid and op:
             if op == "TOOL_CALL":
                 prefix = "tool"

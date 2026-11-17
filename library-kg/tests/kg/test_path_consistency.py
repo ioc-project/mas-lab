@@ -6,15 +6,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 _ROOT = Path(__file__).resolve().parents[2]
 _EVENTS = _ROOT / "tests" / "fixtures" / "path_consistency" / "events.jsonl"
 _SPANS = _ROOT / "tests" / "fixtures" / "path_consistency" / "otel_sdk_spans.jsonl"
 
 
 def test_path_consistency_script_on_fixture() -> None:
-    pytest.importorskip("norm")
     import importlib.util
 
     script = _ROOT / "scripts" / "check_path_consistency.py"

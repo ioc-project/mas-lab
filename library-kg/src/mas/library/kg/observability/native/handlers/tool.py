@@ -1,7 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Handlers for the ``tool_call_*`` / ``network_call_*`` (ToolCall) and
-``skill_execution_*`` (SkillCall) event kinds."""
+``skill_execution_*`` (SkillCall) event kinds. A SkillCall executes the ``Skill`` its
+record names (``skill_name``).
+
+A ``delegate_to_*`` tool call is an ordinary ToolCall of the caller; the callee's visit
+is an ordinary AgentCall.
+"""
 
 from __future__ import annotations
 
@@ -12,73 +17,53 @@ if TYPE_CHECKING:
     from mas.library.kg.core.native_graph_builder import NativeGraphBuilder
 
 
-def _delegate_target(event: Dict[str, Any]) -> str:
-    from mas.runtime.boundary.delegation.handoff import handoff_target
-
-    return handoff_target(str(event.get("tool_name") or ""), event=event)
-
-
 def handle_tool_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> List[Dict[str, Any]]:
     kind = event.get("kind", "")
-    target_agent = _delegate_target(event)
-    call_id = str(event.get("call_id") or "")
-    rewrite = getattr(builder, "rewrite_tool_delegation", True)
-    rewritten_ids = getattr(builder, "_rewritten_delegate_ids", set())
-    if rewrite and (target_agent or call_id in rewritten_ids):
-        if kind.endswith("_start") and target_agent:
-            rewritten_ids.add(call_id)
-            close_visit = getattr(builder, "close_agent_visit_for_delegate", None)
-            if callable(close_visit):
-                close_visit(str(event.get("agent_id") or ""), event)
-            getattr(builder, "_delegated_agent_ids", set()).add(target_agent)
-            if hasattr(builder, "agent_ids"):
-                builder.agent_ids.add(target_agent)
-        return []
-
-    node = builder.upsert_call(event, "ToolCall")
+    node = builder.call_partial(event, "ToolCall")
     if node is None:
         return []
+    tool_name = str(event.get("tool_name") or "")
+    node["toolName"] = tool_name
 
     if kind.endswith("_start"):
-        node.setdefault("toolName", event.get("tool_name") or "")
-        node.setdefault("toolCallId", event.get("tool_call_id") or "")
-        node.setdefault(
-            "toolArguments",
-            json.dumps(
-                event.get("tool_arguments")
-                or event.get("arguments")
-                or event.get("parameters")
-                or {}
-            ),
+        node["toolCallId"] = event.get("tool_call_id") or ""
+        node["toolArguments"] = json.dumps(
+            event.get("tool_arguments") or event.get("arguments") or event.get("parameters") or {}
         )
-
-        # rewrite_tool_delegation=False: keep the ToolCall. callsAgent is a
-        # native extension and is not emitted until A2A observability lands.
     else:
-        output = event.get("output") or event.get("result") or ""
+        output = event.get("output")
+        if output in (None, ""):
+            output = event.get("result")
+        if output is None:
+            output = ""
         # A structured result is text in the graph, as JSON like the arguments (and as the
         # OTel converter writes it), not a Python repr.
         node["toolOutput"] = output if isinstance(output, str) else json.dumps(output, default=str)
 
+    builder.emit_call(event, node)
+    if tool_name:
+        tool = builder.catalog("Tool", tool_name)
+        builder.executes(node, "executesTool", tool)
+        agent_id = str(event.get("agent_id") or "")
+        if agent_id:
+            builder.add_edge("usesTool", builder.catalog("Agent", agent_id, node_id=agent_id), tool)
     return [node]
 
 
 def handle_skill_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> List[Dict[str, Any]]:
-    node = builder.upsert_call(event, "SkillCall")
+    node = builder.call_partial(event, "SkillCall")
     if node is None:
         return []
-    kind = event.get("kind", "")
-
-    if kind.endswith("_start"):
-        node.setdefault(
-            "skillName",
-            event.get("skill_name") or event.get("processing_name") or node.get("kindBase", ""),
-        )
-        node.setdefault("skillInput", event.get("input") or event.get("payload") or "")
-        if event.get("skill_version"):
-            node.setdefault("skillVersion", event["skill_version"])
-    else:
-        node["skillOutput"] = event.get("output") or event.get("result") or ""
-        node["status"] = event.get("status", node.get("status", "success"))
-
+    name = str(event.get("skill_name") or event.get("processing_name") or "")
+    if name:
+        node["name"] = name  # named by the Skill it runs
+    builder.emit_call(event, node)
+    if name:
+        skill = builder.catalog("Skill", name)
+        builder.executes(node, "executesSkill", skill)
+        agent_id = str(event.get("agent_id") or "")
+        if agent_id:
+            builder.add_edge(
+                "usesSkill", builder.catalog("Agent", agent_id, node_id=agent_id), skill
+            )
     return [node]

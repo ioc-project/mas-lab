@@ -17,9 +17,9 @@ from mas.library.standard.lib.observability.emit import (
 )
 from mas.library.standard.lib.observability.native.emit_transition import project_transition
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
+from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.event_stream import publish_event
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
-from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.transition import TransitionEvent
 
 _logger = logging.getLogger(__name__)
@@ -49,6 +49,8 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
     transforms: list = field(default_factory=lambda: [NativeObservabilityTransform()])
     emitters: list[EventEmitter] = field(default_factory=list)
     context: TransformContext = field(default_factory=TransformContext)
+    # Session-wide registry passed into every per-agent TransformContext (delegate/reply pairs).
+    shared: dict = field(default_factory=dict)
     mas_id: str = ""
     # Override only — every real TransitionEvent already carries its own
     # session_id/task_id (see mas.runtime.driver.driver.KernelDriver.session_id),
@@ -73,6 +75,8 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
     def __post_init__(self) -> None:
         if self.emitters:
             self._fanout = FanOutEmitter(*self.emitters)
+        # The base context and every per-agent context share one registry.
+        self.context.shared = self.shared
 
     def events_jsonl_path(self) -> Path | None:
         for emitter in self.emitters:
@@ -112,6 +116,7 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
                     agent_id=key,
                     run_id=self.context.run_id,
                     mas_call_id=self.context.mas_call_id,
+                    shared=self.shared,
                 )
                 self._ctx_by_agent[key] = ctx
             elif self.context.mas_call_id and not ctx.mas_call_id:

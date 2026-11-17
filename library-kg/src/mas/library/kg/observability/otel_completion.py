@@ -17,14 +17,14 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Sequence, Tuple
 
+from mas.library.kg.core.otel_state_synthesis import (
+    session_trajectory_anchors,
+    synthesize_states_and_transitions,
+)
 from mas.library.kg.core.output_rendering import (
     agent_output_text,
     derive_tool_use_completions,
     materialize_agent_outputs,
-)
-from mas.library.kg.core.state_transition import (
-    session_trajectory_anchors,
-    synthesize_states_and_transitions,
 )
 from mas.library.kg.observability.native.handlers.chat import (
     extract_tool_calls_structured,

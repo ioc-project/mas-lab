@@ -9,8 +9,6 @@ Edge schema: edge_type, from_id, to_id.
 
 from __future__ import annotations
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -29,8 +27,7 @@ class TestCheckUnknownNodeTypes:
     def test_known_node_type_passes(self):
         from mas.library.kg.core.verifier import KNOWN_NODE_TYPES, check_unknown_node_types
 
-        if not KNOWN_NODE_TYPES:
-            pytest.skip("Ontology not loaded — KNOWN_NODE_TYPES empty")
+        assert KNOWN_NODE_TYPES
         node_type = next(iter(KNOWN_NODE_TYPES))
         nodes = [{"node_type": node_type, "callId": "x"}]
         ok, violations = check_unknown_node_types(nodes, [])
@@ -68,8 +65,7 @@ class TestCheckUnknownEdgeTypes:
     def test_known_edge_type_passes(self):
         from mas.library.kg.core.verifier import KNOWN_EDGE_TYPES, check_unknown_edge_types
 
-        if not KNOWN_EDGE_TYPES:
-            pytest.skip("Ontology not loaded — KNOWN_EDGE_TYPES empty")
+        assert KNOWN_EDGE_TYPES
         etype = next(iter(KNOWN_EDGE_TYPES))
         edges = [{"edge_type": etype, "from_id": "a", "to_id": "b"}]
         ok, violations = check_unknown_edge_types([], edges)
@@ -113,8 +109,7 @@ class TestCheckBlockVocabulary:
     def test_invalid_block_value_is_violation(self):
         from mas.library.kg.core.verifier import _VALID_BLOCK_VALUES, check_block_vocabulary
 
-        if not _VALID_BLOCK_VALUES:
-            pytest.skip("Ontology not loaded")
+        assert _VALID_BLOCK_VALUES
         nodes = [_node("c", "AgentCall", block="notAValidValue")]
         ok, violations = check_block_vocabulary(nodes, [])
         assert not ok
@@ -144,16 +139,14 @@ class TestCheckLayerVocabulary:
 
         # AgentCall is an execution element, not trajectory
         nodes = [_node("c", "AgentCall", layer="normalized")]
-        if "AgentCall" in (_TRAJECTORY_NODE_TYPES or frozenset()):
-            pytest.skip("AgentCall is trajectory in this ontology")
+        assert "AgentCall" not in _TRAJECTORY_NODE_TYPES
         ok, violations = check_layer_vocabulary(nodes, [])
         assert not ok
 
     def test_layer_on_state_node_passes(self):
         from mas.library.kg.core.verifier import _TRAJECTORY_NODE_TYPES, check_layer_vocabulary
 
-        if "State" not in (_TRAJECTORY_NODE_TYPES or frozenset()):
-            pytest.skip("State not in trajectory types")
+        assert "State" in _TRAJECTORY_NODE_TYPES
         state = {"node_type": "State", "stateNodeId": "s1", "layer": "normalized"}
         ok, _ = check_layer_vocabulary([state], [])
         assert ok

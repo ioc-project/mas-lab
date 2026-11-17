@@ -128,9 +128,12 @@ def test_convert_realtime(tmp_path, events_path):
         ["convert", str(events_path), "-o", str(out), "--app-name", "demo", "--realtime"],
     )
     assert result.exit_code == 0
+    from mas.library.telemetry.conversion.session import runtime_events_path
+
     names = {_json.loads(line)["name"] for line in out.read_text().splitlines() if line.strip()}
     assert not any(n.endswith(".graph") for n in names)
-    assert any(n.startswith("topology.node.") for n in names)
+    events = runtime_events_path(out).read_text().splitlines()
+    assert any(_json.loads(line)["event_name"].startswith("topology.node.") for line in events if line.strip())
 
 
 def test_dump_and_list_apps(tmp_path, monkeypatch):

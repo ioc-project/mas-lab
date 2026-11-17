@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from mas.library.standard.lib.observability.emit import JsonlFileEmitter
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.library.standard.plugins.observability.native_plugin import NativeObservabilityPlugin
@@ -210,3 +211,73 @@ def test_a_run_inside_its_step_budget_has_no_error_end(tmp_path: Path) -> None:
     records = _run_with_step_cap(tmp_path, cap=50)
     ends = [r for r in records if r.get("kind") == "llm_call_end"]
     assert ends and all("status" not in r for r in ends)
+
+
+def test_abandoning_a_call_pops_the_envelope_frame() -> None:
+    """A cut-off call's envelope frame is popped, so the next call is not its child."""
+    from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
+    from mas.runtime.boundary.obs.operator import ObservabilityOperator
+    from mas.runtime.schema.observability import ObsPhase
+
+    class _Sink(ObservabilityPlugin):
+        def on_transition(self, event) -> None:
+            pass
+
+    op = ObservabilityOperator()
+    op.subscribe(_Sink())
+    op.record_envelope_activity(
+        symbol="CONTRACT_START",
+        activity="contract_call",
+        boundary="start",
+        phase=ObsPhase.REQUEST,
+        correlation_id=7,
+        payload={"op": "LLM_CALL"},
+    )
+    op.record_engine_io(correlation_id=7, op="LLM_CALL")
+    assert op._frames.top is not None
+    (end,) = op.abandon_open_engine_calls("step budget exhausted")
+    assert end.payload["response_kind"] == "ERROR"
+    assert op._frames.top is None
+    assert not op._open_engine_calls
+
+
+def test_a_run_that_raises_mid_step_closes_the_call_it_left_open(tmp_path: Path) -> None:
+    events_path = tmp_path / "events.jsonl"
+    engine = SimulatedEngine(model="openai/gpt-4o", llm_messages=[{"role": "user", "content": "x"}])
+    inst = RuntimeInstance.from_parts(engine=engine)
+    obs = _native_plugin(events_path)
+    inst.driver.observability.subscribe(obs)
+    inst.capture_session_baseline()
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("recorder failed")
+
+    inst.driver._record_engine_return = boom
+    with pytest.raises(RuntimeError, match="recorder failed"):
+        inst.run_user_text("x")
+    obs.flush()
+    obs.close()
+
+    records = _records(events_path)
+    (start,) = [r for r in records if r.get("kind") == "llm_call_start"]
+    (end,) = [r for r in records if r.get("kind") == "llm_call_end"]
+    assert end["call_id"] == start["call_id"]
+    assert end["status"] == "error"
+    assert end["output"] == "aborted: RuntimeError"
+    assert not inst.driver.observability._open_engine_calls
+
+
+def test_abandoning_closes_calls_on_the_bound_operator_as_well(monkeypatch) -> None:
+    from mas.runtime.boundary.obs.operator import ObservabilityOperator
+
+    own, bound = ObservabilityOperator(), ObservabilityOperator()
+    bound.record_engine_io(correlation_id=3, op="LLM_CALL")
+    own.record_engine_io(correlation_id=4, op="TOOL_CALL")
+    inst = RuntimeInstance.from_parts(engine=SimulatedEngine(model="openai/gpt-4o"))
+    inst.driver.observability = own
+    monkeypatch.setattr("mas.runtime.boundary.gov.telemetry.get_bound_observability", lambda: bound)
+
+    inst.driver._abandon_in_flight_calls("cut off")
+
+    assert not own._open_engine_calls
+    assert not bound._open_engine_calls

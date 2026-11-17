@@ -61,12 +61,12 @@ kg.jsonld with additional annotation nodes and edges
 ### OTel path
 
 This library does not rebuild `events.jsonl` from OTel spans. The OTel path
-(`observability/otel_via_norm.py`, needs the `[norm]` extra) reshapes the spans and calls
-`norm.normalize()`. The native path uses `build_kg_document`.
+(`observability/otel_via_norm.py`, needs the `[norm]` extra) reshapes the spans and feeds them
+to `norm.KGBuilder`, whose graph it returns as is. The native path uses `build_kg_document`.
 
 ```
 OTel spans (ClickHouse rows or SDK JSON)
-    |  otel_via_norm.normalize_otel(): reshape SDK keys to ClickHouse keys, then norm.normalize()
+    |  otel_via_norm.normalize_otel(): reshape SDK keys to ClickHouse keys, then norm.KGBuilder().add_all(rows + realtime records).snapshot()
     v
 (nodes, edges) targeting scope_ontology.models.*
 ```
@@ -83,11 +83,11 @@ Two OTel wire formats exist:
 SDK spans are reshaped mechanically onto the ClickHouse keys that `norm` expects. This
 library has no OTel handler or dispatch of its own.
 
-**Ontology split.** `ioc-scope-ontology` declares the core classes: Session, MASCall, AgentCall,
-LLMCall, ToolCall, ProcessingCall, State, Transition, MAS, Agent, LLM, Tool and
-Processing. Native-path classes that SCOPE does not declare yet (RAGQuery,
-MemoryCall, SkillCall, governance and trajectory annotations) are declared in
-`ontology/extensions/`.
+**Ontology.** `ioc-scope-ontology` 1.2 declares every class and property the native fold emits
+(calls including SkillCall, MemoryCall and RAGQuery, State, Transition, CallAnnotation and its
+GovernanceEvent and ContextContribution subclasses, and the catalog classes including Skill,
+Memory and Worker). An earlier release lacks some of them: for those classes `library-kg` ships
+`ontology/extensions/mas-kg-native-extensions.ttl`, used only while SCOPE does not declare them.
 
 ---
 
@@ -140,7 +140,7 @@ To get `(nodes, edges)` without the document wrapper (needs the `[norm]` extra):
 ```python
 from mas.library.kg.observability.otel_via_norm import normalize_otel
 
-nodes, edges = normalize_otel(spans)
+nodes, edges = normalize_otel(spans)  # optional: runtime_events=[...] realtime records
 ```
 
 ### events.jsonl to KG
@@ -438,7 +438,7 @@ In `denormalize`, caller-supplied `annotations` apply first; `session_id`, `app_
 
 | Symbol | Description |
 |--------|-------------|
-| `normalize_otel(spans)` | OTel spans (SDK or ClickHouse shape) to `(nodes, edges)` via `norm.normalize()` |
+| `normalize_otel(spans, runtime_events=())` | OTel spans (SDK or ClickHouse shape) and realtime runtime-events records to the `(nodes, edges)` snapshot of `norm.KGBuilder`, untouched |
 | `detect_span_shape(spans)` | The detected wire format |
 | `to_clickhouse_spans(spans)` | Reshape SDK spans onto ClickHouse keys |
 
@@ -447,7 +447,7 @@ In `denormalize`, caller-supplied `annotations` apply first; `session_id`, `app_
 | Symbol | Description |
 |--------|-------------|
 | `normalize_events(events, ontology, run_id, *, include_*, strict)` | Annotate events with ontology metadata (phase 1) |
-| `extract_graph(normalized, session_id_override=None, *, split_session_id, app_name_override, application_node, ...)` | Annotated events to `(nodes, edges)` (phase 2) |
+| `extract_graph(normalized, session_id_override=None, *, split_session_id, app_name_override, ...)` | Annotated events to `(nodes, edges)` (phase 2) |
 | `extract_plot_events(raw_events)` | Filter to plottable kinds for visualisation |
 
 Most callers use `build_kg_document` instead; see [docs/normalization.md](docs/normalization.md).
@@ -512,7 +512,7 @@ mas/library/kg/
 ├── __init__.py               top-level public API (lazy) + package_root()
 ├── artifact.py               KGArtifact dataclass + stream_artifacts()
 ├── exceptions.py             typed exception hierarchy
-├── ontology.py               TTL path resolution (ioc-scope-ontology + local extensions)
+├── ontology.py               TTL path resolution (ioc-scope-ontology)
 ├── pipeline.py               public batch API: build_kg_document, build_kg_from_events_path, ...
 ├── infra.py                  `kind: Infra` manifest -> Neo4j connection target
 ├── bench.py                  PipelineStep adapters (normalize_events, validate_kg, ...)
@@ -522,7 +522,8 @@ mas/library/kg/
 ├── core/                     KG algorithms
 │   ├── event_mappings.py     KIND_TO_CLASS: event kind -> ontology class
 │   ├── graph_builder.py      normalize_events + extract_graph (events -> nodes/edges)
-│   ├── native_graph_builder.py  NativeGraphBuilder (batch / realtime builders)
+│   ├── native_graph_builder.py  NativeGraphBuilder: the stateless, order-agnostic event mapping (batch = realtime)
+│   ├── state_transition.py   State / Transition nodes mapped from `state_in` / `state_out`
 │   ├── scope_models.py       bridge to scope_ontology.models.*
 │   ├── annotate.py           annotate_kg_nodes
 │   ├── query.py              KGIndex, FacetQuery, KGSource, KGView
@@ -548,13 +549,12 @@ mas/library/kg/
     ├── vocabulary.py         attribute key constants
     ├── extractors.py         pure parsing functions
     ├── helpers.py            shared loaders, trace-cache paths
-    ├── path_equivalence.py   native vs OTel-via-norm comparator (dev/CI tool)
+    ├── path_equivalence.py   native vs norm trajectory comparator (`compare_trajectories`, dev/CI tool)
     └── native/               native events.jsonl handlers / completeness / validate / verify
 ```
 
 Outside `src/`: `schemas/` (`events.schema.json`, `events.spec.yaml`; shipped inside the
-wheel as package data), `ontology/extensions/` (native-only ontology classes),
-`pipelines/`, `infra/`, `examples/`, `docker/` and `tests/`.
+wheel as package data), `pipelines/`, `infra/`, `examples/`, `docker/` and `tests/`.
 
 ---
 
@@ -593,11 +593,11 @@ machine-readable definitions are
   "edges": [
     {"edge_type": "hasMASCall", "from_id": "session-demo", "to_id": "mascall:demo:mas:..."}
   ],
-  "metadata": { "events": 44, "nodes": 47, "edges": 79, "layers": { "...": "..." } }
+  "metadata": { "events": 44, "nodes": 47, "edges": 79, "categories": [] }
 }
 ```
 
-The ontology defines the node types (Session, Run, MASCall, AgentCall, LLMCall, ToolCall,
+The ontology defines the node types (Session, MASCall, AgentCall, LLMCall, ToolCall,
 ProcessingCall, State, Transition, CallAnnotation, ...) and edge types (`hasAgentCall`,
 `hasLLMCall`, `hasInitialState`, `hasFinalState`, `annotates`, ...); see
 [docs/ontology.md](docs/ontology.md). A real graph is
@@ -609,7 +609,6 @@ ProcessingCall, State, Transition, CallAnnotation, ...) and edge types (`hasAgen
 |----------|--------|
 | `mas-ontology.ttl` | `ioc-scope-ontology` |
 | `mas-shapes.ttl`, `mas-shapes-custom.ttl` | `ioc-scope-ontology` |
-| Native-path extensions (RAGQuery, MemoryCall, SkillCall, governance, ...) | `library-kg/ontology/extensions/` |
 
 Pass `ontology_path` to override the package-provided path. Native graph extraction does
 not need the TTL (`KIND_TO_CLASS` is the map). TTL enrichment and SHACL validation do.
@@ -633,9 +632,8 @@ not need the TTL (`KIND_TO_CLASS` is the map). TTL enrichment and SHACL validati
 **New native event kind or node type.**
 
 1. Map the kind to a class in `core/event_mappings.py:KIND_TO_CLASS`.
-2. If the node needs custom fields, implement the extraction in `core/graph_builder.py`.
-3. If SCOPE lacks the class, add it to
-   `ontology/extensions/mas-kg-native-extensions.ttl` and document the gap.
+2. If the node needs custom fields, add a handler in `observability/native/handlers/` that maps one event to its node and edges (no look at other events; ids from what the event carries).
+3. If SCOPE lacks the class, the fold must not emit it: propose it to SCOPE first.
 4. Add a native `events.jsonl` fixture test.
 
 **New OTel span shape.** OTel dispatch lives in `norm` (`norm.ioa_observe`). Do not add

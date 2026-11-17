@@ -20,10 +20,9 @@ import sys
 from pathlib import Path
 
 import click
-
+from mas.library.telemetry import inspection
 from mas.library.telemetry.collector.clickhouse import dump_spans, list_apps
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
-from mas.library.telemetry import inspection
 from mas.library.telemetry.steps.compare_spans import run_compare_spans
 from mas.library.telemetry.steps.convert import run_convert
 from mas.library.telemetry.steps.push_otlp import run_push_otlp
@@ -64,11 +63,6 @@ def telemetry_group() -> None:
     help="Allocate a new session UUID, distinct from the original run.",
 )
 @click.option(
-    "--rewrite-tool-delegation/--no-rewrite-tool-delegation",
-    default=True,
-    help="Rewrite delegate_to_* tool calls as agent handoffs (default: on).",
-)
-@click.option(
     "--governance/--no-governance",
     default=False,
     help="Include the governance export layer (default: off).",
@@ -99,7 +93,6 @@ def _convert(
     app_name: str,
     shift_to_now: bool,
     new_session_id: bool,
-    rewrite_tool_delegation: bool,
     governance: bool,
     layers: tuple[str, ...],
     realtime: bool,
@@ -126,7 +119,6 @@ def _convert(
         export_layers=export_layers,
         shift_to_now=shift_to_now,
         new_session_id=new_session_id,
-        rewrite_tool_delegation=rewrite_tool_delegation,
         realtime=realtime,
     )
     click.echo(json.dumps({"spans": ss.span_count, "output": output}, indent=2))
@@ -137,9 +129,7 @@ def _convert(
 @click.option("--level", default="L3")
 @click.option("--spanspec", "spanspec_path", default=None)
 @click.option("--fail", "fail_on_error", is_flag=True)
-def _verify(
-    spans_file: str, level: str, spanspec_path: str | None, fail_on_error: bool
-) -> None:
+def _verify(spans_file: str, level: str, spanspec_path: str | None, fail_on_error: bool) -> None:
     """Verify a spans file (structural + JSON schema + SpanSpec)."""
     report = run_verify_spans(
         spans_file,
@@ -254,17 +244,11 @@ def _push(
 
 @telemetry_group.command("dump")
 @click.argument("session_id")
-@click.option(
-    "--by", "query_by", type=click.Choice(["session", "trace"]), default="session"
-)
+@click.option("--by", "query_by", type=click.Choice(["session", "trace"]), default="session")
 @click.option("--output", "-o", default=None)
 def _dump(session_id: str, query_by: str, output: str | None) -> None:
     """Dump a session's spans from ClickHouse to JSONL."""
-    click.echo(
-        json.dumps(
-            dump_spans(session_id, query_by=query_by, output_path=output), indent=2
-        )
-    )
+    click.echo(json.dumps(dump_spans(session_id, query_by=query_by, output_path=output), indent=2))
 
 
 @telemetry_group.command("list-apps")

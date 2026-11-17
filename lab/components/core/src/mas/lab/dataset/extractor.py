@@ -102,7 +102,9 @@ class TrajectoryExtractor:
         agent_tool_names: dict[str, list[str]] = defaultdict(list)
         # Authoritative per-agent I/O from execution lifecycle events.
         agent_exec_input: dict[str, str] = {}  # execution_start.input
-        agent_exec_output: dict[str, str] = {}  # execution_end.output
+        # The agent's reply: user_response.content (the runtime records it there, and
+        # execution_end.output on older traces).
+        agent_exec_output: dict[str, str] = {}
         pending_msgs: dict[str, list] = {}  # agent_id -> messages from last llm_call_start
 
         for ev in events:
@@ -118,6 +120,13 @@ class TrajectoryExtractor:
                 out = ev.get("output", "")
                 if out and agent_id:
                     agent_exec_output[agent_id] = out
+
+            elif kind == "user_response":
+                reply = ev.get("content", "")
+                if isinstance(reply, dict):
+                    reply = reply.get("content", str(reply))
+                if reply and agent_id:
+                    agent_exec_output[agent_id] = str(reply)
 
             elif kind == "llm_call_start":
                 pending_msgs[agent_id] = ev.get("messages") or []

@@ -2,19 +2,15 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Handler for the ``llm_call_start`` / ``llm_call_end`` event kinds (LLMCall).
 
-Also synthesizes a child ``ThinkingCall`` node when the LLM response carries
-a ``thinking`` trace — this is legitimate per-event construction (everything
-needed is on this one ``llm_call_end`` event), not a cross-event heuristic.
+Each record says what it says: the request on the start, the return on the end. The
+``thinking`` category adds the reasoning interval (``thinking_start`` / ``thinking_end``,
+``handle_thinking_call``); no interval is inferred from the call's duration.
 """
 
 from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Any, Dict, List
-
-from mas.library.kg.core.scope_models import mas_namespace
-
-_MAS_NS = mas_namespace()
 
 if TYPE_CHECKING:
     from mas.library.kg.core.native_graph_builder import NativeGraphBuilder
@@ -52,7 +48,7 @@ def format_messages(messages: Any) -> str:
     return "\n\n".join(parts)
 
 
-def _number(value: Any, cast: Any) -> Any:
+def number(value: Any, cast: Any) -> Any:
     """``value`` as ``cast`` (int/float), or None when it is unset or not a number."""
     if value is None or isinstance(value, bool):
         return None
@@ -62,7 +58,15 @@ def _number(value: Any, cast: Any) -> Any:
         return None
 
 
-def _tool_names(tools: List[Any]) -> List[str]:
+def _reasoning_tokens(usage: Dict[str, Any]) -> Any:
+    """Reasoning tokens the provider reported (``completion_tokens_details``), or None."""
+    details = usage.get("completion_tokens_details")
+    if isinstance(details, dict) and details.get("reasoning_tokens") is not None:
+        return number(details["reasoning_tokens"], int)
+    return number(usage.get("reasoning_tokens"), int)
+
+
+def tool_names(tools: List[Any]) -> List[str]:
     """Offered tools as names: the runtime writes names; OpenAI tool dicts are reduced to theirs."""
     names: List[str] = []
     for tool in tools:
@@ -110,6 +114,15 @@ def _text_with_tool_calls(content: str, tool_calls: Any) -> str:
     return (content + "\n" + tc_text).strip() if tc_text else content
 
 
+def response_text(resp: Dict[str, Any]) -> str:
+    """Reply text of a response in either shape (OpenAI ``choices`` or flat), without tool calls."""
+    choices = resp.get("choices") or []
+    if choices and isinstance(choices, list) and isinstance(choices[0], dict):
+        msg = choices[0].get("message")
+        return str((msg.get("content") if isinstance(msg, dict) else "") or "")
+    return str(resp.get("content") or resp.get("text") or "")
+
+
 def _extract_completion(resp: Dict[str, Any]) -> str:
     """Best-effort extraction of completion text from a response dict.
 
@@ -120,11 +133,11 @@ def _extract_completion(resp: Dict[str, Any]) -> str:
        so the trajectory never shows an empty output for tool-use steps.
     """
     choices = resp.get("choices") or []
-    if choices and isinstance(choices, list):
-        msg = choices[0].get("message") or {}
-        return _text_with_tool_calls(str(msg.get("content") or ""), msg.get("tool_calls"))
-    content = str(resp.get("content") or resp.get("text") or "")
-    return _text_with_tool_calls(content, resp.get("tool_calls"))
+    if choices and isinstance(choices, list) and isinstance(choices[0], dict):
+        msg = choices[0].get("message")
+        msg = msg if isinstance(msg, dict) else {}
+        return _text_with_tool_calls(response_text(resp), msg.get("tool_calls"))
+    return _text_with_tool_calls(response_text(resp), resp.get("tool_calls"))
 
 
 def extract_tool_calls_structured(resp: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -150,65 +163,63 @@ def _extract_finish_reason(resp: Dict[str, Any]) -> str:
 
 
 def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> List[Dict[str, Any]]:
-    if str(event.get("kind") or "").endswith("_start"):
-        ensure = getattr(builder, "ensure_resumed_agent_call", None)
-        if callable(ensure):
-            ensure(event)
-        active = builder._active_exec.get(str(event.get("agent_id") or ""))
-        if active and active != event.get("parent_call_id"):
-            event = dict(event)
-            event["parent_call_id"] = active
-    node = builder.upsert_call(event, "LLMCall")
+    node = builder.call_partial(event, "LLMCall")
     if node is None:
         return []
     kind = event.get("kind", "")
-    new_nodes: List[Dict[str, Any]] = [node]
+    node["llmName"] = event.get("llm_name") or event.get("model") or ""
+    model = str(event.get("model") or "")
 
     if kind.endswith("_start"):
-        node.setdefault(
-            "llmName",
-            event.get("llm_name") or event.get("model") or "llm",
-        )
-        model = str(event.get("model") or "")
         if "/" in model:
             provider, name = model.split("/", 1)
-            node.setdefault("provider", provider or "unknown")
-            node.setdefault("modelName", name or model)
+            node["provider"] = provider or "unknown"
+            node["modelName"] = name or model
         else:
-            node.setdefault("modelName", model)
-            node.setdefault("provider", "unknown")
-        # Same name the OTel normalizer gives an LLMCall, so the two paths pair
-        # calls by name: ``LLM call (<provider>/<model>) <id>``.
-        label = f"{node['provider']}/{node['modelName'] or 'llm'}"
-        node.setdefault("name", f"LLM call ({label}) {event.get('call_id') or ''}".rstrip())
-        # Prefer explicit input/prompt field; fall back to formatting the
-        # messages list as a readable conversation (no artificial truncation
-        # — callers truncate when writing to State.content).
-        node.setdefault(
-            "prompt",
+            node["modelName"] = model
+        # A call is named by what it executes: the model (the LLM type's name).
+        node["name"] = node["modelName"]
+        # Prefer explicit input/prompt field; fall back to formatting the messages list
+        # as a readable conversation.
+        messages = event.get("messages")
+        node["prompt"] = (
             event.get("input")
             or event.get("prompt")
-            or format_messages(event.get("messages"))
-            or json.dumps(event.get("messages") or [], ensure_ascii=False),
+            or format_messages(messages)
+            or (json.dumps(messages, ensure_ascii=False) if messages else "")
         )
-        node.setdefault("promptTokenCount", 0)
-        node.setdefault("completionTokenCount", 0)
-        node.setdefault("totalTokenCount", 0)
-        node.setdefault("cacheReadTokenCount", 0)
-        node.setdefault("finishReason", "")
-        node.setdefault("responseId", "")
-        temperature = _number(event.get("temperature"), float)
-        node.setdefault("temperature", 0.0 if temperature is None else temperature)
-        max_tokens = _number(event.get("max_tokens"), int)
+        temperature = number(event.get("temperature"), float)
+        if temperature is not None:
+            node["temperature"] = temperature
+        max_tokens = number(event.get("max_tokens"), int)
         if max_tokens is not None:
-            node.setdefault("maxTokens", max_tokens)
+            node["maxTokens"] = max_tokens
+        if event.get("reasoning_effort"):
+            node["reasoningEffort"] = str(event["reasoning_effort"])
         if isinstance(event.get("tools"), list):
-            node.setdefault("offeredTools", _tool_names(event["tools"]))
-        return new_nodes
+            node["offeredTools"] = tool_names(event["tools"])
+    else:
+        _read_return(event, node)
 
-    # llm_call_end — usage/finish_reason/tool_calls at the top level;
-    # OpenAI-shaped `response` is also accepted. Request fields (`model`,
-    # messages, tools) live on start and are not read here.
+    builder.emit_call(event, node)
+    if kind.endswith("_start") and model:
+        catalog_name = node["modelName"]
+        extra = {"provider": node["provider"]} if node.get("provider") else {}
+        llm = builder.catalog("LLM", catalog_name, **extra)
+        builder.executes(node, "executesLLM", llm)
+        agent_id = str(event.get("agent_id") or "")
+        if agent_id:
+            builder.add_edge("usesLLM", builder.catalog("Agent", agent_id, node_id=agent_id), llm)
+    return [node]
+
+
+def _read_return(event: Dict[str, Any], node: Dict[str, Any]) -> None:
+    """Fill the return of an ``llm_call_end`` onto its node.
+
+    Usage, finish_reason and tool_calls are at the top level; an OpenAI-shaped
+    ``response`` is also accepted. Request fields (``model``, messages, tools) live on
+    the start record and are not read here.
+    """
     resp: Dict[str, Any] = event.get("response") or {}
     if not isinstance(resp, dict):
         resp = {}
@@ -221,19 +232,18 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
         usage.update({k: v for k, v in resp["usage"].items() if v not in (None, "")})
     event_tool_calls = event.get("tool_calls")
     if resp:
-        node.setdefault("toolCalls", extract_tool_calls_structured(resp))
-        node.setdefault("completion", _extract_completion(resp))
-        node.setdefault("responseId", resp.get("id", "") or "")
+        node["toolCalls"] = extract_tool_calls_structured(resp)
+        node["completion"] = _extract_completion(resp)
+        node["responseId"] = resp.get("id", "") or ""
     if event_tool_calls:
         # The runtime's own shape wins over an OpenAI-shaped ``response`` on the same event;
         # the OTel converter does the same: text first, then the rendered calls.
         node["toolCalls"] = extract_tool_calls_structured({"tool_calls": event_tool_calls})
-        base_text = str(resp.get("content") or flat_out)
+        base_text = response_text(resp) or flat_out
         node["completion"] = _text_with_tool_calls(base_text, event_tool_calls)
     if not node.get("completion") and flat_out:
         node["completion"] = flat_out
-    # A cap on the return is the one actually sent, when it differs from the one asked for on start.
-    sent_max_tokens = _number(event.get("max_tokens"), int)
+    sent_max_tokens = number(event.get("max_tokens"), int)
     if sent_max_tokens is not None:
         node["maxTokens"] = sent_max_tokens
     if usage:
@@ -242,52 +252,46 @@ def handle_llm_call(event: Dict[str, Any], builder: "NativeGraphBuilder") -> Lis
             usage.get("completion_tokens") or usage.get("output_tokens") or 0
         )
         node["totalTokenCount"] = usage.get("total_tokens") or 0
-        node.setdefault("cacheReadTokenCount", usage.get("cache_read_input_tokens") or 0)
+        node["cacheReadTokenCount"] = usage.get("cache_read_input_tokens") or 0
+        reasoning = _reasoning_tokens(usage)
+        if reasoning is not None:
+            node["reasoningTokenCount"] = reasoning
     finish = str(event.get("finish_reason") or _extract_finish_reason(resp) or "")
     if finish:
         node["finishReason"] = finish
 
-    # thinking/reasoning trace is nested under response.thinking
-    thinking_text = (event.get("response") or {}).get("thinking") or ""
-    if thinking_text and getattr(builder, "include_native_extensions", False):
-        call_id = node["callId"]
-        llm_start = float(node.get("startTime") or 0)
-        llm_end = float(event.get("timestamp") or 0)
-        # Thinking occupies the first ~85 % of the LLM call duration.
-        think_end = llm_start + (llm_end - llm_start) * 0.85
-        tc_id = f"{call_id}-thinking"
-        thinking_node = {
-            "node_type": "ThinkingCall",
-            "id": tc_id,
-            "callId": tc_id,
-            "executionId": f"ThinkingCall/{tc_id}",
-            "agentId": event.get("agent_id", ""),
-            "parentCallId": call_id,
-            "kindBase": "thinking_call",
-            "masUri": _MAS_NS + "ThinkingCall",
-            "spanLevel": "thinking",
-            "runId": event.get("run_id", ""),
-            "startTime": node.get("startTime"),
-            "endTime": think_end,
-            "thinkingContent": thinking_text,
-            "status": "success",
-        }
-        # Direct write, not upsert_call(): ThinkingCall is fully determined
-        # by this one llm_call_end event (no separate start/end pair to
-        # merge across), and tc_id is never an AgentCall, so it can never
-        # collide with _call_nodes_merge_key's compound "<call_id>::
-        # <agent_id>" scheme -- a plain dict key here is correct, not a
-        # shortcut around upsert_call's merge semantics.
-        builder.call_nodes[tc_id] = thinking_node
-        builder.edges.append(
-            {
-                "edge_type": "hasThinking",
-                "from_id": call_id,
-                "from_type": "call",
-                "to_id": tc_id,
-                "to_type": "call",
-            }
-        )
-        new_nodes.append(thinking_node)
 
-    return new_nodes
+def handle_thinking_call(
+    event: Dict[str, Any], builder: "NativeGraphBuilder"
+) -> List[Dict[str, Any]]:
+    """Handle ``thinking_start`` / ``thinking_end``: the reasoning interval of one LLMCall.
+
+    The record's ``parent_call_id`` is the LLM call (its own ``call_id`` is
+    ``<llm_call_id>#think``); the LLMCall ``hasThinkingCall`` it. The start names the
+    input State (the prompt) in ``state_in`` and the end the output State (the reasoning
+    text) in ``state_out``, like every element record. A reasoning token count on the end
+    is ``reasoningTokenCount``; the LLM it ran on is the one the record names.
+    """
+    from mas.library.kg.core.native_graph_builder import call_node_id
+
+    node = builder.call_partial(event, "ThinkingCall")
+    if node is None:
+        return []
+    if str(event.get("kind", "")).endswith("_end"):
+        tokens = number(event.get("reasoning_tokens"), int)
+        if tokens is not None:
+            node["reasoningTokenCount"] = tokens
+    builder.emit_call(event, node)
+    run_id = str(event.get("run_id") or "")
+    parent = str(event.get("parent_call_id") or "")
+    if parent:
+        builder.add_edge("hasThinkingCall", call_node_id("LLMCall", run_id, parent), node["id"])
+    model = str(event.get("model") or event.get("llm_name") or "")
+    if model:
+        provider, name = model.split("/", 1) if "/" in model else ("", model)
+        extra = {"provider": provider} if provider else {}
+        # Named by the model it ran on, like its LLMCall.
+        node["name"] = name or model
+        builder.add_node(node)
+        builder.executes(node, "executesLLM", builder.catalog("LLM", name or model, **extra))
+    return [node]

@@ -71,16 +71,9 @@ def run_normalize(
     ontology_path: Optional[str] = None,
     split_session_id: bool = True,
     app_name: Optional[str] = None,
-    application_node: bool = False,
-    fill_synthesized_processing_defaults: bool = True,
     dry_run: bool = False,
     strict: bool = False,
-    include_infrastructure: bool = False,
-    include_trajectory: bool = False,
-    include_provenance: bool = False,
-    include_governance: bool = False,
-    include_annotation: bool = False,
-    include_native_extensions: bool = False,
+    categories: Optional[str | list[str]] = None,
     all_attributes: bool = False,
 ) -> KGArtifact
 ```
@@ -93,11 +86,9 @@ def run_normalize(
 | `ontology_path` | `None` | Explicit path to `mas-ontology.ttl`. Omit to resolve it from `ioc-scope-ontology`. |
 | `split_session_id` | `True` | Split a `run_id` of the form `<appName>_<sessionUuid>` and write `Session.appName`. |
 | `app_name` | `None` | Explicit `Session.appName` override. |
-| `application_node` | `False` | Emit an `Application` node and `hasSession` edges. |
-| `fill_synthesized_processing_defaults` | `True` | Populate recommended fields on synthesized `ProcessingCall` nodes. |
 | `dry_run` | `False` | Parse and validate, write nothing. |
 | `strict` | `False` | Raise on an observability gap (unmapped event kind, missing `call_id`, ...) instead of logging a warning and skipping the event. |
-| `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`, `include_native_extensions` | all `False` | Event categories (layers) to include; see [normalization.md](normalization.md#8-layer-defaults-and-control). |
+| `categories` | `None` | Opt-in categories added to the core output: `capabilities`, `annotations`, `worker`, `thinking`, or `all` (a list or a comma-separated string); see [normalization.md](normalization.md#8-categories-and-control). |
 | `all_attributes` | `False` | Keep native-only fields. Default keeps SCOPE model attributes. |
 
 Returns the normalised `KGArtifact`. With `output_dir` set and `dry_run` false, it also
@@ -125,26 +116,14 @@ def run_normalize_otel(
     run_id: str,
     output_dir: Optional[str | Path] = None,
     *,
-    ontology_path: Optional[str] = None,
-    split_session_id: bool = True,
-    app_name: Optional[str] = None,
-    application_node: bool = False,
-    fill_synthesized_processing_defaults: bool = True,
-    strict: bool = False,
-    allow_heuristics: bool = True,
     include_normalization_provenance: bool = False,
-    synthesize_llm_gaps: bool = True,
-    write_events: bool = True,
     dry_run: bool = False,
+    all_attributes: bool = False,
 ) -> KGArtifact
 ```
 
-The step delegates to the SCOPE function `norm.normalize()`
-(extra `[norm]`; see [otel-telemetry.md](otel-telemetry.md)). The options
-`split_session_id`, `app_name`, `application_node`,
-`fill_synthesized_processing_defaults`, `strict`, `allow_heuristics`,
-`synthesize_llm_gaps` and `write_events` exist so call sites can switch between the two
-normalisers. This step **ignores** them. If `norm` is not installed, or the span shape is
+The step runs `norm.normalize` on the spans, completes the graph and writes it
+(extra `[norm]`; see [otel-telemetry.md](otel-telemetry.md)). If `norm` is not installed, or the span shape is
 not recognised, the step logs a warning and returns an empty artifact instead of failing.
 
 | Parameter | Default | Description |
@@ -152,9 +131,9 @@ not recognised, the step logs a warning and returns an empty artifact instead of
 | `spans_path` | required | OTel spans file (JSON array or JSONL of span dicts). |
 | `run_id` | required | Run identifier, stored in the artifact metadata. |
 | `output_dir` | `None` | Directory to write `kg.jsonld` into. |
-| `ontology_path` | `None` | Unused here; `norm` resolves `ioc-scope-ontology` itself. |
 | `include_normalization_provenance` | `False` | Record `provenance_mode` and `heuristics_applied` in the metadata. |
 | `dry_run` | `False` | Convert, write nothing. |
+| `all_attributes` | `False` | Keep fields beyond the SCOPE models. |
 
 The artifact metadata holds:
 
@@ -612,8 +591,8 @@ what it writes to the step output directory.
 | Step `type` | Wraps | Config keys read | Output |
 |-------------|-------|------------------|--------|
 | `verify_events` | `run_verify_events` | `events_path`, `filename`, `strictness`, `fail_on_error` | `events_verify_report.json` |
-| `normalize_events` | `run_normalize` | `events_path`, `filename`, `run_id`, `ontology_path`, `strict`, `include_infrastructure`, `include_trajectory`, `include_provenance`, `include_governance`, `include_annotation`, `include_native_extensions`, `all_attributes`, `artifact` (default `kg`) | `kg.jsonld` |
-| `normalize_otel` | `run_normalize_otel` | `spans_path`, `filename`, `run_id`, `ontology_path`, `strict`, `all_attributes`, `artifact` (default `kg_otel`) | `kg.jsonld` |
+| `normalize_events` | `run_normalize` | `events_path`, `filename`, `run_id`, `ontology_path`, `strict`, `categories`, `all_attributes`, `artifact` (default `kg`) | `kg.jsonld` |
+| `normalize_otel` | `run_normalize_otel` | `spans_path`, `filename`, `run_id`, `all_attributes`, `artifact` (default `kg_otel`) | `kg.jsonld` |
 | `validate_kg` | `run_validate_kg` | `kg_path`, `ontology_path`, `strict`, `fail_on_error` | `kg_validation_report.json` |
 | `compare_kg` | `run_compare_kg` | `reference_artifact`, `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`, `strict`, `strict_nodes`, `strict_edges`, `strict_node_attributes`, `strict_edge_attributes`, `fail_on_error`, `node_types` | `kg_compare_report.json` |
 | `neo4j_push` | `run_neo4j_push` | `kg_path`, `infra`, `uri`, `username`, `password_env`, `database`, `app_name`, `batch_size`, `clear_session`, `dry_run` | push summary |

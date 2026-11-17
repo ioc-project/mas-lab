@@ -1,0 +1,13 @@
+{
+  "run_hash": "b4321de6a5445b70777d",
+  "experiment": "golden-extensions",
+  "scenario": "golden",
+  "item_id": "1",
+  "run_idx": 0,
+  "referenced_at": "2026-11-16T15:44:42.782543Z",
+  "mas": {
+    "app": "trip-planner",
+    "mas_ref": "library-samples/apps/trip-planner/mas.yaml",
+    "overlay": "golden"
+  }
+}

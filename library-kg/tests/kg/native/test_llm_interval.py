@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from mas.library.kg.observability.native.validate import EventValidator
 from mas.library.kg.pipeline import build_kg_document
 
@@ -208,9 +210,11 @@ def _with_session_identity(events: list[dict]) -> list[dict]:
     return out
 
 
-def test_llm_call_is_named_like_the_otel_normalizer_names_it() -> None:
+def test_llm_call_is_named_by_its_model() -> None:
+    """A call is named by what it executes: the model, as its LLM catalog entry is."""
     doc = build_kg_document(_current_events(), run_id="r1")
-    assert _llm_node(doc)["name"] == f"LLM call ({_MODEL}) llm"
+    (llm,) = [n for n in doc["nodes"] if n.get("node_type") == "LLM"]
+    assert _llm_node(doc)["name"] == llm["name"] == _MODEL.split("/", 1)[1]
 
 
 def test_llm_catalog_entry_takes_the_provider_of_its_calls() -> None:
@@ -237,18 +241,36 @@ def test_session_without_event_identity_keeps_the_run_id_form() -> None:
     assert session["id"] == "session-r1"
 
 
-def test_session_success_follows_the_outer_call() -> None:
+def test_session_success_follows_the_mas_call() -> None:
+    events = _current_events() + [
+        {"kind": "mas_call_start", "timestamp": 0.5, "run_id": "r1", "call_id": "mc"},
+        {
+            "kind": "mas_call_end",
+            "timestamp": 2.0,
+            "run_id": "r1",
+            "call_id": "mc",
+            "status": "error",
+        },
+    ]
+    doc = build_kg_document(events, run_id="r1")
+    (session,) = [n for n in doc["nodes"] if n.get("node_type") == "Session"]
+    mas_call = next(n for n in doc["nodes"] if n.get("node_type") == "MASCall")
+    assert session["success"] == mas_call["success"] is False
+
+
+def test_a_session_without_a_mas_call_has_no_outcome() -> None:
     doc = build_kg_document(_current_events(), run_id="r1")
     (session,) = [n for n in doc["nodes"] if n.get("node_type") == "Session"]
-    outer = next(n for n in doc["nodes"] if n.get("node_type") == "AgentCall")
-    assert session["success"] == outer["success"]
+    assert "success" not in session
 
 
-def test_a_call_with_no_end_event_did_not_succeed() -> None:
-    """Same verdict as the OTel converter gives a span that never ended."""
+def test_a_call_with_no_end_event_has_no_end_and_no_verdict() -> None:
+    """An unfinished call is not given an end or an outcome it never reported."""
     events = [e for e in _current_events() if e["kind"] != "llm_call_end"]
     doc = build_kg_document(events, run_id="r1")
-    assert _llm_node(doc)["success"] is False
+    llm = _llm_node(doc)
+    assert "endTime" not in llm
+    assert "success" not in llm
 
 
 def test_a_call_that_ended_keeps_its_own_verdict() -> None:
@@ -256,13 +278,23 @@ def test_a_call_that_ended_keeps_its_own_verdict() -> None:
     assert _llm_node(doc)["success"] is True
 
 
-def test_an_explicit_run_id_beats_the_session_id_the_events_carry() -> None:
-    """``--run-id app/exp/sc/it/r1`` stays the Session id and names the app."""
+def test_a_hierarchical_run_id_does_not_hide_the_session_id_the_events_carry() -> None:
+    """``--run-id app/exp/sc/it/r1`` names the app; the Session id is the one the events carry."""
     events = _with_session_identity(_current_events())
     run_id = "trip-planner/demo/baseline/item1/r1"
     doc = build_kg_document(events, run_id=run_id, all_attributes=True)
     (session,) = [n for n in doc["nodes"] if n.get("node_type") == "Session"]
-    assert session["id"] == "trip-planner/demo/baseline/item1/r1"
+    assert session["id"] == "sess-uuid"
+    assert session["appName"] == "trip-planner"
+    assert {n["sessionId"] for n in doc["nodes"] if n.get("sessionId")} == {"sess-uuid"}
+
+
+def test_a_hierarchical_run_id_is_the_session_id_when_the_events_carry_none() -> None:
+    events = [{k: v for k, v in e.items() if k != "session_id"} for e in _current_events()]
+    run_id = "trip-planner/demo/baseline/item1/r1"
+    doc = build_kg_document(events, run_id=run_id, all_attributes=True)
+    (session,) = [n for n in doc["nodes"] if n.get("node_type") == "Session"]
+    assert session["id"] == run_id
     assert session["appName"] == "trip-planner"
 
 
@@ -312,3 +344,43 @@ def test_an_llm_call_that_ended_in_error_did_not_succeed() -> None:
     events = _current_events()
     next(e for e in events if e["kind"] == "llm_call_end")["status"] = "error"
     assert _llm_node(build_kg_document(events, run_id="r1"))["success"] is False
+
+
+def test_openai_shaped_reply_text_survives_event_level_tool_calls() -> None:
+    events = _current_events()
+    end = next(e for e in events if e["kind"] == "llm_call_end")
+    end["response"] = {"choices": [{"message": {"content": "Let me check"}}]}
+    llm = _llm_node(build_kg_document(events, run_id="r1", all_attributes=True))
+    assert llm["completion"].startswith("Let me check")
+
+
+def test_a_tool_result_that_is_falsy_but_not_empty_is_kept() -> None:
+    events = _current_events()
+    end = next(e for e in events if e["kind"] == "tool_call_end")
+    end["output"] = []
+    doc = build_kg_document(events, run_id="r1", all_attributes=True)
+    tool = next(n for n in doc["nodes"] if n.get("node_type") == "ToolCall")
+    assert tool["toolOutput"] == "[]"
+
+
+def test_reasoning_fields_appear_only_when_the_events_carry_them() -> None:
+    """No ``reasoningTokenCount=0`` or ``reasoningEffort=""`` is made up for a plain call."""
+    llm = _llm_node(build_kg_document(_current_events(), run_id="r1"))
+    assert "reasoningTokenCount" not in llm
+    assert "reasoningEffort" not in llm
+
+
+@pytest.mark.scope_next
+def test_reasoning_effort_and_tokens_are_read_from_the_records() -> None:
+    events = _current_events()
+    start = next(e for e in events if e["kind"] == "llm_call_start")
+    end = next(e for e in events if e["kind"] == "llm_call_end")
+    start["reasoning_effort"] = "high"
+    end["tokens_used"] = {
+        "prompt_tokens": 3,
+        "completion_tokens": 9,
+        "completion_tokens_details": {"reasoning_tokens": 0},
+    }
+    llm = _llm_node(build_kg_document(events, run_id="r1"))
+    assert llm["reasoningEffort"] == "high"
+    assert llm["reasoningTokenCount"] == 0  # stated by the provider, so kept

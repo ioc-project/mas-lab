@@ -111,6 +111,10 @@ class LLMProvider(Protocol):
         **static (also on spec.models[])** — ``reasoning`` / ``reasoning_effort``,
         ``sampling``, ``extra_body``.
         **dynamic (per call)** — ``stream``, ``stream_options``, ``on_stream_chunk``,
-        ``api_key``, ``tool_choice``, ``extra_headers``, ``extra_query``.
+        ``api_key``, ``tool_choice``, ``extra_headers``, ``extra_query``,
+        ``reasoning_stream`` (a ``ReasoningStream``: call ``feed_delta`` for each
+        stream delta and ``close`` at the end of the stream, or ``received`` with
+        the reasoning text of a whole response, so the reasoning interval is
+        reported when it happens).
         """
         ...

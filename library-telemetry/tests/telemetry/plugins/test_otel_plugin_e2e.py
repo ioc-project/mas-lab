@@ -15,19 +15,6 @@ from mas.runtime.boundary.obs.transition import TransitionEvent
 pytestmark = pytest.mark.skipif(not OTEL_AVAILABLE, reason="opentelemetry-sdk not installed")
 
 
-def _otlp_exporter_available() -> bool:
-    try:
-        import opentelemetry.exporter.otlp.proto.http.trace_exporter  # noqa: F401
-
-        return True
-    except Exception:
-        return False
-
-
-_needs_otlp = pytest.mark.skipif(
-    not _otlp_exporter_available(), reason="opentelemetry OTLP http exporter not installed"
-)
-
 _RECORDS = [
     {
         "kind": "system_specification",
@@ -102,7 +89,6 @@ def test_create_otel_plugin_full_lifecycle(tmp_path: Path, monkeypatch) -> None:
     plugin.close()
 
 
-@_needs_otlp
 def test_create_otel_export_with_otlp_endpoint(tmp_path: Path) -> None:
     from mas.library.telemetry.conversion.session import create_otel_export
 
@@ -209,7 +195,6 @@ def test_from_binding_uses_mas_id_not_agent_or_runtime(tmp_path: Path) -> None:
     plugin.close()
 
 
-@_needs_otlp
 def test_from_binding_honours_env_otlp_endpoint(tmp_path: Path, monkeypatch) -> None:
     from mas.library.telemetry.plugins.otel_plugin import OtelObservabilityPlugin
 
@@ -225,7 +210,6 @@ def test_from_binding_honours_env_otlp_endpoint(tmp_path: Path, monkeypatch) -> 
     plugin.close()
 
 
-@_needs_otlp
 def test_from_binding_defaults_to_otel_exporter_env(tmp_path: Path, monkeypatch) -> None:
     """Spec plugin + ``$OTEL_EXPORTER_OTLP_ENDPOINT`` is enough — no infra YAML."""
     from mas.library.telemetry.plugins.otel_plugin import OtelObservabilityPlugin

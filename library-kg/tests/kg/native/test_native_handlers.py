@@ -27,9 +27,9 @@ def _normalize_full(path: Path):
     return doc["nodes"], doc["edges"]
 
 
-def test_delegate_to_tool_call_is_rewritten_without_calls_agent(tmp_path: Path) -> None:
-    """A delegate_to_<agent> tool is not a ToolCall. callsAgent stays off
-    until A2A observability lands."""
+def test_delegate_to_tool_call_is_an_ordinary_tool_call(tmp_path: Path) -> None:
+    """A delegate_to_<agent> tool is an ordinary ToolCall of the caller. callsAgent
+    stays off until A2A observability lands."""
     events = [
         {
             "kind": "execution_start",
@@ -70,7 +70,7 @@ def test_delegate_to_tool_call_is_rewritten_without_calls_agent(tmp_path: Path) 
     path = _write_events(tmp_path, events)
     _nodes, edges = normalize(str(path))
     assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
-    assert not any(
+    assert any(
         n.get("node_type") == "ToolCall"
         and str(n.get("toolName") or n.get("name") or "").startswith("delegate_to_")
         for n in _nodes
@@ -160,7 +160,7 @@ def test_tool_with_target_argument_is_not_a_handoff(tmp_path: Path) -> None:
     assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
 
 
-def test_recorded_agent_comm_semantics_are_a_handoff(tmp_path: Path) -> None:
+def test_recorded_agent_comm_semantics_do_not_turn_a_tool_into_a_handoff(tmp_path: Path) -> None:
     events = [
         {
             "kind": "execution_start",
@@ -200,22 +200,22 @@ def test_recorded_agent_comm_semantics_are_a_handoff(tmp_path: Path) -> None:
     ]
     _nodes, edges = normalize(str(_write_events(tmp_path, events)))
     assert [e for e in edges if e.get("edge_type") == "callsAgent"] == []
-    assert not any(n.get("node_type") == "ToolCall" and n.get("name") == "send" for n in _nodes)
+    assert any(n.get("node_type") == "ToolCall" and n.get("name") == "send" for n in _nodes)
 
 
-def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) -> None:
-    """A session's hasInitialState/hasFinalState anchors must be derived
-    from top-level transitions only. A nested AgentCall (one with a real
-    parentCallId, delegated to from another agent) must not be mistaken
-    for top-level just because its call_nodes entry is keyed by a compound
-    "<call_id>::<agent_id>" merge key while its Transition's realizesCallId
-    only carries the plain call_id."""
+def test_a_nested_agent_call_is_contained_by_the_mas_call_not_by_the_caller(
+    tmp_path: Path,
+) -> None:
+    """Agent calls are contained by the MASCall, whatever their parent_call_id names
+    (a delegated visit names the tool call, or another agent's visit)."""
     events = [
+        {"kind": "mas_call_start", "timestamp": 0.5, "run_id": "r1", "call_id": "mc"},
         {
             "kind": "execution_start",
             "timestamp": 1.0,
             "run_id": "r1",
             "call_id": "parent-call",
+            "parent_call_id": "mc",
             "agent_id": "planner",
             "input": "start",
         },
@@ -235,7 +235,6 @@ def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) ->
             "call_id": "nested-call",
             "agent_id": "researcher",
             "status": "success",
-            "output": "nested done",
         },
         {
             "kind": "execution_end",
@@ -244,34 +243,21 @@ def test_session_trajectory_anchor_excludes_nested_agent_call(tmp_path: Path) ->
             "call_id": "parent-call",
             "agent_id": "planner",
             "status": "success",
-            "output": "done",
         },
+        {"kind": "mas_call_end", "timestamp": 5.0, "run_id": "r1", "call_id": "mc"},
     ]
-    path = _write_events(tmp_path, events)
-    nodes, edges = _normalize_full(path)
-
-    session_node = next(n for n in nodes if n.get("node_type") == "Session")
-
-    def _session_anchor(edge_type: str) -> str:
-        matches = [
-            e
-            for e in edges
-            if e.get("edge_type") == edge_type and e.get("from_id") == session_node["id"]
-        ]
-        assert len(matches) == 1, matches
-        return str(matches[0]["to_id"])
-
-    # The nested AgentCall's own Transition has a *later* transitionTimestamp
-    # than the parent's (it starts after and finishes before the parent, but
-    # this builder stamps one transitionTimestamp per call at its own start
-    # time, so nested's is later here) -- under the bug, both calls' lookups
-    # into call_nodes missed (both are AgentCalls, both keyed by the compound
-    # "<call_id>::<agent_id>" merge key, neither matched by a plain-call_id
-    # lookup), so *both* were wrongly treated as top-level, and the
-    # session's hasFinalState anchor was taken from whichever sorted last by
-    # timestamp -- the nested call's, not the actual top-level parent's.
-    assert _session_anchor("hasInitialState") == "state-agent-parent-call-initial"
-    assert _session_anchor("hasFinalState") == "state-agent-parent-call-final"
+    nodes, edges = _normalize_full(_write_events(tmp_path, events))
+    mas_call = next(n for n in nodes if n.get("node_type") == "MASCall")
+    agent_calls = {n["callId"]: n for n in nodes if n.get("node_type") == "AgentCall"}
+    contained = {
+        e["to_id"]
+        for e in edges
+        if e["edge_type"] == "hasAgentCall" and e["from_id"] == mas_call["id"]
+    }
+    assert contained == {n["id"] for n in agent_calls.values()}
+    assert not [
+        e for e in edges if e["edge_type"] == "hasAgentCall" and e["from_id"] != mas_call["id"]
+    ]
 
 
 def test_context_assembly_processing_output_reads_real_messages(tmp_path: Path) -> None:

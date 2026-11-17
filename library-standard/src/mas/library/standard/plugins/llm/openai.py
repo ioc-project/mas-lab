@@ -23,10 +23,13 @@ from mas.library.standard.plugins.llm.http import (
 from mas.runtime.boundary.context.assemble import llm_tool_choice
 from mas.runtime.engine.llm_reasoning import (
     ReasoningSettings,
-    ThinkTagStreamFilter,
+    ReasoningStream,
+    ThinkTagSplitter,
     apply_reasoning_payload,
     coerce_reasoning_settings,
+    reasoning_text,
     sanitize_assistant_message,
+    think_block_text,
 )
 from mas.runtime.engine.llm_request import (
     apply_output_token_limit,
@@ -216,6 +219,7 @@ class OpenAILLMProvider(LayerLifecycle):
         sampling: dict[str, Any] | None = None,
         tool_choice: Any = None,
         stream_options: dict[str, Any] | None = None,
+        reasoning_stream: ReasoningStream | None = None,
         **_: Any,
     ) -> dict[str, Any]:
         key = api_key if api_key is not None else os.environ.get(self.api_key_env, "")
@@ -243,6 +247,7 @@ class OpenAILLMProvider(LayerLifecycle):
                 sampling=sampling,
                 tool_choice=tool_choice,
                 stream_options=stream_options,
+                reasoning_stream=reasoning_stream or ReasoningStream(None),
             )
         except ClassifiedFailure:
             raise
@@ -317,11 +322,15 @@ class OpenAILLMProvider(LayerLifecycle):
         return url, payload, headers, query
 
     @staticmethod
-    def _message_from_completion(data: dict[str, Any], reasoning: ReasoningSettings) -> dict[str, Any]:
+    def _message_from_completion(
+        data: dict[str, Any], reasoning: ReasoningSettings, reasoning_stream: ReasoningStream
+    ) -> dict[str, Any]:
         choices = data.get("choices") or []
         if not choices:
             return {}
         message = dict(choices[0].get("message") or {})
+        # The whole response arrived at once: its reasoning is reported now, as received.
+        reasoning_stream.received(reasoning_text(message) + think_block_text(message.get("content")))
         usage = data.get("usage") or {}
         if usage:
             message["usage"] = usage
@@ -349,6 +358,7 @@ class OpenAILLMProvider(LayerLifecycle):
         sampling: dict[str, Any] | None = None,
         tool_choice: Any = None,
         stream_options: dict[str, Any] | None = None,
+        reasoning_stream: ReasoningStream,
     ) -> dict[str, Any]:
         url, payload, headers, query = self._build_chat_request(
             model=model,
@@ -374,6 +384,7 @@ class OpenAILLMProvider(LayerLifecycle):
                 on_stream_chunk=on_stream_chunk,
                 reasoning=reasoning,
                 params=query,
+                reasoning_stream=reasoning_stream,
             )
         resp = await arequest_once(
             self._get_async_client(),
@@ -386,7 +397,7 @@ class OpenAILLMProvider(LayerLifecycle):
             on_failure=self._adiscard_client_after_transport_failure,
         )
         resp.raise_for_status()
-        return self._message_from_completion(resp.json(), reasoning)
+        return self._message_from_completion(resp.json(), reasoning, reasoning_stream)
 
     async def _achat_completion_streamed(
         self,
@@ -396,6 +407,7 @@ class OpenAILLMProvider(LayerLifecycle):
         *,
         on_stream_chunk: Callable[[str], None] | None,
         reasoning: ReasoningSettings,
+        reasoning_stream: ReasoningStream,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Async SSE-streamed variant — same OpenAI-compatible message shape."""
@@ -406,7 +418,7 @@ class OpenAILLMProvider(LayerLifecycle):
         tool_call_accum: dict[int, dict[str, Any]] = {}
         finish_reason = ""
         usage: dict[str, Any] = {}
-        think_filter = ThinkTagStreamFilter() if reasoning.exclude else None
+        splitter = ThinkTagSplitter()
         emitted_any = False
 
         try:
@@ -435,18 +447,17 @@ class OpenAILLMProvider(LayerLifecycle):
                     if fr:
                         finish_reason = fr
                     delta = choice.get("delta") or {}
-                    text = delta.get("content")
+                    # Reasoning deltas start the thinking interval; the first answer delta ends it.
+                    answer = reasoning_stream.feed_delta(delta, splitter)
+                    text = answer if reasoning.exclude else delta.get("content")
                     if text:
-                        if think_filter is not None:
-                            text = think_filter.feed(text)
-                        if text:
-                            content_parts.append(text)
-                            emitted_any = True
-                            if callable(on_stream_chunk):
-                                try:
-                                    on_stream_chunk(text)
-                                except Exception:
-                                    logger.exception("on_stream_chunk callback failed")
+                        content_parts.append(text)
+                        emitted_any = True
+                        if callable(on_stream_chunk):
+                            try:
+                                on_stream_chunk(text)
+                            except Exception:
+                                logger.exception("on_stream_chunk callback failed")
                     for tc in delta.get("tool_calls") or []:
                         emitted_any = True
                         idx = int(tc.get("index", 0) or 0)
@@ -462,6 +473,7 @@ class OpenAILLMProvider(LayerLifecycle):
                             slot["function"]["arguments"] += fn["arguments"]
         except Exception as exc:
             await self._areraise_stream_failure(exc, emitted_any=emitted_any)
+        reasoning_stream.close()
 
         message: dict[str, Any] = {"content": "".join(content_parts) or None}
         if tool_call_accum:

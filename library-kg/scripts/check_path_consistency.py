@@ -124,9 +124,7 @@ def compare(
     doc = build_kg_document(
         events,
         run_id=run_id,
-        include_trajectory=True,
-        include_governance=True,
-        include_annotation=True,
+        categories="all",
     )
     native_nodes = doc["nodes"]
     native_edges = doc["edges"]

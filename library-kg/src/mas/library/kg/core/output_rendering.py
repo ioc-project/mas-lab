@@ -5,9 +5,9 @@
 Self-contained concern: given an AgentCall node and its already-built child
 call nodes (LLMCall, ToolCall, ProcessingCall, ...), build a structured
 ``outputParts`` list and a flattened ``outputContent`` string. This runs as
-a ``core.native_graph_builder.NativeGraphBuilder.finalize()`` post-processing
-pass (it needs every child of an AgentCall collected first), the same way
-``core.state_transition`` does.
+a post-processing pass of the OTel path over a released ``norm``
+(:mod:`mas.library.kg.observability.otel_completion`), the same way
+``core.otel_state_synthesis`` does. The native fold does not render outputs.
 """
 
 from __future__ import annotations

@@ -15,6 +15,7 @@ from typing import Any
 
 import click
 
+from mas.library.kg.core.event_mappings import parse_categories
 from mas.library.kg.infra import resolve_neo4j_conn as _resolve_neo4j_conn
 
 
@@ -123,43 +124,17 @@ def kg_group() -> None:
 @click.option("--session-id", default=None)
 @click.option("--split-session-id/--no-split-session-id", default=True, show_default=True)
 @click.option("--app-name", default=None, help="Override Session.appName in normalized output.")
-@click.option(
-    "--application-node/--no-application-node",
-    default=False,
-    show_default=True,
-    help="Emit an Application node and hasSession edges in normalized output.",
-)
-@click.option(
-    "--fill-synthesized-processing-defaults/--no-fill-synthesized-processing-defaults",
-    default=True,
-    show_default=True,
-    help="Populate recommended fields on synthesized ProcessingCall nodes.",
-)
 @click.option("--output-dir", "output_dir", default=None)
 @click.option("--output", "output_path", "-o", default=None)
 @click.option("--ontology-path", default=None)
 @click.option("--dry-run", is_flag=True)
-@click.option("--include-infrastructure/--no-include-infrastructure", default=False)
 @click.option(
-    "--include-trajectory/--no-include-trajectory",
-    default=False,
-    help="Include ParallelGroup / Branch / routing (native extensions; default off).",
-)
-@click.option("--include-provenance/--no-include-provenance", default=False)
-@click.option(
-    "--include-governance/--no-include-governance",
-    default=False,
-    help="Include the governance category (default: off, same as OTel export).",
-)
-@click.option(
-    "--include-annotation/--no-include-annotation",
-    default=False,
-    help="Include CallAnnotation kinds (default: off, same as observe-sdk).",
-)
-@click.option(
-    "--include-native-extensions/--no-include-native-extensions",
-    default=False,
-    help="Include RAG / memory / skill kinds and ThinkingCall (default: off).",
+    "--categories",
+    default=None,
+    help=(
+        "Comma-separated opt-in categories added to the core output: capabilities, "
+        "annotations, worker, thinking, or all (default: none)."
+    ),
 )
 @click.option(
     "--all-attributes/--no-all-attributes",
@@ -173,22 +148,19 @@ def _normalize(
     session_id: str | None,
     split_session_id: bool,
     app_name: str | None,
-    application_node: bool,
-    fill_synthesized_processing_defaults: bool,
     output_dir: str | None,
     output_path: str | None,
     ontology_path: str | None,
     dry_run: bool,
-    include_infrastructure: bool,
-    include_trajectory: bool,
-    include_provenance: bool,
-    include_governance: bool,
-    include_annotation: bool,
-    include_native_extensions: bool,
+    categories: str | None,
     all_attributes: bool,
 ) -> None:
     if bool(events_path) == bool(otel_path):
         raise click.UsageError("Pass either EVENTS_PATH or --otel SPANS_PATH.")
+    try:
+        parse_categories(categories)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
 
     if otel_path:
         from mas.library.kg.steps.normalize_otel import run_normalize_otel
@@ -198,12 +170,6 @@ def _normalize(
             spans_path=otel_path,
             run_id=effective_run_id,
             output_dir=output_dir if not output_path else None,
-            ontology_path=ontology_path,
-            split_session_id=split_session_id,
-            app_name=app_name,
-            application_node=application_node,
-            fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
-            write_events=False,
             dry_run=dry_run,
             all_attributes=all_attributes,
         )
@@ -221,15 +187,8 @@ def _normalize(
         ontology_path=ontology_path,
         split_session_id=split_session_id,
         app_name=app_name,
-        application_node=application_node,
-        fill_synthesized_processing_defaults=fill_synthesized_processing_defaults,
         dry_run=dry_run,
-        include_infrastructure=include_infrastructure,
-        include_trajectory=include_trajectory,
-        include_provenance=include_provenance,
-        include_governance=include_governance,
-        include_annotation=include_annotation,
-        include_native_extensions=include_native_extensions,
+        categories=categories,
         all_attributes=all_attributes,
     )
     _emit_artifact(artifact, output_path, output_dir, dry_run)
@@ -408,39 +367,12 @@ def _otel_to_events(
 @click.argument("spans_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("--run-id", required=True)
 @click.option("--output-dir", "output_dir", default=".")
-@click.option("--ontology-path", default=None)
-@click.option("--no-strict", is_flag=True)
-@click.option("--no-synthesize", is_flag=True)
-@click.option(
-    "--no-fill-synthesized-processing-defaults",
-    is_flag=True,
-    help="Leave synthesized ProcessingCall recommended fields empty.",
-)
-@click.option("--write-events", is_flag=True)
 @click.option("--dry-run", is_flag=True)
-def _otel_to_kg(
-    spans_path: str,
-    run_id: str,
-    output_dir: str,
-    ontology_path: str | None,
-    no_strict: bool,
-    no_synthesize: bool,
-    no_fill_synthesized_processing_defaults: bool,
-    write_events: bool,
-    dry_run: bool,
-) -> None:
+def _otel_to_kg(spans_path: str, run_id: str, output_dir: str, dry_run: bool) -> None:
     from mas.library.kg.steps.normalize_otel import run_normalize_otel
 
     artifact = run_normalize_otel(
-        spans_path=spans_path,
-        run_id=run_id,
-        output_dir=output_dir,
-        ontology_path=ontology_path,
-        strict=not no_strict,
-        synthesize_llm_gaps=not no_synthesize,
-        fill_synthesized_processing_defaults=not no_fill_synthesized_processing_defaults,
-        write_events=write_events,
-        dry_run=dry_run,
+        spans_path=spans_path, run_id=run_id, output_dir=output_dir, dry_run=dry_run
     )
     click.echo(json.dumps(artifact.to_doc(), indent=2))
 

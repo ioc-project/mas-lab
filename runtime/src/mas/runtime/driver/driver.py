@@ -178,7 +178,15 @@ def llm_request_for(engine: Any, record: ExchangeRecord, op: str) -> LlmCallRequ
         offered_tools=tool_def_names(record.tools) or None,
         max_tokens=max_tokens,
         temperature=float(temperature) if temperature is not None else None,
+        reasoning_effort=_requested_reasoning_effort(engine),
     )
+
+
+def _requested_reasoning_effort(engine: Any) -> str | None:
+    """The reasoning effort the engine requests (``ReasoningSettings.effort``), if any."""
+    settings = _engine_chain_attr(engine, "reasoning", lambda v: isinstance(getattr(v, "effort", None), str))
+    effort = getattr(settings, "effort", None) if settings is not None else None
+    return str(effort) if effort else None
 
 
 def engine_model_id(engine: Any) -> str:
@@ -377,7 +385,11 @@ class KernelDriver(Lifecycle):
 
     async def afeed(self, event: IngressSymbol) -> DriverTrace:
         with runtime_binding(self.coordination, self.observability), _inbound_scope(event):
-            return await self._afeed_bounded(event)
+            try:
+                return await self._afeed_bounded(event)
+            except BaseException as exc:
+                self._abandon_in_flight_calls(f"aborted: {type(exc).__name__}")
+                raise
 
     def _working_memory_store(self) -> Any | None:
         ctx = self.ctx
@@ -411,8 +423,12 @@ class KernelDriver(Lifecycle):
 
     def _abandon_in_flight_calls(self, reason: str) -> None:
         """Close the observability interval of every engine call the run abandons."""
-        if self.observability is not None:
-            self.observability.abandon_open_engine_calls(reason)
+        from mas.runtime.boundary.gov.telemetry import get_bound_observability
+
+        # Calls are recorded on the bound operator when one is bound, so close on both.
+        operators = {id(o): o for o in (get_bound_observability(), self.observability) if o is not None}
+        for operator in operators.values():
+            operator.abandon_open_engine_calls(reason)
 
     async def _afeed_bounded(self, event: IngressSymbol) -> DriverTrace:
         trace = DriverTrace()

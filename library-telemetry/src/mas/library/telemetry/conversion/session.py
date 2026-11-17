@@ -16,6 +16,7 @@ from typing import Any
 
 from mas.library.telemetry.conversion.exporter import (
     OTEL_AVAILABLE,
+    JSONLineFileLogExporter,
     JSONLineFileSpanExporter,
     MultiSpanExporter,
 )
@@ -27,11 +28,19 @@ from mas.library.telemetry.conversion.profiles import (
 from mas.library.telemetry.exceptions import OtelSdkUnavailableError
 
 
+def runtime_events_path(spans_path: str | Path) -> Path:
+    """Where realtime runtime events (LogRecords) are written next to ``spans_path``."""
+    path = Path(spans_path)
+    return path.with_name(f"{path.stem}_runtime_events.jsonl")
+
+
 @dataclass
 class OtelExport:
     provider: Any
     converter: Any
     file_exporter: Any
+    # Realtime only: the OTel LoggerProvider carrying the runtime events.
+    logger_provider: Any = None
 
     def process_event(self, event: dict[str, Any]) -> None:
         self.converter.process_event(event)
@@ -39,10 +48,14 @@ class OtelExport:
     def finish(self, *, emit_graph: bool | None = None, flush_timeout_ms: int = 5000) -> None:
         self.converter.finish(emit_graph=emit_graph)
         self.provider.force_flush(timeout_millis=flush_timeout_ms)
+        if self.logger_provider is not None:
+            self.logger_provider.force_flush(timeout_millis=flush_timeout_ms)
 
     def close(self, *, emit_graph: bool | None = None, flush_timeout_ms: int = 5000) -> None:
         self.finish(emit_graph=emit_graph, flush_timeout_ms=flush_timeout_ms)
         self.provider.shutdown()
+        if self.logger_provider is not None:
+            self.logger_provider.shutdown()
 
 
 def create_otel_export(
@@ -59,40 +72,31 @@ def create_otel_export(
     annotation_enabled: bool | None = None,
     timestamp_offset_s: float = 0.0,
     session_uuid: str | None = None,
-    rewrite_tool_delegation: bool = True,
     agent_llm_models: dict[str, str] | None = None,
 ) -> OtelExport:
-    """Stand up a TracerProvider + converter writing JSONL (and optional OTLP)."""
+    """Stand up a TracerProvider + converter writing JSONL (and optional OTLP).
+
+    With ``realtime``, a LoggerProvider also carries the ioa-observe runtime
+    events (``topology.node.*``, ``tool.*``, ``llm.*``) as LogRecords, written
+    to :func:`runtime_events_path` and, with an OTLP endpoint, to ``/v1/logs``.
+    """
     if not OTEL_AVAILABLE:
         raise OtelSdkUnavailableError("required for OTel export")
 
+    from mas.library.telemetry.conversion.converter import MasOtelConverter
     from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.id_generator import IdGenerator, RandomIdGenerator
 
-    from mas.library.telemetry.conversion.converter import MasOtelConverter, SpanIdReuse
-
-    class _SharedTraceIdGenerator(SpanIdReuse, IdGenerator):
-        """Reuse one TraceId for parentless observe-sdk roots (graph/session/invoke).
-
-        Also lets a caller force the *next* span id, so a realtime signal's
-        "completed" half can reuse its "started" half's id (emit_realtime_
-        signal) -- two independently start()/end()'d spans otherwise always
-        get two different random ids, leaving norm with no key to link them
-        as one logical call.
-        """
+    class _SharedTraceIdGenerator(IdGenerator):
+        """Reuse one TraceId for parentless observe-sdk roots (graph/session/invoke)."""
 
         def __init__(self, inner: IdGenerator) -> None:
             self._inner = inner
             self._trace_id: int | None = None
-            self._next_span_id: int | None = None
 
         def generate_span_id(self) -> int:
-            if self._next_span_id is not None:
-                span_id = self._next_span_id
-                self._next_span_id = None
-                return span_id
             return self._inner.generate_span_id()
 
         def generate_trace_id(self) -> int:
@@ -100,17 +104,12 @@ def create_otel_export(
                 self._trace_id = self._inner.generate_trace_id()
             return self._trace_id
 
-        def reuse_span_id(self, span_id: int) -> None:
-            self._next_span_id = span_id
-
     layers = (
         export_layers
         if isinstance(export_layers, ExportLayers)
         else parse_export_layers(export_layers if isinstance(export_layers, dict) else None)
     )
-    profile = normalize_converter_profile(
-        converter_profile if converter_profile is not None else "observe_sdk"
-    )
+    profile = normalize_converter_profile(converter_profile if converter_profile is not None else "observe_sdk")
     if annotation_enabled is None:
         # Observe-sdk default matches noa-trip-planner: no CallAnnotation
         # spans (routing, state_update, user_response, …).
@@ -148,6 +147,27 @@ def create_otel_export(
     provider = TracerProvider(**kwargs)
     sink = exporters[0] if len(exporters) == 1 else MultiSpanExporter(exporters)
     provider.add_span_processor(SimpleSpanProcessor(sink))
+    logger_provider = None
+    if realtime:
+        try:
+            import ioa_observe.sdk.tracing.runtime_events  # noqa: F401
+        except ImportError as exc:
+            raise ImportError(
+                'realtime runtime events are the ioa-observe SDK\'s: pip install "mas-lab-library-telemetry[observe]"'
+            ) from exc
+        from opentelemetry.sdk._logs import LoggerProvider
+        from opentelemetry.sdk._logs.export import SimpleLogRecordProcessor
+
+        logger_provider = LoggerProvider(resource=resource)
+        logger_provider.add_log_record_processor(
+            SimpleLogRecordProcessor(JSONLineFileLogExporter(runtime_events_path(spans_path)))
+        )
+        if otlp_endpoint:
+            from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+
+            logger_provider.add_log_record_processor(
+                SimpleLogRecordProcessor(OTLPLogExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/logs"))
+            )
     converter = MasOtelConverter(
         provider.get_tracer("mas-otel"),
         app_name=mas_name,
@@ -158,11 +178,15 @@ def create_otel_export(
         realtime=realtime,
         timestamp_offset_s=timestamp_offset_s,
         session_uuid=session_uuid,
-        rewrite_tool_delegation=rewrite_tool_delegation,
         agent_llm_models=agent_llm_models,
-        id_generator=generator,
+        event_logger=(logger_provider.get_logger("ioa_observe.runtime_events") if logger_provider else None),
     )
-    return OtelExport(provider=provider, converter=converter, file_exporter=file_exporter)
+    return OtelExport(
+        provider=provider,
+        converter=converter,
+        file_exporter=file_exporter,
+        logger_provider=logger_provider,
+    )
 
 
-__all__ = ["OtelExport", "create_otel_export"]
+__all__ = ["OtelExport", "create_otel_export", "runtime_events_path"]

@@ -3,9 +3,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from mas.library.kg.core.event_mappings import KIND_TO_CLASS
+from mas.library.kg.core.event_mappings import CHECK_INTERVALS, KIND_TO_CLASS
 from mas.library.kg.core.graph_builder import extract_graph
 from mas.library.kg.core.verifier import KNOWN_NODE_TYPES
 
@@ -13,13 +11,7 @@ from mas.library.kg.core.verifier import KNOWN_NODE_TYPES
 def test_skill_execution_maps_to_skill_call() -> None:
     assert KIND_TO_CLASS["skill_execution_start"] == "SkillCall"
     assert KIND_TO_CLASS["skill_execution_end"] == "SkillCall"
-    if not KNOWN_NODE_TYPES:
-        # KNOWN_NODE_TYPES is parsed from the real ontology TTL (see
-        # core/verifier.py's _OntologyIndex) -- empty means scope_ontology
-        # or rdflib isn't installed, not that the alignment is actually
-        # broken.
-        pytest.importorskip("scope_ontology")
-        pytest.importorskip("rdflib")
+    assert KNOWN_NODE_TYPES, "the SCOPE ontology did not load"
     assert "SkillCall" in KNOWN_NODE_TYPES
 
 
@@ -27,7 +19,7 @@ def test_governance_kinds_map_to_governance_event() -> None:
     gov_kinds = [
         k
         for k in KIND_TO_CLASS
-        if k.startswith("governance")
+        if (k.startswith("governance") and not k.endswith(("_start", "_end")))
         or k
         in {
             "audit",
@@ -44,9 +36,17 @@ def test_governance_kinds_map_to_governance_event() -> None:
         assert KIND_TO_CLASS[kind] == "GovernanceEvent", kind
 
 
-def test_checkpoint_kinds_mapped() -> None:
-    assert KIND_TO_CLASS.get("checkpoint_start") == "CallAnnotation"
-    assert KIND_TO_CLASS.get("checkpoint_end") == "CallAnnotation"
+def test_check_intervals_are_processing_calls() -> None:
+    """The timing brackets of a check are work: ProcessingCalls, not governance points."""
+    assert CHECK_INTERVALS == {
+        "governance_authorize",
+        "governance_validate",
+        "obs_wrap_gov_authorize",
+        "obs_wrap_gov_validate",
+        "checkpoint",
+    }
+    for name in CHECK_INTERVALS:
+        assert KIND_TO_CLASS[f"{name}_start"] == KIND_TO_CLASS[f"{name}_end"] == "ProcessingCall"
 
 
 def test_alignment_report_script_runs() -> None:
@@ -65,151 +65,142 @@ def test_alignment_report_script_runs() -> None:
     assert "kind\tmas_class" in proc.stdout
 
 
-def test_session_trajectory_anchors_use_state_transition_chain() -> None:
-    run_id = "demo_123e4567-e89b-12d3-a456-426614174000"
-    normalized = [
+def _chain_events(run_id: str) -> list[dict]:
+    """One visit whose LLM and tool calls pass the State on, and the MAS call around it."""
+    base = {"run_id": run_id, "agent_id": "planner"}
+    return [
         {
+            **base,
+            "kind": "mas_call_start",
+            "call_id": "mc",
+            "timestamp": 0.5,
+            "mas_class": "MASCall",
+        },
+        {
+            **base,
             "kind": "execution_start",
             "mas_class": "AgentCall",
-            "run_id": run_id,
-            "agent_id": "planner",
-            "call_id": "call-1",
-            "timestamp": 1.0,
-            "input": "hello",
-        },
-        {
-            "kind": "execution_end",
-            "mas_class": "AgentCall",
-            "run_id": run_id,
-            "agent_id": "planner",
-            "call_id": "call-1",
-            "timestamp": 2.0,
-            "output": "world",
-            "status": "success",
-        },
-        {
-            "kind": "execution_start",
-            "mas_class": "AgentCall",
-            "run_id": run_id,
-            "agent_id": "planner",
-            "call_id": "call-2",
-            "timestamp": 3.0,
-            "input": "again",
-        },
-        {
-            "kind": "execution_end",
-            "mas_class": "AgentCall",
-            "run_id": run_id,
-            "agent_id": "planner",
-            "call_id": "call-2",
-            "timestamp": 4.0,
-            "output": "done",
-            "status": "success",
-        },
-    ]
-
-    nodes, edges = extract_graph(normalized, all_attributes=True)
-    transitions = {
-        node["transitionId"]: node for node in nodes if node.get("node_type") == "Transition"
-    }
-    session = next(node for node in nodes if node.get("node_type") == "Session")
-
-    assert any(
-        edge["edge_type"] == "hasInitialState" and edge["from_id"] == session["id"]
-        for edge in edges
-    )
-    assert any(
-        edge["edge_type"] == "hasFinalState" and edge["from_id"] == session["id"] for edge in edges
-    )
-    assert any(
-        edge["edge_type"] == "inputTo"
-        and edge["from_type"] == "state"
-        and edge["to_type"] == "transition"
-        and edge["to_id"] in transitions
-        for edge in edges
-    )
-    assert not any(
-        edge["edge_type"] == "leadsTo" and edge.get("from_type") == "state" for edge in edges
-    )
-
-
-def test_session_anchors_stay_connected_when_top_call_has_children() -> None:
-    """Session hasInitialState/hasFinalState must land on States reachable
-    from each other via an (inputTo/leadsTo)+ path -- exactly what
-    SessionShape's connectivity check requires.
-
-    Regression test: a top-level AgentCall that has children (LLMCall,
-    ToolCall) got its own wrapper transition included in a flat,
-    session-wide timestamp sort used to pick the session's anchors. Since
-    that wrapper transition is deliberately excluded from the sibling chain
-    its children form, picking it as an anchor left the session's
-    hasInitialState/hasFinalState disconnected from the real trajectory.
-    """
-    run_id = "demo_223e4567-e89b-12d3-a456-426614174000"
-    normalized = [
-        {
-            "kind": "execution_start",
-            "mas_class": "AgentCall",
-            "run_id": run_id,
-            "agent_id": "planner",
             "call_id": "agent-1",
+            "parent_call_id": "mc",
             "timestamp": 1.0,
             "input": "plan a trip",
+            "state_out": "a#0",
+            "state_out_content": "plan a trip",
         },
         {
+            **base,
             "kind": "llm_call_start",
             "mas_class": "LLMCall",
-            "run_id": run_id,
-            "agent_id": "planner",
             "call_id": "llm-1",
             "parent_call_id": "agent-1",
             "timestamp": 2.0,
-            "prompt": "prompt text",
+            "state_in": "a#0",
+            "state_in_content": "plan a trip",
+            "state_out": "a#1",
         },
         {
+            **base,
             "kind": "llm_call_end",
             "mas_class": "LLMCall",
-            "run_id": run_id,
-            "agent_id": "planner",
             "call_id": "llm-1",
             "parent_call_id": "agent-1",
             "timestamp": 3.0,
-            "completion": "completion text",
+            "state_in": "a#0",
+            "state_out": "a#1",
+            "state_out_content": "completion text",
         },
         {
+            **base,
             "kind": "tool_call_start",
             "mas_class": "ToolCall",
-            "run_id": run_id,
-            "agent_id": "planner",
             "call_id": "tool-1",
             "parent_call_id": "agent-1",
             "timestamp": 4.0,
             "tool_name": "search",
-            "arguments": {"q": "paris"},
+            "state_in": "a#1",
+            "state_in_content": "completion text",
+            "state_out": "a#2",
         },
         {
+            **base,
             "kind": "tool_call_end",
             "mas_class": "ToolCall",
-            "run_id": run_id,
-            "agent_id": "planner",
             "call_id": "tool-1",
             "parent_call_id": "agent-1",
             "timestamp": 5.0,
-            "result": "tool result text",
+            "tool_name": "search",
+            "state_in": "a#1",
+            "state_out": "a#2",
+            "state_out_content": "tool result text",
         },
         {
+            **base,
             "kind": "execution_end",
             "mas_class": "AgentCall",
-            "run_id": run_id,
-            "agent_id": "planner",
             "call_id": "agent-1",
+            "parent_call_id": "agent-1",
             "timestamp": 6.0,
-            "output": "final answer",
             "status": "success",
+            "state_in": "a#2",
+            "state_in_content": "tool result text",
+            "state_out": "a#2",
+        },
+        {
+            **base,
+            "kind": "mas_call_end",
+            "mas_class": "MASCall",
+            "call_id": "mc",
+            "timestamp": 7.0,
+            "state_in": "a#0",
+            "state_in_content": "plan a trip",
+            "state_out": "a#2",
+            "state_out_content": "tool result text",
         },
     ]
 
-    nodes, edges = extract_graph(normalized)
+
+def test_session_boundary_states_are_the_ones_the_mas_call_end_names() -> None:
+    run_id = "demo_123e4567-e89b-12d3-a456-426614174000"
+    nodes, edges = extract_graph(_chain_events(run_id), all_attributes=True)
+    session = next(node for node in nodes if node.get("node_type") == "Session")
+    mas_call = next(node for node in nodes if node.get("node_type") == "MASCall")
+    initial = f"state:{run_id}:a#0"
+    final = f"state:{run_id}:a#2"
+    for owner in (session, mas_call):
+        assert (
+            sum(
+                1
+                for e in edges
+                if e["edge_type"] == "hasInitialState"
+                and e["from_id"] == owner["id"]
+                and e["to_id"] == initial
+            )
+            == 1
+        )
+        assert any(
+            e["edge_type"] == "hasFinalState"
+            and e["from_id"] == owner["id"]
+            and e["to_id"] == final
+            for e in edges
+        )
+    transitions = {n["id"] for n in nodes if n.get("node_type") == "Transition"}
+    assert any(
+        e["edge_type"] == "inputTo" and e["from_id"] == initial and e["to_id"] in transitions
+        for e in edges
+    )
+    assert any(
+        e["edge_type"] == "leadsTo" and e["to_id"] == final and e["from_id"] in transitions
+        for e in edges
+    )
+
+
+def test_session_anchors_stay_connected_when_top_call_has_children() -> None:
+    """Session hasInitialState/hasFinalState land on States reachable from each other via
+    an (inputTo/leadsTo)+ path -- what SessionShape's connectivity check requires. The
+    path follows the State ids the records name: the visit's wrapper Transition and its
+    children's Transitions all read and write ids of one chain."""
+    run_id = "demo_223e4567-e89b-12d3-a456-426614174000"
+    nodes, edges = extract_graph(_chain_events(run_id))
     session = next(node for node in nodes if node.get("node_type") == "Session")
 
     adjacency: dict = {}

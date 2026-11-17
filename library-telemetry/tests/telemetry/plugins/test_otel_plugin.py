@@ -14,7 +14,7 @@ class _DummyConverter:
     def __init__(self) -> None:
         self.processed: list[dict] = []
         self.graph_calls: list[tuple[dict, dict]] = []
-        self.flush_count = 0
+        self.finish_count = 0
         self._app_name = "sample-app"
 
     def process_event(self, rec: dict) -> None:
@@ -23,15 +23,12 @@ class _DummyConverter:
     def emit_graph_span(self, topology: dict, **kwargs) -> None:
         self.graph_calls.append((topology, kwargs))
 
-    def flush_open_spans(self) -> None:
-        self.flush_count += 1
-
     def finish(self, *, emit_graph: bool | None = None) -> None:
         from mas.library.telemetry.conversion.topology import build_topology
 
         if self.processed and emit_graph is not False:
             self.emit_graph_span(build_topology(self.processed), app_name=self._app_name)
-        self.flush_open_spans()
+        self.finish_count += 1
 
 
 def test_flush_emits_graph_span_from_projected_events(monkeypatch) -> None:
@@ -80,7 +77,7 @@ def test_flush_emits_graph_span_from_projected_events(monkeypatch) -> None:
     dummy = plugin.converter
     assert dummy is not None
     assert dummy.processed == records
-    assert dummy.flush_count == 1
+    assert dummy.finish_count == 1
     assert len(dummy.graph_calls) == 1
 
     topology, kwargs = dummy.graph_calls[0]

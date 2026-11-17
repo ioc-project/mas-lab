@@ -28,7 +28,6 @@ def run_convert(
     extensions: bool | None = None,
     shift_to_now: bool = False,
     new_session_id: bool = False,
-    rewrite_tool_delegation: bool = True,
 ) -> OtelSpanSet:
     """Convert ``events.jsonl`` to an :class:`OtelSpanSet`.
 
@@ -60,7 +59,6 @@ def run_convert(
         extensions=extensions,
         shift_to_now=shift_to_now,
         new_session_id=new_session_id,
-        rewrite_tool_delegation=rewrite_tool_delegation,
     )
 
     if output_dir and not dry_run:

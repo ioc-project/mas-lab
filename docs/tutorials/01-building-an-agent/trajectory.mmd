@@ -1,7 +1,8 @@
 sequenceDiagram
     actor User
     participant mas
+    participant qa-agent
     participant agent
 
-    User->>agent: What is the speed of light?
-    agent-->>User: response
+    User->>qa-agent: What is the speed of light?
+    qa-agent-->>User: response

@@ -41,7 +41,7 @@ def test_normalize_native_events_jsonl(tmp_path: Path) -> None:
 def test_build_kg_document_native_trip_planner_fixture() -> None:
     fixtures = Path(__file__).resolve().parents[2] / "examples" / "trip-planner" / "events.jsonl"
     events = load_events_jsonl(fixtures)
-    doc = build_kg_document(events, run_id="trip-planner-demo", include_trajectory=True)
+    doc = build_kg_document(events, run_id="trip-planner-demo", categories="annotations")
     types = {n.get("node_type") for n in doc["nodes"]}
     assert "MASCall" in types or "AgentCall" in types
     assert doc["metadata"]["nodes"] == len(doc["nodes"])

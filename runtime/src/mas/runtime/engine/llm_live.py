@@ -28,8 +28,11 @@ from mas.runtime.engine.llm_output_limits import (
 )
 from mas.runtime.engine.llm_reasoning import (
     ReasoningSettings,
+    ReasoningStream,
     coerce_reasoning_settings,
     reasoning_settings_from_manifest,
+    reasoning_text,
+    think_block_text,
 )
 from mas.runtime.engine.llm_request import extra_from_manifest, sampling_settings_from_manifest, sampling_temperature
 from mas.runtime.engine.textual_tool_calls import maybe_recover_textual_tool_calls, repair_merged_arg_keys
@@ -46,6 +49,11 @@ if TYPE_CHECKING:
     from mas.runtime.driver.mocks import AutoCtxAssembler
 
 logger = logging.getLogger(__name__)
+
+# The reasoning interval of the LLM call in progress (see LiveLlmEngine._reasoning_for).
+_REASONING_STREAM: contextvars.ContextVar[ReasoningStream | None] = contextvars.ContextVar(
+    "mas_llm_reasoning_stream", default=None
+)
 
 
 class TruncatedCompletionError(RuntimeError):
@@ -609,12 +617,15 @@ class LiveLlmEngine(Lifecycle):
         messages = await self._abuild_messages(tools=tool_defs)
         tools = llm_request_tools(messages, tools=tool_defs or None)
         answering_from_tools = has_tool_results(messages)
+        stream = self._reasoning_for(io.correlation_id)
+        token = _REASONING_STREAM.set(stream)
         try:
             message, retries = await self._acomplete_with_truncation_policy(
                 messages,
                 tools=tools,
                 temperature=sampling_temperature(self.temperature, answering_from_tools=answering_from_tools),
             )
+            self._report_final_reasoning(stream, message)
         except asyncio.CancelledError:
             raise
         except TruncatedCompletionError as exc:
@@ -628,6 +639,8 @@ class LiveLlmEngine(Lifecycle):
             )
         except Exception as exc:
             return self._llm_error_return(io, exc)
+        finally:
+            _REASONING_STREAM.reset(token)
 
         usage = message.pop("usage", None) or {}
         finish_reason = message.pop("finish_reason", None) or ""
@@ -782,6 +795,37 @@ class LiveLlmEngine(Lifecycle):
             pricing=pricing or {},
         )
 
+    def _reasoning_for(self, correlation_id: int) -> ReasoningStream | None:
+        """The reasoning interval of the LLM call ``correlation_id``, reported to observability.
+
+        Each boundary reaches ``record_llm_thinking`` when it happens (the
+        provider reports reasoning and answer deltas as they arrive). ``None``
+        when nothing records it.
+        """
+        op = getattr(self.ctx, "observability", None) if self.ctx is not None else None
+        record = getattr(op, "record_llm_thinking", None) if op is not None else None
+        if not callable(record):
+            return None
+
+        def listener(boundary: str, text: str, at: float) -> None:
+            record(correlation_id=correlation_id, boundary=boundary, text=text, at=at)
+
+        return ReasoningStream(listener)
+
+    @staticmethod
+    def _report_final_reasoning(stream: ReasoningStream | None, message: dict[str, Any]) -> None:
+        """Close the interval; report reasoning a provider returned only in its final message.
+
+        A provider that reports no deltas but keeps the reasoning in the message
+        (``reasoning.exclude: false``) is reported as received now: a
+        zero-length interval. A message without reasoning text reports nothing.
+        """
+        if stream is None:
+            return
+        stream.close()
+        if not stream.reported:
+            stream.received(reasoning_text(message) + think_block_text(message.get("content")))
+
     async def _abuild_messages(self, *, tools: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         if self.ctx:
             limits = self.output_limits
@@ -844,6 +888,7 @@ class LiveLlmEngine(Lifecycle):
             "reasoning": self.reasoning,
             "sampling": self.sampling.to_spec_dict() or None,
             "extra_body": self.extra_body or None,
+            "reasoning_stream": _REASONING_STREAM.get(),
         }
         if api_key is not None:
             kwargs["api_key"] = api_key
@@ -866,18 +911,23 @@ class LiveLlmEngine(Lifecycle):
         assembled: dict[str, Any] | None = None
         parts: list[str] = []
         try:
+            reasoning = kwargs.get("reasoning_stream")
             async for chunk in stream_iter(**kwargs):
                 text = ""
                 if isinstance(chunk, dict) and ("role" in chunk or "tool_calls" in chunk) and "delta" not in chunk:
                     assembled = chunk
                     text = str(chunk.get("content") or "")
                 elif isinstance(chunk, dict):
+                    if reasoning is not None:
+                        reasoning.reasoning(reasoning_text(chunk))
                     text = str(chunk.get("delta") or chunk.get("content") or "")
                     parts.append(text)
                 else:
                     text = str(chunk)
                     parts.append(text)
                 if text:
+                    if reasoning is not None:
+                        reasoning.answer()
                     self._emit_llm_delta(text)
         except asyncio.CancelledError:
             raise

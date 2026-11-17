@@ -135,7 +135,7 @@ class TestCheckCallDepth:
                 {"id": "a", "node_type": "AgentCall"},
                 {"id": "b", "node_type": "LLMCall"},
             ],
-            "edges": [{"from_id": "a", "to_id": "b", "edge_type": "contains"}],
+            "edges": [{"from_id": "a", "to_id": "b", "edge_type": "containsCall"}],
         }
         result = check_call_depth(kg["nodes"], kg["edges"], kg["nodes"], kg["edges"])
         assert result["passed"] is True
@@ -149,8 +149,8 @@ class TestCheckCallDepth:
                 {"id": "c", "node_type": "LLMCall"},
             ],
             "edges": [
-                {"from_id": "a", "to_id": "b", "edge_type": "contains"},
-                {"from_id": "b", "to_id": "c", "edge_type": "contains"},
+                {"from_id": "a", "to_id": "b", "edge_type": "containsCall"},
+                {"from_id": "b", "to_id": "c", "edge_type": "containsCall"},
             ],
         }
         shallow = {
@@ -332,9 +332,9 @@ class TestCompareKG:
                     {"id": "", "node_type": "AgentCall"},
                 ],
                 "edges": [
-                    {"source": "sess", "target": "ac-a", "edge_type": "contains"},
+                    {"source": "sess", "target": "ac-a", "edge_type": "containsCall"},
                     {"from": "ac-a", "to": "ann-1", "edge_type": "annotates"},
-                    {"from_id": "missing", "to_id": "ac-a", "edge_type": "contains"},
+                    {"from_id": "missing", "to_id": "ac-a", "edge_type": "containsCall"},
                 ],
             }
 

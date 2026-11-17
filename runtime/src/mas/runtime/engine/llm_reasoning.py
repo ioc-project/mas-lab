@@ -10,6 +10,9 @@ chain-of-thought out of working memory even when a proxy still returns it.
 from __future__ import annotations
 
 import re
+import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -258,39 +261,193 @@ def sanitize_assistant_message(
     return out
 
 
-class ThinkTagStreamFilter:
-    """Drop ``<think>`` / ``<thinking>`` spans from streamed content deltas."""
+def reasoning_text(message_or_delta: dict[str, Any]) -> str:
+    """The reasoning text a message or stream delta carries in its reasoning keys.
+
+    ``reasoning`` / ``reasoning_content`` / ``thinking`` are strings;
+    ``reasoning_details`` is a list of parts whose ``text`` (or ``summary``)
+    is the reasoning. Answer ``content`` is not read here (see
+    :func:`think_block_text` for ``<think>`` blocks inside it).
+    """
+    if not isinstance(message_or_delta, dict):
+        return ""
+    parts: list[str] = []
+    for key in _REASONING_MESSAGE_KEYS:
+        value = message_or_delta.get(key)
+        if isinstance(value, str):
+            parts.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    text = item.get("text") if item.get("text") is not None else item.get("summary")
+                    if isinstance(text, str):
+                        parts.append(text)
+                elif isinstance(item, str):
+                    parts.append(item)
+    return "".join(parts)
+
+
+def think_block_text(content: Any) -> str:
+    """The text of the ``<think>`` / ``<thinking>`` blocks inside answer ``content``."""
+    if not isinstance(content, str) or not content:
+        return ""
+    return "".join(
+        _THINK_OPEN_RE.sub("", _THINK_CLOSE_RE.sub("", block.group(0))) for block in _THINK_BLOCK_RE.finditer(content)
+    )
+
+
+class ThinkTagSplitter:
+    """Split streamed content deltas into answer text and ``<think>`` reasoning.
+
+    :meth:`feed` returns the pieces of one delta in order, each
+    ``("answer", text)``, ``("reasoning", text)`` or ``("reasoning_end", "")``
+    (a closing tag). A tag split across deltas is held back until it is whole.
+    """
 
     def __init__(self) -> None:
         self._buf = ""
         self._in_think = False
 
-    def feed(self, text: str) -> str:
+    def feed(self, text: str) -> list[tuple[str, str]]:
         if not text:
-            return ""
+            return []
         self._buf += text
-        emitted: list[str] = []
+        out: list[tuple[str, str]] = []
         while self._buf:
             if self._in_think:
                 close = _THINK_CLOSE_RE.search(self._buf)
                 if close is None:
-                    # Keep a short tail in case a close tag is split across chunks.
-                    if len(self._buf) > 16:
-                        self._buf = self._buf[-16:]
-                    return "".join(emitted)
+                    # Hold back a tail that may be the start of a split close tag.
+                    idx = self._buf.rfind("<")
+                    keep = idx if idx >= 0 and "</thinking>".startswith(self._buf[idx:].lower()) else len(self._buf)
+                    if keep:
+                        out.append(("reasoning", self._buf[:keep]))
+                    self._buf = self._buf[keep:]
+                    return out
+                if close.start():
+                    out.append(("reasoning", self._buf[: close.start()]))
+                out.append(("reasoning_end", ""))
                 self._buf = self._buf[close.end() :]
                 self._in_think = False
                 continue
             open_m = _THINK_OPEN_RE.search(self._buf)
             if open_m is None:
                 keep, rest = _split_partial_open_tag(self._buf)
-                emitted.append(keep)
+                if keep:
+                    out.append(("answer", keep))
                 self._buf = rest
                 break
-            emitted.append(self._buf[: open_m.start()])
+            if open_m.start():
+                out.append(("answer", self._buf[: open_m.start()]))
             self._buf = self._buf[open_m.end() :]
             self._in_think = True
-        return "".join(emitted)
+        return out
+
+
+ThinkingListener = Callable[[str, str, float], None]
+
+
+class ReasoningStream:
+    """The reasoning interval of one LLM call, reported as it happens.
+
+    A provider calls :meth:`reasoning` for each reasoning delta and
+    :meth:`answer` for each answer delta (content or tool call), then
+    :meth:`close` when the stream ends. The listener gets
+    ``(boundary, text, at)``:
+
+    * ``("start", "", at)`` at the first reasoning delta;
+    * ``("end", reasoning, at)`` at the first answer delta after it, at a
+      closing ``</think>`` tag, or at the end of the stream, with the whole
+      reasoning text received.
+
+    ``at`` is the clock reading when the delta arrived. A response that
+    carries its reasoning only in the final message (no deltas) is reported
+    with :meth:`received`: a start and an end at the same instant, the one
+    the text was received. A call has at most one interval: reasoning that
+    arrives after it ended is not reported again. Nothing is reported for a
+    call without reasoning text (a reasoning token count is not an interval).
+    """
+
+    def __init__(self, listener: ThinkingListener | None, *, clock: Callable[[], float] | None = None) -> None:
+        self._listener = listener
+        self._clock = clock or time.time
+        self._parts: list[str] = []
+        self._state = "idle"  # idle -> open -> closed
+        self._lock = threading.Lock()
+
+    @property
+    def text(self) -> str:
+        return "".join(self._parts)
+
+    @property
+    def reported(self) -> bool:
+        return self._state != "idle"
+
+    def reasoning(self, text: str) -> None:
+        if not text:
+            return
+        with self._lock:
+            if self._state == "closed":
+                return
+            if self._state == "idle":
+                self._state = "open"
+                self._notify("start", "", self._clock())
+            self._parts.append(text)
+
+    def answer(self) -> None:
+        self._end()
+
+    def close(self) -> None:
+        self._end()
+
+    def received(self, text: str) -> None:
+        """Reasoning text that came whole, in a final message: a zero-length interval."""
+        if not text:
+            return
+        with self._lock:
+            if self._state != "idle":
+                return
+            self._state = "closed"
+            self._parts.append(text)
+            at = self._clock()
+            self._notify("start", "", at)
+            self._notify("end", self.text, at)
+
+    def _end(self) -> None:
+        with self._lock:
+            if self._state != "open":
+                return
+            self._state = "closed"
+            self._notify("end", self.text, self._clock())
+
+    def _notify(self, boundary: str, text: str, at: float) -> None:
+        if self._listener is None:
+            return
+        self._listener(boundary, text, at)
+
+    def feed_delta(self, delta: dict[str, Any], splitter: "ThinkTagSplitter | None" = None) -> str:
+        """Report one OpenAI-style stream ``delta``; return its answer text.
+
+        Reasoning keys are reasoning. ``content`` goes through ``splitter``
+        (``<think>`` blocks are reasoning) when one is given. Answer text or a
+        tool-call delta ends the interval.
+        """
+        self.reasoning(reasoning_text(delta))
+        answer_parts: list[str] = []
+        content = delta.get("content")
+        if isinstance(content, str) and content:
+            pieces = splitter.feed(content) if splitter is not None else [("answer", content)]
+            for kind, piece in pieces:
+                if kind == "reasoning":
+                    self.reasoning(piece)
+                elif kind == "reasoning_end":
+                    self.close()
+                elif piece:
+                    self.answer()
+                    answer_parts.append(piece)
+        if delta.get("tool_calls"):
+            self.answer()
+        return "".join(answer_parts)
 
 
 def _reasoning_block(entry: dict[str, Any] | None) -> tuple[dict[str, Any], bool]:

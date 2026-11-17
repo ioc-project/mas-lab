@@ -40,6 +40,7 @@ class ObsEventKind(str, Enum):
     ENGINE_IO_RETURN = "engine.io.return"
     ENVELOPE_ACTIVITY = "envelope.activity"
     CONTROL = "control"
+    LLM_THINKING = "llm.thinking"
 
 
 class ObservabilityEvent(BaseModel):

@@ -49,7 +49,6 @@ def create_otel_plugin(
     converter_profile: str | None = "observe_sdk",
     realtime: bool = False,
     extensions: bool | None = None,
-    rewrite_tool_delegation: bool = True,
 ) -> OtelObservabilityPlugin:
     from mas.library.telemetry.conversion.topology import require_mas_name
 
@@ -63,7 +62,6 @@ def create_otel_plugin(
         converter_profile=converter_profile,
         realtime=realtime,
         extensions=extensions,
-        rewrite_tool_delegation=rewrite_tool_delegation,
     )
     plugin = OtelObservabilityPlugin(
         converter=export.converter,
@@ -146,11 +144,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
         if not spans_path.is_absolute():
             spans_path = (base_path / spans_path).resolve()
 
-        env_name = str(
-            otel_cfg.get("otlp_endpoint_env")
-            or binding.otlp_endpoint_env
-            or "OTEL_EXPORTER_OTLP_ENDPOINT"
-        )
+        env_name = str(otel_cfg.get("otlp_endpoint_env") or binding.otlp_endpoint_env or "OTEL_EXPORTER_OTLP_ENDPOINT")
         endpoint = os.environ.get(env_name, "").strip() or None
 
         from mas.library.telemetry.conversion.topology import require_mas_name
@@ -160,11 +154,8 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             str(otel_cfg.get("mas_id") or ""),
         )
         profile = str(otel_cfg.get("converter_profile") or "observe_sdk")
-        realtime = bool(otel_cfg.get("realtime", False)) or _env_flag(
-            "OBSERVE_REALTIME_OBSERVABILITY_ENABLED", False
-        )
+        realtime = bool(otel_cfg.get("realtime", False)) or _env_flag("OBSERVE_REALTIME_OBSERVABILITY_ENABLED", False)
         ext_cfg = otel_cfg.get("extensions")
-        rewrite_cfg = otel_cfg.get("rewrite_tool_delegation")
         ctx = TransformContext(agent_id=agent_id, run_id="")
         return create_otel_plugin(
             spans_path=spans_path,
@@ -177,7 +168,6 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             converter_profile=profile,
             realtime=realtime,
             extensions=None if ext_cfg is None else bool(ext_cfg),
-            rewrite_tool_delegation=True if rewrite_cfg is None else bool(rewrite_cfg),
         )
 
 

@@ -28,6 +28,14 @@ def _number(value: Any, cast: Any) -> Any:
         return None
 
 
+def _reasoning_tokens(usage: Dict[str, Any]) -> Any:
+    """Reasoning tokens the provider reported (OpenAI ``completion_tokens_details``), or None."""
+    details = usage.get("completion_tokens_details")
+    if isinstance(details, dict) and details.get("reasoning_tokens") is not None:
+        return _number(details["reasoning_tokens"], int)
+    return _number(usage.get("reasoning_tokens"), int)
+
+
 # ── LLM calls ────────────────────────────────────────────────────────────────
 
 
@@ -51,6 +59,9 @@ def h_llm_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         attrs["mas.llm.max_tokens"] = max_tokens
     if ev.get("tools") is not None:
         attrs["mas.llm.tools"] = conv.enc(ev.get("tools"))
+    if ev.get("reasoning_effort"):
+        attrs["mas.llm.reasoning_effort"] = str(ev["reasoning_effort"])
+    attrs.update(conv.state_start_attrs(ev))
     conv.open_span(call_id, "LLMCall", attrs, ev.get("parent_call_id"), start_ns=conv.ts_ns(ev))
 
 
@@ -87,8 +98,10 @@ def h_llm_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         extra["metrics.token.input"] = tokens.get("prompt_tokens")
         extra["metrics.token.output"] = tokens.get("completion_tokens")
         extra["metrics.token.total"] = tokens.get("total_tokens")
+        extra["metrics.token.reasoning"] = _reasoning_tokens(tokens)
     elif tokens:
         extra["metrics.token.total"] = tokens
+    extra.update(conv.state_end_attrs(ev))
     call_id = ev.get("call_id")
     if conv.is_closed(call_id):
         return
@@ -105,14 +118,38 @@ def h_llm_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     conv.close_span(call_id, extra, status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
 
 
+# ── Thinking (the reasoning interval of one LLM call) ───────────────────────
+
+
+@register("thinking_start")
+def h_thinking_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    """``thinking_start``: the first reasoning delta of the LLM call ``parent_call_id``."""
+    llm_call_id = str(ev.get("parent_call_id") or "")
+    model = getattr(conv, "span_model", lambda _c: "")(llm_call_id)
+    attrs: Dict[str, Any] = {
+        "mas.boundary": "ThinkingCall",
+        "mas.agent.id": conv.agent_id(ev),
+        "mas.thinking.llm_call_id": llm_call_id,
+        **({"mas.llm.model": model} if model else {}),
+        **conv.state_start_attrs(ev),
+    }
+    conv.open_span(conv.require_call_id(ev), "ThinkingCall", attrs, llm_call_id or None, start_ns=conv.ts_ns(ev))
+
+
+@register("thinking_end")
+def h_thinking_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
+    """``thinking_end``: the first answer delta (or the end of the stream)."""
+    extra: Dict[str, Any] = dict(conv.state_end_attrs(ev))
+    if ev.get("state_out_content"):
+        extra["mas.thinking.text"] = str(ev["state_out_content"])
+    conv.close_span(ev.get("call_id"), extra, status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
+
+
 # ── Tool calls ───────────────────────────────────────────────────────────────
 
 
 @register("tool_call_start")
 def h_tool_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    rewrite = getattr(conv, "rewrite_delegate_tool_start", None)
-    if callable(rewrite) and rewrite(ev):
-        return
     if conv.emit_duplicate_start_annotation(ev, "tool_call_start"):
         return
     call_id = conv.require_call_id(ev)
@@ -125,14 +162,12 @@ def h_tool_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     }
     if ev.get("barrier_id"):
         attrs["mas.tool.barrier_id"] = ev["barrier_id"]
+    attrs.update(conv.state_start_attrs(ev))
     conv.open_span(call_id, "ToolCall", attrs, ev.get("parent_call_id"), start_ns=conv.ts_ns(ev))
 
 
 @register("tool_call_end")
 def h_tool_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    rewrite = getattr(conv, "rewrite_delegate_tool_end", None)
-    if callable(rewrite) and rewrite(ev):
-        return
     result = ev.get("result")
     if result in (None, ""):
         result = ev.get("output", "")
@@ -141,6 +176,7 @@ def h_tool_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
         ev.get("call_id"),
         {
             "mas.tool.output": output,
+            **conv.state_end_attrs(ev),
         },
         status=ev.get("status", "success"),
         end_ns=conv.ts_ns(ev),
@@ -164,6 +200,7 @@ def h_processing_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.processing.segments": int(ev.get("segments") or 0),
             "mas.processing.tokens": int(ev.get("tokens") or 0),
             **_processing_content(conv, ev, "input"),
+            **conv.state_start_attrs(ev),
         },
         ev.get("parent_call_id"),
         start_ns=conv.ts_ns(ev),
@@ -174,7 +211,7 @@ def h_processing_call_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 def h_processing_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     conv.close_span(
         conv.span_key(ev),
-        _processing_content(conv, ev, "output"),
+        {**_processing_content(conv, ev, "output"), **conv.state_end_attrs(ev)},
         status=ev.get("status", "success"),
         end_ns=conv.ts_ns(ev),
     )
@@ -209,6 +246,7 @@ def h_skill_execution_start(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
             "mas.agent.id": conv.agent_id(ev),
             "mas.skill.name": ev.get("skill_name") or "",
             "mas.skill.input": conv.enc(ev.get("input")),
+            **conv.state_start_attrs(ev),
         },
         ev.get("parent_call_id"),
         start_ns=conv.ts_ns(ev),
@@ -221,7 +259,7 @@ def h_skill_execution_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
     val = output if isinstance(output, str) else conv.enc(output)
     conv.close_span(
         ev.get("call_id"),
-        {"mas.skill.output": val},
+        {"mas.skill.output": val, **conv.state_end_attrs(ev)},
         status=ev.get("status", "success"),
         end_ns=conv.ts_ns(ev),
     )
@@ -355,29 +393,13 @@ def h_contract_call_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
 
 @register(
     "observability_pre_execute_start",
+    "observability_pre_execute_end",
     "observability_post_execute_start",
+    "observability_post_execute_end",
     "boundary_ingress",
+    "boundary_egress",
     "tool_result_injected",
 )
 def h_execution_annotation(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    kind = str(ev.get("kind") or "annotation")
-    conv.point_span(
-        "CallAnnotation",
-        {
-            "mas.boundary": "CallAnnotation",
-            "mas.agent.id": conv.agent_id(ev),
-            "mas.annotation.kind": kind,
-        },
-        ev.get("parent_call_id"),
-        ts_ns=conv.ts_ns(ev),
-        call_id=ev.get("call_id"),
-    )
-
-
-@register("observability_pre_execute_end", "observability_post_execute_end")
-def h_execution_annotation_end(conv: SpanEmitter, ev: Dict[str, Any]) -> None:
-    call_id = ev.get("call_id")
-    if conv.is_open(call_id):
-        conv.close_span(call_id, status=ev.get("status", "success"), end_ns=conv.ts_ns(ev))
-        return
-    h_execution_annotation(conv, ev)
+    """Kernel markers: one CallAnnotation point per record."""
+    conv.emit_annotation(ev, "CallAnnotation", {"mas.annotation.kind": str(ev.get("kind") or "")})

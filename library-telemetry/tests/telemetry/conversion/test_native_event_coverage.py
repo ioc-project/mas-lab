@@ -41,8 +41,8 @@ def test_unknown_kind_emits_span_when_execution_enabled(tmp_path):
         export_layers={"annotation": True},
     )
     spans = [json.loads(line) for line in out.read_text().splitlines() if line.strip()]
-    names = {s.get("name") or "" for s in spans}
-    assert any("totally_novel_kind" in n for n in names)
+    kinds = {s["attributes"].get("mas.annotation.kind") for s in spans if s.get("name") == "planner.annotation"}
+    assert kinds == {"totally_novel_kind"}
 
 
 @requires_otel

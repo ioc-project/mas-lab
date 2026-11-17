@@ -16,7 +16,7 @@ mas-lab kg otel-to-kg [OPTIONS]
 
 ## DESCRIPTION
 
-OTel spans → events → kg.json. Same steps as `kg:otel-to-kg`.
+OTel spans → kg.json through one `normalize_otel` step. Options: `--run-id`, `--output-dir`, `--dry-run`. Same steps as `kg:otel-to-kg`.
 
 ## OPTIONS
 

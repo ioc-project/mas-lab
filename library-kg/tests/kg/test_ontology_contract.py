@@ -1,7 +1,6 @@
-"""Ontology contract tests — verify every KIND_TO_CLASS entry maps to a class
-that exists in mas-ontology.ttl, and that the GovernanceEvent interim mapping
-is still provisional (test fails when GovernanceEvent appears in the TTL,
-signalling it's time to update KIND_TO_CLASS entries).
+"""Ontology contract tests — every KIND_TO_CLASS entry maps to a class that exists in
+``mas-ontology.ttl``. A class a released SCOPE does not declare yet is an optional extension
+(``NATIVE_EXTENSION_NODE_TYPES``): its entries skip until the installed SCOPE has it.
 """
 
 from __future__ import annotations
@@ -24,9 +23,7 @@ from mas.library.kg.core.scope_models import NATIVE_EXTENSION_NODE_TYPES
 def ontology():
     """Load the ontology; skip all contract tests if no TTL is available."""
     try:
-        path = _resolve_ontology_path(None)
-        ont = _load_ontology(path)
-        return ont
+        return _load_ontology(_resolve_ontology_path(None))
     except (FileNotFoundError, ImportError, Exception) as exc:
         pytest.skip(f"Ontology not available: {exc}")
 
@@ -43,13 +40,12 @@ def ontology():
 )
 def test_kind_maps_to_valid_ontology_class(kind: str, cls: str, ontology) -> None:
     """Each KIND_TO_CLASS entry with a non-None class must exist in the loaded TTL."""
-    optional_extension_classes = set(NATIVE_EXTENSION_NODE_TYPES)
-    if cls in optional_extension_classes and cls not in ontology:
+    if cls in NATIVE_EXTENSION_NODE_TYPES and cls not in ontology:
         pytest.skip(f"optional extension class {cls!r} not present in bundled mas ontology")
     assert cls in ontology, (
         f"Event kind {kind!r} maps to ontology class {cls!r}, "
         f"but {cls!r} is not defined in mas-ontology.ttl. "
-        f"Either add the class to the TTL or update KIND_TO_CLASS."
+        f"Either add the class to SCOPE or update KIND_TO_CLASS."
     )
 
 
@@ -73,7 +69,7 @@ def test_suppressed_kinds_map_to_none() -> None:
 
 
 def test_governance_kinds_map_to_governance_event(ontology) -> None:
-    """Governance kinds map to GovernanceEvent, not the interim CallAnnotation."""
+    """Governance kinds map to GovernanceEvent."""
     if "GovernanceEvent" not in ontology:
         pytest.skip("GovernanceEvent not in the loaded ontology (scope_ontology not installed)")
     governance_kinds = {k for k, v in KIND_TO_CLASS.items() if v == "GovernanceEvent"}
@@ -85,6 +81,20 @@ def test_governance_kinds_map_to_governance_event(ontology) -> None:
 # ---------------------------------------------------------------------------
 # Completeness — every kind emitted by observe/normalizer.py is in KIND_TO_CLASS
 # ---------------------------------------------------------------------------
+
+
+def test_parallel_group_markers_are_suppressed_and_branch_is_unknown() -> None:
+    """SCOPE has no ParallelGroup or Branch class: the markers map to nothing."""
+    assert KIND_TO_CLASS["parallel_group_start"] is None
+    assert KIND_TO_CLASS["parallel_group_end"] is None
+    assert "branch_start" not in KIND_TO_CLASS
+    assert "branch_end" not in KIND_TO_CLASS
+
+
+def test_memory_and_rag_kinds_map_to_scope_classes() -> None:
+    assert KIND_TO_CLASS["rag_query_start"] == "RAGQuery"
+    assert KIND_TO_CLASS["memory_store_start"] == "MemoryCall"
+    assert KIND_TO_CLASS["skill_execution_start"] == "SkillCall"
 
 
 def test_observe_worker_boundary_kind_is_in_kind_to_class() -> None:

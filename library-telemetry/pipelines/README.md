@@ -58,7 +58,7 @@ mas-lab telemetry push    /tmp/otel_sdk_spans.jsonl --endpoint http://localhost:
 | `otel-span-parity.yaml` | `otel_parity_report.json` | Replay reference vs live plugin span JSONL |
 | `export-otel-collector.yaml` | OTLP export | Push spans to a collector (`--infra` with OTLP endpoint) |
 
-> KG-folding steps (`normalize_otel`, `normalize_events`, `validate_kg`,
+> KG-folding steps (`normalize_otel`, `validate_kg`,
 > `compare_kg`) belong to **library-kg** / **mas-lab-graph**; the
 > `*-to-kg-via-otel` and `*-plugin-to-kg` pipelines compose telemetry conversion
 > with those KG steps.

@@ -51,10 +51,13 @@ class OtelSpanSet:
     Attributes:
         spans:    List of OTel SDK span dicts (``ReadableSpan.to_json()`` shape).
         metadata: Free-form metadata (``run_id``, ``service_name``, ``source``…).
+        runtime_events: Realtime runtime events (OTel LogRecord JSON), when the
+                  conversion was realtime; saved next to the spans.
     """
 
     spans: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+    runtime_events: List[Dict[str, Any]] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Factory methods
@@ -91,7 +94,6 @@ class OtelSpanSet:
         replay_speed: float = 0.0,
         shift_to_now: bool = False,
         new_session_id: bool = False,
-        rewrite_tool_delegation: bool = True,
     ) -> "OtelSpanSet":
         """Convert a native ``events.jsonl`` file to an ``OtelSpanSet``.
 
@@ -101,6 +103,7 @@ class OtelSpanSet:
         import tempfile
 
         from mas.library.telemetry.conversion.replay import replay_events_file
+        from mas.library.telemetry.conversion.session import runtime_events_path
 
         with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as tmp:
             tmp_path = tmp.name
@@ -117,11 +120,16 @@ class OtelSpanSet:
                 replay_speed=replay_speed,
                 shift_to_now=shift_to_now,
                 new_session_id=new_session_id,
-                rewrite_tool_delegation=rewrite_tool_delegation,
             )
             art = cls.from_file(tmp_path)
+            events_file = runtime_events_path(tmp_path)
+            if events_file.exists():
+                art.runtime_events = [
+                    json.loads(line) for line in events_file.read_text(encoding="utf-8").splitlines() if line.strip()
+                ]
         finally:
             Path(tmp_path).unlink(missing_ok=True)
+            runtime_events_path(tmp_path).unlink(missing_ok=True)
         art.metadata = {
             "source": str(events_path),
             "service_name": service_name,
@@ -146,6 +154,12 @@ class OtelSpanSet:
         p = Path(path).expanduser().resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(self.to_jsonl() + ("\n" if self.spans else ""), encoding="utf-8")
+        if self.runtime_events:
+            from mas.library.telemetry.conversion.session import runtime_events_path
+
+            runtime_events_path(p).write_text(
+                "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in self.runtime_events), encoding="utf-8"
+            )
         logger.debug("OtelSpanSet saved: %d spans → %s", self.span_count, p)
         return p
 
@@ -194,9 +208,7 @@ class OtelSpanSet:
         with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as tmp:
             tmp_path = tmp.name
         try:
-            result = dump_spans(
-                session_id, query_by=query_by, output_path=tmp_path, **kwargs
-            )
+            result = dump_spans(session_id, query_by=query_by, output_path=tmp_path, **kwargs)
             art = cls.from_file(tmp_path)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
@@ -207,9 +219,7 @@ class OtelSpanSet:
     # Verification
     # ------------------------------------------------------------------
 
-    def validate(
-        self, *, strictness: str = "required", spec_file: Optional[str] = None
-    ):
+    def validate(self, *, strictness: str = "required", spec_file: Optional[str] = None):
         """Validate these spans against the SpanSpec; return a ``ValidationReport``."""
         from mas.library.telemetry.verification.spanspec import SpanValidator
 
@@ -221,9 +231,7 @@ class OtelSpanSet:
 
         return verify_otel_spans(self.spans)
 
-    def compare_to(
-        self, reference: "OtelSpanSet | list", *, strict: bool = True
-    ) -> Dict[str, Any]:
+    def compare_to(self, reference: "OtelSpanSet | list", *, strict: bool = True) -> Dict[str, Any]:
         """Structurally compare this span set (candidate) against a *reference*."""
         from mas.library.telemetry.verification.compare import compare_otel_span_sets
 
@@ -240,20 +248,14 @@ class OtelSpanSet:
 
     def trace_ids(self) -> List[str]:
         """Distinct trace ids present in the span set."""
-        out = {
-            (s.get("context") or {}).get("trace_id")
-            for s in self.spans
-            if (s.get("context") or {}).get("trace_id")
-        }
+        out = {(s.get("context") or {}).get("trace_id") for s in self.spans if (s.get("context") or {}).get("trace_id")}
         return sorted(t for t in out if t)
 
     def span_names(self) -> Dict[str, int]:
         """Count of spans by ``name``."""
         counts: Dict[str, int] = {}
         for s in self.spans:
-            counts[str(s.get("name") or "")] = (
-                counts.get(str(s.get("name") or ""), 0) + 1
-            )
+            counts[str(s.get("name") or "")] = counts.get(str(s.get("name") or ""), 0) + 1
         return counts
 
     def run_id(self) -> Optional[str]:

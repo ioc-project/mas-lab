@@ -83,7 +83,7 @@ The observability layer adds correlation and classification fields to most event
 | `run_id` | Run identifier; empty for single `mas-ctl` runs |
 
 The examples below omit these fields and show the payload fields specific to each kind. Further keys may be present.
-Streams also contain governance and envelope events (`governance_decision`, `boundary_ingress`, `governance_authorize_start` / `_end`, `hitl_gate`, ...), `state_update_start` / `_end`, `mas_call_start` / `_end`, `processing_call_start` / `_end`, `context_part_contributed`, `context_steer`, and `client_response`. The authoritative list is `Kind` in `lab/components/core/src/mas/lab/evaluation/events.py`.
+Streams also contain governance and envelope events (`governance_decision`, `boundary_ingress`, `boundary_egress`, `governance_authorize_start` / `_end`, `hitl_gate`, ...), `state_update_start` / `_end`, `mas_call_start` / `_end`, `processing_call_start` / `_end`, `context_part_contributed`, `context_steer`, and `client_response`. The authoritative list is `Kind` in `lab/components/core/src/mas/lab/evaluation/events.py`.
 
 ### Event kinds
 
@@ -104,7 +104,7 @@ Streams also contain governance and envelope events (`governance_decision`, `bou
 - The request is built once, per call, by `llm_request_for` (driver) into an `LlmCallRequest` and stamped on the `ENGINE_IO` event. `max_tokens` is the configured cap (`max_completion_tokens` wins when set) and `temperature` is the value sent (0.0 when the model is answering from tool results; the engine and the request share one rule, `sampling_temperature`). Both are read through infra middleware wrappers, like `model`.
 - The engine may send a smaller cap than the configured one (the prompt leaves less room) or a larger one (a truncation retry). `llm_call_end.max_tokens` then carries the cap of the final attempt; it is omitted when it equals the one on start.
 - `tools` is the list of offered tool names (`tool_def_names`). It is omitted when the engine offered none.
-- `tool_calls` on `llm_call_end` is the list of calls the model returned, `{toolName, arguments}` each. Readers render it as `→ name(args)` text when the model produced no other output.
+- `tool_calls` on `llm_call_end` is the list of calls the model returned, `{toolName, arguments}` each. Readers render it as `→ name(args)` text after any output text.
 
 Examples:
 
@@ -142,6 +142,10 @@ The context assembler emits this event just before each LLM call. It carries the
   ]
 }
 ```
+
+### State identity fields
+
+Native records of an agent visit carry an explicit dataflow chain. `state_in` and `state_out` are State ids of the form `{exec_call_id}#{n}`, numbered from 0 per visit in emission order. `state_in_content` and `state_out_content` give the content of those States. The full rules are in [native-telemetry.md](../../library-kg/docs/native-telemetry.md#state-identity). Parallel group end records carry `state_in` as a list of member ids. Nothing consumes these fields yet.
 
 ### `audit`
 

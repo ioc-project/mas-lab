@@ -17,21 +17,15 @@ spec:
         spanspec_level: L3
         spanspec_strictness: required
 
-    - name: normalize-observe-plugin
+    - name: normalize-observe-plugin-kg
       # observe-sdk spans are OTel spans — normalize_otel auto-detects the
       # format (openclaw / ioa_observe), so there is no separate observe step.
       type: normalize_otel
       per_run: true
       depends_on: [verify-observe-plugin-spans]
       config:
-        filename: observe_sdk_spans.jsonl
-
-    - name: normalize-observe-plugin-kg
-      type: normalize_events
-      per_run: true
-      depends_on: [normalize-observe-plugin]
-      config:
         artifact: kg_observe
+        filename: observe_sdk_spans.jsonl
 
     - name: validate-observe-plugin-kg
       type: validate_kg

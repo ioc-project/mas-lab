@@ -37,8 +37,8 @@ The format has three validation levels, each building on the previous. `EventVal
 
 Normalization runs in two phases ([normalization.md](normalization.md) has the details):
 
-1. **Annotation** (`normalize_events` in `core/graph_builder.py`): drops events of disabled layers, maps each event's `kind` to an ontology class through `KIND_TO_CLASS` (`core/event_mappings.py`), and stamps `mas_class`, `mas_uri`, `run_id` and `call_id` on the event.
-2. **Graph extraction** (`extract_graph`, which drives `NativeGraphBuilder` in `core/native_graph_builder.py`): dispatches each event to a per-class handler in `observability/native/handlers/`, upserts one node per `call_id` from the start/end pair, then runs post-passes (annotation edges, session nodes, containment edges, State/Transition synthesis).
+1. **Annotation** (`normalize_events` in `core/graph_builder.py`): drops events whose class belongs to a disabled category, maps each event's `kind` to an ontology class through `KIND_TO_CLASS` (`core/event_mappings.py`), and stamps `mas_class`, `mas_uri`, `run_id` and `call_id` on the event.
+2. **Graph extraction** (`extract_graph`, which drives `NativeGraphBuilder` in `core/native_graph_builder.py`): maps each event, by itself, to nodes and edges through a per-class handler in `observability/native/handlers/`. Both records of a call carry the same `call_id` and give the same node id, so they merge; the State and Transition nodes come from the `state_in` / `state_out` fields; the final step only merges by id, drops edges whose endpoint never arrived and applies the SCOPE attribute projection.
 
 ### Native normalization contract
 
@@ -50,7 +50,7 @@ Native normalization is mechanical. The runtime should emit explicit values for:
 - `parent_call_id` when a call is nested under another call
 - the payload fields listed per kind below
 
-Two small inference steps remain for traces that omit `parent_call_id`: a `routing` event that names a source and a target agent supplies the `parent_call_id` of the target agent's next `execution_start` (from the source agent's currently open `execution_start`), and the containment pass adds `contains` edges by timestamp enclosure.
+Nothing is inferred. Each event maps to nodes and edges by itself: the States and Transitions are the ones the `state_in` / `state_out` fields name, containment is what `parent_call_id` says, and a call that never ended keeps no `endTime`. A field the runtime does not write gives no node, no edge and no placeholder. Because ids come from what the event carries and records merge by id, the graph does not depend on the order of the events.
 
 ### Unknown and suppressed kinds
 
@@ -66,7 +66,7 @@ Format rules:
 - One JSON object per line, UTF-8.
 - Blank lines are ignored.
 - `kind` and `run_id` are strings; `timestamp` is Unix epoch seconds as a number.
-- The graph builder processes events in arrival order. Containment, annotation and routing inference use `timestamp` and arrival order together, so emit events in non-decreasing `timestamp` order.
+- Order does not matter to the graph: each event maps by itself and records merge by id, so a trace read in any order, or one event at a time as it arrives, gives the same graph. Emit non-decreasing `timestamp` values anyway: they become `startTime` / `endTime`.
 
 A start/end pair:
 
@@ -75,7 +75,7 @@ A start/end pair:
 {"kind":"execution_end","agent_id":"planner","call_id":"tp-exec-001","parent_call_id":"tp-mas-001","run_id":"r1","session_id":"trip-planner/demo/baseline/item1/r1","status":"success","output":"Trip planned: AF101 NYC to CDG.","timestamp":1716200009.5}
 ```
 
-Real traces: `library-kg/examples/qa-agent/events.jsonl` (emitted by the runtime) and `library-kg/examples/trip-planner/events.jsonl` (hand-written). Both ship with an empty or absent `run_id`, so `mas-lab kg verify` reports `missing required field 'run_id'` on them; pass `--run-id` to `mas-lab kg normalize` to normalize them.
+Real traces: `library-kg/examples/qa-agent/events.jsonl` (emitted by the runtime) and `library-kg/examples/trip-planner/events.jsonl` (captured from a live run of the `trip-planner` sample). Both ship with an empty or absent `run_id`, so `mas-lab kg verify` reports `missing required field 'run_id'` on them; pass `--run-id` to `mas-lab kg normalize` to normalize them.
 
 ## 3. Global envelope (L1)
 
@@ -88,7 +88,7 @@ Real traces: `library-kg/examples/qa-agent/events.jsonl` (emitted by the runtime
 | `kind` | `string` | Event kind. Must be a key of `KIND_TO_CLASS` to reach the graph (see [Section 5](#5-kind-reference)). |
 | `timestamp` | `number` | Unix epoch seconds; use a float for sub-second precision. |
 | `run_id` | `string` | Run identifier grouping the events of one trace. The `run_id` passed to `run_normalize` / `--run-id` overrides this value on every event. |
-| `agent_id` | `string` | Agent emitting the event. Used for agent attribution, containment inference and routing-based parent inference. |
+| `agent_id` | `string` | Agent emitting the event. Used for agent attribution (`agentId`, the `Agent` catalog node). |
 
 ### Recommended fields
 
@@ -99,7 +99,7 @@ Reported as warnings when `--strictness recommended` (or `complete`) is used:
 | `mas_id` | `string` | Multi-agent system identifier. |
 | `session_id` | `string` | Free-form session identifier (see [Section 8](#8-session-id-convention)). |
 | `block` | `string` | Observability block, one of `structural`, `execution`, `context`, `trajectory`, `governance` (the schema enum). A coarse grouping of what the event describes. |
-| `layer` | `string` | One of `structure`, `execution`, `semantic`, `provenance`, `governance` (the schema enum). Not the same thing as the optional normalization layers of [Section 5](#5-kind-reference). |
+| `layer` | `string` | One of `structure`, `execution`, `semantic`, `provenance`, `governance` (the schema enum). Not the same thing as the opt-in `categories` of [Section 5](#5-kind-reference). |
 | `summand` | `string` | One of `model`, `tool`, `context`, `governance`, `orchestrator` (the schema enum): which component of the runtime's observability state machine produced the event. |
 | `mealy_symbol` | `string` | Label of the runtime state-machine transition the event records, for example `RUN_START`, `AGENT_START`, `LLM_CALL`, `POLICY_CHECK`. Free-form in the schema; the normalizer does not read it. |
 
@@ -111,6 +111,7 @@ Interval events are kinds whose name ends in `_start` or `_end`. They model one 
 
 - `*_start` creates the node and sets `startTime` plus start-phase payload.
 - `*_end` updates the same node with `endTime`, `status` (default `success` when absent) and end-phase payload.
+- A call with a start and no end gets `success=false`, and so does the Session when its outer call has no end. This only happens for an interrupted trace.
 
 ### Pairing contract
 
@@ -119,34 +120,72 @@ Interval events are kinds whose name ends in `_start` or `_end`. They model one 
 | Same `call_id` | Both halves carry the identical `call_id`. This is the join key. It is a string, not necessarily a UUID. |
 | Same base kind | The part before `_start`/`_end` must match. A `call_id` shared by different bases is reported by `check_interval_pairing` as `mixed interval bases`. |
 | `call_id` required | The JSON Schema and `EventValidator` require `call_id` on every `*_start` and `*_end`. The normalizer drops a structural event without one. |
-| `parent_call_id` recommended | Links the call to its enclosing call. Omit it (or set it to `null`) for root calls such as `mas_call_start`. |
+| `parent_call_id` recommended | Names the call's parent. For an LLM, tool, processing or memory call it is the agent visit (`execution_start` `call_id`) that contains it. Omit it (or set it to `null`) for root calls such as `mas_call_start`. A delegated visit names the tool call that started it. |
 
 ### Resilience behaviour
 
-Behaviour of `NativeGraphBuilder.upsert_call` (`core/native_graph_builder.py`):
+Behaviour of the merge by node id (`NativeGraphBuilder.add_node`, `core/native_graph_builder.py`). Start and end records are two partial descriptions of one node; each says what it carries:
 
 | Scenario | Behaviour |
 |----------|-----------|
 | Start arrives before end | Normal case. |
-| End arrives before start | The node is created from the end event (no `startTime`); `startTime` is set when the start arrives. A node with no `startTime` or no `endTime` gets no inferred `contains` edges. |
-| Start with no matching end | The node keeps `startTime` and has no `endTime` (open call). |
+| End arrives before start | The node is created from the end event (no `startTime`); `startTime` is set when the start arrives. |
+| Start with no matching end | The node keeps `startTime` and has no `endTime` and no `success` (open call). Nothing is cut off at the last event. |
 | End with no matching start | The node is created from the end alone. |
-| Second start while the first call is still open | The second start becomes a `CallAnnotation` point node; the original node is not overwritten. |
-| Duplicate end | Last writer wins on `endTime`, `status` and output fields. |
+| Second start | Merges into the same node: the earliest `startTime` is kept; a different non-empty value for a field keeps the one that sorts first. |
+| Duplicate end | Merges into the same node: the latest `endTime` is kept; a different non-empty value for a field keeps the one that sorts first. |
+
+### State identity
+
+Each agent visit (`execution_start` to `execution_end`, keyed by `call_id`) is a chain of States. A State id is `{exec_call_id}#{n}`, with `n` counting from 0 in emission order. Ids depend only on emission order, never on uuids or time. The fields are additive and no existing field changes:
+
+| Field | On | Meaning |
+|-------|----|---------|
+| `state_out` / `state_out_content` | `execution_start` | The agent input (`#0`) and its text. |
+| `state_in` / `state_out` | `llm_call_*`, `tool_call_*`, `memory_call_*`, context assembly `processing_call_*` | The State the element reads and the State it produces. Start and end of one call carry the same pair. |
+| `state_out_content` | `llm_call_end` | Model text, or the canonical JSON of `tool_calls` when the text is empty. |
+| `state_out_content` | `tool_call_end`, `memory_call_end` | The `output`. |
+| `state_out_content` | context assembly `processing_call_end` (and its start, when it has messages) | Canonical JSON of `messages`. |
+| `state_in` / `state_out` | `execution_end` | The visit's final State. No new id. |
+| `state_in` / `state_out` | `mas_call_end` | The root visit's first State and the last root visit's final State. |
+| `state_in_content` | every record with `state_in` | The content of the input State, as its producer stated it. `""` if the producer has not ended yet. |
+
+Canonical JSON means `json.dumps(value, sort_keys=True, separators=(",", ":"))`.
+
+Parallel groups do not advance the chain. Members read the group's input State and each gets its own `state_out`. The join is one `aggregate` ProcessingCall pair at the group end (`processing_type` `parallel_group`, the same timestamp on start and end). Its `state_in` is the list of member outs in start order, `state_out` is the new join State, and `state_in_content` / `state_out_content` (also `input` / `output`) are the JSON list of the members' contents. This is the only State producer at the join. `parallel_group_start` / `parallel_group_end` are plain markers and carry no state fields. There is no fork ProcessingCall.
+
+Control markers are plain records. `wait_state_start` / `wait_state_end` and `parallel_group_start` / `parallel_group_end` have no `wait`, `resume` or `parallel fork` ProcessingCall companions. A context assembly `processing_call_end` has zero duration (its timestamp equals its start) and no `synthetic` flag.
+
+Delegation hands data from the caller to the callee through the tool call that starts the callee's visit. The callee's `execution_start` carries `parent_call_id` = that tool call's `call_id`. A session-wide registry records every tool call (caller `agent_id`, caller `exec_call_id`, and the call's `state_in` / `state_in_content` / `state_out`). When a visit is delegated, the caller gets two ProcessingCall pairs:
+
+| Pair | `call_id` | `parent_call_id` | State flow | Emitted |
+|------|-----------|------------------|------------|---------|
+| `delegate` | `{tool_call_id}:delegate` | caller `exec_call_id` | reads the tool call's `state_in`, writes the callee's `#0` | before the callee's `execution_start` |
+| `reply` | `{tool_call_id}:reply` | caller `exec_call_id` | reads the callee's final State, writes the tool call's `state_out` | after the callee's `execution_end` |
+
+Both pairs use `processing_type` `agent_boundary`, and both start and end records of a pair carry the same timestamp. A root visit (no delegating `parent_call_id`) gets neither pair.
+
+**How the fold reads these fields.** `mas.library.kg` turns each record into States and Transitions with no knowledge of any other record (`core/state_transition.py`; [normalization.md](normalization.md#state-and-transition-nodes-corestate_transitionpy)):
+
+- A State node per id (`state:{run_id}:{state id}`). The same id on two records is one State; non-empty content beats empty, and two different non-empty contents keep the one that sorts first and log a warning. The emitter guarantees equal content for a same id.
+- One Transition per element. On `execution_start`, `state_out` is the visit's initial State; on `execution_end`, `state_in` = `state_out` is its final State; on `mas_call_end`, `state_in` / `state_out` are the root visit's first and the last root visit's final State; on every other element, `state_in` (one id, or a list for a join) is read and `state_out` written.
+- Edges: `hasInitialState` / `hasFinalState` / `hasState` (element -> State), `inputTo` (input State -> Transition), `leadsTo` (Transition -> output State), `correspondsToTransition` / `representsExecution`. The Session and the MASCall share the States `mas_call_end` names and each has its own Transition.
+- A record with no state fields adds no State, no Transition and no placeholder content. `wait_state_*` and `parallel_group_*` records are plain markers.
 
 ## 5. Kind reference
 
-`KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` has 85 entries: 73 map to an ontology class (tables below) and 12 map to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the SCOPE ontology (`ioc-scope-ontology`; see [ontology.md](ontology.md)).
+`KIND_TO_CLASS` in `library-kg/src/mas/library/kg/core/event_mappings.py` maps every known kind to an ontology class (tables below) or to `None` (suppressed, [5.6](#56-suppressed-kinds)). Class names are local names in the SCOPE ontology (`ioc-scope-ontology`; see [ontology.md](ontology.md)).
 
-**Optional layers.** `LAYER_KINDS` groups kinds into layers that `normalize_events` can drop. Defaults: all off (`infrastructure`, `trajectory`, `provenance`, `governance`, `annotation`, `native_extensions`). CLI flags: `--include-infrastructure`, `--include-trajectory`, `--include-provenance`, `--include-governance`, `--include-annotation`, `--include-native-extensions`, `--all-attributes` (each with a `--no-` form); Python: the same keyword arguments of `run_normalize`. A dropped layer produces no nodes for its kinds. Default attributes are SCOPE model fields only.
+**Categories.** The default output holds the core classes only: `Session`, `MASCall`, `AgentCall`, `LLMCall`, `ToolCall`, `ProcessingCall`, `State`, `Transition` and the `MAS` / `Agent` / `LLM` / `Tool` / `Processing` catalog. One option, `categories` (`--categories a,b` on `mas-lab kg normalize`; a list or a comma-separated string in `run_normalize`, `build_kg_document`, `normalize_events` and the `normalize_events` step's `categories:`), adds opt-in classes on top; `all` enables every one, and an unknown name is an error. The filter acts on the class an event maps to (`CATEGORY_CLASSES` in `core/event_mappings.py`), the same way in the batch and the realtime fold: an event of a disabled category is dropped, never changes a core node, and the core graph is the same whether or not such events are in the input. Default attributes are SCOPE model fields only (`--all-attributes` keeps the native-only ones).
 
-| Layer | Kinds | Default |
-|-------|-------|---------|
-| `infrastructure` | `infrastructure_info` | off |
-| `trajectory` | `parallel_group_*`, `branch_*`, `routing`, `routing_result` | on |
-| `provenance` | `context_part_contributed` | off |
-| `governance` | `audit`, `policy_denial`, `policy_allow`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_gate`, `hitl_request`, `governance_denied`, `governance_checked`, `governance_decision`, `governance_event`, `governance_policy`, `governance_authorize_*`, `governance_validate_*`, `obs_wrap_gov_authorize_*`, `obs_wrap_gov_validate_*` | off |
-| `annotation` | `context_assembled`, `state_update_*`, `agent_communication_*`, `checkpoint_*`, `observability_*_execute_*`, `user_input`, `user_output`, `client_response`, `tool_result_injected`, `boundary_ingress`, `context_steer`, `compaction`, `wait_state_*` | off |
+| Category | Classes | Kinds | Default |
+|----------|---------|-------|---------|
+| `capabilities` | `Skill`, `SkillCall`, `Memory`, `MemoryCall`, `RAGQuery` (and `executesSkill`, `executesMemory`, `usesSkill`, `usesMemory`, `hasSkillCall`, `hasMemoryCall`) | `skill_execution_*`, `memory_*`, `rag_query_*` | off |
+| `annotations` | `CallAnnotation`, `GovernanceEvent`, `ContextContribution` (and `annotates`) | `routing`, `routing_result`, `context_assembled`, `state_update_*`, `agent_communication_*`, `observability_*_execute_*`, `user_input`, `user_output`, `client_response`, `tool_result_injected`, `boundary_ingress`, `boundary_egress`, `context_steer`, `compaction`, `wait_state_*`, `context_part_contributed`, the governance kinds (`audit`, `policy_*`, `budget_event`, `transformation_event`, `control_intervention`, `hitl_*`, `governance_decision`, `governance_event`) and the outcome a check interval states | off |
+| `worker` | `Worker` (and `runsOn`) | `infrastructure_info` | off |
+| `thinking` | `ThinkingCall` (and `hasThinkingCall`) | `thinking_start`, `thinking_end` | off |
+
+The names are the ones of the observe-sdk categories (memory, rag, skill, governance, context, annotation, worker, thinking), which are also off by default there. `norm` has no category gate: it maps every span suffix it is given (`*.skill`, `*.memory`, `*.rag`, `*.annotation`, `*.governance`, `*.context`, `*.worker`, `*.thinking`), so on the OTel path the gate is the observe-sdk's switches (and the converter's export layers), and a native graph with every category on equals `norm`'s output for the same trace.
 
 The "Spec required" and "Spec recommended" columns below come from `events.spec.yaml` (what `mas-lab kg verify` checks). Every `*_start` / `*_end` kind additionally requires `call_id` (L2) and recommends `parent_call_id`. The "Normalizer reads" details are in [Section 6](#6-per-kind-payload-reference).
 
@@ -154,7 +193,7 @@ The "Spec required" and "Spec recommended" columns below come from `events.spec.
 
 | Kind | KG class | Spec required (L3) | Spec recommended (L3) |
 |------|----------|--------------------|------------------------|
-| `execution_start` | `AgentCall`, or `TaskCall` when `boundary="TaskCall"` or `agent_id` ends in `.task` | `input` | `context` |
+| `execution_start` | `AgentCall` | `input` | `context` |
 | `execution_end` | same as its start | `status` | `output`, `output_parts` |
 | `llm_call_start` | `LLMCall` | `model` | `messages`, `temperature`, `max_tokens`, `tools` |
 | `llm_call_end` | `LLMCall` | | `latency_ms`, `response`, `tool_calls`, `output_parts`, `finish_reason`, `tokens_used` |
@@ -162,41 +201,43 @@ The "Spec required" and "Spec recommended" columns below come from `events.spec.
 | `tool_call_end` | `ToolCall` | `tool_name` | `latency_ms`, `result`, `output_parts`, `status` |
 | `network_call_start` / `_end` | `ToolCall` | | |
 | `mas_call_start` / `_end` | `MASCall` | | `mas_id`, `session_id` |
-| `rag_query_start` / `_end` | `RAGQuery` | | |
-| `memory_call_*`, `memory_store_*`, `memory_retrieve_*` | `MemoryCall` | | |
+| `rag_query_start` / `_end` | `RAGQuery` (a `MemoryCall` that retrieves); `capabilities` | | |
+| `memory_call_*`, `memory_store_*`, `memory_retrieve_*` | `MemoryCall`; `capabilities` | | |
 | `processing_call_start` / `_end` | `ProcessingCall` | | |
 | `workflow_transition_start` / `_end` | `ProcessingCall` (no dedicated class) | | |
-| `skill_execution_start` / `_end` | `SkillCall` | | |
-| `parallel_group_start` / `_end` | `ParallelGroup` | | |
-| `branch_start` / `_end` | `Branch` | | |
+| `skill_execution_start` / `_end` | `SkillCall`; `capabilities` | | |
+| `thinking_start` / `_end` | `ThinkingCall`; `thinking` | | `model`, `reasoning_tokens` (end), `state_in` (start), `state_out` (end) |
+| `parallel_group_start` / `_end` | none (suppressed marker; the join is the `aggregate` ProcessingCall) | | |
+
+A `thinking_start` / `thinking_end` pair is the reasoning interval of one LLM call (`thinking` category): its `call_id` is `<llm_call_id>#think`, its `parent_call_id` the LLM call (which `hasThinkingCall` it), `state_in` the prompt State of the LLM call and `state_out` the reasoning text, like any element record. The fold never estimates an interval from timing; a producer that reports reasoning only as text puts it on the LLM call's output State and emits no pair. `branch_*` is not a known kind (no producer emits it).
 
 ### 5.2 Annotation kinds (point events)
 
-Annotation events become `CallAnnotation` nodes. They do not form call-tree nodes: each line (including each half of a `*_start`/`*_end` annotation pair) becomes its own annotation node, linked by an `annotates` edge to the tightest enclosing call of the same agent by timestamp.
+With the `annotations` category, annotation events become `CallAnnotation` nodes (`eventKind`, `eventTime`, `payload`). They do not form call-tree nodes: each line (including each half of a `*_start`/`*_end` annotation pair) becomes its own annotation node, linked by an `annotates` edge to the call its record names in `call_id` (else `parent_call_id`) when that call is in the trace. No call is looked up by time.
 
 | Kind | Notes |
 |------|-------|
-| `routing`, `routing_result` | Delegation between agents (trajectory layer); `routing` also feeds parent inference. |
+| `routing`, `routing_result` | Delegation between agents ; no parent is inferred from it. |
 | `context_assembled` | Context window assembled before an LLM call. |
 | `state_update_start` / `_end` | Context state mutation. |
 | `agent_communication_start` / `_end` | Agent-to-agent message. |
-| `checkpoint_start` / `_end` | Checkpoint; the node gets `block="governance"`. |
+| `checkpoint_start` / `_end`, `governance_authorize_*`, `governance_validate_*`, `obs_wrap_gov_authorize_*`, `obs_wrap_gov_validate_*` | Timing bracket of a check: a `ProcessingCall` named by the kind without its suffix (core class, always mapped). `call_id` is the interval's own key, `parent_call_id` the call it brackets, which contains it (`hasProcessingCall` from an agent visit, `containsCall` from an LLM or tool call). The States come from `state_in` / `state_out` when the records carry them. A record that states a decision (`decision_type`, `decision`, `outcome`, `resolution`) also gives a `GovernanceEvent` (`annotations` category) that annotates the bracket; one that states none gives none. |
 | `observability_pre_execute_start` / `_end`, `observability_post_execute_start` / `_end` | Runtime wrapper checkpoints around an operation. |
 | `user_input`, `user_output`, `client_response` | User-facing I/O. |
 | `tool_result_injected` | A tool result fed back into the context. |
-| `boundary_ingress`, `context_steer`, `compaction`, `wait_state_start` / `_end` | Runtime markers. |
+| `boundary_ingress`, `boundary_egress`, `context_steer`, `compaction`, `wait_state_start` / `_end` | Runtime markers. |
 
-### 5.3 Provenance (optional layer)
+### 5.3 Context provenance (`annotations`)
 
-`context_part_contributed` becomes a `ContextContribution` node (one per context part). Spec recommended: `part_id`, `source`, `content`, `access_mechanism`, `cause`, `retained`, `parents`. Off by default; enable with `--include-provenance`.
+`context_part_contributed` becomes a `ContextContribution` node (one per context part). Spec recommended: `part_id`, `source`, `content`, `access_mechanism`, `cause`, `retained`, `parents`. Off by default; enable with `--categories annotations`.
 
-### 5.4 Infrastructure (optional layer)
+### 5.4 Infrastructure (`worker`)
 
-`infrastructure_info` maps to class `Worker`. Spec recommended: `worker_id`, `endpoint`. The native handlers currently produce no node for it (there is no dispatch handler for `Worker`, and without a `call_id` the generic call handler skips it), so enabling the layer has no effect on the graph today.
+`infrastructure_info` maps to class `Worker`. Spec recommended: `worker_id`, `endpoint`. The handler writes a `Worker` node named by `worker_id` (`processId` from `worker_pid`, `durableBackend` from `durable_backend`) and, when the record has a `parent_call_id`, a `runsOn` edge from that execution to the Worker.
 
-### 5.5 Governance (optional layer)
+### 5.5 Governance (`annotations`)
 
-All governance kinds (listed in the layer table above) map to class `GovernanceEvent` and are handled like annotations: a `GovernanceEvent` node with an `annotates` edge. The handler sets `annotationKind` and `block="governance"` for every one except `hitl_request` and the `obs_wrap_gov_*` kinds. Off by default; enable with `--include-governance`.
+All governance kinds (listed in the category table above) map to class `GovernanceEvent` and are handled like annotations: a `GovernanceEvent` node with an `annotates` edge. Off by default; enable with `--categories annotations`.
 
 Note: `events.spec.yaml` requires `call_id` for every kind with a `governance_` prefix (including point kinds such as `governance_checked` and `governance_decision`), so `mas-lab kg verify` flags them when `call_id` is missing, although the normalizer does not need it.
 
@@ -207,7 +248,7 @@ Mapped to `None` in `KIND_TO_CLASS`: skipped by the normalizer and by `EventVali
 | Kind | Reason |
 |------|--------|
 | `prompt_build_start`, `prompt_build_end` | Redundant with `llm_call_start.messages`. |
-| `user_response` | Redundant with `execution_end.output`. |
+| `user_response` | Not a node. Its `content` is the AgentCall's `outputRaw` (the runtime puts the reply here and `execution_end` carries none), and the OTel converter reads the reply the same way. |
 | `human_interaction`, `delegated_agent_output` | Superseded; no mapping. |
 | `skills_check` | Legacy governance extension. |
 | `object_upsert`, `object_link`, `object_model_event` | Domain-KG extension only. |
@@ -218,11 +259,11 @@ Mapped to `None` in `KIND_TO_CLASS`: skipped by the normalizer and by `EventVali
 
 This section lists what the native handlers in `observability/native/handlers/` read. Fields the spec recommends but the handlers do not read are called out. Examples use the trip-planner scenario (`run_id` `r1`, agents `mas`, `planner`, `itinerary_agent`) and are illustrative.
 
-**Common to every call-tree node** (`NativeGraphBuilder.upsert_call`): `call_id` -> `callId`, `agent_id` -> `agentId`, `parent_call_id` -> `parentCallId`, `run_id` -> `runId`, start `timestamp` -> `startTime`, end `timestamp` -> `endTime`, end `status` -> `status` (default `success`), and `event_id` (when present) -> `sourceRecordIds`.
+**Common to every call-tree node** (`NativeGraphBuilder.call_partial`): `call_id` -> `callId`, `agent_id` -> `agentId`, `parent_call_id` of the start record -> `parentCallId`, `run_id` -> `runId`, start `timestamp` -> `startTime`, end `timestamp` -> `endTime`, end `status` -> `status` (default `success`), and `event_id` (when present) -> `sourceRecordIds`.
 
 ### 6.1 `execution_start`
 
-Creates an `AgentCall` (or `TaskCall`, see [5.1](#51-call-tree-kinds-startend-pairs)) node.
+Creates an `AgentCall` node.
 
 | Event field | KG attribute | Notes |
 |-------------|-------------|-------|
@@ -230,9 +271,7 @@ Creates an `AgentCall` (or `TaskCall`, see [5.1](#51-call-tree-kinds-startend-pa
 | `agent_type` | `agentType` | AgentCall only. |
 | `agent_sequence` | `agentSequence` | AgentCall only; converted to int. |
 | `agent_id` | `agentName` | AgentCall only. |
-| `task_name`, `task_type` | `taskName`, `taskType` | TaskCall only. |
-| `boundary` | node class | `"TaskCall"` selects `TaskCall`; anything else `AgentCall`. |
-| `parent_call_id` | `parentCallId` | If absent, taken from a preceding `routing` event addressed to this agent. |
+| `parent_call_id` | `parentCallId` | Not read for containment of an AgentCall: agent calls are contained by the MASCall of the session. |
 
 `context` is spec-recommended but not read by the handler.
 
@@ -245,7 +284,7 @@ Creates an `AgentCall` (or `TaskCall`, see [5.1](#51-call-tree-kinds-startend-pa
 | Event field | KG attribute | Notes |
 |-------------|-------------|-------|
 | `status` | `status` | Spec-required. Free-form string (the shipped examples use `success` and `ok`). |
-| `output` / `payload` | `outputRaw` | AgentCall only. Rendered output (`outputContent`, `outputParts`) is derived afterwards from the call's children. |
+| `output` / `payload` | `outputRaw` | AgentCall only. |
 
 The handler pairs the end with the agent's currently open `execution_start`, even when `call_id` differs.
 
@@ -281,7 +320,6 @@ Token counts and `finishReason` start at `0` / empty and are filled by the end e
 | `response.id` | `responseId` | |
 | `response.choices[0].finish_reason` or top-level `finish_reason` | `finishReason` | |
 | `response.choices[0].message.{content,tool_calls}` or flat `response.{content,text,tool_calls}` or top-level `tool_calls` | `completion`, `toolCalls` | Tool calls are rendered as `→ name(args)` lines (args cut at 300 characters, appended after any output text). The OTel converter renders the same text. |
-| `response.thinking` | child `ThinkingCall` node | Emitted when `include_native_extensions` is on. Linked from the LLM call by a `hasThinking` edge. |
 | `content` / `output` (flat) | `completion` | Used when there is no `response` object. |
 
 New runtime traces put `model` / `messages` / offered `tools` on `llm_call_start`. Token usage and `finish_reason` stay on `_end`. An OpenAI-shaped `response` is still accepted; `model` on that object is not read.
@@ -298,7 +336,7 @@ New runtime traces put `model` / `messages` / offered `tools` on `llm_call_start
 | `tool_call_id` | `toolCallId` | Provider-assigned id. |
 | `tool_arguments` / `arguments` / `parameters` | `toolArguments` | First present, JSON-encoded. |
 
-**Delegation tools.** A tool named `delegate_to_<agent>` is treated as a hand-off, not a tool call: by default no `ToolCall` node is created, and the caller's agent visit is closed so the delegate appears as a sibling visit (LangGraph / observe-sdk). `callsAgent` is not emitted until A2A observability lands.
+**Delegation tools.** A tool named `delegate_to_<agent>` is an ordinary `ToolCall` of the caller; the callee's visit is an ordinary `AgentCall` (contained by the MASCall). The data handoff is on the States ([State identity](#state-identity)). `callsAgent` is not emitted until A2A observability lands.
 
 ```json
 {"kind":"tool_call_start","agent_id":"itinerary_agent","call_id":"tp-tc-001","parent_call_id":"tp-pg-001","run_id":"r1","tool_name":"search_flights","timestamp":1716200005.1,"arguments":{"origin":"NYC","destination":"CDG","date":"2026-07-01"}}
@@ -328,7 +366,15 @@ Brackets the whole multi-agent system invocation, usually the root of the call t
 
 ### 6.8 `rag_query_*`, `memory_*`
 
-These produce `RAGQuery` / `MemoryCall` nodes with only the common call-node fields. Payload fields such as `query_text`, `collection`, `retrieved_doc_count` or `results` are carried on the event but not copied onto the node by the native handlers.
+These produce `RAGQuery` / `MemoryCall` nodes (a `RAGQuery` is a `MemoryCall`; both are contained by `hasMemoryCall`).
+
+| Event field | KG attribute | Notes |
+|-------------|-------------|-------|
+| kind (`memory_store`, `memory_retrieve`, `rag_query`) or `operation` | `memoryOperation` | `store`, `retrieve`, `retrieve`; for `memory_call_*` the record's `operation`. |
+| `query` / `query_text` / `key` | `memoryQuery` | |
+| `result_count` / `results_count` / `retrieved_doc_count` | `resultCount` | |
+| `top_k` | `topK` | `RAGQuery` only. |
+| `memory_name`, else `collection`, else `memory_type` | the `Memory` node (`name`) and the `executesMemory` edge | `memory_type` also fills `Memory.memoryType`. A record that names none gives no `Memory` and no edge: SHACL then reports the missing `executesMemory`. |
 
 ```json
 {"kind":"rag_query_start","agent_id":"itinerary_agent","call_id":"tp-rag-001","parent_call_id":"tp-pg-001","run_id":"r1","query_text":"Paris boutique hotels near Marais","collection":"hotels-europe","timestamp":1716200005.2}
@@ -346,25 +392,19 @@ These produce `RAGQuery` / `MemoryCall` nodes with only the common call-node fie
 
 ### 6.10 `skill_execution_*`
 
-Start reads `skill_name` (or `processing_name`) -> `skillName`, `input` / `payload` -> `skillInput`, `skill_version` -> `skillVersion`. End reads `output` / `result` -> `skillOutput` and `status`.
+A `SkillCall` has the common call fields only. `skill_name` (or `processing_name`) names the `Skill` node it `executesSkill`; the input and output belong to its States.
 
 ### 6.11 Point and annotation events
 
-`routing`, `routing_result`, `context_assembled`, `state_update_*`, `agent_communication_*`, `checkpoint_*`, and the governance kinds are copied to an annotation node (`CallAnnotation` or `GovernanceEvent`) with `kind`, `agentId`, `timestamp`, `runId` plus any of these fields that are present:
+`routing`, `routing_result`, `context_assembled`, `state_update_*`, `agent_communication_*`, and the governance kinds become an annotation node (`CallAnnotation` or `GovernanceEvent`) with `eventKind` (the kind), `eventTime` (the timestamp), `sessionId` and `payload`, a JSON object of the fields below that the record carries:
 
-| Event field | KG attribute |
+| Event field | In `payload` |
 |-------------|-------------|
-| `source_agent_id`, `target_agent_id` | `sourceAgentId`, `targetAgentId` |
-| `task`, `correlation_id`, `status` | `task`, `correlationId`, `status` |
-| `segments`, `total_tokens` | `segments`, `totalTokens` |
-| `operation`, `target`, `from`, `to` | same names |
-| `message_type` | `messageType` |
-| `policy_id`, `decision`, `reason` | `policyId`, `decision`, `reason` |
-| `denied_call_id` | `deniedCallId` |
-| `budget_scope`, `amount` | `budgetScope`, `amount` |
-| `intervention_type` | `interventionType` |
+| `source_agent_id`, `target_agent_id`, `task`, `correlation_id`, `status` | same names |
+| `segments`, `total_tokens`, `operation`, `target`, `from`, `to`, `message_type` | same names |
+| `denied_call_id`, `budget_scope`, `amount`, `intervention_type` | same names |
 
-Other fields (for example `hook`, `plugin`, `contract_id`, `details`, `content`) are not copied. For `routing`, when the source agent has an open `execution_start`, that call becomes the `parent_call_id` of the target agent's next `execution_start` that lacks one. An annotation whose `agent_id` is empty falls back to `source_agent_id` for the `annotates` match.
+A `GovernanceEvent` also takes `decision` (`decision`), `policyName` (`policy_name`, else `policy_id`) and `decisionReason` (`reason`). Other fields (for example `hook`, `plugin`, `contract_id`, `details`, `content`) are not copied. The node `annotates` the call in `call_id`, else `parent_call_id`; a record naming neither has no edge, and SHACL reports the missing `annotates`.
 
 ```json
 {"kind":"routing","agent_id":"planner","run_id":"r1","source_agent_id":"planner","target_agent_id":"itinerary_agent","task":"Build a 3-day Paris itinerary.","correlation_id":"corr-001","timestamp":1716200003.9}
@@ -374,30 +414,28 @@ Other fields (for example `hook`, `plugin`, `contract_id`, `details`, `content`)
 
 ### 6.12 `context_part_contributed`
 
-Requires `--include-provenance`. Produces a `ContextContribution` node:
+Requires `--categories annotations`. Produces a `ContextContribution` node (a `CallAnnotation` subclass):
 
-| Event field | KG attribute | Default |
-|-------------|-------------|---------|
-| `part_id` | `partId` | derived id |
-| `parents` (or `provenance.parents`) | `parents`; `derivedFrom` edges | `[]` |
-| `source`, `section_id` | `source`, `sectionId` | `""` |
-| `source_type` | `sourceType` | `unknown` |
-| `access_mechanism` | `accessMechanism` (and `mechanism`) | `inject` |
-| `cause`, `cause_type` | `cause`, `causeType` | `context_manager`, `deterministic` |
-| `token_estimate` | `tokenEstimate` | `0` |
-| `retained` | `retained` | `true` |
-| `eviction_reason` | `evictionReason` | `budget_exceeded` when `retained` is false |
-| `sensitivity` | `sensitivity` | |
-| `content` / `content_preview` | `content`, `contentPreview` (first 200 chars) | |
-| `llm_call_id` | `contributesTo` edge to that `LLMCall` | without it, linked by agent and timestamp enclosure |
+| Event field | KG attribute | Notes |
+|-------------|-------------|-------|
+| `part_id` | `partId` | derived id when absent |
+| `source` | `contextSource` | |
+| `access_mechanism` | `contributionMechanism` | |
+| `token_estimate` | `tokenEstimate` | |
+| `retained` | `retained` | |
+| `kind`, `timestamp` | `eventKind`, `eventTime` | |
+| `parents`, `section_id`, `source_type`, `cause`, `cause_type`, `sensitivity`, `eviction_reason`, `content` | `payload` (JSON) | only those the record carries |
+| `llm_call_id` | `annotates` edge to that `LLMCall` | without it, `annotates` the call in `parent_call_id` when present |
+
+There is no `derivedFrom` edge: SCOPE has none, so `parents` stays in `payload`.
 
 ```json
 {"kind":"context_part_contributed","agent_id":"itinerary_agent","run_id":"r1","part_id":"part-hotel-rag-001","source":"rag_result","section_id":"retrieved_context","access_mechanism":"vector_search","token_estimate":142,"retained":true,"content_preview":"Hotel du Marais: 195 EUR/night","llm_call_id":"tp-llm-002","parents":[],"timestamp":1716200007.1}
 ```
 
-### 6.13 `parallel_group_*`, `branch_*`, `infrastructure_info`
+### 6.13 `parallel_group_*`, `infrastructure_info`
 
-`parallel_group_*` and `branch_*` produce `ParallelGroup` / `Branch` nodes with only the common call-node fields; `group_id`, `branch_count`, `branches` and `branch_name` stay on the event and are not copied to the node. `infrastructure_info` currently produces no node (see [5.4](#54-infrastructure-optional-layer)).
+`parallel_group_*` are plain markers and map to nothing (see [5.1](#51-call-tree-kinds-startend-pairs)). `infrastructure_info` produces a `Worker` (see [5.4](#54-infrastructure-worker)).
 
 ## 7. Pairing rules and validation
 
@@ -429,7 +467,7 @@ Group events by `call_id` over `*_start` / `*_end` kinds and warn when:
 | `call_id X: start without matching end` | Open call; typically a crashed or truncated trace. The node is still built without `endTime`. |
 | `call_id X: end without matching start` | Orphan end; the node is built without `startTime`. |
 
-Containment (`contains` edges) is inferred separately by timestamp enclosure of nodes that have both `startTime` and `endTime`; it does not use `parent_call_id` alone.
+Containment is not inferred. `hasAgentCall` / `belongsToMASCall` link every AgentCall to the MASCall of the session; `hasLLMCall`, `hasToolCall`, `hasProcessingCall` and `hasMemoryCall` link a call to the agent visit its `parent_call_id` names (no edge when that visit never arrives).
 
 ### Running validation
 
@@ -506,7 +544,6 @@ mas-lab kg normalize events.jsonl \
 | `--session-id` | On `mas-lab kg normalize`, only a fallback source for the run id (it is not applied as a separate Session id override). |
 | `--no-split-session-id` | Do not split `<appName>_<uuid>` run ids. |
 | `--app-name` | Force `Session.appName`. |
-| `--application-node` | Also emit an `Application` node and `hasSession` edges. |
 
 ```python
 from mas.library.kg.steps import run_normalize
@@ -518,7 +555,7 @@ artifact = run_normalize(
 )
 ```
 
-`run_id` is also written into every node (`runId`) and into the `Run` node.
+`run_id` is also written into every node (`runId`; kept with `all_attributes=True`).
 
 ## 9. Adding new event kinds
 
@@ -539,7 +576,7 @@ library-kg/src/mas/library/kg/core/event_mappings.py
 
    The value is the local name of a class in the SCOPE ontology (`ioc-scope-ontology`), for example `ToolCall`, `LLMCall`, `AgentCall`, `CallAnnotation`, `GovernanceEvent`, `ContextContribution`. Classes with a dispatch entry in `observability/native/handlers/__init__.py` (`HANDLERS`) get class-specific enrichment; others fall back to the generic call handler.
 
-2. If the kind belongs to an optional layer, add it to `LAYER_KINDS` in the same file so it is dropped when the layer is off.
+2. If its class belongs to an opt-in category, add the class to `CATEGORY_CLASSES` in the same file so it is dropped when the category is off.
 
 3. If the kind needs field extraction beyond the common call-node fields, extend the matching handler in `observability/native/handlers/` (for annotation fields, `_ANN_KEY_MAP` in `handlers/annotation.py`).
 

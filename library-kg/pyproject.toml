@@ -81,8 +81,12 @@ dev = [
   "pyshacl>=0.25.0",
   "jsonschema>=4.0.0",
   "pyyaml>=6.0.0",
+  # The native-vs-OTel parity tests and the bench adapters.
+  "ioc-scope-norm>=1.0.0",
+  "mas-lab-library-telemetry[dev]",
+  "mas-lab-component-bench",
 ]
-# Complete CI run. Includes the [norm] git stopgap so OTel→KG tests can run
+# Complete CI run. Includes the [norm] extra so OTel→KG tests can run
 # when network is available; local loops can use [dev] only.
 all = [
   "mas-lab-library-kg[dev,neo4j,norm]",

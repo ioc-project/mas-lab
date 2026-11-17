@@ -1,12 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""``context_assembled`` copies archive_view_id onto the span, not the prompt."""
+"""``context_assembled`` copies archive_view_id onto the span; its payload is the record's."""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 
+from mas.library.telemetry.conversion import semconv
 from mas.library.telemetry.conversion.mappings.context import h_context_assembled
 
 
@@ -24,6 +25,17 @@ class _Conv:
     def ts_ns(self, ev: dict[str, Any]) -> int:
         _ = ev
         return 0
+
+    def emit_annotation(
+        self,
+        ev: dict[str, Any],
+        boundary: str,
+        attrs: dict[str, Any],
+        *,
+        fields: tuple[str, ...] = semconv.ANNOTATION_PAYLOAD_FIELDS,
+    ) -> None:
+        payload = semconv.annotation_payload(ev, fields)
+        self.spans.append((boundary, {**attrs, **({"mas.annotation.content": payload} if payload else {})}))
 
     def point_span(
         self,
@@ -51,10 +63,9 @@ def test_archive_view_id_is_span_attribute_not_message_body() -> None:
     assert conv.spans
     _name, attrs = conv.spans[0]
     assert attrs["mas.archive.view_id"] == "view-abc"
+    # The payload is the record's own fields, as the native fold writes it.
     annotation = json.loads(attrs["mas.annotation.content"])
-    assert annotation["archive_view_id"] == "view-abc"
-    assert annotation["segments"] == 1
-    assert annotation["total_tokens"] == 4
+    assert annotation == {"segments": [{"tokens": 4}]}
 
 
 def test_missing_archive_view_id_omits_the_attribute() -> None:
@@ -63,5 +74,4 @@ def test_missing_archive_view_id_omits_the_attribute() -> None:
     _name, attrs = conv.spans[0]
     assert "mas.archive.view_id" not in attrs
     annotation = json.loads(attrs["mas.annotation.content"])
-    assert "archive_view_id" not in annotation
     assert annotation == {"segments": 2, "total_tokens": 9}

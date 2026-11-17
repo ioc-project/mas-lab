@@ -59,6 +59,7 @@ Key behaviors:
 - `otel.realtime` (plugin config) and `OBSERVE_REALTIME_OBSERVABILITY_ENABLED` default to off. When on, the plugin emits incremental `topology.node.*`, `tool.*` and `llm.*` signals and does not also emit the end-of-run `.graph` span.
 - The `[convert]` extra depends on `ioa-observe-sdk>=1.0.49` for semantic constants. MAS Lab does not call `Observe.init()`, neither for the live plugin nor for replay.
 - `session.end` is emitted on `mas_call_end`, with `finish()` or plugin close as the fallback.
+- Explicit dataflow: under `observe_sdk`, the native `state_*` fields become `ioa_observe.state.input.*` and `ioa_observe.state.output.*` attributes on agent, chat, tool, processing and `session.end` spans. The converter copies them and never infers or fills an id or content. A `delegate_to_*` tool call is an ordinary tool span of the caller. See [conversion](docs/conversion.md#explicit-dataflow-ioa_observestate).
 
 The core (`conversion/`, `verification/`, `collector/`, `steps/`, `OtelSpanSet`) does not depend on `mas.lab.*`, `mas.ctl.*` or `mas.runtime.*`. Only the integration layers do: the live plugin (`plugins/otel_plugin.py`, imports `mas.runtime`) and the benchmark adapters (`bench.py`, `codecs.py`, `steps/list_clickhouse_sessions.py`, import `mas.lab`).
 
@@ -180,7 +181,7 @@ Command notes:
 
 | Command | Notes |
 |---------|-------|
-| `convert` | `--service-name` is the fallback name when `--app-name` is unset and events carry none. `--layer` defaults to structure, execution, semantic, provenance. `--governance` adds the governance layer. `--rewrite-tool-delegation/--no-rewrite-tool-delegation` (default on) turns `delegate_to_*` tool calls into agent handoffs. Prints span count and output path as JSON. |
+| `convert` | `--service-name` is the fallback name when `--app-name` is unset and events carry none. `--layer` defaults to structure, execution, semantic, provenance. `--governance` adds the governance layer. Prints span count and output path as JSON. |
 | `verify` | `--level` defaults to `L3`. `--fail` exits with code 1 when any check fails. |
 | `inspect` | Prints span, trace and `mas.boundary` counts as JSON. |
 | `compare` | `--strict/--no-strict` (default strict). |

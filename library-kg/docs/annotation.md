@@ -194,7 +194,7 @@ Each new node looks like:
 {
   "id": "urn:mas:emb:3f8a1c9e72b04d51",
   "node_type": "StateEmbedding",
-  "source_node_id": "state-agent-agent-u1-exec-initial",
+  "source_node_id": "state:run:agent-u1-exec#0",
   "vector": [0.023, -0.114, ...],
   "model": "text-embedding-3-small",
   "dimensions": 1536
