@@ -94,6 +94,8 @@ extend-exclude = ["**/*_generated.py"]
 select = ["E", "F", "B", "I"]
 
 [tool.pytest.ini_options]
+# deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
+addopts = "-p no:deepeval"
 asyncio_mode = "auto"
 # test-only helpers shared by several test trees (the in-process SLIM node); not part of any package
 pythonpath = ["tests/support"]

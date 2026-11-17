@@ -193,7 +193,7 @@ def _load_resolved_schema_file(
     local: list[tuple[str, str]] = [_file_stamp(resolved)]
     raw = cached_yaml_document(resolved)
     doc = _resolve_local_refs(raw, resolved.parent, collected=local)
-    stamps = tuple(local)
+    stamps = tuple(dict.fromkeys(local))  # one stamp per file, however many $refs point at it
     _RESOLVED_SCHEMA[resolved] = (stamps, doc)
     if collected is not None:
         collected.extend(stamps)

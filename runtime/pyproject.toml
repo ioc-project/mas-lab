@@ -43,5 +43,7 @@ packages = ["src/mas"]
 force-include = {"src/mas/runtime/aliases.yaml" = "mas/runtime/aliases.yaml", "src/mas/runtime/aliases.schema.yaml" = "mas/runtime/aliases.schema.yaml", "src/mas/runtime/defaults.yaml" = "mas/runtime/defaults.yaml", "src/mas/runtime/defaults.schema.yaml" = "mas/runtime/defaults.schema.yaml", "src/mas/runtime/spec/llm-model-catalog.yaml" = "mas/runtime/spec/llm-model-catalog.yaml"}
 
 [tool.pytest.ini_options]
+# deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
+addopts = "-p no:deepeval"
 asyncio_mode = "auto"
 norecursedirs = [".git", "node_modules", "pending_port"]
