@@ -13,7 +13,7 @@ A *contract* is the declared inputs, outputs, and rules of a boundary that the r
 An agent calls tools that live in different places: in-process Python classes, skills, and remote MCP servers. The caller needs one way to list and invoke them all.
 
 ```python
-provider.call_tool("web-search", {"query": "Apple stock price"})
+await provider.acall_tool("web-search", {"query": "Apple stock price"})
 ```
 
 ## How a call flows

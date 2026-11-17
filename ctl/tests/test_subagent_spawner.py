@@ -20,12 +20,12 @@ from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemorySnapshot,
 )
 from mas.runtime.driver.driver import DriverTrace
-from mas.runtime.engine.tool_dispatch import execute_engine_tool
+from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 from mas.runtime.schema.egress import EmitClientResponse
 from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
-def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):
+async def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):
     instances = {}
     bus = InProcessCommBus()
     materialized = SimpleNamespace(instances=instances, bus=bus)
@@ -50,7 +50,7 @@ def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):
         def __init__(self, **kwargs):
             observed.append(kwargs)
 
-        def run_turn(self, task, *, turn_id, parent_call_id):
+        async def arun_turn(self, task, *, turn_id, parent_call_id):
             observed.append((task, turn_id, parent_call_id))
             registry.put("session", "root.worker.1", WorkingMemorySnapshot())
             return TurnResult(
@@ -71,7 +71,7 @@ def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):
         controller_factory=Controller,
     )
 
-    result = spawner.spawn("worker", "Review this change", caller_call_id="parent-call")
+    result = await spawner.aspawn("worker", "Review this change", caller_call_id="parent-call")
 
     assert result == "review complete"
     assert observed[-1] == ("Review this change", "root.worker.1-spawn", "parent-call")
@@ -80,10 +80,10 @@ def test_spawner_materializes_runs_and_always_tears_down(tmp_path: Path):
     assert registry.get("session", "root.worker.1") is None
     assert ledger.current_depth("session") == 0
     assert ledger.spawn_count("session") == 1
-    assert "blocked" in spawner.spawn("worker", "another task")
+    assert "blocked" in (await spawner.aspawn("worker", "another task"))
 
 
-def test_spawn_emits_kernel_spawn_observability(tmp_path: Path):
+async def test_spawn_emits_kernel_spawn_observability(tmp_path: Path):
     from mas.runtime.boundary.obs.operator import ObservabilityOperator
     from mas.runtime.schema.observability import ObsEventKind
 
@@ -121,7 +121,7 @@ def test_spawn_emits_kernel_spawn_observability(tmp_path: Path):
         def __init__(self, **kwargs):
             return None
 
-        def run_turn(self, task, *, turn_id, parent_call_id):
+        async def arun_turn(self, task, *, turn_id, parent_call_id):
             return TurnResult(
                 trace=DriverTrace(),
                 responses=[EmitClientResponse(content="ok")],
@@ -138,7 +138,7 @@ def test_spawn_emits_kernel_spawn_observability(tmp_path: Path):
         controller_factory=Controller,
     )
 
-    spawner.call("create_subagent", {"template": "worker", "task": "review"}, caller_call_id="parent-call")
+    await spawner.acall("create_subagent", {"template": "worker", "task": "review"}, caller_call_id="parent-call")
     spawn_events = [event for event in obs.events if event.payload.get("op") == "SPAWN"]
     assert [event.kind for event in spawn_events] == [ObsEventKind.ENGINE_IO, ObsEventKind.ENGINE_IO_RETURN]
     assert spawn_events[0].payload["category"] == "spawn.subagent"
@@ -236,7 +236,7 @@ def test_wire_uses_the_subagents_plugin_ledger(tmp_path: Path):
     assert not ledger.allow_spawn("session", "root")
 
 
-def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
+async def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
     worker = tmp_path / "worker.yaml"
     worker.write_text(
         "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: worker}\nspec:\n  description: Worker agent\n",
@@ -256,7 +256,7 @@ def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
         def __init__(self, **kwargs):
             controller_args.append(kwargs)
 
-        def run_turn(self, task, *, turn_id, parent_call_id):
+        async def arun_turn(self, task, *, turn_id, parent_call_id):
             controller_args.append((task, turn_id, parent_call_id))
             return TurnResult(
                 trace=DriverTrace(),
@@ -280,7 +280,7 @@ def test_engine_tool_dispatch_spawns_and_removes_dynamic_agent(tmp_path: Path):
         controller_factory=Controller,
     )
 
-    result = execute_engine_tool(
+    result = await aexecute_engine_tool(
         "create_subagent",
         engine_contracts=engine.engine_tool_contracts,
         arguments={"template": "worker", "task": "review this"},
@@ -352,7 +352,7 @@ def _plugin_engine(tmp_path: Path, *, attach_first: bool):
         def __init__(self, **_kwargs):
             pass
 
-        def run_turn(self, task, *, turn_id, parent_call_id):
+        async def arun_turn(self, task, *, turn_id, parent_call_id):
             turns.append((task, parent_call_id))
             return TurnResult(trace=DriverTrace(), responses=[EmitClientResponse(content="child answer")])
 
@@ -383,9 +383,9 @@ def _plugin_engine(tmp_path: Path, *, attach_first: bool):
 
 
 @pytest.mark.parametrize("attach_first", [True, False])
-def test_plugin_runs_the_child_whichever_is_wired_first(tmp_path: Path, attach_first: bool):
+async def test_plugin_runs_the_child_whichever_is_wired_first(tmp_path: Path, attach_first: bool):
     leaf, turns = _plugin_engine(tmp_path, attach_first=attach_first)
-    result = execute_engine_tool(
+    result = await aexecute_engine_tool(
         "create_subagent",
         engine_contracts=leaf.engine_tool_contracts,
         arguments={"template": "worker", "task": "review this"},
@@ -422,14 +422,14 @@ def test_plugin_runs_the_child_on_the_async_path(tmp_path: Path, attach_first: b
     assert turns[-1][0] == "async task"
 
 
-def test_restore_keeps_the_ledger_the_spawner_holds(tmp_path: Path):
+async def test_restore_keeps_the_ledger_the_spawner_holds(tmp_path: Path):
     leaf, _turns = _plugin_engine(tmp_path, attach_first=True)
     bound = leaf.tool_provider.system_plugins()
     state = bound.state_for_capability("orchestration")
     ledger = state.ledger
     assert state.spawner.context.ledger is ledger
     saved = bound.snapshot()
-    execute_engine_tool(
+    await aexecute_engine_tool(
         "create_subagent",
         engine_contracts=leaf.engine_tool_contracts,
         arguments={"template": "worker", "task": "t"},

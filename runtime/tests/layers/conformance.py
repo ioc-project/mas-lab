@@ -28,16 +28,13 @@ class RecordingInner(Lifecycle):
     def capabilities(self) -> dict[str, bool]:
         return {"inner": True}
 
-    def invoke(self, request: Any) -> Any:
+    async def ainvoke(self, request: Any) -> Any:
         if self.fail:
             raise RuntimeError("inner failed")
         return request
 
-    async def ainvoke(self, request: Any) -> Any:
-        return self.invoke(request)
 
-
-def assert_layer_conformance(make_layer: Callable[..., Any], request: Any) -> None:
+async def assert_layer_conformance(make_layer: Callable[..., Any], request: Any) -> None:
     """Bind, start inner first, stop, merge capabilities, propagate inner exceptions."""
     log: list[str] = []
     inner = RecordingInner(log)
@@ -55,7 +52,7 @@ def assert_layer_conformance(make_layer: Callable[..., Any], request: Any) -> No
     failing = make_layer()
     failing.bind(boom)
     try:
-        failing.invoke(request)
+        await failing.ainvoke(request)
     except RuntimeError as exc:
         if "inner failed" not in str(exc):
             raise AssertionError("exception in inner must reach the outer layer") from exc

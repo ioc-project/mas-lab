@@ -69,11 +69,7 @@ ALLOWED: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         f"{_RELEASED}: a comm without asend is sent to on a worker thread",
     ),
-    (f"{STD}/plugins/agentcomm/local_group.py", "LocalGroupAgentComm._areceive_request", "getattr"): (
-        1,
-        f"{_RELEASED}: the session turn may carry asend",
-    ),
-    (f"{IOA}/a2a/agent_comm.py", "A2AAgentComm.send", "getattr"): (
+    (f"{IOA}/a2a/agent_comm.py", "A2AAgentComm.asend", "getattr"): (
         1,
         f"{_RELEASED}: reads the optional SendContext intent",
     ),

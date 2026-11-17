@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Protocol, TypeVar
 
 from mas.runtime.layers.base import LayerBase
-from mas.runtime.layers.lifecycle import Lifecycle, call_start, call_stop, call_tick
+from mas.runtime.layers.lifecycle import Lifecycle, acall_tick, call_start, call_stop
 
 Req = TypeVar("Req")
 Resp = TypeVar("Resp")
@@ -37,8 +37,8 @@ class LayerLifecycle(LayerBase):
         self._stopped = True
         call_stop(self.inner)
 
-    def tick(self) -> None:
-        call_tick(self.inner)
+    async def atick(self) -> None:
+        await acall_tick(self.inner)
 
     def own_capabilities(self) -> dict[str, bool]:
         """What this layer adds. A layer that adds a capability overrides this."""
@@ -57,8 +57,6 @@ class CallLayer(Protocol[Req, Resp]):
     """
 
     def bind(self, inner: object) -> None: ...
-
-    def invoke(self, request: Req) -> Resp: ...
 
     async def ainvoke(self, request: Req) -> Resp: ...
 

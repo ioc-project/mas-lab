@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import pytest
 from mas.runtime.engine.llm_live import LiveLlmEngine
-from mas.runtime.engine.simulated import SimulatedEngine
 from mas.runtime.schema.egress import InvokeEngineIo
 
 
@@ -27,29 +26,6 @@ class _StubProvider:
         self.async_calls += 1
         self.last_kwargs = kwargs
         return dict(self.message)
-
-
-@pytest.mark.asyncio
-async def test_simulated_engine_ainvoke_matches_invoke():
-    engine = SimulatedEngine(stop_text="hello")
-    io = InvokeEngineIo(correlation_id=2, op="LLM_CALL")
-    sync = engine.invoke(io)
-    async_ret = await engine.ainvoke(io)
-    assert sync == async_ret
-    assert async_ret.text == "hello"
-
-
-@pytest.mark.asyncio
-async def test_live_engine_ainvoke_parity_with_invoke():
-    message = {"role": "assistant", "content": "same-answer", "finish_reason": "stop"}
-    provider = _StubProvider(message)
-    engine = LiveLlmEngine(llm_provider=provider, use_cache=False, model="stub")
-    io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    sync = engine.invoke(io)
-    async_ret = await engine.ainvoke(io)
-    assert sync.text == async_ret.text == "same-answer"
-    assert provider.sync_calls == 1
-    assert provider.async_calls == 1
 
 
 @pytest.mark.asyncio
@@ -123,3 +99,29 @@ async def test_ainvoke_uses_stream_iterator_even_when_spec_stream_is_false() -> 
     )
     ret = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "x"
+
+
+def test_a_driver_without_the_setting_leaves_the_sync_pool_size_alone() -> None:
+    from mas.runtime.aio import configure_sync_threads, sync_threads
+    from mas.runtime.kernel.config import KernelConfig
+
+    assert KernelConfig().sync_threads is None
+    configure_sync_threads(3)
+    try:
+        from mas.runtime.driver.driver import KernelDriver  # noqa: F401
+
+        assert sync_threads() == 3
+    finally:
+        configure_sync_threads(1)
+
+
+def test_a_wrapped_sync_provider_survives_a_copy() -> None:
+    import copy
+
+    from mas.runtime.registry.llm_provider_protocol import SyncLLMProvider
+
+    class P:
+        def chat_completion(self, **_):
+            return {}
+
+    assert copy.copy(SyncLLMProvider(P())) is not None

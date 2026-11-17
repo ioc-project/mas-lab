@@ -10,15 +10,15 @@ import pytest
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.delegation.llm_delegator import LlmDelegator
 from mas.runtime.engine.manifest_tool_provider import build_manifest_tool_provider
-from mas.runtime.engine.tool_dispatch import aexecute_engine_tool, execute_engine_tool
+from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
 
-def test_execute_engine_tool_routes_delegate_tools():
+async def test_execute_engine_tool_routes_delegate_tools():
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}:{task}"),
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: asyncio.sleep(0, f"delegated:{aid}:{task}")),
         allowed_peers=["db"],
     )
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "delegate_to_db",
         delegation=delegator,
         arguments={"task": "check connections"},
@@ -26,16 +26,18 @@ def test_execute_engine_tool_routes_delegate_tools():
     assert out == "delegated:db:check connections"
 
 
-def test_execute_engine_tool_forwards_caller_call_id_to_delegation():
+async def test_execute_engine_tool_forwards_caller_call_id_to_delegation():
     """caller_call_id (this TOOL_CALL's own resolved call_id, attached by
     the driver) must reach the DelegationContract unchanged, so a
     delegate's own execution_start.parent_call_id is a real native value."""
     seen: list[str] = []
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: seen.append(ccid) or f"delegated:{aid}"),
+        comm=LocalAgentComm(
+            lambda aid, task, cid, ccid, ctx_id: asyncio.sleep(0, seen.append(ccid) or f"delegated:{aid}")
+        ),
         allowed_peers=["db"],
     )
-    execute_engine_tool(
+    await aexecute_engine_tool(
         "delegate_to_db",
         delegation=delegator,
         arguments={"task": "check connections"},
@@ -44,7 +46,7 @@ def test_execute_engine_tool_forwards_caller_call_id_to_delegation():
     assert seen == ["tool-call-xyz"]
 
 
-def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
+async def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
     seen: list[str] = []
 
     class Provider:
@@ -53,10 +55,10 @@ def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
             return "from-user-tool"
 
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}"),
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: asyncio.sleep(0, f"delegated:{aid}")),
         allowed_peers=["db"],
     )
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "send",
         delegation=delegator,
         arguments={"target": "db", "message": "hi"},
@@ -67,7 +69,7 @@ def test_execute_engine_tool_leaves_user_tool_named_send_to_provider():
     assert not delegator.is_delegate_tool("send")
 
 
-def test_execute_engine_tool_leaves_unlisted_delegate_name_to_provider():
+async def test_execute_engine_tool_leaves_unlisted_delegate_name_to_provider():
     seen: list[str] = []
 
     class Provider:
@@ -76,10 +78,10 @@ def test_execute_engine_tool_leaves_unlisted_delegate_name_to_provider():
             return "from-user-tool"
 
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}"),
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: asyncio.sleep(0, f"delegated:{aid}")),
         allowed_peers=["db"],
     )
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "delegate_to_stranger",
         delegation=delegator,
         arguments={"task": "hi"},
@@ -87,10 +89,10 @@ def test_execute_engine_tool_leaves_unlisted_delegate_name_to_provider():
     )
     assert out == "from-user-tool"
     assert seen == ["delegate_to_stranger"]
-    assert delegator.send("stranger", "hi") == "delegated:stranger"
+    assert (await delegator.asend("stranger", "hi")) == "delegated:stranger"
 
 
-def test_execute_engine_tool_with_no_peer_list_does_not_claim_delegate_names():
+async def test_execute_engine_tool_with_no_peer_list_does_not_claim_delegate_names():
     seen: list[str] = []
 
     class Provider:
@@ -99,9 +101,9 @@ def test_execute_engine_tool_with_no_peer_list_does_not_claim_delegate_names():
             return "from-user-tool"
 
     delegator = LlmDelegator(
-        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: f"delegated:{aid}"),
+        comm=LocalAgentComm(lambda aid, task, cid, ccid, ctx_id: asyncio.sleep(0, f"delegated:{aid}")),
     )
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "delegate_to_db",
         delegation=delegator,
         arguments={"task": "hi"},
@@ -111,7 +113,7 @@ def test_execute_engine_tool_with_no_peer_list_does_not_claim_delegate_names():
     assert seen == ["delegate_to_db"]
 
 
-def test_execute_engine_tool_runs_async_on_execute_tool_to_completion():
+async def test_execute_engine_tool_runs_async_on_execute_tool_to_completion():
     from mas.library.standard.plugins.tools.local import LocalToolProvider
 
     class _AsyncOnExecute:
@@ -123,26 +125,9 @@ def test_execute_engine_tool_runs_async_on_execute_tool_to_completion():
 
     provider = LocalToolProvider()
     provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
-    out = execute_engine_tool("echo", tool_provider=provider, arguments={"q": 1})
+    out = await aexecute_engine_tool("echo", tool_provider=provider, arguments={"q": 1})
     assert '"one-method": "echo"' in out
     assert '"q": 1' in out
-
-
-@pytest.mark.asyncio
-async def test_execute_engine_tool_from_a_running_loop_tells_you_to_use_aexecute():
-    from mas.library.standard.plugins.tools.local import LocalToolProvider
-
-    class _AsyncOnExecute:
-        def on_collect_tools(self, **_):
-            return [{"name": "echo"}]
-
-        async def on_execute_tool(self, name, args, **_):
-            return {"one-method": name, **args}
-
-    provider = LocalToolProvider()
-    provider._add_instance(_AsyncOnExecute(), {"name": "echo"})
-    with pytest.raises(Exception, match="use acall_tool"):
-        execute_engine_tool("echo", tool_provider=provider, arguments={"q": 1})
 
 
 @pytest.mark.asyncio
@@ -162,7 +147,7 @@ async def test_aexecute_engine_tool_awaits_async_on_execute_tool():
     assert '"one-method": "echo"' in out
 
 
-def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
+async def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
     calls = []
 
     class EngineTool:
@@ -173,7 +158,7 @@ def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
             calls.append((tool_name, arguments, kwargs["caller_call_id"]))
             return "spawned"
 
-    result = execute_engine_tool(
+    result = await aexecute_engine_tool(
         "create_subagent",
         engine_contracts=[EngineTool()],
         arguments={"template": "worker", "task": "review"},
@@ -184,7 +169,7 @@ def test_execute_engine_tool_routes_ordered_contract_before_manifest_provider():
     assert calls == [("create_subagent", {"template": "worker", "task": "review"}, "parent-call")]
 
 
-def test_execute_engine_tool_uses_manifest_provider(tmp_path):
+async def test_execute_engine_tool_uses_manifest_provider(tmp_path):
     tool_dir = tmp_path / "tools"
     tool_dir.mkdir()
     (tool_dir / "calc.py").write_text(
@@ -218,7 +203,7 @@ class CalcTool:
         [{"ref": "tools/calculator.tool.yaml"}],
         tmp_path,
     )
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "calculator",
         arguments={"expression": "2**16"},
         tool_provider=provider,
@@ -226,7 +211,7 @@ class CalcTool:
     assert "65536" in out
 
 
-def test_unknown_tool_raises(tmp_path):
+async def test_unknown_tool_raises(tmp_path):
     tool_dir = tmp_path / "tools"
     tool_dir.mkdir()
     (tool_dir / "calc.py").write_text(
@@ -260,7 +245,7 @@ class CalcTool:
     from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 
     with pytest.raises(ClassifiedFailure, match="not found") as caught:
-        execute_engine_tool("missing", tool_provider=provider)
+        await aexecute_engine_tool("missing", tool_provider=provider)
     assert caught.value.failure_class is FailureClass.APPLICATION
     assert caught.value.code == "TOOL_UNKNOWN"
 
@@ -414,10 +399,10 @@ async def test_a_tool_sees_the_same_sealed_ctx_wherever_it_runs(worker):
     assert live.skill_state == "live"
 
 
-def test_the_sync_path_seals_the_ctx_too():
+async def test_the_sync_path_seals_the_ctx_too():
     live = _live_ctx()
     provider = _CtxProbe()
-    execute_engine_tool("t", tool_provider=provider, ctx=live)
+    await aexecute_engine_tool("t", tool_provider=provider, ctx=live)
     from mas.runtime.engine.tool_workers import ToolCallContext
 
     assert isinstance(provider.seen[0], ToolCallContext)
@@ -524,32 +509,3 @@ async def test_a_sync_tool_is_flagged_once_and_louder_when_it_blocks_the_loop(wo
     flagged = [r for r in caplog.records if "FlaggedSyncTool" in r.getMessage()]
     assert len(flagged) == 1
     assert flagged[0].levelname == level
-
-
-def test_run_awaitable_uses_one_loop_for_every_sync_call() -> None:
-    import asyncio
-    import contextvars
-
-    from mas.runtime.engine.tool_workers import run_awaitable
-
-    marker: contextvars.ContextVar[str] = contextvars.ContextVar("marker", default="unset")
-
-    async def where() -> tuple[int, str]:
-        return id(asyncio.get_running_loop()), marker.get()
-
-    marker.set("caller")
-    first = run_awaitable(where())
-    second = run_awaitable(where())
-    assert first[0] == second[0]
-    assert first[1] == "caller"
-
-
-def test_run_awaitable_raises_what_the_awaitable_raises() -> None:
-    import pytest
-    from mas.runtime.engine.tool_workers import run_awaitable
-
-    async def boom() -> None:
-        raise ValueError("boom")
-
-    with pytest.raises(ValueError, match="boom"):
-        run_awaitable(boom())

@@ -35,6 +35,9 @@ class KernelConfig:
     # engine.tool_concurrency). Placement only: results and order are the same.
     tool_worker: str = "thread"
     tool_concurrency: int | None = None
+    # Worker threads shared by sync plugins other than tools (engine.sync_threads). Placement only.
+    # None leaves the process-wide pool as it is, so a child driver without the setting cannot shrink a parent's.
+    sync_threads: int | None = None
     engine_queue_depth: int = DEFAULT_ENGINE_QUEUE_DEPTH
     max_auto_steps: int | None = DEFAULT_MAX_AUTO_STEPS
     policy_engine: GovernancePolicyEngine | None = field(default=None, compare=False)

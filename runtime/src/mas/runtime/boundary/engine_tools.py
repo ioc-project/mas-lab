@@ -21,17 +21,6 @@ class EngineToolContext(Protocol):
     than in plugin discipline.
     """
 
-    def run_turn(
-        self,
-        agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-    ) -> str:
-        """Run one turn on an existing peer agent."""
-        ...
-
     async def arun_turn(
         self,
         agent_id: str,
@@ -70,16 +59,6 @@ class EngineToolContract(Protocol):
 
     def claims(self, tool_name: str) -> bool: ...
 
-    def call(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any = None,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-    ) -> str: ...
-
     async def acall(
         self,
         tool_name: str,
@@ -95,15 +74,6 @@ class SubagentContract(Protocol):
     """Spawn a bounded, named subagent template for one task."""
 
     def is_subagent_tool(self, tool_name: str) -> bool: ...
-
-    def spawn(
-        self,
-        template_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-    ) -> str: ...
 
     async def aspawn(
         self,

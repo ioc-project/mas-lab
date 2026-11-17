@@ -12,7 +12,7 @@ def test_simulated_next_step_alternates():
     assert simulated_next_step(SimMode.DEFAULT, 1) == "TOOL_CALL"
 
 
-def test_simulated_engine_script_override():
+async def test_simulated_engine_script_override():
     engine = SimulatedEngine(
         script={
             7: EngineIoReturn(
@@ -23,11 +23,11 @@ def test_simulated_engine_script_override():
             )
         }
     )
-    out = engine.invoke(InvokeEngineIo(correlation_id=7, op="LLM_CALL"))
+    out = await engine.ainvoke(InvokeEngineIo(correlation_id=7, op="LLM_CALL"))
     assert out.text == "scripted"
 
 
-def test_simulated_engine_tool_call_path():
+async def test_simulated_engine_tool_call_path():
     engine = SimulatedEngine()
-    out = engine.invoke(InvokeEngineIo(correlation_id=3, op="TOOL_CALL"))
+    out = await engine.ainvoke(InvokeEngineIo(correlation_id=3, op="TOOL_CALL"))
     assert out.response_kind == "TOOL_RESULT"

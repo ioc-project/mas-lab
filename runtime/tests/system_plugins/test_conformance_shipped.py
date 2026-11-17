@@ -2,6 +2,8 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from mas.library.skills.plugins.system_tools import ActivateSkillPlugin, RunSkillScriptSystemPlugin
 from mas.library.standard.plugins.system_tools.control import PauseSessionPlugin
@@ -31,9 +33,9 @@ _PLUGINS = (
 
 
 @pytest.mark.parametrize("plugin_cls", _PLUGINS)
-def test_shipped_plugin_conformance(plugin_cls: type) -> None:
+async def test_shipped_plugin_conformance(plugin_cls: type) -> None:
     assert_is_system_plugin(plugin_cls)
-    assert_unknown_tool_raises(plugin_cls)
+    await assert_unknown_tool_raises(plugin_cls)
     assert_snapshot_restore(plugin_cls)
     assert_session_state_isolated(plugin_cls, SessionContext(session_id="a"), SessionContext(session_id="b"))
 
@@ -71,9 +73,9 @@ def test_conformance_rejects_mutable_class_state() -> None:
         assert_session_state_isolated(_SharedState, SessionContext(), SessionContext())
 
 
-def test_conformance_rejects_a_plugin_that_swallows_an_unknown_tool() -> None:
+async def test_conformance_rejects_a_plugin_that_swallows_an_unknown_tool() -> None:
     with pytest.raises(AssertionError, match="did not raise"):
-        assert_unknown_tool_raises(_SwallowsUnknown)
+        await assert_unknown_tool_raises(_SwallowsUnknown)
 
 
 class _DropsSnapshot(SystemPluginBase):
@@ -155,7 +157,7 @@ def test_subagents_restore_keeps_spec_ceilings_and_saved_spend() -> None:
     assert restored.ledger.spawn_count("s") == 1
 
 
-def test_send_plugin_owns_the_delegation_and_claims_only_offered_peers() -> None:
+async def test_send_plugin_owns_the_delegation_and_claims_only_offered_peers() -> None:
     from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
     from mas.runtime.system_plugins import CallContext
     from mas.runtime.system_plugins.load import load_system_plugins
@@ -166,13 +168,13 @@ def test_send_plugin_owns_the_delegation_and_claims_only_offered_peers() -> None
 
     seen: list[tuple[str, str]] = []
     tool.configure(
-        comm=LocalAgentComm(lambda agent, text, *_: seen.append((agent, text)) or "done"),
+        comm=LocalAgentComm(lambda agent, text, *_: asyncio.sleep(0, seen.append((agent, text)) or "done")),
         routes={},
         allowed_peers=["worker"],
     )
     assert bound.claims("delegate_to_worker")
     assert not bound.claims("delegate_to_other")  # a name the model was not offered is not claimed
-    assert bound.call("delegate_to_worker", {"task": "go"}, context=CallContext()) == "done"
+    assert (await bound.acall("delegate_to_worker", {"task": "go"}, context=CallContext())) == "done"
     assert seen == [("worker", "go")]
     with pytest.raises(UnknownSystemToolError):
-        bound.call("delegate_to_other", {"task": "go"}, context=CallContext())
+        await bound.acall("delegate_to_other", {"task": "go"}, context=CallContext())

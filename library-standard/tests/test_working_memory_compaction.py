@@ -17,6 +17,7 @@ from mas.library.standard.plugins.context.conversation import (
     SummarizingConversation,
 )
 from mas.library.standard.plugins.context.summarizer import SUMMARIZE_INSTRUCTIONS, LlmSummarizer
+from mas.runtime.aio import settle
 from mas.runtime.contracts.cm_factory import CMFactory
 
 
@@ -85,27 +86,29 @@ def test_resolve_translates_compaction_when_no_explicit_context_manager():
 
 
 class _FakeEngine:
-    def summarize_messages(self, messages):
+    async def asummarize_messages(self, messages):
         return f"summary of {len(messages)} prompt messages"
 
 
-def test_build_llm_summarize_fn_is_engine_completion():
+async def test_build_llm_summarize_fn_is_engine_completion():
     fn = build_llm_summarize_fn(_FakeEngine())
-    result = fn([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}])
+    result = await fn([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}])
     assert result == "summary of 2 prompt messages"
 
 
-def test_llm_summarizer_wraps_then_engine_completes():
+async def test_llm_summarizer_wraps_then_engine_completes():
     seen: list[list[dict]] = []
 
     class _Capture:
-        def summarize_messages(self, messages):
+        async def asummarize_messages(self, messages):
             seen.append(messages)
             return "ok"
 
     plugin = LlmSummarizer()
     plugin.bind_engine(_Capture())
-    result = plugin.summarize([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}])
+    result = await settle(
+        plugin.summarize([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}])
+    )
     assert result == "ok"
     assert seen[0][0]["content"] == SUMMARIZE_INSTRUCTIONS
     assert json.loads(seen[0][1]["content"]) == [
@@ -114,7 +117,7 @@ def test_llm_summarizer_wraps_then_engine_completes():
     ]
 
 
-def test_apply_working_memory_compaction_wires_a_real_context_manager():
+async def test_apply_working_memory_compaction_wires_a_real_context_manager():
     spec = {"working_memory": {"compaction": {"strategy": "keep_recent", "max_messages": 2}}}
     apply_working_memory_compaction(spec)
     assert spec["context_manager"] == {"type": "stack", "params": {"max_messages": 2}}
@@ -122,7 +125,7 @@ def test_apply_working_memory_compaction_wires_a_real_context_manager():
     cm = CMFactory.create(spec=spec["context_manager"])
     assert isinstance(cm, StackConversation)
     past = [{"role": "user", "content": f"m{i}"} for i in range(5)]
-    assert len(cm.manage_history(past, 0)) == 2
+    assert len(await settle(cm.manage_history(past, 0))) == 2
 
 
 def test_apply_working_memory_compaction_summarize_with_live_engine():
@@ -181,23 +184,23 @@ class _FakeEngineWithBudget(_FakeEngine):
 
         self._budget = BudgetTracker(max_llm_calls=max_llm_calls)
 
-    def summarize_messages(self, messages):
+    async def asummarize_messages(self, messages):
         if not self._budget.allow_llm():
             raise RuntimeError("history summarizer: LLM call budget exceeded (spec.budget.max_llm_calls)")
         self._budget.note_llm()
-        return super().summarize_messages(messages)
+        return await super().asummarize_messages(messages)
 
 
-def test_build_llm_summarize_fn_counts_against_engine_budget():
+async def test_build_llm_summarize_fn_counts_against_engine_budget():
     engine = _FakeEngineWithBudget(max_llm_calls=5)
     fn = build_llm_summarize_fn(engine)
-    fn([{"role": "user", "content": "hi"}])
+    await fn([{"role": "user", "content": "hi"}])
     assert engine._budget.llm_calls == 1
 
 
-def test_build_llm_summarize_fn_raises_when_budget_exhausted():
+async def test_build_llm_summarize_fn_raises_when_budget_exhausted():
     engine = _FakeEngineWithBudget(max_llm_calls=1)
     fn = build_llm_summarize_fn(engine)
-    fn([{"role": "user", "content": "hi"}])
+    await fn([{"role": "user", "content": "hi"}])
     with pytest.raises(RuntimeError, match="budget exceeded"):
-        fn([{"role": "user", "content": "again"}])
+        await fn([{"role": "user", "content": "again"}])

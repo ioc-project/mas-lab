@@ -10,7 +10,7 @@ from mas.runtime.engine.manifest_tool_provider import (
     ManifestToolLoadError,
     build_manifest_tool_provider,
 )
-from mas.runtime.engine.tool_dispatch import execute_engine_tool
+from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 from mas.runtime.engine.tools import openai_tools
 from mas.runtime.system_plugins import SystemPluginBase, ToolDefinition
 
@@ -67,14 +67,14 @@ class CalcTool:
     return tmp_path
 
 
-def test_build_manifest_tool_provider_from_ref(calculator_tool_tree: Path):
+async def test_build_manifest_tool_provider_from_ref(calculator_tool_tree: Path):
     provider = build_manifest_tool_provider(
         [{"ref": "tools/calculator.tool.yaml"}],
         calculator_tool_tree,
     )
     names = [t["function"]["name"] for t in provider.list_openai_tools()]
     assert names == ["calculator"]
-    out = provider.call_tool("calculator", {"expression": "2**16"})
+    out = await provider.acall_tool("calculator", {"expression": "2**16"})
     assert out["result"] == 65536
 
 
@@ -109,7 +109,7 @@ def test_system_plugin_entry_enables_the_tool_without_loading_a_module(calculato
     assert names == {"calculator", "request_human_input"}
 
 
-def test_system_plugin_registry_supports_new_registered_tool_names(calculator_tool_tree: Path):
+async def test_system_plugin_registry_supports_new_registered_tool_names(calculator_tool_tree: Path):
     from mas.runtime.registry import register_plugin, unregister_plugin
 
     urn = "mas.system_plugin.dynamic_system_tool"
@@ -127,7 +127,7 @@ def test_system_plugin_registry_supports_new_registered_tool_names(calculator_to
         )
 
         assert [tool["function"]["name"] for tool in provider.list_openai_tools()] == ["dynamic_system_tool"]
-        assert provider.call_tool("dynamic_system_tool", {}) == "registered"
+        assert (await provider.acall_tool("dynamic_system_tool", {})) == "registered"
     finally:
         unregister_plugin(urn)
 
@@ -217,7 +217,7 @@ def test_manifest_tool_attachment_hides_spawn_without_templates(tmp_path: Path):
     assert engine.tool_provider.list_openai_tools(ctx=ctx) == []
 
 
-def test_ref_entry_params_override_yaml_impl_params(tmp_path: Path):
+async def test_ref_entry_params_override_yaml_impl_params(tmp_path: Path):
     tool_dir = tmp_path / "tools"
     tool_dir.mkdir()
     (tool_dir / "echo_impl.py").write_text(
@@ -263,7 +263,7 @@ class EchoImplTool:
         ],
         tmp_path,
     )
-    out = provider.call_tool("echo_impl", {})
+    out = await provider.acall_tool("echo_impl", {})
     assert out == {"impl": "langchain", "base_dir": "./custom"}
 
 
@@ -308,20 +308,20 @@ def test_unknown_bare_tool_name_reports_local_directory(tmp_path: Path):
         )
 
 
-def test_execute_engine_tool_requires_provider():
+async def test_execute_engine_tool_requires_provider():
     from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 
     with pytest.raises(ClassifiedFailure, match="No manifest tool provider") as caught:
-        execute_engine_tool("calculator", arguments={"expression": "1"})
+        await aexecute_engine_tool("calculator", arguments={"expression": "1"})
     assert caught.value.failure_class is FailureClass.APPLICATION
 
 
-def test_execute_engine_tool_via_provider(calculator_tool_tree: Path):
+async def test_execute_engine_tool_via_provider(calculator_tool_tree: Path):
     provider = build_manifest_tool_provider(
         [{"ref": "tools/calculator.tool.yaml"}],
         calculator_tool_tree,
     )
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "calculator",
         arguments={"expression": "2**16"},
         tool_provider=provider,
@@ -380,7 +380,7 @@ def test_wrong_kind_rejected(tmp_path: Path):
         build_manifest_tool_provider([{"ref": "agent.tool.yaml"}], tmp_path)
 
 
-def test_call_tool_none_result_when_owner_returns_empty(calculator_tool_tree: Path):
+async def test_call_tool_none_result_when_owner_returns_empty(calculator_tool_tree: Path):
     tool_dir = calculator_tool_tree / "tools"
     (tool_dir / "side_effect.py").write_text(
         """
@@ -408,7 +408,7 @@ class SideEffectTool:
         [{"ref": "tools/ping.tool.yaml"}],
         calculator_tool_tree,
     )
-    assert provider.call_tool("ping", {}) == ""
+    assert (await provider.acall_tool("ping", {})) == ""
 
 
 def test_module_loaded_once_for_same_path(calculator_tool_tree: Path):
@@ -457,18 +457,18 @@ class RunActionTool:
         encoding="utf-8",
     )
 
-    def _load_once(_: int) -> None:
+    async def _load_once(_: int) -> None:
         provider = build_manifest_tool_provider(
             [{"ref": "pkg_tools/run_action.tool.yaml"}],
             tmp_path,
         )
-        assert provider.call_tool("run_action", {}) == {"ok": True}
+        assert (await provider.acall_tool("run_action", {})) == {"ok": True}
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(_load_once, range(32)))
 
 
-def test_package_tool_load_does_not_mutate_sys_path(tmp_path: Path):
+async def test_package_tool_load_does_not_mutate_sys_path(tmp_path: Path):
     import sys
 
     tool_dir = tmp_path / "pkg_tools"
@@ -505,10 +505,10 @@ class PackagedTool:
         tmp_path,
     )
     assert sys.path == path_before
-    assert provider.call_tool("packaged", {}) == {"value": 42}
+    assert (await provider.acall_tool("packaged", {})) == {"value": 42}
 
 
-def test_call_tool_propagates_on_collect_tools_error(calculator_tool_tree: Path):
+async def test_call_tool_propagates_on_collect_tools_error(calculator_tool_tree: Path):
     tool_dir = calculator_tool_tree / "tools"
     (tool_dir / "broken_collect.py").write_text(
         """
@@ -535,7 +535,7 @@ class BrokenCollectTool:
         calculator_tool_tree,
     )
     with pytest.raises(RuntimeError, match="misconfigured collect"):
-        provider.call_tool("broken", {})
+        await provider.acall_tool("broken", {})
 
 
 def test_list_tools_propagates_on_collect_tools_error(calculator_tool_tree: Path):
@@ -568,7 +568,7 @@ class BrokenCollectTool:
         provider.list_tools()
 
 
-def test_call_tool_propagates_execute_error_when_owner(calculator_tool_tree: Path):
+async def test_call_tool_propagates_execute_error_when_owner(calculator_tool_tree: Path):
     tool_dir = calculator_tool_tree / "tools"
     (tool_dir / "broken_exec.py").write_text(
         """
@@ -595,10 +595,10 @@ class BrokenExecTool:
         calculator_tool_tree,
     )
     with pytest.raises(RuntimeError, match="execute failed"):
-        provider.call_tool("boom", {})
+        await provider.acall_tool("boom", {})
 
 
-def test_agent_sibling_tools_layout(tmp_path: Path):
+async def test_agent_sibling_tools_layout(tmp_path: Path):
     """Refs like ../tools/ from agents/ resolve under app_root containment."""
     app_root = tmp_path / "app"
     agents = app_root / "agents"
@@ -630,10 +630,10 @@ class PingTool:
         agents,
         app_root=app_root,
     )
-    assert provider.call_tool("ping", {}) == {"pong": True}
+    assert (await provider.acall_tool("ping", {})) == {"pong": True}
 
 
-def test_shared_library_tools_under_app_ancestors(tmp_path: Path):
+async def test_shared_library_tools_under_app_ancestors(tmp_path: Path):
     """library-samples style: agents/../../../tools under shared library root."""
     library = tmp_path / "library-samples"
     app = library / "apps" / "qa-agent"
@@ -667,7 +667,7 @@ class CalcTool:
         app_root=app,
         workspace_root=tmp_path,
     )
-    assert provider.call_tool("calc", {}) == {"ok": True}
+    assert (await provider.acall_tool("calc", {})) == {"ok": True}
 
 
 def test_library_scheme_tool_ref():
@@ -686,7 +686,7 @@ def test_library_scheme_tool_ref():
     assert "calc" in names
 
 
-def test_call_tool_skips_non_owner_instances(calculator_tool_tree: Path):
+async def test_call_tool_skips_non_owner_instances(calculator_tool_tree: Path):
     tool_dir = calculator_tool_tree / "tools"
     (tool_dir / "spy.py").write_text(
         """
@@ -715,7 +715,7 @@ class SpyTool:
         ],
         calculator_tool_tree,
     )
-    out = provider.call_tool("calculator", {"expression": "2**16"})
+    out = await provider.acall_tool("calculator", {"expression": "2**16"})
     assert out["result"] == 65536
 
 
@@ -730,7 +730,7 @@ def test_duplicate_tool_names_rejected(calculator_tool_tree: Path):
         )
 
 
-def test_dotted_module_path_imports_installed_package(tmp_path: Path, monkeypatch):
+async def test_dotted_module_path_imports_installed_package(tmp_path: Path, monkeypatch):
     """Third-party dotted module_path works when the package is on sys.path."""
     pkg_root = tmp_path / "site-packages"
     pkg_dir = pkg_root / "myorg" / "travel" / "tools"
@@ -752,10 +752,10 @@ class CheckerTool:
         [{"module_path": "myorg.travel.tools.checker", "class_name": "CheckerTool"}],
         tmp_path,
     )
-    assert provider.call_tool("check", {}) == {"ok": True}
+    assert (await provider.acall_tool("check", {})) == {"ok": True}
 
 
-def test_deep_app_tree_tools_under_workspace(tmp_path: Path):
+async def test_deep_app_tree_tools_under_workspace(tmp_path: Path):
     """apps/category/<app>/agents can reach workspace-level shared tools."""
     workspace = tmp_path / "workspace"
     app = workspace / "apps" / "category" / "myapp"
@@ -789,4 +789,4 @@ class PingTool:
         app_root=app,
         workspace_root=workspace,
     )
-    assert provider.call_tool("ping", {}) == {"pong": True}
+    assert (await provider.acall_tool("ping", {})) == {"pong": True}

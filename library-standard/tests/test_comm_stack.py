@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import pickle
 from dataclasses import FrozenInstanceError
@@ -27,7 +28,6 @@ from mas.library.standard.testing.agent_comm_checks import (
     MemoryLink,
     UnicastOnlyLink,
     check_agent_comm,
-    check_agent_comm_async,
     make_unicast_mesh,
 )
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
@@ -40,20 +40,20 @@ def _on_request(links: list[MemoryLink]):
     return _set
 
 
-def test_check_agent_comm_against_memory_mesh() -> None:
+async def test_check_agent_comm_against_memory_mesh() -> None:
     links = make_unicast_mesh()
-    check_agent_comm(links, on_request=_on_request(links))
+    await check_agent_comm(links, on_request=_on_request(links))
 
 
-def test_check_agent_comm_against_stack_of_one() -> None:
+async def test_check_agent_comm_against_stack_of_one() -> None:
     links = make_unicast_mesh()
-    check_agent_comm([StackAgentComm(layers=[link]) for link in links], on_request=_on_request(links))
+    await check_agent_comm([StackAgentComm(layers=[link]) for link in links], on_request=_on_request(links))
 
 
-def test_check_agent_comm_against_trace_over_memory() -> None:
+async def test_check_agent_comm_against_trace_over_memory() -> None:
     links = make_unicast_mesh()
     stacked = [StackAgentComm(layers=[link, TraceContextLayer()]) for link in links]
-    check_agent_comm(stacked, on_request=_on_request(links))
+    await check_agent_comm(stacked, on_request=_on_request(links))
 
 
 def test_empty_stack_rejected() -> None:
@@ -63,26 +63,26 @@ def test_empty_stack_rejected() -> None:
 
 def test_bind_layer_cannot_sit_at_the_bottom() -> None:
     with pytest.raises(ValueError, match="bottom"):
-        StackAgentComm(layers=[TraceContextLayer(), LocalAgentComm(lambda *_: "x")])
+        StackAgentComm(layers=[TraceContextLayer(), LocalAgentComm(lambda *_: asyncio.sleep(0, "x"))])
 
 
 def test_layers_above_bottom_must_bind() -> None:
     class NoBind:
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "ok"
 
     with pytest.raises(ValueError, match="bind"):
-        StackAgentComm(layers=[LocalAgentComm(lambda *_: "x"), NoBind()])
+        StackAgentComm(layers=[LocalAgentComm(lambda *_: asyncio.sleep(0, "x")), NoBind()])
     with pytest.raises(ValueError, match="send"):
         StackAgentComm(layers=[object()])
 
 
-def test_stack_of_one_equals_the_layer() -> None:
+async def test_stack_of_one_equals_the_layer() -> None:
     links = make_unicast_mesh()
     inner = links[0]
     stacked = StackAgentComm(layers=[inner])
-    assert stacked.send("b", "hello") == inner.send("b", "hello")
+    assert (await stacked.asend("b", "hello")) == (await inner.asend("b", "hello"))
     assert stacked.capabilities() == inner.capabilities()
 
 
@@ -144,7 +144,7 @@ def test_declared_capabilities_read_from_plugin_classes() -> None:
         capability_set(teleport=True)
 
 
-def test_layer_ordering_top_sees_send_first() -> None:
+async def test_layer_ordering_top_sees_send_first() -> None:
     links = make_unicast_mesh()
     order: list[str] = []
 
@@ -155,12 +155,12 @@ def test_layer_ordering_top_sees_send_first() -> None:
         def capabilities(self) -> dict[str, bool]:
             return capability_set(unicast=True)
 
-        def send(self, target: str, task: str, **kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
             order.append("top")
-            return self.lower.send(target, task, **kwargs)  # type: ignore[attr-defined]
+            return await self.lower.asend(target, task, **kwargs)  # type: ignore[attr-defined]
 
     stack = StackAgentComm(layers=[links[0], Probe()])
-    stack.send("b", "go")
+    await stack.asend("b", "go")
     assert order == ["top"]
 
 
@@ -187,7 +187,7 @@ def test_unguarded_link_start_and_stop_run_once() -> None:
             self.stops = 0
             self.agent_id = "u"
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "ok"
 
@@ -211,8 +211,8 @@ def test_unguarded_link_start_and_stop_run_once() -> None:
 async def test_asend_parity() -> None:
     links = make_unicast_mesh()
     stack = StackAgentComm(layers=[links[0]])
-    assert await stack.asend("b", "hello") == stack.send("b", "hello")
-    await check_agent_comm_async(links)
+    assert await stack.asend("b", "hello") == (await stack.asend("b", "hello"))
+    await check_agent_comm(links)
 
 
 def test_getattr_does_not_recurse_on_private_names() -> None:
@@ -233,12 +233,12 @@ def test_getattr_does_not_recurse_on_private_names() -> None:
     assert stack.agent_id == "a"
 
 
-def test_stack_bind_asend_fallback_and_capability_attr() -> None:
+async def test_stack_bind_asend_fallback_and_capability_attr() -> None:
     class CapsAttr:
         CAPABILITIES = capability_set(unicast=True)
         agent_id = "c"
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "sync"
 
@@ -246,7 +246,7 @@ def test_stack_bind_asend_fallback_and_capability_attr() -> None:
             self.lower = lower
 
     class NoId:
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "x"
 
@@ -256,16 +256,14 @@ def test_stack_bind_asend_fallback_and_capability_attr() -> None:
     stack.bind(marker)
     assert bottom.lower is marker
     assert stack.capabilities()["unicast"] is True
-    import asyncio
-
-    assert asyncio.run(stack.asend("x", "t")) == "sync"
+    assert await stack.asend("x", "t") == "sync"
     with pytest.raises(AttributeError, match="agent_id"):
         _ = StackAgentComm(layers=[NoId()]).agent_id
     stacked = StackAgentComm(layers=[NoId()])
-    assert stacked.send("x", "t") == "x"
+    assert (await stacked.asend("x", "t")) == "x"
 
     class NoCaps:
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "ok"
 
@@ -274,18 +272,18 @@ def test_stack_bind_asend_fallback_and_capability_attr() -> None:
     assert layer.capabilities() == capability_set()
 
 
-def test_send_context_sender_comes_from_the_link() -> None:
+async def test_send_context_sender_comes_from_the_link() -> None:
     links = make_unicast_mesh()
     seen: list[SendContext | None] = []
 
     class Capture(BoundLayer):
-        def send(self, target: str, task: str, **kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
             seen.append(kwargs.get("context"))  # type: ignore[arg-type]
-            return super().send(target, task, **kwargs)
+            return await super().asend(target, task, **kwargs)
 
     stack = StackAgentComm(layers=[links[0], Capture()])
     fake = SendContext(headers={"k": "v"}, sender="evil")
-    assert stack.send("b", "x", context=fake) == "ack:x"
+    assert (await stack.asend("b", "x", context=fake)) == "ack:x"
     stamped = seen[-1]
     assert stamped is not None
     assert stamped.sender == "a"
@@ -294,35 +292,35 @@ def test_send_context_sender_comes_from_the_link() -> None:
         stamped.sender = "evil"  # type: ignore[misc]
 
 
-def test_local_link_stamps_sender() -> None:
+async def test_local_link_stamps_sender() -> None:
     seen: list[SendContext | None] = []
 
     class Capture(BoundLayer):
-        def send(self, target: str, task: str, **kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
             seen.append(kwargs.get("context"))  # type: ignore[arg-type]
-            return super().send(target, task, **kwargs)
+            return await super().asend(target, task, **kwargs)
 
-    comm = LocalAgentComm(lambda *_: "ok", agent_id="alice")
+    comm = LocalAgentComm(lambda *_: asyncio.sleep(0, "ok"), agent_id="alice")
     stack = StackAgentComm(layers=[comm, Capture()])
     fake = SendContext(headers={"k": "v"}, sender="evil")
-    assert stack.send("b", "t", context=fake) == "ok"
+    assert (await stack.asend("b", "t", context=fake)) == "ok"
     stamped = seen[-1]
     assert stamped is not None
     assert stamped.sender == "alice"
     assert stamped.headers["k"] == "v"
 
 
-def test_trace_layer_keeps_headers_and_context_in_sync() -> None:
+async def test_trace_layer_keeps_headers_and_context_in_sync() -> None:
     seen: list[tuple[object, object]] = []
 
     class Spy(BoundLayer):
-        def send(self, target: str, task: str, **kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
             seen.append((kwargs.get("headers"), kwargs.get("context")))
-            return super().send(target, task, **kwargs)
+            return await super().asend(target, task, **kwargs)
 
-    comm = LocalAgentComm(lambda *_: "ok", agent_id="alice")
+    comm = LocalAgentComm(lambda *_: asyncio.sleep(0, "ok"), agent_id="alice")
     stack = StackAgentComm(layers=[comm, Spy(), TraceContextLayer()])
-    assert stack.send("b", "t", headers={"k": "v"}) == "ok"
+    assert (await stack.asend("b", "t", headers={"k": "v"})) == "ok"
     headers, ctx = seen[-1]
     assert isinstance(headers, dict)
     assert isinstance(ctx, SendContext)
@@ -332,30 +330,30 @@ def test_trace_layer_keeps_headers_and_context_in_sync() -> None:
     assert ctx.sender == "alice"
 
 
-def test_explicit_headers_replace_context_headers() -> None:
+async def test_explicit_headers_replace_context_headers() -> None:
     seen: list[tuple[object, object]] = []
 
     class Spy(BoundLayer):
-        def send(self, target: str, task: str, **kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
             seen.append((kwargs.get("headers"), kwargs.get("context")))
-            return super().send(target, task, **kwargs)
+            return await super().asend(target, task, **kwargs)
 
     class Redact(BoundLayer):
-        def send(self, target: str, task: str, **kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
             incoming = dict(kwargs.get("headers") or {})
             if not incoming and kwargs.get("context") is not None:
                 incoming = dict(kwargs["context"].headers)  # type: ignore[union-attr]
             incoming.pop("baggage", None)
-            return super().send(
+            return await super().asend(
                 target,
                 task,
                 headers=incoming,
                 context=kwargs.get("context"),  # type: ignore[arg-type]
             )
 
-    comm = LocalAgentComm(lambda *_: "ok", agent_id="alice")
+    comm = LocalAgentComm(lambda *_: asyncio.sleep(0, "ok"), agent_id="alice")
     stack = StackAgentComm(layers=[comm, Spy(), Redact()])
-    assert stack.send("b", "t", headers={"k": "v", "baggage": "secret=1"}) == "ok"
+    assert (await stack.asend("b", "t", headers={"k": "v", "baggage": "secret=1"})) == "ok"
     headers, ctx = seen[-1]
     assert isinstance(headers, dict)
     assert isinstance(ctx, SendContext)
@@ -388,8 +386,8 @@ def test_stack_starts_every_layer_even_if_top_does_not_forward() -> None:
         def bind(self, lower: object) -> None:
             self.lower = lower
 
-        def send(self, *args: object, **kwargs: object) -> str:
-            return self.lower.send(*args, **kwargs)  # type: ignore[attr-defined]
+        async def asend(self, *args: object, **kwargs: object) -> str:
+            return await self.lower.asend(*args, **kwargs)  # type: ignore[attr-defined]
 
         def start(self) -> None:
             self.started = True
@@ -404,7 +402,7 @@ def test_failed_start_can_be_retried() -> None:
         def __init__(self) -> None:
             self.n = 0
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "x"
 
@@ -421,16 +419,16 @@ def test_failed_start_can_be_retried() -> None:
     assert stack_lower.n == 2
 
 
-def test_stack_rejects_bad_headers_at_the_link() -> None:
+async def test_stack_rejects_bad_headers_at_the_link() -> None:
     links = make_unicast_mesh()
     stack = StackAgentComm(layers=[links[0]])
     with pytest.raises(AgentCommError, match="control"):
-        stack.send("b", "x", headers={"k": "v\n"})
+        await stack.asend("b", "x", headers={"k": "v\n"})
 
 
 def test_unknown_live_layer_has_no_security_claims() -> None:
     class Bare:
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "x"
 
@@ -442,7 +440,7 @@ def test_unknown_live_layer_has_no_security_claims() -> None:
 
 def test_a_stack_says_who_it_is_from_its_bottom_link_and_forwards_nothing_else() -> None:
     class Bare:
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             return "x"
 
         def extra(self) -> str:
@@ -472,7 +470,7 @@ def test_a_bound_layer_sees_the_identity_of_the_link_below_and_nothing_else() ->
         fabric_id = 7
         secret = "kept on the link"
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             return "x"
 
     decorator = BoundLayer()
@@ -502,33 +500,32 @@ def test_a_layer_needs_no_hook_to_be_a_layer_and_a_legacy_object_is_adapted_once
     assert adapt_legacy(layer, bottom=False) is layer
 
     class Link:
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             return "x"
 
     assert isinstance(adapt_legacy(Link(), bottom=True), LinkLayer)
     assert isinstance(adapt_legacy(BoundLayer(), bottom=False), LegacyLayer)
     with pytest.raises(ValueError, match="bind layer cannot sit at the bottom"):
         adapt_legacy(BoundLayer(), bottom=True)
-    with pytest.raises(ValueError, match="must be a link with send"):
+    with pytest.raises(ValueError, match="must be a link with asend"):
         adapt_legacy(object(), bottom=True)
     with pytest.raises(ValueError, match="must bind to the layer below"):
         adapt_legacy(Link(), bottom=False)
 
 
-def test_bound_layer_forwards_and_asend_fallback() -> None:
-    import asyncio
+async def test_bound_layer_forwards_and_asend_fallback() -> None:
 
     class CapsOnly:
         CAPABILITIES = capability_set(unicast=True)
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "ok"
 
-        def start(self) -> None:
+        async def start(self) -> None:
             self.started = True
 
-        def stop(self) -> None:
+        async def stop(self) -> None:
             self.stopped = True
 
     layer = BoundLayer()
@@ -543,7 +540,7 @@ def test_bound_layer_forwards_and_asend_fallback() -> None:
     layer.stop()
     assert not hasattr(lower, "started")
     assert not hasattr(lower, "stopped")
-    assert asyncio.run(layer.asend("b", "x")) == "ok"
+    assert await layer.asend("b", "x") == "ok"
 
 
 def test_schema_matches_capability_flags() -> None:
@@ -553,7 +550,7 @@ def test_schema_matches_capability_flags() -> None:
     assert set(schema["properties"]) == set(CAPABILITY_FLAGS)
 
 
-def test_stack_instantiates_dict_layers_via_registry() -> None:
+async def test_stack_instantiates_dict_layers_via_registry() -> None:
     class Dummy:
         def __init__(self, agent_id: str = "d", run_turn: object | None = None) -> None:
             self.agent_id = agent_id
@@ -562,7 +559,7 @@ def test_stack_instantiates_dict_layers_via_registry() -> None:
         def capabilities(self) -> dict[str, bool]:
             return capability_set(unicast=True)
 
-        def send(self, target_agent_id: str, task: str, **_kwargs: object) -> str:
+        async def asend(self, target_agent_id: str, task: str, **_kwargs: object) -> str:
             del target_agent_id
             return f"dummy:{task}"
 
@@ -581,25 +578,25 @@ def test_stack_instantiates_dict_layers_via_registry() -> None:
     stack = StackAgentComm(
         layers=[{"type": "dummy", "params": {"agent_id": "d"}}],
         registry=Registry(),
-        run_turn=lambda: None,
+        run_turn=lambda: asyncio.sleep(0, asyncio.sleep(0, None)),
     )
     assert stack.agent_id == "d"
-    assert stack.send("x", "hi") == "dummy:hi"
+    assert (await stack.asend("x", "hi")) == "dummy:hi"
     stack.start()
 
 
-def test_local_agent_comm_still_sets_headers() -> None:
+async def test_local_agent_comm_still_sets_headers() -> None:
     seen: list[dict[str, str]] = []
 
-    def run_turn(*_args: object) -> str:
+    async def run_turn(*_args: object) -> str:
         seen.append(get_headers())
         return "ok"
 
     comm = LocalAgentComm(run_turn)
-    assert comm.send("b", "t", headers={"k": "v"}) == "ok"
+    assert (await comm.asend("b", "t", headers={"k": "v"})) == "ok"
     assert seen[-1] == {"k": "v"}
     assert comm.capabilities()["unicast"] is True
-    assert comm.send("b", "t", context=SendContext(headers={"from-ctx": "1"}, sender="evil")) == "ok"
+    assert (await comm.asend("b", "t", context=SendContext(headers={"from-ctx": "1"}, sender="evil"))) == "ok"
     assert seen[-1] == {"from-ctx": "1"}
 
 
@@ -617,7 +614,7 @@ def test_decorator_cannot_strip_flags() -> None:
     assert stack.capabilities()["unicast"] is True
 
 
-def test_check_agent_comm_custom_reply_prefix() -> None:
+async def test_check_agent_comm_custom_reply_prefix() -> None:
     links = make_unicast_mesh()
 
     def handler(task: str, **_kw: object) -> str:
@@ -625,12 +622,12 @@ def test_check_agent_comm_custom_reply_prefix() -> None:
 
     for link in links:
         link._on_request = handler
-    check_agent_comm(links, ping="hi", ack_prefix="pong:")
+    await check_agent_comm(links, ping="hi", ack_prefix="pong:")
 
 
-def test_check_agent_comm_rejects_short_list() -> None:
+async def test_check_agent_comm_rejects_short_list() -> None:
     with pytest.raises(ValueError, match="three"):
-        check_agent_comm([])
+        await check_agent_comm([])
 
 
 def test_stack_honours_intents_of_the_bottom_link() -> None:
@@ -638,7 +635,7 @@ def test_stack_honours_intents_of_the_bottom_link() -> None:
         agent_id = "bottom"
         HONOURED_SEND_INTENTS = frozenset({"task"})
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "ok"
 
@@ -648,8 +645,8 @@ def test_stack_honours_intents_of_the_bottom_link() -> None:
         def bind(self, lower: object) -> None:
             self._lower = lower
 
-        def send(self, *args: object, **kwargs: object) -> str:
-            return self._lower.send(*args, **kwargs)
+        async def asend(self, *args: object, **kwargs: object) -> str:
+            return await self._lower.asend(*args, **kwargs)
 
     stack = StackAgentComm(layers=[Bottom(), Top()])
     assert stack.honoured_send_intents() == frozenset({"task"})
@@ -663,7 +660,7 @@ def test_stack_stops_top_first() -> None:
             self.name = name
             self.agent_id = name
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             del args, kwargs
             return "ok"
 
@@ -682,12 +679,12 @@ def test_stack_stops_top_first() -> None:
     assert order == ["start:bottom", "start:top", "stop:top", "stop:bottom"]
 
 
-def test_check_agent_comm_fails_a_link_that_never_raises() -> None:
+async def test_check_agent_comm_fails_a_link_that_never_raises() -> None:
     class Silent:
         def __init__(self, agent_id: str) -> None:
             self.agent_id = agent_id
 
-        def send(self, target: str, task: str, **_kwargs: object) -> str:
+        async def asend(self, target: str, task: str, **_kwargs: object) -> str:
             del target
             return f"ack:{task}"
 
@@ -695,7 +692,7 @@ def test_check_agent_comm_fails_a_link_that_never_raises() -> None:
             return {flag: True for flag in CAPABILITY_FLAGS}
 
     with pytest.raises(AssertionError, match="missing peer"):
-        check_agent_comm([Silent("a"), Silent("b"), Silent("c")])
+        await check_agent_comm([Silent("a"), Silent("b"), Silent("c")])
 
 
 def test_a_link_is_found_before_a_layer_wherever_the_entry_sits() -> None:
@@ -728,15 +725,15 @@ def test_a_link_is_found_before_a_layer_wherever_the_entry_sits() -> None:
     assert [type(layer) for layer in built] == [Link, Frame, Link]
 
 
-def test_stack_takes_a_generic_layer_by_live_object() -> None:
+async def test_stack_takes_a_generic_layer_by_live_object() -> None:
     from mas.library.standard.lib.stack import StackSendError
     from mas.library.standard.testing.layer_conformance import FailingLayer
 
-    link = LocalAgentComm(lambda *_: "ok", agent_id="alice")
+    link = LocalAgentComm(lambda *_: asyncio.sleep(0, "ok"), agent_id="alice")
     stack = StackAgentComm(layers=[link, FailingLayer(targets=("b",), message="b refused")])
-    assert stack.send("c", "t") == "ok"
+    assert (await stack.asend("c", "t")) == "ok"
     with pytest.raises(StackSendError, match="b refused"):
-        stack.send("b", "t")
+        await stack.asend("b", "t")
 
 
 def test_an_adapted_link_or_decorator_starts_and_stops_once() -> None:
@@ -756,7 +753,7 @@ def test_an_adapted_link_or_decorator_starts_and_stops_once() -> None:
     class Link:
         calls: list[str] = []
 
-        def send(self, *args: object, **kwargs: object) -> str:
+        async def asend(self, *args: object, **kwargs: object) -> str:
             return "x"
 
         def start(self) -> None:

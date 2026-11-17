@@ -33,11 +33,7 @@ async def test_concurrent_adelegate_does_not_crosstalk_working_memory():
         seen[agent_id] = snap.turn_history[0][1]
         return f"ok-{agent_id}"
 
-    def send(agent_id, task, correlation_id, caller_call_id, context_id):
-        raise AssertionError("sync send must not run on the async path")
-
-    send.asend = asend  # type: ignore[attr-defined]
-    delegator = LlmDelegator(comm=LocalAgentComm(send), allowed_peers=["schedule", "concierge"])
+    delegator = LlmDelegator(comm=LocalAgentComm(asend), allowed_peers=["schedule", "concierge"])
     a, b = await asyncio.gather(
         delegator.adelegate("schedule", "trains", caller_call_id="c1"),
         delegator.adelegate("concierge", "fares", caller_call_id="c2"),

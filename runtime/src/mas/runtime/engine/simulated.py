@@ -40,7 +40,7 @@ class SimulatedEngine:
     max_tokens: int | None = None
     temperature: float | None = None
 
-    def exchange_snapshot(self, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot:
+    async def aexchange_snapshot(self, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot:
         if op == "LLM_CALL":
             return ExchangeSnapshot(
                 note=f"simulated:{self.sim_mode.value}",
@@ -49,10 +49,10 @@ class SimulatedEngine:
             )
         return ExchangeSnapshot()
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        return format_exchange_snapshot(self.exchange_snapshot(op, correlation_id=correlation_id))
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return format_exchange_snapshot(await self.aexchange_snapshot(op, correlation_id=correlation_id))
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.correlation_id in self.script:
             return self.script[io.correlation_id]
 
@@ -109,7 +109,3 @@ class SimulatedEngine:
             response_kind="ERROR",
             next_step="STOP",
         )
-
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        """Async twin of :meth:`invoke` — simulated I/O is already in-memory."""
-        return self.invoke(io)

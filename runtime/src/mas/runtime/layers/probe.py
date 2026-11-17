@@ -11,7 +11,7 @@ from typing import Any
 class ToolProber:
     """Base of the call body that can run a tool on its own. Raises when the tool fails."""
 
-    def probe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
+    async def aprobe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
         raise NotImplementedError(f"{type(self).__name__} cannot probe tools")
 
 

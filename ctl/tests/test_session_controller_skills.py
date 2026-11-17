@@ -68,14 +68,14 @@ def _idle_engine() -> SimulatedEngine:
         return "STOP"
 
     engine = SimulatedEngine(llm_next_step=next_step)
-    original_invoke = engine.invoke
+    original_invoke = engine.ainvoke
 
-    def invoke(io):
+    async def ainvoke(io):
         if io.op == "LLM_CALL":
             raise AssertionError("/skills and /skill must not trigger an LLM call")
-        return original_invoke(io)
+        return await original_invoke(io)
 
-    engine.invoke = invoke  # type: ignore[method-assign]
+    engine.ainvoke = ainvoke  # type: ignore[method-assign]
     return engine
 
 

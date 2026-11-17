@@ -42,4 +42,7 @@ class ContextManagerContract(ABC):
         past: list[dict[str, Any]],
         budget_tokens: int,
     ) -> list[dict[str, Any]]:
-        """Return a possibly shorter version of *past* (excludes current user turn)."""
+        """Return a possibly shorter version of *past* (excludes current user turn).
+
+        A strategy that waits on I/O (summarising with an LLM) is ``async def``; the assembler awaits it.
+        """

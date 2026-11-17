@@ -2,7 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Protocol for pluggable tool providers."""
 
-import logging
 from typing import Any, Dict, List, Protocol, runtime_checkable
 
 
@@ -27,14 +26,6 @@ class ToolProvider(Protocol):
         """Return tool specifications this plugin currently serves."""
         ...
 
-    def call_tool(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any = None,
-        user: str = "",
-        **kwargs: Any,
-    ) -> Any:
-        """Execute a tool by name. Extra kwargs are optional protocol options."""
-        ...
+    # Calling is ``async def acall_tool(tool_name, arguments, *, ctx=None, user="", **kwargs)``. A provider that only
+    # has the sync ``call_tool`` still works: the registry runs it on the worker threads. Neither is declared here,
+    # so a class that names this protocol as a base does not inherit a stub that answers ``None``.

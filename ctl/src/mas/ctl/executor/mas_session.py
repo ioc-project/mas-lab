@@ -24,7 +24,6 @@ from mas.ctl.manifest.mas_agent_merge import enrich_entry_agent_for_delegation, 
 from mas.ctl.session.controller import ConversationConfig, SessionController
 from mas.ctl.ui.turn_result import turn_failed, turn_failure_message
 from mas.library.standard.lib.stack.handle import RunTurnFn as RunTurnFn
-from mas.library.standard.lib.stack.handle import SessionTurn
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute, build_agent_comm_routes
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
@@ -529,11 +528,11 @@ def make_workflow_send(
     trace_engine: bool = False,
     trace_summary: bool = False,
     trace_color: bool = False,
-) -> SessionTurn:
+) -> RunTurnFn:
     """Run one agent turn inside a multi-agent workflow (sequential or delegation).
 
-    The returned ``SessionTurn`` (``send``, and ``asend`` to await it) holds mutable routing
-    state and is **not reentrant**; use one per workflow run on a single thread.
+    The returned coroutine function holds mutable routing state and is **not reentrant**; use one per
+    workflow run.
 
     ``session_id`` (empty means mint a fresh one — the caller has none yet)
     is captured once here and reused for every ``send()`` call this closure
@@ -551,134 +550,7 @@ def make_workflow_send(
         "working_memory_registry": working_memory_registry or WorkingMemoryRegistry(),
     }
 
-    def send(
-        agent_id: str,
-        prompt: str,
-        delegate_correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-    ) -> str:
-        bus = getattr(materialized, "bus", None)
-        prev_agent = state["prev_agent"]
-        # caller_call_id arrives already resolved — the driver attaches it to
-        # the delegating TOOL_CALL's own InvokeEngineIo (see
-        # InvokeEngineIo.call_id) before the engine ever runs, and it's
-        # threaded explicitly through execute_engine_tool -> LlmDelegator ->
-        # this closure (RunTurnFn's 4th argument) — a real contract field,
-        # not a lookup reconstructed here after the fact. This is what makes
-        # nested/multi-level delegation work too: whichever agent is
-        # delegating (entry or not) already resolved its own call_id at
-        # dispatch time, so this closure no longer needs to assume the
-        # delegator is always ``from_agent`` or reach into
-        # materialized.instances to find it.
-        parent_call_id = caller_call_id
-        # RuntimeInstance.run_user_text builds this invocation's own exec_id
-        # as f"{agent_id}-{turn_id}-exec" (instance.py). turn_id is the
-        # unique caller_call_id (or a per-closure sequence number), so two
-        # calls to the same agent stay distinct even when we reuse one
-        # SessionController — that reuse is required so CliTraceExchangePlugin
-        # is subscribed once. Recreating the controller every send() stacked
-        # a new plugin on the shared driver and reprinted every later reply
-        # N times with non-monotonic +offsets.
-        state["call_seq"] += 1
-        turn_id = caller_call_id or f"{agent_id}-seq{state['call_seq']}"
-        if bus is not None and prev_agent and prev_agent != agent_id:
-            from mas.runtime.schema.egress import InvokeEngineIo
-
-            state["correlation_id"] += 1
-            bus.send(
-                from_agent=prev_agent,
-                to_agent=agent_id,
-                intent=InvokeEngineIo(correlation_id=state["correlation_id"], op="TRANSPORT_MSG"),
-            )
-        instance = materialized.instances.get(agent_id)
-        if instance is None:
-            raise KeyError(f"agent {agent_id!r} not materialized (have: {list(materialized.instances)})")
-        if hasattr(instance.driver, "agent_id"):
-            instance.driver.agent_id = agent_id
-        # An explicit context_id (LLM-chosen, via the delegate tool's optional
-        # context_id argument) picks a working-memory bucket independent of
-        # the ambient session_id — lets the delegating agent run more than
-        # one context with the same peer inside one session. Omitted (the
-        # common case) falls back to the session's default bucket. Passed to
-        # SessionController below as working_memory_key -- the controller
-        # syncs working memory itself (same mechanism a directly-driven chat
-        # session uses), so this closure doesn't sync it a second time.
-        memory_key = context_id or state["session_id"]
-        sub_display = display
-        # A turn another agent asked for (a delegation, or a request that arrived over a chain, which
-        # carries the caller's call id) is not the user's: show it under the agent's label, not "You:".
-        if from_agent and (agent_id != from_agent or parent_call_id):
-            import sys
-
-            from mas.ctl.ui.stdout import StdoutConversationDisplay
-
-            base = display if isinstance(display, StdoutConversationDisplay) else None
-            sub_display = StdoutConversationDisplay(
-                out=getattr(base, "_out", sys.stdout),
-                err=getattr(base, "_err", sys.stderr),
-                agent_label=agent_id,
-                verbose=verbose,
-                show_labels=True,
-                user_prompt_echoed=True,
-                trace=getattr(base, "_trace", False),
-            )
-        caller_agent_id = from_agent if parent_call_id and from_agent and from_agent != agent_id else ""
-        controllers: dict[str, Any] = state["controllers"]
-        controller = controllers.get(agent_id)
-        if controller is None:
-            controller = SessionController(
-                instance=instance,
-                display=sub_display,
-                verbose=verbose,
-                agent_id=agent_id,
-                config=ConversationConfig(single_turn=True),
-                session_id=state["session_id"],
-                working_memory_key=memory_key,
-                working_memory_registry=state["working_memory_registry"],
-                caller_agent_id=caller_agent_id,
-                trace=trace,
-                trace_timestamps=trace_timestamps,
-                trace_engine=trace_engine,
-                trace_summary=trace_summary,
-                trace_color=trace_color,
-            )
-            controllers[agent_id] = controller
-        else:
-            controller.caller_agent_id = caller_agent_id
-            controller.working_memory_key = memory_key
-            controller.display = sub_display
-        result = controller.run_turn(prompt, turn_id=turn_id, parent_call_id=parent_call_id)
-        # Do NOT close observability after a delegated sub-turn: in a multi-agent
-        # run every agent shares one plugin set owned by the top-level session
-        # (see setup_shared_obs), and the sub-agent instance now references it.
-        # Closing here would tear the shared events sink down mid-run and
-        # truncate the entry agent's post-delegation events (e.g. its final
-        # synthesis llm_call_end).  The top-level owner closes it once at the end.
-        # Only close a controller that owns its own recorder (non-shared setups).
-        if controller.obs_recorder is not None:
-            from mas.ctl.session.controller import close_observability
-
-            close_observability(controller)
-        state["prev_agent"] = agent_id
-        if turn_failed(result):
-            raise RuntimeError(turn_failure_message(result, agent_id))
-
-        # Propagate awaiting_hitl state via side channel (not return value)
-        # This allows external clients to detect and resolve HITL requests
-        # from delegated agents without breaking the delegation contract.
-        if result.awaiting_hitl:
-            from mas.runtime.boundary.hitl.registry import get_hitl_resolver_registry
-
-            registry = get_hitl_resolver_registry()
-            # Check if there are any pending HITL requests for this agent
-            if registry.has_pending(state["session_id"], agent_id):
-                # Mark in state that this agent has pending HITL
-                state.setdefault("pending_hitl_agents", set()).add(agent_id)
-
-        return result.text
-
-    async def asend(
+    async def send(
         agent_id: str,
         prompt: str,
         delegate_correlation_id: int = 0,
@@ -766,4 +638,4 @@ def make_workflow_send(
 
         return result.text
 
-    return SessionTurn(send, asend)
+    return send

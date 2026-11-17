@@ -18,6 +18,7 @@ from mas.library.standard.lib.context.history_budget import (
 )
 from mas.library.standard.lib.context.payload import split_user_turns
 from mas.library.standard.lib.context.spec import configure_archive_store
+from mas.runtime.aio import settle
 from mas.runtime.boundary.context.archive import ConversationChunkStore
 from mas.runtime.boundary.context.assembly_cache import cached_context_manager
 
@@ -72,7 +73,7 @@ def apply_request_view(
         ctx.turn_history = history[-n_managed_turns:]
 
 
-def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None:
+async def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None:
     """Fold the covering prefix when the next request would not fit.
 
     Leaves stay stored. Under-budget ``managed == past`` is a no-op, so a run
@@ -85,7 +86,7 @@ def compact_committed_history(ctx: Any, *, manifest: dict | None = None) -> None
 
     cm = cached_context_manager(ctx, resolved)
     budget = context_manager_history_budget_hint(resolved, fixed_context_tokens=0)
-    managed = cm.manage_history(past, budget)
+    managed = await settle(cm.manage_history(past, budget))
     if managed == past:
         return
     apply_request_view(ctx, managed, manifest=resolved)

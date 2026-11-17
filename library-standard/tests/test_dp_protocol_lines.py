@@ -32,20 +32,17 @@ class _Engine:
         self.instance: RuntimeInstance | None = None
         self.systems: list[str] = []
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "TOOL_CALL":
             return EngineIoReturn(
                 correlation_id=io.correlation_id, response_kind="TOOL_RESULT", next_step="STOP", text="42"
             )
         ctx = self.instance.driver.ctx
-        messages = assemble_llm_messages(ctx, manifest={})
+        messages = await assemble_llm_messages(ctx, manifest={})
         self.systems.append(next((m["content"] for m in messages if m["role"] == "system"), ""))
         return EngineIoReturn(
             correlation_id=io.correlation_id, response_kind="MODEL_TEXT", next_step="STOP", text=self.answers.pop(0)
         )
-
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
 
 
 def _instance(plugin: object, plugin_id: str, engine: _Engine) -> RuntimeInstance:

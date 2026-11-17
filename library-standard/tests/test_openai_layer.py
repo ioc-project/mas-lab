@@ -45,15 +45,6 @@ def _provider(transport: _Transport, monkeypatch: pytest.MonkeyPatch, **params: 
     )
 
 
-def test_a_chat_goes_through_the_transport_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    transport = _Transport()
-    provider = _provider(transport, monkeypatch)
-    out = provider.chat_completion(model="m", messages=[{"role": "user", "content": "q"}])
-    assert out["content"] == "ok"
-    assert transport.requests[0].url.path.endswith("/chat/completions")
-    assert provider.call_kinds == ("llm",)
-
-
 def test_an_async_chat_goes_through_the_transport_aclient(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = _Transport()
     provider = _provider(transport, monkeypatch)
@@ -65,9 +56,6 @@ def test_an_async_chat_goes_through_the_transport_aclient(monkeypatch: pytest.Mo
 def test_a_transport_failure_drops_the_transport_clients(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = _Transport()
     provider = _provider(transport, monkeypatch)
-    provider._discard_client_after_transport_failure(httpx.ConnectError("down"))
-    provider._discard_client_after_transport_failure(ValueError("not transport"))
-    assert transport.discarded == 1
     asyncio.run(provider._adiscard_client_after_transport_failure(httpx.ConnectError("down")))
     asyncio.run(provider._adiscard_client_after_transport_failure(ValueError("not transport")))
     assert transport.adiscarded == 1
@@ -94,18 +82,13 @@ def test_the_openai_layer_answers_the_chat_in_flight(monkeypatch: pytest.MonkeyP
     payload = {"model": "m", "messages": [{"role": "user", "content": "q"}]}
     token = _PROVIDER_CALL.set(payload)
     try:
-        ret = provider.invoke(_io())
-        assert payload["_result"]["content"] == "ok" and '"content": "ok"' in ret.text
-        payload.pop("_result")
         ret = asyncio.run(provider.ainvoke(_io()))
-        assert payload["_result"]["content"] == "ok"
+        assert payload["_result"]["content"] == "ok" and '"content": "ok"' in ret.text
     finally:
         _PROVIDER_CALL.reset(token)
 
 
 def test_the_openai_layer_needs_a_chat_in_flight(monkeypatch: pytest.MonkeyPatch) -> None:
     provider = _provider(_Transport(), monkeypatch)
-    with pytest.raises(RuntimeError, match="in flight"):
-        provider.invoke(_io())
     with pytest.raises(RuntimeError, match="in flight"):
         asyncio.run(provider.ainvoke(_io()))

@@ -18,12 +18,12 @@ class _LogsOnly:
         raise ManifestToolLoadError(f"Tool {tool_name!r} not found in manifest or overlays")
 
 
-def test_unknown_tool_returns_to_the_same_agent() -> None:
+async def test_unknown_tool_returns_to_the_same_agent() -> None:
     engine = LiveLlmEngine(use_tool_loop=True, use_cache=False, tool_provider=_LogsOnly())
     engine._offered_tool_names = ["get_logs", "get_metrics"]
     engine.set_scheduled_tool("get_deployments", {})
 
-    ret = engine.invoke(InvokeEngineIo(correlation_id=4, op="TOOL_CALL"))
+    ret = await engine.ainvoke(InvokeEngineIo(correlation_id=4, op="TOOL_CALL"))
 
     assert ret.response_kind == "TOOL_RESULT"
     assert ret.next_step == "LLM_CALL"
@@ -31,7 +31,7 @@ def test_unknown_tool_returns_to_the_same_agent() -> None:
     assert "Available tools: get_logs, get_metrics." in ret.text
 
 
-def test_context_assembled_records_offered_tool_names() -> None:
+async def test_context_assembled_records_offered_tool_names() -> None:
     obs = ObservabilityOperator()
     ctx = AutoCtxAssembler(observability=obs, last_user_text="check latency", agent_id="telemetry")
     tools = [
@@ -45,7 +45,7 @@ def test_context_assembled_records_offered_tool_names() -> None:
         },
     ]
 
-    assemble_llm_messages(ctx, correlation_id=6, tools=tools)
+    await assemble_llm_messages(ctx, correlation_id=6, tools=tools)
 
     assembled = [ev for ev in obs.events if ev.kind == ObsEventKind.CONTEXT_ASSEMBLED]
     assert assembled[-1].payload["tools"] == ["get_logs", "get_metrics"]

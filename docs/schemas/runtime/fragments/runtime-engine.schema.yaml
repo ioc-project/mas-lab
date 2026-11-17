@@ -46,6 +46,15 @@ properties:
         description: >
           How many sync plugin tools may run at once. Null means no cap other
           than the number of calls in the batch.
+      sync_threads:
+        type: integer
+        minimum: 1
+        default: 1
+        description: >
+          Worker threads shared by sync plugins other than tools (an LLM
+          provider, an agent-comm link or a layer that only implements the
+          sync method). One by default: they run one at a time. Raise it when
+          such plugins must overlap. Async plugins do not use these threads.
   cache:
     type: object
     additionalProperties: false

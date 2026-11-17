@@ -72,7 +72,7 @@ LLM_CALL (forward):
     - append `{key, preview}` to `miss_log_path` when set,
     - record a `cache.lookup` miss,
     - raise `RuntimeError`.
-5. Otherwise call `inner.invoke(io)`. On `allow_write` and `MODEL_TEXT` with `next_step` in `{STOP, TOOL_CALL, PARALLEL_TOOL_CALLS}`, persist the response.
+5. Otherwise await `inner.ainvoke(io)`. On `allow_write` and `MODEL_TEXT` with `next_step` in `{STOP, TOOL_CALL, PARALLEL_TOOL_CALLS}`, persist the response.
 
 Source: `library-standard/src/mas/library/standard/plugins/infra/llm_cache.py`. The runtime dispatches by registry name from `runtime/src/mas/runtime/engine/infra_pipeline.py`.
 

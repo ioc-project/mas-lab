@@ -61,9 +61,9 @@ def _gls_endpoint() -> tuple[str, str] | None:
     return base.rstrip("/"), key
 
 
-def _chat(base: str, key: str, model: str, reasoning: dict) -> dict:
+async def _chat(base: str, key: str, model: str, reasoning: dict) -> dict:
     provider = OpenAILLMProvider(api_base=base, reasoning=reasoning)
-    return provider.chat_completion(
+    return await provider.achat_completion(
         model=model,
         messages=[{"role": "user", "content": "Reply with the single word pong and nothing else."}],
         api_key=key,
@@ -105,7 +105,7 @@ def _pick_model(base: str, key: str, fallback: str) -> str:
 
 
 @pytest.mark.timeout(60)
-def test_litellm_outshift_reasoning_exclude_hides_cot() -> None:
+async def test_litellm_outshift_reasoning_exclude_hides_cot() -> None:
     endpoint = _litellm_endpoint()
     if endpoint is None:
         pytest.skip("LITELLM_URL / OPENAI_API_KEY not set")
@@ -114,7 +114,7 @@ def test_litellm_outshift_reasoning_exclude_hides_cot() -> None:
         pytest.skip(f"LiteLLM host {_host(base)} does not resolve")
     model = _pick_model(base, key, "onprem/gemma4")
     try:
-        message = _chat(base, key, model, {"exclude": True})
+        message = await _chat(base, key, model, {"exclude": True})
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"LiteLLM chat failed on {_host(base)}: {exc}")
     cleaned = sanitize_assistant_message(dict(message), exclude=True)
@@ -124,7 +124,7 @@ def test_litellm_outshift_reasoning_exclude_hides_cot() -> None:
 
 
 @pytest.mark.timeout(60)
-def test_litellm_outshift_rejects_or_accepts_think_explicitly() -> None:
+async def test_litellm_outshift_rejects_or_accepts_think_explicitly() -> None:
     """Do not retry-without-think: a proxy that rejects think must skip, not pass."""
     endpoint = _litellm_endpoint()
     if endpoint is None:
@@ -139,7 +139,7 @@ def test_litellm_outshift_rejects_or_accepts_think_explicitly() -> None:
     if info is not None and not info.supports("think"):
         pytest.skip(f"{model} does not advertise think")
     try:
-        message = _chat(base, key, model, {"think": True, "exclude": True})
+        message = await _chat(base, key, model, {"think": True, "exclude": True})
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"LiteLLM proxy rejected think on {_host(base)} ({model}): {exc}")
     cleaned = sanitize_assistant_message(dict(message), exclude=True)
@@ -148,7 +148,7 @@ def test_litellm_outshift_rejects_or_accepts_think_explicitly() -> None:
 
 
 @pytest.mark.timeout(60)
-def test_gls_vllm_think_flag_and_local_exclude() -> None:
+async def test_gls_vllm_think_flag_and_local_exclude() -> None:
     endpoint = _gls_endpoint()
     if endpoint is None:
         pytest.skip("OUTSHIFT_GLS_API_KEY not set")
@@ -158,7 +158,7 @@ def test_gls_vllm_think_flag_and_local_exclude() -> None:
         pytest.skip(f"GLS vLLM host {host} does not resolve (set OUTSHIFT_GLS_API_BASE)")
     model = _pick_model(base, key, "gemma-4-26b-a4b-it-node1-a100-0")
     try:
-        message = _chat(base, key, model, {"think": True, "exclude": True})
+        message = await _chat(base, key, model, {"think": True, "exclude": True})
     except Exception as exc:  # noqa: BLE001
         pytest.skip(f"GLS vLLM chat failed on {host}: {exc}")
     cleaned = sanitize_assistant_message(dict(message), exclude=True)

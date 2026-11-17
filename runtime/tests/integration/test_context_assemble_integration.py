@@ -10,7 +10,7 @@ from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.schema.observability import ObsEventKind
 
 
-def test_assemble_llm_messages_includes_user_turn():
+async def test_assemble_llm_messages_includes_user_turn():
     observability = ObservabilityOperator()
     ctx = SimpleNamespace(
         working_memory=WorkingMemoryStore(),
@@ -23,7 +23,7 @@ def test_assemble_llm_messages_includes_user_turn():
         turn_index=0,
         agent_id="agent",
     )
-    messages = assemble_llm_messages(
+    messages = await assemble_llm_messages(
         ctx,
         manifest={"spec": {"context_manager": {"type": "stack"}}},
         tools=[{"type": "function", "function": {"name": "search", "description": "search"}}],

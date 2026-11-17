@@ -6,7 +6,7 @@ This note records the plan for agent-initiated HITL (human in the loop). It is k
 
 ## Problem it addressed
 
-Only the session that hosted the agent resolved governance-triggered HITL. In a delegation, `mas_session.send()` returned the delegate's text and dropped its HITL state. A question raised by a delegate never reached the user-facing entry point:
+Only the session that hosted the agent resolved governance-triggered HITL. In a delegation, the session turn (`make_workflow_send`) returned the delegate's text and dropped its HITL state. A question raised by a delegate never reached the user-facing entry point:
 
 ```
 Moderator (entry)  --delegate("finance", ...)-->  Finance agent
@@ -35,7 +35,7 @@ Moderator never learns that the question is pending.
 | System plugins auto-injected into every agent | Opt-in: list `request_human_input` in `spec.system_plugins`. |
 | Tool lives in the runtime | Tool lives in `library-standard` (`plugins/system_tools/request_human_input.py`); the runtime keeps only the signal (`mas.runtime.system_tools.signal`) and the registry (`mas.runtime.boundary.hitl.registry`). |
 | Single resolution path through the registry | Pluggable `HITLContract`: `RegistryHitlContract` (default), `AutoResolveHitlContract` (unattended), `InteractiveHitlContract` (`mas-ctl chat -i`). |
-| Delegation tracks pending delegates | `mas_session.send()` adds them to `state["pending_hitl_agents"]`. |
+| Delegation tracks pending delegates | the session turn (`make_workflow_send`) adds them to `state["pending_hitl_agents"]`. |
 | Host helper module | Hosts call `HitlResolverRegistry` directly (`subscribe`, `get_pending_for_session`, `resolve`). |
 
 ## See also

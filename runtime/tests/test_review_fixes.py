@@ -43,12 +43,12 @@ def _bound(plugin: InstanceSystemPlugin, *names: str) -> BoundSystemPlugins:
     return bundle
 
 
-def test_a_plugin_whose_tools_come_from_the_turn_context_is_claimed_and_callable() -> None:
+async def test_a_plugin_whose_tools_come_from_the_turn_context_is_claimed_and_callable() -> None:
     bundle = _bound(_CtxPlugin())
     ctx = SimpleNamespace(registry=object())
     assert not bundle.claims("ctx_tool")
     assert bundle.claims("ctx_tool", ctx)
-    assert bundle.call("ctx_tool", {}, context=CallContext(ctx=ctx)) == "ran ctx_tool"
+    assert await bundle.acall("ctx_tool", {}, context=CallContext(ctx=ctx)) == "ran ctx_tool"
 
 
 def test_a_failed_add_binds_nothing() -> None:

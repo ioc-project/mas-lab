@@ -16,6 +16,7 @@ from mas.library.standard.plugins.context.conversation import (
     SummarizingConversation,
 )
 from mas.library.standard.plugins.context.token_budget import trim_messages_to_budget
+from mas.runtime.aio import settle
 from mas.runtime.boundary.context.chunk_meta import attach_chunk_meta
 
 BODY = "Always end with a one-sentence summary."
@@ -67,12 +68,12 @@ def _skill_rows(messages: list[dict]) -> list[dict]:
     return [m for m in messages if is_retained_instruction(m) and m.get("role") == "system"]
 
 
-def test_summarizer_never_sees_skill_body_and_body_is_retained():
+async def test_summarizer_never_sees_skill_body_and_body_is_retained():
     seen: list[list[dict]] = []
     cm = SummarizingConversation(summary_threshold=100, keep_turns=2)
     cm.bind_summarizer(lambda msgs: (seen.append(msgs), "SUMMARY")[1])
 
-    managed = cm.manage_history(_history(), 0)
+    managed = await settle(cm.manage_history(_history(), 0))
 
     assert seen and BODY not in json.dumps(seen)
     assert "[content retained verbatim: skills/activated/fmt]" in json.dumps(seen)
@@ -81,49 +82,49 @@ def test_summarizer_never_sees_skill_body_and_body_is_retained():
     assert len(rows) == 1 and BODY in rows[0]["content"]
 
 
-def test_cached_summary_view_keeps_skill_rows():
+async def test_cached_summary_view_keeps_skill_rows():
     cm = SummarizingConversation(summary_threshold=600, keep_turns=2, hysteresis_ratio=1.0)
     cm.bind_summarizer(lambda msgs: "SUMMARY")
     past = _history()
-    cm.manage_history(past, 0)
+    await settle(cm.manage_history(past, 0))
     past += [{"role": "user", "content": "q-next"}, {"role": "assistant", "content": "a-next"}]
 
-    managed = cm.manage_history(past, 0)
+    managed = await settle(cm.manage_history(past, 0))
 
     assert cm.last_compaction_metadata["reused"] is True
     assert len(_skill_rows(managed)) == 1
 
 
-def test_drop_summarizer_keeps_skill_body():
+async def test_drop_summarizer_keeps_skill_body():
     cm = SummarizingConversation(summary_threshold=100, keep_turns=2)
     cm.bind_summarizer(None)
 
-    managed = cm.manage_history(_history(), 0)
+    managed = await settle(cm.manage_history(_history(), 0))
 
     assert len(_skill_rows(managed)) == 1
     assert not any(m.get("role") == "tool" for m in managed)
 
 
-def test_repeated_compaction_keeps_one_row_per_skill_latest_wins():
+async def test_repeated_compaction_keeps_one_row_per_skill_latest_wins():
     cm = SummarizingConversation(summary_threshold=100, keep_turns=2)
     cm.bind_summarizer(lambda msgs: "SUMMARY")
     past = _history() + _activation_turn("c2", body="Updated body.") + _history()[4:]
 
-    once = cm.manage_history(past, 0)
-    twice = cm.manage_history(once + _history()[4:], 0)
+    once = await settle(cm.manage_history(past, 0))
+    twice = await settle(cm.manage_history(once + _history()[4:], 0))
 
     rows = _skill_rows(twice)
     assert len(rows) == 1
     assert "Updated body." in rows[0]["content"]
 
 
-def test_sliding_window_keeps_skill_body():
-    managed = SlidingWindowConversation(keep_turns=2).manage_history(_history(), 0)
+async def test_sliding_window_keeps_skill_body():
+    managed = await settle(SlidingWindowConversation(keep_turns=2).manage_history(_history(), 0))
     assert len(_skill_rows(managed)) == 1
 
 
-def test_stack_cap_keeps_skill_body():
-    managed = StackConversation(max_messages=4).manage_history(_history(), 0)
+async def test_stack_cap_keeps_skill_body():
+    managed = await settle(StackConversation(max_messages=4).manage_history(_history(), 0))
     assert len(_skill_rows(managed)) == 1
 
 

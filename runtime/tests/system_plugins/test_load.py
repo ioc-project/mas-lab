@@ -245,19 +245,19 @@ def test_host_requested_loads_and_enabled_false_in_the_spec_wins() -> None:
     assert "inform_user" not in load_system_plugins(spec, host_requested=("inform_user",)).tool_names()
 
 
-def test_two_sessions_of_one_agent_do_not_share_state_and_a_snapshot_restores_it() -> None:
+async def test_two_sessions_of_one_agent_do_not_share_state_and_a_snapshot_restores_it() -> None:
     with _registered(_DefaultOn):
         spec = {"system_plugins": ["probe_default_on"]}
         one, two = load_system_plugins(spec), load_system_plugins(spec)
-        assert one.call("probe_default_on", {}) == 1
-        assert one.call("probe_default_on", {}) == 2
-        assert two.call("probe_default_on", {}) == 1
+        assert (await one.acall("probe_default_on", {})) == 1
+        assert (await one.acall("probe_default_on", {})) == 2
+        assert (await two.acall("probe_default_on", {})) == 1
         snapshot = one.snapshot()
         assert snapshot == {"mas.system_plugin.probe_default_on": {"calls": 2}}
         fresh = load_system_plugins(spec)
         fresh.restore(snapshot)
-        assert fresh.call("probe_default_on", {}, context=CallContext()) == 3
-        assert two.call("probe_default_on", {}) == 2
+        assert (await fresh.acall("probe_default_on", {}, context=CallContext())) == 3
+        assert (await two.acall("probe_default_on", {})) == 2
 
 
 class _LegacyTool:
@@ -295,7 +295,7 @@ def test_host_system_tools_argument_still_loads_and_warns(tmp_path: Path, caplog
     assert "system_plugins=" in warnings[0]
 
 
-def test_deprecated_system_tool_type_still_loads_and_warns_once(caplog: pytest.LogCaptureFixture) -> None:
+async def test_deprecated_system_tool_type_still_loads_and_warns_once(caplog: pytest.LogCaptureFixture) -> None:
     urn = "mas.system_tool.legacy_probe"
     register_plugin(urn, _LegacyTool, shortcuts=["legacy_probe"], attributes={"plugin_type": "system_tool"})
     try:
@@ -303,7 +303,7 @@ def test_deprecated_system_tool_type_still_loads_and_warns_once(caplog: pytest.L
         with caplog.at_level(logging.WARNING):
             bound = load_system_plugins(spec)
             load_system_plugins(spec)
-        assert bound.call("legacy_probe", {}) == "legacy-ok"
+        assert (await bound.acall("legacy_probe", {})) == "legacy-ok"
         assert [d["name"] for d in bound.advertise()] == ["legacy_probe"]
         warnings = [r.getMessage() for r in caplog.records if "system_tool is deprecated" in r.getMessage()]
         assert len(warnings) == 1
@@ -325,12 +325,12 @@ class _LegacyWithSettings:
         return self.tag
 
 
-def test_deprecated_system_tool_type_applies_grant_settings() -> None:
+async def test_deprecated_system_tool_type_applies_grant_settings() -> None:
     urn = "mas.system_tool.legacy_settings"
     register_plugin(urn, _LegacyWithSettings, shortcuts=["legacy_settings"], attributes={"plugin_type": "system_tool"})
     try:
         bound = load_system_plugins({"system_plugins": [{"legacy_settings": {"tag": "from-grant"}}]})
-        assert bound.call("legacy_settings", {}) == "from-grant"
+        assert (await bound.acall("legacy_settings", {})) == "from-grant"
     finally:
         unregister_plugin(urn)
 
@@ -346,7 +346,7 @@ class _LegacyHitl:
         raise RequestHitlSignal(question="Approve?", question_type=HitlQuestionType.CONFIRM, choices=["yes"])
 
 
-def test_deprecated_system_tool_communication_hitl_wraps() -> None:
+async def test_deprecated_system_tool_communication_hitl_wraps() -> None:
     from mas.library.standard.plugins.tools.local import _wrap_legacy_communication
 
     class _Hitl:
@@ -369,7 +369,7 @@ def test_deprecated_system_tool_communication_hitl_wraps() -> None:
                 )
             ),
         )
-        assert bound.call("legacy_hitl", {})["choice"] == "yes"
+        assert (await bound.acall("legacy_hitl", {}))["choice"] == "yes"
     finally:
         unregister_plugin(urn)
 
@@ -384,7 +384,7 @@ class _LegacyUserIo:
         raise InformUserSignal(message="still working")
 
 
-def test_deprecated_system_tool_communication_user_io_wraps() -> None:
+async def test_deprecated_system_tool_communication_user_io_wraps() -> None:
     from mas.library.standard.plugins.tools.local import _wrap_legacy_communication
 
     class _UserIo:
@@ -407,7 +407,7 @@ def test_deprecated_system_tool_communication_user_io_wraps() -> None:
                 )
             ),
         )
-        result = bound.call("legacy_user_io", {})
+        result = await bound.acall("legacy_user_io", {})
         assert result["status"] == "sent"
         assert result["message"] == "still working"
     finally:

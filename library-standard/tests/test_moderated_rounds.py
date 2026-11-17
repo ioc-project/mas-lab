@@ -43,7 +43,7 @@ class _Engine:
         self.instance: RuntimeInstance | None = None
         self.calls: list[tuple[str, dict]] = []
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         assert io.op == "TOOL_CALL", f"moderated_rounds must not call the model, got {io.op}"
         q = self.instance.kernel.q
         name, args = q.pending_tool_name, dict(q.pending_tool_args)
@@ -53,9 +53,6 @@ class _Engine:
         return EngineIoReturn(
             correlation_id=io.correlation_id, response_kind="TOOL_RESULT", next_step="STOP", text=text
         )
-
-    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.invoke(io)
 
 
 def _raw(reply: Callable[[str, str], str], **params: object) -> tuple[str, _Engine]:

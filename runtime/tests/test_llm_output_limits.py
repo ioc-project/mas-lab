@@ -180,7 +180,7 @@ class _ScriptedProvider:
         self.replies = list(replies)
         self.calls: list[dict[str, Any]] = []
 
-    def chat_completion(self, **kwargs: Any) -> dict[str, Any]:
+    async def achat_completion(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         return dict(self.replies.pop(0))
 
@@ -197,16 +197,16 @@ def _length(tokens: int) -> dict[str, Any]:
     }
 
 
-def test_engine_omits_limit_by_default(monkeypatch) -> None:
+async def test_engine_omits_limit_by_default(monkeypatch) -> None:
     monkeypatch.delenv("MAS_LLM_MAX_TOKENS", raising=False)
     provider = _ScriptedProvider([{"content": "ok", "finish_reason": "stop"}])
-    ret = _engine(provider).invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    ret = await _engine(provider).ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "ok"
     assert "max_tokens" not in provider.calls[0]
     assert "max_completion_tokens" not in provider.calls[0]
 
 
-def test_engine_escalates_on_length(monkeypatch) -> None:
+async def test_engine_escalates_on_length(monkeypatch) -> None:
     monkeypatch.delenv("MAS_LLM_MAX_TOKENS", raising=False)
     provider = _ScriptedProvider(
         [
@@ -215,7 +215,7 @@ def test_engine_escalates_on_length(monkeypatch) -> None:
         ]
     )
     engine = _engine(provider, max_tokens=1000, on_truncation={"action": "escalate", "max_tokens": 3000})
-    ret = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    ret = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "full"
     assert [c["max_tokens"] for c in provider.calls] == [1000, 2000]
     assert ret.truncation_retries == 1
@@ -261,31 +261,31 @@ async def test_async_engine_escalates_on_length(monkeypatch) -> None:
     assert ret.truncation_retries == 1
 
 
-def test_engine_escalation_stops_at_retries_and_warns(monkeypatch, caplog) -> None:
+async def test_engine_escalation_stops_at_retries_and_warns(monkeypatch, caplog) -> None:
     monkeypatch.delenv("MAS_LLM_MAX_TOKENS", raising=False)
     provider = _ScriptedProvider([_length(1000), _length(2000)])
     engine = _engine(provider, max_tokens=1000, on_truncation="escalate")
     with caplog.at_level(logging.WARNING):
-        ret = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+        ret = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert len(provider.calls) == 2
     assert ret.finish_reason == "length"
     assert ret.text == "partial"
     assert "truncated" in caplog.text
 
 
-def test_engine_escalates_from_server_default(monkeypatch) -> None:
+async def test_engine_escalates_from_server_default(monkeypatch) -> None:
     monkeypatch.delenv("MAS_LLM_MAX_TOKENS", raising=False)
     provider = _ScriptedProvider([_length(8000), {"content": "full", "finish_reason": "stop"}])
     engine = _engine(provider, on_truncation={"action": "escalate", "max_tokens": 12000})
-    engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert "max_tokens" not in provider.calls[0]
     assert provider.calls[1]["max_tokens"] == 12000
 
 
-def test_engine_error_action_returns_engine_error(monkeypatch) -> None:
+async def test_engine_error_action_returns_engine_error(monkeypatch) -> None:
     monkeypatch.delenv("MAS_LLM_MAX_TOKENS", raising=False)
     provider = _ScriptedProvider([_length(500)])
-    ret = _engine(provider, max_tokens=500, on_truncation="error").invoke(
+    ret = await _engine(provider, max_tokens=500, on_truncation="error").ainvoke(
         InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     )
     assert ret.response_kind == "ERROR"
@@ -293,8 +293,10 @@ def test_engine_error_action_returns_engine_error(monkeypatch) -> None:
     assert "max tokens=500" in ret.text
 
 
-def test_engine_fits_budget_to_context_window(monkeypatch) -> None:
+async def test_engine_fits_budget_to_context_window(monkeypatch) -> None:
     monkeypatch.delenv("MAS_LLM_MAX_TOKENS", raising=False)
     provider = _ScriptedProvider([{"content": "ok", "finish_reason": "stop"}])
-    _engine(provider, max_tokens=4000, context_window=1000).invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    await _engine(provider, max_tokens=4000, context_window=1000).ainvoke(
+        InvokeEngineIo(correlation_id=1, op="LLM_CALL")
+    )
     assert provider.calls[0]["max_tokens"] < 1000

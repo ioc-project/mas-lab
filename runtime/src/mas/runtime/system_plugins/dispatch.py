@@ -28,19 +28,6 @@ class SystemPluginDispatcher:
             caller_call_id=caller_call_id,
         )
 
-    def call(
-        self,
-        tool_name: str,
-        arguments: dict[str, Any],
-        *,
-        ctx: Any = None,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        user: str = "",
-        **_: Any,
-    ) -> Any:
-        return self.bound.call(tool_name, arguments, context=self._context(ctx, user, correlation_id, caller_call_id))
-
     async def acall(
         self,
         tool_name: str,

@@ -11,6 +11,7 @@ from mas.library.standard.lib.comm.capabilities import CAPABILITY_FLAGS, capabil
 from mas.library.standard.lib.comm.headers import bound_headers, get_headers, merge_headers
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.library.standard.plugins.agentcomm.layer import BoundLayer
+from mas.runtime.aio import settle
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
 
 OnRequestSetter = Callable[[int, Callable[..., str]], None]
@@ -50,7 +51,7 @@ class MemoryLink:
     def stop(self) -> None:
         self._stops += 1
 
-    def send(
+    async def asend(
         self,
         target_agent_id: str,
         task: str,
@@ -71,10 +72,7 @@ class MemoryLink:
         with bound_headers(merged):
             if handler is None:
                 return f"ack:{task}"
-            return handler(task)
-
-    async def asend(self, *args: Any, **kwargs: Any) -> str:
-        return self.send(*args, **kwargs)
+            return await settle(handler(task))
 
 
 def make_unicast_mesh(names: Sequence[str] = ("a", "b", "c")) -> list[MemoryLink]:
@@ -85,7 +83,7 @@ def make_unicast_mesh(names: Sequence[str] = ("a", "b", "c")) -> list[MemoryLink
     return links
 
 
-def check_agent_comm(
+async def check_agent_comm(
     endpoints: Sequence[Any],
     *,
     on_request: OnRequestSetter | None = None,
@@ -98,9 +96,9 @@ def check_agent_comm(
     a, b, c = endpoints[0], endpoints[1], endpoints[2]
     if a is b or b is c or a is c:
         raise AssertionError("check_agent_comm needs three distinct endpoints")
-    _assert_unicast(a, b, ping=ping, expected=f"{ack_prefix}{ping}")
+    await _assert_unicast(a, b, ping=ping, expected=f"{ack_prefix}{ping}")
     if on_request is not None:
-        _assert_unicast_headers(a, b, on_request, ack_prefix=ack_prefix)
+        await _assert_unicast_headers(a, b, on_request, ack_prefix=ack_prefix)
     caps = a.capabilities()
     missing = [flag for flag in CAPABILITY_FLAGS if flag not in caps]
     if missing:
@@ -110,27 +108,12 @@ def check_agent_comm(
             raise AssertionError(f"capability {flag!r} is not a bool")
 
 
-async def check_agent_comm_async(
-    endpoints: Sequence[Any],
-    *,
-    ping: str = "ping",
-    ack_prefix: str = "ack:",
-) -> None:
-    if len(endpoints) < 2:
-        raise ValueError("check_agent_comm_async needs at least two endpoints")
-    a, b = endpoints[0], endpoints[1]
+async def _assert_unicast(a: Any, b: Any, *, ping: str, expected: str) -> None:
     reply = await a.asend(str(b.agent_id), ping)
-    expected = f"{ack_prefix}{ping}"
-    if reply != expected:
-        raise AssertionError(f"asend reply {reply!r}")
-
-
-def _assert_unicast(a: Any, b: Any, *, ping: str, expected: str) -> None:
-    reply = a.send(str(b.agent_id), ping)
     if reply != expected:
         raise AssertionError(f"unicast reply {reply!r}")
     try:
-        a.send("missing-peer", "x")
+        await a.asend("missing-peer", "x")
     except AgentCommError:
         return
     raise AssertionError("unicast to a missing peer must raise AgentCommError")
@@ -142,7 +125,7 @@ def _assert_subset(expected: dict[str, str], seen: dict[str, str], where: str) -
         raise AssertionError(f"{where}: headers {missing!r} did not arrive (saw {seen!r})")
 
 
-def _assert_unicast_headers(
+async def _assert_unicast_headers(
     a: Any,
     b: Any,
     on_request: OnRequestSetter,
@@ -157,12 +140,12 @@ def _assert_unicast_headers(
 
     on_request(1, _handler)
     explicit = {"x-check": "explicit"}
-    if a.send(str(b.agent_id), "h1", headers=explicit) != f"{ack_prefix}h1":
+    if await a.asend(str(b.agent_id), "h1", headers=explicit) != f"{ack_prefix}h1":
         raise AssertionError("unicast with headers changed the reply")
     _assert_subset(explicit, seen[-1], "unicast explicit")
     hop = "00-" + "a" * 32 + "-" + "b" * 16 + "-01"
     with bound_headers({"x-ambient": "ambient", "x-check": "ambient", "traceparent": hop}):
-        a.send(str(b.agent_id), "h2", headers=explicit)
+        await a.asend(str(b.agent_id), "h2", headers=explicit)
         arrived = seen[-1]
         _assert_subset({"x-check": "explicit"}, arrived, "unicast merge explicit wins")
         if arrived.get("x-ambient") == "ambient":

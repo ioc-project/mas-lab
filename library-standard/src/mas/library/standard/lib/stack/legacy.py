@@ -9,11 +9,12 @@ one into a ``Layer`` and every other module of the stack reads layers by their d
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from collections.abc import Callable
+from typing import Any
 
 from mas.library.standard.lib.comm.capabilities import read_capabilities
 from mas.library.standard.lib.comm.payload import intents_honoured_by
+from mas.library.standard.lib.comm.send_async import asend_via
 from mas.library.standard.lib.stack.agent_comm import call_kwargs, to_envelope
 from mas.library.standard.lib.stack.envelope import Envelope
 from mas.library.standard.lib.stack.errors import StackError
@@ -48,8 +49,8 @@ def adapt_legacy(item: Any, *, bottom: bool) -> Layer:
     if bottom:
         if isinstance(item, BoundLayer):
             raise ValueError("a bind layer cannot sit at the bottom; put a link first")
-        if _method(item, "send") is None:
-            raise ValueError("the bottom layer must be a link with send")
+        if _method(item, "asend") is None and _method(item, "send") is None:
+            raise ValueError("the bottom layer must be a link with asend (or the sync send)")
         return LinkLayer(item)
     if _method(item, "bind") is None:
         raise ValueError("layers above the bottom must bind to the layer below")
@@ -112,15 +113,9 @@ class LinkLayer(Layer):
         result = fn(handler)
         return handler if result is None else result
 
-    def send(self, envelope: Envelope) -> Any:
-        return self.link.send(str(envelope.meta["target"]), envelope.payload, **call_kwargs(envelope))
-
     async def asend(self, envelope: Envelope) -> Any:
-        fn = _method(self.link, "asend")
-        if fn is not None:
-            target = str(envelope.meta["target"])
-            return await cast(Awaitable[Any], fn(target, envelope.payload, **call_kwargs(envelope)))
-        return self.send(envelope)
+        target = str(envelope.meta["target"])
+        return await asend_via(self.link, target, envelope.payload, **call_kwargs(envelope))
 
 
 class _View(LinkIdentity):
@@ -147,9 +142,6 @@ class _View(LinkIdentity):
     @property
     def agent_id(self) -> str:  # type: ignore[override]
         return self._below.agent_id
-
-    def send(self, target_agent_id: str, task: str, **kwargs: Any) -> Any:
-        return self._below.send(to_envelope(target_agent_id, task, **kwargs))
 
     async def asend(self, target_agent_id: str, task: str, **kwargs: Any) -> Any:
         return await self._below.asend(to_envelope(target_agent_id, task, **kwargs))
@@ -189,8 +181,5 @@ class LegacyLayer(Layer):
             self._stopped = True
             _call_if_present(self.decorator, "stop")
 
-    def send(self, envelope: Envelope) -> Any:
-        return self.decorator.send(str(envelope.meta["target"]), envelope.payload, **call_kwargs(envelope))
-
     async def asend(self, envelope: Envelope) -> Any:
-        return await self.decorator.asend(str(envelope.meta["target"]), envelope.payload, **call_kwargs(envelope))
+        return await asend_via(self.decorator, str(envelope.meta["target"]), envelope.payload, **call_kwargs(envelope))

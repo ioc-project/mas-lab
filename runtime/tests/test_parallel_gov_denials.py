@@ -25,7 +25,7 @@ class _ParallelEngine(SimulatedEngine):
         self.tool_calls: list[str] = []
         self._asked = False
 
-    def invoke(self, io):
+    async def ainvoke(self, io):
         if io.op == "LLM_CALL" and not self._asked:
             self._asked = True
             return EngineIoReturn(
@@ -93,10 +93,10 @@ class _CountingEngine(_ParallelEngine):
         super().__init__()
         self.llm_calls = 0
 
-    def invoke(self, io):
+    async def ainvoke(self, io):
         if io.op == "LLM_CALL":
             self.llm_calls += 1
-        return super().invoke(io)
+        return await super().ainvoke(io)
 
 
 def _sequential(plugin) -> tuple[_CountingEngine, RuntimeInstance]:
@@ -181,7 +181,7 @@ class _WideEngine(SimulatedEngine):
         self.asked = False
         self.ran: list[str] = []
 
-    def invoke(self, io):
+    async def ainvoke(self, io):
         if io.op == "LLM_CALL" and not self.asked:
             self.asked = True
             names = [f"t{i}" for i in range(self.width)]

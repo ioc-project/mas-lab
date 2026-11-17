@@ -162,7 +162,7 @@ class TestSkillsContract:
         assert "name: answer-formatting" not in content
         assert "---" not in content
 
-    def test_base_agent_does_not_expose_skill_system_tools(self):
+    async def test_base_agent_does_not_expose_skill_system_tools(self):
         from mas.runtime.boundary.context.assemble import assemble_llm_messages
         from mas.runtime.engine.leaf import leaf_engine
 
@@ -175,7 +175,7 @@ class TestSkillsContract:
         assert "list_skill_files" not in names
         assert "read_skill_file" not in names
         assert getattr(leaf, "use_tool_loop", False) is False
-        messages = assemble_llm_messages(instance.driver.ctx)
+        messages = await assemble_llm_messages(instance.driver.ctx)
         prompt = next((m.get("content") or "" for m in messages if m.get("role") == "system"), "")
         assert "Available Skills" not in prompt
 
@@ -388,22 +388,22 @@ class TestBuiltinTools:
             root,
         )
 
-    def test_calculator_tool(self):
-        from mas.runtime.engine.tool_dispatch import execute_engine_tool
+    async def test_calculator_tool(self):
+        from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
         provider = self._tutorial_tools_provider()
-        result = execute_engine_tool(
+        result = await aexecute_engine_tool(
             "calc",
             arguments={"expression": "9 * 3"},
             tool_provider=provider,
         )
         assert result
 
-    def test_calculator_basic_arithmetic(self):
-        from mas.runtime.engine.tool_dispatch import execute_engine_tool
+    async def test_calculator_basic_arithmetic(self):
+        from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
         provider = self._tutorial_tools_provider()
-        result = execute_engine_tool(
+        result = await aexecute_engine_tool(
             "calc",
             arguments={"expression": "32768 * 2"},
             tool_provider=provider,

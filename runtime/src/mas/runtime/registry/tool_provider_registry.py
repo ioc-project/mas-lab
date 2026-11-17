@@ -139,8 +139,9 @@ class ToolProviderRegistry:
 
     def register_provider(self, provider: ToolProvider) -> None:
         """Step 1: register a plugin. Does not query tools."""
-        if not callable(getattr(provider, "list_tools", None)) or not callable(getattr(provider, "call_tool", None)):
-            raise TypeError(f"Provider must implement list_tools and call_tool, got {type(provider)}")
+        can_call = any(callable(getattr(provider, name, None)) for name in ("acall_tool", "call_tool"))
+        if not callable(getattr(provider, "list_tools", None)) or not can_call:
+            raise TypeError(f"Provider must implement list_tools and acall_tool (or call_tool), got {type(provider)}")
         self._providers.append(provider)
         self._routes = None
         logger.debug("Registered tool provider: %s", provider_name(provider))
@@ -319,36 +320,6 @@ class ToolProviderRegistry:
                 out.append(routed)
                 seen.add(name)
         return out
-
-    def call_tool(
-        self,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        *,
-        ctx: Any = None,
-        user: str = "",
-        **kwargs: Any,
-    ) -> Any:
-        """Dispatch by name. The owning plugin executes; this registry does not."""
-        self.initialize(ctx=ctx)
-        route = (self._routes or {}).get(tool_name)
-        if route is None or route.handler is None:
-            if self.has_external_providers():
-                raise UnclaimedToolError(
-                    f"using tools not claimed by any provider: {tool_name!r}. "
-                    "Claim it on a provider plugin, or reintroduce in-process with a kind: local overlay."
-                )
-            raise UnclaimedToolError(f"Tool {tool_name!r} is not registered with any provider")
-        from mas.runtime.engine.tool_workers import provider_ctx
-
-        return invoke_call_tool(
-            route.handler.call_tool,
-            tool_name,
-            arguments,
-            ctx=provider_ctx(route.handler, ctx),
-            user=user,
-            **kwargs,
-        )
 
     async def acall_tool(
         self,

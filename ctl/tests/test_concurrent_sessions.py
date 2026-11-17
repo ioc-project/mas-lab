@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import random
 import threading
-import time
 
 from mas.ctl.session.controller import ConversationConfig, SessionController
 from mas.runtime.driver.instance import RuntimeInstance
@@ -67,10 +66,6 @@ class _TaggedEngine(SimulatedEngine):
                 correlation_id=cid, response_kind="TOOL_RESULT", next_step="LLM_CALL", text=f"tool:{self.tag}"
             )
         return EngineIoReturn(correlation_id=cid, response_kind="ERROR", next_step="STOP")
-
-    def invoke(self, io):
-        time.sleep(random.random() * 0.005)
-        return self._reply(io)
 
     async def ainvoke(self, io):
         await asyncio.sleep(random.random() * 0.005)

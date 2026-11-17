@@ -33,9 +33,9 @@ from mas.runtime.engine.llm_reasoning import (
 )
 from mas.runtime.engine.llm_request import extra_from_manifest, sampling_settings_from_manifest, sampling_temperature
 from mas.runtime.engine.textual_tool_calls import maybe_recover_textual_tool_calls, repair_merged_arg_keys
-from mas.runtime.engine.tool_dispatch import IN_FLIGHT_TOOL, InFlightTool, ToolExecutionError, execute_engine_tool
+from mas.runtime.engine.tool_dispatch import IN_FLIGHT_TOOL, InFlightTool, ToolExecutionError
 from mas.runtime.engine.tools import openai_tools
-from mas.runtime.layers.lifecycle import Lifecycle, call_tick
+from mas.runtime.layers.lifecycle import Lifecycle, acall_tick
 from mas.runtime.layers.probe import ToolProber
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import classify_llm_failure, classify_llm_http_error
@@ -59,17 +59,14 @@ class _InfraDispatchPort(ToolProber):
     owns_call_identity: ClassVar[bool] = True
     engine: LiveLlmEngine
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self.engine._dispatch(io)
-
-    def probe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
-        self.engine.probe_tool(name, arguments)
+    async def aprobe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
+        await self.engine.aprobe_tool(name, arguments)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         return await self.engine._adispatch(io)
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        return self.engine.exchange_preview(op, correlation_id=correlation_id)
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return await self.engine.aexchange_preview(op, correlation_id=correlation_id)
 
     @property
     def model(self) -> str:
@@ -146,14 +143,11 @@ class _ToolDestRouter:
                 return wrap
         return self.fallback
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self._pick(io.correlation_id).invoke(io)
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         return await self._pick(io.correlation_id).ainvoke(io)
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        return str(self._pick(correlation_id).exchange_preview(op, correlation_id=correlation_id) or "")
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return str(await self._pick(correlation_id).aexchange_preview(op, correlation_id=correlation_id) or "")
 
 
 @dataclass
@@ -337,13 +331,13 @@ class LiveLlmEngine(Lifecycle):
             return
         self._tool_stack = wrap_call_stack(inner, common)
 
-    def tick(self) -> None:
+    async def atick(self) -> None:
         """Periodic work of the tool layers; run before each LLM call."""
-        call_tick(self._tool_stack)
+        await acall_tick(self._tool_stack)
         for wrap in self._tool_destinations.values():
-            call_tick(wrap)
+            await acall_tick(wrap)
 
-    def probe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
+    async def aprobe_tool(self, name: str, arguments: Mapping[str, Any]) -> None:
         """Run a tool the running spec took away, to see whether it is back. Not a model call: no budget, no layers."""
         if self.tool_provider is None:
             raise ToolExecutionError(f"no tool provider to probe {name!r}")
@@ -353,7 +347,7 @@ class LiveLlmEngine(Lifecycle):
         if not tool_is_idempotent(name, current_spec_for_advertise(self.ctx)):
             # A probe runs outside the model's turn; only a tool declared safe to repeat may be called that way.
             raise ToolExecutionError(f"tool {name!r} is not declared idempotent, so it cannot be a probe")
-        self.tool_provider.probe_tool(name, dict(arguments), ctx=self.ctx)
+        await self.tool_provider.aprobe_tool(name, dict(arguments), ctx=self.ctx)
 
     def stop(self) -> None:
         from mas.runtime.layers.lifecycle import call_stop
@@ -402,7 +396,7 @@ class LiveLlmEngine(Lifecycle):
         self._pending_tools_by_cid.clear()
         self._offered_tool_names = []
 
-    def summarize_messages(self, messages: list[dict[str, Any]], *, model: str | None = None) -> str:
+    async def asummarize_messages(self, messages: list[dict[str, Any]], *, model: str | None = None) -> str:
         """One-off chat completion. The summarizer plugin builds the prompt."""
         if not self._budget.allow_llm():
             raise RuntimeError("history summarizer: LLM call budget exceeded (spec.budget.max_llm_calls)")
@@ -414,13 +408,13 @@ class LiveLlmEngine(Lifecycle):
             use_model,
             " (override)" if model and model != self.model else "",
         )
-        message, _retries = self._complete_with_truncation_policy(
+        message, _retries = await self._acomplete_with_truncation_policy(
             messages, tools=None, temperature=0.0, model=use_model
         )
         content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
         return str(content or "").strip()
 
-    def exchange_snapshot(self, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot:
+    async def aexchange_snapshot(self, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot:
         """Structured outbound LLM payload or pending tool call. Not a display string.
 
         ``correlation_id`` is this op's real id when the caller has one (a
@@ -436,7 +430,7 @@ class LiveLlmEngine(Lifecycle):
             if self.ctx is not None:
                 self.ctx._assembly_correlation_id = correlation_id
             tool_defs = self._tool_defs()
-            messages = self._build_messages(tools=tool_defs)
+            messages = await self._abuild_messages(tools=tool_defs)
             api_tools = llm_request_tools(messages, tools=tool_defs or None)
             tools_note = ""
             if tool_defs and api_tools is None and has_tool_results(messages):
@@ -449,9 +443,9 @@ class LiveLlmEngine(Lifecycle):
             )
         return ExchangeSnapshot()
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        """Pretty-print of exchange_snapshot (cache keys, tests). Not interchange."""
-        return format_exchange_snapshot(self.exchange_snapshot(op, correlation_id=correlation_id))
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        """Pretty-print of the exchange snapshot (cache keys, tests). Not interchange."""
+        return format_exchange_snapshot(await self.aexchange_snapshot(op, correlation_id=correlation_id))
 
     def _take_pending_tool(self, correlation_id: int) -> tuple[str, dict[str, Any]]:
         by_cid = self._pending_tools_by_cid.pop(correlation_id, None)
@@ -498,76 +492,9 @@ class LiveLlmEngine(Lifecycle):
             retry_attempts=classified.attempts,
         )
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if io.op == "LLM_CALL":
-            self.tick()
-        token = self._begin_tool_call(io)
-        try:
-            if io.op == "TOOL_CALL" and self._tool_stack is not None:
-                return self._tool_stack.invoke(io)
-            if self._infra_stack is not None:
-                return self._infra_stack.invoke(io)
-            return self._dispatch(io)
-        except (ClassifiedFailure, ToolExecutionError) as exc:
-            if io.op != "TOOL_CALL":
-                raise
-            return self._tool_failure_return(io, exc)
-        finally:
-            if token is not None:
-                IN_FLIGHT_TOOL.reset(token)
-
-    def _dispatch(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if io.op == "LLM_CALL":
-            return self._llm_call(io)
-        if io.op == "TOOL_CALL":
-            pending = self._in_flight()
-            if pending is None:
-                if not self._budget.allow_tool():
-                    return EngineIoReturn(
-                        correlation_id=io.correlation_id,
-                        response_kind="ERROR",
-                        next_step="STOP",
-                        text="Budget exceeded: max tool calls reached.",
-                    )
-                self._budget.note_tool()
-                tool, args = self._take_pending_tool(io.correlation_id)
-            else:
-                tool, args = pending.name, pending.arguments
-            user = (self.ctx.last_user_text if self.ctx else "") or ""
-            text = execute_engine_tool(
-                tool,
-                delegation=self.delegation,
-                ctx=self.ctx,
-                user=user,
-                arguments=args,
-                tool_provider=self.tool_provider,
-                engine_contracts=self.engine_tool_contracts,
-                correlation_id=io.correlation_id,
-                caller_call_id=io.call_id,
-            )
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="TOOL_RESULT",
-                next_step="LLM_CALL" if self.use_tool_loop else "STOP",
-                text=text,
-            )
-        if io.op == "MEMORY_OP":
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="MODEL_TEXT",
-                next_step="STOP",
-                text="Memory updated.",
-            )
-        return EngineIoReturn(
-            correlation_id=io.correlation_id,
-            response_kind="ERROR",
-            next_step="STOP",
-            text=f"Unsupported operation: {io.op}",
-        )
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         if io.op == "LLM_CALL":
-            await asyncio.to_thread(self.tick)  # a probe is a real, blocking tool call
+            await self.atick()
         token = self._begin_tool_call(io)
         try:
             if io.op == "TOOL_CALL" and self._tool_stack is not None:
@@ -667,60 +594,6 @@ class LiveLlmEngine(Lifecycle):
             retry_attempts=classified.attempts if isinstance(classified, ClassifiedFailure) else 0,
         )
 
-    def _llm_call(self, io: InvokeEngineIo) -> EngineIoReturn:
-        if not self._budget.allow_llm():
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="ERROR",
-                next_step="STOP",
-                text="Budget exceeded: max LLM calls reached.",
-            )
-        self._budget.note_llm()
-        if self.ctx is not None:
-            self.ctx._assembly_correlation_id = io.correlation_id
-        tool_defs = self._tool_defs()
-        messages = self._build_messages(tools=tool_defs)
-        tools = llm_request_tools(messages, tools=tool_defs or None)
-        answering_from_tools = has_tool_results(messages)
-        try:
-            message, retries = self._complete_with_truncation_policy(
-                messages,
-                tools=tools,
-                temperature=sampling_temperature(self.temperature, answering_from_tools=answering_from_tools),
-            )
-        except TruncatedCompletionError as exc:
-            return EngineIoReturn(
-                correlation_id=io.correlation_id,
-                response_kind="ERROR",
-                next_step="STOP",
-                text=str(exc),
-                finish_reason="length",
-                offered_tools=list(self._offered_tool_names),
-            )
-        except Exception as exc:
-            return self._llm_error_return(io, exc)
-
-        usage = message.pop("usage", None) or {}
-        finish_reason = message.pop("finish_reason", None) or ""
-        sent_max_tokens = message.pop("_max_tokens", None)
-        cache_status = message.pop("_mas_cache_status", None)
-        ret = self._message_to_engine_return(
-            io,
-            message,
-            messages,
-            tool_defs,
-            answering_from_tools,
-            usage,
-            finish_reason,
-            cache_status=cache_status,
-            cache_layer="provider_cache" if cache_status else "",
-            cache_events=([{"layer": "provider_cache", "status": cache_status}] if cache_status else []),
-            pricing=dict(self.output_limits.pricing if self.output_limits is not None else {}),
-        )
-        if sent_max_tokens is None and not retries:
-            return ret
-        return ret.model_copy(update={"max_tokens": sent_max_tokens, "truncation_retries": retries})
-
     async def _allm_call(self, io: InvokeEngineIo) -> EngineIoReturn:
         if not self._budget.allow_llm():
             return EngineIoReturn(
@@ -733,7 +606,7 @@ class LiveLlmEngine(Lifecycle):
         if self.ctx is not None:
             self.ctx._assembly_correlation_id = io.correlation_id
         tool_defs = self._tool_defs()
-        messages = self._build_messages(tools=tool_defs)
+        messages = await self._abuild_messages(tools=tool_defs)
         tools = llm_request_tools(messages, tools=tool_defs or None)
         answering_from_tools = has_tool_results(messages)
         try:
@@ -811,56 +684,6 @@ class LiveLlmEngine(Lifecycle):
             retries += 1
             limits = limits.with_budget(nxt)
             message = await self._achat_completion(messages, **{**call_kwargs, "limits": limits})
-            usage = sum_usage(usage, message.get("usage"))
-        if usage:
-            message["usage"] = usage
-        if limits.budget is not None:
-            message["_max_tokens"] = limits.budget
-        if message.get("finish_reason") == "length" and policy.action != "ignore":
-            detail = (
-                f"LLM completion truncated at max tokens={limits.budget or 'server default'} "
-                f"(model={model or self.model}, retries={retries}). Raise spec.models[].max_tokens "
-                "or set on_truncation."
-            )
-            if policy.action == "error":
-                raise TruncatedCompletionError(detail)
-            logger.warning(detail)
-        return message, retries
-
-    def _complete_with_truncation_policy(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        tools: list[dict[str, Any]] | None,
-        temperature: float | None = None,
-        model: str | None = None,
-    ) -> tuple[dict[str, Any], int]:
-        """Run one completion and apply ``on_truncation``. Returns ``(message, retries)``."""
-        assert self.output_limits is not None
-        limits = self.output_limits.fit_to_prompt(estimate_prompt_tokens(messages, tools))
-        call_kwargs: dict[str, Any] = {"tools": tools, "temperature": temperature}
-        if model is not None:
-            call_kwargs["model"] = model
-        if limits != self.output_limits:
-            call_kwargs["limits"] = limits
-        message = self._chat_completion(messages, **call_kwargs)
-        policy = limits.truncation
-        retries = 0
-        usage = message.get("usage")
-        while message.get("finish_reason") == "length" and policy.action == "escalate" and retries < policy.retries:
-            nxt = limits.escalated((message.get("usage") or {}).get("completion_tokens"))
-            if nxt is None or not self._budget.allow_llm():
-                break
-            logger.warning(
-                "LLM completion truncated (model=%s, max tokens=%s); retrying with %d",
-                model or self.model,
-                limits.budget,
-                nxt,
-            )
-            self._budget.note_llm()
-            retries += 1
-            limits = limits.with_budget(nxt)
-            message = self._chat_completion(messages, **{**call_kwargs, "limits": limits})
             usage = sum_usage(usage, message.get("usage"))
         if usage:
             message["usage"] = usage
@@ -959,10 +782,10 @@ class LiveLlmEngine(Lifecycle):
             pricing=pricing or {},
         )
 
-    def _build_messages(self, *, tools: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    async def _abuild_messages(self, *, tools: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         if self.ctx:
             limits = self.output_limits
-            return assemble_llm_messages(
+            return await assemble_llm_messages(
                 self.ctx,
                 manifest=self.manifest,
                 tools=tools,
@@ -990,44 +813,6 @@ class LiveLlmEngine(Lifecycle):
     def _unavailable_tool_observation(self, tool: str, exc: BaseException) -> str:
         available = ", ".join(self._offered_tool_names) if self._offered_tool_names else "(none)"
         return f"{exc}. Available tools: {available}."
-
-    def _chat_completion(
-        self,
-        messages: list[dict[str, Any]],
-        *,
-        tools: list[dict[str, Any]] | None,
-        api_key: str | None = None,
-        temperature: float | None = None,
-        model: str | None = None,
-        limits: OutputLimits | None = None,
-    ) -> dict[str, Any]:
-        """Dispatch to ``llm_provider``. Tests may patch this method."""
-        limits = limits or self.output_limits or OutputLimits()
-        provider = self.llm_provider
-        if provider is None:
-            raise RuntimeError("no LLM provider configured")
-        on_chunk = getattr(self.ctx, "on_stream_chunk", None) if self.ctx is not None else None
-        use_model = (model or self.model or "").strip() or self.model
-        kwargs: dict[str, Any] = {
-            "model": use_model,
-            "messages": messages,
-            "tools": tools,
-            "temperature": self.temperature if temperature is None else temperature,
-            "max_tokens": limits.max_tokens,
-            "max_completion_tokens": limits.max_completion_tokens,
-            "stream": self.stream,
-            "on_stream_chunk": on_chunk,
-            "reasoning_effort": self.reasoning.effort,
-            "reasoning": self.reasoning,
-            "sampling": self.sampling.to_spec_dict() or None,
-            "extra_body": self.extra_body or None,
-        }
-        if api_key is not None:
-            kwargs["api_key"] = api_key
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        if not hasattr(provider, "chat_completion"):
-            raise RuntimeError(f"LLM provider {type(provider).__name__} has no chat_completion")
-        return provider.chat_completion(**kwargs)
 
     async def _achat_completion(
         self,

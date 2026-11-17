@@ -13,6 +13,7 @@ from typing import Any
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.library.standard.lib.stack.envelope import Envelope
 from mas.library.standard.lib.stack.layer import Handler
+from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import SendContext
 
 _META_KEYS = ("correlation_id", "caller_call_id", "context_id")
@@ -72,9 +73,10 @@ def inbound_envelope(
 def turn_handler(run_turn: Callable[..., Any], agent_id: str) -> Handler:
     """The top of an inbound chain: the session turn of ``agent_id``, called as a link calls it."""
 
-    def handle(envelope: Envelope) -> Any:
+    async def handle(envelope: Envelope) -> Any:
         meta = envelope.meta
-        return run_turn(
+        return await acall(
+            run_turn,
             agent_id,
             str(envelope.payload if envelope.payload is not None else ""),
             int(meta.get("correlation_id") or 0),

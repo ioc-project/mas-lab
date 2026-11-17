@@ -10,7 +10,7 @@ import logging
 import random
 import threading
 from collections import deque
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
@@ -32,11 +32,12 @@ from mas.library.standard.lib.comm.payload import (
 )
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.library.standard.lib.stack.layer import ChainMember
+from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 from mas.runtime.boundary.control.contract import ControlContract
 
-OnRequestFn = Callable[..., str]
-RunTurnFn = Callable[[str, str, int, str, str], str]
+OnRequestFn = Callable[..., str | Awaitable[str]]
+RunTurnFn = Callable[[str, str, int, str, str], Awaitable[str]]
 
 _log = logging.getLogger(__name__)
 
@@ -257,32 +258,6 @@ class LocalGroupAgentComm(LocalLinkBase, ChainMember, AgentCommContract):
         if self._stopped:
             raise AgentCommError(f"{self.name} is stopped")
 
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str:
-        steered = self._steer_if_requested(target_agent_id, task, headers=headers, context=context)
-        if steered is not None:
-            return steered
-        peer, envelope = self._prepare_send(
-            target_agent_id,
-            task,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-            headers=headers,
-            context=context,
-        )
-        result = self._wait_reply(lambda: peer._receive_request(envelope))
-        return send_result(str(envelope["intent"]), result)
-
     async def asend(
         self,
         target_agent_id: str,
@@ -384,46 +359,27 @@ class LocalGroupAgentComm(LocalLinkBase, ChainMember, AgentCommContract):
             "context_id": envelope.get("context_id", ""),
         }
 
-    def _call_run_turn(self, envelope: dict[str, Any]) -> str:
-        run_turn = self._run_turn
-        if run_turn is None:
-            raise AgentCommError(f"no handler for {self.name}")
-        return run_turn(
-            self.agent_id,
-            str(envelope["task"]),
-            int(envelope.get("correlation_id") or 0),
-            str(envelope.get("caller_call_id") or ""),
-            str(envelope.get("context_id") or ""),
-        )
-
     def _inbound(self, envelope: dict[str, Any]):
         return bound_inbound(
             sender=str(envelope.get("sender") or ""),
             intent=str(envelope.get("intent") or ""),
         )
 
-    def _receive_request(self, envelope: dict[str, Any]) -> str:
+    async def _areceive_request(self, envelope: dict[str, Any]) -> str:
         self._require_live()
         with self._inbound(envelope), bound_headers(envelope.get("headers")):
             if self._on_request is not None:
-                return self._on_request(str(envelope["task"]), **self._handler_kwargs(envelope))
+                return await acall(self._on_request, str(envelope["task"]), **self._handler_kwargs(envelope))
             if self._run_turn is not None:
-                return self._call_run_turn(envelope)
-        raise AgentCommError(f"no handler for {self.name}")
-
-    async def _areceive_request(self, envelope: dict[str, Any]) -> str:
-        self._require_live()
-        asend_fn = getattr(self._run_turn, "asend", None) if self._on_request is None else None
-        if callable(asend_fn):
-            with self._inbound(envelope), bound_headers(envelope.get("headers")):
-                return await asend_fn(
+                return await acall(
+                    self._run_turn,
                     self.agent_id,
                     str(envelope["task"]),
                     int(envelope.get("correlation_id") or 0),
                     str(envelope.get("caller_call_id") or ""),
                     str(envelope.get("context_id") or ""),
                 )
-        return self._receive_request(envelope)
+        raise AgentCommError(f"no handler for {self.name}")
 
     def create_channel(self, name: str, members: list[str], options: dict[str, Any] | None = None) -> str:
         self._require_live()

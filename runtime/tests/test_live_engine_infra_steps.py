@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import threading
-import time
 
 import pytest
 from mas.runtime.engine.infra_pipeline import PipedLLMProvider
@@ -19,13 +18,10 @@ class _StubProvider:
     def __init__(self) -> None:
         self.calls = 0
 
-    def chat_completion(self, **kwargs: object) -> dict[str, str]:
+    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
         del kwargs
         self.calls += 1
         return {"role": "assistant", "content": f"live-{self.calls}"}
-
-    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
-        return self.chat_completion(**kwargs)
 
 
 class _SlowProvider:
@@ -35,28 +31,22 @@ class _SlowProvider:
         self._inflight = 0
         self._lock = threading.Lock()
 
-    def chat_completion(self, **kwargs: object) -> dict[str, str]:
+    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
         del kwargs
         with self._lock:
             self._inflight += 1
             self.peak = max(self.peak, self._inflight)
             self.calls += 1
-        time.sleep(0.12)
+        await asyncio.sleep(0.12)
         with self._lock:
             self._inflight -= 1
         return {"role": "assistant", "content": "ok"}
 
-    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
-        return self.chat_completion(**kwargs)
-
 
 class _BareProvider:
-    def chat_completion(self, **kwargs: object) -> dict[str, str]:
+    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
         del kwargs
         return {"role": "assistant", "content": "ok"}
-
-    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
-        return self.chat_completion(**kwargs)
 
 
 def _engine(provider: object) -> LiveLlmEngine:
@@ -67,14 +57,14 @@ def _io() -> InvokeEngineIo:
     return InvokeEngineIo(correlation_id=1, op="LLM_CALL")
 
 
-def test_live_engine_invoke_cache_hit_skips_provider(tmp_path) -> None:
+async def test_live_engine_invoke_cache_hit_skips_provider(tmp_path) -> None:
     provider = _StubProvider()
     engine = _engine(provider)
     engine.install_infra_pipeline(
         [{"layer": "llm_cache", "params": {"cache_path": str(tmp_path / "cache.json")}}],
     )
-    first = engine.invoke(_io())
-    second = engine.invoke(_io())
+    first = await engine.ainvoke(_io())
+    second = await engine.ainvoke(_io())
     assert first.text == "live-1"
     assert second.text == "live-1"
     assert second.cache_status == "hit"
@@ -94,7 +84,7 @@ def test_live_engine_ainvoke_cache_hit_skips_provider(tmp_path) -> None:
     assert provider.calls == 1
 
 
-def test_live_engine_invoke_fault_rate_one_skips_provider() -> None:
+async def test_live_engine_invoke_fault_rate_one_skips_provider() -> None:
     provider = _StubProvider()
     engine = _engine(provider)
     engine.install_infra_pipeline(
@@ -106,7 +96,7 @@ def test_live_engine_invoke_fault_rate_one_skips_provider() -> None:
             }
         ],
     )
-    ret = engine.invoke(_io())
+    ret = await engine.ainvoke(_io())
     assert ret.response_kind == "ERROR"
     assert "injected" in ret.text
     assert provider.calls == 0
@@ -130,7 +120,7 @@ def test_live_engine_ainvoke_fault_rate_one_skips_provider() -> None:
     assert provider.calls == 0
 
 
-def test_live_engine_invoke_scheduler_paces(tmp_path, monkeypatch) -> None:
+async def test_live_engine_invoke_scheduler_paces(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
     reset_policy()
     provider = _SlowProvider()
@@ -151,17 +141,13 @@ def test_live_engine_invoke_scheduler_paces(tmp_path, monkeypatch) -> None:
     )
     errors: list[BaseException] = []
 
-    def _run() -> None:
+    async def _run() -> None:
         try:
-            engine.invoke(_io())
+            await engine.ainvoke(_io())
         except BaseException as exc:  # noqa: BLE001
             errors.append(exc)
 
-    threads = [threading.Thread(target=_run) for _ in range(3)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    await asyncio.gather(*(_run() for _ in range(3)))
     reset_policy()
     assert not errors
     assert provider.calls == 3
@@ -192,51 +178,44 @@ def _leaf_with_scheduler(provider: object, tmp_path, *, keys: list[str] | None =
     )
 
 
-def _run_two_models(piped: PipedLLMProvider) -> list[BaseException]:
+async def _run_two_models(piped: PipedLLMProvider) -> list[BaseException]:
     errors: list[BaseException] = []
 
-    def _run(model: str) -> None:
+    async def _run(model: str) -> None:
         try:
-            piped.chat_completion(model=model, messages=[])
+            await piped.achat_completion(model=model, messages=[])
         except BaseException as exc:  # noqa: BLE001
             errors.append(exc)
 
-    threads = [
-        threading.Thread(target=_run, args=("model-j",)),
-        threading.Thread(target=_run, args=("model-k",)),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    await asyncio.gather(_run("model-j"), _run("model-k"))
     return errors
 
 
-def test_leaf_scheduler_two_models_get_separate_buckets(tmp_path, monkeypatch) -> None:
+async def test_leaf_scheduler_two_models_get_separate_buckets(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
     reset_policy()
     provider = _SlowProvider()
     piped = _leaf_with_scheduler(provider, tmp_path)
-    errors = _run_two_models(piped)
+    errors = await _run_two_models(piped)
     reset_policy()
     assert not errors
     assert provider.calls == 2
     assert provider.peak == 2
 
 
-def test_leaf_scheduler_keys_model_separates_buckets(tmp_path, monkeypatch) -> None:
+async def test_leaf_scheduler_keys_model_separates_buckets(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
     reset_policy()
     provider = _SlowProvider()
     piped = _leaf_with_scheduler(provider, tmp_path, keys=["model"])
-    errors = _run_two_models(piped)
+    errors = await _run_two_models(piped)
     reset_policy()
     assert not errors
     assert provider.calls == 2
     assert provider.peak == 2
 
 
-def test_piped_provider_accepts_provider_without_kind() -> None:
+async def test_piped_provider_accepts_provider_without_kind() -> None:
     piped = PipedLLMProvider(
         inner=_BareProvider(),
         pipeline=[{"layer": "llm_scheduler", "params": {"max_in_flight": 1}}],
@@ -244,4 +223,4 @@ def test_piped_provider_accepts_provider_without_kind() -> None:
     assert piped.kind == ""
     assert piped.api_base == ""
     assert piped.api_key_env == ""
-    assert piped.chat_completion(model="m", messages=[])["content"] == "ok"
+    assert (await piped.achat_completion(model="m", messages=[]))["content"] == "ok"

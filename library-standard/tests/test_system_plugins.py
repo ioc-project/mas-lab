@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -43,13 +42,13 @@ class _UserIO:
         return "receipt"
 
 
-def test_inform_user_plugin_sends_through_the_session_contract() -> None:
+async def test_inform_user_plugin_sends_through_the_session_contract() -> None:
     user_io = _UserIO()
     plugin = InformUserPlugin(max_message_length=50)
     state = plugin.bind(SessionContext(user_io_contract=user_io))
     assert isinstance(state, SystemToolUserUpdateWrapper)
     ctx = SimpleNamespace(session_id="s", agent_id="a", correlation_id=3)
-    out = plugin.call(
+    out = await plugin.acall(
         "inform_user", {"message": "working", "user_name": "u"}, state=state, context=CallContext(ctx=ctx)
     )
     assert out["status"] == "sent" and out["user_name"] == "u" and out["receipt"] == "receipt"
@@ -57,12 +56,12 @@ def test_inform_user_plugin_sends_through_the_session_contract() -> None:
     assert [t.name for t in plugin.tools()] == ["inform_user"]
 
 
-def test_request_human_input_plugin_resolves_through_the_session_contract() -> None:
+async def test_request_human_input_plugin_resolves_through_the_session_contract() -> None:
     plugin = RequestHumanInputPlugin(max_question_length=80, timeout=5, auto_resolve_decision="reject")
     state = plugin.bind(SessionContext(hitl_contract=AutoResolveHitlContract("approve")))
     assert isinstance(state, SystemToolHitlWrapper)
     ctx = SimpleNamespace(session_id="s", agent_id="a", correlation_id=1)
-    out = plugin.call(
+    out = await plugin.acall(
         "request_human_input",
         {"question": "ok?", "choices": ["approve", "reject"]},
         state=state,
@@ -70,7 +69,7 @@ def test_request_human_input_plugin_resolves_through_the_session_contract() -> N
     )
     assert out["choice"] == "reject"
     with pytest.raises(UnknownSystemToolError):
-        plugin.call("nope", {}, state=state, context=CallContext())
+        await plugin.acall("nope", {}, state=state, context=CallContext())
 
 
 class _Control:
@@ -103,7 +102,7 @@ class _Control:
         return {"ran": text, "auto_stop": auto_stop}
 
 
-def test_pause_session_plugin_runs_every_control_tool() -> None:
+async def test_pause_session_plugin_runs_every_control_tool() -> None:
     control = _Control()
     plugin = PauseSessionPlugin()
     state = plugin.bind(SessionContext(session_id="s"))
@@ -111,20 +110,20 @@ def test_pause_session_plugin_runs_every_control_tool() -> None:
     ctx = SimpleNamespace(control=control, allow_control_tools=True, session_id="s")
     call = CallContext(ctx=ctx)
 
-    def run(tool: str, **args: Any) -> str:
-        return plugin.call(tool, args, state=state, context=call)
+    async def run(tool: str, **args: Any) -> str:
+        return await plugin.acall(tool, args, state=state, context=call)
 
-    assert run("pause_session", reason="r") == "paused"
-    assert run("list_checkpoints") == "a,b"
-    assert '"status": "paused"' in run("inspect_session")
-    assert run("navigate_checkpoint", to="x", reason="r") == "x"
-    assert run("cancel_inflight") == "cancelled"
-    assert '"ran": "go"' in run("run_control_script", script="go", auto_stop=True)
+    assert await run("pause_session", reason="r") == "paused"
+    assert await run("list_checkpoints") == "a,b"
+    assert '"status": "paused"' in await run("inspect_session")
+    assert await run("navigate_checkpoint", to="x", reason="r") == "x"
+    assert await run("cancel_inflight") == "cancelled"
+    assert '"ran": "go"' in await run("run_control_script", script="go", auto_stop=True)
     assert "unsupported" in state.on_execute_tool("other", {}, ctx=ctx)
     assert len(plugin.tools(ctx)) == 6
     assert plugin.tools(SimpleNamespace(allow_control_tools=False)) == ()
     with pytest.raises(UnknownSystemToolError):
-        run("not_a_control_tool")
+        await run("not_a_control_tool")
 
 
 def test_pause_session_without_a_control_contract_is_unavailable() -> None:
@@ -143,7 +142,7 @@ def test_send_tool_wiring_and_offers() -> None:
     assert not second.offers("pause_session")
 
 
-def test_send_plugin_claims_only_offered_peers() -> None:
+async def test_send_plugin_claims_only_offered_peers() -> None:
     plugin = SendPlugin()
     state = plugin.bind(SessionContext())
     assert isinstance(state, SendTool)
@@ -151,9 +150,9 @@ def test_send_plugin_claims_only_offered_peers() -> None:
     state.configure(comm=None, routes={}, allowed_peers=["alice"])
     assert plugin.claims("delegate_to_alice", state=state)
     with pytest.raises(UnknownSystemToolError):
-        plugin.call("delegate_to_bob", {}, state=state, context=CallContext())
+        await plugin.acall("delegate_to_bob", {}, state=state, context=CallContext())
     with pytest.raises(UnknownSystemToolError):
-        plugin.call("delegate_to_alice", {}, state=object(), context=CallContext())
+        await plugin.acall("delegate_to_alice", {}, state=object(), context=CallContext())
     assert not plugin.claims("delegate_to_alice", state=object())
 
 
@@ -177,7 +176,7 @@ class _Spawner:
 _TEMPLATES = [{"id": "w", "description": "worker"}, {"id": "x"}]
 
 
-def test_subagents_plugin_advertises_and_fails_closed_without_a_spawner() -> None:
+async def test_subagents_plugin_advertises_and_fails_closed_without_a_spawner() -> None:
     plugin = SubagentsPlugin(templates=_TEMPLATES, max_spawns=2, max_depth=1)
     state = plugin.bind(SessionContext())
     assert isinstance(state, SubagentsState)
@@ -185,28 +184,24 @@ def test_subagents_plugin_advertises_and_fails_closed_without_a_spawner() -> Non
     [definition] = plugin.tools()
     assert definition.name == "create_subagent" and "w: worker" in definition.description
     assert SubagentsPlugin().tools() == ()
-    out = plugin.call("create_subagent", {"template": "w", "task": "t"}, state=state, context=CallContext())
+    out = await plugin.acall("create_subagent", {"template": "w", "task": "t"}, state=state, context=CallContext())
     assert "unavailable" in out
-    assert "unavailable" in asyncio.run(
-        plugin.acall("create_subagent", {"template": "w", "task": "t"}, state=state, context=CallContext())
-    )
     with pytest.raises(UnknownSystemToolError):
-        plugin.call("other", {}, state=state, context=CallContext())
+        await plugin.acall("other", {}, state=state, context=CallContext())
     assert SpawnSubagentTool().on_execute_tool("other", {}).startswith("[spawn_subagent] unsupported")
     ctx = SimpleNamespace(allow_subagent_spawning=True, subagent_templates=_TEMPLATES)
     assert [s["name"] for s in SpawnSubagentTool().on_collect_tools(ctx=ctx)] == ["create_subagent"]
     assert SpawnSubagentTool().on_collect_tools(ctx=SimpleNamespace()) == []
 
 
-def test_subagents_plugin_runs_the_host_spawner_sync_and_async() -> None:
+async def test_subagents_plugin_runs_the_host_spawner() -> None:
     plugin = SubagentsPlugin(templates=_TEMPLATES)
     state = plugin.bind(SessionContext())
     spawner = _Spawner()
     state.spawner = spawner
     call = CallContext(correlation_id=4, caller_call_id="c")
-    assert plugin.call("create_subagent", {"task": "t"}, state=state, context=call) == "ran"
-    assert asyncio.run(plugin.acall("create_subagent", {"task": "t"}, state=state, context=call)) == "aran"
-    assert [c[0] for c in spawner.calls] == ["call", "acall"]
+    assert (await plugin.acall("create_subagent", {"task": "t"}, state=state, context=call)) == "aran"
+    assert [c[0] for c in spawner.calls] == ["acall"]
     assert spawner.calls[0][3]["correlation_id"] == 4
 
 

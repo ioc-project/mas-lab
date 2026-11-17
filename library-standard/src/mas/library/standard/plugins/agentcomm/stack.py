@@ -164,23 +164,6 @@ class StackAgentComm(LinkIdentity):
             context=stamped,
         )
 
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str:
-        envelope = self._envelope(target_agent_id, task, correlation_id, caller_call_id, context_id, headers, context)
-        try:
-            return cast(str, self._stack.send(envelope))
-        except StackError as exc:
-            raise _as_comm_error(exc) from exc
-
     async def asend(
         self,
         target_agent_id: str,

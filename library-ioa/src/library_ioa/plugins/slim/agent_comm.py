@@ -9,7 +9,7 @@ import datetime
 import json
 import logging
 import threading
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
 
 from mas.library.standard.lib.comm.capabilities import capability_set
@@ -99,7 +99,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
 
     def __init__(
         self,
-        run_turn: Callable[..., str] | None = None,
+        run_turn: Callable[..., Awaitable[str]] | None = None,
         *,
         name: str,
         service: SlimService,
@@ -116,7 +116,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         _refuse_dots(parts)
         self.local_agent_id = slim_local_id(self.name, agent_id)
         self._actor = actor
-        self._serve_handler: Callable[[Any], Any] | None = None
+        self._serve_handler: Callable[[Any], Awaitable[Any]] | None = None
         self.endpoint = actor.endpoint
         self.fabric_id: int | None = None
         self.dev = actor.dev
@@ -291,36 +291,6 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             except BaseException:
                 self._need_reconnect = True
                 raise
-
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str:
-        if self._actor.failed:
-            raise AgentCommError("slim link is failed")
-        if self._stopped:
-            raise AgentCommError("slim link is stopped")
-        if not self._actor.running:
-            self.start()
-        return self._actor.submit(
-            self._asend_impl(
-                target_agent_id,
-                task,
-                correlation_id=correlation_id,
-                caller_call_id=caller_call_id,
-                context_id=context_id,
-                headers=headers,
-                context=context,
-            ),
-            timeout=self._send_timeout,
-        )
 
     async def asend(
         self,

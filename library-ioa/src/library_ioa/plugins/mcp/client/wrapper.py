@@ -121,16 +121,28 @@ class MCPClientWrapper:
     def run(self, coro: Coroutine[Any, Any, _T]) -> _T:
         """Run a client coroutine on the wrapper's loop, reusing one session."""
 
+        self._register_exit()
+        return self._loop.run(self._sticky(coro))
+
+    async def arun(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        """Await a client coroutine from any loop. The session stays on the wrapper's own loop.
+
+        An MCP session belongs to the task that opened it (a stdio server is a child process of that
+        task group), so it cannot move to the caller's loop. The caller awaits; it never blocks.
+        """
+        self._register_exit()
+        future = asyncio.run_coroutine_threadsafe(self._sticky(coro), self._loop.ensure())
+        return await asyncio.wrap_future(future)
+
+    def _register_exit(self) -> None:
         if not self._registered:
             # A held stdio server is a child process: close it at exit.
             self._registered = True
             atexit.register(_close_weak, weakref.ref(self))
 
-        async def _sticky() -> _T:
-            await self._client.connect()
-            return await coro
-
-        return self._loop.run(_sticky())
+    async def _sticky(self, coro: Coroutine[Any, Any, _T]) -> _T:
+        await self._client.connect()
+        return await coro
 
     async def list_tools(self, **kwargs: Any) -> List[Dict[str, Any]]:
         return await self._client.list_tools(**kwargs)

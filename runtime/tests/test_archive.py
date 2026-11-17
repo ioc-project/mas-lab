@@ -103,11 +103,11 @@ def test_default_store_does_not_write_disk(tmp_path: Path, monkeypatch) -> None:
     assert list(tmp_path.rglob("*.json")) == []
 
 
-def test_assembled_request_is_chat_messages_not_chunk_ids() -> None:
+async def test_assembled_request_is_chat_messages_not_chunk_ids() -> None:
     ctx = AutoCtxAssembler(injected_context=["You are a helper."])
     ctx.note_user_input("hello")
-    ctx.note_agent_response("hi there")
-    messages = assemble_llm_messages(ctx)
+    await ctx.note_agent_response("hi there")
+    messages = await assemble_llm_messages(ctx)
     covering = ctx.conversation_chunks.covering_ids()
     assert covering
     for msg in messages:
@@ -120,16 +120,16 @@ def test_assembled_request_is_chat_messages_not_chunk_ids() -> None:
     assert ctx.last_context_usage["archive_covering_ids"] == covering
 
 
-def test_under_limit_assembly_is_verbatim_committed_plus_wm() -> None:
+async def test_under_limit_assembly_is_verbatim_committed_plus_wm() -> None:
     """Runs that never hit the window keep the same messages[] as a manual join."""
     ctx = AutoCtxAssembler(injected_context=["You are a helper."])
     ctx.note_user_input("hello")
-    ctx.note_agent_response("hi there")
+    await ctx.note_agent_response("hi there")
     ctx.note_user_input("follow-up")
     ctx.record_assistant_tool_call(call_id="c1", tool_name="lookup", arguments={})
     ctx.record_tool_result(call_id="c1", content="ok")
-    first = assemble_llm_messages(ctx)
-    second = assemble_llm_messages(ctx)
+    first = await assemble_llm_messages(ctx)
+    second = await assemble_llm_messages(ctx)
     assert first == second
     assert not any(str(m.get("content") or "").startswith("[Conversation summary") for m in first)
     assert first[0] == {"role": "system", "content": "You are a helper."}
@@ -142,7 +142,7 @@ def test_under_limit_assembly_is_verbatim_committed_plus_wm() -> None:
     assert ctx.conversation_chunks.project_messages() == ctx.committed_messages
 
 
-def test_live_skill_body_survives_more_than_twenty_tool_rows() -> None:
+async def test_live_skill_body_survives_more_than_twenty_tool_rows() -> None:
     ctx = AutoCtxAssembler(last_user_text="run protocol")
     ctx.record_assistant_tool_call(call_id="sk", tool_name="activate_skill", arguments={})
     ctx.record_tool_result(
@@ -157,7 +157,7 @@ def test_live_skill_body_survives_more_than_twenty_tool_rows() -> None:
     for i in range(24):
         ctx.record_assistant_tool_call(call_id=f"t{i}", tool_name="step", arguments={})
         ctx.record_tool_result(call_id=f"t{i}", content=f"r{i}")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert "PINNED BODY" in str(messages)
     assert len([m for m in messages if m.get("role") == "tool"]) == 25
 
@@ -180,16 +180,16 @@ def test_configure_archive_store_ignores_spec_params() -> None:
     assert store.memory_watermark_bytes == 12
 
 
-def test_assemble_annotates_archive_view_id() -> None:
+async def test_assemble_annotates_archive_view_id() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("hello")
-    ctx.note_agent_response("world")
-    assemble_llm_messages(ctx)
+    await ctx.note_agent_response("world")
+    await assemble_llm_messages(ctx)
     usage = ctx.last_context_usage or {}
     assert usage["archive_view_id"] == ctx.conversation_chunks.view_id
     assert ctx.conversation_chunks.order[0] in usage["archive_covering_ids"]
     assert usage["system_prefix_hash"] == "" or isinstance(usage["system_prefix_hash"], str)
-    assemble_llm_messages(ctx)
+    await assemble_llm_messages(ctx)
     assert ctx.last_context_usage["system_prefix_reused"] is True or ctx.last_context_usage["system_prefix_hash"] == ""
 
 

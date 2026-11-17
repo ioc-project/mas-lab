@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
@@ -38,11 +39,11 @@ class _SlowEngine:
     def reset_turn_state(self) -> None:
         return None
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
+    async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         self._inflight += 1
         self.peak = max(self.peak, self._inflight)
         self.calls += 1
-        time.sleep(self.delay_s)
+        await asyncio.sleep(self.delay_s)
         self._inflight -= 1
         return EngineIoReturn(
             correlation_id=io.correlation_id,
@@ -63,7 +64,7 @@ def _reset_scheduler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     reset_policy()
 
 
-def test_scheduler_caps_in_flight(tmp_path: Path) -> None:
+async def test_scheduler_caps_in_flight(tmp_path: Path) -> None:
     inner = _SlowEngine()
     engine = LlmSchedulerMiddleware.wrap(
         inner,
@@ -77,23 +78,19 @@ def test_scheduler_caps_in_flight(tmp_path: Path) -> None:
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
     errors: list[BaseException] = []
 
-    def _run() -> None:
+    async def _run() -> None:
         try:
-            engine.invoke(io)
+            await engine.ainvoke(io)
         except BaseException as exc:  # noqa: BLE001
             errors.append(exc)
 
-    threads = [threading.Thread(target=_run) for _ in range(3)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    await asyncio.gather(*(_run() for _ in range(3)))
     assert not errors
     assert inner.calls == 3
     assert inner.peak == 1
 
 
-def test_cache_outer_skips_scheduler(tmp_path: Path) -> None:
+async def test_cache_outer_skips_scheduler(tmp_path: Path) -> None:
     cache_path = tmp_path / "cache.json"
     inner = _SlowEngine(delay_s=0.0)
     scheduled = LlmSchedulerMiddleware.wrap(
@@ -105,8 +102,8 @@ def test_cache_outer_skips_scheduler(tmp_path: Path) -> None:
     )
     engine = LlmCacheMiddleware.wrap(scheduled, {"cache_path": str(cache_path)})
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")
-    first = engine.invoke(io)
-    second = engine.invoke(io)
+    first = await engine.ainvoke(io)
+    second = await engine.ainvoke(io)
     assert first.text == second.text == "live-1"
     assert inner.calls == 1
 

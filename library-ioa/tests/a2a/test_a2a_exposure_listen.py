@@ -88,7 +88,7 @@ def test_two_background_exposures_serve_distinct_agent_cards() -> None:
         handle_greeter.close()
 
 
-def test_a2a_agent_comm_reaches_an_in_process_peer() -> None:
+async def test_a2a_agent_comm_reaches_an_in_process_peer() -> None:
     (port,) = _hold_ports(1)
     url = f"http://127.0.0.1:{port}"
     received: list[str] = []
@@ -102,8 +102,7 @@ def test_a2a_agent_comm_reaches_an_in_process_peer() -> None:
     comm = A2AAgentComm(url=url, timeout=10)
     try:
         _wait(port)
-        assert comm.send("peer", "hello") == "peer:hello"
+        assert (await comm.asend("peer", "hello")) == "peer:hello"
         assert received == ["hello"]
     finally:
-        comm.close()
         handle.close()

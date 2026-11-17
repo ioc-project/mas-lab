@@ -163,14 +163,14 @@ def test_temperature_helper_is_the_one_rule_the_engine_and_the_request_share() -
     assert sampling_temperature(0.7, answering_from_tools=False) == 0.7
 
 
-def test_snapshot_is_read_through_a_middleware_wrapper() -> None:
+async def test_snapshot_is_read_through_a_middleware_wrapper() -> None:
     from mas.runtime.driver.driver import _engine_snapshot
     from mas.runtime.engine.exchange_preview import ExchangeSnapshot
 
     class Snapshotting(Leaf):
-        def exchange_snapshot(self, op, *, correlation_id=0):
+        async def aexchange_snapshot(self, op, *, correlation_id=0):
             return ExchangeSnapshot(messages=USER, tools=[{"function": {"name": "t"}}])
 
-    snap = _engine_snapshot(Middleware(Snapshotting()), "LLM_CALL")
+    snap = await _engine_snapshot(Middleware(Snapshotting()), "LLM_CALL")
     assert snap is not None and snap.messages == USER
-    assert _engine_snapshot(Middleware(Leaf()), "LLM_CALL") is None
+    assert await _engine_snapshot(Middleware(Leaf()), "LLM_CALL") is None

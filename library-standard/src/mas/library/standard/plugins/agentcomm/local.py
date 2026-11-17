@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 
 from mas.library.standard.lib.comm.headers import _bound_validated, merge_headers
 from mas.library.standard.lib.comm.local_link import LocalLinkBase
@@ -19,10 +19,11 @@ from mas.library.standard.lib.comm.payload import (
     send_result,
 )
 from mas.library.standard.lib.comm.send_context import align_send
+from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, SendContext
 from mas.runtime.boundary.control.contract import ControlContract
 
-RunTurnFn = Callable[[str, str, int, str, str], str]
+RunTurnFn = Callable[[str, str, int, str, str], Awaitable[str]]
 
 
 class LocalAgentComm(LocalLinkBase, AgentCommContract):
@@ -80,7 +81,7 @@ class LocalAgentComm(LocalLinkBase, AgentCommContract):
             sender=self.agent_id,
         )
 
-    def _deliver(
+    async def _deliver(
         self,
         target_agent_id: str,
         headers: dict[str, str],
@@ -93,7 +94,8 @@ class LocalAgentComm(LocalLinkBase, AgentCommContract):
         context_id: str,
     ) -> str:
         with bound_inbound(sender=sender, intent=kind), _bound_validated(merge_headers(headers)):
-            result = self._run_turn(
+            result = await acall(
+                self._run_turn,
                 target_agent_id,
                 payload,
                 correlation_id,
@@ -101,31 +103,6 @@ class LocalAgentComm(LocalLinkBase, AgentCommContract):
                 context_id,
             )
         return send_result(kind, result)
-
-    def send(
-        self,
-        target_agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-        context_id: str = "",
-        headers: dict[str, str] | None = None,
-        context: SendContext | None = None,
-    ) -> str:
-        headers, kind, payload, sender, mode = self._plan(task, headers, context)
-        if kind == STEER_INTENT:
-            return self._steer(target_agent_id, task, mode=mode)
-        return self._deliver(
-            target_agent_id,
-            headers,
-            kind,
-            payload,
-            sender,
-            correlation_id=correlation_id,
-            caller_call_id=caller_call_id,
-            context_id=context_id,
-        )
 
     async def asend(
         self,
@@ -141,18 +118,7 @@ class LocalAgentComm(LocalLinkBase, AgentCommContract):
         headers, kind, payload, sender, mode = self._plan(task, headers, context)
         if kind == STEER_INTENT:
             return self._steer(target_agent_id, task, mode=mode)
-        asend_fn = getattr(self._run_turn, "asend", None)
-        if callable(asend_fn):
-            with bound_inbound(sender=sender, intent=kind), _bound_validated(merge_headers(headers)):
-                result = await asend_fn(
-                    target_agent_id,
-                    payload,
-                    correlation_id,
-                    caller_call_id,
-                    context_id,
-                )
-            return send_result(kind, result)
-        return self._deliver(
+        return await self._deliver(
             target_agent_id,
             headers,
             kind,

@@ -30,8 +30,8 @@ class _Tag(Layer):
             self.events.append(f"stop:{self.tag}")
         super().stop()
 
-    def send(self, envelope):
-        return super().send(envelope.with_(payload=f"{envelope.payload}>{self.tag}"))
+    async def asend(self, envelope):
+        return await super().asend(envelope.with_(payload=f"{envelope.payload}>{self.tag}"))
 
 
 def test_a_layer_that_fails_to_stop_does_not_keep_the_layers_below_it_running():
@@ -65,14 +65,14 @@ def test_envelope_is_immutable_and_with_merges():
     assert env.with_(payload=None).payload is None
 
 
-def test_layers_run_top_down_and_lifecycle_is_bottom_first_then_top_first():
+async def test_layers_run_top_down_and_lifecycle_is_bottom_first_then_top_first():
     lower = RecordingLower()
     log: list[str] = []
     a, b = _Tag("a", log), _Tag("b", log)
     stack = Stack([lower, a, b])
     stack.start()
     stack.start()
-    assert stack.send(Envelope(payload="x")) == "ok"
+    assert (await stack.asend(Envelope(payload="x"))) == "ok"
     assert lower.seen[0].payload == "x>b>a"
     stack.stop()
     stack.stop()
@@ -86,12 +86,12 @@ def test_capabilities_are_the_or_merge_and_layers_cannot_remove_one():
     assert caps["unicast"] and caps["e2e"] and not caps["group"]
 
 
-def test_stack_stamps_a_child_traceparent_on_every_send_and_keeps_the_trace_id():
+async def test_stack_stamps_a_child_traceparent_on_every_send_and_keeps_the_trace_id():
     lower = RecordingLower()
     stack = Stack([lower])
     parent = "00-" + "ab" * 16 + "-" + "cd" * 8 + "-01"
-    stack.send(Envelope(headers={"traceparent": parent}))
-    stack.send(Envelope())
+    await stack.asend(Envelope(headers={"traceparent": parent}))
+    await stack.asend(Envelope())
     first, second = (e.headers["traceparent"] for e in lower.seen)
     assert first.split("-")[1] == "ab" * 16
     assert first.split("-")[2] != "cd" * 8
@@ -117,7 +117,7 @@ def test_construction_rejects_bad_stacks():
         Stack([RecordingLower(), RecordingLower()])
 
 
-def test_unbound_layer_raises_and_tag_layer_conforms():
-    check_layer(lambda: _Tag("c"))
+async def test_unbound_layer_raises_and_tag_layer_conforms():
+    await check_layer(lambda: _Tag("c"))
     with pytest.raises(StackError, match="unbound"):
-        _Tag().send(Envelope())
+        await _Tag().asend(Envelope())

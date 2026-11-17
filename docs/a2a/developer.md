@@ -22,7 +22,7 @@ The runtime registry selects `AgentCommContract` implementations (category `agen
 
 The A2A server is a separate ingress adapter. It uses registry category `agent_expose` (`library_ioa.plugins.a2a.exposure.A2AExposure`). It is not an `AgentCommContract` implementation.
 
-It maps each incoming A2A `message/send` onto the session turn mailbox (`mas.ctl.session.mailbox.SessionTurnMailbox`). The message is queued at the tail, and the call waits for its own turn. `AgentCommContract.send` is the outbound peer send after delegation.
+It maps each incoming A2A `message/send` onto the session turn mailbox (`mas.ctl.session.mailbox.SessionTurnMailbox`). The message is queued at the tail, and the call waits for its own turn. `AgentCommContract.asend` is the outbound peer send after delegation.
 
 ## Steer, cancel, and input-required
 

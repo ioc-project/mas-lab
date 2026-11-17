@@ -477,7 +477,7 @@ def test_build_engine_installs_infra_pipeline(monkeypatch, tmp_path):
     assert sel.engine._infra_stack is not None
 
 
-def test_build_engine_installs_tool_destinations(monkeypatch, tmp_path):
+async def test_build_engine_installs_tool_destinations(monkeypatch, tmp_path):
     from mas.ctl.infra.resolve import resolve_infra_refs
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
     from mas.runtime.engine.llm_live import LiveLlmEngine
@@ -511,15 +511,15 @@ def test_build_engine_installs_tool_destinations(monkeypatch, tmp_path):
     assert type(sel.engine) is LiveLlmEngine
     assert sel.engine._tool_destinations
     sel.engine.set_scheduled_tool("alpha", {})
-    hit = sel.engine.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    hit = await sel.engine.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
     assert hit.response_kind == "ERROR"
     assert "dest fault" in (hit.text or "")
     sel.engine.set_scheduled_tool("beta", {})
-    miss = sel.engine.invoke(InvokeEngineIo(correlation_id=2, op="TOOL_CALL"))
+    miss = await sel.engine.ainvoke(InvokeEngineIo(correlation_id=2, op="TOOL_CALL"))
     assert "dest fault" not in (miss.text or "")
 
 
-def test_build_engine_installs_tool_pipeline(monkeypatch, tmp_path):
+async def test_build_engine_installs_tool_pipeline(monkeypatch, tmp_path):
     from mas.ctl.infra.resolve import resolve_infra_refs
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
     from mas.runtime.engine.llm_live import LiveLlmEngine
@@ -545,7 +545,7 @@ def test_build_engine_installs_tool_pipeline(monkeypatch, tmp_path):
     )
     assert type(sel.engine) is LiveLlmEngine
     assert sel.engine._tool_stack is not None
-    ret = sel.engine.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    ret = await sel.engine.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
     assert ret.response_kind == "ERROR"
     assert "injected fault" in (ret.text or "")
 

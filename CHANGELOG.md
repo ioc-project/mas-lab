@@ -31,6 +31,12 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- The runtime is async end to end: the driver, engines, call layers, LLM providers, context assembly, tool dispatch, send, delegation, spawn, the inbound serve chain and the session turn are awaited on one event loop. Write new plugins as `async def` (`achat_completion`, `asend`, `ainvoke`, `acall`, `on_execute_tool`); see [Writing plugins](docs/references/async-plugins.md).
+- Sync plugins keep working. A plugin that only has the sync method (`chat_completion`, `send`, `invoke`, `call`, a `def` tool or hook) runs on worker threads, and the runtime logs one warning per class naming the async method to write. `engine.sync_threads` in the RuntimeEngine manifest sets how many threads they share (default 1).
+- A non-async caller uses `SessionController.run_turn`, `feed` or `submit_hitl`; each runs the async implementation on its own loop and raises inside a running loop. The helper loop thread of the sync tool path is gone.
+- The HTTP layer and the A2A client keep one async client per event loop, so connections are reused across sends. The A2A client also keeps the agent card instead of fetching it on every send. `A2AClient.asend_message` and `aget_agent_card` replace the sync methods.
+- A per-agent turn lock, `TurnGuard`, is taken with `async with guard.ahold()` and is re-entrant along one call chain. `ChainHandles.turn_lock` returns one.
+- The test helpers `check_layer`, `check_transport` and `check_agent_comm` are coroutines; `check_agent_comm_async` is folded into `check_agent_comm`.
 - The qa-agent example graphs use the ioc-project scope-ontology URIs.
 - `llm_call_start` carries the request: `model`, `messages`, offered tools, `max_tokens`, `temperature`. `llm_call_end` is the return: `output`, `finish_reason`, tokens, `tool_calls`, and `max_tokens` only when the sent cap differs. `model` on `llm_call_end` is no longer read.
 - `--cache-read` / `--cache-write` help now says the cache is off until those flags insert the `llm_cache` step. The default pipeline is retry only.
@@ -684,6 +690,11 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- The runtime is async end to end. A driver, engine, call layer, LLM provider, context assembler, summarizer, tool dispatch, send, delegation, spawn, inbound serve chain and turn all await. The sync twins are removed: `ainvoke` replaces `invoke`, `achat_completion` replaces `chat_completion`, `aexchange_preview` and `aexchange_snapshot` replace their sync forms, `asend` replaces `AgentCommContract.send` and `Layer.send`, `adelegate`, `acall_delegate_tool`, `aspawn`, `acall` replace their sync forms, `aexecute_engine_tool` replaces `execute_engine_tool`, `atick` and `aprobe_tool` replace `tick` and `probe_tool`, and the registry and manifest provider keep only `acall_tool`. The session turn (`RunTurnFn`) and the inbound `Handler` are coroutine functions; `SessionTurn` is gone.
+- A plugin may still be sync or async. A hook that returns an awaitable is awaited, and a plain `def` callback (a tool, an `on_request`, a `run_turn`) runs without blocking the loop where the plugin says so. An LLM provider must provide `achat_completion`.
+- A caller that is not async uses `SessionController.run_turn`, `feed` or `submit_hitl`; each runs the one async implementation on its own private loop and refuses to run inside a running loop. The helper loop thread of the sync tool path is gone.
+- The A2A client is async (`asend_message`, `aget_agent_card`; no `close`), and the HTTP layer opens an async client per send. A turn guard (`ChainHandles.turn_lock`) is a `TurnGuard` taken with `async with guard.ahold()`; it is re-entrant along one call chain.
+- `check_layer`, `check_transport` and `check_agent_comm` are coroutines; `check_agent_comm_async` is removed.
 - LLM calls no longer send `max_tokens: 2000` implicitly. Without a model,
   infra, or environment value, the server default applies. Set
   `spec.models[].max_tokens` to keep the previous cap. Provider-level cache

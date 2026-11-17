@@ -12,7 +12,7 @@ from mas.runtime.engine.tools import openai_tools, resolve_manifest_tool_refs
 
 
 class _StubComm:
-    def send(self, *args: object, **kwargs: object) -> str:
+    async def asend(self, *args: object, **kwargs: object) -> str:
         return "ok"
 
 
@@ -228,10 +228,10 @@ def test_wire_entry_engine_delegation_entry_without_delegates_to_sends_to_nobody
     assert "delegate_to_b" not in names
 
 
-def test_a_pattern_on_a_non_entry_agent_calls_its_own_peers():
+async def test_a_pattern_on_a_non_entry_agent_calls_its_own_peers():
     from mas.runtime.boundary.delegation.policy import delegation_targets
     from mas.runtime.engine.llm_live import LiveLlmEngine
-    from mas.runtime.engine.tool_dispatch import execute_engine_tool
+    from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
     from mas.runtime.engine.tools import openai_tools
 
     engine = LiveLlmEngine(manifest=None, use_tool_loop=False, use_cache=False)
@@ -261,18 +261,17 @@ def test_a_pattern_on_a_non_entry_agent_calls_its_own_peers():
     assert names == {"delegate_to_hotels"}
     assert delegation_targets(manifest, agent_id="flights") == ["hotels"]
     assert (
-        execute_engine_tool(
+        await aexecute_engine_tool(
             "delegate_to_hotels",
             delegation=engine.delegation,
             arguments={"task": "book"},
         )
-        == "ok"
-    )
+    ) == "ok"
     assert not engine.delegation.offers("delegate_to_planner")
-    assert engine.delegation.send("planner", "no") == "ok"
+    assert (await engine.delegation.asend("planner", "no")) == "ok"
 
 
-def test_reset_engine_delegation_does_not_suppress_repeated_delegation():
+async def test_reset_engine_delegation_does_not_suppress_repeated_delegation():
     from mas.ctl.manifest.mas_agent_merge import reset_engine_delegation
     from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
     from mas.library.standard.plugins.delegation.llm_delegator import LlmDelegator
@@ -288,13 +287,13 @@ def test_reset_engine_delegation_does_not_suppress_repeated_delegation():
             self.delegation = LlmDelegator(comm=LocalAgentComm(run_turn), allowed_peers=["peer"])
 
     engine = _Engine()
-    assert engine.delegation.delegate("peer", "task") == "findings:peer:task"
+    assert (await engine.delegation.adelegate("peer", "task")) == "findings:peer:task"
     reset_engine_delegation(engine)
-    assert engine.delegation.delegate("peer", "task") == "findings:peer:task"
+    assert (await engine.delegation.adelegate("peer", "task")) == "findings:peer:task"
     assert calls == ["peer", "peer"]
 
 
-def test_reset_engine_delegation_walks_inner_wrapper():
+async def test_reset_engine_delegation_walks_inner_wrapper():
     from mas.ctl.manifest.mas_agent_merge import reset_engine_delegation
     from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
     from mas.library.standard.plugins.delegation.llm_delegator import LlmDelegator
@@ -318,9 +317,9 @@ def test_reset_engine_delegation_walks_inner_wrapper():
 
     inner = _Engine()
     engine = _Wrapper(inner)
-    assert inner.delegation.delegate("peer", "task") == "findings:peer:task"
+    assert (await inner.delegation.adelegate("peer", "task")) == "findings:peer:task"
     reset_engine_delegation(engine)
-    assert inner.delegation.delegate("peer", "task") == "findings:peer:task"
+    assert (await inner.delegation.adelegate("peer", "task")) == "findings:peer:task"
     assert calls == ["peer", "peer"]
 
 

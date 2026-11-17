@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sys
 from typing import Sequence
@@ -29,16 +30,12 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    client: A2AClient | None = None
     try:
         client = A2AClient(url=args.a2a, transport=args.a2a_transport)
-        response = client.send_message(args.message)
+        response = asyncio.run(client.asend_message(args.message))
     except Exception as error:
         print(f"mas-a2a: {error}", file=sys.stderr)
         return 1
-    finally:
-        if client is not None:
-            client.close()
 
     print(json.dumps(response, indent=2, ensure_ascii=False, default=str))
     return 0

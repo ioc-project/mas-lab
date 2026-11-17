@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -696,7 +697,7 @@ def fake_node(monkeypatch: pytest.MonkeyPatch):
     FakeWorld.reset()
 
 
-def test_a_slim_chain_carries_the_send_across_the_node(tmp_path: Path, fake_node) -> None:
+async def test_a_slim_chain_carries_the_send_across_the_node(tmp_path: Path, fake_node) -> None:
     rows = _write(
         tmp_path / "desk.yaml",
         {"apiVersion": "infra/v1", "kind": "Application", "metadata": {"name": "desk"}, "spec": {"endpoints": _ROWS}},
@@ -713,7 +714,7 @@ def test_a_slim_chain_carries_the_send_across_the_node(tmp_path: Path, fake_node
         assert caller["comm"]._layers[0].link.name == "acme/lab/desk/triage"
         assert caller["peers"] == ["billing"]
         tool = SendTool(comm=caller["comm"], routes=caller["routes"], allowed_peers=["billing"])
-        assert tool.send("billing", "refund") == "ok:billing:refund"
+        assert (await tool.asend("billing", "refund")) == "ok:billing:refund"
         assert any(b"refund" in frame for frame in fake_node.frames)
         assert _SECRET not in repr(caller["comm"])
         actor = next(iter(materialized.stack_handles.values()))._services[0].actor
@@ -723,14 +724,14 @@ def test_a_slim_chain_carries_the_send_across_the_node(tmp_path: Path, fake_node
     assert actor.thread is None or not actor.thread.is_alive()
 
 
-def test_a_local_group_chain_routes_in_process(tmp_path: Path) -> None:
+async def test_a_local_group_chain_routes_in_process(tmp_path: Path) -> None:
     resolved = _bind({"agent_comm": ["desk-group"], "usage": ["connect", "listen"]}, agents=["triage", "billing"])
     materialized = _materialized(["triage", "billing"], tmp_path, resolved)
     try:
         caller = next(item for item in _wire(materialized) if item["entry_agent_id"] == "triage")
         assert caller["comm"]._layers[0].link.name == "acme/lab/desk/triage"
         tool = SendTool(comm=caller["comm"], routes=caller["routes"], allowed_peers=["billing"])
-        assert tool.send("billing", "refund") == "ok:billing:refund"
+        assert (await tool.asend("billing", "refund")) == "ok:billing:refund"
     finally:
         materialized.stack_handles.close()
 
@@ -877,7 +878,7 @@ _PER_AGENT = {
 }
 
 
-def test_a_sender_joins_its_targets_chain_and_each_chain_gets_one_handle(tmp_path: Path, fake_node) -> None:
+async def test_a_sender_joins_its_targets_chain_and_each_chain_gets_one_handle(tmp_path: Path, fake_node) -> None:
     resolved = _bind(_PER_AGENT)
     nodes = [{"id": "triage", "delegates_to": ["billing", "outage"]}, {"id": "billing"}, {"id": "outage"}]
     materialized = _materialized(_DESK, tmp_path, resolved, nodes)
@@ -892,8 +893,8 @@ def test_a_sender_joins_its_targets_chain_and_each_chain_gets_one_handle(tmp_pat
         assert billing_route is handles["desk-node-a2a+desk-a2a"]._links["triage"]
         assert billing_route._layers[0].link.name == "acme/lab/desk-a2a/triage"
         tool = SendTool(comm=caller["comm"], routes=caller["routes"], allowed_peers=["billing", "outage"])
-        assert tool.send("billing", "refund") == "ok:billing:refund"
-        assert tool.send("outage", "down?") == "ok:outage:down?"
+        assert (await tool.asend("billing", "refund")) == "ok:billing:refund"
+        assert (await tool.asend("outage", "down?")) == "ok:outage:down?"
         frames = [frame.decode("utf-8", "replace") for frame in fake_node.frames]
         assert any("SendMessage" in frame and "refund" in frame for frame in frames)  # billing's chain frames A2A
         assert any("down?" in frame and "SendMessage" not in frame for frame in frames)  # outage's does not
@@ -1520,25 +1521,18 @@ def test_a_flavour_overlay_can_patch_bind(tmp_path: Path) -> None:
 # --- one turn at a time per served agent ------------------------------------------------------------------------
 
 
-def test_a_served_agent_answers_one_request_at_a_time_and_waits_for_the_users_turn(fake_node) -> None:
-    import threading
-    import time
-
+async def test_a_served_agent_answers_one_request_at_a_time_and_waits_for_the_users_turn(fake_node) -> None:
     from mas.ctl.executor.stacks import ChainHandles, chain_links
-    from mas.ctl.session.controller import SessionController
 
     resolved = _bind({"agent_comm": ["desk-node"], "usage": ["connect", "listen"]}, agents=["a", "b", "c"])
     running: list[str] = []
     peak = [0]
-    guard = threading.Lock()
 
-    def run_turn(agent_id: str, task: str, *_args: object) -> str:
-        with guard:
-            running.append(agent_id)
-            peak[0] = max(peak[0], running.count("b"))
-        time.sleep(0.3)
-        with guard:
-            running.remove(agent_id)
+    async def run_turn(agent_id: str, task: str, *_args: object) -> str:
+        running.append(agent_id)
+        peak[0] = max(peak[0], running.count("b"))
+        await asyncio.sleep(0.3)
+        running.remove(agent_id)
         return f"{agent_id}:{task}"
 
     handles = ChainHandles()
@@ -1551,63 +1545,47 @@ def test_a_served_agent_answers_one_request_at_a_time_and_waits_for_the_users_tu
             handles=handles,
             peers={"a": {"b"}, "c": {"b"}},
         )
-        replies: list[str] = []
-        callers = [
-            threading.Thread(target=lambda caller=caller: replies.append(routes[caller]["b"].handler.send("b", caller)))
-            for caller in ("a", "c")
-        ]
-        for thread in callers:
-            thread.start()
-        for thread in callers:
-            thread.join(timeout=5)
+        replies = await asyncio.gather(
+            routes["a"]["b"].handler.asend("b", "a"), routes["c"]["b"].handler.asend("b", "c")
+        )
         assert sorted(replies) == ["b:a", "b:c"]
         assert peak[0] == 1
 
-        # the user's own turn on b holds the same lock: a request over the chain waits for it to end
-        controller = SessionController(instance=MagicMock(), display=MagicMock())
-        controller.turn_guard = handles.turn_lock("b")
+        # the user's own turn on b holds the same guard: a request over the chain waits for it to end
         order: list[str] = []
-        with controller.turn_guard:
-            sender = threading.Thread(target=lambda: order.append(routes["a"]["b"].handler.send("b", "late")))
-            sender.start()
-            time.sleep(0.2)
+
+        async def late() -> None:
+            order.append(await routes["a"]["b"].handler.asend("b", "late"))
+
+        guard = handles.turn_lock("b")
+        pending = None
+        async with guard.ahold():
+            # a request from another call chain does not share the user's turn
+            pending = asyncio.get_running_loop().run_in_executor(None, lambda: asyncio.run(late()))
+            await asyncio.sleep(0.2)
             order.append("user turn ended")
-        sender.join(timeout=5)
+        await pending
         assert order == ["user turn ended", "b:late"]
     finally:
         handles.close()
 
 
-def test_a_request_that_waits_too_long_for_a_busy_agent_fails() -> None:
-    import threading
-
+async def test_a_request_that_waits_too_long_for_a_busy_agent_fails() -> None:
     from mas.ctl.executor.stacks import ChainHandles
     from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
     handles = ChainHandles(turn_wait_s=0.1)
-    turn = handles.serialized(lambda agent_id, task, *_: f"{agent_id}:{task}")
+    turn = handles.serialized(lambda agent_id, task, *_: asyncio.sleep(0, f"{agent_id}:{task}"))
     lock = handles.turn_lock("b")
-    lock.acquire()
+    lock._lock.acquire()
     try:
-        raised: list[BaseException] = []
-
-        def call() -> None:
-            try:
-                turn("b", "late", 0, "", "")
-            except BaseException as exc:
-                raised.append(exc)
-
-        waiter = threading.Thread(target=call)
-        waiter.start()
-        waiter.join(timeout=5)
-        assert waiter.is_alive() is False
-        assert raised and "did not become free" in str(raised[0])
-        assert isinstance(raised[0], AgentCommError)
+        with pytest.raises(AgentCommError, match="did not become free"):
+            await turn("b", "late", 0, "", "")
     finally:
-        lock.release()
+        lock._lock.release()
 
 
-def test_a_connect_only_link_answers_no_request(fake_node) -> None:
+async def test_a_connect_only_link_answers_no_request(fake_node) -> None:
     from mas.ctl.executor.stacks import ChainHandles, chain_links
     from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
@@ -1620,38 +1598,34 @@ def test_a_connect_only_link_answers_no_request(fake_node) -> None:
         _handlers, routes = chain_links(
             None,
             resolved,
-            run_turn=lambda agent_id, task, *_: f"{agent_id}:{task}",
+            run_turn=lambda agent_id, task, *_: asyncio.sleep(0, f"{agent_id}:{task}"),
             local_ids=["a", "b"],
             handles=handles,
             peers={"a": {"b"}, "b": {"a"}},
         )
-        assert routes["b"]["a"].handler.send("a", "hi") == "a:hi"  # a is served here
+        assert (await routes["b"]["a"].handler.asend("a", "hi")) == "a:hi"  # a is served here
         with pytest.raises(AgentCommError, match="the agent is not served on this link"):
-            routes["a"]["b"].handler.send("b", "hi")  # b only sends on this chain: nobody here runs its turn
+            await routes["a"]["b"].handler.asend("b", "hi")  # b only sends on this chain: nobody here runs its turn
     finally:
         handles.close()
 
 
-def test_a_user_turn_holds_the_turn_guard_while_it_runs() -> None:
-    import threading
-
+async def test_a_user_turn_holds_the_turn_guard_while_it_runs() -> None:
     from mas.ctl.session.controller import SessionController
+    from mas.ctl.session.turn_guard import TurnGuard
 
-    guard = threading.RLock()
+    guard = TurnGuard("b")
     controller = SessionController(instance=MagicMock(), display=MagicMock(), turn_guard=guard)
     held: list[bool] = []
 
-    def turn(*_args: object, **_kwargs: object) -> str:
-        probe = threading.Thread(target=lambda: held.append(not guard.acquire(timeout=0.05)))
-        probe.start()
-        probe.join()
+    async def turn(*_args: object, **_kwargs: object) -> str:
+        held.append(guard._lock.locked())
         return "ok"
 
-    controller._run_turn_guarded = turn  # type: ignore[method-assign]
-    assert controller.run_turn("hello") == "ok"
-    assert held[0] is True
-    assert guard.acquire(timeout=0.05)  # released after the turn
-    guard.release()
+    controller._arun_turn_guarded = turn  # type: ignore[method-assign]
+    assert (await controller.arun_turn("hello")) == "ok"
+    assert held == [True]
+    assert not guard._lock.locked()  # released after the turn
 
 
 def test_a_bundled_flavour_name_is_never_a_file_in_the_current_directory(
@@ -1681,3 +1655,32 @@ def test_a_url_that_carries_a_secret_is_refused_and_the_secret_is_not_shown(url:
     assert "pw" not in str(err.value) and "abc" not in str(err.value)
     plain = _rows(web={"protocol": "http", "url": "https://hub.example.test/a2a?page=2", "usage": "connect"})
     _bind({"agent_comm": ["web"], "agents": {a: {"usage": "connect"} for a in _DESK}}, rows=plain)
+
+
+async def test_a_waiter_that_is_cancelled_does_not_leave_the_turn_guard_held() -> None:
+    from mas.ctl.session.turn_guard import TurnGuard
+
+    guard = TurnGuard("b", wait_s=5)
+    gate = asyncio.Event()
+
+    async def holder() -> None:
+        async with guard.ahold():
+            await gate.wait()
+
+    async def waiter() -> None:
+        async with guard.ahold():
+            return None
+
+    held = asyncio.create_task(holder())
+    await asyncio.sleep(0.02)
+    cancelled = asyncio.create_task(waiter())
+    await asyncio.sleep(0.02)
+    cancelled.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled
+    gate.set()
+    await held
+    await asyncio.sleep(0.05)
+    assert not guard._lock.locked()
+    async with guard.ahold():  # and the next turn gets in
+        pass

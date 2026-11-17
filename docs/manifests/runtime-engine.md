@@ -47,6 +47,7 @@ For offline CI, replay responses recorded against a live provider with [llm_cach
 | `engine.timeout` | none | Accepted by the schema; the current kernel does not apply it |
 | `engine.tool_worker` | `thread` | Where sync plugin tools run when a batch overlaps: `thread` or `inline`. Placement only: same context, same results, same order. An async `on_execute_tool` / `execute` (or `on_aexecute_tool`) never uses it; it runs on the event loop. Each sync tool class is logged once (warning under `inline`) |
 | `engine.tool_concurrency` | none | How many sync plugin tools run at once. No cap other than the batch size |
+| `engine.sync_threads` | 1 | Worker threads shared by sync plugins other than tools (an LLM provider, a link or a layer that only implements the sync method) |
 | `cache.enabled` | none | `false` turns cache read and write off, even when a flag asks for them |
 | `cache.read` / `cache.write` | `false` / `false` | Turn the `llm_cache` infra step on for this deployment |
 | `stream` | `false` | Stream LLM responses |

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from unittest.mock import MagicMock
 
 import pytest
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
@@ -24,11 +23,12 @@ class _CapturePlugin(ObservabilityPlugin):
         self.seen.append(event)
 
 
-def test_dispatch_engine_batch_records_correct_tool_per_correlation_id():
+@pytest.mark.asyncio
+async def test_dispatch_engine_batch_records_correct_tool_per_correlation_id():
     """Regression: q.pending_tool_name/pending_tool_args are single shared
     fields that only ever hold the LAST spec set by
     schedule_parallel_tools_egress's per-tool loop (see parallel_tools.py).
-    _dispatch_engine_batch used to read those shared fields directly when
+    _adispatch_engine_batch used to read those shared fields directly when
     building each sym's CONTRACT_EXECUTE EnvelopeContext, so every
     tool_call_start/CONTRACT_EXECUTE observability event in a batch of N
     *different* tool calls got mistagged with the LAST tool's name/arguments —
@@ -64,7 +64,7 @@ def test_dispatch_engine_batch_records_correct_tool_per_correlation_id():
         InvokeEngineIo(correlation_id=1, op="TOOL_CALL"),
         InvokeEngineIo(correlation_id=2, op="TOOL_CALL"),
     ]
-    driver._dispatch_engine_batch(ios, DriverTrace())
+    await driver._adispatch_engine_batch(ios, DriverTrace())
 
     execs = {e.correlation_id: e for e in cap.seen if e.attributes.get("activity") == "contract_execute"}
     assert set(execs) == {1, 2}
@@ -86,30 +86,3 @@ def test_dispatch_engine_batch_records_correct_tool_per_correlation_id():
         tools = list(pg.attributes.get("tools") or [])
         assert tools
         assert all(str(t.get("call_id") or "") for t in tools)
-
-
-def test_parallel_tool_dispatch_strict_zip_raises_on_length_mismatch():
-    """Engine pool must return one result per submitted InvokeEngineIo."""
-    kernel = RuntimeKernel()
-    driver = KernelDriver(kernel=kernel, engine=MagicMock())
-    pool = MagicMock()
-    pool.submit = MagicMock()
-    pool.pending_outbound.return_value = 0
-    pool.max_depth = 32
-    pool.drain.return_value = [
-        EngineIoReturn(
-            correlation_id=1,
-            response_kind="TOOL_RESULT",
-            next_step="STOP",
-            text="only one result",
-        ),
-    ]
-    driver.engine_pool = pool
-
-    ios = [
-        InvokeEngineIo(correlation_id=1, op="TOOL_CALL"),
-        InvokeEngineIo(correlation_id=2, op="TOOL_CALL"),
-    ]
-
-    with pytest.raises(ValueError, match="zip"):
-        driver._dispatch_engine_batch(ios, DriverTrace())

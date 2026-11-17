@@ -102,19 +102,8 @@ class _FakeController:
     def __init__(self, result, **_kw):
         self._result = result
 
-    def run_turn(self, *_a, **_kw):
+    async def arun_turn(self, *_a, **_kw):
         return self._result
-
-
-def test_run_turn_raises_with_the_governance_reason():
-    """A withheld hand-off tells the caller why, not just that the turn failed."""
-    from mas.ctl.executor.engine_tool_context import EngineToolTurnFailed
-
-    ctx = _context()
-    ctx.materialized.instances["worker"] = _instance()
-    ctx.controller_factory = lambda **kw: _FakeController(_blocked_turn("PII in reply"), **kw)
-    with pytest.raises(EngineToolTurnFailed, match="agent 'worker' turn failed: PII in reply"):
-        ctx.run_turn("worker", "do it")
 
 
 @pytest.mark.asyncio

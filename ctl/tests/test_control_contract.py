@@ -207,12 +207,12 @@ def test_inspect_context_returns_numeric_snapshot_and_cache_rate() -> None:
     assert not hasattr(view, "messages")
 
 
-def test_inspect_archive_returns_covering_tree() -> None:
+async def test_inspect_archive_returns_covering_tree() -> None:
     manager = SessionManager()
     session = _session(manager)
     ctx = session.instance.driver.ctx
     ctx.note_user_input("hello")
-    ctx.note_agent_response("world")
+    await ctx.note_agent_response("world")
     dump = manager.control(capability=ControlCapability(actor="debugger", surface="admin")).inspect_archive("s1")
     assert dump["covers_archive"] is True
     assert dump["covering_ids"]

@@ -33,10 +33,10 @@ def _committed_tool_turn(call_id: str, answer: str) -> list[dict[str, Any]]:
     ]
 
 
-def test_plain_turn_history_unchanged() -> None:
+async def test_plain_turn_history_unchanged() -> None:
     ctx = AutoCtxAssembler(last_user_text="Follow-up?")
     ctx.turn_history = [("Q1?", "A1."), ("Q2?", "A2.")]
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant", "user"]
     assert messages[-1]["content"] == "Follow-up?"
 
@@ -53,7 +53,7 @@ def test_working_memory_pinned_whole_in_turn() -> None:
     assert pending_outbound_waits(q)[0].kind == "TOOL"
 
 
-def test_assemble_pins_wm_under_budget() -> None:
+async def test_assemble_pins_wm_under_budget() -> None:
     ctx = AutoCtxAssembler(last_user_text="Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"q": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content="Donald Trump is president.")
@@ -65,12 +65,12 @@ def test_assemble_pins_wm_under_budget() -> None:
             },
         }
     }
-    messages = assemble_llm_messages(ctx, manifest=manifest)
+    messages = await assemble_llm_messages(ctx, manifest=manifest)
     assert messages[-1]["role"] == "tool"
     assert_provider_payload(messages)
 
 
-def test_assemble_committed_history_provider_safe_after_stack_trim() -> None:
+async def test_assemble_committed_history_provider_safe_after_stack_trim() -> None:
     committed: list[dict[str, Any]] = []
     for i in range(8):
         committed.extend(_committed_tool_turn(f"call_{i}", f"answer-{i}"))
@@ -83,12 +83,12 @@ def test_assemble_committed_history_provider_safe_after_stack_trim() -> None:
             },
         }
     }
-    messages = assemble_llm_messages(ctx, manifest=manifest)
+    messages = await assemble_llm_messages(ctx, manifest=manifest)
     assert messages[-1]["content"] == "What next?"
     assert_provider_payload(messages)
 
 
-def test_inflight_partial_parallel_tools_filled_before_provider() -> None:
+async def test_inflight_partial_parallel_tools_filled_before_provider() -> None:
     """A live parallel group with one result still outstanding: final assemble
     inserts an empty tool row so Bedrock sees 2 toolUse + 2 toolResult.
     """
@@ -100,7 +100,7 @@ def test_inflight_partial_parallel_tools_filled_before_provider() -> None:
         ]
     )
     ctx.working_memory.record_tool_result(call_id="call_a", content="result-a")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert_provider_payload(messages)
     asst = [m for m in messages if m.get("tool_calls")][-1]
     assert [c["id"] for c in asst["tool_calls"]] == ["call_a", "call_b"]
@@ -109,19 +109,19 @@ def test_inflight_partial_parallel_tools_filled_before_provider() -> None:
     assert tools[-1]["content"] == ""
 
 
-def test_multi_turn_committed_tool_visible_on_follow_up() -> None:
+async def test_multi_turn_committed_tool_visible_on_follow_up() -> None:
     ctx = AutoCtxAssembler()
     ctx.note_user_input("Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"q": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content="Donald Trump")
-    ctx.note_agent_response("Donald Trump is POTUS.")
+    await ctx.note_agent_response("Donald Trump is POTUS.")
     ctx.note_user_input("Who was before?")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert any(m.get("role") == "tool" for m in messages)
     assert messages[-1]["content"] == "Who was before?"
 
 
-def test_hitl_pause_fold_completes_parallel_group_from_working_memory() -> None:
+async def test_hitl_pause_fold_completes_parallel_group_from_working_memory() -> None:
     """HITL pause commits the assistant + first result; the remaining result
     lands in working memory. Assembly must concat then pair — not strip the
     assistant and leave extra toolResults after the previous turn.
@@ -140,7 +140,7 @@ def test_hitl_pause_fold_completes_parallel_group_from_working_memory() -> None:
         {"role": "tool", "tool_call_id": "call_a", "content": "result-a"},
     ]
     ctx.working_memory.record_tool_result(call_id="call_b", content="result-b")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert_provider_payload(messages)
     tools = [m for m in messages if m.get("role") == "tool"]
     assert [m["tool_call_id"] for m in tools] == ["call_a", "call_b"]
@@ -149,18 +149,18 @@ def test_hitl_pause_fold_completes_parallel_group_from_working_memory() -> None:
     assert [c["id"] for c in asst[0]["tool_calls"]] == ["call_a", "call_b"]
 
 
-def test_assemble_drops_duplicate_tool_results_before_provider() -> None:
+async def test_assemble_drops_duplicate_tool_results_before_provider() -> None:
     ctx = AutoCtxAssembler(last_user_text="q")
     ctx.working_memory.record_assistant_tool_calls([("call_a", "search", {"q": "a"}), ("call_b", "search", {"q": "b"})])
     ctx.working_memory.record_tool_result(call_id="call_a", content="ra")
     ctx.working_memory.record_tool_result(call_id="call_b", content="rb")
     ctx.working_memory.record_tool_result(call_id="call_a", content="ra-dup")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert_provider_payload(messages)
     assert [m["tool_call_id"] for m in messages if m.get("role") == "tool"] == ["call_a", "call_b"]
 
 
-def test_hitl_style_mismatched_ids_rebound_in_assembly() -> None:
+async def test_hitl_style_mismatched_ids_rebound_in_assembly() -> None:
     ctx = AutoCtxAssembler(
         last_user_text="Follow-up?",
         committed_messages=[
@@ -173,21 +173,21 @@ def test_hitl_style_mismatched_ids_rebound_in_assembly() -> None:
             {"role": "tool", "tool_call_id": "call_3", "content": "Maxence Postu is POTUS"},
         ],
     )
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert any("Maxence Postu is POTUS" in str(m.get("content")) for m in messages)
     assert_provider_payload(messages)
 
 
-def test_assembler_plugin_retains_tool_messages() -> None:
+async def test_assembler_plugin_retains_tool_messages() -> None:
     plugin = ContextAssemblerPlugin(conversation_strategy=StackConversation(max_messages=4))
     messages = _committed_tool_turn("call_0", "a0") + _committed_tool_turn("call_1", "a1")
     messages.append({"role": "user", "content": "current"})
-    out = plugin._apply_conversation_strategy(messages)
+    out = await plugin._apply_conversation_strategy(messages)
     assert any(m.get("role") == "tool" for m in out)
     assert_provider_payload(out)
 
 
-def test_assembler_preserves_live_turn_inflight_tool_calls() -> None:
+async def test_assembler_preserves_live_turn_inflight_tool_calls() -> None:
     plugin = ContextAssemblerPlugin(conversation_strategy=StackConversation(max_messages=4))
     messages = _committed_tool_turn("call_0", "a0") + [
         {"role": "user", "content": "current"},
@@ -197,17 +197,17 @@ def test_assembler_preserves_live_turn_inflight_tool_calls() -> None:
             "tool_calls": [{"id": "call_live", "function": {"name": "search", "arguments": "{}"}}],
         },
     ]
-    out = plugin._apply_conversation_strategy(messages)
+    out = await plugin._apply_conversation_strategy(messages)
     live = [m for m in out if m.get("tool_calls")]
     assert any(c["id"] == "call_live" for m in live for c in m["tool_calls"])
     assert_provider_payload(out)
 
 
-def test_high_level_react_path_still_sees_tool_result() -> None:
+async def test_high_level_react_path_still_sees_tool_result() -> None:
     ctx = AutoCtxAssembler(last_user_text="Who is POTUS?")
     ctx.record_assistant_tool_call(call_id="call_1", tool_name="web-search", arguments={"q": "POTUS"})
     ctx.record_tool_result(call_id="call_1", content="Donald Trump is president.")
-    messages = assemble_llm_messages(ctx)
+    messages = await assemble_llm_messages(ctx)
     assert messages[-1]["role"] == "tool"
     assert messages[-1]["content"] == "Donald Trump is president."
 
@@ -223,19 +223,19 @@ def _record_malformed_get_metrics_retry(ctx: AutoCtxAssembler, n: int) -> None:
     )
 
 
-def test_issue_65_stuck_retry_loop_ages_out_under_token_budget() -> None:
+async def test_issue_65_stuck_retry_loop_ages_out_under_token_budget() -> None:
     """A stuck retry loop is kept by default; the token trimmer ages oldest groups."""
     ctx = AutoCtxAssembler(last_user_text="plan a weekend trip to Celestia")
     for n in range(1, 16):
         _record_malformed_get_metrics_retry(ctx, n)
     assert len(ctx.working_memory.messages) == 30
 
-    unbounded = assemble_llm_messages(ctx)
+    unbounded = await assemble_llm_messages(ctx)
     unbounded_tool_msgs = [m for m in unbounded if m.get("role") == "tool"]
     assert len(unbounded_tool_msgs) == 15
     assert_provider_payload(unbounded)
 
-    tight = assemble_llm_messages(
+    tight = await assemble_llm_messages(
         ctx,
         manifest={
             "spec": {
@@ -251,13 +251,13 @@ def test_issue_65_stuck_retry_loop_ages_out_under_token_budget() -> None:
     assert_provider_payload(tight)
 
 
-def test_working_memory_messages_is_ignored() -> None:
+async def test_working_memory_messages_is_ignored() -> None:
     """Deprecated count cap is accepted in YAML and has no effect."""
     ctx = AutoCtxAssembler(last_user_text="plan a weekend trip to Celestia")
     for n in range(1, 6):
         _record_malformed_get_metrics_retry(ctx, n)
     manifest = {"spec": {"context_manager": {"type": "sliding_window", "params": {"working_memory_messages": 4}}}}
-    messages = assemble_llm_messages(ctx, manifest=manifest)
+    messages = await assemble_llm_messages(ctx, manifest=manifest)
     tool_msgs = [m for m in messages if m.get("role") == "tool"]
     assert len(tool_msgs) == 5
     assert_provider_payload(messages)
@@ -282,7 +282,7 @@ def test_bounded_working_memory_tail_never_splits_tool_group() -> None:
     assert out[0]["tool_calls"][0]["id"] == "c3"
 
 
-def test_concurrent_sessions_have_isolated_kernel_and_assembly() -> None:
+async def test_concurrent_sessions_have_isolated_kernel_and_assembly() -> None:
     """Each session owns its own kernel state and context; outbound waits do not cross sessions."""
     q_a = QProduct()
     q_b = QProduct()
@@ -294,8 +294,8 @@ def test_concurrent_sessions_have_isolated_kernel_and_assembly() -> None:
 
     ctx_b = AutoCtxAssembler(session_id="sess-b", last_user_text="B")
 
-    msgs_a = assemble_llm_messages(ctx_a)
-    msgs_b = assemble_llm_messages(ctx_b)
+    msgs_a = await assemble_llm_messages(ctx_a)
+    msgs_b = await assemble_llm_messages(ctx_b)
 
     assert pending_outbound_waits(q_a)
     assert not pending_outbound_waits(q_b)

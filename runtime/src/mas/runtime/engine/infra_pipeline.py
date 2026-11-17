@@ -17,6 +17,7 @@ import contextvars
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Protocol
 
+from mas.runtime.engine.ainvoke import ainvoke_call, apreview_call
 from mas.runtime.layers.compose import (
     apply_layer as apply_middleware,
 )
@@ -102,11 +103,9 @@ class InfraMiddleware(Protocol):
     stores_llm_responses: bool
     inner: Any
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn: ...
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn: ...
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str: ...
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str: ...
 
 
 def infra_has_cache_step(
@@ -259,39 +258,21 @@ class BidirectionalPipelineEngine(Lifecycle):
 
         call_start(self.inner)
 
-    def tick(self) -> None:
-        from mas.runtime.layers.lifecycle import call_tick
+    async def atick(self) -> None:
+        from mas.runtime.layers.lifecycle import acall_tick
 
-        call_tick(self.inner)
+        await acall_tick(self.inner)
 
     def stop(self) -> None:
         from mas.runtime.layers.lifecycle import call_stop
 
         call_stop(self.inner)
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        return str(self.inner.exchange_preview(op, correlation_id=correlation_id) or "")
-
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        ret = self.inner.invoke(io)
-        if io.op != "LLM_CALL" or ret.response_kind != "MODEL_TEXT" or not ret.text:
-            return ret
-        from mas.runtime.engine.infra_chain import BidirectionalInfraPipeline, InfraChainContext
-
-        chain = BidirectionalInfraPipeline.from_pipeline_steps(self.pipeline_steps)
-        ctx = InfraChainContext(
-            query={"content": ret.text, "correlation_id": io.correlation_id},
-            correlation_id=io.correlation_id,
-            target="LLM_CALL",
-        )
-        out = chain.backward_reply(ctx, {"content": ret.text})
-        new_text = str(out.get("content") or ret.text)
-        if new_text == ret.text:
-            return ret
-        return ret.model_copy(update={"text": new_text})
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return await apreview_call(self.inner, op, correlation_id=correlation_id)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        ret = await self.inner.ainvoke(io)
+        ret = await ainvoke_call(self.inner, io)
         if io.op != "LLM_CALL" or ret.response_kind != "MODEL_TEXT" or not ret.text:
             return ret
         from mas.runtime.engine.infra_chain import BidirectionalInfraPipeline, InfraChainContext
@@ -343,7 +324,7 @@ class _ProviderCallEngine:
     def ctx(self) -> Any:
         return None
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
         del op, correlation_id
         payload = _PROVIDER_CALL.get() or {}
         if not isinstance(payload, dict):
@@ -367,11 +348,6 @@ class _ProviderCallEngine:
             tools if isinstance(tools, list) else None,
             params=params,
         )
-
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        payload = _provider_call_payload()
-        result = self.inner.chat_completion(**payload)
-        return _provider_result_return(io, payload, result)
 
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         payload = _provider_call_payload()
@@ -415,19 +391,8 @@ class PipedLLMProvider(Lifecycle):
 
         call_stop(self._stack)
 
-    def chat_completion(self, **kwargs: Any) -> dict[str, Any]:
-        return self._run_sync(dict(kwargs))
-
     async def achat_completion(self, **kwargs: Any) -> dict[str, Any]:
         return await self._run_async(dict(kwargs))
-
-    def _run_sync(self, payload: dict[str, Any]) -> dict[str, Any]:
-        token = _PROVIDER_CALL.set(payload)
-        try:
-            ret = self._stack.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
-            return _completion_from_pipeline(ret, payload)
-        finally:
-            _PROVIDER_CALL.reset(token)
 
     async def _run_async(self, payload: dict[str, Any]) -> dict[str, Any]:
         token = _PROVIDER_CALL.set(payload)
@@ -454,24 +419,21 @@ class PipedToolCall(Lifecycle):
     def __post_init__(self) -> None:
         self._stack = wrap_call_stack(self.inner, list(self.pipeline))
 
-    def tick(self) -> None:
-        from mas.runtime.layers.lifecycle import call_tick
+    async def atick(self) -> None:
+        from mas.runtime.layers.lifecycle import acall_tick
 
-        call_tick(self._stack)
+        await acall_tick(self._stack)
 
     def stop(self) -> None:
         from mas.runtime.layers.lifecycle import call_stop
 
         call_stop(self._stack)
 
-    def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
-        return self._stack.invoke(io)
-
     async def ainvoke(self, io: InvokeEngineIo) -> EngineIoReturn:
         return await self._stack.ainvoke(io)
 
-    def exchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
-        return str(self._stack.exchange_preview(op, correlation_id=correlation_id) or "")
+    async def aexchange_preview(self, op: str, *, correlation_id: int = 0) -> str:
+        return await apreview_call(self._stack, op, correlation_id=correlation_id)
 
 
 def _provider_result_return(io: InvokeEngineIo, payload: dict[str, Any], result: Any) -> EngineIoReturn:

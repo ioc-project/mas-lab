@@ -207,7 +207,7 @@ class MCPToolProvider(ToolProvider):
             return [{"name": n, "parameters": {"type": "object", "properties": {}}} for n in self.tools_claim]
         return self.discover_tools(ctx=ctx)
 
-    def call_tool(
+    async def acall_tool(
         self,
         tool_name: str,
         arguments: Dict[str, Any],
@@ -226,7 +226,9 @@ class MCPToolProvider(ToolProvider):
         if self.timeout is not None:
             options.setdefault("timeout_seconds", self.timeout)
         try:
-            result = self._run(self._client.call_tool(tool_name, arguments, **options))
+            call = self._client.call_tool(tool_name, arguments, **options)
+            arun = getattr(self._client, "arun", None)
+            result = await arun(call) if callable(arun) else await call
             mapped = as_mas_tool_result(result)
             if mapped.get("is_error"):
                 mapped.setdefault("tool", tool_name)

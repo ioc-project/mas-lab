@@ -37,7 +37,7 @@ An *overset* is the union of the fields that different vendors accept.
 Each backend receives only the subset it supports.
 
 - **Spec** (`spec.models[]`) is the static overset: sampling, `reasoning`, and `extra`, a passthrough for vendor fields the spec does not name.
-- **Contract** (`LLMProvider.chat_completion`) is the per-call overset: `stream`, `stream_options`, `tool_choice`, `extra_body`, `extra_headers`, `extra_query`.
+- **Contract** (`LLMProvider.achat_completion`) is the per-call overset: `stream`, `stream_options`, `tool_choice`, `extra_body`, `extra_headers`, `extra_query`.
 - **Catalog** ([llm-model-catalog.md](llm-model-catalog.md)) holds per-model `default`, `min`, `max`, `enum`, and `supported`, like context-window tables.
 
 Unknown models are not deny-by-default.

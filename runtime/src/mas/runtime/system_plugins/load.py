@@ -206,18 +206,6 @@ class BoundSystemPlugins:
     def claims(self, tool_name: str, ctx: Any | None = None) -> bool:
         return self._owner(tool_name, ctx) is not None
 
-    def call(
-        self,
-        tool: str,
-        args: Mapping[str, Any] | None = None,
-        *,
-        context: CallContext | None = None,
-    ) -> Any:
-        bound = self._owner(tool, context.ctx if context else None)
-        if bound is None:
-            raise UnknownSystemToolError(tool)
-        return bound.plugin.call(tool, dict(args or {}), state=bound.state, context=context or CallContext())
-
     async def acall(
         self,
         tool: str,

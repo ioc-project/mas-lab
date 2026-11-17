@@ -215,11 +215,11 @@ def test_sync_working_memory_out_does_not_save_when_not_persistent():
     assert get_working_memory_registry().get("s", "a") is None
 
 
-def test_sync_working_memory_round_trips_conversation_chunks():
+async def test_sync_working_memory_round_trips_conversation_chunks():
     reset_working_memory_registry()
     ctx = AutoCtxAssembler()
     ctx.note_user_input("hello")
-    ctx.note_agent_response("world")
+    await ctx.note_agent_response("world")
     instance = _fake_instance(ctx=ctx)
     sync_working_memory_out(instance, memory_key="sess-1", agent_id="agent-a")
 

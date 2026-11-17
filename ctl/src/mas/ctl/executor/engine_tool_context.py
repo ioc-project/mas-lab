@@ -129,39 +129,6 @@ class MaterializedEngineToolContext:
                     driver_ctx.current_spec = spec_log.current_spec(self.session_id)
         return child_id
 
-    def run_turn(
-        self,
-        agent_id: str,
-        task: str,
-        *,
-        correlation_id: int = 0,
-        caller_call_id: str = "",
-    ) -> str:
-        """Run a single turn on one agent of this run."""
-        instance = self.materialized.instances.get(agent_id)
-        if instance is None:
-            raise EngineToolTurnFailed(f"unknown agent {agent_id!r}")
-
-        from mas.ctl.session.controller import ConversationConfig, SessionController
-        from mas.ctl.ui.turn_result import turn_failed, turn_failure_message
-
-        controller_factory = self.controller_factory or SessionController
-        controller = controller_factory(
-            instance=instance,
-            display=self.display,
-            verbose=self.verbose,
-            agent_id=agent_id,
-            config=ConversationConfig(single_turn=True),
-            session_id=self.session_id,
-            working_memory_key=self.session_id,
-            working_memory_registry=self.working_memory_registry,
-            caller_agent_id=self.parent_agent_id,
-        )
-        result = controller.run_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
-        if turn_failed(result):
-            raise EngineToolTurnFailed(turn_failure_message(result, agent_id))
-        return result.text
-
     async def arun_turn(
         self,
         agent_id: str,
@@ -170,7 +137,7 @@ class MaterializedEngineToolContext:
         correlation_id: int = 0,
         caller_call_id: str = "",
     ) -> str:
-        """Async twin of :meth:`run_turn`."""
+        """Run one turn on an existing agent."""
         instance = self.materialized.instances.get(agent_id)
         if instance is None:
             raise EngineToolTurnFailed(f"unknown agent {agent_id!r}")
@@ -190,11 +157,7 @@ class MaterializedEngineToolContext:
             working_memory_registry=self.working_memory_registry,
             caller_agent_id=self.parent_agent_id,
         )
-        arun = getattr(controller, "arun_turn", None)
-        if callable(arun):
-            result = await arun(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
-        else:
-            result = controller.run_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
+        result = await controller.arun_turn(task, turn_id=f"{agent_id}-spawn", parent_call_id=caller_call_id)
         if turn_failed(result):
             raise EngineToolTurnFailed(turn_failure_message(result, agent_id))
         return result.text

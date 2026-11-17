@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from mas.library.standard.plugins.context.conversation import SummarizingConversation
 from mas.library.standard.plugins.context.summarizer import DropSummarizer, LlmSummarizer
+from mas.runtime.aio import settle
 from mas.runtime.contracts.cm_factory import CMFactory
 from mas.runtime.registry import get_registry
 
@@ -22,7 +23,7 @@ def test_summarizer_plugins_are_registered() -> None:
     assert isinstance(reg.create("summarizer", {"type": "drop"}), DropSummarizer)
 
 
-def test_drop_summarizer_keeps_recent_turns() -> None:
+async def test_drop_summarizer_keeps_recent_turns() -> None:
     cm = CMFactory.create(
         spec={"type": "summarising", "params": {"keep_turns": 1, "summarizer": "drop"}},
     )
@@ -32,11 +33,11 @@ def test_drop_summarizer_keeps_recent_turns() -> None:
         {"role": "user", "content": "new"},
         {"role": "assistant", "content": "b"},
     ]
-    out = cm.manage_history(past, budget_tokens=1)
+    out = await settle(cm.manage_history(past, budget_tokens=1))
     assert [m["content"] for m in out] == ["new", "b"]
 
 
-def test_llm_summarizer_uses_engine() -> None:
+async def test_llm_summarizer_uses_engine() -> None:
     cm = CMFactory.create(
         spec={"type": "summarising", "params": {"keep_turns": 1, "summarizer": "llm"}},
         engine=_Engine(),
@@ -47,13 +48,13 @@ def test_llm_summarizer_uses_engine() -> None:
         {"role": "user", "content": "new"},
         {"role": "assistant", "content": "b"},
     ]
-    out = cm.manage_history(past, budget_tokens=1)
+    out = await settle(cm.manage_history(past, budget_tokens=1))
     assert out[0]["role"] == "system"
     assert "sum:" in out[0]["content"]
     assert out[-1]["content"] == "b"
 
 
-def test_llm_summarizer_without_engine_drops(caplog: pytest.LogCaptureFixture) -> None:
+async def test_llm_summarizer_without_engine_drops(caplog: pytest.LogCaptureFixture) -> None:
     cm = CMFactory.create(
         spec={"type": "summarising", "params": {"keep_turns": 1, "hysteresis_ratio": 0}},
     )
@@ -64,7 +65,7 @@ def test_llm_summarizer_without_engine_drops(caplog: pytest.LogCaptureFixture) -
         {"role": "user", "content": "new"},
     ]
     with caplog.at_level("WARNING"):
-        out = cm.manage_history(past, budget_tokens=1)
+        out = await settle(cm.manage_history(past, budget_tokens=1))
     assert [m["role"] for m in out] == ["user"]
     assert out[0]["content"] == "new"
     assert any("no engine" in rec.message for rec in caplog.records)
@@ -77,7 +78,7 @@ def test_summarizer_string_shorthand_and_object_form() -> None:
     assert drop._summarizer.__class__.__name__ == "DropSummarizer"
 
 
-def test_llm_summarizer_wraps_engine_prompt() -> None:
+async def test_llm_summarizer_wraps_engine_prompt() -> None:
     from mas.library.standard.plugins.context.summarizer import SUMMARIZE_INSTRUCTIONS
 
     seen: list[list[dict]] = []
@@ -89,7 +90,7 @@ def test_llm_summarizer_wraps_engine_prompt() -> None:
 
     plugin = LlmSummarizer()
     plugin.bind_engine(_RawEngine())
-    assert plugin.summarize([{"role": "user", "content": "hi"}]) == "ok"
+    assert await settle(plugin.summarize([{"role": "user", "content": "hi"}])) == "ok"
     assert seen[0][0] == {"role": "system", "content": SUMMARIZE_INSTRUCTIONS}
     assert seen[0][1]["role"] == "user"
 
@@ -124,7 +125,7 @@ def test_llm_summarizer_defaults_to_agent_model(caplog: pytest.LogCaptureFixture
     assert any("summarizer llm: model=gpt-4o" in rec.message for rec in caplog.records)
 
 
-def test_llm_summarizer_raw_model_override() -> None:
+async def test_llm_summarizer_raw_model_override() -> None:
     engine = _EngineWithModel()
     cm = CMFactory.create(
         spec={
@@ -145,7 +146,7 @@ def test_llm_summarizer_raw_model_override() -> None:
         {"role": "user", "content": "new"},
         {"role": "assistant", "content": "b"},
     ]
-    out = cm.manage_history(past, budget_tokens=1)
+    out = await settle(cm.manage_history(past, budget_tokens=1))
     assert "gpt-4o-mini" in out[0]["content"]
     assert engine.seen[0][1] == "gpt-4o-mini"
     assert cm.last_compaction_metadata["model"] == "gpt-4o-mini"
@@ -223,7 +224,7 @@ def test_llm_summarizer_params_model_beats_experiment_slot() -> None:
     assert cm._summarizer.model == "haiku"
 
 
-def test_compaction_logs_threshold_and_model(caplog: pytest.LogCaptureFixture) -> None:
+async def test_compaction_logs_threshold_and_model(caplog: pytest.LogCaptureFixture) -> None:
     engine = _EngineWithModel()
     cm = CMFactory.create(
         spec={
@@ -243,7 +244,7 @@ def test_compaction_logs_threshold_and_model(caplog: pytest.LogCaptureFixture) -
         {"role": "assistant", "content": "b"},
     ]
     with caplog.at_level("INFO"):
-        cm.manage_history(past, budget_tokens=1)
+        await settle(cm.manage_history(past, budget_tokens=1))
     assert any("compacted" in rec.message and "gpt-4o-mini" in rec.message for rec in caplog.records)
     assert any("estimated_tokens=" in rec.message for rec in caplog.records)
 
@@ -260,7 +261,7 @@ def test_drop_summarizer_does_not_receive_model() -> None:
     assert isinstance(cm._summarizer, DropSummarizer)
 
 
-def test_llm_summarizer_falls_back_when_engine_rejects_model_kw() -> None:
+async def test_llm_summarizer_falls_back_when_engine_rejects_model_kw() -> None:
     class _EngineNoModelKw:
         model = "gpt-4o"
 
@@ -269,11 +270,11 @@ def test_llm_summarizer_falls_back_when_engine_rejects_model_kw() -> None:
 
     plugin = LlmSummarizer(model="gpt-4o-mini")
     plugin.bind_engine(_EngineNoModelKw(), model="gpt-4o-mini", model_source="override")
-    text = plugin.summarize([{"role": "user", "content": "hi"}])
+    text = await settle(plugin.summarize([{"role": "user", "content": "hi"}]))
     assert text == "legacy:2"
 
 
-def test_under_budget_does_not_call_summarizer() -> None:
+async def test_under_budget_does_not_call_summarizer() -> None:
     engine = _EngineWithModel()
     cm = CMFactory.create(
         spec={
@@ -288,6 +289,6 @@ def test_under_budget_does_not_call_summarizer() -> None:
         {"role": "user", "content": "new"},
         {"role": "assistant", "content": "b"},
     ]
-    out = cm.manage_history(past, budget_tokens=10_000)
+    out = await settle(cm.manage_history(past, budget_tokens=10_000))
     assert out == past
     assert engine.seen == []

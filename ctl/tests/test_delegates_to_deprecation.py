@@ -20,7 +20,7 @@ from mas.runtime.engine.tools import openai_tools
 
 
 class _StubComm:
-    def send(self, *args: object, **kwargs: object) -> str:
+    async def asend(self, *args: object, **kwargs: object) -> str:
         return "ok"
 
 

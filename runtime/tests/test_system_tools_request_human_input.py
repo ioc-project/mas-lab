@@ -71,7 +71,7 @@ def test_manifest_params_set_the_default_timeout(empty_tool_tree: Path):
     assert wrapper._default_timeout_seconds == 5
 
 
-def test_no_timeout_configured_blocks_until_resolved(empty_tool_tree: Path):
+async def test_no_timeout_configured_blocks_until_resolved(empty_tool_tree: Path):
     """With neither a manifest default nor a call-time timeout, the wrapper
     must wait indefinitely for resolution -- not silently apply some other
     default. Resolved promptly from another thread here so the test itself
@@ -91,7 +91,7 @@ def test_no_timeout_configured_blocks_until_resolved(empty_tool_tree: Path):
 
     threading.Thread(target=resolve_soon, daemon=True).start()
 
-    result["value"] = provider.call_tool(
+    result["value"] = await provider.acall_tool(
         "request_human_input",
         {"question": "Approve?", "question_type": "CONFIRM", "choices": ["approve", "reject"]},
         ctx=ctx,
@@ -99,12 +99,12 @@ def test_no_timeout_configured_blocks_until_resolved(empty_tool_tree: Path):
     assert result["value"]["choice"] == "approve"
 
 
-def test_call_time_timeout_raises_after_configured_seconds(empty_tool_tree: Path):
+async def test_call_time_timeout_raises_after_configured_seconds(empty_tool_tree: Path):
     provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=HITL)
     ctx = _FakeCtx(session_id="sess-timeout")
 
     with pytest.raises(TimeoutError):
-        provider.call_tool(
+        await provider.acall_tool(
             "request_human_input",
             {
                 "question": "Approve?",
@@ -116,7 +116,7 @@ def test_call_time_timeout_raises_after_configured_seconds(empty_tool_tree: Path
         )
 
 
-def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
+async def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
     """A longer manifest default must not stop a call from asking for a
     shorter timeout for that one request."""
     provider = build_manifest_tool_provider(
@@ -128,7 +128,7 @@ def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
 
     start = time.monotonic()
     with pytest.raises(TimeoutError):
-        provider.call_tool(
+        await provider.acall_tool(
             "request_human_input",
             {
                 "question": "Approve?",
@@ -146,13 +146,13 @@ def test_call_time_timeout_overrides_manifest_default(empty_tool_tree: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_auto_resolve_defaults_to_approve(empty_tool_tree: Path):
+async def test_auto_resolve_defaults_to_approve(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
         [], empty_tool_tree, system_plugins=HITL, hitl_contract=AutoResolveHitlContract()
     )
     ctx = _FakeCtx(session_id="sess-auto-default")
 
-    result = provider.call_tool(
+    result = await provider.acall_tool(
         "request_human_input",
         {"question": "Approve?", "question_type": "CONFIRM", "choices": ["approve", "reject"]},
         ctx=ctx,
@@ -160,14 +160,14 @@ def test_auto_resolve_defaults_to_approve(empty_tool_tree: Path):
     assert result == {"choice": "approve", "steering": "", "question": "Approve?", "resolved": True}
 
 
-def test_auto_resolve_ignores_process_environment(empty_tool_tree: Path, monkeypatch):
+async def test_auto_resolve_ignores_process_environment(empty_tool_tree: Path, monkeypatch):
     monkeypatch.setenv("MAS_HITL_AUTO_RESOLVE", "1")
     monkeypatch.setenv("MAS_HITL_AUTO_RESOLVE_DECISION", "reject")
     provider = build_manifest_tool_provider([], empty_tool_tree, system_plugins=HITL)
     ctx = _FakeCtx(session_id="sess-auto-env")
 
     with pytest.raises(TimeoutError):
-        provider.call_tool(
+        await provider.acall_tool(
             "request_human_input",
             {
                 "question": "Approve?",
@@ -179,7 +179,7 @@ def test_auto_resolve_ignores_process_environment(empty_tool_tree: Path, monkeyp
         )
 
 
-def test_auto_resolve_decision_configurable_via_manifest_params(empty_tool_tree: Path):
+async def test_auto_resolve_decision_configurable_via_manifest_params(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
         [],
         empty_tool_tree,
@@ -188,7 +188,7 @@ def test_auto_resolve_decision_configurable_via_manifest_params(empty_tool_tree:
     )
     ctx = _FakeCtx(session_id="sess-auto-manifest")
 
-    result = provider.call_tool(
+    result = await provider.acall_tool(
         "request_human_input",
         {"question": "Approve?", "question_type": "CONFIRM", "choices": ["approve", "reject"]},
         ctx=ctx,
@@ -240,7 +240,7 @@ def test_advertised_schema_reflects_configured_max_question_length():
     assert schema["properties"]["question"]["maxLength"] == 8000
 
 
-def test_manifest_auto_resolve_decision_wins_over_host_default(empty_tool_tree: Path):
+async def test_manifest_auto_resolve_decision_wins_over_host_default(empty_tool_tree: Path):
     provider = build_manifest_tool_provider(
         [],
         empty_tool_tree,
@@ -249,7 +249,7 @@ def test_manifest_auto_resolve_decision_wins_over_host_default(empty_tool_tree: 
     )
     ctx = _FakeCtx(session_id="sess-auto-precedence")
 
-    result = provider.call_tool(
+    result = await provider.acall_tool(
         "request_human_input",
         {"question": "Approve?", "question_type": "CONFIRM", "choices": ["approve", "reject", "escalate"]},
         ctx=ctx,

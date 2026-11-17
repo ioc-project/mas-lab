@@ -43,30 +43,14 @@ from mas.library.standard.lib.comm.compose import accepted_kwargs, resolve_layer
 from mas.library.standard.lib.stack.agent_comm import turn_handler
 from mas.library.standard.lib.stack.errors import StackError
 from mas.library.standard.lib.stack.layer import ChainMember, Layer
+from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError
 
 if TYPE_CHECKING:
     from mas.library.standard.plugins.agentcomm.stack import StackAgentComm
 
-RunTurnFn = Callable[..., str]
-"""The session turn: ``run_turn(agent_id, task, correlation_id, caller_call_id, context_id) -> reply``."""
-
-
-class SessionTurn:
-    """A session turn that can also be awaited: ``turn(agent_id, task, ...)`` and ``await turn.asend(...)``.
-
-    A plain ``RunTurnFn`` is run as it is; a ``SessionTurn`` also gives each link an async path.
-    """
-
-    def __init__(self, call: RunTurnFn, acall: Callable[..., Awaitable[str]]) -> None:
-        self._call = call
-        self._acall = acall
-
-    def __call__(self, *args: Any, **kwargs: Any) -> str:
-        return self._call(*args, **kwargs)
-
-    async def asend(self, *args: Any, **kwargs: Any) -> str:
-        return await self._acall(*args, **kwargs)
+RunTurnFn = Callable[..., Awaitable[str]]
+"""The session turn: ``await run_turn(agent_id, task, correlation_id, caller_call_id, context_id) -> reply``."""
 
 
 def normalize_layers(entries: Any) -> list[dict[str, Any]]:
@@ -203,21 +187,14 @@ def _agent_turn(run_turn: RunTurnFn | None, agent_id: str) -> RunTurnFn | None:
     if run_turn is None:
         return None
 
-    def turn(_name: str, task: str, *args: Any) -> str:
-        return run_turn(agent_id, task, *args)
+    async def turn(_name: str, task: str, *args: Any) -> str:
+        return await acall(run_turn, agent_id, task, *args)
 
-    if not isinstance(run_turn, SessionTurn):
-        return turn
-    asend = run_turn.asend
-
-    async def aturn(_name: str, task: str, *args: Any) -> str:
-        return await asend(agent_id, task, *args)
-
-    return SessionTurn(turn, aturn)
+    return turn
 
 
 def _no_turn(agent_id: str) -> Any:
-    def refuse(_envelope: Any) -> Any:
+    async def refuse(_envelope: Any) -> Any:
         raise StackError(f"agent {agent_id!r} has no turn to serve this request")
 
     return refuse

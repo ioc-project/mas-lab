@@ -20,6 +20,7 @@ from mas.library.standard.lib.comm.payload import MAX_MESSAGE_SIZE
 from mas.library.standard.lib.stack import Envelope, Layer
 from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.library.standard.plugins.llm.http import resolve_ssl_verify
+from mas.runtime.aio import LoopCache
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
 # Headers the HTTP client writes from the request itself; a row or a send that set them could split or
@@ -290,8 +291,7 @@ class HttpLayer(Layer):
         self.timeout = float(timeout)
         # dev skips TLS verification, and only on a loopback https url
         self._verify = not (bool(dev) and scheme == "https" and host in LOOPBACK)
-        self._client: httpx.Client | None = None
-        self._lock = threading.Lock()
+        self._clients = LoopCache()  # one client per event loop: connections are reused across sends
 
     @classmethod
     def wrap(
@@ -322,21 +322,8 @@ class HttpLayer(Layer):
         return f"HttpLayer(url={shown_url(self.url)!r})"
 
     def stop(self) -> None:
-        if self._stopped:
-            return
         self._stopped = True
-        with self._lock:
-            client, self._client = self._client, None
-        if client is not None:
-            client.close()
-
-    def _http(self) -> httpx.Client:
-        if self._stopped:
-            raise AgentCommError("http transport is stopped")
-        with self._lock:
-            if self._client is None:
-                self._client = httpx.Client(timeout=self.timeout, verify=self._verify)
-            return self._client
+        self._clients.close()
 
     def _request_headers(self, envelope: Envelope) -> dict[str, Any]:
         out: dict[str, Any] = dict(self._headers)
@@ -344,7 +331,9 @@ class HttpLayer(Layer):
             out[key] = value.encode("utf-8")  # a header value may hold any text; send it as UTF-8 bytes
         return out
 
-    def send(self, envelope: Envelope) -> Any:
+    async def asend(self, envelope: Envelope) -> Any:
+        if self._stopped:
+            raise AgentCommError("http transport is stopped")
         body = envelope.payload
         if isinstance(body, str):
             body = body.encode("utf-8")
@@ -352,21 +341,20 @@ class HttpLayer(Layer):
             raise AgentCommError("http transport sends text or bytes")
         headers = self._request_headers(envelope)
         try:
-            with self._http().stream("POST", self.url, content=bytes(body), headers=headers) as response:
+            client = self._clients.get(lambda: httpx.AsyncClient(timeout=self.timeout, verify=self._verify))
+            async with client.stream("POST", self.url, content=bytes(body), headers=headers) as response:
                 if response.status_code >= 400:
                     raise AgentCommError(f"http transport: {shown_url(self.url)} answered {response.status_code}")
                 reply = bytearray()
-                for chunk in response.iter_bytes():
+                async for chunk in response.aiter_bytes():
                     reply.extend(chunk)
                     if len(reply) > self.max_message_size:
+                        limit = self.max_message_size
                         raise AgentCommError(
-                            f"http transport: the reply of {shown_url(self.url)} is over {self.max_message_size} bytes"
+                            f"http transport: the reply of {shown_url(self.url)} is over {limit} bytes"
                         )
                 encoding = response.encoding or "utf-8"
         except httpx.HTTPError as exc:
             detail = str(exc).replace(self.url, shown_url(self.url))
             raise AgentCommError(f"http transport: {type(exc).__name__}: {detail}") from None
         return reply.decode(encoding, errors="replace")
-
-    async def asend(self, envelope: Envelope) -> Any:
-        return await asyncio.to_thread(self.send, envelope)

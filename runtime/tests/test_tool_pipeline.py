@@ -18,12 +18,9 @@ from mas.runtime.schema.ingress import EngineIoReturn
 
 
 class _BareProvider:
-    def chat_completion(self, **kwargs: object) -> dict[str, str]:
+    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
         del kwargs
         return {"role": "assistant", "content": "ok"}
-
-    async def achat_completion(self, **kwargs: object) -> dict[str, str]:
-        return self.chat_completion(**kwargs)
 
 
 def _engine() -> LiveLlmEngine:
@@ -48,7 +45,7 @@ def test_empty_for_list_is_llm_not_every_kind() -> None:
     assert filter_pipeline_for_kind([stamped], "tool") == []
 
 
-def test_install_tool_pipeline_runs_on_tool_call() -> None:
+async def test_install_tool_pipeline_runs_on_tool_call() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [
@@ -60,7 +57,7 @@ def test_install_tool_pipeline_runs_on_tool_call() -> None:
             }
         ]
     )
-    ret = engine.invoke(_tool_io())
+    ret = await engine.ainvoke(_tool_io())
     assert engine._tool_stack is not None
     assert ret.response_kind == "ERROR"
     assert "injected fault" in (ret.text or "")
@@ -75,7 +72,7 @@ def _dest_step(message: str) -> dict[str, object]:
     }
 
 
-def test_destination_tool_wrap_runs_on_claimed_tool() -> None:
+async def test_destination_tool_wrap_runs_on_claimed_tool() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -88,14 +85,14 @@ def test_destination_tool_wrap_runs_on_claimed_tool() -> None:
         },
     )
     engine.set_scheduled_tool("alpha", {})
-    ret = engine.invoke(_tool_io())
+    ret = await engine.ainvoke(_tool_io())
     assert engine._tool_stack is not None
     assert engine._tool_destinations
     assert ret.response_kind == "ERROR"
     assert "dest fault" in (ret.text or "")
 
 
-def test_one_dest_server_does_not_wrap_an_unclaimed_tool() -> None:
+async def test_one_dest_server_does_not_wrap_an_unclaimed_tool() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -108,11 +105,11 @@ def test_one_dest_server_does_not_wrap_an_unclaimed_tool() -> None:
         },
     )
     engine.set_scheduled_tool("beta", {})
-    ret = engine.invoke(_tool_io())
+    ret = await engine.ainvoke(_tool_io())
     assert "dest fault" not in (ret.text or "")
 
 
-def test_star_dest_does_not_wrap_a_tool_another_server_lists() -> None:
+async def test_star_dest_does_not_wrap_a_tool_another_server_lists() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -126,15 +123,15 @@ def test_star_dest_does_not_wrap_a_tool_another_server_lists() -> None:
         },
     )
     engine.set_scheduled_tool("b_tool", {})
-    claimed = engine.invoke(_tool_io())
+    claimed = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (claimed.text or "")
     engine.set_scheduled_tool("other", {})
-    leftover = engine.invoke(_tool_io())
+    leftover = await engine.ainvoke(_tool_io())
     assert leftover.response_kind == "ERROR"
     assert "A-FAULT" in (leftover.text or "")
 
 
-def test_unlisted_dest_does_not_wrap_a_tool_another_server_lists() -> None:
+async def test_unlisted_dest_does_not_wrap_a_tool_another_server_lists() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -147,15 +144,15 @@ def test_unlisted_dest_does_not_wrap_a_tool_another_server_lists() -> None:
         },
     )
     engine.set_scheduled_tool("b_tool", {})
-    claimed = engine.invoke(_tool_io())
+    claimed = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (claimed.text or "")
     engine.set_scheduled_tool("other", {})
-    leftover = engine.invoke(_tool_io())
+    leftover = await engine.ainvoke(_tool_io())
     assert leftover.response_kind == "ERROR"
     assert "A-FAULT" in (leftover.text or "")
 
 
-def test_empty_string_tools_dest_is_star_not_empty_explicit() -> None:
+async def test_empty_string_tools_dest_is_star_not_empty_explicit() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -169,15 +166,15 @@ def test_empty_string_tools_dest_is_star_not_empty_explicit() -> None:
         },
     )
     engine.set_scheduled_tool("b_tool", {})
-    claimed = engine.invoke(_tool_io())
+    claimed = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (claimed.text or "")
     engine.set_scheduled_tool("other", {})
-    leftover = engine.invoke(_tool_io())
+    leftover = await engine.ainvoke(_tool_io())
     assert leftover.response_kind == "ERROR"
     assert "A-FAULT" in (leftover.text or "")
 
 
-def test_star_dest_does_not_wrap_system_tools() -> None:
+async def test_star_dest_does_not_wrap_system_tools() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -191,15 +188,15 @@ def test_star_dest_does_not_wrap_system_tools() -> None:
     )
     for name in ("request_human_input", "inform_user", "create_subagent"):
         engine.set_scheduled_tool(name, {})
-        ret = engine.invoke(_tool_io())
+        ret = await engine.ainvoke(_tool_io())
         assert "A-FAULT" not in (ret.text or ""), name
     engine.set_scheduled_tool("other", {})
-    leftover = engine.invoke(_tool_io())
+    leftover = await engine.ainvoke(_tool_io())
     assert leftover.response_kind == "ERROR"
     assert "A-FAULT" in (leftover.text or "")
 
 
-def test_star_dest_with_advertised_names_does_not_wrap_unknown() -> None:
+async def test_star_dest_with_advertised_names_does_not_wrap_unknown() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -213,15 +210,15 @@ def test_star_dest_with_advertised_names_does_not_wrap_unknown() -> None:
         },
     )
     engine.set_scheduled_tool("a_tool", {})
-    hit = engine.invoke(_tool_io())
+    hit = await engine.ainvoke(_tool_io())
     assert hit.response_kind == "ERROR"
     assert "A-FAULT" in (hit.text or "")
     engine.set_scheduled_tool("other", {})
-    miss = engine.invoke(_tool_io())
+    miss = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (miss.text or "")
 
 
-def test_star_dest_uses_provider_advertised_names() -> None:
+async def test_star_dest_uses_provider_advertised_names() -> None:
     engine = _engine()
     engine.tool_provider = SimpleNamespace(
         advertised_names_by_provider=lambda: {"a": ("a_tool",)},
@@ -237,14 +234,14 @@ def test_star_dest_uses_provider_advertised_names() -> None:
         },
     )
     engine.set_scheduled_tool("a_tool", {})
-    hit = engine.invoke(_tool_io())
+    hit = await engine.ainvoke(_tool_io())
     assert "A-FAULT" in (hit.text or "")
     engine.set_scheduled_tool("other", {})
-    miss = engine.invoke(_tool_io())
+    miss = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (miss.text or "")
 
 
-def test_apply_middleware_passes_call_kinds_into_wrap() -> None:
+async def test_apply_middleware_passes_call_kinds_into_wrap() -> None:
     class _Inner:
         def invoke(self, io: InvokeEngineIo) -> EngineIoReturn:
             return EngineIoReturn(
@@ -267,14 +264,14 @@ def test_apply_middleware_passes_call_kinds_into_wrap() -> None:
         },
     )
     assert wrapped.call_kinds == ("tool",)
-    hit = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
+    hit = await wrapped.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))
     assert hit.response_kind == "ERROR"
     assert "tool fault" in (hit.text or "")
-    miss = wrapped.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    miss = await wrapped.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert "tool fault" not in (miss.text or "")
 
 
-def test_explicit_dest_still_wraps_a_listed_system_tool() -> None:
+async def test_explicit_dest_still_wraps_a_listed_system_tool() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -287,12 +284,12 @@ def test_explicit_dest_still_wraps_a_listed_system_tool() -> None:
         },
     )
     engine.set_scheduled_tool("request_human_input", {})
-    ret = engine.invoke(_tool_io())
+    ret = await engine.ainvoke(_tool_io())
     assert ret.response_kind == "ERROR"
     assert "A-FAULT" in (ret.text or "")
 
 
-def test_two_servers_claiming_one_tool_use_raw_dispatch() -> None:
+async def test_two_servers_claiming_one_tool_use_raw_dispatch() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -310,12 +307,12 @@ def test_two_servers_claiming_one_tool_use_raw_dispatch() -> None:
         },
     )
     engine.set_scheduled_tool("shared", {})
-    ret = engine.invoke(_tool_io())
+    ret = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (ret.text or "")
     assert "B-FAULT" not in (ret.text or "")
 
 
-def test_dest_wrap_reads_pending_tool_by_correlation_id() -> None:
+async def test_dest_wrap_reads_pending_tool_by_correlation_id() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -329,12 +326,12 @@ def test_dest_wrap_reads_pending_tool_by_correlation_id() -> None:
     )
     engine.set_scheduled_tool("beta", {})
     engine.set_tool_for_correlation(9, "alpha", {})
-    ret = engine.invoke(InvokeEngineIo(correlation_id=9, op="TOOL_CALL"))
+    ret = await engine.ainvoke(InvokeEngineIo(correlation_id=9, op="TOOL_CALL"))
     assert ret.response_kind == "ERROR"
     assert "dest fault" in (ret.text or "")
 
 
-def test_dest_exchange_preview_reads_pending_tool_by_correlation_id() -> None:
+async def test_dest_exchange_preview_reads_pending_tool_by_correlation_id() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -350,15 +347,15 @@ def test_dest_exchange_preview_reads_pending_tool_by_correlation_id() -> None:
     engine.set_tool_for_correlation(9, "alpha", {})
     stack = engine._tool_stack
     assert stack is not None
-    dest = stack.exchange_preview("TOOL_CALL", correlation_id=9)
-    raw = stack.exchange_preview("TOOL_CALL")
-    miss = stack.exchange_preview("TOOL_CALL", correlation_id=2)
+    dest = await stack.aexchange_preview("TOOL_CALL", correlation_id=9)
+    raw = await stack.aexchange_preview("TOOL_CALL")
+    miss = await stack.aexchange_preview("TOOL_CALL", correlation_id=2)
     assert "fault_inject" in dest
     assert "fault_inject" not in raw
     assert "fault_inject" not in miss
 
 
-def test_tool_name_equal_to_server_id_is_not_a_claim() -> None:
+async def test_tool_name_equal_to_server_id_is_not_a_claim() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -371,11 +368,11 @@ def test_tool_name_equal_to_server_id_is_not_a_claim() -> None:
         },
     )
     engine.set_scheduled_tool("search", {})
-    ret = engine.invoke(_tool_io())
+    ret = await engine.ainvoke(_tool_io())
     assert "A-FAULT" not in (ret.text or "")
 
 
-def test_several_dest_servers_wrap_the_server_that_claims_the_tool() -> None:
+async def test_several_dest_servers_wrap_the_server_that_claims_the_tool() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [],
@@ -393,24 +390,24 @@ def test_several_dest_servers_wrap_the_server_that_claims_the_tool() -> None:
         },
     )
     engine.set_scheduled_tool("search", {})
-    mcp = engine.invoke(_tool_io())
+    mcp = await engine.ainvoke(_tool_io())
     assert mcp.response_kind == "ERROR"
     assert "mcp fault" in (mcp.text or "")
     assert "local fault" not in (mcp.text or "")
 
     engine.set_scheduled_tool("fs", {})
-    local = engine.invoke(_tool_io())
+    local = await engine.ainvoke(_tool_io())
     assert local.response_kind == "ERROR"
     assert "local fault" in (local.text or "")
     assert "mcp fault" not in (local.text or "")
 
     engine.set_scheduled_tool("other", {})
-    other = engine.invoke(_tool_io())
+    other = await engine.ainvoke(_tool_io())
     assert "mcp fault" not in (other.text or "")
     assert "local fault" not in (other.text or "")
 
 
-def test_llm_call_does_not_run_tool_stack() -> None:
+async def test_llm_call_does_not_run_tool_stack() -> None:
     engine = _engine()
     engine.install_tool_pipeline(
         [
@@ -422,7 +419,7 @@ def test_llm_call_does_not_run_tool_stack() -> None:
             }
         ]
     )
-    ret = engine.invoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
+    ret = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.response_kind != "ERROR"
     assert "injected fault" not in (ret.text or "")
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from mas.library.standard.plugins.sandbox.workdir import WorkdirSandbox
 from mas.runtime.boundary.sandbox import sandbox_from_name
-from mas.runtime.engine.tool_dispatch import execute_engine_tool
+from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
 
 class _CwdTool:
@@ -18,10 +18,10 @@ class _CwdTool:
         return os.getcwd()
 
 
-def test_workdir_sandbox_is_the_body_of_allow(tmp_path: Path) -> None:
+async def test_workdir_sandbox_is_the_body_of_allow(tmp_path: Path) -> None:
     root = tmp_path / "jail"
     host = Path.cwd()
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "cwd",
         engine_contracts=(_CwdTool(),),
         sandbox=WorkdirSandbox(root),
@@ -32,7 +32,7 @@ def test_workdir_sandbox_is_the_body_of_allow(tmp_path: Path) -> None:
     assert Path.cwd() == host
 
 
-def test_mcp_style_tool_provider_still_runs_inside_sandbox() -> None:
+async def test_mcp_style_tool_provider_still_runs_inside_sandbox() -> None:
     """MCP (and any tool_provider) must hit execute_engine_tool, hence the sandbox."""
 
     class _McpProvider:
@@ -47,8 +47,12 @@ def test_mcp_style_tool_provider_still_runs_inside_sandbox() -> None:
             self.seen = tool_name
             return body()
 
+        async def arun(self, body, *, tool_name=""):
+            self.seen = tool_name
+            return await body()
+
     box = _RecordingBox()
-    out = execute_engine_tool(
+    out = await aexecute_engine_tool(
         "mcp_echo",
         arguments={"text": "hi"},
         tool_provider=_McpProvider(),

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 import threading
@@ -17,7 +18,9 @@ from mas.ctl.session.exchange_log import (
     CliTraceExchangePlugin,
     TraceFormatOptions,
 )
+from mas.ctl.session.turn_guard import TurnGuard
 from mas.ctl.ui.display import ConversationDisplay
+from mas.runtime.aio import settle
 from mas.runtime.boundary.context.working_memory_registry import (
     WorkingMemoryRegistry,
     get_working_memory_registry,
@@ -28,6 +31,7 @@ from mas.runtime.boundary.control.contract import SessionBusy, SessionPaused
 from mas.runtime.boundary.obs.exchange_plugin import ExchangePlugin
 from mas.runtime.driver.driver import DriverTrace, ExchangeRecord
 from mas.runtime.driver.instance import RuntimeInstance
+from mas.runtime.driver.sync_bridge import SyncBridge
 from mas.runtime.schema.egress import EmitClientResponse
 from mas.runtime.session import BacktrackCapReached, Session, SessionStatus
 
@@ -146,9 +150,10 @@ class SessionController:
     _turn: int = 0
     inflight: bool = field(default=False, repr=False)
     _turn_lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
+    _bridge: SyncBridge = field(default_factory=SyncBridge, repr=False, compare=False)
     # Held for every user turn when set: the lock a Flavour chain's requests to this agent take too
     # (``ChainHandles.turn_lock``), so a served agent never runs two turns at once.
-    turn_guard: threading.RLock | None = field(default=None, repr=False, compare=False)
+    turn_guard: TurnGuard | None = field(default=None, repr=False, compare=False)
     _trace_turn_start: float = 0.0
     _trace_plugin: CliTraceExchangePlugin | None = field(default=None, repr=False)
     _bridge_plugin: _ToolErrorAndListenerBridge | None = field(default=None, repr=False)
@@ -322,7 +327,7 @@ class SessionController:
         self.display.on_system("session reset — working memory and turn history cleared; system prompt restored")
         return True
 
-    def _finalize_turn(self, result: TurnResult, *, trace: DriverTrace | None = None) -> None:
+    async def _finalize_turn(self, result: TurnResult, *, trace: DriverTrace | None = None) -> None:
         """Commit completed turn to ctx (chat history + tool trajectory).
 
         Folds working memory into committed history whenever there's
@@ -340,7 +345,7 @@ class SessionController:
         note_resp = getattr(ctx, "note_agent_response", None)
         has_working_memory = bool(getattr(getattr(ctx, "working_memory", None), "messages", None))
         if callable(note_resp) and (response_text or has_working_memory):
-            note_resp(response_text)
+            await settle(note_resp(response_text))
         sync_working_memory_out(
             self.instance,
             memory_key=self._working_memory_key(),
@@ -396,15 +401,13 @@ class SessionController:
         upstream_correlation_id: int | None = None,
         dequeued: bool = False,
     ) -> TurnResult:
-        """Run one user turn.
+        """Sync entry for callers that are not async: :meth:`arun_turn` on this controller's own loop.
 
-        ``dequeued`` says ``text`` was already taken off the session's turn
-        queue by the caller (the A2A mailbox), so it is not queued again.
+        ``dequeued`` says ``text`` was already taken off the session's turn queue by
+        the caller (the A2A mailbox), so it is not queued again.
         """
-        with self.turn_guard or nullcontext():
-            if text.strip().lower() == "/backtrack" or text.strip().lower().startswith("/backtrack "):
-                return self._handle_backtrack(text)
-            return self._run_turn_guarded(
+        return self._bridge.run(
+            self.arun_turn(
                 text,
                 turn_id=turn_id,
                 auto_hitl=auto_hitl,
@@ -412,51 +415,7 @@ class SessionController:
                 upstream_correlation_id=upstream_correlation_id,
                 dequeued=dequeued,
             )
-
-    def _run_turn_guarded(
-        self,
-        text: str,
-        *,
-        turn_id: str | None,
-        auto_hitl: bool,
-        parent_call_id: str,
-        upstream_correlation_id: int | None = None,
-        dequeued: bool = False,
-    ) -> TurnResult:
-        inject_now = text.strip().lower().startswith("/steer ")
-        with self._turn_lock:
-            if self.inflight:
-                raise SessionBusy(self.session_id or "session", method="run_turn")
-            self.inflight = True
-        try:
-            if inject_now:
-                return self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
-
-            stripped = text.strip()
-            if stripped.lower() == "/skills":
-                return self._handle_list_skills()
-            if stripped.lower() == "/skill" or stripped.lower().startswith("/skill "):
-                skill_name = stripped[len("/skill") :].strip()
-                return self._handle_activate_skill(skill_name)
-
-            self._reject_if_paused()
-            if dequeued:
-                self._queued_actor = ""
-                self._queued_source = ""
-            else:
-                text = self._take_queued_or_direct(text)
-            if text.strip().lower().startswith("/steer "):
-                return self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
-            return self._run_user_turn(
-                text,
-                turn_id=turn_id,
-                auto_hitl=auto_hitl,
-                parent_call_id=parent_call_id,
-                upstream_correlation_id=upstream_correlation_id,
-            )
-        finally:
-            with self._turn_lock:
-                self.inflight = False
+        )
 
     def _reject_if_paused(self) -> None:
         session = self.managed_session
@@ -479,7 +438,7 @@ class SessionController:
         self._queued_source = item.source
         return item.text
 
-    def _handle_steer(self, text: str, *, turn_id: str | None, auto_hitl: bool) -> TurnResult:
+    async def _handle_steer(self, text: str, *, turn_id: str | None, auto_hitl: bool) -> TurnResult:
         from mas.runtime.schema.ingress import OperatorSteerReceived
 
         steer_text = text.strip()[7:].strip()
@@ -499,7 +458,7 @@ class SessionController:
         # preempts streamed tokens into this same session instead of calling here.
         sender = self._queued_actor
         source = self._queued_source
-        trace = self.instance.feed(
+        trace = await self.instance.afeed(
             OperatorSteerReceived(
                 steer_id=tid,
                 context_text=steer_text,
@@ -509,7 +468,7 @@ class SessionController:
             )
         )
         if auto_hitl:
-            trace = self._drain_hitl(trace)
+            trace = await self._adrain_hitl(trace)
         self._present_trace(trace)
         return TurnResult(trace=trace, responses=list(trace.client_responses))
 
@@ -520,25 +479,72 @@ class SessionController:
         turn_id: str | None = None,
         auto_hitl: bool = True,
         parent_call_id: str = "",
+        upstream_correlation_id: int | None = None,
+        dequeued: bool = False,
     ) -> TurnResult:
-        """Async twin of :meth:`run_turn` — awaits ``instance.arun_user_text``."""
+        """Run one user turn. One session runs one turn at a time: a second one raises ``SessionBusy``.
 
+        ``dequeued`` says ``text`` was already taken off the session's turn queue by the caller (the A2A
+        mailbox), so it is not queued again. ``turn_guard`` is held for the whole turn, so a request that
+        comes in over a chain waits for it.
+        """
+        guard = self.turn_guard.ahold() if self.turn_guard is not None else nullcontext()
+        async with guard:
+            return await self._arun_turn_guarded(
+                text,
+                turn_id=turn_id,
+                auto_hitl=auto_hitl,
+                parent_call_id=parent_call_id,
+                upstream_correlation_id=upstream_correlation_id,
+                dequeued=dequeued,
+            )
+
+    async def _arun_turn_guarded(
+        self,
+        text: str,
+        *,
+        turn_id: str | None = None,
+        auto_hitl: bool = True,
+        parent_call_id: str = "",
+        upstream_correlation_id: int | None = None,
+        dequeued: bool = False,
+    ) -> TurnResult:
         if text.strip().lower() == "/backtrack" or text.strip().lower().startswith("/backtrack "):
             return self._handle_backtrack(text)
+        inject_now = text.strip().lower().startswith("/steer ")
+        with self._turn_lock:
+            if self.inflight:
+                raise SessionBusy(self.session_id or "session", method="run_turn")
+            self.inflight = True
+        try:
+            if inject_now:
+                return await self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
 
-        if text.strip().lower().startswith("/steer "):
-            return self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
+            stripped = text.strip()
+            if stripped.lower() == "/skills":
+                return self._handle_list_skills()
+            if stripped.lower() == "/skill" or stripped.lower().startswith("/skill "):
+                skill_name = stripped[len("/skill") :].strip()
+                return self._handle_activate_skill(skill_name)
 
-        stripped = text.strip()
-        if stripped.lower() == "/skills":
-            return self._handle_list_skills()
-        if stripped.lower() == "/skill" or stripped.lower().startswith("/skill "):
-            skill_name = stripped[len("/skill") :].strip()
-            return self._handle_activate_skill(skill_name)
-
-        self._reject_if_paused()
-        text = self._take_queued_or_direct(text)
-        return await self._arun_user_turn(text, turn_id=turn_id, auto_hitl=auto_hitl, parent_call_id=parent_call_id)
+            self._reject_if_paused()
+            if dequeued:
+                self._queued_actor = ""
+                self._queued_source = ""
+            else:
+                text = self._take_queued_or_direct(text)
+            if text.strip().lower().startswith("/steer "):
+                return await self._handle_steer(text, turn_id=turn_id, auto_hitl=auto_hitl)
+            return await self._arun_user_turn(
+                text,
+                turn_id=turn_id,
+                auto_hitl=auto_hitl,
+                parent_call_id=parent_call_id,
+                upstream_correlation_id=upstream_correlation_id,
+            )
+        finally:
+            with self._turn_lock:
+                self.inflight = False
 
     def _handle_backtrack(self, text: str) -> TurnResult:
         """Restore retained session state and optionally inject a steering note."""
@@ -566,7 +572,7 @@ class SessionController:
         self.display.on_system(f"backtracked to checkpoint: {path}")
         return TurnResult(trace=None, responses=[])
 
-    def _run_user_turn(
+    async def _arun_user_turn(
         self,
         text: str,
         *,
@@ -596,7 +602,7 @@ class SessionController:
         self._setup_exchange_tracing()
         queued_source = self._queued_source
         queued_actor = self._queued_actor
-        trace = self.instance.run_user_text(
+        trace = await self.instance.arun_user_text(
             text,
             turn_id=tid,
             parent_call_id=parent_call_id,
@@ -611,7 +617,7 @@ class SessionController:
             end_working()
         while True:
             if auto_hitl:
-                trace = self._drain_hitl(trace)
+                trace = await self._adrain_hitl(trace)
             if not auto_hitl:
                 break
             if not self._session_awaiting_operator():
@@ -624,73 +630,12 @@ class SessionController:
             responses=list(trace.client_responses),
             awaiting_hitl=trace.awaiting_hitl,
         )
-        if self._handle_automatic_backtrack(trace):
+        if await self._handle_automatic_backtrack(trace):
             return result
-        self._finalize_turn(result, trace=trace)
+        await self._finalize_turn(result, trace=trace)
         return result
 
-    async def _arun_user_turn(
-        self,
-        text: str,
-        *,
-        turn_id: str | None = None,
-        auto_hitl: bool = True,
-        parent_call_id: str = "",
-    ) -> TurnResult:
-        from mas.ctl.manifest.mas_agent_merge import reset_engine_delegation
-
-        reset_engine_delegation(getattr(self.instance.driver, "engine", None))
-        sync_working_memory_in(
-            self.instance,
-            memory_key=self._working_memory_key(),
-            agent_id=self.agent_id,
-            registry=self.working_memory_registry,
-        )
-        self._turn += 1
-        tid = turn_id or f"u{self._turn}"
-        if hasattr(self.instance, "driver") and hasattr(self.instance.driver, "caller_agent_id"):
-            self.instance.driver.caller_agent_id = self.caller_agent_id
-        if self.display is not None:
-            self.display.on_user(text, turn_id=tid)
-        on_working = getattr(self.display, "on_working", None)
-        if callable(on_working):
-            on_working()
-        self._setup_exchange_tracing()
-        queued_source = self._queued_source
-        queued_actor = self._queued_actor
-        trace = await self.instance.arun_user_text(
-            text,
-            turn_id=tid,
-            parent_call_id=parent_call_id,
-            session_id=self.session_id,
-            source=queued_source,
-            sender=queued_actor,
-            intent="steer" if queued_source == "peer" else "",
-        )
-        end_working = getattr(self.display, "end_working", None)
-        if callable(end_working):
-            end_working()
-        while True:
-            if auto_hitl:
-                trace = self._drain_hitl(trace)
-            if not auto_hitl:
-                break
-            if not self._session_awaiting_operator():
-                break
-            if self.hitl_terminal is None or not trace.hitl_requests:
-                break
-        self._present_trace(trace)
-        result = TurnResult(
-            trace=trace,
-            responses=list(trace.client_responses),
-            awaiting_hitl=trace.awaiting_hitl,
-        )
-        if self._handle_automatic_backtrack(trace):
-            return result
-        self._finalize_turn(result, trace=trace)
-        return result
-
-    def _handle_automatic_backtrack(self, trace: DriverTrace) -> bool:
+    async def _handle_automatic_backtrack(self, trace: DriverTrace) -> bool:
         """Restore on the explicit kernel signal; patterns never own rollback."""
         session = self.managed_session
         if session is None or self.checkpoint_store is None:
@@ -714,10 +659,10 @@ class SessionController:
             if exc.action == "stop_backtracking":
                 return False
             if exc.action == "terminate":
-                self.instance.abort(reason=str(exc))
+                await self.instance.aabort(reason=str(exc))
                 session.status = SessionStatus.TERMINATED
             else:
-                self.instance.pause(reason=str(exc))
+                await self.instance.apause(reason=str(exc))
                 session.status = SessionStatus.PAUSED
             self.display.on_system(str(exc))
         except (OSError, ValueError) as exc:
@@ -725,28 +670,33 @@ class SessionController:
         return True
 
     def submit_hitl(self, resolve, *, auto_hitl: bool = True) -> TurnResult:
+        """Sync entry for callers that are not async: :meth:`asubmit_hitl` on this controller's own loop."""
+        return self._bridge.run(self.asubmit_hitl(resolve, auto_hitl=auto_hitl))
+
+    async def asubmit_hitl(self, resolve, *, auto_hitl: bool = True) -> TurnResult:
         """Feed HITL_RESOLVE after UI collects operator choice."""
         self._setup_exchange_tracing()
-        trace = self.instance.feed(resolve)
+        trace = await self.instance.afeed(resolve)
         if auto_hitl:
-            trace = self._drain_hitl(trace)
+            trace = await self._adrain_hitl(trace)
         self._present_trace(trace)
         result = TurnResult(
             trace=trace,
             responses=list(trace.client_responses),
             awaiting_hitl=trace.awaiting_hitl,
         )
-        self._finalize_turn(result, trace=trace)
+        await self._finalize_turn(result, trace=trace)
         return result
 
-    def _drain_hitl(self, trace: DriverTrace) -> DriverTrace:
+    async def _adrain_hitl(self, trace: DriverTrace) -> DriverTrace:
+        """Async :meth:`_drain_hitl`: the operator prompt may block, so it runs in a worker thread."""
         while trace.awaiting_hitl and self.hitl_terminal is not None:
             if not trace.hitl_requests:
                 break
             request = trace.hitl_requests[-1]
             self.display.on_hitl_request(request)
-            resolve = self.hitl_terminal.resolve(request)
-            trace = self.instance.feed(resolve)
+            resolve = await asyncio.to_thread(self.hitl_terminal.resolve, request)
+            trace = await self.instance.afeed(resolve)
         return trace
 
     def _present_trace(self, trace: DriverTrace) -> None:
@@ -781,6 +731,7 @@ def close_observability(controller: SessionController) -> None:
     from mas.runtime.layers.lifecycle import call_stop
 
     call_stop(controller.instance)
+    controller._bridge.close()
     if controller.obs_recorder is not None:
         controller.obs_recorder.close()
     elif hasattr(controller.instance, "obs_plugin_set") and controller.instance.obs_plugin_set:

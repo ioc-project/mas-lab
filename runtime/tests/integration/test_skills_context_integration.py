@@ -116,7 +116,7 @@ def test_attach_populates_ctx_skill_registry(tmp_path):
     assert len(ctx.plugin_collection) == 2
 
 
-def test_active_skill_is_reported_as_pinned_context_without_body_text(tmp_path):
+async def test_active_skill_is_reported_as_pinned_context_without_body_text(tmp_path):
     skill_dir = tmp_path / "my-skill"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(
@@ -128,7 +128,7 @@ def test_active_skill_is_reported_as_pinned_context_without_body_text(tmp_path):
     attach_skill_catalog_plugin(ctx, manifest, tmp_path)
     ctx.activated_skills_plugin.add_activated("my-skill", "# Body\nSECRET_SKILL_TEXT")
 
-    assemble_llm_messages(
+    await assemble_llm_messages(
         ctx,
         manifest=manifest,
         resolved_model="vertex_ai/gemini-2.5-flash",
@@ -144,7 +144,7 @@ def test_active_skill_is_reported_as_pinned_context_without_body_text(tmp_path):
 
 
 @pytest.mark.parametrize("pin_activated", [True, False])
-def test_activated_skill_body_survives_compaction_once(tmp_path, pin_activated):
+async def test_activated_skill_body_survives_compaction_once(tmp_path, pin_activated):
     import json
 
     from mas.library.skills.plugins.sk_tools import SkillToolsPlugin
@@ -191,7 +191,7 @@ def test_activated_skill_body_survives_compaction_once(tmp_path, pin_activated):
         ]
     ctx.committed_messages = history
 
-    messages = assemble_llm_messages(ctx, manifest=manifest)
+    messages = await assemble_llm_messages(ctx, manifest=manifest)
 
     assert not any(m.get("role") == "tool" for m in messages)  # activation turn was folded
     assert json.dumps(messages).count("SKILL_RULE_TEXT") == 1
