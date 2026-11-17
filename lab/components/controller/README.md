@@ -125,6 +125,7 @@ Environment variables (defaults):
 | `MAS_HOME` | `$XDG_DATA_HOME/mas` | Config and socket parent dir |
 | `MAS_CONTROLLER_SOCKET` | `$XDG_DATA_HOME/mas/controller.sock` | Unix socket path |
 | `MAS_CONTROLLER_PORT` | `9000` | HTTP API port |
+| `MAS_CONTROLLER_MAX_TIMEOUT` | `1800` | Maximum seconds for a controller job (request `timeout` cap); values under 300 are rejected; restart the controller to apply |
 
 ---
 
