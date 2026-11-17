@@ -15,6 +15,22 @@ class ToolProber:
         raise NotImplementedError(f"{type(self).__name__} cannot probe tools")
 
 
+class PeerProber:
+    """Base of the call body that can check a peer on its own."""
+
+    async def aprobe_peer(self, name: str) -> bool | None:
+        """Raise when the peer does not answer; ``True`` when it does; ``None`` when its link cannot be probed."""
+        raise NotImplementedError(f"{type(self).__name__} cannot probe peers")
+
+
+def peer_prober_for(inner: Any) -> PeerProber | None:
+    """The :class:`PeerProber` at the bottom of the call chain *inner*, or ``None``."""
+    from mas.runtime.engine.infra_pipeline import innermost_call
+
+    source = innermost_call(inner)
+    return source if isinstance(source, PeerProber) else None
+
+
 def tool_prober_for(inner: Any) -> ToolProber | None:
     """The :class:`ToolProber` at the bottom of the call chain *inner*, or ``None``."""
     from mas.runtime.engine.infra_pipeline import innermost_call

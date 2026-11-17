@@ -153,6 +153,7 @@ practical examples.
 | `DropLayer`              | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
 | `FailLayer`              | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
 | `FaultInjectMiddleware`  | `mas.library.standard.plugins.infra.fault_inject`     | `library-standard` |
+| `HealthProbeLayer`       | `mas.library.standard.plugins.layers.health_probe`    | `library-standard` |
 | `HttpLayer`              | `library_ioa.plugins.http_layer.transport`            | `library-ioa`      |
 | `LlmCacheMiddleware`     | `mas.library.standard.plugins.infra.llm_cache`        | `library-standard` |
 | `LlmSchedulerMiddleware` | `mas.library.standard.plugins.infra.llm_scheduler`    | `library-standard` |
@@ -323,6 +324,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `FailLayer`                      | layer                | `library-standard`  |
 | `FaultInjectMiddleware`          | layer                | `library-standard`  |
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |
+| `HealthProbeLayer`               | layer                | `library-standard`  |
 | `HttpLayer`                      | layer                | `library-ioa`       |
 | `HybridCheckpointStore`          | checkpoint_store     | `library-standard`  |
 | `InformUserPlugin`               | system_plugin        | `library-standard`  |

@@ -117,3 +117,39 @@ async def test_a_send_to_a_declared_but_unavailable_peer_says_so_and_offers_only
     tool = SendTool(allowed_peers=["billing", "outage"])
     assert [s["name"] for s in tool.on_collect_tools(ctx=ctx)] == ["delegate_to_outage"]
     assert "declared but unavailable" in await tool.asend("billing", "hi", ctx=ctx)
+
+
+async def test_a_peer_probe_goes_through_the_link_or_says_it_cannot() -> None:
+    from types import SimpleNamespace
+
+    from mas.library.standard.plugins.system_tools.send import SendTool
+
+    seen: list[str] = []
+
+    class Probing:
+        plugin_id = "a2a"
+        fabric_id = None
+        endpoint = ""
+
+        async def aprobe(self, target: str) -> bool:
+            seen.append(target)
+            return True
+
+    class Silent:
+        plugin_id = "local"
+        fabric_id = None
+        endpoint = ""
+
+    def ctx_with(link: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            agent_id="triage",
+            manifest=None,
+            agent_comm=link,
+            agent_comm_routes={},
+            delegation_peer_descriptions=None,
+            send_peer_descriptions=None,
+        )
+
+    tool = SendTool(allowed_peers=["billing"])
+    assert await tool.aprobe("billing", ctx=ctx_with(Probing())) is True and seen == ["billing"]
+    assert await tool.aprobe("billing", ctx=ctx_with(Silent())) is None

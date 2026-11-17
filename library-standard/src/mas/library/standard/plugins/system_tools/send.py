@@ -366,6 +366,15 @@ class SendTool:
             return f"[send] agent {target_agent_id!r} failed: {exc}"
         return result
 
+    async def aprobe(self, peer: str, *, ctx: SendToolContext | None = None) -> bool | None:
+        """Check that *peer* answers, through its link. Raises when it does not; ``None`` when its link has no probe."""
+        communication, _protocol = self._resolve(str(peer).strip(), ctx=ctx)
+        probe = getattr(communication, "aprobe", None)
+        if not callable(probe):
+            return None
+        await probe(str(peer).strip())
+        return True
+
     async def adelegate(
         self,
         target_agent_id: str,

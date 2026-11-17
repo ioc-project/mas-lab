@@ -69,6 +69,10 @@ ALLOWED: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         f"{_RELEASED}: a comm without asend is sent to on a worker thread",
     ),
+    (f"{STD}/plugins/system_tools/send.py", "SendTool.aprobe", "getattr"): (
+        1,
+        "a link may offer aprobe: one that does not is skipped by the health probe, not reported failing",
+    ),
     (f"{IOA}/a2a/agent_comm.py", "A2AAgentComm.asend", "getattr"): (
         1,
         f"{_RELEASED}: reads the optional SendContext intent",
