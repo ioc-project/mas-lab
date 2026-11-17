@@ -28,6 +28,8 @@ _KWARGS_METHODS = frozenset(
         "send_message",
         "disable_tool",
         "enable_tool",
+        "disable_peer",
+        "enable_peer",
         "layer_state",
         "swap_layer_state",
         "set_queued_action",

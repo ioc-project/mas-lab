@@ -140,7 +140,10 @@ def serve_agent_cmd(
 
         try:
             attach_overlay_controls(flavour_spec, tuple(str(path) for path in session.overlays))
-            infra = bind_session(infra, flavour_spec, agent_ids=[agent_id])
+            from mas.ctl.executor.mas_session import standalone_peer_ids
+
+            peers = standalone_peer_ids(manifest, agent_id)
+            infra = bind_session(infra, flavour_spec, agent_ids=[agent_id, *peers])
         except (BindError, ControlError) as exc:
             raise click.ClickException(str(exc)) from exc
         if agent_id in infra.agent_chains:
@@ -187,6 +190,16 @@ def serve_agent_cmd(
             obs_config,
             base_dir=session.manifest_dir or session.original_cwd,
         )
+        from mas.ctl.executor.mas_session import open_single_agent_chains
+
+        # the peers this agent's own spec declares, reached the way the Flavour binds them
+        peer_handles = open_single_agent_chains(
+            instance,
+            agent_id,
+            infra,
+            manifest=manifest,
+            manifest_dir=Path(session.manifest_dir) if session.manifest_dir else None,
+        )
         from mas.ctl.session.control_dir import default_control_dir
 
         try:
@@ -198,5 +211,6 @@ def serve_agent_cmd(
                 control_dir=None if no_control else (control_dir or default_control_dir()),
             )
         finally:
+            peer_handles.close()
             if recorder is not None:
                 recorder.close()

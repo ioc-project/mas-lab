@@ -116,6 +116,7 @@ spec:
 | `bind.agent_comm` | The default chain: row names, bottom first. The first row is the transport. |
 | `bind.usage` | This deployment's default for every agent that omits its own usage: `connect`, `listen`, or both. Default `connect`. |
 | `bind.agents.<id>.agent_comm` | That agent's own chain, instead of the default. |
+| `bind.agents.<peer>` for a peer of a standalone agent | An agent run alone binds itself and the peers its own `spec.communication.peers` names, with no MAS. A peer entry is `usage: connect`: the agent dials it over that chain or endpoint row. A peer the Flavour names no chain or row for is warned about and not offered. |
 | `bind.agents.<id>.usage` | `connect` (this deployment reaches the agent over its chain), `listen` (this deployment hosts it), or both. Omitted, it is `bind.usage`, else `connect`. It must be within the `usage` of every row of the chain. |
 | `bind.agents.<id>.params` | Overrides of a row's params for that agent: row name to `{param: value}`. A string value may hold `{agent}`. |
 | `bind.agents.<id>.llm` | That agent's llm stack, instead of `bind.llm`. `{stack: NAME}`. |

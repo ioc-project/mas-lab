@@ -20,15 +20,7 @@ from mas.runtime.kernel.coupling import GovDecision
 
 
 def _spec(*delegates: str) -> dict:
-    return {
-        "workflow": {
-            "entry": "mod",
-            "nodes": [
-                {"id": "mod", "delegates_to": list(delegates)},
-                {"id": "worker"},
-            ],
-        }
-    }
+    return {"communication": {"peers": list(delegates)}}
 
 
 def _config(*delegates: str, agent_id: str = "mod") -> KernelConfig:

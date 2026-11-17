@@ -463,13 +463,5 @@ async def test_default_max_rejects_over_one_mib() -> None:
 def _legacy_manifest() -> dict:
     return {
         "metadata": {"name": "moderator"},
-        "spec": {
-            "workflow": {
-                "entry": "moderator",
-                "nodes": [
-                    {"id": "moderator", "delegates_to": ["worker"]},
-                    {"id": "worker"},
-                ],
-            }
-        },
+        "spec": {"communication": {"peers": ["worker"]}},
     }

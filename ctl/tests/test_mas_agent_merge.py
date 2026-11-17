@@ -16,7 +16,7 @@ class _StubComm:
         return "ok"
 
 
-def test_enrich_entry_agent_injects_workflow(tmp_path: Path):
+def test_enrich_entry_agent_compiles_its_own_peers(tmp_path: Path):
     peer_yaml = tmp_path / "agents" / "alpha.yaml"
     peer_yaml.parent.mkdir(parents=True)
     peer_yaml.write_text(
@@ -46,7 +46,7 @@ def test_enrich_entry_agent_injects_workflow(tmp_path: Path):
         mas,
         mas_base_dir=tmp_path,
     )
-    assert enriched["spec"]["workflow"]["entry"] == "entry"
+    assert "workflow" not in enriched["spec"]  # the MAS workflow stays in the MAS manifest
     assert "delegation_peer_descriptions" not in enriched["spec"]
     engine = LiveLlmEngine(manifest=enriched, use_tool_loop=True)
     wire_entry_engine_delegation(
@@ -122,7 +122,7 @@ def test_wire_entry_engine_delegation_skips_when_no_peers():
     engine = _Engine()
     manifest = {
         "metadata": {"name": "solo"},
-        "spec": {"workflow": {"entry": "solo", "nodes": [{"id": "solo"}]}},
+        "spec": {"communication": {"peers": []}},
     }
     wire_entry_engine_delegation(
         engine,
@@ -142,16 +142,7 @@ def test_wire_entry_engine_delegation_skips_when_delegates_to_empty():
     engine = _Engine()
     manifest = {
         "metadata": {"name": "helper"},
-        "spec": {
-            "workflow": {
-                "entry": "leaf",
-                "nodes": [
-                    {"id": "leaf", "delegates_to": ["other"]},
-                    {"id": "helper", "delegates_to": []},
-                    {"id": "other"},
-                ],
-            }
-        },
+        "spec": {"communication": {"peers": []}},
     }
     wire_entry_engine_delegation(
         engine,
@@ -174,10 +165,7 @@ def test_wire_entry_engine_delegation_enables_tool_loop_on_leaf():
     manifest = {
         "metadata": {"name": "entry"},
         "spec": {
-            "workflow": {
-                "entry": "entry",
-                "nodes": [{"id": "entry", "delegates_to": ["peer"]}],
-            },
+            "communication": {"peers": ["peer"]},
         },
     }
     wire_entry_engine_delegation(
@@ -204,10 +192,7 @@ def test_wire_entry_engine_delegation_entry_without_delegates_to_sends_to_nobody
         "metadata": {"name": "mod"},
         "spec": {
             "design_pattern": {"type": "deterministic_linear"},
-            "workflow": {
-                "entry": "mod",
-                "nodes": [{"id": "mod"}, {"id": "a"}, {"id": "b"}],
-            },
+            "communication": {"peers": []},
         },
     }
     wire_entry_engine_delegation(
@@ -239,14 +224,7 @@ async def test_a_pattern_on_a_non_entry_agent_calls_its_own_peers():
         "metadata": {"name": "flights"},
         "spec": {
             "design_pattern": {"type": "deterministic_linear"},
-            "workflow": {
-                "entry": "planner",
-                "nodes": [
-                    {"id": "planner", "delegates_to": ["flights", "hotels"]},
-                    {"id": "flights", "delegates_to": ["hotels"]},
-                    {"id": "hotels"},
-                ],
-            },
+            "communication": {"peers": ["hotels"]},
         },
     }
     wire_entry_engine_delegation(
@@ -451,7 +429,7 @@ def test_base_mas_rejects_skills_on_agency_row():
         "metadata": {"name": "m"},
         "spec": {
             "agency": {"agents": [{"id": "a", "ref": "agents/a.yaml", "skills": ["s"]}]},
-            "workflow": {"entry": "a", "nodes": [{"id": "a"}]},
+            "communication": {"peers": []},
         },
     }
     result = validate_data(mas, resolve_refs=False)
@@ -695,10 +673,7 @@ def test_wire_entry_engine_delegation_uses_overlay_peer_description(tmp_path: Pa
     manifest = {
         "metadata": {"name": "entry"},
         "spec": {
-            "workflow": {
-                "entry": "entry",
-                "nodes": [{"id": "entry", "delegates_to": ["alpha"]}],
-            },
+            "communication": {"peers": ["alpha"]},
         },
     }
     mas = {
@@ -798,7 +773,7 @@ def _send_plugin_engine(*, wire_first: bool):
     engine = LiveLlmEngine(manifest=None, use_tool_loop=False, use_cache=False)
     spec = {
         "system_plugins": ["send"],
-        "workflow": {"entry": "entry", "nodes": [{"id": "entry", "delegates_to": ["peer"]}]},
+        "communication": {"peers": ["peer"]},
     }
     manifest = {"metadata": {"name": "entry"}, "spec": spec}
 
@@ -835,10 +810,7 @@ def test_delegation_style_none_hides_the_tools_but_still_wires_send():
         "metadata": {"name": "planner"},
         "spec": {
             "behavior": {"delegation_style": "none"},
-            "workflow": {
-                "entry": "planner",
-                "nodes": [{"id": "planner", "delegates_to": ["hotels"]}, {"id": "hotels"}],
-            },
+            "communication": {"peers": ["hotels"]},
         },
     }
     wire_entry_engine_delegation(engine, manifest, Path("."), comm=_StubComm(), entry_agent_id="planner")

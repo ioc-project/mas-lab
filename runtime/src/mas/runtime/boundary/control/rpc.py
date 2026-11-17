@@ -98,6 +98,8 @@ class ControlRpcServer:
             "enqueue_input",
             "disable_tool",
             "enable_tool",
+            "disable_peer",
+            "enable_peer",
             "layer_state",
             "swap_layer_state",
         }:

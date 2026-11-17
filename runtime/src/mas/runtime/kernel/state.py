@@ -186,4 +186,7 @@ class QProduct:
     # None until an LLM return records them; kept across tool results so
     # egress governance can compare the pending tool to what the model saw.
     offered_tools: tuple[str, ...] | None = None
+    # The session's running spec as of the last step (not part of the snapshot: the session keeps it).
+    # Governance reads it to tell a tool or peer that was never declared from one that is declared but unavailable.
+    running_spec: dict | None = field(default=None, repr=False, compare=False)
     dp_data: dict = field(default_factory=dict)

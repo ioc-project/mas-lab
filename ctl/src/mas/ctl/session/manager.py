@@ -251,7 +251,16 @@ class SessionManager:
                     actor="layers",
                     surface="plugin",
                     session_ids=frozenset({session.session_id}),
-                    methods=frozenset({"layer_state", "swap_layer_state", "disable_tool", "enable_tool"}),
+                    methods=frozenset(
+                        {
+                            "layer_state",
+                            "swap_layer_state",
+                            "disable_tool",
+                            "enable_tool",
+                            "disable_peer",
+                            "enable_peer",
+                        }
+                    ),
                 ),
             )
             ctx.control = SessionControl(

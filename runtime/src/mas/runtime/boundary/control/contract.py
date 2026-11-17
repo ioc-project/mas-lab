@@ -290,6 +290,14 @@ class ControlContract(Protocol):
         """Undo a ``disable_tool``. With ``by``, only a disable made by that actor is undone."""
         ...
 
+    def disable_peer(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        """Take peer *name* out of the peers the agent offers. The peer stays declared; it is unavailable."""
+        ...
+
+    def enable_peer(self, session_id: str, *, name: str, reason: str, by: str = "") -> int:
+        """Undo a ``disable_peer``. With ``by``, only a disable made by that actor is undone."""
+        ...
+
     def layer_state(self, session_id: str, *, layer: str) -> dict[str, Any]:
         """What call layer *layer* has recorded in the running spec, per target."""
         ...

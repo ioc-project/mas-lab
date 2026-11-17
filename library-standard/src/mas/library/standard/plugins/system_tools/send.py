@@ -26,7 +26,9 @@ from mas.runtime.boundary.delegation.policy import (
     SEND_TOOL_NAME,
     openai_delegation_tools,
     parse_delegate_tool_name,
+    unavailable_peers,
 )
+from mas.runtime.engine.tools import current_spec_for_advertise
 from mas.runtime.system_plugins import CallContext, InstanceSystemPlugin, SessionContext, UnknownSystemToolError
 
 _Prepare = tuple[AgentCommContract, str, str, str]
@@ -215,8 +217,12 @@ class SendTool:
 
     def on_collect_tools(self, *, ctx: SendToolContext | None = None) -> list[dict[str, Any]]:
         view = _SendCtx.of(ctx)
+        manifest = view.manifest
+        running = current_spec_for_advertise(ctx)
+        if manifest is not None and running:
+            manifest = {**manifest, "spec": running}  # the peers the running spec still offers
         return self.collect_tool_specs(
-            view.manifest,
+            manifest,
             agent_id=view.agent_id or None,
             peer_descriptions=view.peer_descriptions,
         )
@@ -289,6 +295,8 @@ class SendTool:
         kind = str(intent or "task").strip().lower() or "task"
         if kind not in SEND_INTENTS:
             return f"[send] unknown intent {intent!r}"
+        if target in unavailable_peers(current_spec_for_advertise(ctx)):
+            return f"[send] peer {target!r} is declared but unavailable right now"
         communication, protocol = self._resolve(target, ctx=ctx)
         if kind not in intents_honoured_by(communication):
             return f"[send] intent {kind!r} is not supported on this link"

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from mas.runtime.boundary.delegation.policy import delegate_tool_name, delegation_targets
 from mas.runtime.boundary.gov.policy import EgressIntentView
-from mas.runtime.engine.tools import tool_entry_name
+from mas.runtime.engine.tools import disabled_tool_names, tool_entry_name
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.coupling import GovDecision
 
@@ -17,6 +17,12 @@ def undeclared_tool_observation(tool: str, available: list[str]) -> str:
     """Text the model sees when it names a tool that was not in ``tools``."""
     names = ", ".join(available) if available else "(none)"
     return f"Tool {tool!r} was not in the tools list offered to you. Do not call it. Available tools: {names}."
+
+
+def unavailable_tool_observation(tool: str, available: list[str]) -> str:
+    """Text the model sees when it names a declared tool that is switched off right now."""
+    names = ", ".join(available) if available else "(none)"
+    return f"Tool {tool!r} is declared but unavailable right now. Do not call it. Available tools: {names}."
 
 
 def _names_from_spec(spec: dict | None) -> list[str] | None:
@@ -81,5 +87,7 @@ class NoUndeclaredToolPlugin:
                 PLUGIN_ID,
                 f"tool {name!r} is in the offered tools list",
             )
+        if name in disabled_tool_names(intent.running_spec):
+            return GovDecision.BLOCK, PLUGIN_ID, unavailable_tool_observation(name, allowed)
         reason = undeclared_tool_observation(name, allowed)
         return GovDecision.BLOCK, PLUGIN_ID, reason

@@ -25,13 +25,7 @@ SPEAKERS = ["seller_a", "seller_b", "carrier"]
 def _spec(**params: object) -> dict:
     return {
         "design_pattern": {"type": "moderated_rounds", "params": {"decider": "lead", **params}},
-        "workflow": {
-            "entry": "moderator",
-            "nodes": [
-                {"id": "moderator", "delegates_to": ["lead", *SPEAKERS]},
-                *({"id": p} for p in ["lead", *SPEAKERS]),
-            ],
-        },
+        "communication": {"peers": ["lead", *SPEAKERS]},
     }
 
 

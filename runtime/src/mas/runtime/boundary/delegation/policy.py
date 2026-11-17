@@ -4,7 +4,7 @@
 
 Peer delegation tools are exposed when BOTH conditions hold:
 1. The agent capability contract allows typed delegation (behavior.delegation_style)
-2. The workflow topology declares delegates_to targets for that agent
+2. The agent's spec declares peers (``spec.communication.peers``) for it
 
 This separates:
 - Capability contract (WHAT an agent can do) from
@@ -14,11 +14,7 @@ Examples:
     >>> manifest = {
     ...     "spec": {
     ...         "behavior": {"delegation_style": "typed"},
-    ...         "workflow": {
-    ...             "nodes": [
-    ...                 {"id": "moderator", "delegates_to": ["worker1", "worker2"]}
-    ...             ]
-    ...         }
+    ...         "communication": {"peers": ["worker1", "worker2"]},
     ...     }
     ... }
     >>> uses_llm_peer_delegation(manifest)
@@ -63,11 +59,6 @@ def _spec(manifest: dict | None) -> dict[str, Any]:
     return (manifest or {}).get("spec") or {}
 
 
-def _workflow(manifest: dict | None) -> dict[str, Any]:
-    wf = _spec(manifest).get("workflow")
-    return wf if isinstance(wf, dict) else {}
-
-
 def delegation_style(manifest: dict | None) -> str:
     """Extract delegation_style from manifest behavior settings.
 
@@ -106,65 +97,57 @@ def uses_llm_peer_delegation(manifest: dict | None) -> bool:
     return delegation_style(manifest) == "typed"
 
 
-def entry_agent_id(manifest: dict | None) -> str | None:
-    wf = _workflow(manifest)
-    if entry := wf.get("entry"):
-        return str(entry)
-    name = ((manifest or {}).get("metadata") or {}).get("name")
-    return str(name) if name else None
-
-
 def _name(value: object) -> str:
     return str(value or "").strip()
 
 
-def _names(values: object, *, exclude: frozenset[str]) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    out: list[str] = []
+def communication_peers(manifest: dict | None) -> list[dict[str, Any]] | None:
+    """This agent's peers as ``spec.communication.peers`` declares them, or ``None`` when it declares none.
+
+    Each entry is ``{id, enabled?, disabled_by?}``; a bare string is an enabled peer. mas-ctl writes this list
+    from the MAS manifest, so an agent run alone sees only its own next hops. A peer is declared whether or not
+    it is currently available.
+    """
+    spec = (manifest or {}).get("spec") if isinstance(manifest, dict) else None
+    communication = spec.get("communication") if isinstance(spec, dict) else None
+    peers = communication.get("peers") if isinstance(communication, dict) else None
+    if not isinstance(peers, list):
+        return None
+    out: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for value in values:
-        peer = _name(value)
-        if not peer or peer in exclude or peer in seen:
+    for peer in peers:
+        entry = {"id": peer} if isinstance(peer, str) else peer
+        name = _name(entry.get("id")) if isinstance(entry, dict) else ""
+        if not name or name in seen:
             continue
-        seen.add(peer)
-        out.append(peer)
+        seen.add(name)
+        out.append({**entry, "id": name})
     return out
 
 
-def _node_identity(node: dict[str, Any]) -> str:
-    return _name(node.get("agent")) or _name(node.get("id"))
+def unavailable_peers(spec: dict | None) -> frozenset[str]:
+    """Declared peers a layer or an operator took away in this spec (``enabled: false``)."""
+    peers = communication_peers({"spec": spec or {}}) or []
+    return frozenset(str(p["id"]) for p in peers if p.get("enabled") is False)
 
 
-def _node_delegates(nodes: list[dict[str, Any]], node_id: str) -> list[str] | None:
-    for node in nodes:
-        if node_id not in (_node_identity(node), _name(node.get("id"))):
-            continue
-        return [_name(t) for t in (node.get("delegates_to") or []) if _name(t)]
-    return None
+def peer_unavailable_observation(peer: str, allowed: list[str]) -> str:
+    names = ", ".join(allowed) if allowed else "(none)"
+    return f"Peer {peer!r} is declared but unavailable right now. Do not send to it. Available peers: {names}."
 
 
 def delegation_targets(manifest: dict | None, *, agent_id: str | None = None) -> list[str]:
     """Leftover ``delegate_to_*`` names this agent offers, and the next hop a pattern picks.
 
-    That is this agent's ``delegates_to``. ``workflow.entry`` only names who
-    receives the user message; it does not change this list. An empty list,
-    a missing node, or a missing agent id means none of those tools (and a
-    pattern that sends itself has no next hop). Send still delivers if called.
+    That is this agent's ``spec.communication.peers`` (mas-ctl writes it from the MAS manifest), declared whether
+    or not a peer is currently available. An agent that declares none has no next hop (and a pattern that sends
+    itself has none). Send still delivers if called.
 
     ``behavior.delegation_style`` does not change this list. It only decides
     whether the model is shown the tools (see ``advertise_delegate_tools``).
     """
-    if not manifest:
-        return []
-    nodes = [n for n in (_workflow(manifest).get("nodes") or []) if isinstance(n, dict)]
-    self_id = _name(agent_id) or _name(((manifest or {}).get("metadata") or {}).get("name"))
-    if not self_id:
-        return []
-    own = _node_delegates(nodes, self_id)
-    if own is None:
-        return []
-    return _names(own, exclude=frozenset({self_id}))
+    peers = communication_peers(manifest) or []
+    return [str(peer["id"]) for peer in peers if peer["id"] != _name(agent_id)]
 
 
 def delegate_tool_name(agent_id: str) -> str:
@@ -199,4 +182,5 @@ def openai_delegation_tools(
             },
         }
         for peer in delegation_targets(manifest, agent_id=agent_id)
+        if peer not in unavailable_peers((manifest or {}).get("spec"))
     ]

@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
-from mas.runtime.boundary.delegation.policy import delegation_targets
 
 
 def declared_entry_id(mas_config: dict[str, Any] | None) -> str:
@@ -49,11 +48,34 @@ def agency_ids(mas_config: dict[str, Any] | None) -> list[str]:
     return out
 
 
+def workflow_peers(mas_config: dict[str, Any] | None, agent_id: str) -> list[str]:
+    """The agents ``agent_id`` delegates to, read from the MAS workflow node ``delegates_to`` (shorthand input).
+
+    This is where the MAS manifest is read. mas-ctl compiles the result into the agent's own
+    ``spec.communication.peers``; the runtime never reads the workflow.
+    """
+    workflow = _spec(mas_config).get("workflow")
+    nodes = (
+        [n for n in ((workflow or {}).get("nodes") or []) if isinstance(n, dict)] if isinstance(workflow, dict) else []
+    )
+    me = agent_id.strip()
+    for node in nodes:
+        names = {str(node.get("agent") or "").strip(), str(node.get("id") or "").strip()}
+        if me and me in names:
+            out: list[str] = []
+            for target in node.get("delegates_to") or []:
+                peer = str(target or "").strip()
+                if peer and peer != me and peer not in out:
+                    out.append(peer)
+            return out
+    return []
+
+
 def peers_of(mas_config: dict[str, Any] | None, agent_ids: list[str]) -> dict[str, set[str]]:
     """The agents each of ``agent_ids`` delegates to; an agent that delegates to no one is left out."""
     out: dict[str, set[str]] = {}
     for agent_id in agent_ids:
-        targets = set(delegation_targets(mas_config, agent_id=agent_id))
+        targets = set(workflow_peers(mas_config, agent_id))
         if targets:
             out[agent_id] = targets
     return out

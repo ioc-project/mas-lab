@@ -58,34 +58,18 @@ class _RunTurn:
 def _legacy_manifest() -> dict:
     return {
         "metadata": {"name": "moderator"},
-        "spec": {
-            "workflow": {
-                "entry": "moderator",
-                "nodes": [
-                    {"id": "moderator", "delegates_to": ["worker"]},
-                    {"id": "worker"},
-                ],
-            }
-        },
+        "spec": {"communication": {"peers": ["worker"]}},
     }
 
 
-def _two_level_hierarchy_manifest() -> dict:
+_TWO_LEVEL_PEERS = {"A": ["B", "C", "D"], "C": ["E", "F"]}
+
+
+def _two_level_hierarchy_manifest(agent_id: str = "A") -> dict:
+    """The manifest one agent of a two-level hierarchy receives: its own next hops, nothing of the others."""
     return {
-        "metadata": {"name": "A"},
-        "spec": {
-            "workflow": {
-                "entry": "A",
-                "nodes": [
-                    {"id": "A", "delegates_to": ["B", "C", "D"]},
-                    {"id": "B"},
-                    {"id": "C", "delegates_to": ["E", "F"]},
-                    {"id": "D"},
-                    {"id": "E"},
-                    {"id": "F"},
-                ],
-            }
-        },
+        "metadata": {"name": agent_id},
+        "spec": {"communication": {"peers": list(_TWO_LEVEL_PEERS.get(agent_id, []))}},
     }
 
 
@@ -117,13 +101,7 @@ async def test_list_tools_empty_when_delegation_style_is_none() -> None:
         "metadata": {"name": "moderator"},
         "spec": {
             "behavior": {"delegation_style": "none"},
-            "workflow": {
-                "entry": "moderator",
-                "nodes": [
-                    {"id": "moderator", "delegates_to": ["worker"]},
-                    {"id": "worker"},
-                ],
-            },
+            "communication": {"peers": ["worker"]},
         },
     }
     tool = SendTool(comm=LocalAgentComm(_RunTurn()), allowed_peers=["worker"])
@@ -152,14 +130,13 @@ def test_two_level_hierarchy_list_tools_follow_spec_not_bus() -> None:
     agents = ["A", "B", "C", "D", "E", "F"]
     routes = {agent_id: AgentCommRoute(agent_id, "local", LocalAgentComm(run)) for agent_id in agents}
     tool = SendTool(comm=LocalAgentComm(run), routes=routes)
-    manifest = _two_level_hierarchy_manifest()
 
     def names(agent_id: str) -> list[str]:
         return [
             spec["name"]
             for spec in tool.list_tools(
                 ctx=_ctx(agent_id=agent_id),
-                manifest=manifest,
+                manifest=_two_level_hierarchy_manifest(agent_id),
             )
         ]
 

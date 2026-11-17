@@ -10,18 +10,10 @@ from mas.runtime.boundary.delegation import (
 )
 
 
-def test_delegation_targets_from_workflow_topology():
+def test_delegation_targets_from_the_agents_own_peers():
     manifest = {
         "metadata": {"name": "moderator"},
-        "spec": {
-            "workflow": {
-                "entry": "moderator",
-                "nodes": [
-                    {"id": "moderator", "delegates_to": ["planner", "reviewer"]},
-                    {"id": "planner", "delegates_to": ["reviewer"]},
-                ],
-            },
-        },
+        "spec": {"communication": {"peers": ["planner", "reviewer"]}},
     }
     assert delegation_targets(manifest, agent_id="moderator") == ["planner", "reviewer"]
 
@@ -29,17 +21,7 @@ def test_delegation_targets_from_workflow_topology():
 def test_delegation_without_collaboration_block():
     manifest = {
         "metadata": {"name": "entry"},
-        "spec": {
-            "workflow": {
-                "entry": "entry",
-                "nodes": [
-                    {
-                        "id": "entry",
-                        "delegates_to": ["alpha", "beta", "gamma"],
-                    },
-                ],
-            }
-        },
+        "spec": {"communication": {"peers": ["alpha", "beta", "gamma"]}},
     }
     assert delegation_targets(manifest, agent_id="entry") == ["alpha", "beta", "gamma"]
     tools = openai_delegation_tools(manifest, agent_id="entry")
@@ -54,10 +36,7 @@ def test_topology_only_workflow_allows_delegate_tools_when_style_is_typed():
     manifest = {
         "metadata": {"name": "schedule_agent"},
         "spec": {
-            "workflow": {
-                "entry": "schedule_agent",
-                "nodes": [{"id": "schedule_agent", "delegates_to": ["itinerary_agent"]}],
-            },
+            "communication": {"peers": ["itinerary_agent"]},
         },
     }
     assert uses_llm_peer_delegation(manifest)
@@ -67,7 +46,7 @@ def test_topology_only_workflow_allows_delegate_tools_when_style_is_typed():
 def test_topology_without_delegates_uses_capability_contract():
     manifest = {
         "metadata": {"name": "generalist"},
-        "spec": {"workflow": {"entry": "generalist", "nodes": [{"id": "generalist"}]}},
+        "spec": {"communication": {"peers": []}},
     }
     assert uses_llm_peer_delegation(manifest)
     assert delegation_targets(manifest) == []
@@ -76,10 +55,7 @@ def test_topology_without_delegates_uses_capability_contract():
 def test_openai_delegation_tools_shape():
     manifest = {
         "spec": {
-            "workflow": {
-                "entry": "lead",
-                "nodes": [{"id": "lead", "delegates_to": ["worker"]}],
-            },
+            "communication": {"peers": ["worker"]},
         }
     }
     tools = openai_delegation_tools(manifest, agent_id="lead")
@@ -100,28 +76,6 @@ def test_delegation_targets_unknown_agent_id_returns_empty():
         },
     }
     assert delegation_targets(manifest, agent_id="missing") == []
-
-
-def test_delegation_targets_empty_delegates_on_matched_node():
-    """An empty delegates_to offers no leftover tools. A listed hop is only
-    that leftover name.
-    """
-    manifest = {
-        "metadata": {"name": "leaf"},
-        "spec": {
-            "workflow": {
-                "entry": "leaf",
-                "nodes": [
-                    {"id": "leaf", "delegates_to": []},
-                    {"id": "other", "delegates_to": ["worker"]},
-                    {"id": "helper", "delegates_to": []},
-                ],
-            },
-        },
-    }
-    assert delegation_targets(manifest, agent_id="leaf") == []
-    assert delegation_targets(manifest, agent_id="other") == ["worker"]
-    assert delegation_targets(manifest, agent_id="helper") == []
 
 
 def test_parse_delegate_tool_name():

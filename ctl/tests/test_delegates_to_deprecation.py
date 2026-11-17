@@ -335,8 +335,8 @@ def test_delegates_to_still_wires_the_same_tools(tmp_path: Path) -> None:
             },
         }
     }
-    assert delegation_targets(mas, agent_id="entry") == ["alpha", "beta"]
-    enriched = enrich_entry_agent_for_delegation(agent, mas, mas_base_dir=tmp_path)
+    enriched = enrich_entry_agent_for_delegation(agent, mas, mas_base_dir=tmp_path, agent_id="entry")
+    assert delegation_targets(enriched, agent_id="entry") == ["alpha", "beta"]
     engine = LiveLlmEngine(manifest=enriched, use_tool_loop=True)
     wire_entry_engine_delegation(
         engine,
