@@ -1,0 +1,19 @@
+# What the images need is copied by name in docker/*/Dockerfile. Keep the rest out of the build context:
+# it is sent to the daemon whole, and local environments, caches and secrets must not be in it.
+.git
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/.env
+.coverage
+coverage.xml
+docker/data/*
+!docker/data/.gitkeep
+ui/dist
+ui/.yarn/cache
+ui/.yarn/install-state.gz
+ui/.yarn/unplugged

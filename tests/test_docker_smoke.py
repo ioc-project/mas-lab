@@ -169,3 +169,42 @@ def test_the_backend_entrypoint_does_not_install_dev_dependencies_at_start() -> 
     entrypoint = (SCRIPT.parents[1] / "docker/backend/entrypoint.sh").read_text()
     execs = [line.strip() for line in entrypoint.splitlines() if line.strip().startswith("exec uv run")]
     assert execs == ['exec uv run --no-sync "$@"']
+
+
+def test_the_backend_image_installs_exactly_what_the_lock_file_pins() -> None:
+    root = SCRIPT.parents[1]
+    lines = (root / "docker/backend/Dockerfile").read_text().splitlines()
+    assert any(line.startswith("COPY pyproject.toml") and "uv.lock" in line.split() for line in lines)
+    assert [line for line in lines if line.startswith("RUN uv sync")] == ["RUN uv sync --locked --no-dev"]
+    assert (root / "uv.lock").is_file()
+
+
+def test_the_ui_image_uses_the_yarn_that_wrote_the_lock_file() -> None:
+    """Without a ``packageManager`` field, Corepack gives Yarn 1, which ignores a Yarn 4 lock file."""
+    import json
+
+    root = SCRIPT.parents[1]
+    lock = (root / "ui/yarn.lock").read_text()
+    manager = json.loads((root / "ui/package.json").read_text()).get("packageManager", "")
+    if "__metadata:" in lock:  # the Yarn 2+ lock file format
+        assert manager.startswith("yarn@") and int(manager.split("@")[1].split(".")[0]) >= 2, manager
+    dockerfile = (root / "docker/ui/Dockerfile").read_text()
+    assert "corepack enable" in dockerfile and "yarn install --immutable" in dockerfile
+
+
+def test_the_build_context_leaves_out_environments_caches_and_secrets() -> None:
+    ignored = {
+        line.strip()
+        for line in (SCRIPT.parents[1] / ".dockerignore").read_text().splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    assert {".git", "**/.venv", "**/node_modules", "**/.env"} <= ignored
+    # nothing the Dockerfiles copy by name may be ignored
+    copied = []
+    for name in ("backend", "ui"):
+        for line in (SCRIPT.parents[1] / f"docker/{name}/Dockerfile").read_text().splitlines():
+            if line.startswith("COPY ") and "--from" not in line:
+                copied.extend(line.split()[1:-1])
+    assert copied
+    for path in copied:
+        assert path.rstrip("/") not in ignored, path
