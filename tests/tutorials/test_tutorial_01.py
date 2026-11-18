@@ -3,8 +3,8 @@
 """Tutorial 01 — Building an Agent: integration tests.
 
 Manifest validation, overlay merging, and tool execution run without an LLM.
-Bootstrap uses an injected SimulatedEngine. Chat effect is checked with a
-real model when OPENAI_API_KEY and TUTORIAL_ONLINE=1 are set.
+Bootstrap uses an injected SimulatedEngine. Chat effect is checked through
+``mas-ctl chat`` against a local fake OpenAI endpoint.
 """
 
 from __future__ import annotations
@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 from ci_llm import stop_engine
-from tutorial_support import T01, live_cli_env, live_tutorial_chat, load_yaml, run_cli, tutorial_file
+from fake_openai import FakeOpenAI, last_role, offered_tools, text, tool_call
+from tutorial_support import T01, load_yaml, run_cli, tutorial_copy, tutorial_file
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. Manifest & overlay validation (CLI)
@@ -315,52 +316,62 @@ class TestAgentInstantiation:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 4b. Live mas-ctl chat (real LLM)
+# 4b. mas-ctl chat against a fake OpenAI endpoint
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = live_tutorial_chat
-_LIVE_QUERY = "What is the speed of light?"
+_CHAT_QUERY = "What is the speed of light?"
+_ANSWER = "The speed of light is 299,792 km/s.\n\nConfidence: high"
 
 
-@_LIVE
-class TestLiveSkillChat:
-    """mas-ctl chat from the tutorial directory against a real model."""
+def _skill_script(body):
+    """Activate the skill when it is offered and no result is back yet, then answer."""
+    if last_role(body) != "tool" and "activate_skill" in offered_tools(body):
+        return tool_call("activate_skill", {"name": "answer-formatting"})
+    return text(_ANSWER)
 
-    def test_without_skills_does_not_load_or_activate(self):
-        r = run_cli(
-            ["mas-ctl", "chat", "agent.yaml", "--no-cache-read", "--trace", "-q", _LIVE_QUERY],
-            cwd=T01,
-            timeout=120,
-            extra_env=live_cli_env(),
-        )
+
+class TestSkillChat:
+    """mas-ctl chat from the tutorial directory against a local fake model."""
+
+    def test_without_skills_does_not_load_or_activate(self, tmp_path):
+        with FakeOpenAI(_skill_script) as fake:
+            r = run_cli(
+                ["mas-ctl", "chat", "agent.yaml", "--no-cache-read", "--trace", "-q", _CHAT_QUERY],
+                cwd=tutorial_copy(T01, tmp_path),
+                timeout=120,
+                extra_env=fake.env(),
+            )
         combined = f"{r.stdout}\n{r.stderr}"
         assert r.returncode == 0, r.stderr
+        assert fake.bodies
+        assert all("activate_skill" not in offered_tools(body) for body in fake.bodies)
         assert "Available Skills" not in combined
         assert "activate_skill" not in combined
 
-    def test_with_skills_activates_and_formats(self):
-        r = run_cli(
-            [
-                "mas-ctl",
-                "chat",
-                "agent.yaml",
-                "-o",
-                "overlays/skills.yaml",
-                "--no-cache-read",
-                "--trace",
-                "-q",
-                _LIVE_QUERY,
-            ],
-            cwd=T01,
-            timeout=120,
-            extra_env=live_cli_env(),
-        )
+    def test_with_skills_activates_and_formats(self, tmp_path):
+        with FakeOpenAI(_skill_script) as fake:
+            r = run_cli(
+                [
+                    "mas-ctl",
+                    "chat",
+                    "agent.yaml",
+                    "-o",
+                    "overlays/skills.yaml",
+                    "--no-cache-read",
+                    "--trace",
+                    "-q",
+                    _CHAT_QUERY,
+                ],
+                cwd=tutorial_copy(T01, tmp_path),
+                timeout=120,
+                extra_env=fake.env(),
+            )
         combined = f"{r.stdout}\n{r.stderr}"
         assert r.returncode == 0, r.stderr
-        # Summary --trace does not dump the system prompt (Available Skills).
-        assert "SKILL[answer-formatting]" in combined
         assert "TOOL[activate_skill]" in combined
-        assert "Confidence:" in combined
+        skill_result = next(body["messages"][-1] for body in fake.bodies if last_role(body) == "tool")
+        assert "answer-formatting" in skill_result["content"]
+        assert "one-sentence summary" in skill_result["content"]  # the body of SKILL.md reached the model
         user_out = [line for line in r.stderr.splitlines() if "-> USER" in line]
         assert user_out
         assert "..." not in user_out[-1]

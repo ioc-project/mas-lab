@@ -71,26 +71,20 @@ all = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# "." (not just "src") is required: several test modules do
-# `from tests.conftest import requires_otel`, a dotted import that assumes
-# the package root (containing tests/) is on sys.path. `python -m pytest`
-# adds the cwd automatically and masked this; invoking the pytest console
-# script directly -- exactly what Taskfile.yml's {{.VENV}}/pytest does --
-# does not, and failed with "No module named 'tests'" on 8 of 17 test files.
-pythonpath = ["src", "."]
+pythonpath = ["src"]
 # deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
 addopts = "--tb=short -q -p no:deepeval"
 
 [tool.coverage.run]
 source = ["mas/library/telemetry"]
-# bench.py / codecs.py / list_clickhouse_sessions.py are thin glue over the
+# bench.py / list_clickhouse_sessions.py are thin glue over the
 # bench framework — exercised by integration runs (need mas-lab-component-bench), not
 # unit tests. lab_cli.py IS unit-tested (click CliRunner), so it stays
 # measured. list_clickhouse_sessions.py's own tests exist (mocking urllib
 # directly, no real ClickHouse needed) but are skipped whenever mas-lab-component-bench
 # isn't installed -- PipelineStep is its base class -- so it's omitted here
 # for the same reason bench.py is, not because it's untested.
-omit = ["*/tests/*", "*/bench.py", "*/codecs.py", "*/list_clickhouse_sessions.py"]
+omit = ["*/tests/*", "*/bench.py", "*/list_clickhouse_sessions.py"]
 
 [tool.coverage.report]
 show_missing = true
@@ -104,13 +98,6 @@ packages = ["src/mas"]
 # (the `.yaml` suffix and the `pipelines/` prefix are both optional — see
 # mas.runtime.package_refs.resolve_path_ref).
 telemetry = "mas.library.telemetry"
-
-# Span serialize/deserialize codecs (OtlpSpansCodec, ClickHouseSpansCodec) are
-# NOT registered as plugins yet: unlike steps, codec discovery has no
-# entry-point path at all (see mas.lab.benchmark.codecs), and declaring them
-# in library.yaml would collide with library-lab's generic codecs under the
-# same (otel_traces, otlp)/(otel_traces, clickhouse) keys. See
-# mas.library.telemetry.codecs module docstring.
 
 # `mas-lab telemetry` (and legacy `mas-lab otel`) — thin CLI wrapper. Replaces
 # the one previously provided by the deleted mas-lab-telemetry package.

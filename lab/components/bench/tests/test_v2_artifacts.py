@@ -34,7 +34,6 @@ def test_artifact_batch_digest_invariant(tmp_path) -> None:
 
 
 def test_artifact_record_validation() -> None:
-    pytest.importorskip("jsonschema")
     spec = ArtifactType(
         name="m",
         shape="records",
@@ -63,7 +62,6 @@ def test_artifact_record_validation() -> None:
 
 
 def test_artifact_batch_validation_vectorized() -> None:
-    pytest.importorskip("jsonschema")
     from mas.lab.benchmark.pipeline.artifact import validate_batch
 
     spec = ArtifactType(
@@ -126,7 +124,8 @@ def test_artifact_reset_on_retry() -> None:
 def test_legacy_adapter_wraps_stepoutput() -> None:
     wrapped = wrap_step_output({"score": 1}, [], _key(), name="metrics")
     assert wrapped.records() == [{"score": 1}]
-    pd = pytest.importorskip("pandas")
+    import pandas as pd
+
     frame = pd.DataFrame([{"a": 1}, {"a": 2}])
     rows = wrap_step_output(frame, [], _key(), name="data")
     assert len(rows.records()) == 2

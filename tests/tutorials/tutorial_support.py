@@ -10,11 +10,11 @@ picked up whichever ``conftest`` module another test directory loaded first, so
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 # ---------------------------------------------------------------------------
@@ -97,15 +97,14 @@ def run_cli(
     )
 
 
-live_tutorial_chat = pytest.mark.skipif(
-    not os.environ.get("OPENAI_API_KEY") or not os.environ.get("TUTORIAL_ONLINE"),
-    reason="OPENAI_API_KEY and TUTORIAL_ONLINE=1 required for live tutorial chat",
-)
+def tutorial_copy(src: Path, tmp_path: Path) -> Path:
+    """A throwaway copy of a tutorial directory, to run ``mas-ctl chat`` in.
 
-
-def live_cli_env() -> dict[str, str]:
-    """pytest isolates XDG_CONFIG_HOME; live chat must see the operator config."""
-    return {"XDG_CONFIG_HOME": str(Path.home() / ".config")}
+    A chat run writes traces beside its manifest; running on a copy keeps them out of the repo.
+    """
+    dest = tmp_path / src.name
+    shutil.copytree(src, dest)
+    return dest
 
 
 def tutorial_file(root: Path, name: str) -> Path:

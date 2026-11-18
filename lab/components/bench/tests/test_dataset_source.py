@@ -292,27 +292,3 @@ def test_source_then_inline_items(tmp_path: Path):
     )
     ds = Dataset.from_yaml(manifest)
     assert [i.id for i in ds] == ["s1", "local"]
-
-
-@pytest.mark.skipif(
-    __import__("os").environ.get("MAS_HF_LIVE") != "1",
-    reason="live HuggingFace download is opt-in (MAS_HF_LIVE=1)",
-)
-def test_huggingface_live_mmlu_pro_one_row():
-    pytest.importorskip("datasets")
-    items = materialize_source(
-        {
-            "kind": "huggingface",
-            "id": "TIGER-Lab/MMLU-Pro",
-            "split": "validation[:1]",
-            "map": {
-                "id": "question_id",
-                "inputs.user": "{question}\n{options_text}",
-                "expectations.ground_truth": "answer_index",
-            },
-        },
-        base_path=Path("."),
-    )
-    assert items[0]["id"]
-    assert items[0]["inputs"]["user"]
-    assert items[0]["expectations"]["ground_truth"] is not None

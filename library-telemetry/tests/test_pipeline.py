@@ -4,10 +4,7 @@
 
 from __future__ import annotations
 
-from tests.conftest import requires_otel
 
-
-@requires_otel
 def test_convert_verify_roundtrip(tmp_path, events_path):
     from mas.library.telemetry.pipeline import (
         convert_events_to_spans_file,
@@ -23,7 +20,6 @@ def test_convert_verify_roundtrip(tmp_path, events_path):
     assert report["stats"]["root_spans"] >= 3
 
 
-@requires_otel
 def test_replay_parity_is_deterministic(tmp_path, events_path):
     from mas.library.telemetry.steps import run_compare_spans, run_convert
 
@@ -35,7 +31,6 @@ def test_replay_parity_is_deterministic(tmp_path, events_path):
     assert a.span_count > 0
 
 
-@requires_otel
 def test_push_dry_run_step(tmp_path, events_path):
     from mas.library.telemetry.steps import run_convert, run_push_otlp
 

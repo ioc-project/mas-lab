@@ -17,8 +17,6 @@ from typing import Any
 
 import pytest
 
-from tests.conftest import requires_otel
-
 _HERE = Path(__file__).resolve()
 PACKAGE_ROOT = _HERE.parents[3]  # library-telemetry/
 REPO_ROOT = _HERE.parents[4]  # repository root
@@ -156,7 +154,6 @@ def _assert_same_otel_json(live_path: Path, replay_path: Path) -> None:
         pytest.param(QA_AGENT_EXAMPLE, "qa-agent", id="example-qa-agent"),
     ],
 )
-@requires_otel
 def test_live_otel_plugin_json_matches_replay_pipeline(tmp_path: Path, events_path: Path, app_name: str) -> None:
     assert events_path.is_file(), events_path
     events = _load_events(events_path)

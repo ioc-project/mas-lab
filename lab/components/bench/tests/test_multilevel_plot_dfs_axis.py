@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 from mas.lab.plots.multilevel_trajectory.chart_data import _build_chart_data, build_trajectory_chart_data
 from mas.lab.plots.multilevel_trajectory.dag import _build_dag
 from mas.lab.plots.multilevel_trajectory.models import TransNode
@@ -1246,8 +1245,7 @@ def test_every_state_on_every_lane_yields_non_empty_cpr_popup():
     dag.py (see test_wait_resume_states_expose_internal_wait_fields) but
     whose popup must fall back to the calls lane's own ground-truth view via
     DFS position (num), never raw ts (see chart_data.py's dfs_pos notes)."""
-    if not _TRIP_PLANNER_TRACE.is_file():
-        pytest.skip(f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}")
+    assert _TRIP_PLANNER_TRACE.is_file(), f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}"
 
     chart = build_trajectory_chart_data(_TRIP_PLANNER_TRACE, title="phase6")
     lanes_by_id = {lane["laneId"]: lane for lane in chart["lanes"]}
@@ -1272,8 +1270,7 @@ def test_every_transition_on_every_lane_yields_diff_or_has_a_fallback():
     back empty, the transition must still carry hoverIn/hoverOut/label so
     the JS-side _buildGenericTransitionParts fallback (multilevel.html) has
     something to render instead of a bare "(no content)"."""
-    if not _TRIP_PLANNER_TRACE.is_file():
-        pytest.skip(f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}")
+    assert _TRIP_PLANNER_TRACE.is_file(), f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}"
 
     chart = build_trajectory_chart_data(_TRIP_PLANNER_TRACE, title="phase6")
     lanes_by_id = {lane["laneId"]: lane for lane in chart["lanes"]}
@@ -1305,8 +1302,7 @@ def test_fork_join_states_carry_bidirectional_branch_navigation():
     state's joinForkTs points back to that same fork state's own ts. Every
     listed ts must resolve to a real state on the SAME lane (the renderer's
     scrollToState/pinStateTip navigation depends on this)."""
-    if not _TRIP_PLANNER_TRACE.is_file():
-        pytest.skip(f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}")
+    assert _TRIP_PLANNER_TRACE.is_file(), f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}"
 
     chart = build_trajectory_chart_data(_TRIP_PLANNER_TRACE, title="phase7")
     checked_lanes = []
@@ -1359,8 +1355,7 @@ def test_calls_lane_fork_and_join_are_cross_linked_bidirectionally():
     the calls lane, which is the only lane carrying a genuine native
     same-agent tool fork/join pair in this trace (the agents lane has none —
     see test_fork_join_states_carry_bidirectional_branch_navigation)."""
-    if not _TRIP_PLANNER_TRACE.is_file():
-        pytest.skip(f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}")
+    assert _TRIP_PLANNER_TRACE.is_file(), f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}"
 
     chart = build_trajectory_chart_data(_TRIP_PLANNER_TRACE, title="fork-join-cross-link")
     calls_lane = next(lane for lane in chart["lanes"] if lane["laneId"] == "calls")
@@ -1396,8 +1391,7 @@ def test_calls_lane_branch_begin_end_are_paired_within_each_group():
     branch-begin/branch-end state now carries the same parallelGroupId as
     its fork/join siblings (the renderer's shape/labelling and the group
     cross-linking both rely on this)."""
-    if not _TRIP_PLANNER_TRACE.is_file():
-        pytest.skip(f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}")
+    assert _TRIP_PLANNER_TRACE.is_file(), f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}"
 
     chart = build_trajectory_chart_data(_TRIP_PLANNER_TRACE, title="branch-begin-end-pairing")
     calls_lane = next(lane for lane in chart["lanes"] if lane["laneId"] == "calls")
@@ -1435,8 +1429,7 @@ def test_calls_lane_branch_begin_end_are_cross_linked_to_each_other_and_to_fork_
     individual branches form one fully cross-linked graph: fork <-> merge,
     fork -> every branch entry, branch-begin <-> branch-end, and (via the
     shared parallelGroupId) branch-begin/branch-end <-> their own fork/merge."""
-    if not _TRIP_PLANNER_TRACE.is_file():
-        pytest.skip(f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}")
+    assert _TRIP_PLANNER_TRACE.is_file(), f"real-trace fixture not available: {_TRIP_PLANNER_TRACE}"
 
     chart = build_trajectory_chart_data(_TRIP_PLANNER_TRACE, title="branch-cross-link")
     calls_lane = next(lane for lane in chart["lanes"] if lane["laneId"] == "calls")

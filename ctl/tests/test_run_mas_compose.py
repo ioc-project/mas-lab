@@ -21,8 +21,7 @@ def _library_samples_manifest() -> Path | None:
 
 def test_compose_run_multi_agent_bind_from_library_samples():
     manifest = _library_samples_manifest()
-    if manifest is None:
-        pytest.skip("library-samples trip-planner not in workspace")
+    assert manifest is not None, "library-samples trip-planner not in workspace"
 
     result = compose_run(
         ComposeRequest(

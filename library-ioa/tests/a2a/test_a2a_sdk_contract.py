@@ -82,8 +82,7 @@ def test_a2a_sdk_defaults_to_enabled_without_the_mas_pin() -> None:
         text=True,
     )
     installed, enabled = result.stdout.strip().splitlines()
-    if installed != "True":
-        pytest.skip("opentelemetry is not installed")
+    assert installed == "True", "opentelemetry is not installed"
     assert enabled == "True"
 
 
@@ -608,9 +607,6 @@ def test_a2a_routes_reject_unsupported_content_type() -> None:
 
 @pytest.mark.parametrize("transport", [None, "JSONRPC", "HTTP+JSON", "GRPC"])
 def test_exposed_agent_can_delegate_outbound_over_a2a(transport: str | None) -> None:
-    if transport == "GRPC":
-        pytest.importorskip("grpc")
-
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
         peer_port = listener.getsockname()[1]
@@ -719,7 +715,6 @@ def test_exposed_agent_can_delegate_outbound_over_a2a(transport: str | None) -> 
 
 
 def test_grpc_maps_an_unsupported_version_to_failed_precondition() -> None:
-    pytest.importorskip("grpc")
     import grpc
     from a2a.types import a2a_pb2
     from a2a.types.a2a_pb2_grpc import A2AServiceStub

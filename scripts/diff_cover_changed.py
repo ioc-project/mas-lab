@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
+import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -27,6 +29,46 @@ COVERED_PREFIXES = (
     "ctl/src/mas/ctl/workspace/",
     "lab/components/bench/src/mas/lab/benchmark/pipeline/",
 )
+
+
+def coverage_omit_patterns() -> tuple[str, ...]:
+    """The ``omit`` globs of ``[tool.coverage.run]``: files coverage never measures."""
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return tuple(data.get("tool", {}).get("coverage", {}).get("run", {}).get("omit", ()))
+
+
+def _coverage_glob(pattern: str) -> re.Pattern[str]:
+    """Translate a coverage.py ``omit`` glob: a leading ``*/`` spans any prefix, ``**/``
+    spans zero or more directories, ``*`` stays inside one path segment, ``?`` is one
+    character. (Kept here so the gate needs no coverage import.)"""
+    out = []
+    i = 0
+    if pattern.startswith("*/"):
+        out.append(".*/")
+        i = 2
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def is_omitted_path(git_path: str, omit: tuple[str, ...]) -> bool:
+    posix = git_path.replace("\\", "/")
+    # coverage matches an omit glob against the absolute path; the repo path is its tail
+    return any(_coverage_glob(pattern).fullmatch("/" + posix) for pattern in omit)
 
 
 def default_base() -> str:
@@ -124,6 +166,7 @@ def evaluate(
     changed_lines: dict[str, set[int]],
     fail_under: float,
     prefixes: tuple[str, ...] = COVERED_PREFIXES,
+    omit: tuple[str, ...] = (),
 ) -> tuple[int, str]:
     measured = 0
     hit = 0
@@ -134,7 +177,7 @@ def evaluate(
         lines = changed_lines[path]
         if not path.endswith(".py"):
             continue
-        if not is_measured_path(path, prefixes):
+        if not is_measured_path(path, prefixes) or is_omitted_path(path, omit):
             skipped.append(path)
             continue
         hits = coverage_for_path(coverage, path) or {}
@@ -208,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         # No measured changes → skip. Measured changes without XML → fail.
         print(f"coverage file not found: {coverage_path}; treating as no measurements.")
         coverage = {}
-    code, report = evaluate(coverage, changed, args.fail_under, prefixes)
+    code, report = evaluate(coverage, changed, args.fail_under, prefixes, coverage_omit_patterns())
     print(report)
     return code
 

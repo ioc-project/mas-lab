@@ -54,7 +54,6 @@ _MAS_PATHS = _discover("MAS")
     ids=lambda p: str(p.relative_to(_ROOT)),
 )
 def test_shipped_agent_declares_identity(path: Path) -> None:
-    pytest.importorskip("jsonschema")
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     issues = collect_identity_issues(doc, "agent")
     assert not issues, f"{path.relative_to(_ROOT)}: {[i.message for i in issues]}"
@@ -73,7 +72,6 @@ def test_shipped_agent_declares_identity(path: Path) -> None:
     ids=lambda p: str(p.relative_to(_ROOT)),
 )
 def test_shipped_mas_declares_identity(path: Path) -> None:
-    pytest.importorskip("jsonschema")
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     issues = collect_identity_issues(doc, "mas")
     assert not issues, f"{path.relative_to(_ROOT)}: {[i.message for i in issues]}"

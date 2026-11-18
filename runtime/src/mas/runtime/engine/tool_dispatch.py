@@ -49,7 +49,7 @@ class _DelegationEngineTool:
     def __init__(self, delegation: DelegationContract) -> None:
         self.delegation = delegation
 
-    def claims(self, tool_name: str) -> bool:
+    def claims(self, tool_name: str, *, ctx: Any = None) -> bool:
         offers = getattr(self.delegation, "offers", None)
         if callable(offers):
             return bool(offers(tool_name))
@@ -91,7 +91,7 @@ def format_tool_result(result: Any, *, ctx: Any = None, call_id: str = "") -> st
     if isinstance(payload, str):
         return payload
     if isinstance(payload, dict):
-        return json.dumps(payload, indent=2)
+        return json.dumps(payload, indent=2, default=str)
     return str(payload)
 
 
@@ -213,25 +213,27 @@ async def aexecute_engine_tool(
         if delegation is not None:
             contracts.insert(0, _DelegationEngineTool(delegation))
         for contract in contracts:
-            if contract.claims(tool):
+            if contract.claims(tool, ctx=ctx):
                 call = getattr(contract, "acall", None)
                 if callable(call):
-                    return await call(
+                    result = await call(
                         tool,
                         arguments or {},
                         ctx=ctx,
                         correlation_id=correlation_id,
                         caller_call_id=caller_call_id,
                     )
-                warn_sync_plugin(contract, "call", "acall")
-                return await run_sync(
-                    contract.call,
-                    tool,
-                    arguments or {},
-                    ctx=ctx,
-                    correlation_id=correlation_id,
-                    caller_call_id=caller_call_id,
-                )
+                else:
+                    warn_sync_plugin(contract, "call", "acall")
+                    result = await run_sync(
+                        contract.call,
+                        tool,
+                        arguments or {},
+                        ctx=ctx,
+                        correlation_id=correlation_id,
+                        caller_call_id=caller_call_id,
+                    )
+                return format_tool_result("" if result is None else result, ctx=ctx, call_id=caller_call_id)
         if tool_provider is None:
             raise ToolExecutionError(f"No manifest tool provider configured; cannot execute {tool!r}")
         return await _acall_provider(

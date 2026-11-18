@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from mas.library.telemetry import OtelSpanSet
 
-from tests.conftest import requires_otel
-
 
 def test_from_spans_and_accessors():
     spans = [
@@ -46,7 +44,6 @@ def test_save_and_from_file_roundtrip(tmp_path):
     assert loaded.span_names() == {"TaskCall": 1}
 
 
-@requires_otel
 def test_from_events(events_path):
     ss = OtelSpanSet.from_events(
         events_path,

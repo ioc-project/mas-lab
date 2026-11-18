@@ -6,8 +6,11 @@ resolution, and a governed tool call end to end (auto-approve vs auto-deny).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from tutorial_support import T14, live_cli_env, live_tutorial_chat, load_yaml, run_cli, tutorial_file
+from fake_openai import FakeOpenAI, last_role, offered_tools, text, tool_call
+from tutorial_support import T14, load_yaml, run_cli, tutorial_copy, tutorial_file
 
 OVERLAYS = [
     "tools.yaml",
@@ -207,58 +210,56 @@ class TestGovernedToolCallEndToEnd:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Live mas-ctl chat (real LLM)
+# mas-ctl chat against a fake OpenAI endpoint
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = live_tutorial_chat
-_LIVE_QUERY = "Calculate 125 * 3 + 42."
+_QUERY = "Calculate 125 * 3 + 42."
 
 
-@_LIVE
-class TestLiveGovernedChat:
-    def test_auto_approve_runs_the_tool(self):
-        r = run_cli(
-            [
-                "mas-ctl",
-                "chat",
-                "agent.yaml",
-                "-o",
-                "overlays/tools.yaml",
-                "--control",
-                "controls/governance-auto-approve.yaml",
-                "--no-cache-read",
-                "--model",
-                "gpt-4o",
-                "-q",
-                _LIVE_QUERY,
-            ],
-            cwd=T14,
-            timeout=120,
-            extra_env=live_cli_env(),
-        )
+def _script(body):
+    """Call the calculator once and report its result."""
+    if last_role(body) != "tool":
+        calc = next(name for name in offered_tools(body) if "calc" in name)
+        return tool_call(calc, {"expression": "125 * 3 + 42"})
+    return text(f"125 * 3 + 42 = {body['messages'][-1]['content']}")
+
+
+def _chat(control: str, fake: FakeOpenAI, tmp_path: Path):
+    return run_cli(
+        [
+            "mas-ctl",
+            "chat",
+            "agent.yaml",
+            "-o",
+            "overlays/tools.yaml",
+            "--control",
+            control,
+            "--no-cache-read",
+            "--model",
+            "gpt-4o",
+            "-q",
+            _QUERY,
+        ],
+        cwd=tutorial_copy(T14, tmp_path),
+        timeout=120,
+        extra_env=fake.env(),
+    )
+
+
+class TestGovernedChat:
+    def test_auto_approve_runs_the_tool(self, tmp_path):
+        with FakeOpenAI(_script) as fake:
+            r = _chat("controls/governance-auto-approve.yaml", fake, tmp_path)
         assert r.returncode == 0, r.stderr
+        tool_results = [body["messages"][-1]["content"] for body in fake.bodies if last_role(body) == "tool"]
+        assert tool_results
+        assert "417" in str(tool_results[0])
         assert "417" in r.stdout
 
-    def test_auto_deny_blocks_the_tool(self):
-        r = run_cli(
-            [
-                "mas-ctl",
-                "chat",
-                "agent.yaml",
-                "-o",
-                "overlays/tools.yaml",
-                "--control",
-                "controls/governance-auto-deny.yaml",
-                "--no-cache-read",
-                "--model",
-                "gpt-4o",
-                "-q",
-                _LIVE_QUERY,
-            ],
-            cwd=T14,
-            timeout=120,
-            extra_env=live_cli_env(),
-        )
+    def test_auto_deny_blocks_the_tool(self, tmp_path):
+        with FakeOpenAI(_script) as fake:
+            r = _chat("controls/governance-auto-deny.yaml", fake, tmp_path)
         assert r.returncode == 0, r.stderr
+        assert len(fake.bodies) == 1, "a denied tool call must end the turn without a second model request"
         assert "417" not in r.stdout
         assert "blocked" in r.stdout.lower()

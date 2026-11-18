@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 from mas.library.standard.plugins.context.summarizer import SUMMARIZE_INSTRUCTIONS, LlmSummarizer
 from mas.runtime.aio import settle
@@ -45,7 +44,6 @@ def test_sample_agent_pins_model_and_instructions() -> None:
 
 
 def test_sample_agent_validates() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_file
 
     result = validate_file(SAMPLE / "agent.yaml", kind="agent", strict=True, resolve_refs=True)

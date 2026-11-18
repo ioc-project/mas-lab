@@ -129,16 +129,25 @@ def test_branch_separator_label_flips_before_the_right_edge() -> None:
 
 
 def _shipped_traces() -> list:
+    """The ``events.jsonl`` files the repository ships: tracked files, never run output."""
+    import subprocess
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[4]
     skip = ("pipeline_parity", "cache-backup", "cache-entry", "node_modules", ".venv")
-    found = []
-    for base in ("docs", "library-samples", "library-kg/examples", "library-telemetry/examples", "tests/fixtures"):
-        for path in (root / base).rglob("events.jsonl"):
-            if not any(part in skip for part in path.parts):
-                found.append(path)
-    return sorted(found)
+    bases = ("docs", "library-samples", "library-kg/examples", "library-telemetry/examples", "tests/fixtures")
+    try:
+        listed = subprocess.run(
+            ["git", "ls-files", "-z", "--", *bases],
+            cwd=root,
+            capture_output=True,
+            check=True,
+            text=True,
+        ).stdout.split("\0")
+        found = [root / name for name in listed if name.endswith("/events.jsonl")]
+    except (OSError, subprocess.CalledProcessError):  # not a git checkout (sdist)
+        found = [p for base in bases for p in (root / base).rglob("events.jsonl")]
+    return sorted(p for p in found if not any(part in skip for part in p.parts))
 
 
 @pytest.mark.parametrize("path", _shipped_traces(), ids=lambda p: p.parent.name)

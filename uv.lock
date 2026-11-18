@@ -3148,6 +3148,7 @@ dev = [
     { name = "httpx" },
     { name = "hypothesis" },
     { name = "import-linter" },
+    { name = "mas-lab-library-ioa", extra = ["slim"] },
     { name = "mypy" },
     { name = "pyarrow" },
     { name = "pytest" },
@@ -3179,6 +3180,7 @@ dev = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "hypothesis", specifier = ">=6.0" },
     { name = "import-linter", specifier = ">=2.0" },
+    { name = "mas-lab-library-ioa", extras = ["slim"], editable = "library-ioa" },
     { name = "mypy", specifier = ">=1.19.1" },
     { name = "pyarrow", specifier = ">=14.0" },
     { name = "pytest", specifier = ">=9.0.2" },
@@ -3554,6 +3556,11 @@ all = [
     { name = "deepagents" },
     { name = "google-adk" },
 ]
+dev = [
+    { name = "deepagents" },
+    { name = "google-adk" },
+    { name = "pytest" },
+]
 langchain = [
     { name = "deepagents" },
 ]
@@ -3564,11 +3571,13 @@ requires-dist = [
     { name = "deepagents", marker = "extra == 'langchain'", specifier = ">=0.7.0,<1.0.0" },
     { name = "google-adk", marker = "extra == 'adk'", specifier = ">=1.0.0,<3.0.0" },
     { name = "google-adk", marker = "extra == 'all'", specifier = ">=1.0.0,<3.0.0" },
+    { name = "mas-lab-library-skills", extras = ["all"], marker = "extra == 'dev'", editable = "library-skills" },
     { name = "mas-lab-runtime", editable = "runtime" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "python-frontmatter", specifier = ">=1.0.0,<2.0.0" },
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
 ]
-provides-extras = ["adk", "langchain", "all"]
+provides-extras = ["adk", "langchain", "all", "dev"]
 
 [[package]]
 name = "mas-lab-library-standard"

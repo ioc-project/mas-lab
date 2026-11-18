@@ -21,7 +21,6 @@ def _library_envelope(**extra):
 
 
 def test_schema_rejects_plugins_keyed_by_type() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_data
 
     result = validate_data(
@@ -47,7 +46,6 @@ def test_schema_rejects_plugins_keyed_by_type() -> None:
 
 
 def test_schema_rejects_plugin_entry_without_type() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_data
 
     result = validate_data(
@@ -71,7 +69,6 @@ def test_schema_rejects_plugin_entry_without_type() -> None:
 
 
 def test_schema_accepts_flat_plugin_list() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_data
 
     result = validate_data(

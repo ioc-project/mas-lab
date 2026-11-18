@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import sys
 from dataclasses import dataclass, field
@@ -292,19 +293,52 @@ _CLAIMED_PACKAGES: dict[str, Path] = {}
 
 def _register_library_manifest(reg: PluginRegistry, manifest_path: Path) -> None:
     library_parent = str(manifest_path.parent.parent)
-    if library_parent not in sys.path:
+    added_to_path = library_parent not in sys.path
+    if added_to_path:
         sys.path.append(library_parent)
+    claimed_before = dict(_CLAIMED_PACKAGES)
+    modules_before = set(sys.modules)
+    registered_before = reg.snapshot()
     try:
         data = _load_yaml(manifest_path)
         _claim_library_package(manifest_path.parent, data, _CLAIMED_PACKAGES)
         register_manifest_data(reg, data, source=manifest_path)
     except Exception as exc:
+        # A manifest that failed must not keep its package name claimed.
+        # Evict only this library's own modules imported by the attempt: never an already
+        # loaded package, nor a dependency or another thread's import in the same window.
+        library_dir = manifest_path.parent.resolve()
+        for module in set(sys.modules) - modules_before:
+            if _module_is_under(sys.modules.get(module), library_dir):
+                del sys.modules[module]
+        if added_to_path and library_parent in sys.path:
+            sys.path.remove(library_parent)
+            importlib.invalidate_caches()
+        _CLAIMED_PACKAGES.clear()
+        _CLAIMED_PACKAGES.update(claimed_before)
+        reg.restore(registered_before)
         raise ValueError(f"Failed to register plugin manifest {manifest_path}: {exc}") from exc
     _REGISTERED_MANIFESTS.add(manifest_path.resolve())
 
 
-def register_new_library_plugins(reg: PluginRegistry) -> None:
+def _module_is_under(module: Any, directory: Path) -> bool:
+    paths = [getattr(module, "__file__", None), *getattr(module, "__path__", [])]
+    for raw in paths:
+        try:
+            if raw and Path(raw).resolve().is_relative_to(directory):
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def register_new_library_plugins(reg: PluginRegistry, *, only_under: Path | None = None) -> None:
     """Register plugin manifests that appeared after ``reg`` was built.
+
+    A manifest that fails raises when it sits under ``only_under`` (or when that is not
+    given), and then nothing this call registered stays. Elsewhere, such as a lab found
+    through the working directory, the failure is logged and skipped, so a broken lab
+    cannot break the loading of another one.
 
     The registry is built once per process. A long-lived process (the
     controller daemon) later loads labs whose own ``library.yaml`` declares
@@ -312,9 +346,23 @@ def register_new_library_plugins(reg: PluginRegistry) -> None:
     """
     from mas.library_catalog import discover_plugin_manifests
 
+    snapshot = reg.snapshot()
+    manifests_before = set(_REGISTERED_MANIFESTS)
+    claimed_before = dict(_CLAIMED_PACKAGES)
     for manifest_path in discover_plugin_manifests():
-        if manifest_path.resolve() not in _REGISTERED_MANIFESTS:
+        if manifest_path.resolve() in _REGISTERED_MANIFESTS:
+            continue
+        try:
             _register_library_manifest(reg, manifest_path)
+        except ValueError as exc:
+            if only_under is None or manifest_path.resolve().is_relative_to(only_under.resolve()):
+                # all or nothing: a lab's earlier libraries do not stay behind a failed one
+                reg.restore(snapshot)
+                _REGISTERED_MANIFESTS.intersection_update(manifests_before)
+                _CLAIMED_PACKAGES.clear()
+                _CLAIMED_PACKAGES.update(claimed_before)
+                raise
+            logger.warning("Skipping a library outside the lab being loaded: %s", exc)
 
 
 def clear_library_plugin_registration() -> None:

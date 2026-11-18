@@ -8,12 +8,8 @@ import json
 from pathlib import Path
 
 import pytest
-from mas.library.telemetry.conversion.exporter import OTEL_AVAILABLE
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.transition import TransitionEvent
-
-pytestmark = pytest.mark.skipif(not OTEL_AVAILABLE, reason="opentelemetry-sdk not installed")
-
 
 _RECORDS = [
     {

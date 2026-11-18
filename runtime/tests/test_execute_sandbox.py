@@ -9,7 +9,7 @@ from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
 
 class _CwdTool:
-    def claims(self, tool_name: str) -> bool:
+    def claims(self, tool_name: str, *, ctx=None) -> bool:
         return tool_name == "cwd"
 
     def call(self, tool_name: str, arguments: dict, **_: object) -> str:

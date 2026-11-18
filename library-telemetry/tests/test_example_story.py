@@ -12,14 +12,11 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from tests.conftest import requires_otel
-
 EXAMPLE_EVENTS = Path(__file__).resolve().parents[1] / "examples" / "travel-planner.events.jsonl"
 EXAMPLE_SPANS = 944
 INFRA = Path(__file__).resolve().parents[1] / "infra" / "local-otel.yaml"
 
 
-@requires_otel
 def test_story_step1_convert(tmp_path):
     from mas.library.telemetry.steps.convert import run_convert
 
@@ -56,7 +53,6 @@ def test_story_step1_convert(tmp_path):
     }
 
 
-@requires_otel
 def test_story_step2_verify(tmp_path):
     from mas.library.telemetry.steps.convert import run_convert
     from mas.library.telemetry.steps.verify_spans import run_verify_spans
@@ -74,7 +70,6 @@ def test_story_step2_verify(tmp_path):
     assert conf["L3"] in {"full", "passing"}
 
 
-@requires_otel
 def test_story_step3_push_via_infra_dry_run(tmp_path):
     from mas.library.telemetry.steps.convert import run_convert
     from mas.library.telemetry.steps.push_otlp import run_push_otlp
@@ -91,7 +86,6 @@ def test_story_step3_push_via_infra_dry_run(tmp_path):
     assert "localhost:4318" in result["detail"]
 
 
-@requires_otel
 def test_story_step4_roundtrip_parity(tmp_path):
     # ④ (dump) needs a store; we simulate the round-trip by re-converting and
     # comparing — the same semantic parity the doc's `compare` command asserts.

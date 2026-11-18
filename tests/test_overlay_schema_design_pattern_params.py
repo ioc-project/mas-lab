@@ -21,7 +21,7 @@ def test_overlay_schema_rejects_global_design_pattern_params_on_mas_target() -> 
             "target": {"kind": "MAS"},
             "patch": {
                 "design_pattern": {
-                    "type": "concord",
+                    "type": "sample-pattern",
                     "params": {
                         "max_rounds": 3,
                         "enable_peer_context": False,
@@ -45,7 +45,7 @@ def test_overlay_schema_rejects_agent_only_patch_on_flavour_target() -> None:
             "target": {"kind": "Flavour"},
             "patch": {
                 "design_pattern": {
-                    "type": "concord",
+                    "type": "sample-pattern",
                 }
             },
         },

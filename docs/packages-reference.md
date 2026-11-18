@@ -240,6 +240,7 @@ uv pip install "mas-lab-library-skills[all]"  # PyPI, all extras
 | `adk`       | `google-adk>=1.0.0,<3.0.0`                             |
 | `langchain` | `deepagents>=0.7.0,<1.0.0`                             |
 | `all`       | `google-adk>=1.0.0,<3.0.0`, `deepagents>=0.7.0,<1.0.0` |
+| `dev`       | `pytest>=7.0`, `mas-lab-library-skills[all]`           |
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 

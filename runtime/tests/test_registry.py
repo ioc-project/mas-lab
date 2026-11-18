@@ -462,3 +462,59 @@ class TestRealPlugins:
         from mas._dist import extra_spec
 
         assert variant.extra == extra_spec("convert", module=variant.module)
+
+
+def test_a_manifest_that_fails_releases_its_claim_and_only_its_own_modules(tmp_path, monkeypatch) -> None:
+    import sys
+    import types
+
+    from mas.runtime.registry import bootstrap
+
+    lib = tmp_path / "rollbacklib"
+    lib.mkdir()
+    manifest = lib / "library.yaml"
+    manifest.write_text("plugins:\n  - module: rollbacklib.plugins\n", encoding="utf-8")
+    monkeypatch.setattr(bootstrap, "_CLAIMED_PACKAGES", {})
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    monkeypatch.setitem(sys.modules, "already_loaded_pkg", object())
+
+    own = types.ModuleType("rollbacklib.plugins")
+    own.__file__ = str(lib / "plugins.py")
+
+    registry = PluginRegistry()
+    registry.register(PluginEntry(urn="mas.keep.me", attributes={"plugin_type": "keep"}, variants={}))
+
+    def boom(reg, data, source=None):
+        reg.register(PluginEntry(urn="mas.half.registered", attributes={"plugin_type": "half"}, variants={}))
+        reg.register_types({"half"})
+        reg.set_default("half", "mas.half.registered")
+        sys.modules["rollbacklib.plugins"] = own
+        sys.modules["dependency_first_imported_by_the_attempt"] = types.ModuleType("dep")
+        raise RuntimeError("bad plugin")
+
+    monkeypatch.setattr(bootstrap, "register_manifest_data", boom)
+    with pytest.raises(ValueError, match="Failed to register plugin manifest"):
+        bootstrap._register_library_manifest(registry, manifest)
+
+    assert registry.get_entry("mas.half.registered") is None
+    assert registry.get_entry("mas.keep.me") is not None
+    assert "half" not in registry._known_types
+    assert "half" not in registry._spec_defaults
+    assert "half" not in registry._by_type
+    assert str(tmp_path) not in sys.path
+    assert "rollbacklib" not in bootstrap._CLAIMED_PACKAGES
+    assert "rollbacklib.plugins" not in sys.modules
+    assert "dependency_first_imported_by_the_attempt" in sys.modules
+    assert "already_loaded_pkg" in sys.modules
+    sys.modules.pop("dependency_first_imported_by_the_attempt", None)
+
+
+def test_restore_puts_back_the_scan_paths_too(tmp_path) -> None:
+    from mas.runtime.registry import PluginRegistry
+
+    reg = PluginRegistry()
+    reg.add_scan_path(tmp_path / "one")
+    snap = reg.snapshot()
+    reg.add_scan_path(tmp_path / "two")
+    reg.restore(snap)
+    assert reg._scan_paths == [tmp_path / "one"]

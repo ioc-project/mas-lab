@@ -10,6 +10,6 @@ spec:
     agents:
       moderator:
         design_pattern:
-          type: react
-          config:
+          type: reflection
+          params:
             max_steps: 40

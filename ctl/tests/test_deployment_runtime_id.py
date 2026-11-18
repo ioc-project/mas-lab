@@ -12,8 +12,7 @@ from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
 def test_resolve_default_runtime_from_tutorial_deployment():
     root = Path(__file__).resolve().parents[2]
     t01 = root / "docs" / "tutorials" / "01-building-an-agent"
-    if not t01.is_dir():
-        pytest.skip("tutorial bundle not present")
+    assert t01.is_dir(), "tutorial bundle not present"
     rid = resolve_runtime_id_for_run(manifest_dir=t01)
     assert rid == DEFAULT_RUNTIME_ID
 
@@ -21,8 +20,7 @@ def test_resolve_default_runtime_from_tutorial_deployment():
 def test_cli_override_wins():
     root = Path(__file__).resolve().parents[2]
     t01 = root / "docs" / "tutorials" / "01-building-an-agent"
-    if not t01.is_dir():
-        pytest.skip("tutorial bundle not present")
+    assert t01.is_dir(), "tutorial bundle not present"
     rid = resolve_runtime_id_for_run(manifest_dir=t01, cli_override=DEFAULT_RUNTIME_ID)
     assert rid == DEFAULT_RUNTIME_ID
 

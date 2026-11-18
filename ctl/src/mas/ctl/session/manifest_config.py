@@ -377,4 +377,4 @@ def engine_use_tool_loop(manifest: dict | None, kernel: KernelConfig) -> bool:
     if kernel.pattern_plugin_id == "plan_execute@v1":
         return False
     spec = (manifest or {}).get("spec") or {}
-    return bool(spec.get("tools") or spec.get("skills"))
+    return bool(spec.get("tools") or spec.get("skills") or spec.get("system_plugins"))

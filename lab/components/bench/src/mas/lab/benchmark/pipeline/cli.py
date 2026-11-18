@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """
 CLI for pipeline execution.
 
@@ -12,6 +11,7 @@ Usage:
     python -m mas.lab.benchmark.pipeline.cli clean evaluation.yaml
 """
 
+from __future__ import annotations
 
 import argparse
 import asyncio
@@ -31,7 +31,19 @@ logger = logging.getLogger(__name__)
 
 
 def _load_lab_custom_steps(pipeline_config_path: Path) -> None:
-    """Auto-load custom step types from the lab directory."""
+    """Auto-load custom step types from the lab directory.
+
+    Also makes the lab's own ``library.yaml`` steps resolvable, as the
+    controller does, so the CLI and the daemon agree wherever the cwd is.
+    """
+    from mas.lab.lab.config import discover_lab_context, inject_lab_libraries
+
+    lab_context = discover_lab_context(pipeline_config_path)
+    if lab_context.lab_yaml:
+        try:
+            inject_lab_libraries(lab_context)
+        except Exception as exc:
+            raise SystemExit(f"Could not load the lab's libraries: {exc}") from exc
     search_dir = pipeline_config_path.parent
     max_levels = 5
 
@@ -39,9 +51,7 @@ def _load_lab_custom_steps(pipeline_config_path: Path) -> None:
         register_file = search_dir / "register_steps.py"
         if register_file.exists():
             try:
-                spec = importlib.util.spec_from_file_location(
-                    "register_steps_local", register_file
-                )
+                spec = importlib.util.spec_from_file_location("register_steps_local", register_file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     sys.modules["register_steps_local"] = module
@@ -61,9 +71,7 @@ def _load_lab_custom_steps(pipeline_config_path: Path) -> None:
                     type(e).__name__,
                     e,
                 )
-                raise RuntimeError(
-                    f"Failed to load custom step registrations from {register_file}: {e}"
-                ) from e
+                raise RuntimeError(f"Failed to load custom step registrations from {register_file}: {e}") from e
             except Exception as e:
                 logger.warning("[Pipeline] Could not load %s: %s", register_file, e)
                 return
@@ -78,8 +86,8 @@ def cmd_run(args):
     _load_lab_custom_steps(config_path)
 
     try:
-        from mas.lab.benchmark.pipeline.config import PipelineEngineSpec
         from mas.lab.benchmark.pipeline.channel import install_channel
+        from mas.lab.benchmark.pipeline.config import PipelineEngineSpec
 
         install_channel(PipelineEngineSpec())
     except Exception:
@@ -204,9 +212,7 @@ def cmd_clean(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Pipeline CLI for declarative evaluations"
-    )
+    parser = argparse.ArgumentParser(description="Pipeline CLI for declarative evaluations")
     subparsers = parser.add_subparsers(dest="command", help="Command")
 
     run_parser = subparsers.add_parser("run", help="Execute pipeline")

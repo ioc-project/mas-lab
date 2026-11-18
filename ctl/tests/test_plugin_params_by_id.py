@@ -44,7 +44,6 @@ def _middleware(middleware: str, params: dict) -> dict:
     ],
 )
 def test_shipped_middleware_accepts_own_params(tmp_path: Path, middleware: str, params: dict) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(tmp_path, "mw.yaml", _middleware(middleware, params))
     result = validate_file(path, kind="infra", strict=True, resolve_refs=True)
     assert result.ok, result.issues
@@ -59,21 +58,18 @@ def test_shipped_middleware_accepts_own_params(tmp_path: Path, middleware: str, 
     ],
 )
 def test_shipped_middleware_rejects_sibling_plugin_params(tmp_path: Path, middleware: str, params: dict) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(tmp_path, "mw.yaml", _middleware(middleware, params))
     result = validate_file(path, kind="infra", strict=True, resolve_refs=True)
     assert not result.ok
 
 
 def test_unknown_middleware_keeps_custom_params(tmp_path: Path) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(tmp_path, "mw.yaml", _middleware("acme_pace", {"tokens_per_sec": 12}))
     result = validate_file(path, kind="infra", strict=True, resolve_refs=True)
     assert result.ok, result.issues
 
 
 def test_summarising_rejects_stack_param(tmp_path: Path) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(
         tmp_path,
         "agent.yaml",
@@ -84,7 +80,6 @@ def test_summarising_rejects_stack_param(tmp_path: Path) -> None:
 
 
 def test_stack_rejects_summarizer_param(tmp_path: Path) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(
         tmp_path,
         "agent.yaml",
@@ -95,7 +90,6 @@ def test_stack_rejects_summarizer_param(tmp_path: Path) -> None:
 
 
 def test_sliding_window_rejects_hysteresis(tmp_path: Path) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(
         tmp_path,
         "agent.yaml",
@@ -106,7 +100,6 @@ def test_sliding_window_rejects_hysteresis(tmp_path: Path) -> None:
 
 
 def test_summarising_accepts_own_params(tmp_path: Path) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(
         tmp_path,
         "agent.yaml",
@@ -122,7 +115,6 @@ def test_summarising_accepts_own_params(tmp_path: Path) -> None:
 
 
 def test_unknown_context_manager_keeps_custom_params(tmp_path: Path) -> None:
-    pytest.importorskip("jsonschema")
     path = _write(
         tmp_path,
         "agent.yaml",

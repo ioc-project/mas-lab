@@ -19,7 +19,7 @@ def test_path_ref_for_anchor_relative(tmp_path: Path):
 
 
 def test_experiment_infra_bundle_path(tmp_path: Path):
-    exp = tmp_path / "labs" / "concord"
+    exp = tmp_path / "labs" / "sample"
     bundle = exp / "infra" / "gls-vllm.yaml"
     bundle.parent.mkdir(parents=True)
     bundle.write_text("{}", encoding="utf-8")

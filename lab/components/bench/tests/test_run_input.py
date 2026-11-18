@@ -91,7 +91,6 @@ def test_memory_seed_kind_file(tmp_path: Path):
 
 
 def test_validate_user_string_envelope():
-    pytest.importorskip("jsonschema")
     validate_run_input_envelope({"inputs": {"user": "Hello"}})
 
 
@@ -286,7 +285,6 @@ def test_run_input_round_trip_dict():
     assert envelope["inputs"]["user"] == "Hi"
     assert envelope["inputs"]["hitl"] == ["OK"]
     envelope = run_input_to_dict(run)
-    pytest.importorskip("jsonschema")
     validate_run_input_envelope(envelope)
     reloaded = load_run_input({"id": "r", **envelope})
     assert reloaded.primary_prompt == "Hi"

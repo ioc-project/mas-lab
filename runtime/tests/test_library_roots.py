@@ -8,6 +8,7 @@ single broken library must never take down discovery of the others.
 from __future__ import annotations
 
 import sys
+import threading
 import types
 
 import mas.library_roots as library_roots
@@ -390,3 +391,25 @@ def test_the_lab_registered_last_wins_a_library_name_two_labs_share(tmp_path, mo
 
     library_roots.register_lab_dir(first)  # running lab A again makes it current
     assert library_roots.resolve_named_library_root("mylab_lib") == first_lib.resolve()
+
+
+def test_register_lab_dir_from_many_threads_keeps_each_root_once(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(library_roots, "_REGISTERED_LAB_DIRS", [])
+    labs = []
+    for n in range(8):
+        lab = tmp_path / f"lab{n}.lab"
+        lab.mkdir()
+        labs.append(lab)
+
+    def register(lab):
+        for _ in range(200):
+            library_roots.register_lab_dir(lab)
+            library_roots.restore_lab_dir(lab, library_roots.register_lab_dir(lab))
+
+    threads = [threading.Thread(target=register, args=(lab,)) for lab in labs]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert sorted(library_roots._REGISTERED_LAB_DIRS) == sorted(lab.resolve() for lab in labs)

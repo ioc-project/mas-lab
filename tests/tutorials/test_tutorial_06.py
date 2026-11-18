@@ -1,10 +1,11 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tutorial 06 — Agent skills: validation, frontmatter contract, live chat."""
+"""Tutorial 06 — Agent skills: validation, frontmatter contract, chat against a fake endpoint."""
 
 from __future__ import annotations
 
-from tutorial_support import T06, live_cli_env, live_tutorial_chat, load_yaml, run_cli
+from fake_openai import FakeOpenAI, last_role, offered_tools, text, tool_call
+from tutorial_support import T06, load_yaml, run_cli, tutorial_copy
 
 
 class TestManifestValidation:
@@ -85,35 +86,42 @@ class TestOverlayMerging:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Live mas-ctl chat (real LLM)
+# mas-ctl chat against a fake OpenAI endpoint
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LIVE = live_tutorial_chat
-_LIVE_QUERY = "What is the speed of light in kilometres and miles per second? Use the answer-expert skill."
+_QUERY = "What is the speed of light in kilometres and miles per second? Use the answer-expert skill."
 
 
-@_LIVE
-class TestLiveSkillChat:
-    def test_with_skills_activates_and_answers(self):
-        r = run_cli(
-            [
-                "mas-ctl",
-                "chat",
-                "agent.yaml",
-                "-o",
-                "overlays/with-skills.yaml",
-                "--no-cache-read",
-                "--model",
-                "gpt-4o",
-                "--trace",
-                "-q",
-                _LIVE_QUERY,
-            ],
-            cwd=T06,
-            timeout=120,
-            extra_env=live_cli_env(),
-        )
+def _script(body):
+    if last_role(body) != "tool" and "activate_skill" in offered_tools(body):
+        return tool_call("activate_skill", {"name": "answer-expert"})
+    return text("About 299,792 km/s, or 186,282 miles per second.\n\nConfidence: high")
+
+
+class TestSkillChat:
+    def test_with_skills_activates_and_answers(self, tmp_path):
+        with FakeOpenAI(_script) as fake:
+            r = run_cli(
+                [
+                    "mas-ctl",
+                    "chat",
+                    "agent.yaml",
+                    "-o",
+                    "overlays/with-skills.yaml",
+                    "--no-cache-read",
+                    "--model",
+                    "gpt-4o",
+                    "--trace",
+                    "-q",
+                    _QUERY,
+                ],
+                cwd=tutorial_copy(T06, tmp_path),
+                timeout=120,
+                extra_env=fake.env(),
+            )
         combined = f"{r.stdout}\n{r.stderr}"
         assert r.returncode == 0, r.stderr
-        assert "SKILL[answer-expert]" in combined
+        assert "TOOL[activate_skill]" in combined
+        skill_result = next(body["messages"][-1] for body in fake.bodies if last_role(body) == "tool")
+        assert "answer-expert" in skill_result["content"]
         assert "Confidence:" in combined

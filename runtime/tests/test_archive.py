@@ -61,12 +61,12 @@ def test_pinned_skill_leaf_stays_in_covering_view() -> None:
             {
                 "role": "tool",
                 "tool_call_id": "c1",
-                "content": '<skill_content name="accord">LOCK RULES</skill_content>',
+                "content": '<skill_content name="lockrules">LOCK RULES</skill_content>',
             },
             {
                 "pin_policy": "never",
                 "semantic": "instruction",
-                "section_id": "skills/activated/accord",
+                "section_id": "skills/activated/lockrules",
             },
         ),
     ]
@@ -147,11 +147,11 @@ async def test_live_skill_body_survives_more_than_twenty_tool_rows() -> None:
     ctx.record_assistant_tool_call(call_id="sk", tool_name="activate_skill", arguments={})
     ctx.record_tool_result(
         call_id="sk",
-        content='<skill_content name="accord">PINNED BODY</skill_content>',
+        content='<skill_content name="lockrules">PINNED BODY</skill_content>',
         chunk={
             "pin_policy": "never",
             "semantic": "instruction",
-            "section_id": "skills/activated/accord",
+            "section_id": "skills/activated/lockrules",
         },
     )
     for i in range(24):

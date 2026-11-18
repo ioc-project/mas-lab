@@ -11,5 +11,5 @@ spec:
       moderator:
         design_pattern:
           type: cot
-          config:
+          params:
             max_steps: 40

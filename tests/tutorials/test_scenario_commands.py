@@ -36,6 +36,7 @@ from __future__ import annotations
 import importlib
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -51,65 +52,6 @@ _ONLINE_MODE: bool = os.environ.get("TUTORIAL_ONLINE", "").strip().lower() in (
     "true",
     "yes",
 )
-
-_DOCKER_AVAILABLE: bool | None = None
-
-
-def _docker_available() -> bool:
-    """Return True when the Docker daemon accepts commands."""
-    global _DOCKER_AVAILABLE
-    if _DOCKER_AVAILABLE is None:
-        try:
-            result = subprocess.run(
-                ["docker", "info"],
-                capture_output=True,
-                timeout=10,
-            )
-            _DOCKER_AVAILABLE = result.returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            _DOCKER_AVAILABLE = False
-    return _DOCKER_AVAILABLE
-
-
-_DOCKER_CLI_IMAGE_BUILT: bool | None = None
-_DOCKER_COMPOSE_FILE = Path(__file__).resolve().parents[2] / "docker" / "compose.yaml"
-
-
-def _docker_cli_image_built() -> bool:
-    """Return True only when the cli service image is already present locally.
-
-    ``docker compose run --no-deps cli`` refuses to build on-demand, so if the
-    image is absent the command hangs or fails within the 60-second test timeout.
-    The image is built by ``task docker-build`` or the ``docker-build`` scenario
-    step (timeout_s: 300) — not by ``task ci``.
-    """
-    global _DOCKER_CLI_IMAGE_BUILT
-    if _DOCKER_CLI_IMAGE_BUILT is None:
-        if not _docker_available():
-            _DOCKER_CLI_IMAGE_BUILT = False
-        else:
-            try:
-                result = subprocess.run(
-                    [
-                        "docker",
-                        "compose",
-                        "--profile",
-                        "tools",
-                        "-f",
-                        str(_DOCKER_COMPOSE_FILE),
-                        "images",
-                        "--quiet",
-                        "cli",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-                _DOCKER_CLI_IMAGE_BUILT = bool(result.stdout.strip())
-            except (OSError, subprocess.TimeoutExpired):
-                _DOCKER_CLI_IMAGE_BUILT = False
-    return _DOCKER_CLI_IMAGE_BUILT
-
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -352,10 +294,18 @@ def _collect_command_cases() -> list[_CommandCase]:
     return cases
 
 
-_CASES = _collect_command_cases()
+def is_docker_command(command: str) -> bool:
+    """True for steps that run ``docker ...`` (functional suite, needs an image build)."""
+    return " ".join(command.split()).startswith("docker ")
 
 
-def _idfn(case: _CommandCase) -> str:
+_ALL_CASES = _collect_command_cases()
+# Docker steps need a daemon and a built image: they run in tests/functional.
+_CASES = [c for c in _ALL_CASES if not is_docker_command(c.command)]
+DOCKER_CASES = [c for c in _ALL_CASES if is_docker_command(c.command)]
+
+
+def scenario_case_id(case: _CommandCase) -> str:
     # e.g. "norm-verify/Inspecting Traces/Telemetry summary"
     return f"{case.scenario_id}/{case.section_title}/{case.step_title}"
 
@@ -365,33 +315,25 @@ def _idfn(case: _CommandCase) -> str:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("case", _CASES, ids=[_idfn(c) for c in _CASES])
-def test_scenario_command(case: _CommandCase, tmp_path):
-    """Run a COMMAND step from a scenario YAML and check exit code + output."""
-    # Skip if required modules are not importable
+def run_scenario_case(case: _CommandCase, cwd: Path | None = None) -> None:
+    """Run a COMMAND step from a scenario YAML and check exit code + output.
+
+    ``cwd`` overrides the step's working directory (the tests pass a throwaway copy).
+    """
     for mod in case.requires:
-        if importlib.util.find_spec(mod) is None:
-            pytest.skip(f"requires {mod}")
+        assert importlib.util.find_spec(mod) is not None, f"scenario step requires {mod}"
 
     # Normalise multi-line folded YAML command (> operator produces single line)
     command = " ".join(case.command.split())
     command = _rewrite_command_for_v2(command)
     command = _inject_docker_env(command, _test_env())
 
-    if command.strip().startswith("docker "):
-        if not _docker_available():
-            pytest.skip("Docker daemon not available")
-        if not _docker_cli_image_built():
-            pytest.skip(
-                "Docker cli image not built — run: docker compose --profile tools -f docker/compose.yaml build cli"
-            )
-
     result = subprocess.run(
         command,
         shell=True,
         capture_output=True,
         text=True,
-        cwd=str(case.working_dir),
+        cwd=str(cwd or case.working_dir),
         env=_test_env(),
         timeout=case.timeout_s,
     )
@@ -412,6 +354,30 @@ def test_scenario_command(case: _CommandCase, tmp_path):
         )
 
 
+_SCRATCH_DIRS: dict[Path, Path] = {}
+
+
+def _scratch_working_dir(working_dir: Path, tmp_path_factory) -> Path:
+    """The directory a step runs in: a per-scenario temporary copy of a tutorial directory.
+
+    Steps write traces and plots beside the manifests, so a tutorial directory runs on a copy that
+    its later steps share (a plot step reads the trace a chat step wrote). The repository root is
+    used as is.
+    """
+    if working_dir == REPO_ROOT:
+        return working_dir
+    if working_dir not in _SCRATCH_DIRS:
+        dest = tmp_path_factory.mktemp("scenario") / working_dir.name
+        shutil.copytree(working_dir, dest)
+        _SCRATCH_DIRS[working_dir] = dest
+    return _SCRATCH_DIRS[working_dir]
+
+
+@pytest.mark.parametrize("case", _CASES, ids=[scenario_case_id(c) for c in _CASES])
+def test_scenario_command(case: _CommandCase, tmp_path_factory):
+    run_scenario_case(case, cwd=_scratch_working_dir(case.working_dir, tmp_path_factory))
+
+
 # ---------------------------------------------------------------------------
 # Scenario file presence guard (separate from parametrized tests)
 # ---------------------------------------------------------------------------
@@ -426,8 +392,6 @@ def test_scenario_yaml_exists(yaml_path: Path, _base: Path, scenario_id: str):
 @pytest.mark.parametrize("yaml_path,_base,scenario_id", _SCENARIOS, ids=[s[2] for s in _SCENARIOS])
 def test_scenario_yaml_parses(yaml_path: Path, _base: Path, scenario_id: str):
     """Each registered scenario YAML must parse cleanly."""
-    if not yaml_path.exists():
-        pytest.skip(f"{yaml_path} not found")
     with open(yaml_path, encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
     assert isinstance(raw, dict), f"Top-level must be a dict, got {type(raw)}"
@@ -438,9 +402,7 @@ def test_scenario_yaml_parses(yaml_path: Path, _base: Path, scenario_id: str):
 @pytest.mark.parametrize("yaml_path,_base,scenario_id", _SCENARIOS, ids=[s[2] for s in _SCENARIOS])
 def test_scenario_has_commands(yaml_path: Path, _base: Path, scenario_id: str):
     """Each registered scenario YAML must have at least one COMMAND step."""
-    if not yaml_path.exists():
-        pytest.skip(f"{yaml_path} not found")
-    matching = [c for c in _CASES if c.scenario_id == scenario_id]
+    matching = [c for c in _ALL_CASES if c.scenario_id == scenario_id]
     assert len(matching) > 0, f"No COMMAND steps found in {yaml_path.name}"
 
 

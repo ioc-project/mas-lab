@@ -22,17 +22,8 @@ def mas_lab_root() -> Path:
     env = os.environ.get("MAS_LAB_ROOT")
     if env:
         return Path(env).expanduser().resolve()
-    # Monorepo / Actions checkout (ctl package lives under repo root).
-    if (_V2_ROOT / "lab" / "pyproject.toml").is_file():
-        return _V2_ROOT
-    candidates = (
-        _V2_ROOT.parent / "ioc-project" / "mas-lab",
-        Path.home() / "repos" / "ioc-project" / "mas-lab",
-    )
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate
-    return candidates[1]
+    # This repository: ctl lives under the repo root next to library-standard.
+    return _V2_ROOT
 
 
 def _v2_env(base: dict[str, str]) -> dict[str, str]:

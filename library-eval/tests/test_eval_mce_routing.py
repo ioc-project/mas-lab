@@ -75,7 +75,6 @@ async def test_eval_mce_routes_mixed_ids(tmp_path, monkeypatch) -> None:
     assert doc["session"]["toy_echo"]["details"]["bytes"] > 0
     assert doc["run_quality"]["status"] == "ok"
 
-    pytest.importorskip("jsonschema")
     import jsonschema
 
     schema = json.loads(

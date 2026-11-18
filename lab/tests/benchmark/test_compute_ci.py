@@ -114,7 +114,6 @@ class TestResolveDataframe:
         assert len(result) == len(df)
 
     def test_reads_parquet_file(self, tmp_path):
-        pytest.importorskip("pyarrow", reason="pyarrow required for parquet support")
         df = _make_tidy_df()
         p = tmp_path / "data.parquet"
         df.to_parquet(p, index=False)

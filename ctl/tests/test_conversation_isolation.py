@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import json
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from fake_openai import FakeOpenAI, text
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.exposure import make_runtime_handler
@@ -27,44 +27,26 @@ AGENT = {
 }
 
 
-class _Model(BaseHTTPRequestHandler):
-    def do_POST(self) -> None:  # noqa: N802
-        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-        users = [str(m.get("content")) for m in body.get("messages", []) if m.get("role") == "user"]
-        self.server.requests.append(users)  # type: ignore[attr-defined]
-        out = json.dumps(
-            {
-                "choices": [
-                    {"message": {"role": "assistant", "content": f"echo {users[-1]}"}, "finish_reason": "stop"}
-                ],
-                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
-            }
-        ).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(out)))
-        self.end_headers()
-        self.wfile.write(out)
-
-    def log_message(self, *_args: object) -> None:
-        return None
-
-
 @pytest.fixture
 def model_server(monkeypatch):
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Model)
-    server.requests = []  # type: ignore[attr-defined]
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    requests: list[list[str]] = []
+
+    def answer(body: dict) -> dict:
+        users = [str(m.get("content")) for m in body.get("messages", []) if m.get("role") == "user"]
+        requests.append(users)
+        return text(f"echo {users[-1]}")
+
     from mas.ctl.workspace.config import UserConfig
 
     monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
     monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
-    monkeypatch.setenv("OPENAI_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}/v1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
     monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
-    yield server
-    server.shutdown()
+    with FakeOpenAI(answer) as fake:
+        monkeypatch.setenv("OPENAI_BASE_URL", fake.url)
+        fake.requests = requests  # type: ignore[attr-defined]
+        yield fake
 
 
 def _hosted_agent(tmp_path: Path):

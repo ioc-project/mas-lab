@@ -491,8 +491,7 @@ def test_reproduce_command_dry_run(rel_path: str):
     """
     exp_yaml = _REPO_ROOT / rel_path
     assert exp_yaml.exists(), f"Experiment YAML not found: {exp_yaml}"
-    if not _MAS_LAB.is_file():
-        pytest.skip("mas-lab CLI not in venv")
+    assert _MAS_LAB.is_file(), "mas-lab CLI not in venv"
 
     result = subprocess.run(
         [str(_MAS_LAB), "benchmark", "run", str(exp_yaml), "--dry-run"],

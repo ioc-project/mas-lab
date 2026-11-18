@@ -172,6 +172,36 @@ class PluginRegistry:
         self._runtime_spec_keys: set[str] = set()
         self._by_type: dict[str, list[PluginEntry]] = {}
 
+    # ── Snapshot ─────────────────────────────────────────────────────────
+
+    def snapshot(self) -> dict[str, Any]:
+        """Copy of everything registered, for :meth:`restore` after a failed batch."""
+        return {
+            "_entries": dict(self._entries),
+            "_aliases": dict(self._aliases),
+            "_deprecated": dict(self._deprecated),
+            "_warned": set(self._warned),
+            "_known_types": set(self._known_types),
+            "_spec_defaults": dict(self._spec_defaults),
+            "_runtime_spec_keys": set(self._runtime_spec_keys),
+            "_by_type": {key: list(items) for key, items in self._by_type.items()},
+            "_scan_paths": list(self._scan_paths),
+        }
+
+    def restore(self, snapshot: dict[str, Any]) -> None:
+        """Put back what :meth:`snapshot` copied; anything registered since is gone.
+
+        Containers are refilled in place, so references to them stay valid. Callers hold
+        the registry lock (``register_new_library_plugins`` does) so nothing registers meanwhile.
+        """
+        for name, value in snapshot.items():
+            current = getattr(self, name)
+            if isinstance(current, list):
+                current[:] = value
+            else:
+                current.clear()
+                current.update(value)
+
     # ── Registration ─────────────────────────────────────────────────────
 
     def register(self, entry: PluginEntry) -> None:
@@ -556,7 +586,7 @@ class PluginRegistry:
 
 
 _instance: PluginRegistry | None = None
-_instance_lock = threading.Lock()
+_instance_lock = threading.RLock()
 
 
 def get_registry() -> PluginRegistry:
@@ -577,15 +607,15 @@ def get_registry() -> PluginRegistry:
     return _instance
 
 
-def register_new_library_plugins() -> None:
+def register_new_library_plugins(*, only_under: Path | None = None) -> None:
     """Add plugins from libraries discovered since the registry was built.
 
     No-op while the registry has not been built yet (it will find them when
-    it is).
+    it is). A failing manifest outside ``only_under`` is skipped with a warning.
     """
-    if _instance is not None:
-        with _instance_lock:
-            _bootstrap.register_new_library_plugins(_instance)
+    with _instance_lock:
+        if _instance is not None:
+            _bootstrap.register_new_library_plugins(_instance, only_under=only_under)
 
 
 def construct_plugin(plugin_cls: type, params: Mapping[str, Any] | None = None) -> Any:

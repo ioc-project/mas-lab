@@ -13,10 +13,10 @@ Tests:
   7. LLM node ID derivation matches between backend and frontend helper
 
 Run (from the repository root, with a demo server already running):
-  python -m pytest lab/tests/test_demo_e2e.py
+  python -m pytest tests/functional/test_demo_e2e.py -m functional
 
 NOTE: This is an integration test requiring a running demo server.
-Skipped in CI test suite as it requires external resources.
+Functional suite only: CI does not run it.
 """
 
 import json
@@ -27,8 +27,7 @@ from pathlib import Path
 
 import pytest
 
-# Skip this entire module - it's an integration test requiring a running server
-pytestmark = pytest.mark.skip(reason="Integration test requiring running demo server")
+pytestmark = pytest.mark.functional
 
 BASE_URL = "http://localhost:8090"
 REPO_ROOT = Path(__file__).resolve().parents[2]  # repository root

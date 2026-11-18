@@ -96,7 +96,7 @@ async def test_a_sync_delegation_and_a_sync_engine_tool_run_on_worker_threads(ca
             return f"delegated:{name}:{arguments['task']}"
 
     class SyncEngineTool:
-        def claims(self, name: str) -> bool:
+        def claims(self, name: str, *, ctx=None) -> bool:
             return name == "make"
 
         def call(self, name, arguments, **_):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 from mas.lab.lab.config.experiment_base import MASRunBase
 from mas.library.eval.mce.judge_model import resolve_judge_model
@@ -25,7 +24,6 @@ def test_sample_files_exist() -> None:
 
 
 def test_sample_experiment_validates() -> None:
-    pytest.importorskip("jsonschema")
     from mas.ctl.validate import validate_file
 
     result = validate_file(SAMPLE / "experiment.yaml", kind="experiment", strict=True, resolve_refs=True)

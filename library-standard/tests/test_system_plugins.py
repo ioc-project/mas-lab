@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from typing import Any
 
@@ -28,6 +29,8 @@ from mas.runtime.system_plugins import (
     CallContext,
     SessionContext,
     SpawnLedger,
+    SystemPluginBase,
+    ToolDefinition,
     UnknownSystemToolError,
     load_system_plugins,
 )
@@ -269,3 +272,27 @@ def test_local_provider_serves_system_plugins_before_application_tools() -> None
     assert [s["name"] for s in local.list_tools()] == ["inform_user"]
     out = local.call_tool("inform_user", {"message": "hi"}, ctx=SimpleNamespace(session_id="s"))
     assert out["status"] == "sent"
+
+
+def test_local_provider_executes_a_tool_offered_only_from_the_live_ctx() -> None:
+    """``activate_skill`` is offered from the turn ctx; the provider must claim and run it, sync and async."""
+    from mas.runtime.system_plugins.load import BoundSystemPlugins, _Bound
+
+    class _PerTurn(SystemPluginBase):
+        def tools(self, ctx: Any | None = None):
+            return (ToolDefinition(name="late_tool"),) if getattr(ctx, "enabled", False) else ()
+
+        def bind(self, session):
+            return object()
+
+        def call(self, tool, args, *, state, context):
+            return {"tool": tool}
+
+    bound = BoundSystemPlugins()
+    plugin = _PerTurn()
+    bound.add(_Bound(name="per_turn", urn="per_turn", plugin=plugin, state=plugin.bind(None), settings={}))
+    local = LocalToolProvider()
+    local.system_plugins = bound
+    ctx = SimpleNamespace(session_id="s", enabled=True)
+    assert local.call_tool("late_tool", {}, ctx=ctx) == {"tool": "late_tool"}
+    assert asyncio.run(local.acall_tool("late_tool", {}, ctx=ctx)) == {"tool": "late_tool"}

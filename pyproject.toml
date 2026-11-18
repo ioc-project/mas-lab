@@ -50,6 +50,7 @@ dev = [
     "ruff>=0.15.0",
     "pyarrow>=14.0",
     "hypothesis>=6.0",
+    "mas-lab-library-ioa[slim]",
 ]
 
 [tool.uv.workspace]
@@ -95,13 +96,14 @@ select = ["E", "F", "B", "I"]
 
 [tool.pytest.ini_options]
 # deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
-addopts = "-p no:deepeval"
+addopts = '-p no:deepeval -m "not functional"'
 asyncio_mode = "auto"
 # test-only helpers shared by several test trees (the in-process SLIM node); not part of any package
 pythonpath = ["tests/support"]
 testpaths = ["tests", "ctl/tests", "runtime/tests", "library-ioa/tests", "lab/components/controller/tests"]
 markers = [
     "timeout: per-test timeout (pytest-timeout)",
+    "functional: needs network, Docker or API keys; excluded from the default run (see tests/functional)",
 ]
 
 [tool.coverage.run]

@@ -11,8 +11,6 @@ import pytest
 from mas.library.telemetry.conversion import semconv
 from mas.library.telemetry.conversion.replay import replay_events_file
 
-pytest.importorskip("opentelemetry.sdk")
-
 FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "events.jsonl"
 
 

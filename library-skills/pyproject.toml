@@ -37,6 +37,11 @@ all = [
     "google-adk>=1.0.0,<3.0.0",
     "deepagents>=0.7.0,<1.0.0",
 ]
+# Test tooling: both engines are installed so no test skips for a missing extra.
+dev = [
+    "pytest>=7.0",
+    "mas-lab-library-skills[all]",
+]
 
 [project.entry-points."mas.runtime.manifest_libraries"]
 skills = "mas.library.skills"

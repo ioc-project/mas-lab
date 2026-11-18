@@ -13,7 +13,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from tutorial_support import REPO_ROOT, T02, load_yaml, run_cli
+from tutorial_support import REPO_ROOT, T02, load_yaml, run_cli, tutorial_copy
 
 INFRA = REPO_ROOT / "library-samples" / "infra" / "mixed-agents.infra.yaml"
 
@@ -41,7 +41,7 @@ class TestInfraManifest:
 class TestMixedTopologyEndToEnd:
     """The MAS graph is unchanged; only schedule_agent crosses an A2A endpoint."""
 
-    def test_schedule_agent_serves_its_real_agentcard_while_others_stay_local(self):
+    def test_schedule_agent_serves_its_real_agentcard_while_others_stay_local(self, tmp_path):
         import httpx
         from mas.ctl.executor.run_mas import execute_run_mas
         from mas.ctl.session.engine_factory import EngineSelection
@@ -70,7 +70,7 @@ class TestMixedTopologyEndToEnd:
         with patch("mas.ctl.session.bootstrap.build_engine", return_value=sel):
             with patch("mas.ctl.session.controller.SessionController.run_turn", side_effect=_run_turn):
                 rc = execute_run_mas(
-                    T02 / "mas.yaml",
+                    tutorial_copy(T02, tmp_path) / "mas.yaml",
                     prompt="Plan a trip and compare the available transport schedules.",
                     validate=False,
                     infra_refs=[str(INFRA)],

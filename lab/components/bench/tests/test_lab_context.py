@@ -261,3 +261,137 @@ def test_pipeline_yaml_resolves_a_lab_step_from_a_foreign_cwd(tmp_path, monkeypa
     loaded = Pipeline.from_yaml(pipe)
     assert loaded.steps[0].type == "pipe_lab_step"
     assert type(loaded.steps[0]).__name__ == "PipeStep"
+
+
+def test_a_lab_that_fails_to_register_does_not_break_the_next_lab(tmp_path, monkeypatch):
+    from mas.lab.lab.config import lab_context as lc
+    from mas.library_roots import _REGISTERED_LAB_DIRS
+
+    bad = tmp_path / "bad.lab"
+    bad.mkdir()
+    (bad / "lab.yaml").write_text("name: bad\n")
+    ctx = lc.LabContext(lab_dir=bad, lab_yaml=bad / "lab.yaml")
+
+    def boom(**_kwargs) -> None:
+        raise ValueError("clash")
+
+    monkeypatch.setattr(lc, "register_new_library_plugins", boom)
+    with pytest.raises(ValueError):
+        lc.inject_lab_libraries(ctx)
+    assert bad.resolve() not in _REGISTERED_LAB_DIRS
+
+
+def test_a_refused_lab_leaves_earlier_labs_and_later_labs_working(tmp_path, monkeypatch) -> None:
+    from mas.lab.benchmark.pipeline.core import get_step
+    from mas.library_roots import _REGISTERED_LAB_DIRS
+
+    first = tmp_path / "first.lab"
+    second = tmp_path / "second.lab"
+    third = tmp_path / "third.lab"
+    _write_lab_with_step(first, pkg="rbpkg", step="rb_a_step", class_name="RbA")
+    _write_lab_with_step(second, pkg="rbpkg", step="rb_b_step", class_name="RbB")
+    _write_lab_with_step(third, pkg="rbother", step="rb_c_step", class_name="RbC")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    assert get_step("rb_a_step") is None  # builds the registry
+    inject_lab_libraries(discover_lab_context(first / "experiment.yaml"))
+    with pytest.raises(ValueError, match="unique package name"):
+        inject_lab_libraries(discover_lab_context(second / "experiment.yaml"))
+    assert first.resolve() in _REGISTERED_LAB_DIRS
+    assert second.resolve() not in _REGISTERED_LAB_DIRS
+
+    inject_lab_libraries(discover_lab_context(third / "experiment.yaml"))
+    assert get_step("rb_c_step") is not None
+    # Re-injecting the first lab makes it current again; a refused lab afterwards must not
+    # push it back behind the third.
+    inject_lab_libraries(discover_lab_context(first / "experiment.yaml"))
+    assert _REGISTERED_LAB_DIRS[-1] == first.resolve()
+    with pytest.raises(ValueError, match="unique package name"):
+        inject_lab_libraries(discover_lab_context(second / "experiment.yaml"))
+    assert _REGISTERED_LAB_DIRS[-2:] == [third.resolve(), first.resolve()]
+
+
+def test_pipeline_cli_loads_the_lab_library_steps(tmp_path, monkeypatch) -> None:
+    from mas.lab.benchmark.pipeline.cli import _load_lab_custom_steps
+    from mas.lab.benchmark.pipeline.core import get_step
+
+    lab_dir = tmp_path / "cli.lab"
+    _write_lab_with_step(lab_dir, pkg="cli_lab", step="cli_lab_step", class_name="CliStep")
+    pipelines = lab_dir / "pipelines"
+    pipelines.mkdir()
+    pipe = pipelines / "post.yaml"
+    pipe.write_text("pipeline:\n  name: post\n  steps: []\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    assert get_step("cli_lab_step") is None
+    _load_lab_custom_steps(pipe.resolve())
+    assert get_step("cli_lab_step") is not None
+
+
+def test_pipeline_cli_stops_when_the_labs_library_cannot_be_loaded(tmp_path, monkeypatch) -> None:
+    """A lab whose library fails to register ends the run with that error, not with an unknown step later."""
+    from mas.lab.benchmark.pipeline.cli import _load_lab_custom_steps
+    from mas.lab.benchmark.pipeline.core import get_step
+
+    first = tmp_path / "first.lab"
+    second = tmp_path / "second.lab"
+    _write_lab_with_step(first, pkg="clashpkg", step="clash_a_step", class_name="ClashA")
+    _write_lab_with_step(second, pkg="clashpkg", step="clash_b_step", class_name="ClashB")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    assert get_step("clash_a_step") is None
+    inject_lab_libraries(discover_lab_context(first / "experiment.yaml"))
+    with pytest.raises(SystemExit, match="Could not load the lab's libraries"):
+        _load_lab_custom_steps(second / "experiment.yaml")
+
+
+def test_a_broken_lab_found_through_the_cwd_does_not_break_the_next_lab(tmp_path, monkeypatch) -> None:
+    """The daemon's cwd can sit inside a lab that fails: discovery finds it on every call."""
+    from mas.lab.benchmark.pipeline.core import get_step
+
+    broken = tmp_path / "broken.lab"
+    good = tmp_path / "good.lab"
+    _write_lab_with_step(broken, pkg="brokenpkg", step="broken_step", class_name="Broken")
+    manifest = broken / "brokenpkg" / "library.yaml"
+    manifest.write_text(manifest.read_text(encoding="utf-8") + "    shortcuts: [bad.name]\n", encoding="utf-8")
+    _write_lab_with_step(good, pkg="goodpkg", step="good_step", class_name="Good")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    assert get_step("good_step") is None  # builds the registry
+    monkeypatch.chdir(broken / "brokenpkg")
+    with pytest.raises(ValueError, match="without"):
+        inject_lab_libraries(discover_lab_context(broken / "experiment.yaml"))
+
+    inject_lab_libraries(discover_lab_context(good / "experiment.yaml"))
+    assert get_step("good_step").__name__ == "Good"
+
+
+def test_a_lab_whose_second_library_fails_registers_none_of_its_libraries(tmp_path, monkeypatch) -> None:
+    from mas.lab.benchmark.pipeline.core import get_step
+
+    lab = tmp_path / "pair.lab"
+    _write_lab_with_step(lab, pkg="apair", step="apair_step", class_name="APair")
+    _write_lab_with_step(tmp_path / "scratch.lab", pkg="bpair", step="bpair_step", class_name="BPair")
+    (tmp_path / "scratch.lab" / "bpair").rename(lab / "bpair")
+    broken = lab / "bpair" / "library.yaml"
+    broken.write_text(broken.read_text(encoding="utf-8") + "    shortcuts: [bad.name]\n", encoding="utf-8")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setattr(sys, "path", list(sys.path))
+
+    assert get_step("apair_step") is None  # builds the registry
+    with pytest.raises(ValueError, match="without"):
+        inject_lab_libraries(discover_lab_context(lab / "experiment.yaml"))
+
+    assert get_step("apair_step") is None

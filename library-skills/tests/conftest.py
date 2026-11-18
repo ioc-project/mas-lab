@@ -7,29 +7,15 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 # ---------------------------------------------------------------------------
 # Optional-dependency detection (google-adk / deepagents come from the
 # `library-skills[all]` extra; a plain `pip install library-skills` shouldn't
 # make the test suite fail on import/collection for these engines).
 # ---------------------------------------------------------------------------
-
-try:
-    import google.adk.skills  # noqa: F401
-except ImportError:
-    HAS_ADK = False
-else:
-    HAS_ADK = True
-
-try:
-    import deepagents  # noqa: F401
-except ImportError:
-    HAS_DEEPAGENTS = False
-else:
-    HAS_DEEPAGENTS = True
-
-MISSING_EXTRA_REASON = "requires the 'library-skills[all]' extra (google-adk / deepagents)"
+# Both engines come from the [dev] extra; a missing install fails at import.
+import deepagents  # noqa: F401
+import google.adk.skills  # noqa: F401
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers

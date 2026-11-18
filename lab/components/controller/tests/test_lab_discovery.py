@@ -409,8 +409,7 @@ def test_design_space_lab_datasets():
     """Design-space lab owns its QA / MAS-necessity Datasets under datasets/."""
     repo_root = Path(__file__).resolve().parents[4]
     lab_path = repo_root / "labs" / "design-space.lab"
-    if not lab_path.is_dir():
-        pytest.skip("repo labs/ not present")
+    assert lab_path.is_dir(), "repo labs/ not present"
 
     reset_lab_registry()
     reg = LabRegistry()
@@ -427,8 +426,7 @@ def test_real_repo_design_space_discovery():
     """Integration: actual labs/design-space.lab on disk when tests run from repo."""
     repo_root = Path(__file__).resolve().parents[4]
     lab_path = repo_root / "labs" / "design-space.lab"
-    if not lab_path.is_dir():
-        pytest.skip("repo labs/ not present")
+    assert lab_path.is_dir(), "repo labs/ not present"
 
     reset_lab_registry()
     reg = LabRegistry()
@@ -469,8 +467,7 @@ def test_all_registered_libraries_have_experiments_when_present():
     """Each *.lab under repo labs/ should expose experiments via registry."""
     repo_root = Path(__file__).resolve().parents[4]
     labs_dir = repo_root / "labs"
-    if not labs_dir.is_dir():
-        pytest.skip("repo labs/ not present")
+    assert labs_dir.is_dir(), "repo labs/ not present"
 
     reset_lab_registry()
     reg = LabRegistry()

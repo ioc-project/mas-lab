@@ -18,7 +18,7 @@ def test_markup_without_metadata_is_not_pinned() -> None:
             {
                 "role": "tool",
                 "tool_call_id": "c1",
-                "content": '<skill_content name="accord">LOCK RULES</skill_content>',
+                "content": '<skill_content name="lockrules">LOCK RULES</skill_content>',
             },
         ]
     )

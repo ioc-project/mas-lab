@@ -548,3 +548,12 @@ def test_send_peer_descriptions_fill_in_when_delegation_map_is_absent() -> None:
     )
     assert specs[0]["name"] == "delegate_to_worker"
     assert specs[0]["description"] == "Overlay peer description."
+
+
+def test_subagent_spawner_claims_only_its_own_tools() -> None:
+    from mas.library.standard.plugins.engine_tools.subagent_spawner import SubagentSpawner
+
+    spawner = SubagentSpawner(parent_agent_id="p", session_id="s", templates={}, context=None)
+    assert spawner.claims("spawn_subagent")
+    assert spawner.claims("spawn_subagent", ctx=object())
+    assert not spawner.claims("send")

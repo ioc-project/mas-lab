@@ -28,8 +28,6 @@ from mas.library.skills.plugins import (
 )
 from mas.library.skills.plugins.plugin_skills_native import _SkillEntry
 
-from .conftest import HAS_ADK, HAS_DEEPAGENTS, MISSING_EXTRA_REASON
-
 # ---------------------------------------------------------------------------
 # SkillPlugin abstract base
 # ---------------------------------------------------------------------------
@@ -119,8 +117,6 @@ class TestSkillPluginRegistry:
         assert isinstance(plugin, NativeSkillPlugin)
 
     def test_langchain_get_plugin(self, tmp_path):
-        if not HAS_DEEPAGENTS:
-            pytest.skip(MISSING_EXTRA_REASON)
         with patch("deepagents.backends.FilesystemBackend"):
             with patch("deepagents.middleware.skills._list_skills"):
                 reg = SkillPluginRegistry(impl="langchain")
@@ -128,8 +124,6 @@ class TestSkillPluginRegistry:
                 assert isinstance(plugin, LangChainSkillPlugin)
 
     def test_adk_get_plugin_mocked(self, tmp_path):
-        if not HAS_ADK:
-            pytest.skip(MISSING_EXTRA_REASON)
         with patch("google.adk.skills.load_skill_from_dir"):
             reg = SkillPluginRegistry(impl="adk")
             plugin = reg.get_plugin(base_dir=tmp_path)
@@ -277,7 +271,6 @@ _LIST_SKILLS_PATCH = "deepagents.middleware.skills._list_skills"
 _BACKEND_READ_PATCH = "mas.library.skills.plugins.plugin_skills_langchain._backend_read"
 
 
-@pytest.mark.skipif(not HAS_DEEPAGENTS, reason=MISSING_EXTRA_REASON)
 class TestLangChainSkillPlugin:
     """LangChain plugin uses deepagents._list_skills + FilesystemBackend."""
 
@@ -419,7 +412,6 @@ def _make_adk_skill_mock(name: str, description: str, body: str = "Instructions.
 ADK_LOAD_PATCH = "google.adk.skills.load_skill_from_dir"
 
 
-@pytest.mark.skipif(not HAS_ADK, reason=MISSING_EXTRA_REASON)
 class TestADKSkillPlugin:
     """ADK plugin wraps google.adk.skills.load_skill_from_dir + Skill model."""
 
