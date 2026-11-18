@@ -36,6 +36,7 @@ from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.session.bootstrap import InstantiationOptions, hitl_contract_for_mode, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
 from mas.ctl.session.flavour_control import ControlError, control_search_dirs, session_flavour_with_controls
+from mas.ctl.session.loop import loop_binding, loop_from_spec
 from mas.ctl.session.observability import obs_config_to_binding
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.lab.manifest.load import (
@@ -416,6 +417,20 @@ class MasBenchRunner:
                 )
             if should_merge_stacked_entry_agent_config(config):
                 entry_manifest = merge_stacked_entry_agent_manifest(entry_manifest, config)
+            if loop_binding(entry_manifest) is not None:
+                try:
+                    return self._run_with_loop(
+                        flavour=flavour,
+                        entry_manifest=entry_manifest,
+                        entry_manifest_path=entry_manifest_path,
+                        queries=queries,
+                        output_dir=output_dir,
+                        run_seed=run_seed,
+                        workspace_root=workspace_root,
+                        controls=controls,
+                    )
+                except (BindError, ControlError, ValueError) as exc:
+                    return RunResult(content="", status="error", error=str(exc))
             try:
                 return self._standalone_controller_target(
                     flavour=flavour,
@@ -675,6 +690,60 @@ class MasBenchRunner:
             working_memory_registry=working_memory_registry,
             chains=chains,
             turn_guard=chains.turn_lock(entry_id),
+        )
+
+    def _run_with_loop(
+        self,
+        *,
+        flavour: Any,
+        entry_manifest: dict[str, Any],
+        entry_manifest_path: Path,
+        queries: list[str],
+        output_dir: Path,
+        run_seed: int,
+        workspace_root: Path | None,
+        controls: Sequence[str],
+    ) -> RunResult:
+        """Run a standalone agent whose ``spec.loop`` names an agent loop (a harness, not the kernel loop).
+
+        The turns, the events file and the result keep the shape of a kernel run; governance (the Controls)
+        judges each task at the boundary, and a refused or failed task is an error result.
+        """
+        from mas.ctl.session.observability import setup_observability
+        from mas.runtime.boundary.loop import LoopError, LoopTask
+
+        flavour = session_flavour_with_controls(
+            flavour,
+            controls=controls,
+            search_dirs=control_search_dirs(workspace_root, entry_manifest_path.parent, Path.cwd()),
+        )
+        host = loop_from_spec(
+            entry_manifest,
+            manifest_dir=entry_manifest_path.parent,
+            flavour_spec=flavour_spec_of(flavour),
+        )
+        events_path, obs_cfg = bench_obs_config(output_dir, entry_manifest, entry_manifest_path, flavour=flavour)
+        host.recorder = setup_observability(host.shell, obs_cfg, base_dir=output_dir)
+        session_id = str(uuid.uuid4())
+        text = ""
+        try:
+            for turn, query in enumerate(queries, start=1):
+                text = host.loop.run(LoopTask(text=query, session_id=session_id, task_id=f"u{turn}")).text
+        except LoopError as exc:
+            return RunResult(content="", status="error", error=str(exc))
+        finally:
+            host.close()
+            ensure_live_otel_span_files(events_path, obs_cfg)
+        return RunResult(
+            content=text,
+            status="ok",
+            artifacts=_events_artifacts(events_path, entry_manifest, entry_manifest_path),
+            metadata={
+                "run_seed": run_seed,
+                "turns": len(queries),
+                "session_id": session_id,
+                "loop": host.loop.loop_id,
+            },
         )
 
     @staticmethod

@@ -19,14 +19,16 @@ import logging
 import socket
 import threading
 import time
-from collections.abc import Callable
+import uuid
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from mas.ctl.infra.resolve import application_endpoint_is_deployed
+from mas.ctl.session.loop import KernelLoop, handler_result
 from mas.ctl.session.mailbox import SessionTurnMailbox
-from mas.runtime.session import SessionStatus
+from mas.runtime.boundary.loop import AgentLoop, LoopTask
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +88,7 @@ def make_runtime_handler(
     from mas.ctl.session.control_host import ControlDirectoryHost
     from mas.ctl.session.controller import SessionController
     from mas.ctl.session.manager import SessionManager
-    from mas.runtime.boundary.control.contract import ControlCapability, SessionPaused
+    from mas.runtime.boundary.control.contract import ControlCapability
 
     manager = SessionManager(checkpoint_store=InMemoryCheckpointStore())
     mailbox = SessionTurnMailbox(queue=manager.turn_queue)
@@ -138,6 +140,8 @@ def make_runtime_handler(
                 host.advertise(session_id)
         return manager.get(session_id)
 
+    loop = KernelLoop(mailbox=mailbox, ensure_session=ensure_session)
+
     def handle(
         prompt: str,
         *,
@@ -146,47 +150,18 @@ def make_runtime_handler(
         parent_call_id: str | None = None,
         upstream_correlation_id: int | None = None,
         **_: Any,
-    ) -> dict[str, Any]:
-        resolved_session = mailbox.resolve_session_id(session_id)
-        session = ensure_session(resolved_session)
-
-        def run(text: str) -> Any:
-            if session.status == SessionStatus.PAUSED:
-                raise SessionPaused(resolved_session, reason=session.pause_reason)
-            # The controller's turn path keeps the conversation: it commits each turn to
-            # the context, so the next message on this contextId sees the earlier ones.
-            return session.controller.run_turn(
-                text,
-                turn_id=turn_id,
-                auto_hitl=False,
-                parent_call_id=parent_call_id or "",
-                upstream_correlation_id=upstream_correlation_id,
-                dequeued=True,
-            ).trace
-
-        trace = mailbox.submit(resolved_session, prompt, source="a2a", run=run)
-        text = "\n".join(
-            response.content for response in trace.client_responses if getattr(response, "content", "")
-        ).strip()
-        stream_chunks = tuple(
-            chunk for response in trace.client_responses for chunk in (getattr(response, "stream_chunks", ()) or ())
+    ) -> Any:
+        return handler_result(
+            loop.run(
+                LoopTask(
+                    text=prompt,
+                    session_id=session_id or "",
+                    task_id=turn_id or "",
+                    parent_call_id=parent_call_id or "",
+                    upstream_correlation_id=upstream_correlation_id,
+                )
+            )
         )
-        if stream_chunks:
-            return stream_chunks
-        result: dict[str, Any] = {"text": text, "context_id": resolved_session}
-        artifacts = [
-            artifact for response in trace.client_responses for artifact in (getattr(response, "artifacts", ()) or ())
-        ]
-        if artifacts:
-            result["artifacts"] = artifacts
-        task_states = [
-            response.task_state for response in trace.client_responses if getattr(response, "task_state", None)
-        ]
-        if task_states:
-            result["task_state"] = task_states[-1]
-        if getattr(trace, "awaiting_hitl", False):
-            result["task_state"] = "input_required"
-        return result
 
     def close_conversations() -> None:
         """End the conversations this handler opened (not the template instance)."""
@@ -203,6 +178,45 @@ def make_runtime_handler(
 
     handle.host = host
     handle.manager = manager
+    handle.close_conversations = close_conversations
+    return handle
+
+
+def make_loop_handler(loop: AgentLoop) -> Any:
+    """An ``agent_expose`` handler that hands each A2A ``message/send`` to ``loop``.
+
+    A task the loop's governance refuses, or that the loop cannot complete, is an exception, which
+    the exposure answers as a failed task. The loop is closed with ``close_conversations``.
+    """
+
+    def handle(
+        prompt: str,
+        *,
+        turn_id: str | None = None,
+        session_id: str | None = None,
+        parent_call_id: str | None = None,
+        upstream_correlation_id: int | None = None,
+        caller: str = "",
+        headers: Mapping[str, str] | None = None,
+        **_: Any,
+    ) -> Any:
+        reply = loop.run(
+            LoopTask(
+                text=prompt,
+                session_id=session_id or str(uuid.uuid4()),
+                task_id=turn_id or "",
+                caller=caller,
+                headers=headers or {},
+                parent_call_id=parent_call_id or "",
+                upstream_correlation_id=upstream_correlation_id,
+            )
+        )
+        return handler_result(reply)
+
+    def close_conversations() -> None:
+        loop.close()
+
+    handle.host = None
     handle.close_conversations = close_conversations
     return handle
 
@@ -317,8 +331,13 @@ def expose_agent(
     blocking: bool = False,
     control_dir: Path | None = None,
     conversation_factory: Callable[[], Any] | None = None,
+    loop: AgentLoop | None = None,
 ) -> Any:
     """Create the ``agent_expose`` plugin and serve this instance.
+
+    With a ``loop`` the agent is served by that loop and ``instance`` is unused (pass None): the
+    listener, the A2A surface and the conversation id are the same, the task goes to the loop. Without
+    one the kernel loop runs it, as before.
 
     ``blocking=True`` is ``mas-ctl serve`` (process is the server, never
     returns until the listener stops). ``blocking=False`` is interrogation
@@ -347,12 +366,15 @@ def expose_agent(
         binding={"type": plugin_type},
         endpoint=endpoint,
     )
-    handler = make_runtime_handler(
-        instance,
-        manifest=manifest,
-        control_dir=control_dir,
-        conversation_factory=conversation_factory,
-    )
+    if loop is not None:
+        handler = make_loop_handler(loop)
+    else:
+        handler = make_runtime_handler(
+            instance,
+            manifest=manifest,
+            control_dir=control_dir,
+            conversation_factory=conversation_factory,
+        )
     if blocking:
         logger.info(
             "agent %r: A2A listening on %s",

@@ -65,6 +65,7 @@ LIBRARY_TYPES = frozenset(
         "codec",
         "artifact",
         "agent_expose",
+        "agent_loop",
         "webserver",
         "harness",
         "related_state",
