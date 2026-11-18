@@ -9,7 +9,7 @@ MAS Lab builds, runs, and tests multi-agent systems (MAS) from YAML files. A MAS
 is a team of LLM agents with tools and a workflow that says who talks to whom.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](docs/python-support.md)
 
 It is for three audiences:
 
@@ -157,6 +157,16 @@ Security fixes are applied to the latest release on the `main` branch.
 | --------------------- | ----------- |
 | latest on `main`      | yes         |
 | older tagged releases | best effort |
+
+### Python versions
+
+| Python | Support | Tested |
+| ------ | ------- | ------ |
+| 3.11, 3.12, 3.13, 3.14 | full | 3.14 on every pull request and push; 3.11 on every push to `main`; every version weekly and before a release |
+| 3.14t (free-threaded) | partial | weekly and before a release, for the components that install on it |
+
+[Python version support](docs/python-support.md) says how and when each version is tested, which
+components do not yet support the free-threaded build, and why.
 
 ## Citing this work
 

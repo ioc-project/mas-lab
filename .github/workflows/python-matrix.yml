@@ -1,0 +1,117 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# Every supported Python version, on a schedule and before a release. Pull requests and pushes
+# run one version (test.yml); this workflow is the guarantee for the others.
+# The versions come from .github/python-support.json through scripts/ci_python.py.
+name: Python matrix
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    # Weekly: catches a new dependency release that breaks an older Python between releases of ours.
+    - cron: "23 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      unit_matrix: ${{ steps.plan.outputs.unit_matrix }}
+      library_matrix: ${{ steps.plan.outputs.library_matrix }}
+      suite_matrix: ${{ steps.plan.outputs.suite_matrix }}
+      free_threaded: ${{ steps.plan.outputs.free_threaded }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: plan
+        run: python3 scripts/ci_python.py >> "$GITHUB_OUTPUT"
+
+  unit:
+    name: Unit ${{ matrix.name }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.unit_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: ${{ matrix.python }}
+          install-dev: "true"
+      - run: task ${{ matrix.task }}
+
+  library:
+    name: Library ${{ matrix.name }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.library_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: ${{ matrix.python }}
+          install-dev: "true"
+      - run: task test-library LIB=${{ matrix.dir }}
+
+  # The slow end-to-end suites run on the oldest and the newest version only.
+  suite:
+    name: Suite ${{ matrix.name }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.suite_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: ${{ matrix.python }}
+          install-dev: "true"
+      - run: task ${{ matrix.task }}
+
+  # Partial support: the components in .github/python-support.json, with the GIL forced off.
+  # Informational until the known failures in docs/python-support.md are fixed; it does not block a release.
+  free-threaded:
+    name: Free-threaded ${{ needs.plan.outputs.free_threaded }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          python-version: ${{ needs.plan.outputs.free_threaded }}
+      - run: task install-free-threaded
+      - run: task verify-free-threaded
+
+  # One check name for the whole matrix. The free-threaded job is not part of it.
+  python-matrix-summary:
+    name: python-matrix-summary
+    if: always()
+    needs: [plan, unit, library, suite]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do
+            test "$r" = success || { echo "a job did not succeed: $r"; exit 1; }
+          done

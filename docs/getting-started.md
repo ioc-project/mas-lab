@@ -13,7 +13,7 @@ steps. This page is the short path and the first command.
 | Path | Use it for | You need |
 | --- | --- | --- |
 | [Docker](getting-started/docker.md) | Running without a local Python environment | Docker, optional [go-task](https://taskfile.dev/) |
-| [From source](getting-started/developer.md) | Editing MAS Lab itself | Python ≥ 3.11, `uv`, `task` |
+| [From source](getting-started/developer.md) | Editing MAS Lab itself | Python ≥ 3.11 ([versions](python-support.md)), `uv`, `task` |
 | PyPI + uv (not yet published) | A released package | Python ≥ 3.11, `uv` |
 
 If unsure, pick Docker. All paths use the same YAML manifests.

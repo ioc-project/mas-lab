@@ -20,6 +20,7 @@ jobs:
   changes:
     name: Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       unit: ${{ steps.paths.outputs.unit }}
       unit_matrix: ${{ steps.paths.outputs.unit_matrix }}
@@ -65,13 +66,12 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-mas
-        with:
-          python-version: "3.13"
       - uses: ./.github/actions/fetch-base
         with:
           sha: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -85,11 +85,11 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-mas
         with:
-          python-version: "3.13"
           install-dev: "true"
       - run: task verify-docs
       - name: Install MkDocs
@@ -104,6 +104,7 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.unit == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.unit_matrix) }}
@@ -113,7 +114,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-mas
         with:
-          python-version: "3.13"
           install-dev: "true"
       - uses: ./.github/actions/fetch-base
         with:
@@ -123,11 +123,14 @@ jobs:
           GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: task ${{ matrix.task }} COVERAGE=1 COVERAGE_PACKAGE=${{ github.event_name != 'pull_request' && '1' || '0' }}
 
+  # The oldest supported Python (.github/python-support.json), on pushes to main only. The full
+  # version matrix runs weekly and before a release (python-matrix.yml).
   unit-311:
     name: Unit (3.11)
     needs: [changes, lint]
     if: needs.changes.outputs.unit_311 == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-mas
@@ -141,6 +144,7 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.suite == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.suite_matrix) }}
@@ -148,7 +152,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-mas
         with:
-          python-version: "3.13"
           install-dev: "true"
       - run: task ${{ matrix.task }}
 
@@ -157,6 +160,7 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.library == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.library_matrix) }}
@@ -166,7 +170,6 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup-mas
         with:
-          python-version: "3.13"
           install-dev: "true"
       - uses: ./.github/actions/fetch-base
         with:
@@ -181,6 +184,7 @@ jobs:
     needs: [changes, lint]
     if: needs.changes.outputs.demo_ui == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -222,6 +226,7 @@ jobs:
       - demo-ui
       - compliance
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:

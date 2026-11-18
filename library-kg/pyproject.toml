@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 name = "mas-lab-library-kg"
 version = "0.2.0"
 description = "MAS Lab trace normalization and knowledge-graph validation algorithms."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # Ontology TTL + generated KG models come from SCOPE
 # (https://github.com/ioc-project/scope, package ioc-scope-ontology).
 # OTel→KG dispatch lives in `norm` (optional extra `[norm]`, PyPI package `ioc-scope-norm`).
@@ -93,7 +93,7 @@ all = [
 ]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]

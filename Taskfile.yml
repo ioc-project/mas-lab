@@ -126,6 +126,7 @@ tasks:
           tests/test_diff_cover_changed.py \
           tests/test_ruff_changed.py \
           tests/test_ci_paths.py \
+          tests/test_ci_python.py \
           tests/test_ci_gate.py \
           runtime/tests/ \
           lab/components/core/tests/ \
@@ -226,6 +227,7 @@ tasks:
           tests/test_diff_cover_changed.py \
           tests/test_ruff_changed.py \
           tests/test_ci_paths.py \
+          tests/test_ci_python.py \
           tests/test_ci_gate.py \
           -q --tb=line --durations=20
 
@@ -260,6 +262,39 @@ tasks:
           --cov-fail-under=0 \
           -q --tb=line
       - python3 scripts/diff_cover_changed.py --coverage coverage.xml --fail-under {{.FAIL_UNDER}} --prefix {{.LIB}}/src/
+
+  test-library:
+    desc: "pytest for one library, with no lint and no coverage gate (what the Python-version matrix runs)"
+    deps: [install-dev]
+    vars:
+      LIB: "{{.LIB}}"
+    cmds:
+      - "{{.VENV}}/pytest {{.LIB}}/tests -q --tb=line"
+
+  install-free-threaded:
+    desc: "Install the components that support the free-threaded build (.github/python-support.json) from wheels only."
+    summary: |
+      Run with UV_PYTHON=3.14t. Wheels only: a dependency with no free-threaded wheel fails here
+      instead of compiling from source. The components that do not install are listed in
+      docs/python-support.md.
+    cmds:
+      - test -d .venv || uv venv .venv
+      - >-
+        uv pip install --only-binary :all: $(python3 scripts/ci_python.py components) -e "library-ioa[slim]" -e "library-kg[norm,validation]"
+        pytest pytest-asyncio pytest-timeout pyyaml click python-dotenv jsonschema httpx hypothesis
+        fastapi pyarrow opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+
+  verify-free-threaded:
+    desc: "Tests of the free-threaded components with the GIL forced off (run task install-free-threaded first)"
+    cmds:
+      # -X gil=0 fails the run if an extension would switch the GIL back on, so a pass means it ran
+      # free-threaded. One pytest process per directory: two suites share test file names.
+      - |
+        rc=0
+        for d in $(python3 scripts/ci_python.py test-dirs); do
+          PYTHON_GIL=0 {{.VENV}}/python -X gil=0 -m pytest "$d" $(python3 scripts/ci_python.py pytest-args "${d%/tests}") -q --tb=line -p no:deepeval || rc=1
+        done
+        exit $rc
 
   verify-libraries:
     desc: "Ruff + pytest + changed-line coverage for every library-*"
