@@ -103,9 +103,10 @@ class WorkingMemoryStore:
         cid = int(getattr(event, "correlation_id", 0) or 0)
         text = str(getattr(event, "text", "") or "")
         finish = str(getattr(event, "finish_reason", "") or "")
+        provider_state = getattr(event, "provider_state", None) or {}
         if kind in {"TOOL_RESULT", "ERROR"}:
             bound = self.project_tool_result(
-                cid=cid, content=text, extra_messages=extra_messages, ctx=ctx
+                cid=cid, content=text, extra_messages=extra_messages, ctx=ctx, is_error=kind == "ERROR"
             )
             if bound is not None:
                 return bound
@@ -122,7 +123,7 @@ class WorkingMemoryStore:
                 return None
             if self._assistant_has_call(calls[0][0], extra_messages):
                 return None
-            self.record_assistant_tool_calls(calls)
+            self.record_assistant_tool_calls(calls, provider_state=provider_state)
             return calls[0][0]
         if next_step == "TOOL_CALL":
             call_id = f"call_{cid}"
@@ -132,6 +133,7 @@ class WorkingMemoryStore:
                 call_id=call_id,
                 tool_name=str(getattr(event, "tool_name", "") or "tool"),
                 arguments=dict(getattr(event, "tool_arguments", None) or {}),
+                provider_state=provider_state,
             )
             return call_id
         if text.strip() and next_step in {"STOP", "LLM_CALL"}:
@@ -159,8 +161,12 @@ class WorkingMemoryStore:
         content: str,
         extra_messages: Sequence[dict[str, Any]] | None = None,
         ctx: Any = None,
+        is_error: bool = False,
     ) -> str | None:
         """Bind one committed TOOL_RESULT. Returns the tool_call_id written.
+
+        ``is_error`` marks a failed tool (row kind ``ERROR``): the tool message
+        gets ``"is_error": true`` so a protocol layer with an error flag can use it.
 
         ``None`` means the row was already projected, or there is no open
         assistant tool_call to bind. Empty ``content`` is valid (governance SKIP).
@@ -179,7 +185,7 @@ class WorkingMemoryStore:
             from mas.runtime.boundary.context.chunk_meta import take_pending_chunk_meta
 
             chunk = take_pending_chunk_meta(ctx, call_id) or None
-        self.record_tool_result(call_id=call_id, content=str(content), chunk=chunk)
+        self.record_tool_result(call_id=call_id, content=str(content), chunk=chunk, is_error=is_error)
         self.mark_synced(cid)
         return call_id
 
@@ -189,30 +195,34 @@ class WorkingMemoryStore:
         call_id: str,
         tool_name: str,
         arguments: dict[str, Any] | None = None,
+        provider_state: dict[str, Any] | None = None,
     ) -> None:
         self._open_tool_call_id = call_id
-        self.messages.append(
-            {
-                "role": "assistant",
-                "content": "",
-                "tool_calls": [_tool_call_entry(call_id, tool_name, arguments)],
-            }
-        )
+        msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [_tool_call_entry(call_id, tool_name, arguments)],
+        }
+        if provider_state:
+            msg["provider_state"] = dict(provider_state)
+        self.messages.append(msg)
 
     def record_assistant_tool_calls(
         self,
         calls: list[tuple[str, str, dict[str, Any]]],
+        provider_state: dict[str, Any] | None = None,
     ) -> None:
         if not calls:
             return
         self._open_tool_call_id = calls[0][0] if len(calls) == 1 else ""
-        self.messages.append(
-            {
-                "role": "assistant",
-                "content": "",
-                "tool_calls": [_tool_call_entry(call_id, tool_name, args) for call_id, tool_name, args in calls],
-            }
-        )
+        msg: dict[str, Any] = {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [_tool_call_entry(call_id, tool_name, args) for call_id, tool_name, args in calls],
+        }
+        if provider_state:
+            msg["provider_state"] = dict(provider_state)
+        self.messages.append(msg)
 
     def record_tool_result(
         self,
@@ -220,11 +230,14 @@ class WorkingMemoryStore:
         call_id: str,
         content: str,
         chunk: dict[str, Any] | None = None,
+        is_error: bool = False,
     ) -> None:
         resolved = call_id or self._open_tool_call_id
         if not resolved:
             raise ValueError("tool result requires call_id (no matching assistant tool_call)")
         msg: dict[str, Any] = {"role": "tool", "tool_call_id": resolved, "content": content}
+        if is_error:
+            msg["is_error"] = True
         if chunk:
             from mas.runtime.boundary.context.chunk_meta import attach_chunk_meta
 

@@ -16,15 +16,18 @@ def log_retry(
     max_attempts: int,
     delay_s: float,
     message: str,
+    server_delay_s: float | None = None,
 ) -> None:
+    server_note = "" if server_delay_s is None else f" (server Retry-After {server_delay_s:.3f}s)"
     LOGGER.warning(
-        "%s %s/%s failed (%s %s); retrying in %.3fs",
+        "%s %s/%s failed (%s %s); retrying in %.3fs%s",
         target or "call",
         attempt,
         max_attempts,
         failure_class,
         failure_code or message,
         delay_s,
+        server_note,
         extra=extra(
             target=target,
             failure_class=failure_class,
@@ -33,6 +36,7 @@ def log_retry(
             max_attempts=max_attempts,
             delay_s=round(delay_s, 3),
             outcome="retry",
+            **({} if server_delay_s is None else {"server_delay_s": round(server_delay_s, 3)}),
         ),
     )
 

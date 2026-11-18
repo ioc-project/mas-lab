@@ -55,3 +55,29 @@ def test_llm_proxy_yaml_retry_is_not_a_proxy_field() -> None:
     proxy = infra.to_llm_proxy_dict()
     assert "retry" not in proxy
     assert "retry" not in infra.to_document()["spec"]["proxy"]
+
+
+def test_vertex_proxy_project_reaches_the_leaf() -> None:
+    infra = InfraManifest.from_document(
+        {
+            "apiVersion": "infra/v1",
+            "kind": "LLMProxy",
+            "metadata": {"name": "vertex"},
+            "spec": {
+                "protocol": "vertex",
+                "proxy": {
+                    "api_base": "https://us-central1-aiplatform.googleapis.com",
+                    "api_key_env": "VERTEX_ACCESS_TOKEN",
+                    "project": "demo-proj",
+                    "location": "us-central1",
+                    "retry": {"max_attempts": 9},
+                },
+            },
+        }
+    )
+    proxy = infra.to_llm_proxy_dict()
+    assert proxy["protocol"] == "vertex"
+    assert proxy["project"] == "demo-proj"
+    assert proxy["location"] == "us-central1"
+    assert "retry" not in proxy
+    assert infra.to_document()["spec"]["proxy"]["project"] == "demo-proj"

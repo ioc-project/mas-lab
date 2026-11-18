@@ -266,13 +266,49 @@ def test_llm_providers_from_manifest_uses_models_kind():
 
 
 def test_registry_resolves_openai_and_cache():
+    from mas.library.standard.plugins.llm.anthropic import AnthropicLLMProvider
+    from mas.library.standard.plugins.llm.azure import AzureLLMProvider
+    from mas.library.standard.plugins.llm.bedrock import BedrockLLMProvider
+    from mas.library.standard.plugins.llm.compatible import GroqLLMProvider
+    from mas.library.standard.plugins.llm.gemini import GeminiLLMProvider
     from mas.runtime.registry import get_registry
 
     assert llm_provider_class("openai") is OpenAILLMProvider
     assert llm_provider_class("cache") is CacheLLMProvider
+    assert llm_provider_class("anthropic") is AnthropicLLMProvider
+    assert llm_provider_class("gemini") is GeminiLLMProvider
+    assert llm_provider_class("azure") is AzureLLMProvider
+    assert llm_provider_class("bedrock") is BedrockLLMProvider
+    assert llm_provider_class("groq") is GroqLLMProvider
     layer = get_registry().resolve_by_type("layer", "openai")
     assert layer is not None
     assert layer.load_class() is OpenAILLMProvider
+    assert get_registry().resolve_by_type("layer", "anthropic").load_class() is AnthropicLLMProvider
+    assert get_registry().resolve_by_type("layer", "gemini").load_class() is GeminiLLMProvider
+    assert get_registry().resolve_by_type("layer", "azure").load_class() is AzureLLMProvider
+    assert get_registry().resolve_by_type("layer", "bedrock").load_class() is BedrockLLMProvider
+    assert get_registry().resolve_by_type("layer", "groq").load_class() is GroqLLMProvider
+
+
+def test_factory_fills_api_key_from_the_named_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mas.runtime.registry.llm_provider_registry import apply_llm_endpoint_defaults, instantiate_llm_provider
+
+    monkeypatch.setenv("CUSTOM_KEY", "from-env")
+    spec = apply_llm_endpoint_defaults(
+        {"kind": "openai"}, {"api_base": "https://example.test/v1", "api_key_env": "CUSTOM_KEY"}
+    )
+    assert spec["api_key"] == "from-env"
+    assert instantiate_llm_provider("openai", spec).api_key == "from-env"
+
+
+def test_factory_fills_the_protocol_default_env_when_infra_omits_api_key_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mas.runtime.registry.llm_provider_registry import instantiate_llm_provider
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    provider = instantiate_llm_provider("openai", {"api_base": "http://127.0.0.1:9/v1"})
+    assert provider.api_key == "sk-test"
 
 
 def test_openai_from_infra_spec_reads_proxy_and_protocol_fields():
@@ -376,8 +412,13 @@ class _FakeStreamResponse:
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
+    is_error = False
+
     def raise_for_status(self) -> None:
         return None
+
+    async def aread(self) -> bytes:
+        return b""
 
     async def aiter_lines(self):
         for line in self._lines:
@@ -817,6 +858,11 @@ async def test_openai_provider_retries_stream_connect_failure(monkeypatch) -> No
 
 
 class _DroppedMidStreamResponse:
+    is_error = False
+
+    async def aread(self) -> bytes:
+        return b""
+
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
@@ -980,6 +1026,11 @@ async def test_openai_provider_does_not_retry_async_after_partial_stream(monkeyp
     _silence_retry_sleep(monkeypatch)
 
     class _DroppedMidStreamAsyncResponse:
+        is_error = False
+
+        async def aread(self) -> bytes:
+            return b""
+
         def __init__(self, lines: list[str]) -> None:
             self._lines = lines
 
@@ -1054,11 +1105,16 @@ async def test_openai_provider_keeps_async_client_after_http_429(monkeypatch) ->
 
 
 class _FakeAsyncStreamResponse:
+    is_error = False
+
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
     def raise_for_status(self) -> None:
         return None
+
+    async def aread(self) -> bytes:
+        return b""
 
     async def aiter_lines(self):
         for line in self._lines:

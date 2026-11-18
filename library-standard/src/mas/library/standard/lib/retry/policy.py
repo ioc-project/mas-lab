@@ -50,6 +50,8 @@ class RetryPolicy:
     )
     require_idempotent: bool = False
     max_backoff_s: float | None = None
+    honor_retry_after: bool = True
+    max_retry_after_s: float = 60.0
 
     def delay_for(self, attempt: int) -> float:
         """Sleep before attempt ``attempt`` (0-based, after the first failure)."""
@@ -78,6 +80,8 @@ class RetryPolicy:
         }
         if self.max_backoff_s is not None:
             out["max_backoff_s"] = self.max_backoff_s
+        out["honor_retry_after"] = self.honor_retry_after
+        out["max_retry_after_s"] = self.max_retry_after_s
         return out
 
     @classmethod
@@ -110,6 +114,8 @@ class RetryPolicy:
             "retry_on",
             "require_idempotent",
             "max_backoff_s",
+            "honor_retry_after",
+            "max_retry_after_s",
         }
         unknown = set(raw) - allowed
         if unknown:
@@ -132,6 +138,12 @@ class RetryPolicy:
             not isinstance(max_backoff, (int, float)) or isinstance(max_backoff, bool) or max_backoff < 0
         ):
             raise _binding_error(f"{field_name}.max_backoff_s must be a number >= 0 or null")
+        honor_retry_after = (
+            base.honor_retry_after if raw.get("honor_retry_after") is None else bool(raw.get("honor_retry_after"))
+        )
+        max_retry_after = raw.get("max_retry_after_s", base.max_retry_after_s)
+        if not isinstance(max_retry_after, (int, float)) or isinstance(max_retry_after, bool) or max_retry_after < 0:
+            raise _binding_error(f"{field_name}.max_retry_after_s must be a number >= 0")
         return cls(
             max_attempts=max_attempts,
             backoff_s=float(backoff_s),
@@ -140,6 +152,8 @@ class RetryPolicy:
             retry_on=_parse_classes(raw.get("retry_on"), field_name=f"{field_name}.retry_on", default=base.retry_on),
             require_idempotent=require_idempotent,
             max_backoff_s=None if max_backoff is None else float(max_backoff),
+            honor_retry_after=honor_retry_after,
+            max_retry_after_s=float(max_retry_after),
         )
 
 

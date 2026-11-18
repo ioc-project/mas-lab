@@ -741,6 +741,8 @@ class LiveLlmEngine(Lifecycle):
         _ = messages, answering_from_tools
         message = maybe_recover_textual_tool_calls(message, tool_defs)
         tool_calls = message.get("tool_calls") or []
+        provider_state = message.get("provider_state")
+        provider_state = dict(provider_state) if isinstance(provider_state, dict) else {}
         if tool_calls and self.use_tool_loop:
             parsed: list[tuple[str, dict[str, Any]]] = []
             for call in tool_calls:
@@ -765,6 +767,7 @@ class LiveLlmEngine(Lifecycle):
                     text="",
                     usage=usage,
                     finish_reason=finish_reason,
+                    provider_state=provider_state,
                     offered_tools=tool_def_names(tool_defs),
                     cache_status=cache_status,
                     cache_layer=cache_layer,
@@ -783,6 +786,7 @@ class LiveLlmEngine(Lifecycle):
                 text="",
                 usage=usage,
                 finish_reason=finish_reason,
+                provider_state=provider_state,
                 offered_tools=tool_def_names(tool_defs),
                 cache_status=cache_status,
                 cache_layer=cache_layer,

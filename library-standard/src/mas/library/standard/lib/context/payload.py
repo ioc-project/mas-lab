@@ -112,9 +112,7 @@ def _repair_tool_call_bindings(messages: list[dict[str, Any]]) -> list[dict[str,
 
 def _sanitize_completed(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     declared = tool_call_pairs(messages)[0]
-    rows = [
-        msg for msg in messages if msg.get("role") != "tool" or str(msg.get("tool_call_id") or "") in declared
-    ]
+    rows = [msg for msg in messages if msg.get("role") != "tool" or str(msg.get("tool_call_id") or "") in declared]
     out: list[dict[str, Any]] = []
     i = 0
     n = len(rows)
@@ -137,7 +135,7 @@ def _sanitize_completed(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     seen.add(tid)
             trailing = j == n
             if not kept and not trailing:
-                stripped = {k: v for k, v in msg.items() if k != "tool_calls"}
+                stripped = {k: v for k, v in msg.items() if k not in {"tool_calls", "provider_state"}}
                 if str(stripped.get("content") or "").strip():
                     out.append(stripped)
             else:

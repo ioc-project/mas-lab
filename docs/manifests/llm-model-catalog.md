@@ -54,6 +54,7 @@ Other pointers (not in-process libraries):
 - **Defaults.** When the spec omits a setting, the runtime uses the catalog `defaults` value. Examples: `reasoning.effort`, `reasoning.budget_tokens`, `think`, `reasoning.mode`, `temperature`.
 - **Clamping.** The runtime clamps numeric spec values to a setting's `min` and `max`. `enum` documents the accepted values but is not enforced.
 - **Gating.** On a known model, these reasoning knobs are **deny-by-default**: `reasoning.effort`, `reasoning.mode`, `reasoning.exclude`, `reasoning.budget_tokens`, `think`, and `include`. The runtime does not send a knob that the entry does not list. Other settings are allowed unless marked `supported: false`.
+- **Sampling and cache markers.** A model that rejects `temperature`, `top_p` or `top_k` lists it as `supported: false`, and the Anthropic and Bedrock layers then leave it off the wire. `prompt_cache_breakpoints` and `prompt_cache_retention` use the same marker; see [LLM prompt cache](llm-prompt-cache.md).
 - **Limits.** `max_output_tokens` is an output ceiling. The lower of it and infra `generation.max_output_tokens` applies. `context_window` sizes the history when neither the agent nor infra sets one. Unknown models fall back to `128000` with a warning.
 - **Unknown models.** The runtime sends the spec as written, and the catalog filters nothing.
 
@@ -90,6 +91,7 @@ spec:
 | `context_window` | Input window in tokens |
 | `max_output_tokens` | Output-token ceiling |
 | `max_thinking_tokens` | Largest thinking budget the model accepts (informational) |
+| `thinking_mode` | How the model thinks. The Anthropic, Bedrock and Gemini layers read it to build the thinking request: `none`, `budget` (the caller sets a token budget), `level` (a discrete low/high level), `adaptive` (the model decides, the caller sets an effort), `always_on` (always thinks, not switchable) |
 | `apis` | Wire APIs the model is served on: `chat_completions`, `responses`, `ollama`, `vllm`, `anthropic`, `gemini` |
 | `defaults` | Values used when the spec omits a setting. `think.chat_template_kwargs: true` sends `think` as `chat_template_kwargs.enable_thinking` (vLLM chat templates) |
 | `settings.<name>` | `supported` (default `true`), `min`, `max`, `default`, `enum` |
@@ -101,6 +103,8 @@ Bump `metadata.version` when curated numbers change.
 ## See also
 
 - [LLM reasoning / thinking](llm-reasoning.md)
+- [LLM prompt cache](llm-prompt-cache.md)
+- [LLM providers](llm-providers.md)
 - [agent.md: Output-token limits](agent.md#output-token-limits)
 - [Summarization](summarization.md): context-window sizing
 - [Infra manifests](infra.md): per-deployment overrides

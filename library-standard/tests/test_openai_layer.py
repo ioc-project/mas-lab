@@ -39,9 +39,11 @@ class _Transport:
 
 
 def _provider(transport: _Transport, monkeypatch: pytest.MonkeyPatch, **params: Any) -> OpenAILLMProvider:
-    monkeypatch.setenv("K", "secret")
+    del monkeypatch
     return OpenAILLMProvider.wrap(
-        transport, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K", **params}, call_kinds=("llm",)
+        transport,
+        {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K", **params},
+        call_kinds=("llm",),
     )
 
 
@@ -86,6 +88,30 @@ def test_the_openai_layer_answers_the_chat_in_flight(monkeypatch: pytest.MonkeyP
         assert payload["_result"]["content"] == "ok" and '"content": "ok"' in ret.text
     finally:
         _PROVIDER_CALL.reset(token)
+
+
+def test_structured_response_format_sets_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    import json as json_lib
+
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"n": 1}'}, "finish_reason": "stop"}]})
+
+    transport = _Transport()
+    transport.aclient = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    provider = _provider(transport, monkeypatch)
+    schema = {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}
+    out = asyncio.run(
+        provider.achat_completion(
+            model="m",
+            messages=[{"role": "user", "content": "q"}],
+            response_format={"type": "json_schema", "json_schema": {"name": "r", "schema": schema}},
+        )
+    )
+    assert json_lib.loads(captured[0].content)["response_format"]["json_schema"]["schema"] == schema
+    assert out["parsed"] == {"n": 1}
 
 
 def test_the_openai_layer_needs_a_chat_in_flight(monkeypatch: pytest.MonkeyPatch) -> None:

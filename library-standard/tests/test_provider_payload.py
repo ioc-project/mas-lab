@@ -374,3 +374,38 @@ async def test_pr55_assembler_end_to_end_with_live_tool_exchange() -> None:
     assert "call_live" in declared
     assert returned <= declared
     assert_provider_payload(out)
+
+
+def test_sanitize_keeps_provider_state_and_error_flag_and_drops_with_stripped_call() -> None:
+    state = {"blocks": [{"signature": "s"}]}
+    kept = [
+        {"role": "user", "content": "ask"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"id": "c1", "function": {"name": "f", "arguments": "{}"}}],
+            "provider_state": state,
+        },
+        {"role": "tool", "tool_call_id": "c1", "content": "bad", "is_error": True},
+    ]
+    out = sanitize_provider_messages(kept)
+    assert out[1]["provider_state"] == state
+    assert out[2]["is_error"] is True
+    orphan = [
+        {
+            "role": "assistant",
+            "content": "thinking aloud",
+            "tool_calls": kept[1]["tool_calls"],
+            "provider_state": state,
+        },
+        {"role": "user", "content": "next"},
+    ]
+    stripped = sanitize_provider_messages(orphan)
+    assert "provider_state" not in stripped[0] and "tool_calls" not in stripped[0]
+
+
+def test_token_estimate_ignores_provider_state() -> None:
+    from mas.library.standard.plugins.context.token_budget import estimate_tokens
+
+    base = {"role": "assistant", "content": "x", "tool_calls": []}
+    assert estimate_tokens([{**base, "provider_state": {"blob": "y" * 4000}}]) == estimate_tokens([base])

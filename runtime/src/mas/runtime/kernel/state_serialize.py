@@ -132,6 +132,7 @@ def run_to_dict(run: RunLedger) -> dict:
                     {"tool_name": name, "tool_arguments": dict(args or {})} for name, args in (r.parallel_tools or ())
                 ],
                 "finish_reason": r.finish_reason,
+                **({"provider_state": dict(r.provider_state)} if r.provider_state else {}),
                 **({"placeholder": True} if r.placeholder else {}),
             }
             for r in run.events
@@ -158,6 +159,7 @@ def run_from_dict(data: dict) -> RunLedger:
                 tool_arguments=dict(row.get("tool_arguments") or {}),
                 parallel_tools=parallel,
                 finish_reason=str(row.get("finish_reason") or ""),
+                provider_state=dict(row.get("provider_state") or {}),
                 placeholder=bool(row.get("placeholder")),
             )
         )

@@ -364,3 +364,17 @@ def test_fault_inject_seeded_draws_are_identical() -> None:
     a = FaultInjectMiddleware.wrap(_Inner(), {"rate": 0.5, "seed": 11}, call_kinds=("llm",))
     b = FaultInjectMiddleware.wrap(_Inner(), {"rate": 0.5, "seed": 11}, call_kinds=("llm",))
     assert [a._draw() for _ in range(16)] == [b._draw() for _ in range(16)]
+
+
+def test_factory_fills_api_key_from_the_named_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mas.runtime.registry.llm_provider_registry import apply_llm_endpoint_defaults, instantiate_llm_provider
+
+    monkeypatch.setenv("X_KEY", "from-env")
+    spec = apply_llm_endpoint_defaults({"kind": "openai"}, {"api_base": "https://x.example/v1", "api_key_env": "X_KEY"})
+    assert spec["api_key"] == "from-env"
+    assert instantiate_llm_provider("openai", spec).api_key == "from-env"
+    held = apply_llm_endpoint_defaults(
+        {"kind": "openai", "api_key": "already"},
+        {"api_base": "https://x.example/v1", "api_key_env": "X_KEY"},
+    )
+    assert held["api_key"] == "already"

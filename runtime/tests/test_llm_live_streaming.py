@@ -17,8 +17,13 @@ class _FakeStreamResponse:
     def __init__(self, lines: list[str]) -> None:
         self._lines = lines
 
+    is_error = False
+
     def raise_for_status(self) -> None:
         return None
+
+    async def aread(self) -> bytes:
+        return b""
 
     async def aiter_lines(self):
         for line in self._lines:

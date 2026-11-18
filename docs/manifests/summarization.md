@@ -415,6 +415,6 @@ cheaper summarizer, judge override on the eval spec.
 - [experiment.md](experiment.md) — `evaluation.model`
 - [Compiled agent defaults](../references/defaults.md) — `mas-ctl compile` expansion
 - [working-memory-compaction.md](../design/working-memory-compaction.md) — design history
-- [Pipeline steps](https://github.com/outshift-open/mas-lab/blob/main/lab/docs/pipeline-steps.md) — `eval_mce`
+- [Pipeline steps](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline-steps.md) — `eval_mce`
 - Feature examples (not sample apps): [summarizer-override](https://github.com/ioc-project/mas-lab/tree/main/library-standard/examples/context/summarizer-override) · [MCE judge-override](https://github.com/ioc-project/mas-lab/tree/main/library-eval/examples/mce/judge-override)
 - Plugin card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/context/summarizer.md)

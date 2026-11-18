@@ -53,6 +53,7 @@ For ordinary chat and LLM HTTP, the runtime retries a dropped socket, connect-re
 | LLM `backoff_s` / `backoff_multiplier` / `jitter` | `0.5` / `2.0` / `true` |
 | LLM `require_idempotent` | `false` (HTTP POST of the same payload is treated as idempotent) |
 | LLM `max_backoff_s` | unlimited |
+| LLM `honor_retry_after` / `max_retry_after_s` | `true` / `60` |
 | Tools `max_attempts` | `2` |
 | Tools `retry_on` | `[transient, unavailable]` |
 | Tools `require_idempotent` | `true` (transient retries only if the tool is idempotent: Tool YAML `spec.idempotent: true`, or `ToolContract.is_idempotent()`) |
@@ -111,6 +112,12 @@ spec:
 
 ---
 
+## Retry-After and context-length failures
+
+**Retry-After.** A 429 or 5xx response may say how long to wait. The runtime reads, in order: header `retry-after-ms` (milliseconds), header `retry-after` (seconds, or an HTTP-date), then a Google RPC `error.details[]` entry whose `@type` ends in `RetryInfo` with `retryDelay` such as `"3s"`. A malformed value is skipped. A negative value counts as `0`. With `honor_retry_after: true` (the default) the sleep before the next try is `max(backoff, server_delay)`, so the hint can lengthen the wait but never shorten it. A hint longer than `max_retry_after_s` (default 60 seconds) is not waited for: the server wants the caller back much later, so retrying now would only be refused again, and the call fails with the server's delay on the failure (`retry_after_s`). Set `honor_retry_after: false` to keep the plain backoff. The retry log line shows the server delay when it is used.
+
+**Context length.** A 400 or 413 whose API error says the prompt is too long (for example `context_length_exceeded`, "maximum context length", "prompt is too long") is classified as `application` with code `CONTEXT_LENGTH_EXCEEDED`. It is never retried, and it does not open the circuit breaker beyond what `application` already does. The operator message says the prompt does not fit the model context window: set `context_window` to the model's real limit so the history is trimmed to fit, or use a model with a larger window.
+
 ## Failure classes
 
 | Class | Meaning | Infra default | Ingress default |
@@ -139,6 +146,8 @@ To make a provider trip the breaker, declare a tool as down with `ExplicitToolUn
 | `retry_on` | list of failure classes | `[transient, unavailable]` | `[transient, unavailable]` |
 | `require_idempotent` | boolean | `false` | `true` |
 | `max_backoff_s` | number ≥ 0 or omit | unlimited | unlimited |
+| `honor_retry_after` | boolean | `true` | `true` |
+| `max_retry_after_s` | number ≥ 0 | `60` | `60` |
 
 `spec.control.retry.llm` becomes a pipeline step. Prefer a `retry` layer on the infra pipeline.
 

@@ -58,6 +58,37 @@ properties:
     additionalProperties: true
   prompt_cache_key:
     type: string
+    description: >
+      Open Responses `prompt_cache_key`: a stable string that groups requests
+      sharing a prefix so the host can route them to the same cache. Gemini
+      reads a `cachedContents/...` name here. See docs/manifests/llm-prompt-cache.md.
+  prompt_cache_retention:
+    type: string
+    enum: [in_memory, 24h, 5m, 1h]
+    description: >
+      Open Responses `prompt_cache_retention`: how long a cached prefix is kept.
+      `in_memory` and `5m` are the short default, `24h` and `1h` the long one.
+      Each protocol maps this to what its wire supports (Anthropic and Bedrock
+      have a 1h maximum, so `24h` becomes `1h`).
+  prompt_cache_breakpoints:
+    description: >
+      Where explicit-cache protocols (Anthropic, Bedrock) mark the prompt as
+      cacheable. Omitted means system, tools and the last two user turns;
+      `false` means no marker; an object picks each part.
+    oneOf:
+      - type: boolean
+        const: false
+      - type: object
+        additionalProperties: false
+        properties:
+          system:
+            type: boolean
+          tools:
+            type: boolean
+          messages:
+            type: integer
+            minimum: 0
+            maximum: 2
   top_p:
     type: number
     minimum: 0

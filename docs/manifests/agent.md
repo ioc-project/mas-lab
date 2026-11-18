@@ -176,7 +176,7 @@ _Used by:_ `spec.models[]`
 | ------- | ------ | ---------- | --------- | ------------- |
 | `model` | `string` | **yes** | — | LiteLLM-style model string, such as `vertex_ai/gemini-3-pro-preview`. Use `any` to inherit the MAS, experiment, or workspace default model. |
 | `id` | `string` | no | `"main"` | Logical model ID within this agent. Use `main` for the primary model. |
-| `kind` | `string` | no | — | Wire-protocol plugin for model calls (`openai` is shipped). |
+| `kind` | `string` | no | — | Wire-protocol plugin for model calls (`openai`, `anthropic`, `gemini`, `azure`, `bedrock`, `vertex`, `openresponses`, `groq`, …). |
 | `temperature` | `number` [0.0–2.0] | no | `0.7` | Sampling temperature. |
 | `max_tokens` | `integer` ≥ 1 | no | unset | Output-token budget; omitted means no limit is sent. |
 | `max_completion_tokens` | `integer` ≥ 1 | no | unset | Explicit cap on answer plus reasoning. The request never carries both token-limit fields. |
@@ -185,8 +185,8 @@ _Used by:_ `spec.models[]`
 | `reasoning` | object | no | — | Thinking controls: `effort`, `budget_tokens`, `exclude`, `mode`, `think`, `include`. See [llm-reasoning.md](llm-reasoning.md). `reasoning_effort` is a deprecated alias for `reasoning.effort`. |
 | `extra` | object | no | — | Protocol-specific fields forwarded on the request body. |
 
-A row also accepts these static Chat Completions sampling fields: `top_p`, `top_k`, `min_p`, `min_tokens`, `presence_penalty`, `frequency_penalty`, `repetition_penalty`, `seed`, `n`, `stop`, `logit_bias`, `logprobs`, `top_logprobs`, `parallel_tool_calls`, `response_format`, `verbosity`, `service_tier`, `store`, `metadata`, `modalities`, `prediction`, `prompt_cache_key`, and `user`. The schema is [`llm-sampling.schema.yaml`](../schemas/runtime/fragments/llm-sampling.schema.yaml).
-The [model catalog](llm-model-catalog.md) records which fields each model honours.
+A row also accepts these static Chat Completions sampling fields: `top_p`, `top_k`, `min_p`, `min_tokens`, `presence_penalty`, `frequency_penalty`, `repetition_penalty`, `seed`, `n`, `stop`, `logit_bias`, `logprobs`, `top_logprobs`, `parallel_tool_calls`, `response_format`, `verbosity`, `service_tier`, `store`, `metadata`, `modalities`, `prediction`, `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_breakpoints`, and `user`. The schema is [`llm-sampling.schema.yaml`](../schemas/runtime/fragments/llm-sampling.schema.yaml).
+The [model catalog](llm-model-catalog.md) records which fields each model honours. The three `prompt_cache_*` fields are explained in [llm-prompt-cache.md](llm-prompt-cache.md); how each protocol maps these fields is in [llm-providers.md](llm-providers.md).
 
 Do **not** put `api_base` or `api_key_env` here. They belong in the flavour or infra manifest.
 
@@ -950,7 +950,7 @@ Set a key to `null` to disable it. Full tables: [reliability.md](../references/r
 | Key | Fields | Description |
 | ----- | -------- | ------------- |
 | `budget` | `max_tokens: integer`, `max_cost_usd: number` | Planned token or cost budget. Not used yet. |
-| `retry` | `llm` / `tools`: `max_attempts`, `backoff_s`, `backoff_multiplier`, `jitter`, `retry_on`, `require_idempotent`, `max_backoff_s` | Infra re-issue budget. LLM default 4 attempts on `transient`+`unavailable` (429/5xx, timeout, connect-refused); tools 2 attempts on `transient`+`unavailable` when idempotent. |
+| `retry` | `llm` / `tools`: `max_attempts`, `backoff_s`, `backoff_multiplier`, `jitter`, `retry_on`, `require_idempotent`, `max_backoff_s`, `honor_retry_after`, `max_retry_after_s` | Infra re-issue budget. LLM default 4 attempts on `transient`+`unavailable` (429/5xx, timeout, connect-refused); tools 2 attempts on `transient`+`unavailable` when idempotent. |
 | `circuit_breaker` | `plugin`, `enabled`, `failure_threshold`, `reset_timeout_s`, `on` | Off unless this key is present. Loads the `threshold` circuit-breaker plugin. |
 | `rate_limiter` | `requests_per_minute: integer` | Planned LLM call-rate limit. Not used yet. |
 

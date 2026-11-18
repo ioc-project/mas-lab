@@ -124,6 +124,32 @@ Defaults, ceilings, and `on_truncation` are in [agent.md: Output-token limits](a
 The nested `reasoning` object carries only `budget_tokens`, `exclude`, and `mode`.
 Strict OpenAI and Azure Chat Completions return HTTP 400 on an unexpected nested `reasoning` object, so effort is not duplicated inside it.
 
+## Thinking on Anthropic, Bedrock and Gemini
+
+The `anthropic`, `bedrock`, `gemini` and `vertex` layers build the vendor's thinking request from the same `reasoning` block.
+How depends on the model's `thinking_mode` in the [catalog](llm-model-catalog.md):
+
+| `thinking_mode` | Request |
+|-----------------|---------|
+| `adaptive` | Anthropic `thinking: {type: adaptive}` plus `output_config.effort` (`minimal` is sent as `low`) |
+| `always_on` | Only `output_config.effort`: the model always thinks and cannot be switched off |
+| `budget` | Anthropic `thinking: {type: enabled, budget_tokens}`; Gemini `thinkingConfig.thinkingBudget`. The budget is `budget_tokens`, else 4000 / 10000 / 16000 / 32000 for `low` / `medium` / `high` / `xhigh`, and on Anthropic stays at least 1024 below `max_tokens` |
+| `level` | Gemini `thinkingConfig.thinkingLevel`: `low` for `low` and `medium`, `high` for `high`, `xhigh` and `max` |
+| `none` | Nothing is sent |
+
+A model the catalog does not list is treated as `adaptive`, or as `budget` when `budget_tokens` is set.
+Effort `none` or `disable` (or `think: false`) sends no thinking request.
+With thinking on, Anthropic rejects `temperature`, `top_p`, `top_k` and a forced `tool_choice`, so they are not sent.
+`exclude: false` also asks for the thought text (`display: summarized` on Anthropic, `includeThoughts` on Gemini) and returns it as `reasoning`.
+
+**Tool turns and signed state.**
+These vendors require the signed thinking blocks (Anthropic, Bedrock) or thought signatures (Gemini) of a tool-calling turn to be sent back verbatim with its tool results.
+The layer returns them in the completion's `provider_state`, the kernel stores that opaque mapping on the assistant tool-call message, and the same layer reads it on the next request.
+Nothing else reads it, and it never enters observability events or token counts (see [context-management.md](../references/context-management.md)).
+If a tool turn of the current loop has no stored state (a session resumed from before this was recorded), the request goes out with thinking left off rather than failing.
+
+A failed tool result carries `is_error: true` on its message; Anthropic sends it as `is_error`, Bedrock as `status: error`, Gemini as `{error: ...}`.
+
 ## Why cache replay is unrelated
 
 Offline CI replays a stored assistant message after sanitization.

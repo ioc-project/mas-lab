@@ -10,6 +10,8 @@ owns `LLMProvider`, the registry, model catalog, and payload mapping.
 | Plugin | Role | Module |
 |--------|------|--------|
 | `openai` | OpenAI-compatible `/chat/completions` (OpenAI, Azure, Ollama, LiteLLM, vLLM) | `plugins/llm/openai.py` |
+| `anthropic` | Anthropic Messages API over `http` | `plugins/llm/anthropic.py` |
+| `gemini` | Gemini `generateContent` over `http` | `plugins/llm/gemini.py` |
 | `cache` | Disk-cache decorator around a routed protocol plugin | `plugins/llm/cache.py` |
 
 Register additional wire protocols the same way as tools: `type: llm_provider`

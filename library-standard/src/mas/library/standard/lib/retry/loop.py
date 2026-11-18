@@ -17,6 +17,15 @@ T = TypeVar("T")
 Classify = Callable[[BaseException], ClassifiedFailure]
 
 
+def _sleep_for(policy: RetryPolicy, attempt: int, classified: ClassifiedFailure) -> tuple[float, float | None]:
+    """Seconds to wait before the next try, and the server hint when it was used."""
+    delay = policy.delay_for(attempt)
+    server = classified.retry_after_s
+    if not policy.honor_retry_after or server is None:
+        return delay, None
+    return max(delay, server), server
+
+
 def _should_retry(
     *,
     attempt: int,
@@ -25,7 +34,12 @@ def _should_retry(
     policy: RetryPolicy,
     idempotent: bool,
 ) -> bool:
-    return attempt < attempts - 1 and policy.allows(classified.failure_class, idempotent=idempotent)
+    if not attempt < attempts - 1 or not policy.allows(classified.failure_class, idempotent=idempotent):
+        return False
+    # A server asking for longer than the cap wants the caller to come back much later: retrying now would
+    # only be refused again, so the failure is returned instead.
+    hint = classified.retry_after_s
+    return not (policy.honor_retry_after and hint is not None and hint > max(0.0, policy.max_retry_after_s))
 
 
 def _finish_failure(
@@ -101,7 +115,7 @@ def call_with_retry(
                     target=target,
                 )
                 raise classified from exc
-            delay = policy.delay_for(attempt)
+            delay, server_delay = _sleep_for(policy, attempt, classified)
             log_retry(
                 target=target,
                 failure_class=classified.failure_class.value,
@@ -110,6 +124,7 @@ def call_with_retry(
                 max_attempts=attempts,
                 delay_s=delay,
                 message=str(classified),
+                server_delay_s=server_delay,
             )
             time.sleep(delay)
     assert last is not None
@@ -157,7 +172,7 @@ async def acall_with_retry(
                     target=target,
                 )
                 raise classified from exc
-            delay = policy.delay_for(attempt)
+            delay, server_delay = _sleep_for(policy, attempt, classified)
             log_retry(
                 target=target,
                 failure_class=classified.failure_class.value,
@@ -166,6 +181,7 @@ async def acall_with_retry(
                 max_attempts=attempts,
                 delay_s=delay,
                 message=str(classified),
+                server_delay_s=server_delay,
             )
             await asyncio.sleep(delay)
     assert last is not None

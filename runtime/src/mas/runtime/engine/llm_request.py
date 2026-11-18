@@ -30,6 +30,8 @@ _SAMPLING_KEYS = (
     "modalities",
     "prediction",
     "prompt_cache_key",
+    "prompt_cache_retention",
+    "prompt_cache_breakpoints",
     "top_p",
     "top_k",
     "presence_penalty",

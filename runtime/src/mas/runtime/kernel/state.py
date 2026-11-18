@@ -59,6 +59,8 @@ class RunEvent:
     tool_arguments: dict = field(default_factory=dict)
     parallel_tools: tuple[tuple[str, dict], ...] = ()
     finish_reason: str = ""
+    # Opaque protocol-layer state of the completion (EngineIoReturn.provider_state).
+    provider_state: dict = field(default_factory=dict)
     seq: int = 0
     # True for a row the kernel wrote for a call that did not run (skipped, blocked,
     # blacklisted); its text is a note for the model, not a reply.

@@ -119,6 +119,21 @@ class _CallFrames:
 _REQUEST_ONLY_FIELDS = frozenset({"model", "tools", "messages", "temperature"})
 
 
+def _without_provider_state(payload: dict) -> dict:
+    """The payload with the opaque, possibly signed ``provider_state`` of any message in ``messages`` removed.
+
+    Events are exported and stored; provider-signed state belongs to the protocol layer that wrote it.
+    """
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not any(isinstance(m, dict) and "provider_state" in m for m in messages):
+        return payload
+    out = dict(payload)
+    out["messages"] = [
+        {k: v for k, v in m.items() if k != "provider_state"} if isinstance(m, dict) else m for m in messages
+    ]
+    return out
+
+
 @dataclass
 class ObservabilityOperator:
     """M_obs — append-only event log with attribution metadata."""
@@ -941,7 +956,7 @@ class ObservabilityOperator:
             policy_name=policy_name,
             actor_id=actor_id,
             attribution_code=attribution_code,
-            payload=payload or {},
+            payload=_without_provider_state(payload or {}),
         )
         self.events.append(ev)
         self._notify_subscribers(ev)

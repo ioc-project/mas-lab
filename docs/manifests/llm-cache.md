@@ -4,6 +4,9 @@
 -->
 # LLM cache
 
+This page is about record and replay.
+For the provider's prompt cache, which lowers the price of a repeated prompt prefix, see [LLM prompt cache](llm-prompt-cache.md).
+
 The **`llm_cache` infra middleware** records LLM responses to a JSON file and replays them later without calling the provider.
 Use it to make tests and tutorials reproducible, to run offline, or to avoid paying for repeated calls.
 A **trace cache** is this kind of store: a run with identical inputs reuses the stored response instead of calling the model again.
@@ -322,7 +325,7 @@ See [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
 
 **Current approach.** The cache is the `llm_cache` layer: a step in the infra
 `pipeline` (or the `--cache-read` / `--cache-write` flags that insert it). It
-wraps whatever protocol the model uses (`openai` over `http`, today), so the
+wraps whatever protocol the model uses (`openai`, `anthropic`, `gemini`, `azure`, `vertex`, … over `http`), so the
 same cache serves every provider. This page describes it.
 
 **Deprecated.** The `llm_provider` plugin `cache` (`CacheLLMProvider`) wrapped
@@ -343,6 +346,7 @@ layer keys on the exchange preview. Record it again with the `llm_cache` step.
 
 ## See also
 
+- [llm-prompt-cache.md](llm-prompt-cache.md): the provider's own prompt cache (cache read and write tokens), a different feature
 - [references/llm-cache.md](../references/llm-cache.md): exhaustive reference
 - [infra.md](infra.md): infra kinds and bundles
 - [runtime-engine.md](runtime-engine.md): cache flags (`spec.cache` on RuntimeEngine)

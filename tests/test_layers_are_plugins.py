@@ -7,13 +7,39 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 from mas.runtime.layers.compose import layers_declaring, response_store_layer
 from mas.runtime.layers.defaults import default_pipeline_steps
 
 ROOT = Path(__file__).resolve().parents[1]
 # The layers the libraries register. A runtime or ctl source that spells one as a literal has hardcoded it.
-_LAYER_NAMES = ("retry", "circuit_breaker", "llm_cache", "llm_scheduler", "fault_inject", "http", "openai", "mcp")
+_LAYER_NAMES = (
+    "retry",
+    "circuit_breaker",
+    "llm_cache",
+    "llm_scheduler",
+    "fault_inject",
+    "http",
+    "openai",
+    "mcp",
+    "health_probe",
+    "anthropic",
+    "gemini",
+    "azure",
+    "bedrock",
+    "groq",
+    "openrouter",
+    "xai",
+    "litellm",
+    "cerebras",
+    "mistral",
+    "vllm",
+    "huggingface",
+    "databricks",
+    "vertex",
+    "structured",
+)
 _RUNTIME_LAYER_SOURCES = (
     "runtime/src/mas/runtime/layers",
     "runtime/src/mas/runtime/reliability",
@@ -73,3 +99,17 @@ def test_ctl_connect_schemes_come_from_protocol_rows() -> None:
     assert any("spec.endpoints" in item and "a2a" in item for item in connect)
     assert any("spec.tool_servers" in item and "mcp" in item for item in connect)
     assert expand_listens(("agent=a2a://127.0.0.1:9/a",))
+    for source in (
+        "x=anthropic://host",
+        "x=gemini://host",
+        "x=azure://host",
+        "x=bedrock://host",
+        "x=vertex://host",
+        "x=groq://host",
+        "x=huggingface://host",
+        "x=databricks://host",
+        "x=anthropics://host",
+        "x=geminis://host",
+    ):
+        with pytest.raises(ValueError, match="must use"):
+            expand_connects((source,))

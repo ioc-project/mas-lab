@@ -10,12 +10,17 @@ MAS-Lab calls language models over the
 [OpenAI Chat Completions](https://platform.openai.com/docs/api-reference/chat)
 HTTP API: `POST {api_base}/chat/completions`. OpenAI, Ollama, LiteLLM, and
 other OpenAI-compatible proxies all answer that request. The runtime does not
-use the Assistants API or the Responses API.
+use the Assistants API; the typed-item `/responses` wire is
+[Open Responses](openresponses.md).
 
 ## How MAS-Lab implements it
 
 `OpenAILLMProvider` in `library-standard` is the chat-completions layer over
-`http`. `protocol: openai` plus a url is sugar for `[http, openai]`. The
+`http`. `protocol: openai` plus a url is sugar for `[http, openai]`. Groq,
+OpenRouter, xAI, LiteLLM, Cerebras, Mistral, vLLM, and Hugging Face inherit
+that class and only change the host and key name (`protocol: groq` is
+`[http, groq]`). Databricks posts that same body at
+`/serving-endpoints/{name}/invocations`. The
 engine still calls `chat_completion`; that adapter sits on top of the layer.
 It speaks `POST {api_base}/chat/completions` with `httpx` (not the `openai`
 Python SDK). Infra selects it:
@@ -46,7 +51,7 @@ is separate from the runtime provider.
 | Piece | Package |
 | --- | --- |
 | Chat Completions client | `library-standard` (`OpenAILLMProvider`, `httpx`) |
-| Bundled infra | `standard:openai`, `standard:llm-proxy`, `standard:llm-proxy-cached` |
+| Bundled infra | `standard:openai`, `standard:llm-proxy`, `standard:llm-proxy-cached`, `standard:groq`, `standard:openrouter`, `standard:xai`, `standard:litellm`, `standard:cerebras`, `standard:mistral`, `standard:vllm`, `standard:huggingface`, `standard:databricks` |
 | Optional eval SDK | `openai` on `lab/components/bench` |
 
 ## Compliance

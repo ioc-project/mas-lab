@@ -17,6 +17,7 @@ and where the tutorials live.
 | Protocol | What it carries | MAS-Lab surface |
 | --- | --- | --- |
 | [OpenAI Chat Completions](openai.md) | Model calls | `standard:openai` and any OpenAI-compatible proxy |
+| [Open Responses](openresponses.md) | Model calls | `standard:openresponses` |
 | [MCP](mcp.md) | Remote tools | `library-ioa/`, `mas-mcp` |
 | [A2A](a2a.md) | Remote agents | `library-ioa/`, `mas-ctl serve` |
 | [Agent Skills](agent-skills.md) | Reusable instruction packs | `library-skills/`, [agentskills.io](https://agentskills.io/) |
@@ -27,6 +28,6 @@ and local delegation, then point the same agent at an MCP server or an A2A
 peer. [Tutorial 4](../tutorials/04-mcp-tools/README.md) and
 [Tutorial 5](../tutorials/05-a2a-agents/README.md) show that split.
 
-The landing page lists the same five protocols. Hands-on paths stay under
+The landing page lists the same protocols. Hands-on paths stay under
 [Discover](../discover/index.md). Flag tables and YAML kinds stay under
 [References](../references/index.md).

@@ -258,6 +258,19 @@ The infra reference says where to call the LLM. The key lives in `.env` or `dock
 | ------ | -------- |
 | `standard:openai` | OpenAI API (`OPENAI_API_KEY`) |
 | `standard:ollama` | Local Ollama at `http://localhost:11434/v1` (no key) |
+| `standard:groq` | Groq (`GROQ_API_KEY`) |
+| `standard:openrouter` | OpenRouter (`OPENROUTER_API_KEY`) |
+| `standard:xai` | xAI (`XAI_API_KEY`) |
+| `standard:azure` | Azure OpenAI (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`) |
+| `standard:bedrock` | Bedrock Converse (`AWS_BEARER_TOKEN_BEDROCK`) |
+| `standard:litellm` | Local LiteLLM proxy |
+| `standard:cerebras` | Cerebras (`CEREBRAS_API_KEY`) |
+| `standard:mistral` | Mistral (`MISTRAL_API_KEY`) |
+| `standard:vllm` | Local vLLM at `http://localhost:8000/v1` |
+| `standard:huggingface` | Hugging Face router (`HF_TOKEN`) |
+| `standard:databricks` | Databricks serving (`DATABRICKS_TOKEN`, `DATABRICKS_HOST`) |
+| `standard:vertex` | Vertex AI (`VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT`) |
+| `standard:openresponses` | Open Responses host (`OPENRESPONSES_API_KEY`) |
 | `standard:production` | Tutorial default. Wraps `standard:openai`. |
 | `standard:development` | Local Ollama bundle |
 

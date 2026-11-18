@@ -153,6 +153,7 @@ class AutoCtxAssembler:
         call_id: str,
         tool_name: str,
         arguments: dict[str, Any] | None = None,
+        provider_state: dict[str, Any] | None = None,
     ) -> None:
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
@@ -160,6 +161,7 @@ class AutoCtxAssembler:
             call_id=call_id,
             tool_name=tool_name,
             arguments=arguments,
+            provider_state=provider_state,
         )
         record_context_mutation(
             self.observability,
@@ -175,8 +177,9 @@ class AutoCtxAssembler:
     def record_assistant_tool_calls(
         self,
         calls: list[tuple[str, str, dict[str, Any]]],
+        provider_state: dict[str, Any] | None = None,
     ) -> None:
-        self.working_memory.record_assistant_tool_calls(calls)
+        self.working_memory.record_assistant_tool_calls(calls, provider_state=provider_state)
 
     def record_tool_result(
         self,
@@ -184,10 +187,11 @@ class AutoCtxAssembler:
         call_id: str,
         content: str,
         chunk: dict[str, Any] | None = None,
+        is_error: bool = False,
     ) -> None:
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
-        self.working_memory.record_tool_result(call_id=call_id, content=content, chunk=chunk)
+        self.working_memory.record_tool_result(call_id=call_id, content=content, chunk=chunk, is_error=is_error)
         record_context_mutation(
             self.observability,
             action="wm_append",

@@ -8,8 +8,8 @@ kind: Library
 
 name: standard
 description: >
-  Standard library for MAS — infra bundles (OpenAI, production),
-  tutorial tools (web-search, calculator), and design-pattern aliases.
+  Standard library for MAS — infra bundles (OpenAI, Groq, Azure, Bedrock,
+  production), tutorial tools (web-search, calculator), and design-pattern aliases.
 version: "0.0.1"
 dependencies:
   - ddgs>=9.14.0
@@ -107,6 +107,309 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: anthropic
+    urn: mas.llm_provider.anthropic
+    module: mas.library.standard.plugins.llm.anthropic
+    class: AnthropicLLMProvider
+    shortcuts:
+      - anthropic
+  - type: layer
+    name: anthropic
+    urn: mas.layer.anthropic
+    module: mas.library.standard.plugins.llm.anthropic
+    class: AnthropicLLMProvider
+    shortcuts:
+      - anthropic
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output, prompt_cache, thinking]
+  - type: llm_provider
+    name: gemini
+    urn: mas.llm_provider.gemini
+    module: mas.library.standard.plugins.llm.gemini
+    class: GeminiLLMProvider
+    shortcuts:
+      - gemini
+  - type: layer
+    name: gemini
+    urn: mas.layer.gemini
+    module: mas.library.standard.plugins.llm.gemini
+    class: GeminiLLMProvider
+    shortcuts:
+      - gemini
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output, thinking]
+  - type: llm_provider
+    name: openresponses
+    urn: mas.llm_provider.openresponses
+    module: mas.library.standard.plugins.llm.openresponses
+    class: OpenResponsesLLMProvider
+    shortcuts:
+      - openresponses
+  - type: layer
+    name: openresponses
+    urn: mas.layer.openresponses
+    module: mas.library.standard.plugins.llm.openresponses
+    class: OpenResponsesLLMProvider
+    shortcuts:
+      - openresponses
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output, prompt_cache, thinking]
+  - type: llm_provider
+    name: vertex
+    urn: mas.llm_provider.vertex
+    module: mas.library.standard.plugins.llm.vertex
+    class: VertexLLMProvider
+    shortcuts:
+      - vertex
+  - type: layer
+    name: vertex
+    urn: mas.layer.vertex
+    module: mas.library.standard.plugins.llm.vertex
+    class: VertexLLMProvider
+    shortcuts:
+      - vertex
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output, thinking]
+      proxy_fields: [project, location]
+  - type: llm_provider
+    name: azure
+    urn: mas.llm_provider.azure
+    module: mas.library.standard.plugins.llm.azure
+    class: AzureLLMProvider
+    shortcuts:
+      - azure
+  - type: layer
+    name: azure
+    urn: mas.layer.azure
+    module: mas.library.standard.plugins.llm.azure
+    class: AzureLLMProvider
+    shortcuts:
+      - azure
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+      proxy_fields: [deployment, api_version, auth]
+  - type: llm_provider
+    name: bedrock
+    urn: mas.llm_provider.bedrock
+    module: mas.library.standard.plugins.llm.bedrock
+    class: BedrockLLMProvider
+    shortcuts:
+      - bedrock
+  - type: layer
+    name: bedrock
+    urn: mas.layer.bedrock
+    module: mas.library.standard.plugins.llm.bedrock
+    class: BedrockLLMProvider
+    shortcuts:
+      - bedrock
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, prompt_cache, thinking]
+  - type: llm_provider
+    name: groq
+    urn: mas.llm_provider.groq
+    module: mas.library.standard.plugins.llm.compatible
+    class: GroqLLMProvider
+    shortcuts:
+      - groq
+  - type: layer
+    name: groq
+    urn: mas.layer.groq
+    module: mas.library.standard.plugins.llm.compatible
+    class: GroqLLMProvider
+    shortcuts:
+      - groq
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: openrouter
+    urn: mas.llm_provider.openrouter
+    module: mas.library.standard.plugins.llm.compatible
+    class: OpenRouterLLMProvider
+    shortcuts:
+      - openrouter
+  - type: layer
+    name: openrouter
+    urn: mas.layer.openrouter
+    module: mas.library.standard.plugins.llm.compatible
+    class: OpenRouterLLMProvider
+    shortcuts:
+      - openrouter
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: xai
+    urn: mas.llm_provider.xai
+    module: mas.library.standard.plugins.llm.compatible
+    class: XaiLLMProvider
+    shortcuts:
+      - xai
+  - type: layer
+    name: xai
+    urn: mas.layer.xai
+    module: mas.library.standard.plugins.llm.compatible
+    class: XaiLLMProvider
+    shortcuts:
+      - xai
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: litellm
+    urn: mas.llm_provider.litellm
+    module: mas.library.standard.plugins.llm.compatible
+    class: LiteLLMLLMProvider
+    shortcuts:
+      - litellm
+  - type: layer
+    name: litellm
+    urn: mas.layer.litellm
+    module: mas.library.standard.plugins.llm.compatible
+    class: LiteLLMLLMProvider
+    shortcuts:
+      - litellm
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: cerebras
+    urn: mas.llm_provider.cerebras
+    module: mas.library.standard.plugins.llm.compatible
+    class: CerebrasLLMProvider
+    shortcuts:
+      - cerebras
+  - type: layer
+    name: cerebras
+    urn: mas.layer.cerebras
+    module: mas.library.standard.plugins.llm.compatible
+    class: CerebrasLLMProvider
+    shortcuts:
+      - cerebras
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: mistral
+    urn: mas.llm_provider.mistral
+    module: mas.library.standard.plugins.llm.compatible
+    class: MistralLLMProvider
+    shortcuts:
+      - mistral
+  - type: layer
+    name: mistral
+    urn: mas.layer.mistral
+    module: mas.library.standard.plugins.llm.compatible
+    class: MistralLLMProvider
+    shortcuts:
+      - mistral
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: vllm
+    urn: mas.llm_provider.vllm
+    module: mas.library.standard.plugins.llm.compatible
+    class: VllmLLMProvider
+    shortcuts:
+      - vllm
+  - type: layer
+    name: vllm
+    urn: mas.layer.vllm
+    module: mas.library.standard.plugins.llm.compatible
+    class: VllmLLMProvider
+    shortcuts:
+      - vllm
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: huggingface
+    urn: mas.llm_provider.huggingface
+    module: mas.library.standard.plugins.llm.compatible
+    class: HuggingFaceLLMProvider
+    shortcuts:
+      - huggingface
+  - type: layer
+    name: huggingface
+    urn: mas.layer.huggingface
+    module: mas.library.standard.plugins.llm.compatible
+    class: HuggingFaceLLMProvider
+    shortcuts:
+      - huggingface
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
+  - type: llm_provider
+    name: databricks
+    urn: mas.llm_provider.databricks
+    module: mas.library.standard.plugins.llm.compatible
+    class: DatabricksLLMProvider
+    shortcuts:
+      - databricks
+  - type: layer
+    name: databricks
+    urn: mas.layer.databricks
+    module: mas.library.standard.plugins.llm.compatible
+    class: DatabricksLLMProvider
+    shortcuts:
+      - databricks
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 0
+      protocol_layer: true
+      features: [tools, streaming, structured_output]
   # Decorator around a routed protocol plugin — not claimed as spec.models[].kind
   - type: llm_provider
     name: cache
@@ -449,6 +752,17 @@ plugins:
             jitter: true
             retry_on: [transient, unavailable]
             require_idempotent: true
+  - type: layer
+    name: structured
+    urn: mas.layer.structured
+    module: mas.library.standard.plugins.layers.structured
+    class: StructuredLayer
+    shortcuts:
+      - structured
+    attributes:
+      per: destination
+      call_kinds: [llm]
+      priority: 40
   - type: hitl_contract
     name: registry
     urn: mas.hitl_contract.registry
