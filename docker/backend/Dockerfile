@@ -13,8 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir uv
 
 # Workspace metadata first (layer cache). The root package declares README.md as its readme, and its
-# build fails without the file.
-COPY pyproject.toml README.md ./
+# build fails without the file. uv.lock pins every dependency, so the image holds what CI tested.
+COPY pyproject.toml uv.lock README.md ./
 COPY runtime/pyproject.toml runtime/
 COPY ctl/pyproject.toml ctl/
 COPY library-standard/pyproject.toml library-standard/
@@ -57,7 +57,7 @@ ENV MAS_DATA_ROOT=/data
 ENV MAS_CONTROLLER_PORT=8090
 ENV PYTHONUNBUFFERED=1
 
-RUN uv sync --no-dev
+RUN uv sync --locked --no-dev
 
 COPY docker/backend/entrypoint.sh /usr/local/bin/mas-lab-entrypoint
 RUN chmod +x /usr/local/bin/mas-lab-entrypoint

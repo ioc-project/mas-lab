@@ -17,7 +17,7 @@ schemas. **It does not read schema files from the repo filesystem.**
 ### Prerequisites
 
 - Python env with `mas-lab` installed (`uv sync` from repo root)
-- Node.js 22+ and Yarn
+- Node.js 22+ and Yarn 4, through Corepack (`corepack enable`; `package.json` names the version)
 
 ### 1. Start the controller (backend)
 
