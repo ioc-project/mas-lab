@@ -60,6 +60,7 @@ The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 | Runtime manifests (Agent, MAS, overlay) | [Manifest fields](../manifests/runtime.md) |
 | Context window, summarization, pinned prompt parts, cache and token usage | [Context management](context-management.md) |
 | Reliability (retries, circuit, `error_policy`, logging) | [reliability.md](reliability.md) |
+| Hardening: the production posture and its named checks | [hardening.md](hardening.md) |
 | LLM response cache (`llm_cache` infra middleware) | [llm-cache.md](llm-cache.md) |
 | Communication headers | [comm-headers.md](comm-headers.md) |
 | Communication stack | [comm-stack.md](comm-stack.md) |

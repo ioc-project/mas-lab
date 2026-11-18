@@ -283,6 +283,40 @@ properties:
           an agent-keyed Application row. Bundled prod sets this. A file
           named prod.yaml does not.
 
+      hardening:
+        type: object
+        additionalProperties: false
+        description: >
+          The hardening posture of this deployment. Omitted, nothing runs and no
+          session changes. Bundled prod selects production. profile production refuses to start when a named
+          hardening check fails and no waiver covers it. See
+          docs/references/hardening.md.
+        properties:
+          profile:
+            type: string
+            enum: [default, production]
+            default: default
+            description: >
+              production enforces every check fail-closed at session start;
+              default is the permissive laptop posture.
+          waive:
+            type: array
+            description: >
+              Checks this deployment accepts failing, each with the reason. The
+              report lists every waiver.
+            items:
+              type: object
+              additionalProperties: false
+              required: [check, reason]
+              properties:
+                check:
+                  type: string
+                  description: A hardening check id (mas-ctl hardening list).
+                reason:
+                  type: string
+                  minLength: 1
+                  description: Why this deployment accepts the failure.
+
       control:
         description: >
           Control manifests this Flavour attaches. A list of {ref, agents}.

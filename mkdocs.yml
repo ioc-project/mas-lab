@@ -217,6 +217,7 @@ nav:
           - Manifest fields: manifests/runtime.md
           - Context management: references/context-management.md
           - Reliability: references/reliability.md
+          - Hardening: references/hardening.md
           - Event model: references/event-model.md
           - Transport observability:
               - Overview: references/transport-observability.md

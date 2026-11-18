@@ -24,6 +24,7 @@ from mas.library.standard.lib.comm.payload import (
     send_result,
 )
 from mas.library.standard.lib.comm.send_context import align_send
+from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack.layer import ChainMember
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
@@ -621,7 +622,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             raise
         except Exception as exc:
             # create_app_with_secret takes the secret, and a binding may echo its arguments in an error
-            text = str(exc).replace(self._secret, "***") if self._secret else str(exc)
+            text = safe_text(str(exc).replace(self._secret, "***") if self._secret else str(exc))
             raise AgentCommError(text or "slim binding error") from None
 
     async def _call(self, value: Any) -> Any:
@@ -636,7 +637,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         except (AttributeError, TypeError, KeyboardInterrupt, SystemExit):
             raise
         except Exception as exc:
-            raise AgentCommError(str(exc) or "slim binding error") from exc
+            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
 
     def _run(self, coro: Any) -> Any:
         if not asyncio.iscoroutine(coro):

@@ -27,6 +27,12 @@ from mas.ctl.validate import validate_file, validate_tree, validation_enabled
     help="Check referenced files exist on disk (default on)",
 )
 @click.option("-o", "--overlay", "overlays", multiple=True, type=click.STRING)
+@click.option(
+    "--profile",
+    type=click.Choice(["default", "production"]),
+    default=None,
+    help="Also run the named hardening checks over the files. production fails on one; default only prints.",
+)
 def validate_cmd(
     paths: tuple[str, ...],
     kind: str | None,
@@ -34,6 +40,7 @@ def validate_cmd(
     no_validate: bool,
     resolve_refs: bool,
     overlays: tuple[str, ...],
+    profile: str | None,
 ) -> None:
     """Validate YAML manifests against docs/schemas (v1 + v2 kinds)."""
     if no_validate or not validation_enabled():
@@ -110,7 +117,34 @@ def validate_cmd(
             if not result.ok:
                 failed += 1
 
+    if profile and _hardening_failed(paths, profile):
+        failed += 1
     raise SystemExit(1 if failed else 0)
+
+
+def _hardening_failed(paths: tuple[str, ...], profile: str) -> bool:
+    """Run the hardening checks over the files read alone; True when ``production`` has a failed check."""
+    from mas.ctl.hardening import evaluate
+    from mas.ctl.hardening.collect import from_documents
+
+    documents: list[tuple[str, dict]] = []
+    for raw in paths:
+        path = Path(raw)
+        files = [path] if path.is_file() else sorted([*path.rglob("*.yaml"), *path.rglob("*.yml")])
+        for file in files:
+            try:
+                loaded = yaml.safe_load(file.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                continue
+            if isinstance(loaded, dict):
+                documents.append((str(file), loaded))
+    report = evaluate(from_documents(documents), profile)
+    click.echo(f"hardening  profile={profile}  failed={len(report.failed)}")
+    for result in report.failed:
+        for problem in result.problems:
+            click.echo(f"  [{'error' if profile == 'production' else 'warning'}] {result.check}: {problem}")
+        click.echo(f"      fix: {result.fix}")
+    return profile == "production" and not report.ok
 
 
 def _print_result(result: Any) -> None:

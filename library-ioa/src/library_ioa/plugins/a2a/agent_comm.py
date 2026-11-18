@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
@@ -36,7 +37,7 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
             await self._client.aget_agent_card(fresh=True)
         except Exception as exc:
             self._client.reset()
-            raise AgentCommError(str(exc)) from exc
+            raise AgentCommError(safe_text(exc)) from exc
         return True
 
     def stop(self) -> None:
@@ -75,11 +76,11 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
                     },
                 )
         except Exception as exc:
-            raise AgentCommError(str(exc)) from exc
+            raise AgentCommError(safe_text(exc)) from exc
 
         status = str(response.get("status") or "").lower()
         if status in {"failed", "error"}:
-            raise AgentCommError(str(response.get("error") or "remote A2A task failed"))
+            raise AgentCommError(safe_text(response.get("error") or "remote A2A task failed"))
         result: Any = response.get("result", response)
         if isinstance(result, str):
             return result

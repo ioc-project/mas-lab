@@ -223,6 +223,7 @@ def serve_agent_cmd(
                 endpoint,
                 blocking=True,
                 control_dir=None if no_control else (control_dir or default_control_dir()),
+                flavour_spec=flavour_spec,
             )
         finally:
             peer_handles.close()
@@ -244,6 +245,6 @@ def _serve_with_loop(manifest, endpoint, *, session, flavour_spec, obs_config, r
         raise click.ClickException(str(exc)) from exc
     host.recorder = setup_observability(host.shell, obs_config, base_dir=session.manifest_dir or session.original_cwd)
     try:
-        expose_agent(None, manifest, endpoint, blocking=True, loop=host.loop)
+        expose_agent(None, manifest, endpoint, blocking=True, loop=host.loop, flavour_spec=flavour_spec)
     finally:
         host.close()

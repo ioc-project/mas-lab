@@ -3,6 +3,7 @@
 """library-standard governance plugins."""
 
 from mas.library.standard.plugins.governance.debug_script import DebugScriptPlugin
+from mas.library.standard.plugins.governance.hardening_profile import HardeningProfilePlugin
 from mas.library.standard.plugins.governance.no_undeclared_peer import (
     NoUndeclaredPeerPlugin,
     undeclared_peer_observation,
@@ -15,6 +16,7 @@ from mas.library.standard.plugins.governance.sample import SampleGovernancePlugi
 
 __all__ = [
     "DebugScriptPlugin",
+    "HardeningProfilePlugin",
     "NoUndeclaredPeerPlugin",
     "NoUndeclaredToolPlugin",
     "SampleGovernancePlugin",

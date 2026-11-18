@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.library.standard.lib.comm.text import safe_text
+
 
 def translate_mcp_error(error: Exception) -> dict[str, Any]:
     """Translate an MCP/SDK error into a MAS tool-error dict."""
     return {
         "status": "error",
-        "error": str(error),
+        "error": safe_text(error),
         "type": error.__class__.__name__,
         "is_error": True,
     }
