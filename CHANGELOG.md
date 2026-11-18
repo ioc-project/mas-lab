@@ -223,6 +223,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- A remote A2A task that failed, was rejected or was canceled (also in a streamed status update) raises a value-free `AgentCommError` ("remote A2A task failed") instead of returning the task dump as the reply; the peer's own error text is not carried.
+- The reply text of an A2A task is read from its artifacts, else from its status message; a streamed reply is the text of its artifact updates, not a dump of the closing status update.
+- A refused MCP connection reaches the caller as its real error (`ConnectionRefusedError`, ...) instead of "unhandled errors in a TaskGroup".
 - A lab run of an agent whose manifest (or a Control) lists a `native` observability entry writes the run's `traces/events.jsonl`: the entry used to build its own sink at its default path next to the manifest, so the run had no events file (seen with `native: transport: defaults: enabled: false`, and with it on). Turning transport observability off removes only the `transport.*` events; `docs/references/transport-observability.md` states it.
 - A tool-provider registry pass asks each provider for its tools once however many names route to it: a provider serving N tools was listed N times per pass, and a refused listing was refused N times.
 - MCP tool discovery is cached again for servers that send no `ttlMs`: the SDK result filled the absent field with `0`, which the client read as "do not cache", so every routed tool name listed the server again (about 28 `tools/list` requests per tool call in a lab run). Such a list is kept for 60 s (`DEFAULT_LIST_TTL_MS`); a `notifications/tools/list_changed`, a failed tool call or closing a held session drops it earlier, and a listing that was in flight when the list changed is not stored. A caller gets a copy of the cached list.

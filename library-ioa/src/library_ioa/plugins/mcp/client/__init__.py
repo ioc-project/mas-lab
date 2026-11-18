@@ -64,6 +64,31 @@ def _names_missing_tool(exc: BaseException) -> bool:
     return code == _INVALID_PARAMS and ("unknown tool" in text or "tool not found" in text or "no such tool" in text)
 
 
+def first_error(exc: BaseException) -> BaseException:
+    """The error an exception group stands for: its first leaf that is not a cancellation.
+
+    The SDK opens a transport inside a task group, so a refused connection leaves it as an ``ExceptionGroup``
+    whose text ("unhandled errors in a TaskGroup") says nothing. The caller wants the real error.
+    """
+    if not isinstance(exc, BaseExceptionGroup):
+        return exc
+    leaves: list[BaseException] = []
+    pending: list[BaseException] = [exc]
+    while pending:
+        item = pending.pop(0)
+        if isinstance(item, BaseExceptionGroup):
+            pending[:0] = list(item.exceptions)
+        else:
+            leaves.append(item)
+    for leaf in leaves:
+        if not isinstance(leaf, (Exception, asyncio.CancelledError)):
+            return leaf  # KeyboardInterrupt, SystemExit: never hidden behind an ordinary error
+    for leaf in leaves:
+        if isinstance(leaf, Exception):
+            return leaf
+    return leaves[0] if leaves else exc
+
+
 def _streams_from_transport(transport: Any) -> tuple[Any, Any]:
     """streamable_http_client / stdio_client / sse_client yield (read, write) or (read, write, extra)."""
     if isinstance(transport, (tuple, list)) and len(transport) >= 2:
@@ -244,8 +269,26 @@ class MCPClient:
 
     @asynccontextmanager
     async def _ephemeral_session(self) -> AsyncIterator[ClientSession]:
-        async with AsyncExitStack() as stack:
-            yield await self._enter_session(stack)
+        body_error: BaseException | None = None
+        try:
+            async with AsyncExitStack() as stack:
+                session = await self._enter_session(stack)
+                try:
+                    yield session
+                except BaseException as exc:
+                    body_error = exc
+                    raise
+        except BaseExceptionGroup as group:
+            if isinstance(body_error, BaseExceptionGroup) or (
+                body_error is not None and not isinstance(body_error, Exception)
+            ):
+                # the caller's own group, or an interrupt or cancellation, is what the caller sees: the stack's
+                # teardown group neither replaces it nor turns it into an ordinary error
+                raise body_error from body_error.__cause__
+            unwrapped = first_error(group)
+            if unwrapped.__cause__ is None:
+                raise unwrapped from group
+            raise unwrapped from unwrapped.__cause__
 
     async def _hold(self, ready: asyncio.Future, stop: asyncio.Event) -> None:
         """Own the transport. Enter and exit in this one task.
@@ -259,7 +302,8 @@ class MCPClient:
                 if not ready.done():
                     ready.set_result(session)
                 await stop.wait()
-        except BaseException as exc:
+        except BaseException as caught:
+            exc = first_error(caught)
             if not ready.done():
                 ready.set_exception(exc)
             elif not isinstance(exc, asyncio.CancelledError):
