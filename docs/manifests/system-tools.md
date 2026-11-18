@@ -98,6 +98,13 @@ Optional `params.max_spawns` and `params.max_depth` bound the spawns.
 The model sees both names.
 See [Spawned subagents](subagents.md) and [Tutorial 12](../tutorials/12-subagents/README.md).
 
+`open_room` is an opt-in group-channel tool for an agent whose link has group channels (`slim` today).
+It carries its configuration in the same entry, and needs `params.channel` and `params.members`; a declaration without them fails at load time.
+It opens a shared room: the members post to the channel, read each other's posts and answer round by round, and the call returns the room's result.
+The room's rules (`round_cap`, `post_timeout_s`, `turn` and the stop rule) travel to the members in the `open` message, so the members need no room config of their own.
+On a link without group channels the call returns an error text and the turn goes on.
+See [System tools reference](../references/system-tools.md#open_room) and [Communication stack](../references/comm-stack.md).
+
 `pause_session` is also opt-in.
 Declaring it gives the model a bounded session-control surface:
 
@@ -166,7 +173,7 @@ spec:
 The same agent then runs in batch mode without a human in the loop (HITL, a person who answers questions and approves actions), and interactively with one.
 Only the overlay changes.
 Overlay patches accept the system-tool names `request_human_input`, `inform_user`, `activate_skill`, and `run_skill_script`.
-Declare `create_subagent` and `pause_session` in the agent manifest itself.
+Declare `create_subagent`, `pause_session` and `open_room` in the agent manifest itself.
 
 ## See also
 

@@ -152,6 +152,14 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- SLIM group channels support shared rooms. `open_room` opens a room on a channel: the members post to the
+  channel, read each other's posts, run a turn when a round is complete, and stop together on the same rule
+  (agreement on one value, a round cap, a failed turn or a silent member). The rules travel to the members in the
+  `open` message. The `open_room` system tool (with the `room_open` engine tool) is the model-facing form. It is on
+  the `slim` link only and is declared in the agent manifest. See [System tools](docs/references/system-tools.md).
+- Fixed on the SLIM link: a channel creator no longer invites itself, a member that is not the creator can publish
+  (the membership check now reads the node's participant list), and a member's id is read from its app name when
+  it runs in another process. The SLIM test fake marks an invited member's session ready, as a real node does.
 - Flavour `spec.control` attaches `kind: Control` documents (observability and
   governance sets) to agents by `$all`, `$entry`, `$not-entry`, `$delegates`, one
   id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` /

@@ -320,6 +320,11 @@ def prepare_delegation_entry_session(
         entry_id=entry_id,
         delegate_ids=tuple(peers or ()),
     )
+    from mas.ctl.executor.open_room import wire_open_room
+
+    wire_open_room(
+        getattr(instance.driver, "engine", None), enriched, comm=comms.comm_for(entry_id), agent_id=entry_id
+    )
     return PreparedEntrySession(
         instance=instance,
         enriched_manifest=enriched,
@@ -464,6 +469,9 @@ def wire_peer_delegation(
                     parent_spec=compose.mas_config,
                     entry_id=entry_id,
                 )
+                from mas.ctl.executor.open_room import wire_open_room
+
+                wire_open_room(engine, manifest, comm=comms.comm_for(agent_id), agent_id=agent_id)
             continue
         if instance is None:
             continue
@@ -491,6 +499,14 @@ def wire_peer_delegation(
             flavour_spec=compose.bind.flavour_spec,
             parent_spec=compose.mas_config,
             entry_id=entry_id,
+        )
+        from mas.ctl.executor.open_room import wire_open_room
+
+        wire_open_room(
+            getattr(getattr(instance, "driver", None), "engine", None),
+            enriched,
+            comm=comms.comm_for(agent_id),
+            agent_id=agent_id,
         )
         peers = delegation_targets(enriched, agent_id=agent_id)
         if not peers:

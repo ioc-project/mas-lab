@@ -8,6 +8,7 @@ import asyncio
 import datetime
 import json
 import logging
+import re
 import threading
 from collections.abc import Callable, Mapping
 from typing import Any, ClassVar
@@ -39,6 +40,7 @@ from library_ioa.plugins.slim.inbound import (
 from library_ioa.plugins.slim.names import instance_uuid as slim_instance_uuid
 from library_ioa.plugins.slim.names import local_id as slim_local_id
 from library_ioa.plugins.slim.names import slim_app_triple
+from library_ioa.plugins.slim.room_link import SlimRooms
 from library_ioa.plugins.slim.service import SlimService
 
 logger = logging.getLogger(__name__)
@@ -52,7 +54,7 @@ def _refuse_dots(parts: tuple[str, str, str, str]) -> None:
             raise AgentCommError(f"SLIM {label} cannot contain '.': {part!r}")
 
 
-class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
+class SlimAgentComm(SlimRooms, SlimInbound, ChainMember, AgentCommContract):
     """stack_layer/slim: the SLIM transport, the bottom layer of a stack.
 
     A stack builds one per local agent. ``shared_service`` gives every agent
@@ -137,6 +139,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         # Sessions this link closed, by id. The session is kept so its id cannot be given to a later session.
         self._closed: dict[int, Any] = {}
         self._subscribers: list[Callable[[dict[str, Any]], None]] = []
+        self._init_rooms()
         self._stopped = False
         self._readers: list[asyncio.Task[None]] = []
         self._frames: set[asyncio.Task[None]] = set()
@@ -437,7 +440,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         session = ctx.session
         roster = {self._full(m) for m in members}
         roster.add(self.name)
-        for member in roster:
+        for member in sorted(roster - {self.name}):  # the creator is in the session already
             await self._wait_handle(session.invite_async(self._pyname(member)))
         self._channel_members[name] = roster
         self._groups[name] = session
@@ -483,7 +486,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         listed = await self._call(session.participants_list_async())
         names: set[str] = set()
         for member in listed:
-            ident = str(member).split("/")[-1]
+            ident = _participant_name(member).split("/")[-1].split(".", 1)[-1]
             names.add(self._actor.agent_of(ident) or ident)
         return sorted(names)
 
@@ -505,6 +508,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         *,
         to: str | None = None,
         headers: dict[str, str] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         await self._aensure()
         check_message_size(payload, max_size=self.max_message_size)
@@ -512,7 +516,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         if id(session) in self._closed:
             raise AgentCommError(f"channel {channel!r} is closed")
         listed = {str(m) for m in await self._call(session.participants_list_async())}
-        shorts = {m.split("/")[-1] for m in listed}
+        shorts = _participant_ids(listed)
         mine = {
             self.agent_id,
             self.local_agent_id,
@@ -520,7 +524,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             slim_instance_uuid(self.agent_id),
             self.name,
         }
-        if shorts.isdisjoint(mine) and self.name not in listed:
+        if not session.is_initiator() and shorts.isdisjoint(mine) and self.name not in listed:  # a node does not list its creator
             raise AgentCommError(f"{self.agent_id!r} is not a member of {channel!r}")
         envelope = {
             "kind": "message",
@@ -528,6 +532,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             "payload": payload,
             "headers": merge_headers(headers),
             "to": to,
+            **(extra or {}),
         }
         await self._wait_handle(session.publish_async(json.dumps(envelope).encode("utf-8"), None, None))
 
@@ -650,6 +655,23 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         if not asyncio.iscoroutine(coro):
             return coro
         return self._actor.submit(coro)
+
+
+def _participant_name(item: Any) -> str:
+    """A session participant's name. The bindings list ``ParticipantInfo(name=<app>, status=...)``; a stand-in lists the bare name."""
+    text = str(item)
+    found = re.search(r"name=([^,)\s]+)", text)
+    return found.group(1) if found else text
+
+
+def _participant_ids(listed: Any) -> set[str]:
+    """Every id a participant list can name an agent by: the whole name, its last part, and the agent after the dot."""
+    ids: set[str] = set()
+    for item in listed:
+        name = _participant_name(item)
+        last = name.split("/")[-1]
+        ids.update({name, last, last.split(".", 1)[-1]})
+    return ids
 
 
 def _unique_sessions(sessions: list[Any]) -> list[Any]:

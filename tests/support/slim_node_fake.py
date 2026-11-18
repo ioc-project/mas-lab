@@ -181,6 +181,7 @@ class FakeSession:
                 members=self.members,
                 pair=self,
                 group_id=self.group_id if self.group_id is not None else id(self),
+                ready=True,  # an invited member's session is up once it is invited, and it may publish
             )
             self.group_id = view.group_id
             peer.sessions.append(view)

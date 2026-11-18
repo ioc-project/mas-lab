@@ -164,6 +164,26 @@ class StackAgentComm(LinkIdentity):
             context=stamped,
         )
 
+    def open_room(
+        self,
+        channel: str,
+        task: str,
+        *,
+        members: list[str],
+        rules: dict[str, Any],
+        timeout: float,
+        headers: dict[str, str] | None = None,
+    ) -> str:
+        """Open a shared room on a channel and return the closer's result.
+
+        Rooms are a property of the bottom link: a link without ``open_room`` refuses.
+        """
+        link = getattr(self._layers[0], "link", None)
+        opener = getattr(link, "open_room", None)
+        if not callable(opener):
+            raise AgentCommError(f"the {self.plugin_id!r} link has no shared rooms")
+        return cast(str, opener(channel, task, members=members, rules=rules, timeout=timeout, headers=headers))
+
     def send(
         self,
         target_agent_id: str,

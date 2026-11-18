@@ -107,6 +107,7 @@ practical examples.
 
 | Class             | Full module path                                             | Library            |
 | ----------------- | ------------------------------------------------------------ | ------------------ |
+| `RoomOpen`        | `mas.library.standard.plugins.engine_tools.room_open`        | `library-standard` |
 | `SendTool`        | `mas.library.standard.plugins.system_tools.send`             | `library-standard` |
 | `SubagentSpawner` | `mas.library.standard.plugins.engine_tools.subagent_spawner` | `library-standard` |
 
@@ -249,6 +250,7 @@ practical examples.
 | ----------------------- | --------------------------------------------------------------- | ------------------ |
 | `ControlTools`          | `mas.library.standard.plugins.system_tools.control`             | `library-standard` |
 | `InformUserTool`        | `mas.library.standard.plugins.system_tools.inform_user`         | `library-standard` |
+| `OpenRoomTool`          | `mas.library.standard.plugins.system_tools.open_room`           | `library-standard` |
 | `RequestHumanInputTool` | `mas.library.standard.plugins.system_tools.request_human_input` | `library-standard` |
 | `SendTool`              | `mas.library.standard.plugins.system_tools.send`                | `library-standard` |
 | `SpawnSubagentTool`     | `mas.library.standard.plugins.system_tools.spawn_subagent`      | `library-standard` |
@@ -332,6 +334,7 @@ practical examples.
 | `NormalizeOtelStep`              | step                 | `library-kg`        |
 | `NoUndeclaredToolPlugin`         | governance           | `library-standard`  |
 | `OpenAILLMProvider`              | llm_provider         | `library-standard`  |
+| `OpenRoomTool`                   | system_tool          | `library-standard`  |
 | `OtelObservabilityPlugin`        | observability        | `library-telemetry` |
 | `PlanExecutePlugin`              | design_pattern       | `library-standard`  |
 | `PlotMultilevelTrajectoryKGStep` | step                 | `library-kg`        |
@@ -340,6 +343,7 @@ practical examples.
 | `RegistryUserIOContract`         | user_io_contract     | `library-standard`  |
 | `RequestHumanInputTool`          | system_tool          | `library-standard`  |
 | `RetryOnErrorPlugin`             | governance           | `library-standard`  |
+| `RoomOpen`                       | engine_tool_provider | `library-standard`  |
 | `RunSkillScriptPlugin`           | skill_shell          | `library-skills`    |
 | `SampleGovernancePlugin`         | governance           | `library-standard`  |
 | `SemanticMemoryPlugin`           | memory               | `library-standard`  |

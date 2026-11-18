@@ -16,6 +16,7 @@ This page lists every system tool implemented in MAS-Lab. A *system tool* is a t
 | [`inform_user`](#inform_user) | `library-standard` | declared only | — |
 | [`send`](#send) | `library-standard` | declared only (`default_enabled: false`) | — |
 | [`create_subagent`](#create_subagent) | `library-standard` | declared only | `spawn_subagent` |
+| [`open_room`](#open_room) | `library-standard` | declared only | — |
 
 The skill tools require `library-skills`. Without it, declaring one fails with an unknown system tool error.
 
@@ -152,6 +153,43 @@ The child cannot invent tools or templates. `mas-ctl` tears the instance down af
 
 Implementation: `mas.library.standard.plugins.system_tools.spawn_subagent.SpawnSubagentTool`
 (advertise) plus `mas.library.standard.plugins.engine_tools.subagent_spawner.SubagentSpawner` (run).
+
+### `open_room`
+
+Opens a shared room on a group channel and returns the room's result. The
+members post to the channel, read each other's posts there, and answer again
+round by round; the caller reads none of it. A member runs a turn when it has
+the posts of the last round and posts the reply to the whole channel, so
+nothing is relayed. Every member applies the same stop rule to the same posts,
+so they stop together; one member (the closer) posts the result. It needs a
+link with rooms: `slim` today. On a link without them the call returns an
+error text and the turn goes on.
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `task` | string | yes | What the room is asked to settle |
+
+| Manifest `params` | Default | Notes |
+| --- | --- | --- |
+| `channel` | (required) | Channel name; created on the call |
+| `members` | (required) | Agent ids of the members that post (at least two) |
+| `round_cap` | (required) | The room stops after this many rounds |
+| `post_timeout_s` | (required) | A round waits this long for missing posts, then the room stops |
+| `turn` | (required) | What a member is asked each round; `{task}`, `{round}`, `{board}` (the last round's posts as `[member]` blocks) and `{cap}` are filled in |
+| `agree_on` | — | Field of each member's closing JSON object that must be the same non-empty value for the room to agree |
+| `accept` | `{}` | Fields of that object that must equal these values (`{stance: accept}`) |
+| `closer` | first member | The member that posts the result |
+| `agreed`, `none` | `{winner}`, `{why}` | The result text; `{winner}`, `{round}`, `{why}`, `{members}`, `{n}`, `{cap}` are filled in |
+| `description` | — | Added to the tool description the model sees |
+| `timeout` | 1800 | Seconds the call waits for the result |
+
+The rules travel to the members in the `open` message, so a member needs no room config of its own.
+A member's position is the last JSON object of its reply. A member whose turn fails ends the room at once, and
+the result names it; a member that stays silent ends it after `post_timeout_s`, and the result names it.
+
+Implementation: `mas.library.standard.plugins.system_tools.open_room.OpenRoomTool`
+(advertise) plus `mas.library.standard.plugins.engine_tools.room_open.RoomOpen` (run),
+over `open_room` on the SLIM link (`library_ioa.plugins.slim.room` and `room_link`).
 
 ## See also
 

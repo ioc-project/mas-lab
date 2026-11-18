@@ -294,6 +294,163 @@ def test_forged_sender_is_ignored() -> None:
     _wait_until(lambda: published == ["a"])
 
 
+def test_plain_publish_does_not_run_a_turn() -> None:
+    a, b, _c = _triple()
+    ran: list[str] = []
+    _set_run_turn(b, lambda task: ran.append(task) or "x")
+    a.create_channel("room", members=["a", "b"], options={})
+    seen: list[str] = []
+    b.subscribe(lambda msg: seen.append(str(msg["payload"])))
+    a.publish("room", "hello")
+    _wait_until(lambda: seen == ["hello"])
+    assert ran == []
+
+
+def _vote(plan: str, stance: str = "accept") -> str:
+    """A member's reply: some prose, then its position as the last JSON object."""
+    return "my position\n```json\n" + json.dumps({"plan": plan, "stance": stance, "ratings": {"x": 1}}) + "\n```"
+
+
+_ROOM_RULES = {
+    "round_cap": 4,
+    "post_timeout_s": 5,
+    "closer": "b",
+    "turn": "Round {round}. {task}\n\nLast round:\n{board}",
+    "agree_on": "plan",
+    "accept": {"stance": "accept"},
+    "agreed": "DECISION: {winner} in round {round}",
+    "none": "DECISION: NONE ({why})",
+}
+
+
+def _room_links() -> list[SlimAgentComm]:
+    """``a`` opens the room; ``b``, ``c`` and ``d`` are its members."""
+    FakeWorld.reset()
+    desk = _desk()
+    return [desk.link(name) for name in "abcd"]
+
+
+def test_room_members_read_each_other_and_agree() -> None:
+    a, b, c, d = _room_links()
+    seen: dict[str, list[str]] = {"b": [], "c": [], "d": []}
+
+    def member(name: str, pick):
+        def turn(task: str) -> str:
+            seen[name].append(task)
+            return pick(task)
+
+        return turn
+
+    ran: list[str] = []
+    _set_run_turn(a, lambda task: ran.append(task) or "x")
+    _set_run_turn(b, member("b", lambda task: _vote("p1")))
+    _set_run_turn(c, member("c", lambda task: _vote("p1" if '"plan": "p1"' in task else "p2")))
+    _set_run_turn(d, member("d", lambda task: _vote("p1")))
+    result = a.open_room("room", "pick a plan", members=["b", "c", "d"], rules=_ROOM_RULES, timeout=10)
+    assert result == "DECISION: p1 in round 2"
+    # round 1 saw nobody; round 2 saw all three round-1 posts, read from the room and not relayed by the opener
+    assert "No posts yet" in seen["c"][0] and "pick a plan" in seen["c"][0]
+    assert all(f"[{m}]" in seen["c"][1] for m in "bcd")
+    assert [len(seen[m]) for m in "bcd"] == [2, 2, 2]
+    assert ran == []  # the opener ran no turn and relayed nothing
+
+
+def test_room_members_take_their_first_turn_at_the_same_time() -> None:
+    a, b, c, d = _room_links()
+    gate = threading.Barrier(3, timeout=3)
+    for link in (b, c, d):
+        _set_run_turn(link, lambda task: (gate.wait(), _vote("p1"))[1])
+    # each first turn waits for the other two: the room only ends when all three run together
+    assert a.open_room("room", "go", members=["b", "c", "d"], rules=_ROOM_RULES, timeout=10) == "DECISION: p1 in round 1"
+
+
+def test_room_stops_at_the_round_cap() -> None:
+    a, b, c, d = _room_links()
+    turns: list[str] = []
+    for link, plan in ((b, "p1"), (c, "p2"), (d, "p3")):
+        _set_run_turn(link, lambda task, plan=plan: turns.append(plan) or _vote(plan))
+    rules = {**_ROOM_RULES, "round_cap": 3}
+    result = a.open_room("room", "go", members=["b", "c", "d"], rules=rules, timeout=10)
+    assert result == "DECISION: NONE (no plan accepted by all 3 members within 3 rounds)"
+    assert sorted(turns) == ["p1"] * 3 + ["p2"] * 3 + ["p3"] * 3
+
+
+def test_room_does_not_agree_on_a_blocked_plan() -> None:
+    a, b, c, d = _room_links()
+    _set_run_turn(b, lambda task: _vote("p1"))
+    _set_run_turn(c, lambda task: _vote("p1", stance="block"))
+    _set_run_turn(d, lambda task: _vote("p1"))
+    rules = {**_ROOM_RULES, "round_cap": 2}
+    assert a.open_room("room", "go", members=["b", "c", "d"], rules=rules, timeout=10).startswith("DECISION: NONE")
+
+
+def test_room_stops_when_a_member_fails() -> None:
+    a, b, c, d = _room_links()
+
+    def boom(task: str) -> str:
+        raise RuntimeError("secret detail")
+
+    _set_run_turn(b, lambda task: _vote("p1"))
+    _set_run_turn(c, boom)
+    _set_run_turn(d, lambda task: _vote("p1"))
+    result = a.open_room("room", "go", members=["b", "c", "d"], rules=_ROOM_RULES, timeout=10)
+    assert result == "DECISION: NONE (c failed to answer in round 1)"
+    assert "secret detail" not in result
+
+
+def test_room_stops_naming_a_silent_member() -> None:
+    a, b, c, d = _room_links()
+    _set_run_turn(b, lambda task: _vote("p1"))
+    _set_run_turn(c, lambda task: time.sleep(2.0) or _vote("p1"))
+    _set_run_turn(d, lambda task: _vote("p1"))
+    rules = {**_ROOM_RULES, "post_timeout_s": 0.5}
+    result = a.open_room("room", "go", members=["b", "c", "d"], rules=rules, timeout=10)
+    assert result == "DECISION: NONE (no post from c in round 1 within 0.5s)"
+
+
+def test_room_opener_gives_up_when_no_result_comes() -> None:
+    a, b, c, d = _room_links()
+    _set_run_turn(b, lambda task: time.sleep(1.5) or _vote("p1"))  # the closer is slow
+    _set_run_turn(c, lambda task: _vote("p1"))
+    _set_run_turn(d, lambda task: _vote("p1"))
+    with pytest.raises(AgentCommError, match=r"no result within 0\.4s"):
+        a.open_room("room", "go", members=["b", "c", "d"], rules=_ROOM_RULES, timeout=0.4)
+
+
+def test_room_can_be_opened_again_on_the_same_channel() -> None:
+    a, b, c, d = _room_links()
+    for link in (b, c, d):
+        _set_run_turn(link, lambda task: _vote("p1"))
+    first = a.open_room("room", "one", members=["b", "c", "d"], rules=_ROOM_RULES, timeout=10)
+    second = a.open_room("room", "two", members=["b", "c", "d"], rules={**_ROOM_RULES, "agreed": "again {winner}"}, timeout=10)
+    assert (first, second) == ("DECISION: p1 in round 1", "again p1")
+
+
+def test_room_refuses_unusable_rules() -> None:
+    a, *_ = _room_links()
+    with pytest.raises(AgentCommError, match="closer 'z' is not a member"):
+        a.open_room("room", "go", members=["b", "c"], rules={**_ROOM_RULES, "closer": "z"}, timeout=1)
+    with pytest.raises(AgentCommError, match="at least two distinct members"):
+        a.open_room("room", "go", members=["b"], rules=_ROOM_RULES, timeout=1)
+
+
+def test_a_post_before_its_open_is_kept_for_the_room() -> None:
+    _a, b, _c, _d = _room_links()
+    b._on_post({"channel": "room", "room_id": "r1", "round": 1, "payload": "early", "ok": True}, "c")
+    assert b._early_posts["room"] == [("r1", 1, "c", "early", True)]
+    assert b._rooms == {}
+
+
+def test_a_stack_forwards_open_room_to_its_slim_link() -> None:
+    FakeWorld.reset()
+    desk = _desk()
+    opener = desk.stack("a")
+    for name in "bcd":
+        _set_run_turn(desk.link(name), lambda task: _vote("p1"))
+    got = opener.open_room("room", "go", members=["b", "c", "d"], rules=_ROOM_RULES, timeout=10)
+    assert got == "DECISION: p1 in round 1"
+
+
 def test_oversize_missing_peer_and_stop() -> None:
     FakeWorld.reset()
     a, b, _c = _triple()
@@ -1154,6 +1311,39 @@ def test_real_node_two_actors_one_namespace() -> None:
     finally:
         one.close()
         two.close()
+
+
+@pytest.mark.slim
+def test_real_node_room_across_four_actors() -> None:
+    """One opener and three members, each on its own actor as four processes would be."""
+    import socket
+
+    pytest.importorskip("slim_bindings")
+    try:
+        socket.create_connection(("127.0.0.1", 46357), timeout=0.5).close()
+    except OSError:
+        pytest.skip("no SLIM node on 127.0.0.1:46357")
+
+    def run_turn(agent_id: str, task: str, *_args: object) -> str:
+        # c follows the room: it backs p2 until it reads a p1 post, the others always back p1
+        if agent_id == "c":
+            return _vote("p1" if '"plan": "p1"' in task else "p2")
+        return _vote("p1")
+
+    def desk() -> _Desk:
+        return _Desk(
+            identity="acme/lab/mas", url="http://127.0.0.1:46357", secret=_SECRET, timeout_s=5.0, run_turn=run_turn
+        )
+
+    desks = [desk() for _ in range(4)]
+    try:
+        a, _b, _c, _d = (d.link(name) for d, name in zip(desks, "abcd"))
+        rules = {**_ROOM_RULES, "post_timeout_s": 60}
+        got = a.open_room("room", "pick", members=["b", "c", "d"], rules=rules, timeout=60)
+        assert got == "DECISION: p1 in round 2"
+    finally:
+        for d in desks:
+            d.close()
 
 
 def test_local_id_and_app_names() -> None:

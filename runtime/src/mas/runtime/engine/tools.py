@@ -173,6 +173,7 @@ def openai_tools(
 SPAWN_SUBAGENT_TOOL = "spawn_subagent"
 CREATE_SUBAGENT_TOOL = "create_subagent"
 SPAWN_SUBAGENT_NAMES = frozenset({SPAWN_SUBAGENT_TOOL, CREATE_SUBAGENT_TOOL})
+OPEN_ROOM_TOOL = "open_room"
 CONTROL_TOOLS = frozenset(
     {
         "pause_session",
@@ -233,6 +234,26 @@ def spawn_subagent_params(spec: dict[str, Any] | None) -> dict[str, Any] | None:
             isinstance(tool, dict)
             and tool.get("kind") == "system"
             and tool.get("name") in SPAWN_SUBAGENT_NAMES
+            and tool.get("enabled") is not False
+        ):
+            params = tool.get("params")
+            return params if isinstance(params, dict) else {}
+    return None
+
+
+def open_room_params(spec: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Params of the enabled ``open_room`` system-tool entry, or ``None``.
+
+    The ``tools`` entry is the capability gate. Its ``params`` name the channel and the members that
+    post (``channel``, ``members``, both required) and the room's rules: ``closer``, ``round_cap``,
+    ``post_timeout_s``, ``turn``, ``agree_on``, ``accept``, ``agreed``, ``none``. ``timeout`` (seconds)
+    is how long the call waits for the result; ``description`` is advertised text.
+    """
+    for tool in (spec or {}).get("tools") or []:
+        if (
+            isinstance(tool, dict)
+            and tool.get("kind") == "system"
+            and tool.get("name") == OPEN_ROOM_TOOL
             and tool.get("enabled") is not False
         ):
             params = tool.get("params")

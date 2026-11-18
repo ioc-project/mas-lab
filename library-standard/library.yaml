@@ -52,6 +52,17 @@ plugins:
     urn: mas.engine_tool_provider.spawn_subagent
     module: mas.library.standard.plugins.engine_tools.subagent_spawner
     class: SubagentSpawner
+  - type: engine_tool_provider
+    name: room_open
+    urn: mas.engine_tool_provider.room_open
+    module: mas.library.standard.plugins.engine_tools.room_open
+    class: RoomOpen
+  - type: system_tool
+    name: open_room
+    urn: mas.system_tool.open_room
+    module: mas.library.standard.plugins.system_tools.open_room
+    class: OpenRoomTool
+    attributes: {default_enabled: false, semantic: agent_comm.room}
   - type: system_tool
     name: send
     urn: mas.system_tool.send

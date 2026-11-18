@@ -17,6 +17,7 @@ from mas.library.standard.lib.stack.errors import StackError
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, bound_inbound
 
 from library_ioa.plugins.slim.actor import MAX_READ_ERRORS
+from library_ioa.plugins.slim.room import ROOM_INTENTS
 
 logger = logging.getLogger(__name__)
 # What a peer sees when a request or a reply could not be handled. It never carries the failure's text.
@@ -90,6 +91,10 @@ class SlimInbound:
         to = envelope.get("to")
         if to and str(to) not in {self.agent_id, self.name} and self._full(str(to)) != self.name:
             return None
+        if kind == "message" and envelope.get("intent") in ROOM_INTENTS:
+            member = _member_of(msg.context.source_name, self._actor)
+            self._room_frame(str(envelope["intent"]), envelope, member, sender, headers)
+            return None
         message = {
             "sender": sender,
             "channel": envelope.get("channel") or "",
@@ -102,6 +107,32 @@ class SlimInbound:
             for cb in list(self._subscribers):
                 cb(message)
         return None
+
+    def _run_channel_turn(self, task: str, sender: str, headers: dict[str, str], channel: str) -> tuple[bool, str]:
+        """Run one turn of this link's agent on a channel message; ``(ok, text)``.
+
+        The turn runs with intent ``task``, as a unicast ``delegate_to_*`` does, so an agent sees the same
+        message whether one peer or a room asked. A failure never carries its text to the peer.
+        """
+        handler = self._serve_handler
+        if handler is None and self._run_turn is None:
+            logger.warning("slim channel message for %s refused: %s", self.name, NOT_SERVED)
+            return False, NOT_SERVED
+        try:
+            with bound_headers(headers), bound_inbound(sender=sender, intent="task"):
+                request = {
+                    "task": task,
+                    "sender": sender,
+                    "correlation_id": 0,
+                    "caller_call_id": "",
+                    "context_id": channel,
+                }
+                if handler is None:
+                    return True, self._handle_request(**request)
+                return True, str(handler(inbound_envelope(**request, intent="task", headers=headers)))
+        except Exception:
+            logger.exception("slim channel turn failed")
+            return False, HANDLER_ERROR
 
     def _handle_request(
         self,
@@ -265,6 +296,19 @@ def _sender_id(source: Any, actor: Any) -> str:
     return actor.agent_of(ident) or ident
 
 
+def _member_of(source: Any, actor: Any) -> str:
+    """The agent id behind a frame's source: the one this actor linked, else the part of the app name after the dot.
+
+    A member in another process has no id registered here, and its instance id says nothing about its name;
+    its app name is ``<org>/<ns>/<service>.<agent>``.
+    """
+    ident = _sender_id(source, actor)
+    if actor.agent_of(str(source.id() or "")):
+        return ident
+    service = str(source or "").rsplit("/", 1)[-1]
+    return service.split(".", 1)[1] if "." in service else ident
+
+
 # What the bindings say when a read found nothing before its deadline (slim-bindings 2.2: a ReceiveError).
 IDLE_READ_MESSAGES = ("listen_for_session timed out", "receive timeout")
 
@@ -286,3 +330,8 @@ def _is_session_gone(exc: BaseException) -> bool:
     cause = exc.__cause__
     cause_text = str(cause).lower() if cause is not None else ""
     return "session closed" in text or "session closed" in cause_text
+
+
+# Public names for the helpers other modules of this package use (``room_link``).
+is_idle_timeout = _is_idle_timeout
+member_of = _member_of
