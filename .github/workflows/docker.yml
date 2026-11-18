@@ -13,7 +13,12 @@ permissions:
   id-token: write
 
 jobs:
+  # Nothing is published unless the images build and the stack starts.
+  check:
+    uses: ./.github/workflows/docker-check.yml
+
   build-ui:
+    needs: check
     uses: ./.github/workflows/build-push-ghcr.yaml
     secrets: inherit
     permissions:
@@ -26,6 +31,7 @@ jobs:
       dockerfile: docker/ui/Dockerfile
 
   build-backend:
+    needs: check
     uses: ./.github/workflows/build-push-ghcr.yaml
     secrets: inherit
     permissions:

@@ -129,6 +129,7 @@ tasks:
           tests/test_ci_python.py \
           tests/test_ci_gate.py \
           tests/test_no_raw_threads.py \
+          tests/test_docker_smoke.py \
           runtime/tests/ \
           lab/components/core/tests/ \
           lab/components/bench/tests/ \
@@ -231,6 +232,7 @@ tasks:
           tests/test_ci_python.py \
           tests/test_ci_gate.py \
           tests/test_no_raw_threads.py \
+          tests/test_docker_smoke.py \
           -q --tb=line --durations=20
 
   verify-coverage:
@@ -631,6 +633,20 @@ tasks:
       - docker compose up --build -d --force-recreate
       - task: verify-env
       - docker compose ps
+
+  docker-smoke:
+    desc: "Build the UI and backend images, start the stack, check the API and UI answer, then remove it."
+    summary: |
+      What the Docker check workflow runs. Set DOCKER_BUILD_ARGS="--no-cache --pull" for a from-scratch build.
+      Needs no model key. The stack uses the ports MAS_BACKEND_PORT (8090) and MAS_UI_PORT (8080).
+    vars:
+      DOCKER_BUILD_ARGS: '{{.DOCKER_BUILD_ARGS | default "--pull"}}'
+    cmds:
+      - docker compose -f docker/compose.yaml build {{.DOCKER_BUILD_ARGS}}
+      - defer: docker compose -f docker/compose.yaml down --volumes --remove-orphans
+      - docker compose -f docker/compose.yaml up --detach --wait --wait-timeout 240
+      - python3 scripts/docker_smoke.py
+      - defer: docker compose -f docker/compose.yaml logs --no-color --tail 80
 
   ensure-docker-env:
     desc: "Ensure docker/.env exists and contains OPENAI_API_KEY for containers."

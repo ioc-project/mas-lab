@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir uv
 
-# Workspace metadata first (layer cache)
-COPY pyproject.toml ./
+# Workspace metadata first (layer cache). The root package declares README.md as its readme, and its
+# build fails without the file.
+COPY pyproject.toml README.md ./
 COPY runtime/pyproject.toml runtime/
 COPY ctl/pyproject.toml ctl/
 COPY library-standard/pyproject.toml library-standard/

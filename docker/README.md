@@ -263,3 +263,27 @@ docker compose down --rmi local
 docker rmi mas-lab-backend:local mas-lab-ui:local 2>/dev/null || true
 docker compose build --no-cache
 ```
+
+## Image check and smoke test
+
+The images are published only on a release tag, so a broken Dockerfile or a new base image or dependency
+release would go unnoticed until then. `.github/workflows/docker-check.yml` builds both images from scratch,
+starts the stack, and checks that the API answers (`/api/health`, `/api/info`) and that the UI is served and
+points at the API. It pushes nothing and needs no model key.
+
+It runs:
+
+- every Monday, which also scans the images for critical vulnerabilities that have a fix. A failed scheduled run
+  opens, or comments on, one issue (from `docker-check-report.yml`) titled "Docker image check is failing";
+- on a pull request that changes `docker/`, the UI dependencies or the lockfile;
+- before `docker.yml` publishes release images: nothing is published if it fails;
+- by hand, from the Actions tab.
+
+Run the same check locally from the repository root:
+
+```bash
+task docker-smoke                                   # build, start, check, remove
+DOCKER_BUILD_ARGS="--pull --no-cache" task docker-smoke   # from scratch
+```
+
+It uses ports 8080 and 8090.
