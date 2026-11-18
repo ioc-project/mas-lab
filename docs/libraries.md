@@ -17,7 +17,7 @@ Install every package from a repository checkout:
 uv sync --all-packages
 ```
 
-Requires **Python 3.11+**.
+Requires **Python 3.11+** ([version support](python-support.md)).
 
 ---
 

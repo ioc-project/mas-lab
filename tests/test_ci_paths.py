@@ -223,3 +223,9 @@ def test_ctl_and_golden_libraries_run_golden(paths):
 def test_library_without_event_output_skips_golden(paths):
     flags = paths.classify(["library-telemetry/src/mas/library/telemetry/__init__.py"], event="pull_request")
     assert flags["golden"] is False
+
+
+def test_a_change_to_the_weekly_workflow_runs_the_compliance_jobs(paths):
+    flags = paths.classify([".github/workflows/weekly.yml"], event="pull_request")
+    assert flags["mcp"] is True and flags["a2a"] is True and flags["lib_ioa"] is True
+    assert flags["runtime"] is False

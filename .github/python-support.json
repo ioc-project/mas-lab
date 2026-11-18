@@ -1,0 +1,77 @@
+{
+  "default": "3.14",
+  "supported": [
+    "3.11",
+    "3.12",
+    "3.13",
+    "3.14"
+  ],
+  "free_threaded": {
+    "version": "3.14t",
+    "components": [
+      "runtime",
+      "ctl",
+      "library-standard",
+      "library-ioa",
+      "library-skills",
+      "library-telemetry",
+      "library-kg",
+      "library-samples",
+      "lab/components/core"
+    ],
+    "not_covered": [
+      {
+        "path": "ctl/tests/test_benchmark_runner.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "ctl/tests/test_mas_session.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "ctl/tests/test_huggingface_token.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "ctl/tests/test_flavour_bind.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "library-telemetry/tests/test_bench.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "library-telemetry/tests/test_list_clickhouse_sessions.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "library-kg/tests/test_bench.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "lab/components/core/tests/test_runner_constants.py",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "lab/components/core/tests/test_runner_registry.py::test_registry_concurrent_init_is_thread_safe",
+        "reason": "needs lab/components/bench, which does not install on 3.14t (deepeval needs grpcio)"
+      },
+      {
+        "path": "library-telemetry/tests/telemetry/conversion/test_scope_contract.py",
+        "reason": "needs the telemetry [observe] extra, which does not resolve on 3.14t (the SDK's OpenTelemetry pins conflict with the protobuf versions that have free-threaded wheels)"
+      },
+      {
+        "path": "library-telemetry/tests/telemetry/conversion/test_replay_timing.py::test_realtime_replay_skips_graph_and_emits_signals",
+        "reason": "needs the telemetry [observe] extra, which does not resolve on 3.14t (the SDK's OpenTelemetry pins conflict with the protobuf versions that have free-threaded wheels)"
+      },
+      {
+        "path": "library-telemetry/tests/test_lab_cli.py::test_convert_realtime",
+        "reason": "needs the telemetry [observe] extra, which does not resolve on 3.14t (the SDK's OpenTelemetry pins conflict with the protobuf versions that have free-threaded wheels)"
+      },
+      {
+        "path": "runtime/tests/test_obs_call_frames.py::test_call_frames_are_isolated_between_threads",
+        "reason": "a new thread inherits the caller's context variables on the free-threaded build (a real difference, see docs/python-support.md)"
+      }
+    ]
+  }
+}

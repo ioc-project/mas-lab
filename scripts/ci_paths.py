@@ -214,17 +214,10 @@ def classify(
         if _starts(posix, WORKFLOW_SELF_PREFIXES) or posix == "Taskfile.yml":
             _enable_all(flags)
             continue
-        if posix in {".github/workflows/compliance.yml"}:
+        if posix in {".github/workflows/compliance.yml", ".github/workflows/weekly.yml"}:
             flags["mcp"] = True
             flags["a2a"] = True
             flags["lib_ioa"] = True
-            continue
-        if posix == ".github/workflows/nightly.yml":
-            flags["runtime"] = True
-            flags["ctl"] = True
-            flags["lab_unit"] = True
-            flags["repo"] = True
-            flags["unit_311"] = True
             continue
         if posix.startswith(".github/"):
             flags["repo"] = True

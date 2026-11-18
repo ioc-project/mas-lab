@@ -239,6 +239,7 @@ nav:
       - Packages:
           - Package map: libraries.md
           - Packages reference: packages-reference.md
+          - Python versions: python-support.md
           - Plugins reference: plugins-reference.md
   - Paper: paper/index.md
   - Blog:

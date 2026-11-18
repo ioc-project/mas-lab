@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "mas-lab-library-telemetry"
 version = "0.2.0"
 description = "MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization."
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # Zero required dependencies — the package imports with nothing installed.
 # Every external dependency is an optional extra so that only the *feature* it
 # powers is unavailable when it is absent (e.g. no opentelemetry-sdk → conversion

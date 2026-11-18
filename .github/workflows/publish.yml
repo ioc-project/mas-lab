@@ -136,8 +136,18 @@ jobs:
           print("matrix=" + json.dumps({"include": include}))
           PY
 
+  # Release gate: every supported Python version must pass before anything is uploaded. A dry run
+  # (publish unchecked) skips it, because nothing leaves the machine.
+  python-matrix:
+    name: Python matrix
+    if: github.event_name == 'push' || inputs.publish == true
+    uses: ./.github/workflows/python-matrix.yml
+
   publish:
-    needs: plan
+    needs: [plan, python-matrix]
+    if: >-
+      !cancelled() && needs.plan.result == 'success' &&
+      (needs.python-matrix.result == 'success' || needs.python-matrix.result == 'skipped')
     runs-on: ubuntu-latest
     # One GitHub environment per package (pypi-<name>), so each PyPI project
     # can have its own trusted publisher and protection rules.

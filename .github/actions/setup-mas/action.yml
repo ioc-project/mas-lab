@@ -5,9 +5,9 @@ description: Install uv, the requested Python, and go-task (optionally task inst
 
 inputs:
   python-version:
-    description: CPython version for uv python install
+    description: CPython version for uv python install, such as 3.13 or 3.14t (free-threaded)
     required: false
-    default: "3.13"
+    default: "3.14"
   install-dev:
     description: Run task install-dev after tool setup
     required: false
@@ -16,15 +16,32 @@ inputs:
 runs:
   using: composite
   steps:
+    # Pull requests restore the dependency cache and never write it: only main saves, so a
+    # branch cannot evict the entries every other run shares. One entry per Python version.
     - name: Install uv
       uses: astral-sh/setup-uv@v4
       with:
         version: "latest"
         enable-cache: true
+        cache-dependency-glob: uv.lock
+        cache-suffix: py${{ inputs.python-version }}
+        save-cache: ${{ github.ref == 'refs/heads/main' }}
 
     - name: Setup Python ${{ inputs.python-version }}
       shell: bash
       run: uv python install ${{ inputs.python-version }}
+
+    # `uv venv` with no request takes whichever Python it finds first, which need not be the one
+    # just installed. Pin it, and fail the job if the interpreter is not the one asked for.
+    - name: Pin and check the interpreter
+      shell: bash
+      env:
+        WANTED: ${{ inputs.python-version }}
+      run: |
+        echo "UV_PYTHON=$WANTED" >> "$GITHUB_ENV"
+        got=$(uv run --no-project --python "$WANTED" python -c 'import sys, sysconfig; print("%d.%d%s" % (sys.version_info[0], sys.version_info[1], "t" if sysconfig.get_config_var("Py_GIL_DISABLED") else ""))')
+        echo "Python $got"
+        test "$got" = "$WANTED"
 
     - name: Install go-task
       shell: bash
