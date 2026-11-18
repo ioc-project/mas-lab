@@ -1,0 +1,56 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# The container images are published only on a release tag (docker.yml), so nothing else would notice that
+# a Dockerfile no longer builds, that a new base image or dependency release broke the image, or that
+# the base image gained a fixable critical vulnerability. This workflow builds from scratch (a runner has
+# no layer cache), starts the stack and checks it answers. It pushes nothing.
+#
+# When it runs: weekly; on a pull request that changes what goes into an image; before a release
+# publishes the images (docker.yml calls it); and by hand.
+name: Docker check
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+  workflow_call:
+  # A change to what goes into an image is built (with the cache) before it merges.
+  pull_request:
+    paths:
+      - "docker/**"
+      - "ui/package.json"
+      - "ui/yarn.lock"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "scripts/docker_smoke.py"
+      - ".github/workflows/docker-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Build and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: ./.github/actions/setup-mas
+      # A runner starts with no layer cache, so every run builds from scratch; --pull takes fresh base images.
+      - name: Build, start, check, remove
+        run: task docker-smoke
+      # Scheduled or manual runs only: a pull request or a release should not fail on a base image it did not choose.
+      # The images built above are still local, so this costs no second build.
+      - name: Scan for fixable critical vulnerabilities
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: |
+          for image in mas-lab-backend:local mas-lab-ui:local; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.65.0 image --severity CRITICAL --ignore-unfixed --exit-code 1 --no-progress "$image"
+          done

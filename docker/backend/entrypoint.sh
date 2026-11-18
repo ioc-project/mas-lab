@@ -22,6 +22,8 @@ mkdir -p "${MAS_DATA_ROOT}" "${MAS_TRACE_CACHE}" "${MAS_LABS_ROOT}" "${MAS_RUNS_
 # Use mounted workspace for config discovery (MAS_WORKSPACE_ROOT) when it has
 # project markers; otherwise fall back to the baked install tree.  Always run
 # uv from MAS_INSTALL_ROOT so we do not re-sync against the mounted pyproject.toml.
+# --no-sync: the image was built with `uv sync --no-dev`; without the flag `uv run` installs the dev
+# dependency group (pytest, pyarrow, ...) again in every new container, needing network and time.
 if [ ! -f "${MAS_WORKSPACE_ROOT}/config.yaml" ] \
    && [ ! -d "${MAS_WORKSPACE_ROOT}/labs" ] \
    && [ ! -f "${MAS_WORKSPACE_ROOT}/mas.yaml" ]; then
@@ -40,4 +42,4 @@ elif [ "$1" = "controller" ] || [ "$1" = "serve" ]; then
   set -- uvicorn mas.lab.controller.fastapi_app:app --host 0.0.0.0 --port "${PORT}" "$@"
 fi
 
-exec uv run "$@"
+exec uv run --no-sync "$@"
