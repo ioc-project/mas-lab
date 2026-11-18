@@ -14,6 +14,7 @@ import contextvars
 import inspect
 import logging
 import threading
+from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -24,6 +25,33 @@ _LOCK = threading.Lock()
 _SIZE = DEFAULT_SYNC_THREADS
 _POOL: ThreadPoolExecutor | None = None
 _WARNED: set[tuple[type, str]] = set()
+
+
+def new_thread(
+    target: Callable[..., Any],
+    *,
+    args: tuple[Any, ...] = (),
+    kwargs: Mapping[str, Any] | None = None,
+    name: str | None = None,
+    daemon: bool | None = None,
+) -> threading.Thread:
+    """An unstarted thread that runs *target* in an empty context.
+
+    Python 3.14's free-threaded build starts a thread with a copy of the context variables of the thread
+    that created it; every other build starts it empty. The runtime keeps per-call state (call frames, the
+    event stream, the current transport) in context variables, so a thread it starts from inside a call
+    must not see that call's. Start threads with this instead of ``threading.Thread``, so they behave the
+    same on every build and no setting is needed. A thread that does need the caller's context takes it
+    explicitly (``contextvars.copy_context().run``).
+    """
+    context = contextvars.Context()
+
+    call_kwargs = dict(kwargs or {})
+
+    def run() -> None:
+        context.run(lambda: target(*args, **call_kwargs))
+
+    return threading.Thread(target=run, name=name, daemon=daemon)
 
 
 def configure_sync_threads(count: int) -> None:

@@ -29,12 +29,13 @@ import asyncio
 import contextvars
 import copy
 import logging
-import threading
 from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
+
+from mas.runtime.aio import new_thread
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ async def _in_new_thread(fn: Callable[[], Any]) -> Any:
         else:
             loop.call_soon_threadsafe(_settle, future, result, None)
 
-    threading.Thread(target=_run, name="mas-tool", daemon=True).start()
+    new_thread(target=_run, name="mas-tool", daemon=True).start()
     return await future
 
 

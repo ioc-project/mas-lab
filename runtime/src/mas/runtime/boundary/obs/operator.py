@@ -11,6 +11,7 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 
+from mas.runtime.aio import new_thread
 from mas.runtime.kernel.state import QProduct
 from mas.runtime.schema.egress import (
     EgressKind,
@@ -22,7 +23,7 @@ from mas.runtime.schema.egress import (
     RequestCtxAssembly,
 )
 from mas.runtime.schema.ingress import HitlResolve, IngressSymbol
-from mas.runtime.schema.observability import AuditReport, ObservabilityEvent, ObsEventKind, ObsPhase
+from mas.runtime.schema.observability import ObservabilityEvent, ObsEventKind, ObsPhase
 
 _logger = logging.getLogger(__name__)
 
@@ -308,19 +309,6 @@ class ObservabilityOperator:
         else:
             self._frames.remove(call_id)
 
-    def record_kernel_snapshot(self, q: QProduct, *, label: str = "snapshot") -> None:
-        self._emit(
-            ObsEventKind.BOUNDARY_EGRESS,
-            ObsPhase.REQUEST,
-            "M_dp",
-            payload={
-                "label": label,
-                "dp": q.dp.value,
-                "ctrl": q.ctrl.value,
-                "scheduled_egress": q.scheduled_egress,
-            },
-        )
-
     def record_ingress(self, event: IngressSymbol, q: QProduct) -> None:
         cid = getattr(event, "correlation_id", 0)
         kind = ObsEventKind.BOUNDARY_INGRESS
@@ -441,38 +429,6 @@ class ObservabilityOperator:
             ObsPhase.EGRESS,
             "kernel",
             payload={"egress_kind": sym.kind.value},
-        )
-
-    def audit(self) -> AuditReport:
-        cids = sorted({e.correlation_id for e in self.events if e.correlation_id > 0})
-        machines = sorted({e.machine_id for e in self.events})
-        phases = {e.phase for e in self.events}
-        required = {
-            ObsPhase.REQUEST,
-            ObsPhase.AUTHZ,
-            ObsPhase.EXECUTE,
-            ObsPhase.RESULT,
-            ObsPhase.END,
-        }
-        gaps: list[str] = []
-        missing = required - phases
-        if missing:
-            gaps.append(f"missing phases: {', '.join(sorted(p.value for p in missing))}")
-        hitl = any(e.kind == ObsEventKind.HITL_REQUEST for e in self.events)
-        resolve = any(e.kind == ObsEventKind.HITL_RESOLVE for e in self.events)
-        if hitl and not resolve:
-            gaps.append("HITL request without resolve — incomplete accountability chain")
-        if not cids:
-            gaps.append("no correlation ids — weak attribution")
-        return AuditReport(
-            event_count=len(self.events),
-            correlation_ids=cids,
-            machines_touched=machines,
-            has_full_envelope=not missing,
-            auditability=len(self.events) > 0 and len(cids) > 0,
-            accountability=hitl == resolve or not hitl,
-            attribution=all(e.machine_id for e in self.events),
-            gaps=gaps,
         )
 
     def record_context_mutation(
@@ -873,7 +829,7 @@ class ObservabilityOperator:
             self._plugin_queue = queue.Queue()
         if self._plugin_worker is not None and self._plugin_worker.is_alive():
             return
-        self._plugin_worker = threading.Thread(
+        self._plugin_worker = new_thread(
             target=self._plugin_worker_loop,
             name="obs-plugin-worker",
             daemon=True,

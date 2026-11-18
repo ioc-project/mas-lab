@@ -1,12 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-
-from __future__ import annotations
-
-import logging
-
-logger = logging.getLogger(__name__)
-
 """KG Widget — Python helpers.
 
 Generates standalone HTML pages using the KGWidget JavaScript component.
@@ -17,17 +10,28 @@ build_standalone_html(kg_data, title, opts)  ->  str
     Returns a complete self-contained HTML document embedding the widget.
 
 serve_and_open(kg_data, title, opts, port)
-    Starts a tiny HTTP server, opens the browser, waits for Ctrl-C.
+    Starts a tiny HTTP server on the loopback address, opens the browser, waits for Ctrl-C.
+    This is what ``mas-lab plot kg`` runs unless it is given ``-o`` or ``--no-open``.
 
 get_widget_js()  ->  str
 get_widget_css() ->  str
     Return the raw JS/CSS content for embedding in other HTML pages.
 """
 
+from __future__ import annotations
+
+import html
 import json
+import logging
+import socketserver
+import webbrowser
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
 
+from mas.runtime.aio import new_thread
+
+logger = logging.getLogger(__name__)
 
 _HERE = Path(__file__).parent
 
@@ -53,24 +57,20 @@ def get_widget_css() -> str:
     return (_HERE / "kg_widget.css").read_text(encoding="utf-8")
 
 
-def get_composer_js() -> str:
-    """Return the KGComposer JavaScript source (composable views)."""
-    return (_HERE / "kg_composer.js").read_text(encoding="utf-8")
-
-
-def get_composer_css() -> str:
-    """Return the KGComposer CSS source."""
-    return (_HERE / "kg_composer.css").read_text(encoding="utf-8")
+def _json_for_script(value: Any) -> str:
+    """JSON that is safe inside a ``<script>`` element: a ``</script>`` in a label cannot end the element."""
+    return json.dumps(value, ensure_ascii=False).replace("</", "<\\/").replace("<!--", "<\\!--")
 
 
 def build_standalone_html(
     kg_data: dict | str,
     title: str = "Knowledge Graph",
     opts: dict[str, Any] | None = None,
-    *,
-    offline: bool = False,
 ) -> str:
     """Build a complete standalone HTML page embedding the KGWidget.
+
+    The widget's own JS and CSS are inlined; Cytoscape and its layout extensions load from a CDN, so the
+    page needs network access.
 
     Parameters
     ----------
@@ -85,9 +85,6 @@ def build_standalone_html(
         Keys: ``panelMode`` ('open'|'closed'), ``layout``, ``maxNodes``,
         ``title``, ``filterStyle`` ('flat'|'layered'),
         ``component`` ('widget'|'graph').
-    offline:
-        If True, inline all JS/CSS from disk (no CDN calls).  Useful when
-        the page must work without internet access.
     """
     if isinstance(kg_data, str):
         kg_data = json.loads(kg_data)
@@ -96,45 +93,43 @@ def build_standalone_html(
     if opts:
         merged_opts.update(opts)
 
-    kg_json = json.dumps(kg_data, ensure_ascii=False)
-    opts_json = json.dumps(merged_opts, ensure_ascii=False)
+    kg_json = _json_for_script(kg_data)
+    opts_json = _json_for_script(merged_opts)
 
-    if offline:
-        cdn_tags = f"<style>{get_widget_css()}</style><script>{get_widget_js()}</script>"
-        # Inline cytoscape too — requires local vendor files to be available
-        # For now fall back to CDN even in offline mode for CDN scripts
-        cdn_scripts = "\n".join(f'<script src="{u}"></script>' for u in _CDN)
-    else:
-        cdn_scripts = "\n".join(f'<script src="{u}"></script>' for u in _CDN)
-        cdn_tags = (
-            f'<style>{get_widget_css()}</style>'
-            f'<script>{get_widget_js()}</script>'
-        )
+    cdn_scripts = "\n".join(f'<script src="{url}"></script>' for url in _CDN)
+    widget_tags = f"<style>{get_widget_css()}</style><script>{get_widget_js()}</script>"
 
     node_count = len(kg_data.get("nodes", []))
     edge_count = len(kg_data.get("edges", []))
     subtitle = f"{node_count} nodes · {edge_count} edges"
+    page_title = html.escape(title)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{title}</title>
+  <title>{page_title}</title>
   <style>
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ background: #0d1117; color: #e2e8f0; font-family: 'Inter', 'Segoe UI', sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }}
-    #kg-page-header {{ flex-shrink: 0; padding: 8px 14px; background: #161b22; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 12px; }}
+    body {{
+      background: #0d1117; color: #e2e8f0; font-family: 'Inter', 'Segoe UI', sans-serif;
+      height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+    }}
+    #kg-page-header {{
+      flex-shrink: 0; padding: 8px 14px; background: #161b22; border-bottom: 1px solid #21262d;
+      display: flex; align-items: center; gap: 12px;
+    }}
     #kg-page-header h1 {{ font-size: 14px; font-weight: 600; color: #e6edf3; }}
     #kg-page-header .sub {{ font-size: 11px; color: #6e7681; }}
     #kg-root {{ flex: 1; min-height: 0; }}
   </style>
   {cdn_scripts}
-  {cdn_tags}
+  {widget_tags}
 </head>
 <body class="kg-widget-page">
   <div id="kg-page-header">
-    <h1>{title}</h1>
+    <h1>{page_title}</h1>
     <span class="sub">{subtitle}</span>
   </div>
   <div id="kg-root"></div>
@@ -160,49 +155,32 @@ def serve_and_open(
 ) -> None:
     """Generate the widget HTML and open it in the default browser.
 
-    Opens a temporary in-process HTTP server on ``port`` (0 = random free
+    Opens a temporary in-process HTTP server on ``127.0.0.1:port`` (0 = random free
     port) and launches the system browser.  Blocks until Ctrl-C.
     """
-    import socketserver
-    import threading
-    import webbrowser
-    from http.server import SimpleHTTPRequestHandler
-    import tempfile, os
+    page = build_standalone_html(kg_data, title=title, opts=opts).encode("utf-8")
 
-    html = build_standalone_html(kg_data, title=title, opts=opts)
-
-    # Write to a temp file so SimpleHTTPRequestHandler can serve static assets
-    with tempfile.NamedTemporaryFile(
-        delete=False, suffix=".html", mode="w", encoding="utf-8"
-    ) as f:
-        f.write(html)
-        tmp_path = f.name
-
-    class _Handler(SimpleHTTPRequestHandler):
-        def do_GET(self):  # noqa: N802
-            if self.path in ('/', '/index.html', f'/{os.path.basename(tmp_path)}'):
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            if self.path in ("/", "/index.html"):
                 self.send_response(200)
                 self.send_header("Content-type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
                 self.end_headers()
-                self.wfile.write(html.encode("utf-8"))
+                self.wfile.write(page)
             else:
                 self.send_response(404)
                 self.end_headers()
 
-        def log_message(self, fmt, *args):  # silence access log
+        def log_message(self, fmt: str, *args: Any) -> None:  # silence the access log
             pass
 
     with socketserver.TCPServer(("127.0.0.1", port), _Handler) as httpd:
-        actual_port = httpd.server_address[1]
-        url = f"http://127.0.0.1:{actual_port}/"
+        url = f"http://127.0.0.1:{httpd.server_address[1]}/"
         print(f"  KG viewer → {url}  (Ctrl-C to stop)")
-        threading.Thread(target=lambda: webbrowser.open(url), daemon=True).start()
+        # the browser is started off this thread: some of them block until they close
+        new_thread(target=lambda: webbrowser.open(url), daemon=True).start()
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
-            logger.debug('suppressed', exc_info=True)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                logger.debug('suppressed', exc_info=True)
+            logger.debug("viewer stopped", exc_info=True)

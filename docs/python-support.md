@@ -56,7 +56,7 @@ Two properties make the check meaningful:
 
 | Component | 3.14t | Notes |
 | --------- | ----- | ----- |
-| `runtime` | yes | Passes with the GIL forced off, except the thread-context difference below. |
+| `runtime` | yes | Passes with the GIL forced off. |
 | `ctl`, `library-standard`, `library-ioa` (with `slim`), `library-skills`, `library-telemetry`, `library-kg`, `library-samples`, `lab/components/core` | yes | Pass with the GIL forced off. A few test files need a component that does not install, and are left out (see below). |
 | `library-eval` | no | Needs `deepeval`, which needs `grpcio`. `grpcio` has no free-threaded wheel yet. |
 | `library-lab`, `lab/components/bench`, `lab/components/controller` | no | They depend on `library-eval`. |
@@ -65,26 +65,21 @@ Two properties make the check meaningful:
 The measured run (runtime 1444 tests, ctl 1169, library-standard 701, library-ioa 360, library-skills 215,
 library-samples 14, lab core 42, plus library-telemetry and library-kg) passed. The tests the job leaves out are
 the `not_covered` list in `.github/python-support.json`, each with its reason. They are the test files that import
-`lab/components/bench`, the tests of the `[observe]` extra, and the one test below. A test in that list is a gap
-in coverage, not a pass.
+`lab/components/bench` and the tests of the `[observe]` extra. A test in that list is a gap in coverage, not a pass.
 
-### Known difference: threads inherit the caller's context
+### Threads and context variables
 
-On the free-threaded build, a new thread starts with a copy of the context variables of the thread that
-created it. On the other builds it starts empty. The runtime keeps per-call state in context variables, so a
-worker thread started from inside a call sees that call's frames.
-`test_call_frames_are_isolated_between_threads` in `runtime/tests/test_obs_call_frames.py` fails on 3.14t for
-this reason. It is the only test that fails on a free-threaded run of the supported components.
-
-The fix belongs in the code, not in a setting: start those threads with an empty context
-(`contextvars.Context().run(target)`, which behaves the same on every version), in every place that starts
-a thread from inside a call. Until then, `-X thread_inherit_context=0` restores the other builds' behavior for a
-process, as a stopgap; the runtime does not rely on it.
+On the free-threaded build, a new thread starts with a copy of the context variables of the thread that created
+it; on the other builds it starts empty. The runtime keeps per-call state in context variables, so a thread it
+starts from inside a call must not see that call's. The runtime and its libraries start threads with
+`mas.runtime.aio.new_thread`, which runs the target in an empty context on every build, so no interpreter setting
+is needed. A test fails on any direct `threading.Thread` in the sources. Code that does want the caller's context in
+a thread passes it explicitly with `contextvars.copy_context().run`.
 
 ### What would lift the remaining limits
 
 - `grpcio` publishing a free-threaded wheel. Until then, run the lab on the regular 3.14 build.
-- The thread-context fix above, after which the free-threaded job can become a required check. Today it
+- A first green weekly run of the free-threaded job, after which it can become a required check. Today it
   reports without blocking a release.
 - `lab/components/bench` installing on 3.14t, which brings back the tests in the `not_covered` list.
 

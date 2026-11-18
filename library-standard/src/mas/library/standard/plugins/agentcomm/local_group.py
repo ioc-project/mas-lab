@@ -5,10 +5,8 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import logging
 import random
-import threading
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -286,22 +284,6 @@ class LocalGroupAgentComm(LocalLinkBase, ChainMember, AgentCommContract):
         except TimeoutError:
             raise AgentCommError("reply timed out") from None
         return send_result(str(envelope["intent"]), result)
-
-    def _wait_reply(self, fn: Callable[[], str]) -> str:
-        """Run the peer's turn, and fail if it has not replied in ``reply_timeout_s``."""
-        done: concurrent.futures.Future[str] = concurrent.futures.Future()
-
-        def run() -> None:
-            try:
-                done.set_result(fn())
-            except BaseException as exc:
-                done.set_exception(exc)
-
-        threading.Thread(target=run, daemon=True, name="local-group-reply").start()
-        try:
-            return done.result(timeout=self.reply_timeout_s)
-        except concurrent.futures.TimeoutError:
-            raise AgentCommError("reply timed out") from None
 
     def _steer_if_requested(
         self,

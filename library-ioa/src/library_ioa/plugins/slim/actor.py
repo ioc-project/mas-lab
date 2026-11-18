@@ -11,6 +11,7 @@ import threading
 from collections.abc import Coroutine
 from typing import Any
 
+from mas.runtime.aio import new_thread
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
 from library_ioa.plugins.slim.bindings import load_slim_bindings
@@ -46,7 +47,7 @@ class _SharedLoop:
             if self._refs == 0:
                 loop = asyncio.new_event_loop()
                 ready = threading.Event()
-                thread = threading.Thread(target=self._run, args=(loop, ready), name="slim-link", daemon=True)
+                thread = new_thread(target=self._run, args=(loop, ready), name="slim-link", daemon=True)
                 thread.start()
                 ready.wait()
                 self._loop, self._thread = loop, thread
