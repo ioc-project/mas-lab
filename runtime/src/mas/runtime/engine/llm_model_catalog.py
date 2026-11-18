@@ -8,6 +8,7 @@ tables (LiteLLM, OpenRouter, …) are listed as sources, not vendored.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -56,6 +57,7 @@ class ModelInfo:
     context_window: int | None = None
     max_output_tokens: int | None = None
     max_thinking_tokens: int | None = None
+    thinking_mode: str | None = None
     apis: tuple[str, ...] = ()
     defaults: dict[str, Any] = field(default_factory=dict)
     settings: dict[str, ModelSetting] = field(default_factory=dict)
@@ -92,10 +94,27 @@ class ModelCatalog:
             return None
         if name in self.models:
             return self.models[name]
-        mapped = self._alias_index.get(name) or self._alias_index.get(name.split("/")[-1])
-        if mapped:
-            return self.models.get(mapped)
+        for candidate in (name, name.split("/")[-1], _base_model_id(name)):
+            mapped = self._alias_index.get(candidate)
+            if mapped:
+                return self.models.get(mapped)
+            if candidate in self.models:
+                return self.models[candidate]
         return None
+
+
+_REGION_PREFIX = re.compile(r"^(?:us|eu|apac|jp|au|ca|global|us-gov)\.")
+_VERSION_SUFFIX = re.compile(r"(?:-v\d+(?::\d+)?|@\d{8}|-\d{8})$")
+
+
+def _base_model_id(name: str) -> str:
+    """A hosted model id without its routing decorations.
+
+    Cross-region inference profiles prefix a region (``us.``) and versioned ids end in ``-v1:0``,
+    ``@20250101`` or ``-20250101``; none of these name a different model.
+    """
+    base = _REGION_PREFIX.sub("", name.split("/")[-1])
+    return _VERSION_SUFFIX.sub("", base)
 
 
 def _parse_setting(raw: Any) -> ModelSetting:
@@ -135,7 +154,10 @@ def load_model_catalog(path: Path | None = None) -> ModelCatalog:
                 aliases=aliases,
                 context_window=int(raw["context_window"]) if raw.get("context_window") else None,
                 max_output_tokens=int(raw["max_output_tokens"]) if raw.get("max_output_tokens") else None,
-                max_thinking_tokens=int(raw["max_thinking_tokens"]) if raw.get("max_thinking_tokens") is not None else None,
+                max_thinking_tokens=int(raw["max_thinking_tokens"])
+                if raw.get("max_thinking_tokens") is not None
+                else None,
+                thinking_mode=str(raw["thinking_mode"]) if raw.get("thinking_mode") else None,
                 apis=tuple(str(a) for a in (raw.get("apis") or [])),
                 defaults=dict(raw.get("defaults") or {}),
                 settings=settings,
@@ -200,18 +222,14 @@ def resolve_model_recursive(model_name: str | None, infra_spec: dict | None = No
             # Circular reference detected
             chain_str = " -> ".join(list(visited) + [current])
             raise ValueError(
-                f"Circular model mapping detected: {chain_str}. "
-                f"Please check infra manifest models.mappings"
+                f"Circular model mapping detected: {chain_str}. Please check infra manifest models.mappings"
             )
         visited.add(current)
         current = str(mappings[current]).strip()
         depth += 1
 
     if depth >= max_depth:
-        raise ValueError(
-            f"Model mapping chain too deep (max {max_depth}). "
-            f"Possible circular reference in: {visited}"
-        )
+        raise ValueError(f"Model mapping chain too deep (max {max_depth}). Possible circular reference in: {visited}")
 
     # Validate against allowed models if specified
     allowed = models_config.get("allowed") or []

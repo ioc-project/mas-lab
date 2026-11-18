@@ -13,7 +13,13 @@ from library_ioa.plugins.http_layer import HttpCallTransport, HttpLayer
 from library_ioa.plugins.mcp.layer import McpLayer
 from library_ioa.plugins.mcp.provider import MCPToolProvider
 from mas.library.standard.lib.stack import Envelope, Layer, Stack
+from mas.library.standard.plugins.llm.anthropic import AnthropicLLMProvider
+from mas.library.standard.plugins.llm.azure import AzureLLMProvider
+from mas.library.standard.plugins.llm.bedrock import BedrockLLMProvider
+from mas.library.standard.plugins.llm.compatible import DatabricksLLMProvider, GroqLLMProvider, HuggingFaceLLMProvider
+from mas.library.standard.plugins.llm.gemini import GeminiLLMProvider
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
+from mas.library.standard.plugins.llm.vertex import VertexLLMProvider
 from mas.runtime.layers.compose import declared_protocol_layers, layer_id, merge_protocol_layers
 
 
@@ -35,12 +41,14 @@ async def test_openai_over_http_matches_direct(monkeypatch: pytest.MonkeyPatch) 
     recorded = {"choices": [{"message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}]}
     monkeypatch.setenv("K", "secret")
     transport = httpx.MockTransport(_chat_handler(recorded))
-    direct = OpenAILLMProvider(api_base="http://127.0.0.1:9/v1", api_key_env="K")
+    direct = OpenAILLMProvider(api_base="http://127.0.0.1:9/v1", api_key="secret", api_key_env="K")
     direct._aclient = httpx.AsyncClient(transport=transport)
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
     assert isinstance(http, HttpCallTransport)
     _use_async_transport(http, transport)
-    layered = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
+    layered = OpenAILLMProvider.wrap(
+        http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
+    )
     kwargs = {"model": "m", "messages": [{"role": "user", "content": "q"}]}
     assert (await layered.achat_completion(**kwargs)) == (await direct.achat_completion(**kwargs))
 
@@ -51,7 +59,7 @@ async def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: p
     transport = httpx.MockTransport(_chat_handler(recorded))
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
     _use_async_transport(http, transport)
-    inner = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
+    inner = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"})
     cache_path = tmp_path / "c.json"
     from mas.runtime.registry.llm_provider_registry import wrap_llm_provider_cache
 
@@ -63,7 +71,9 @@ async def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: p
         raise AssertionError("cache hit must not POST")
 
     reader_http._client = httpx.Client(transport=httpx.MockTransport(boom))
-    reader_inner = OpenAILLMProvider.wrap(reader_http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
+    reader_inner = OpenAILLMProvider.wrap(
+        reader_http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
+    )
     reader = wrap_llm_provider_cache(reader_inner, cache_path=cache_path, cache_read=True, cache_write=False)
     cached = await reader.achat_completion(model="m", messages=[{"role": "user", "content": "q"}])
     assert cached["content"] == written["content"]
@@ -81,6 +91,91 @@ def test_protocol_openai_is_sugar_for_openai_over_http() -> None:
         spec={"api_base": "http://127.0.0.1:9/v1"},
     )
     assert [layer_id(step) for step in merged] == ["http", "openai", "retry"]
+
+
+def test_protocol_anthropic_and_gemini_are_sugar_for_http_then_protocol() -> None:
+    anthropic = AnthropicLLMProvider.protocol_layers(
+        {"protocol": "anthropic", "api_base": "http://127.0.0.1:9/v1", "timeout": 7, "verify_ssl": False}
+    )
+    assert [layer_id(step) for step in anthropic] == ["http", "anthropic"]
+    assert anthropic[0]["params"] == {"url": "http://127.0.0.1:9/v1", "timeout": 7.0, "verify_ssl": False}
+    gemini = GeminiLLMProvider.protocol_layers({"url": "http://127.0.0.1:9/v1beta", "ca_bundle": "/ca.pem"})
+    assert [layer_id(step) for step in gemini] == ["http", "gemini"]
+    assert gemini[0]["params"]["url"] == "http://127.0.0.1:9/v1beta"
+    assert gemini[0]["params"]["ca_bundle"] == "/ca.pem"
+    merged = merge_protocol_layers(
+        [{"layer": "structured", "for": ["llm"]}],
+        plugin_type="llm_provider",
+        kind="anthropic",
+        spec={"api_base": "http://127.0.0.1:9/v1"},
+    )
+    assert [layer_id(step) for step in merged] == ["http", "anthropic", "structured"]
+    assert [
+        layer_id(step) for step in declared_protocol_layers("llm_provider", "gemini", {"api_base": "http://x"})
+    ] == [
+        "http",
+        "gemini",
+    ]
+
+
+def test_protocol_azure_bedrock_and_groq_are_sugar_for_http_then_protocol() -> None:
+    azure = AzureLLMProvider.protocol_layers({"api_base": "https://demo.openai.azure.com", "timeout": 7})
+    assert [layer_id(step) for step in azure] == ["http", "azure"]
+    bedrock = BedrockLLMProvider.protocol_layers({"url": "http://127.0.0.1:9"})
+    assert [layer_id(step) for step in bedrock] == ["http", "bedrock"]
+    groq = GroqLLMProvider.protocol_layers({"api_base": "http://127.0.0.1:9/v1"})
+    assert [layer_id(step) for step in groq] == ["http", "groq"]
+    vertex = VertexLLMProvider.protocol_layers({"api_base": "https://us-central1-aiplatform.googleapis.com"})
+    assert [layer_id(step) for step in vertex] == ["http", "vertex"]
+    huggingface = HuggingFaceLLMProvider.protocol_layers({"api_base": "https://router.huggingface.co/v1"})
+    assert [layer_id(step) for step in huggingface] == ["http", "huggingface"]
+    databricks = DatabricksLLMProvider.protocol_layers({"api_base": "https://demo.cloud.databricks.com"})
+    assert [layer_id(step) for step in databricks] == ["http", "databricks"]
+    merged = merge_protocol_layers(
+        [{"layer": "structured", "for": ["llm"]}],
+        plugin_type="llm_provider",
+        kind="azure",
+        spec={"api_base": "https://demo.openai.azure.com"},
+    )
+    assert [layer_id(step) for step in merged] == ["http", "azure", "structured"]
+
+
+async def test_anthropic_over_http_uses_the_transport_aclient(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("K", "secret")
+    recorded = {
+        "content": [{"type": "text", "text": "hi"}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/messages")
+        return httpx.Response(200, json=recorded)
+
+    http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
+    _use_async_transport(http, httpx.MockTransport(handler))
+    layered = AnthropicLLMProvider.wrap(
+        http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
+    )
+    assert (await layered.achat_completion(model="m", messages=[{"role": "user", "content": "q"}]))["content"] == "hi"
+
+
+async def test_gemini_over_http_uses_the_transport_aclient(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("K", "secret")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert ":generateContent" in request.url.path
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "hi"}]}, "finishReason": "STOP"}]},
+        )
+
+    http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1beta"}, call_kinds=("llm",))
+    _use_async_transport(http, httpx.MockTransport(handler))
+    layered = GeminiLLMProvider.wrap(
+        http, {"api_base": "http://127.0.0.1:9/v1beta", "api_key": "secret", "api_key_env": "K"}
+    )
+    assert (await layered.achat_completion(model="m", messages=[{"role": "user", "content": "q"}]))["content"] == "hi"
 
 
 class _Dump:
@@ -292,7 +387,9 @@ def test_http_layer_wrap_keeps_an_existing_call_transport() -> None:
 def test_openai_wrap_http_is_kept_when_pipeline_binds_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("K", "secret")
     http = HttpCallTransport.from_params({"url": "http://127.0.0.1:9/v1"})
-    provider = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
+    provider = OpenAILLMProvider.wrap(
+        http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
+    )
     from mas.runtime.engine.infra_pipeline import wrap_llm_provider_pipeline
     from mas.runtime.layers.compose import merge_protocol_layers
 
@@ -381,6 +478,23 @@ def test_protocol_openai_keeps_tls_settings(monkeypatch: pytest.MonkeyPatch) -> 
     provider = _inner_for("https://llm.example/v1", verify_ssl=False)
     assert provider.inner._verify is False
     assert provider.inner.client.timeout.read == 120.0
+
+
+def test_bind_llm_stack_on_anthropic_needs_no_ctl_protocol_name() -> None:
+    from mas.ctl.compose.models import ResolvedInfra
+    from mas.ctl.infra.bind import bind_flavour
+    from mas.runtime.layers.compose import stamp_layer_step
+
+    structured = stamp_layer_step({"layer": "structured", "for": ["llm"], "params": {"schema": {"type": "object"}}})
+    resolved = ResolvedInfra(
+        llm_proxy={"api_base": "http://127.0.0.1:1/v1", "protocol": "anthropic", "pipeline": []},
+        stacks={"json-out": [structured]},
+    )
+    bound = bind_flavour(resolved, {"bind": {"llm": {"stack": "json-out"}}}, agent_ids=["a"])
+    merged = merge_protocol_layers(
+        bound.llm_proxy["pipeline"], plugin_type="llm_provider", kind="anthropic", spec=bound.llm_proxy
+    )
+    assert [layer_id(step) for step in merged] == ["http", "anthropic", "structured"]
 
 
 def test_bind_twice_replaces_the_stack_it_put_on() -> None:

@@ -4,5 +4,6 @@
 
 from mas.library.standard.plugins.layers.circuit_breaker import CircuitBreakerLayer
 from mas.library.standard.plugins.layers.retry import RetryLayer
+from mas.library.standard.plugins.layers.structured import StructuredLayer
 
-__all__ = ["CircuitBreakerLayer", "RetryLayer"]
+__all__ = ["CircuitBreakerLayer", "RetryLayer", "StructuredLayer"]

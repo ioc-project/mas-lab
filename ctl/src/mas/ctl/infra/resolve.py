@@ -11,7 +11,7 @@ from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.infra.env_resolve import resolve_manifest_values
-from mas.ctl.infra.models import InfraManifest, ModelsSpec, ProxySpec
+from mas.ctl.infra.models import InfraManifest, ModelsSpec, ProxySpec, proxy_protocol_fields
 from mas.ctl.infra.pipeline_chain import BidirectionalInfraPipeline
 from mas.ctl.libraries.bundles import list_manifest_libraries
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
@@ -696,6 +696,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
                         api_base=str(leaf.get("api_base") or ""),
                         api_key_env=str(leaf.get("api_key_env") or "OPENAI_API_KEY"),
                         timeout=float(leaf["timeout"]) if leaf.get("timeout") is not None else None,
+                        extras=proxy_protocol_fields(leaf),
                     )
                     if leaf.get("protocol"):
                         protocol = str(leaf.get("protocol") or "")
@@ -709,7 +710,12 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
         pipeline = _merge_pipeline(pipeline, m.pipeline)
         # Policy overlay (generation, timeout, mappings) — not a second connection.
         if m.proxy.timeout is not None:
-            proxy = ProxySpec(api_base=proxy.api_base, api_key_env=proxy.api_key_env, timeout=m.proxy.timeout)
+            proxy = ProxySpec(
+                api_base=proxy.api_base,
+                api_key_env=proxy.api_key_env,
+                timeout=m.proxy.timeout,
+                extras={**proxy.extras, **m.proxy.extras},
+            )
         for item in m.models.allowed:
             if item not in seen_allowed:
                 seen_allowed.add(item)

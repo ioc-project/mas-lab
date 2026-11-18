@@ -209,7 +209,7 @@ def _exchange_timestamp() -> tuple[float, str]:
 
 def _engine_payload_json(obj: object) -> str:
     if hasattr(obj, "model_dump"):
-        data = obj.model_dump(mode="json")  # type: ignore[union-attr]
+        data = obj.model_dump(mode="json", exclude={"provider_state"})  # type: ignore[union-attr]
     elif isinstance(obj, dict):
         data = obj
     else:

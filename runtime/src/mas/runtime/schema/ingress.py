@@ -90,6 +90,11 @@ class EngineIoReturn(BaseModel):
     text: str = ""
     usage: dict = Field(default_factory=dict)
     finish_reason: str = ""
+    # Opaque JSON-able state a protocol layer attaches to a completion (for example
+    # provider-signed blocks the provider wants back on the next request). The kernel
+    # never inspects it; the layer that wrote it is the only reader. Kept off
+    # observability payloads.
+    provider_state: dict = Field(default_factory=dict)
     # Names sent as the OpenAI ``tools`` array for this LLM call.
     # None means the engine did not record them (budget stop, non-LLM return).
     offered_tools: list[str] | None = None

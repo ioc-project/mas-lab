@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: azure
+  description: >
+    Azure OpenAI. Classic deployments post under /openai/deployments/{name}.
+    A host that already ends in /v1 keeps /chat/completions. Requires
+    AZURE_OPENAI_API_KEY. Set AZURE_OPENAI_ENDPOINT to the resource URL.
+
+spec:
+  protocol: azure
+  proxy:
+    api_base: env:AZURE_OPENAI_ENDPOINT|https://example.openai.azure.com
+    api_key_env: AZURE_OPENAI_API_KEY

@@ -36,6 +36,7 @@ def from_engine_return(event: EngineIoReturn) -> RunEvent:
         tool_arguments=dict(event.tool_arguments or {}),
         parallel_tools=parallel,
         finish_reason=event.finish_reason or "",
+        provider_state=dict(event.provider_state or {}),
     )
 
 

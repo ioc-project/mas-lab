@@ -88,6 +88,14 @@ definitions:
       max_thinking_tokens:
         type: integer
         minimum: 0
+      thinking_mode:
+        type: string
+        enum: [none, budget, level, adaptive, always_on]
+        description: >
+          How the model thinks: `none` (no thinking), `budget` (a token budget
+          the caller sets), `level` (a discrete level such as low or high),
+          `adaptive` (the model decides, the caller sets an effort),
+          `always_on` (always thinks, not switchable).
       apis:
         type: array
         items:

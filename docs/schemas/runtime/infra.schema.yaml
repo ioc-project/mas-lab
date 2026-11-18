@@ -163,13 +163,16 @@ properties:
         type: string
         description: >
           Sugar for a layer or a Stack. On an LLMProxy leaf this is the
-          wire-protocol plugin (``openai`` now; later ``bedrock``, …) and
-          expands to ``[http, openai]`` when a url is set. On a
-          ToolServerRegistry row, ``mcp`` plus a url expands to
-          ``[http, mcp]``. Ollama and LiteLLM proxies use ``openai``.
-          Default is the library ``llm_provider`` default. Not ``mock`` or
-          ``cache`` — offline CI uses ``llm_cache`` replay
-          (``raise_on_miss``); cache wraps the routed protocol plugin.
+          wire-protocol plugin (``openai``, ``anthropic``, ``gemini``,
+          ``azure``, ``bedrock``, ``vertex``, ``openresponses``, ``groq``, ``openrouter``, ``xai``,
+          ``litellm``, ``cerebras``, ``mistral``, ``vllm``, ``huggingface``,
+          ``databricks``, …) and expands
+          to ``[http, <protocol>]`` when a url
+          is set. On a ToolServerRegistry row, ``mcp`` plus a url expands to
+          ``[http, mcp]``. Ollama uses ``openai``. Default is the library
+          ``llm_provider`` default. Not ``mock`` or ``cache`` — offline CI
+          uses ``llm_cache`` replay (``raise_on_miss``); cache wraps the
+          routed protocol plugin.
         default: openai
 
       layers:

@@ -12,6 +12,7 @@ Offline CI replays a recorded live provider through ``llm_cache`` (``raise_on_mi
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -94,11 +95,27 @@ def instantiate_llm_provider(
     cls = llm_provider_class(kind)
     require_achat_completion(cls, name=kind)
     payload = dict(spec or {})
+    default_env = str(getattr(cls, "default_api_key_env", None) or "")
+    if default_env and not str(payload.get("api_key_env") or "").strip():
+        payload["api_key_env"] = default_env
+    _fill_api_key(payload)
     for name in ("from_provider_spec", "from_infra_spec"):
         factory = getattr(cls, name, None)
         if callable(factory):
             return adapt_llm_provider(factory(payload), name=kind)
     return adapt_llm_provider(cls(), name=kind)
+
+
+def _fill_api_key(spec: dict[str, Any]) -> None:
+    """Copy the token from the env var named in ``api_key_env``. The protocol layer never reads the environment."""
+    if str(spec.get("api_key") or "").strip():
+        return
+    env_name = str(spec.get("api_key_env") or "").strip()
+    if not env_name:
+        return
+    value = os.environ.get(env_name, "").strip()
+    if value:
+        spec["api_key"] = value
 
 
 def canonical_model_name(model: str, leaf: dict[str, Any] | None) -> str:
@@ -204,6 +221,9 @@ def apply_llm_endpoint_defaults(
         out["api_base"] = proxy["api_base"]
     if not str(out.get("api_key_env") or "").strip() and proxy.get("api_key_env"):
         out["api_key_env"] = proxy["api_key_env"]
+    if not str(out.get("api_key") or "").strip() and proxy.get("api_key"):
+        out["api_key"] = proxy["api_key"]
+    _fill_api_key(out)
     if out.get("timeout") is None and proxy.get("timeout") is not None:
         out["timeout"] = proxy["timeout"]
     if "llm_proxy" not in out:

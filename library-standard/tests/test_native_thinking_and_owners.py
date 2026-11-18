@@ -168,8 +168,13 @@ class _FakeStream:
         self._lines = lines
         self._clock = clock
 
+    is_error = False
+
     def raise_for_status(self) -> None:
         return None
+
+    async def aread(self) -> bytes:
+        return b""
 
     async def aiter_lines(self):
         for line in self._lines:
@@ -220,7 +225,7 @@ async def test_streamed_reasoning_reaches_observability_when_it_happens(monkeypa
         _sse({"content": "the train."}),
         "data: [DONE]",
     ]
-    provider = OpenAILLMProvider(api_base="http://llm.test/v1", api_key_env="FAKE_KEY", stream=True)
+    provider = OpenAILLMProvider(api_base="http://llm.test/v1", api_key="k", api_key_env="FAKE_KEY", stream=True)
     monkeypatch.setattr(provider, "_get_async_client", lambda: _FakeClient(lines, clock))
     recorder = _Recorder()
     chunks: list[str] = []

@@ -55,6 +55,8 @@ Same procedure as tools: a plugin speaks **one protocol**; the registry routes
 | ID | Role | Implementation |
 |----|------|----------------|
 | `openai` | Wire protocol | OpenAI-compatible `/chat/completions` HTTP |
+| `anthropic` | Wire protocol | Anthropic Messages API over `http` |
+| `gemini` | Wire protocol | Gemini `generateContent` over `http` |
 | `cache` | Wrapper (not a protocol) | Disk cache around a routed protocol plugin |
 
 Infra `spec.protocol` / agent `spec.models[].kind` select the wire protocol (default `openai`). Ollama and LiteLLM proxies use the OpenAI plugin. Offline CI replays a recorded live protocol through `llm_cache` (`raise_on_miss`).

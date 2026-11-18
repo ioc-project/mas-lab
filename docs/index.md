@@ -172,6 +172,7 @@ transport. [Open standards](standards/index.md) is the map.
 | Protocol | Role |
 | --- | --- |
 | [OpenAI Chat Completions](standards/openai.md) | Model calls, including OpenAI-compatible proxies |
+| [Open Responses](standards/openresponses.md) | Model calls over typed items |
 | [MCP](standards/mcp.md) | Remote tools |
 | [A2A](standards/a2a.md) | Remote agents |
 | [Agent Skills](standards/agent-skills.md) ([agentskills.io](https://agentskills.io/)) | Reusable instruction packs |

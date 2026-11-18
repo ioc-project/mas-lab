@@ -48,6 +48,10 @@ properties:
     $ref: "./llm-sampling.schema.yaml#/properties/prediction"
   prompt_cache_key:
     $ref: "./llm-sampling.schema.yaml#/properties/prompt_cache_key"
+  prompt_cache_retention:
+    $ref: "./llm-sampling.schema.yaml#/properties/prompt_cache_retention"
+  prompt_cache_breakpoints:
+    $ref: "./llm-sampling.schema.yaml#/properties/prompt_cache_breakpoints"
   top_p:
     $ref: "./llm-sampling.schema.yaml#/properties/top_p"
   top_k:

@@ -9,8 +9,10 @@ A Flavour `bind.agent_comm` chain is send. A `kind: Stack` row named by
 `bind.llm` is llm; `bind.tools` is wrap layers on tool calls (`http` and `mcp`
 belong on the tool-server row). `bind.agents.<id>.llm` /
 `bind.agents.<id>.tools` pick that stack for one agent. `protocol: openai` plus a url is
-sugar for `[http, openai]`. `protocol: mcp` plus a url is sugar for
-`[http, mcp]`. Retry, the circuit breaker, cache, and impair wrap those.
+sugar for `[http, openai]`; the same sugar applies to `anthropic`, `gemini`,
+`azure`, `bedrock`, `vertex`, `openresponses`, `groq`, and the other LLM protocol plugins. `protocol: mcp`
+plus a url is sugar for `[http, mcp]`. Retry, the circuit breaker, cache, and
+impair wrap those.
 
 Two different things look like "talking to an agent":
 

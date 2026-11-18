@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: vllm
+  description: >
+    Local vLLM OpenAI-compatible server. Same wire as openai. Optional VLLM_API_KEY.
+
+spec:
+  protocol: vllm
+  proxy:
+    api_base: env:VLLM_API_BASE|http://localhost:8000/v1
+    api_key_env: VLLM_API_KEY

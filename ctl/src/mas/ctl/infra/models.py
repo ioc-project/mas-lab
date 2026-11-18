@@ -34,11 +34,33 @@ def _pipeline_from_spec(spec: dict[str, Any], *, where: str) -> list[dict[str, A
     return out
 
 
+def _protocol_proxy_fields() -> frozenset[str]:
+    """The ``proxy`` fields installed protocol layers declare (``proxy_fields`` on their library row).
+
+    ctl names no protocol and no vendor field: a row says which extra ``proxy`` fields its POST needs.
+    retry and other wrap fields are not on any row (they belong on the pipeline, not the POST).
+    """
+    from mas.runtime.registry import get_registry
+
+    names: set[str] = set()
+    for entry in get_registry().entries_of_type("layer"):
+        declared = (entry.attributes or {}).get("proxy_fields")
+        if isinstance(declared, (list, tuple)):
+            names.update(str(name) for name in declared)
+    return frozenset(names)
+
+
+def proxy_protocol_fields(raw: dict[str, Any] | None) -> dict[str, Any]:
+    src = raw or {}
+    return {key: src[key] for key in _protocol_proxy_fields() if key in src}
+
+
 @dataclass
 class ProxySpec:
     api_base: str = ""
     api_key_env: str = "OPENAI_API_KEY"
     timeout: float | None = None
+    extras: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -128,6 +150,7 @@ class InfraManifest:
                 api_base=str(proxy_raw.get("api_base", "") or ""),
                 api_key_env=api_key_env,
                 timeout=float(proxy_raw["timeout"]) if proxy_raw.get("timeout") is not None else None,
+                extras=proxy_protocol_fields(proxy_raw if isinstance(proxy_raw, dict) else {}),
             ),
             models=ModelsSpec(
                 allowed=list(models_raw.get("allowed") or models_raw.get("available") or []),
@@ -155,6 +178,7 @@ class InfraManifest:
         }
         if self.proxy.timeout is not None:
             proxy["timeout"] = self.proxy.timeout
+        proxy.update(self.proxy.extras)
         defaults: dict[str, Any] = {}
         if self.models.default_llm is not None:
             defaults["llm"] = self.models.default_llm
@@ -222,6 +246,7 @@ class InfraManifest:
             out["generation"] = dict(self.models.generation)
         if self.protocol:
             out["protocol"] = self.protocol
+        out.update(self.proxy.extras)
         return out
 
     def to_leaf_dict(self) -> dict[str, Any]:

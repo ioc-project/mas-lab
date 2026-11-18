@@ -38,3 +38,15 @@ properties:
     type: number
     minimum: 0
     description: Cap on backoff_s * multiplier^attempt (jitter is applied after).
+  honor_retry_after:
+    type: boolean
+    description: >
+      When true, a server Retry-After hint (429 / 5xx) raises the sleep before the
+      next try to the hint. The hint never shortens the backoff. A hint above
+      max_retry_after_s is not waited for: the call fails instead of retrying early.
+  max_retry_after_s:
+    type: number
+    minimum: 0
+    description: >
+      Longest server Retry-After hint in seconds that is waited for. A longer hint
+      ends the retries.

@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: openresponses
+  description: >
+    Open Responses host (POST /responses). Requires OPENRESPONSES_API_KEY.
+
+spec:
+  protocol: openresponses
+  proxy:
+    api_base: env:OPENRESPONSES_API_BASE|https://api.openai.com/v1
+    api_key_env: OPENRESPONSES_API_KEY

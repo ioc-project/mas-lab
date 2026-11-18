@@ -45,6 +45,25 @@ reserve) assemble the same `messages[]` as before this change. The removed
 20-row working-memory count cap only affects in-turn tool loops that used to
 clip.
 
+### Working-memory message keys beyond OpenAI
+
+*Working memory* is the list of chat messages for the current user message
+(live tool rows, above). The kernel copies each accepted log row into it. Two
+optional keys ride on those messages; both are absent unless they apply, and
+neither counts as text for token budgeting.
+
+| Key | On | Meaning |
+| --- | --- | --- |
+| `provider_state` | assistant message that made tool calls | Opaque JSON object the model protocol layer attached to the completion, for providers that require signed blocks from a tool-calling turn (for example reasoning blocks or thought signatures) to be sent back unchanged on the next request. |
+| `is_error` | tool message | `true` when the tool failed (the log row kind is `ERROR`). Present only when true; a protocol layer with a tool-result error flag reads it. |
+
+The kernel never inspects `provider_state`. The protocol layer that produced
+it owns its content and the only code that reads it back is that same layer.
+It is stored on the run log row (`EngineIoReturn.provider_state`), saved in
+checkpoints, replayed by the response cache with the completion, and kept out
+of observability events. Context trimming keeps the key on a message it keeps
+and drops it with a message it removes.
+
 ## System prefix (KV cache)
 
 The system prefix is rebuilt from plugins every call. If the bytes did not

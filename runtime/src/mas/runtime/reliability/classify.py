@@ -4,9 +4,12 @@
 
 from __future__ import annotations
 
+import email.utils
+import math
 import re
 import ssl
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +34,16 @@ _UNAVAILABLE_MARKERS = (
     "Network is unreachable",
 )
 _BUDGET_MARKERS = ("exceededbudget", "budget_exceeded", "budget", "quota")
+_CONTEXT_LENGTH_STATUS = frozenset({400, 413})
+_CONTEXT_LENGTH_PHRASES = (
+    "context_length_exceeded",
+    "maximum context length",
+    "prompt is too long",
+    "input is too long",
+    "too many input tokens",
+    "exceeds the maximum number of tokens",
+)
+_RETRY_DELAY_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*s\s*$", re.IGNORECASE)
 
 
 def _iter_exception_chain(exc: BaseException) -> list[BaseException]:
@@ -58,6 +71,110 @@ def is_tls_verify_failure(exc: BaseException) -> bool:
         ):
             return True
     return False
+
+
+def _finite_seconds(value: float) -> float | None:
+    """A non-negative finite number of seconds, or None (negative clamps to 0)."""
+    if not math.isfinite(value):
+        return None
+    return max(0.0, value)
+
+
+def _parse_retry_after_date(text: str) -> float | None:
+    """HTTP-date form of Retry-After: seconds from now until that instant."""
+    try:
+        when = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return _finite_seconds((when - datetime.now(timezone.utc)).total_seconds())
+
+
+def _parse_retry_info_body(response: Any) -> float | None:
+    """Google RPC ``error.details[]`` entry whose ``@type`` ends with ``RetryInfo``."""
+    data = response.json()
+    if not isinstance(data, dict):
+        return None
+    err = data.get("error")
+    details = err.get("details") if isinstance(err, dict) else None
+    if not isinstance(details, list):
+        return None
+    for item in details:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("@type")
+        delay = item.get("retryDelay")
+        if not isinstance(kind, str) or not kind.endswith("RetryInfo") or not isinstance(delay, str):
+            continue
+        match = _RETRY_DELAY_RE.match(delay)
+        if match is None:
+            continue
+        seconds = _finite_seconds(float(match.group(1)))
+        if seconds is not None:
+            return seconds
+    return None
+
+
+def retry_after_seconds(response: Any) -> float | None:
+    """Server-requested wait in seconds, or None. Never raises.
+
+    Looks at ``retry-after-ms`` (milliseconds), then ``retry-after`` (seconds or
+    an HTTP-date), then a Google RPC ``RetryInfo`` body hint. A malformed value
+    is skipped and the next source is tried.
+    """
+    try:
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            raw_ms = headers.get("retry-after-ms")
+            if raw_ms is not None:
+                number = _parse_number(raw_ms)
+                if number is not None:
+                    seconds = _finite_seconds(number / 1000.0)
+                    if seconds is not None:
+                        return seconds
+            raw = headers.get("retry-after")
+            if raw is not None:
+                number = _parse_number(raw)
+                seconds = _finite_seconds(number) if number is not None else _parse_retry_after_date(raw.strip())
+                if seconds is not None:
+                    return seconds
+        return _parse_retry_info_body(response)
+    except Exception:
+        return None
+
+
+def _parse_number(raw: str) -> float | None:
+    try:
+        return float(raw.strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_context_length_text(text: str) -> bool:
+    lowered = text.lower()
+    if any(phrase in lowered for phrase in _CONTEXT_LENGTH_PHRASES):
+        return True
+    if "input token count" in lowered and "exceeds" in lowered:
+        return True
+    return "request too large" in lowered and "tokens" in lowered
+
+
+def is_context_length_exceeded(text_or_exc: str | BaseException | None) -> bool:
+    """True when a message (or an exception's text / API error body) says the prompt is too long."""
+    if text_or_exc is None:
+        return False
+    if isinstance(text_or_exc, str):
+        return _is_context_length_text(text_or_exc)
+    if not isinstance(text_or_exc, BaseException):
+        return False
+    texts = [str(text_or_exc)]
+    response = getattr(text_or_exc, "response", None)
+    if response is not None:
+        detail = _extract_api_error_message(response)
+        if detail:
+            texts.append(detail)
+    return any(_is_context_length_text(text) for text in texts)
 
 
 def classify_http_exception(exc: BaseException, *, message: str = "") -> ClassifiedFailure:
@@ -105,12 +222,20 @@ def _classify_status(exc: Any, *, operator: str) -> ClassifiedFailure:
     with __import__("contextlib").suppress(Exception):
         body = (exc.response.text or "")[:500]
     lowered = (body + " " + str(exc)).lower()
+    if status in _CONTEXT_LENGTH_STATUS and is_context_length_exceeded(exc):
+        # An application error: the same prompt will fail again, so it is never retried.
+        return ClassifiedFailure(operator, failure_class=FailureClass.APPLICATION, code="CONTEXT_LENGTH_EXCEEDED")
     if status in (401, 403) and any(tok in lowered for tok in _BUDGET_MARKERS):
         return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code="BUDGET")
     if status in (401, 403):
         return ClassifiedFailure(operator, failure_class=FailureClass.FATAL, code=f"HTTP_{status}")
     if status in _RETRYABLE_STATUS or status >= 500:
-        return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code=f"HTTP_{status}")
+        return ClassifiedFailure(
+            operator,
+            failure_class=FailureClass.TRANSIENT,
+            code=f"HTTP_{status}",
+            retry_after_s=retry_after_seconds(exc.response),
+        )
     if 400 <= status < 500:
         return ClassifiedFailure(operator, failure_class=FailureClass.APPLICATION, code=f"HTTP_{status}")
     return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code=f"HTTP_{status}")
@@ -210,6 +335,12 @@ def classify_llm_http_error(exc: BaseException) -> str:
         status = exc.response.status_code
         detail = _extract_api_error_message(exc.response)
         detail_hint = f": {detail}" if detail else ""
+        if status in _CONTEXT_LENGTH_STATUS and is_context_length_exceeded(exc):
+            return (
+                "LLM request failed: the prompt does not fit the model context window"
+                f"{detail_hint}. Set context_window to the model's real limit so history is trimmed, "
+                "or use a model with a larger window."
+            )
         if status in (401, 403):
             return (
                 f"LLM request failed: HTTP {status} (authentication/authorization){detail_hint}. "

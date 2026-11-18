@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: cerebras
+  description: >
+    Cerebras chat-completions host. Same wire as openai. Requires CEREBRAS_API_KEY.
+
+spec:
+  protocol: cerebras
+  proxy:
+    api_base: env:CEREBRAS_API_BASE|https://api.cerebras.ai/v1
+    api_key_env: CEREBRAS_API_KEY

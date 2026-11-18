@@ -45,11 +45,14 @@ class ClassifiedFailure(RuntimeError):
         failure_class: FailureClass,
         code: str = "",
         attempts: int = 0,
+        retry_after_s: float | None = None,
     ) -> None:
         super().__init__(message)
         self.failure_class = failure_class
         self.code = code or failure_class.value
         self.attempts = attempts
+        # Server-provided wait before the next try (Retry-After), in seconds.
+        self.retry_after_s = retry_after_s
 
     def with_attempts(self, attempts: int) -> ClassifiedFailure:
         return ClassifiedFailure(
@@ -57,6 +60,7 @@ class ClassifiedFailure(RuntimeError):
             failure_class=self.failure_class,
             code=self.code,
             attempts=attempts,
+            retry_after_s=self.retry_after_s,
         )
 
 

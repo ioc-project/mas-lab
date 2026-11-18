@@ -29,6 +29,22 @@ spec:
     api_key_env: OPENAI_API_KEY
 ```
 
+`protocol: anthropic`, `gemini`, `azure`, `bedrock`, `vertex`, `openresponses`, `groq`, `openrouter`, `xai`, `litellm`, `cerebras`, `mistral`, `vllm`, `huggingface`, and `databricks` are the same sugar as `openai`: a url becomes layers `[http, <protocol>]`.
+
+```yaml
+apiVersion: infra/v1
+kind: LLMProxy
+metadata:
+  name: anthropic-direct
+spec:
+  protocol: anthropic
+  proxy:
+    api_base: https://api.anthropic.com/v1
+    api_key_env: ANTHROPIC_API_KEY
+```
+
+Groq, OpenRouter, xAI, LiteLLM, Cerebras, Mistral, vLLM, and Hugging Face inherit the openai body. Databricks posts that body at `/serving-endpoints/{name}/invocations`. Azure, Bedrock, and Vertex have their own POST. Bundled rows: `standard:groq`, `standard:openrouter`, `standard:xai`, `standard:litellm`, `standard:cerebras`, `standard:mistral`, `standard:vllm`, `standard:huggingface`, `standard:databricks`, `standard:azure`, `standard:bedrock`, `standard:vertex`, `standard:openresponses`.
+
 Put the env var *name* in the file so several providers can run at once, each with its own variable. `mas-lab init` writes that form for the OpenAI default URL. A custom URL at init uses `<infra-name>_API_BASE`. If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. The right place for the name is still the file. When the address comes from the shell, the engine logs one warning naming the host, because the API key is sent there.
 
 The runtime resolves infra from deployment configuration, in this order of source:
@@ -109,7 +125,7 @@ An empty `models.allowed` is the default (`*`) owner, like a local tool provider
 Two files with the same `metadata.name` do not error: the later ref **replaces** the earlier leaf, including `api_base`, `api_key_env`, `models.allowed`, mappings, and that leaf's steps.
 Pinning a call to a leaf by infra name is not in this release.
 
-Each leaf owns its credentials. The engine does not forward the first leaf's `api_key_env` value; the routed provider reads `os.environ[that leaf's api_key_env]`. `mas-ctl` checks every live leaf at engine build, including a leaf the run never calls. A named model that no leaf claims is an error.
+Each leaf owns its credentials. The engine does not forward the first leaf's `api_key_env` value; the factory reads that leaf's env var once and hands the token to the layer. `mas-ctl` checks every live leaf at engine build, including a leaf the run never calls. A named model that no leaf claims is an error.
 
 The middleware cache key includes the leaf name, canonical model, and `api_base`. A cache written for one endpoint does not hit on another. See [Cache key](../references/llm-cache.md#cache-key).
 
@@ -157,7 +173,7 @@ How steps land there:
 | `InfraBundle` | Compose other infra files; recursive merge | `entries[]` (typed slots) or `includes[]` + `interceptors[]` |
 | `InfraMiddleware` | Pipeline middleware (`llm_cache`, `fault_inject`) wrapped around LLM or tool calls | `middleware`, `for`, `per`, `params` |
 | `InfraInterceptor` | Same shape as `InfraMiddleware`; listed under workspace `middleware` | `middleware`, `for`, `per`, `params` |
-| `LLMProxy` | OpenAI-compatible endpoint, model allow-list, mappings, defaults | `protocol`, `proxy`, `models` |
+| `LLMProxy` | LLM endpoint (`protocol: openai` / `anthropic` / `gemini` / `azure` / `bedrock` / `vertex` / `openresponses` / `groq` / …), model allow-list, mappings, defaults | `protocol`, `proxy`, `models` |
 | `LLMLocal` | Local inference (e.g. Ollama); `server` and `models.available` are aliases of `proxy` / `models.allowed` | `server`, `models` |
 | `ToolServerRegistry` | MCP endpoint to consume or deploy, or local tool/skill paths (`protocol: local`) | `tool_servers[]` |
 | `Application` | Named service and A2A agent endpoints | `endpoints` |
@@ -251,8 +267,8 @@ spec:
 Other `spec` fields:
 
 - `spec.proxy.timeout` (seconds) sets the HTTP timeout for LLM calls. The provider default is 120 s.
-- `spec.proxy.api_key_env` defaults to `OPENAI_API_KEY`. Like every field that ends in `_env`, it holds the *name* of the env var that contains the secret, never the secret itself.
-- `spec.protocol` selects the wire-protocol plugin and defaults to `openai`. Ollama and LiteLLM proxies also use `openai`.
+- `spec.proxy.api_key_env` defaults to `OPENAI_API_KEY`. Like every field that ends in `_env`, it holds the *name* of the env var that contains the secret, never the secret itself. The factory reads that env var once and hands the token to the protocol layer; the layer does not read the environment on a call.
+- `spec.protocol` selects the wire-protocol plugin and defaults to `openai`. `groq`, `openrouter`, `xai`, `litellm`, `cerebras`, `mistral`, `vllm`, and `huggingface` inherit the openai chat-completions layer and only change the host and key name; Ollama still uses `protocol: openai`. `databricks` posts that same body at `/serving-endpoints/{name}/invocations`. `protocol: anthropic`, `gemini`, `azure`, `bedrock`, `vertex`, and `openresponses` are the same shape with their own POST: a url expands to `[http, <protocol>]`. Azure classic uses `/openai/deployments/{name}/chat/completions` and `api-key`; a host that already ends in `/v1` keeps `/chat/completions`; `proxy.auth: bearer` sends `Authorization` instead. Bedrock posts Converse with a bearer token (`AWS_BEARER_TOKEN_BEDROCK`; no SigV4, and `stream: true` returns the whole text in one chunk). Anthropic and Bedrock send `temperature`, `top_p` and `top_k` only when the spec sets them and the [model catalog](llm-model-catalog.md) does not mark them unsupported (current Claude models do); set anything else through `extra`. Anthropic marks the system prompt, the last tool and the last two user turns for prompt caching by default, and counts cache tokens as prompt tokens; `prompt_cache_breakpoints`, `prompt_cache_retention` and `prompt_cache_key` tune it, see [LLM prompt cache](llm-prompt-cache.md), and each protocol's mapping is in [LLM providers](llm-providers.md); a refusal, or a tool call cut off by `max_tokens`, is a failed call. Gemini replays function calls with the skip-validation thought signature and treats an error body on HTTP 200 as a failed call. Anthropic and Gemini do not map `reasoning` or round-trip thinking blocks. Vertex posts generateContent at the project path with a bearer token (`VERTEX_ACCESS_TOKEN`, `proxy.project`). Open Responses posts `/responses` with typed items, stateless (`store: false`), and replays a reasoning item's `encrypted_content` with its tool call. The protocol layer posts through the http transport's `client` / `aclient`. A `structured` wrap layer (Flavour `bind.llm` `{stack: NAME}`) asks for schema-conforming JSON and puts a validated `parsed` object on the completion.
 
 String values may use `env:VAR|default`, so an environment variable can override a manifest default.
 For example: `api_base: env:LLM_PROXY_API_BASE|https://api.openai.com/v1`.
@@ -706,6 +722,7 @@ are its own, so ctl names no protocol:
 | --- | --- |
 | `protocol_name` | The `protocol:` value of the infra row `--connect` / `--listen` writes. |
 | `url_schemes` | `{scheme: http scheme}`, e.g. a plugin's own scheme and its secure twin. |
+| `proxy_fields` | Extra `proxy` fields an LLM protocol layer reads (Vertex: `project`, `location`; Azure: `deployment`, `api_version`, `auth`). ctl carries exactly the fields installed layers declare onto the resolved proxy. |
 | `connect_as` | `endpoint` (an Application row) or `tool_server` (the `#fragment` names the tool). |
 | `listen` | The scheme may be served with `--listen`. |
 | `listen_hint` | What to do instead when it may not. |

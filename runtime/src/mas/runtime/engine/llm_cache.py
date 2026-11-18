@@ -227,9 +227,17 @@ def middleware_cache_serialize(
             }
             for spec in parallel_tools
         ]
+    provider_state = getattr(ret, "provider_state", None)
+    if provider_state:
+        entry["provider_state"] = dict(provider_state)
     if include_preview and preview.strip():
         entry["_preview"] = preview.strip()
     return entry
+
+
+def _provider_state_of(entry: dict[str, Any]) -> dict[str, Any]:
+    state = entry.get("provider_state")
+    return dict(state) if isinstance(state, dict) else {}
 
 
 def middleware_cache_deserialize(entry: str | dict[str, Any], correlation_id: int) -> Any:
@@ -277,6 +285,7 @@ def middleware_cache_deserialize(entry: str | dict[str, Any], correlation_id: in
                 text="",
                 usage=dict(entry.get("usage") or {}),
                 finish_reason=str(entry.get("finish_reason") or "tool_calls"),
+                provider_state=_provider_state_of(entry),
             )
 
     return EngineIoReturn(
@@ -289,6 +298,7 @@ def middleware_cache_deserialize(entry: str | dict[str, Any], correlation_id: in
         parallel_tools=parallel_tools,
         usage=dict(entry.get("usage") or {}),
         finish_reason=str(entry.get("finish_reason") or ""),
+        provider_state=_provider_state_of(entry),
     )
 
 
@@ -304,9 +314,12 @@ def assistant_message_from_cache_content(content: str | None) -> dict[str, Any] 
     except json.JSONDecodeError:
         return {"role": "assistant", "content": text}
     if isinstance(parsed, dict) and parsed.get("tool_calls"):
-        return {
+        message: dict[str, Any] = {
             "role": "assistant",
             "content": None,
             "tool_calls": parsed["tool_calls"],
         }
+        if isinstance(parsed.get("provider_state"), dict) and parsed["provider_state"]:
+            message["provider_state"] = parsed["provider_state"]
+        return message
     return {"role": "assistant", "content": text}

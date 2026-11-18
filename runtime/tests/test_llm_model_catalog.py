@@ -136,3 +136,76 @@ def test_resolve_model_recursive_empty_model_name():
 
     assert resolve_model_recursive(None, {}) is None
     assert resolve_model_recursive("", {}) == ""
+
+
+def test_claude_entries_carry_thinking_mode_sampling_support_and_pricing():
+    catalog = default_model_catalog()
+    no_sampling = [
+        "claude-opus-5-5",
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-sonnet-5-5",
+        "claude-sonnet-5",
+        "claude-haiku-5-5",
+        "claude-fable-5-2",
+        "claude-fable-5-1",
+    ]
+    for name in no_sampling:
+        for alias in (name, f"anthropic/{name}", f"anthropic.{name}", f"vertex_ai/{name}"):
+            info = catalog.get(alias)
+            assert info is not None and info.name == name
+            assert [info.supports(k) for k in ("temperature", "top_p", "top_k")] == [False] * 3
+            assert info.context_window == 1_000_000 and info.max_output_tokens == 128000
+            assert info.apis == ("anthropic",)
+            assert info.supports("prompt_cache_breakpoints") and info.supports("prompt_cache_retention")
+    assert catalog.get("claude-fable-5-2").thinking_mode == "always_on"
+    assert catalog.get("claude-opus-5-5").thinking_mode == "adaptive"
+    assert catalog.get("claude-opus-5-5").pricing["output_per_million_tokens"] == 20
+    assert catalog.get("claude-opus-5-5").pricing["cached_input_per_million_tokens"] == 0.2
+    assert "cached_input_per_million_tokens" not in catalog.get("claude-opus-5").pricing
+    for name in ("claude-opus-4-6", "claude-sonnet-4-6"):
+        info = catalog.get(name)
+        assert info.supports("temperature") and info.thinking_mode == "adaptive"
+        assert info.context_window == 1_000_000 and info.max_output_tokens == 128000
+    haiku = catalog.get("claude-haiku-4-5")
+    assert haiku.thinking_mode == "budget" and haiku.context_window == 200000 and haiku.max_output_tokens == 64000
+    assert haiku.supports("temperature")
+    assert catalog.get("gpt-4o").thinking_mode is None
+
+
+def test_prompt_cache_markers_per_family():
+    catalog = default_model_catalog()
+    for name in ("gpt-4o", "gpt-5"):
+        info = catalog.get(name)
+        assert info.supports("prompt_cache_breakpoints") is False
+        assert info.supports("prompt_cache_key") and info.supports("prompt_cache_retention")
+    gemini = catalog.get("gemini-2.5-pro")
+    assert gemini.supports("prompt_cache_key")
+    assert not gemini.supports("prompt_cache_breakpoints") and not gemini.supports("prompt_cache_retention")
+
+
+def test_thinking_mode_is_parsed_from_a_catalog_file(tmp_path):
+    path = tmp_path / "cat.yaml"
+    path.write_text(
+        'apiVersion: mas/v1\nkind: LlmModelCatalog\nmetadata: {name: t, version: "1"}\n'
+        "spec:\n  models:\n    toy:\n      thinking_mode: budget\n",
+        encoding="utf-8",
+    )
+    assert load_model_catalog(path).get("toy").thinking_mode == "budget"
+
+
+def test_hosted_model_ids_resolve_without_their_routing_decorations() -> None:
+    catalog = default_model_catalog()
+    base = catalog.get("claude-sonnet-5-5")
+    assert base is not None
+    for hosted in (
+        "us.anthropic.claude-sonnet-5-5-v1:0",
+        "eu.anthropic.claude-sonnet-5-5-v1:0",
+        "global.anthropic.claude-sonnet-5-5",
+        "anthropic.claude-sonnet-5-5-v2:0",
+        "claude-sonnet-5-5@20260101",
+        "claude-sonnet-5-5-20260101",
+    ):
+        assert catalog.get(hosted) is base, hosted
+    assert catalog.get("amazon.nova-pro-v1:0") is None

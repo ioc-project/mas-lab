@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: xai
+  description: >
+    xAI chat-completions host. Same wire as openai. Requires XAI_API_KEY.
+
+spec:
+  protocol: xai
+  proxy:
+    api_base: env:XAI_API_BASE|https://api.x.ai/v1
+    api_key_env: XAI_API_KEY

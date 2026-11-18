@@ -161,7 +161,7 @@ def build_gov_transition(
 ) -> GovTransition:
     """Build a :class:`GovTransition` from one raw driver symbol."""
     attributes: dict[str, Any] = (
-        symbol.model_dump(mode="json") if hasattr(symbol, "model_dump") else {}
+        symbol.model_dump(mode="json", exclude={"provider_state"}) if hasattr(symbol, "model_dump") else {}
     )
     if hook == "egress":
         attributes.update(_tool_call_attributes(symbol, q))

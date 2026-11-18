@@ -25,8 +25,9 @@ properties:
   kind:
     type: string
     description: >
-      LLM wire-protocol plugin (openai now; bedrock later). Same role as
-      infra ToolServerRegistry protocol for remote tools. Not cache.
+      LLM wire-protocol plugin (openai, anthropic, gemini, azure, bedrock,
+      vertex, groq, …). Same role as infra ToolServerRegistry protocol for
+      remote tools. Not cache.
   extra:
     type: object
     additionalProperties: true
@@ -75,6 +76,10 @@ properties:
     $ref: "./llm-sampling.schema.yaml#/properties/prediction"
   prompt_cache_key:
     $ref: "./llm-sampling.schema.yaml#/properties/prompt_cache_key"
+  prompt_cache_retention:
+    $ref: "./llm-sampling.schema.yaml#/properties/prompt_cache_retention"
+  prompt_cache_breakpoints:
+    $ref: "./llm-sampling.schema.yaml#/properties/prompt_cache_breakpoints"
   top_p:
     $ref: "./llm-sampling.schema.yaml#/properties/top_p"
   top_k:

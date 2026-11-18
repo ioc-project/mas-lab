@@ -4,7 +4,7 @@ apiVersion: mas/v1
 kind: LlmModelCatalog
 metadata:
   name: standard
-  version: "2026.9.2"
+  version: "2026.11.1"
   description: >
     Curated per-model defaults, maxima, and allowed settings. Not a vendor dump.
     Refresh from the sources below; keep this file versioned in git.
@@ -73,6 +73,8 @@ spec:
       defaults:
         temperature: 0.7
       settings:
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 24h]}
         temperature: {min: 0, max: 2, default: 0.7}
         reasoning.effort: {supported: false}
         reasoning.mode: {supported: false}
@@ -87,6 +89,8 @@ spec:
       defaults:
         temperature: 0.7
       settings:
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 24h]}
         temperature: {min: 0, max: 2, default: 0.7}
         reasoning.effort: {supported: false}
         reasoning.mode: {supported: false}
@@ -102,6 +106,8 @@ spec:
         temperature: 1.0
         reasoning.effort: medium
       settings:
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 24h]}
         temperature: {min: 0, max: 2, default: 1.0}
         reasoning.effort: {enum: [none, minimal, low, medium, high, xhigh], default: medium}
         reasoning.mode: {enum: [standard, pro], supported: true}
@@ -117,12 +123,15 @@ spec:
       defaults:
         reasoning.effort: low
       settings:
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 24h]}
         reasoning.effort: {enum: [none, minimal, low, medium, high], default: low}
         reasoning.mode: {enum: [standard, pro]}
         reasoning.exclude: {supported: false}
         think: {supported: false}
 
     gemini-2.5-pro:
+      thinking_mode: budget
       aliases: [vertex_ai/gemini-2.5-pro, gemini/gemini-2.5-pro]
       context_window: 1048576
       max_output_tokens: 65536
@@ -131,12 +140,17 @@ spec:
       defaults:
         reasoning.budget_tokens: 1024
       settings:
-        reasoning.budget_tokens: {min: 0, max: 32768}
+        prompt_cache_key: {supported: true}
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: false}
+        # 2.5 Pro cannot switch thinking off: its smallest budget is 128.
+        reasoning.budget_tokens: {min: 128, max: 32768}
         reasoning.effort: {enum: [none, low, medium, high]}
         think: {supported: false}
         reasoning.max_completion_tokens: {supported: false}
 
     gemini-2.5-flash:
+      thinking_mode: budget
       aliases: [vertex_ai/gemini-2.5-flash]
       context_window: 1048576
       max_output_tokens: 65536
@@ -150,6 +164,9 @@ spec:
         source: https://cloud.google.com/vertex-ai/generative-ai/pricing
         checked_at: "2026-10-06"
       settings:
+        prompt_cache_key: {supported: true}
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: false}
         reasoning.budget_tokens: {min: 0, max: 24576}
         reasoning.effort: {enum: [none, low, medium, high]}
         reasoning.mode: {supported: false}
@@ -157,6 +174,243 @@ spec:
         think: {supported: false}
         include: {supported: false}
         reasoning.max_completion_tokens: {supported: false}
+
+    # Gemini 3: curated by hand, re-verify against the vendor before relying on it.
+    gemini-3-pro-preview:
+      aliases: [gemini-3-pro, gemini/gemini-3-pro-preview, vertex_ai/gemini-3-pro-preview]
+      thinking_mode: level
+      apis: [chat_completions, gemini]
+      settings:
+        prompt_cache_key: {supported: true}
+        prompt_cache_breakpoints: {supported: false}
+        prompt_cache_retention: {supported: false}
+        reasoning.effort: {enum: [none, low, medium, high]}
+
+    # Claude entries: figures below are curated by hand (context, output cap,
+    # sampling support, USD per million tokens). Re-verify against the vendor
+    # docs and pricing page before relying on them, and bump metadata.version.
+    claude-opus-5-5:
+      aliases: [anthropic/claude-opus-5-5, anthropic.claude-opus-5-5, vertex_ai/claude-opus-5-5]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 4
+        cached_input_per_million_tokens: 0.2
+        output_per_million_tokens: 20
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-opus-5:
+      aliases: [anthropic/claude-opus-5, anthropic.claude-opus-5, vertex_ai/claude-opus-5]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 5
+        output_per_million_tokens: 25
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-opus-4-8:
+      aliases: [anthropic/claude-opus-4-8, anthropic.claude-opus-4-8, vertex_ai/claude-opus-4-8]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 5
+        output_per_million_tokens: 25
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-opus-4-7:
+      aliases: [anthropic/claude-opus-4-7, anthropic.claude-opus-4-7, vertex_ai/claude-opus-4-7]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 5
+        output_per_million_tokens: 25
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-sonnet-5-5:
+      aliases: [anthropic/claude-sonnet-5-5, anthropic.claude-sonnet-5-5, vertex_ai/claude-sonnet-5-5]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 2
+        cached_input_per_million_tokens: 0.1
+        output_per_million_tokens: 10
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-sonnet-5:
+      aliases: [anthropic/claude-sonnet-5, anthropic.claude-sonnet-5, vertex_ai/claude-sonnet-5]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 2
+        output_per_million_tokens: 10
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-haiku-5-5:
+      aliases: [anthropic/claude-haiku-5-5, anthropic.claude-haiku-5-5, vertex_ai/claude-haiku-5-5]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 0.1
+        cached_input_per_million_tokens: 0.01
+        output_per_million_tokens: 0.5
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-fable-5-2:
+      aliases: [anthropic/claude-fable-5-2, anthropic.claude-fable-5-2, vertex_ai/claude-fable-5-2]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: always_on
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 8
+        cached_input_per_million_tokens: 0.2
+        output_per_million_tokens: 40
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-fable-5-1:
+      aliases: [anthropic/claude-fable-5-1, anthropic.claude-fable-5-1, vertex_ai/claude-fable-5-1]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: always_on
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 10
+        output_per_million_tokens: 50
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        temperature: {supported: false}
+        top_p: {supported: false}
+        top_k: {supported: false}
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-opus-4-6:
+      aliases: [anthropic/claude-opus-4-6, anthropic.claude-opus-4-6, vertex_ai/claude-opus-4-6]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 5
+        output_per_million_tokens: 25
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-sonnet-4-6:
+      aliases: [anthropic/claude-sonnet-4-6, anthropic.claude-sonnet-4-6, vertex_ai/claude-sonnet-4-6]
+      context_window: 1000000
+      max_output_tokens: 128000
+      thinking_mode: adaptive
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 3
+        output_per_million_tokens: 15
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
+
+    claude-haiku-4-5:
+      aliases: [anthropic/claude-haiku-4-5, anthropic.claude-haiku-4-5, vertex_ai/claude-haiku-4-5]
+      context_window: 200000
+      max_output_tokens: 64000
+      thinking_mode: budget
+      apis: [anthropic]
+      pricing:
+        currency: USD
+        input_per_million_tokens: 1
+        output_per_million_tokens: 5
+        source: https://www.anthropic.com/pricing
+        checked_at: "2026-11-18"
+      settings:
+        prompt_cache_breakpoints: {supported: true}
+        prompt_cache_retention: {supported: true, enum: [in_memory, 5m, 24h, 1h]}
 
     gemma-4-26b-a4b-it-node1-a100-0:
       aliases: [gemma-4-26b, gemma4, onprem/gemma4]

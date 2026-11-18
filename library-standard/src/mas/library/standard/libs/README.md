@@ -24,6 +24,20 @@ mas-runtime run-agent agent.yaml --infra-ref standard:ollama
   - Default: llama3.2
   - No API key required (assumes localhost:11434)
 
+- **`standard:groq`** — Groq chat-completions host (`GROQ_API_KEY`)
+- **`standard:openrouter`** — OpenRouter (`OPENROUTER_API_KEY`)
+- **`standard:xai`** — xAI (`XAI_API_KEY`)
+- **`standard:litellm`** — Local LiteLLM proxy (`LITELLM_API_KEY` optional)
+- **`standard:cerebras`** — Cerebras (`CEREBRAS_API_KEY`)
+- **`standard:mistral`** — Mistral (`MISTRAL_API_KEY`)
+- **`standard:vllm`** — Local vLLM at `http://localhost:8000/v1`
+- **`standard:azure`** — Azure OpenAI (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`)
+- **`standard:bedrock`** — Bedrock Converse bearer token (`AWS_BEARER_TOKEN_BEDROCK`)
+- **`standard:vertex`** — Vertex AI generateContent (`VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT`)
+- **`standard:openresponses`** — Open Responses host, `POST /responses` (`OPENRESPONSES_API_KEY`)
+- **`standard:huggingface`** — Hugging Face router (`HF_TOKEN`)
+- **`standard:databricks`** — Databricks serving (`DATABRICKS_TOKEN`, `DATABRICKS_HOST`)
+
 ### Composite Bundles
 
 - **`standard:production`** — Production configuration
@@ -92,6 +106,16 @@ mas.library.standard/
     standard/
       openai.yaml
       ollama.yaml
+      groq.yaml
+      openresponses.yaml
+      openrouter.yaml
+      xai.yaml
+      litellm.yaml
+      cerebras.yaml
+      mistral.yaml
+      vllm.yaml
+      azure.yaml
+      bedrock.yaml
       production.yaml
       development.yaml
 ```
@@ -107,6 +131,19 @@ Resolution examples:
 | --- | --- |
 | `standard:openai` | `OPENAI_API_KEY` |
 | `standard:ollama` | None |
+| `standard:groq` | `GROQ_API_KEY` |
+| `standard:openrouter` | `OPENROUTER_API_KEY` |
+| `standard:xai` | `XAI_API_KEY` |
+| `standard:litellm` | `LITELLM_API_KEY` (optional) |
+| `standard:cerebras` | `CEREBRAS_API_KEY` |
+| `standard:mistral` | `MISTRAL_API_KEY` |
+| `standard:vllm` | `VLLM_API_KEY` (optional) |
+| `standard:azure` | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` |
+| `standard:bedrock` | `AWS_BEARER_TOKEN_BEDROCK` |
+| `standard:vertex` | `VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT` |
+| `standard:openresponses` | `OPENRESPONSES_API_KEY` |
+| `standard:huggingface` | `HF_TOKEN` |
+| `standard:databricks` | `DATABRICKS_TOKEN`, `DATABRICKS_HOST` |
 
 ```bash
 export OPENAI_API_KEY=your-key-here

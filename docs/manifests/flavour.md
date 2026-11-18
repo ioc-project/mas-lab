@@ -149,6 +149,31 @@ spec:
         llm: {stack: hardened-llm}
 ```
 
+`bind.llm` is the same for every LLM protocol as for `openai`: ctl names no protocol. The leaf's `protocol:` plus a url still expands to `[http, <protocol>]`; the Flavour stack is wrap layers around that.
+
+```yaml
+# infra/json-out.yaml
+apiVersion: infra/v1
+kind: Stack
+metadata: {name: json-out}
+spec:
+  layers:
+    - layer: structured
+      for: [llm]
+      params:
+        schema:
+          type: object
+          properties: {answer: {type: string}}
+          required: [answer]
+---
+# flavour
+spec:
+  bind:
+    llm: {stack: json-out}
+```
+
+`structured` is opt-in. It injects `response_format` into the in-flight chat and returns a validated `parsed` object on the same provider result path. Omit the stack (or the schema) and the call is unchanged.
+
 Bundled names: `local` (in-process, the default) and `prod` (`require_usage`: every agent must have a bind chain or an agent-keyed Application row). `--connect` / `--listen` / `--bind` write agent-keyed Application rows; they are not copied into Flavour `bind`.
 
 An agent with no entry rides the default chain with `connect`; with no default

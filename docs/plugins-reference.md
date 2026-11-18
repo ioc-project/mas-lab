@@ -144,31 +144,62 @@ practical examples.
 
 ### Layer
 
-| Class                    | Full module path                                      | Library            |
-| ------------------------ | ----------------------------------------------------- | ------------------ |
-| `A2ALayer`               | `library_ioa.plugins.a2a.layer`                       | `library-ioa`      |
-| `CircuitBreakerLayer`    | `mas.library.standard.plugins.layers.circuit_breaker` | `library-standard` |
-| `CorruptLayer`           | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
-| `DelayLayer`             | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
-| `DropLayer`              | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
-| `FailLayer`              | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
-| `FaultInjectMiddleware`  | `mas.library.standard.plugins.infra.fault_inject`     | `library-standard` |
-| `HealthProbeLayer`       | `mas.library.standard.plugins.layers.health_probe`    | `library-standard` |
-| `HttpLayer`              | `library_ioa.plugins.http_layer.transport`            | `library-ioa`      |
-| `LlmCacheMiddleware`     | `mas.library.standard.plugins.infra.llm_cache`        | `library-standard` |
-| `LlmSchedulerMiddleware` | `mas.library.standard.plugins.infra.llm_scheduler`    | `library-standard` |
-| `McpLayer`               | `library_ioa.plugins.mcp.layer`                       | `library-ioa`      |
-| `OpenAILLMProvider`      | `mas.library.standard.plugins.llm.openai`             | `library-standard` |
-| `ReplayLayer`            | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
-| `RetryLayer`             | `mas.library.standard.plugins.layers.retry`           | `library-standard` |
-| `SlimAgentComm`          | `library_ioa.plugins.slim.agent_comm`                 | `library-ioa`      |
+| Class                      | Full module path                                      | Library            |
+| -------------------------- | ----------------------------------------------------- | ------------------ |
+| `A2ALayer`                 | `library_ioa.plugins.a2a.layer`                       | `library-ioa`      |
+| `AnthropicLLMProvider`     | `mas.library.standard.plugins.llm.anthropic`          | `library-standard` |
+| `AzureLLMProvider`         | `mas.library.standard.plugins.llm.azure`              | `library-standard` |
+| `BedrockLLMProvider`       | `mas.library.standard.plugins.llm.bedrock`            | `library-standard` |
+| `CerebrasLLMProvider`      | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `CircuitBreakerLayer`      | `mas.library.standard.plugins.layers.circuit_breaker` | `library-standard` |
+| `CorruptLayer`             | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
+| `DatabricksLLMProvider`    | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `DelayLayer`               | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
+| `DropLayer`                | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
+| `FailLayer`                | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
+| `FaultInjectMiddleware`    | `mas.library.standard.plugins.infra.fault_inject`     | `library-standard` |
+| `GeminiLLMProvider`        | `mas.library.standard.plugins.llm.gemini`             | `library-standard` |
+| `GroqLLMProvider`          | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `HealthProbeLayer`         | `mas.library.standard.plugins.layers.health_probe`    | `library-standard` |
+| `HttpLayer`                | `library_ioa.plugins.http_layer.transport`            | `library-ioa`      |
+| `HuggingFaceLLMProvider`   | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `LiteLLMLLMProvider`       | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `LlmCacheMiddleware`       | `mas.library.standard.plugins.infra.llm_cache`        | `library-standard` |
+| `LlmSchedulerMiddleware`   | `mas.library.standard.plugins.infra.llm_scheduler`    | `library-standard` |
+| `McpLayer`                 | `library_ioa.plugins.mcp.layer`                       | `library-ioa`      |
+| `MistralLLMProvider`       | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `OpenAILLMProvider`        | `mas.library.standard.plugins.llm.openai`             | `library-standard` |
+| `OpenResponsesLLMProvider` | `mas.library.standard.plugins.llm.openresponses`      | `library-standard` |
+| `OpenRouterLLMProvider`    | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `ReplayLayer`              | `mas.library.standard.plugins.stack.impair`           | `library-standard` |
+| `RetryLayer`               | `mas.library.standard.plugins.layers.retry`           | `library-standard` |
+| `SlimAgentComm`            | `library_ioa.plugins.slim.agent_comm`                 | `library-ioa`      |
+| `StructuredLayer`          | `mas.library.standard.plugins.layers.structured`      | `library-standard` |
+| `VertexLLMProvider`        | `mas.library.standard.plugins.llm.vertex`             | `library-standard` |
+| `VllmLLMProvider`          | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `XaiLLMProvider`           | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
 
 ### Llm_Provider
 
-| Class               | Full module path                          | Library            |
-| ------------------- | ----------------------------------------- | ------------------ |
-| `CacheLLMProvider`  | `mas.library.standard.plugins.llm.cache`  | `library-standard` |
-| `OpenAILLMProvider` | `mas.library.standard.plugins.llm.openai` | `library-standard` |
+| Class                      | Full module path                                 | Library            |
+| -------------------------- | ------------------------------------------------ | ------------------ |
+| `AnthropicLLMProvider`     | `mas.library.standard.plugins.llm.anthropic`     | `library-standard` |
+| `AzureLLMProvider`         | `mas.library.standard.plugins.llm.azure`         | `library-standard` |
+| `BedrockLLMProvider`       | `mas.library.standard.plugins.llm.bedrock`       | `library-standard` |
+| `CacheLLMProvider`         | `mas.library.standard.plugins.llm.cache`         | `library-standard` |
+| `CerebrasLLMProvider`      | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `DatabricksLLMProvider`    | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `GeminiLLMProvider`        | `mas.library.standard.plugins.llm.gemini`        | `library-standard` |
+| `GroqLLMProvider`          | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `HuggingFaceLLMProvider`   | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `LiteLLMLLMProvider`       | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `MistralLLMProvider`       | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `OpenAILLMProvider`        | `mas.library.standard.plugins.llm.openai`        | `library-standard` |
+| `OpenResponsesLLMProvider` | `mas.library.standard.plugins.llm.openresponses` | `library-standard` |
+| `OpenRouterLLMProvider`    | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `VertexLLMProvider`        | `mas.library.standard.plugins.llm.vertex`        | `library-standard` |
+| `VllmLLMProvider`          | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
+| `XaiLLMProvider`           | `mas.library.standard.plugins.llm.compatible`    | `library-standard` |
 
 ### Memory
 
@@ -296,12 +327,20 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `A2ALayer`                       | layer                | `library-ioa`       |
 | `ActivateSkillPlugin`            | system_plugin        | `library-skills`    |
 | `ADKSkillPlugin`                 | skill_impl           | `library-skills`    |
+| `AnthropicLLMProvider`           | llm_provider         | `library-standard`  |
+| `AnthropicLLMProvider`           | layer                | `library-standard`  |
 | `AutoApproveResponder`           | hitl_responder       | `library-standard`  |
 | `AutoDenyResponder`              | hitl_responder       | `library-standard`  |
 | `AutoResolveHitlContract`        | hitl_contract        | `library-standard`  |
+| `AzureLLMProvider`               | llm_provider         | `library-standard`  |
+| `AzureLLMProvider`               | layer                | `library-standard`  |
 | `BacktrackOnErrorPlugin`         | governance           | `library-standard`  |
+| `BedrockLLMProvider`             | llm_provider         | `library-standard`  |
+| `BedrockLLMProvider`             | layer                | `library-standard`  |
 | `BudgetPlugin`                   | governance           | `library-standard`  |
 | `CacheLLMProvider`               | llm_provider         | `library-standard`  |
+| `CerebrasLLMProvider`            | llm_provider         | `library-standard`  |
+| `CerebrasLLMProvider`            | layer                | `library-standard`  |
 | `CircuitBreakerLayer`            | layer                | `library-standard`  |
 | `ClickhouseDumpStep`             | step                 | `library-telemetry` |
 | `CompareKgStep`                  | step                 | `library-kg`        |
@@ -311,6 +350,8 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `CopyDirRelatedState`            | related_state        | `library-standard`  |
 | `CorruptLayer`                   | layer                | `library-standard`  |
 | `CotPlugin`                      | design_pattern       | `library-standard`  |
+| `DatabricksLLMProvider`          | llm_provider         | `library-standard`  |
+| `DatabricksLLMProvider`          | layer                | `library-standard`  |
 | `DebugScriptPlugin`              | governance           | `library-standard`  |
 | `DelayLayer`                     | layer                | `library-standard`  |
 | `DeterministicLinearPlugin`      | design_pattern       | `library-standard`  |
@@ -323,9 +364,15 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `ExportOtelStep`                 | step                 | `library-telemetry` |
 | `FailLayer`                      | layer                | `library-standard`  |
 | `FaultInjectMiddleware`          | layer                | `library-standard`  |
+| `GeminiLLMProvider`              | llm_provider         | `library-standard`  |
+| `GeminiLLMProvider`              | layer                | `library-standard`  |
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |
+| `GroqLLMProvider`                | llm_provider         | `library-standard`  |
+| `GroqLLMProvider`                | layer                | `library-standard`  |
 | `HealthProbeLayer`               | layer                | `library-standard`  |
 | `HttpLayer`                      | layer                | `library-ioa`       |
+| `HuggingFaceLLMProvider`         | llm_provider         | `library-standard`  |
+| `HuggingFaceLLMProvider`         | layer                | `library-standard`  |
 | `HybridCheckpointStore`          | checkpoint_store     | `library-standard`  |
 | `InformUserPlugin`               | system_plugin        | `library-standard`  |
 | `InMemoryCheckpointStore`        | checkpoint_store     | `library-standard`  |
@@ -333,6 +380,8 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `JsonCheckpointStore`            | checkpoint_store     | `library-standard`  |
 | `LangChainSkillPlugin`           | skill_impl           | `library-skills`    |
 | `ListClickhouseSessionsStep`     | step                 | `library-telemetry` |
+| `LiteLLMLLMProvider`             | llm_provider         | `library-standard`  |
+| `LiteLLMLLMProvider`             | layer                | `library-standard`  |
 | `LlmCacheMiddleware`             | layer                | `library-standard`  |
 | `LlmSchedulerMiddleware`         | layer                | `library-standard`  |
 | `LlmSummarizer`                  | summarizer           | `library-standard`  |
@@ -341,6 +390,8 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `LocalToolProvider`              | tool_provider        | `library-standard`  |
 | `McpLayer`                       | layer                | `library-ioa`       |
 | `MCPToolProvider`                | tool_provider        | `library-ioa`       |
+| `MistralLLMProvider`             | llm_provider         | `library-standard`  |
+| `MistralLLMProvider`             | layer                | `library-standard`  |
 | `ModeratedRoundsPlugin`          | design_pattern       | `library-standard`  |
 | `NativeObservabilityPlugin`      | observability        | `library-standard`  |
 | `NativeSkillPlugin`              | skill_impl           | `library-skills`    |
@@ -353,6 +404,10 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `NoUndeclaredToolPlugin`         | governance           | `library-standard`  |
 | `OpenAILLMProvider`              | llm_provider         | `library-standard`  |
 | `OpenAILLMProvider`              | layer                | `library-standard`  |
+| `OpenResponsesLLMProvider`       | llm_provider         | `library-standard`  |
+| `OpenResponsesLLMProvider`       | layer                | `library-standard`  |
+| `OpenRouterLLMProvider`          | llm_provider         | `library-standard`  |
+| `OpenRouterLLMProvider`          | layer                | `library-standard`  |
 | `OtelObservabilityPlugin`        | observability        | `library-telemetry` |
 | `PauseSessionPlugin`             | system_plugin        | `library-standard`  |
 | `PlanExecutePlugin`              | design_pattern       | `library-standard`  |
@@ -378,6 +433,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `StackAgentComm`                 | agent_comm           | `library-standard`  |
 | `StackConversation`              | context_manager      | `library-standard`  |
 | `StateMachinePlugin`             | design_pattern       | `library-standard`  |
+| `StructuredLayer`                | layer                | `library-standard`  |
 | `SubagentSpawner`                | engine_tool_provider | `library-standard`  |
 | `SubagentsPlugin`                | system_plugin        | `library-standard`  |
 | `SummarizingConversation`        | context_manager      | `library-standard`  |
@@ -388,7 +444,13 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `ValidateKgStep`                 | step                 | `library-kg`        |
 | `VerifyEventsStep`               | step                 | `library-kg`        |
 | `VerifyOtelStep`                 | step                 | `library-telemetry` |
+| `VertexLLMProvider`              | llm_provider         | `library-standard`  |
+| `VertexLLMProvider`              | layer                | `library-standard`  |
+| `VllmLLMProvider`                | llm_provider         | `library-standard`  |
+| `VllmLLMProvider`                | layer                | `library-standard`  |
 | `WorkdirSandbox`                 | execute_sandbox      | `library-standard`  |
+| `XaiLLMProvider`                 | llm_provider         | `library-standard`  |
+| `XaiLLMProvider`                 | layer                | `library-standard`  |
 
 ---
 

@@ -163,6 +163,7 @@ nav:
   - Open standards:
       - Overview: standards/index.md
       - OpenAI: standards/openai.md
+      - Open Responses: standards/openresponses.md
       - MCP: standards/mcp.md
       - A2A: standards/a2a.md
       - Agent Skills: standards/agent-skills.md
@@ -205,6 +206,8 @@ nav:
           - Writing plugins (async first): references/async-plugins.md
           - RuntimeEngine: manifests/runtime-engine.md
           - LLM cache: manifests/llm-cache.md
+          - LLM prompt cache: manifests/llm-prompt-cache.md
+          - LLM providers: manifests/llm-providers.md
           - LLM scheduler: manifests/llm-scheduler.md
           - LLM reasoning: manifests/llm-reasoning.md
           - LLM model catalog: manifests/llm-model-catalog.md

@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: openrouter
+  description: >
+    OpenRouter chat-completions host. Same wire as openai. Requires OPENROUTER_API_KEY.
+
+spec:
+  protocol: openrouter
+  proxy:
+    api_base: env:OPENROUTER_API_BASE|https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY

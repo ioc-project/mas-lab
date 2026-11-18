@@ -3,30 +3,22 @@
 """OpenAI-compatible chat-completions LLM provider.
 
 Speaks ``POST {api_base}/chat/completions`` (OpenAI, Ollama, LiteLLM, …).
-Later vendors (Bedrock, …) register their own ``llm_provider`` plugin.
+Named hosts subclass this layer.
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
-import os
 from typing import Any, Callable
 
-import httpx
-from mas.library.standard.lib.stack.call import LayerLifecycle
-from mas.library.standard.plugins.llm.http import (
-    arequest_once,
-    resolve_ssl_verify,
-)
+from mas.library.standard.plugins.llm.http_protocol import HttpLlmProtocol, araise_for_status, normalize_usage
 from mas.runtime.boundary.context.assemble import llm_tool_choice
 from mas.runtime.engine.llm_reasoning import (
     ReasoningSettings,
     ReasoningStream,
     ThinkTagSplitter,
     apply_reasoning_payload,
-    coerce_reasoning_settings,
     reasoning_text,
     sanitize_assistant_message,
     think_block_text,
@@ -37,228 +29,43 @@ from mas.runtime.engine.llm_request import (
     merge_extra_body,
     sampling_settings_from_entry,
 )
-from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
-from mas.runtime.reliability.classify import (
-    classify_llm_failure,
-    classify_llm_http_error,
-)
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAILLMProvider(LayerLifecycle):
-    """OpenAI-compatible chat-completions layer. ``chat_completion`` is the adapter on top."""
+_FOREIGN_MESSAGE_KEYS = ("provider_state", "is_error")
+
+
+def _wire_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Messages without the keys other protocols read (the chat-completions wire rejects unknown properties)."""
+    return [
+        {k: v for k, v in m.items() if k not in _FOREIGN_MESSAGE_KEYS}
+        if any(k in m for k in _FOREIGN_MESSAGE_KEYS)
+        else m
+        for m in messages
+    ]
+
+
+def _retention(value: Any) -> str:
+    """``in_memory`` or ``24h``, the two values chat completions takes (``5m`` is the first, ``1h`` the second)."""
+    return "in_memory" if str(value) in {"in_memory", "5m"} else "24h"
+
+
+class OpenAILLMProvider(HttpLlmProtocol):
+    """OpenAI-compatible chat-completions layer. ``achat_completion`` is the adapter on top."""
 
     provider_id = "openai"
     kind = "openai"
-    protocol_layer = True
-    per = "destination"
-    call_kinds = ("llm",)
-    priority = 0
+    default_api_base = "https://api.openai.com/v1"
+    default_api_key_env = "OPENAI_API_KEY"
+    # Hosts that reject unknown body fields turn this off; see ``OpenAICompatibleLLMProvider``.
+    forwards_prompt_cache_fields = True
 
-    def __init__(
-        self,
-        *,
-        api_base: str = "https://api.openai.com/v1",
-        api_key_env: str = "OPENAI_API_KEY",
-        llm_proxy: dict[str, Any] | None = None,
-        stream: bool = False,
-        reasoning_effort: str | None = None,
-        reasoning: ReasoningSettings | dict[str, Any] | None = None,
-        extra_body: dict[str, Any] | None = None,
-        http_timeout: float | None = None,
-        inner: Any = None,
-        **_: Any,
-    ) -> None:
-        super().__init__()
-        self.api_base = api_base or "https://api.openai.com/v1"
-        self.api_key_env = api_key_env or "OPENAI_API_KEY"
-        self.llm_proxy = llm_proxy
-        self.stream = stream
-        self.reasoning = coerce_reasoning_settings(reasoning, effort=reasoning_effort)
-        self.reasoning_effort = self.reasoning.effort
-        self.extra_body = dict(extra_body or {})
-        self.http_timeout = http_timeout
-        self.inner = inner
-        self._aclient: httpx.AsyncClient | None = None
-
-    def _timeout(self) -> float:
-        proxy = self.llm_proxy if isinstance(self.llm_proxy, dict) else {}
-        if proxy.get("timeout") is not None:
-            return float(proxy["timeout"])
-        if self.http_timeout is not None:
-            return float(self.http_timeout)
-        return 120.0
-
-    def _get_async_client(self) -> Any:
-        """The http layer's async client when this protocol sits on one, else a keep-alive pool."""
-        if self.inner is not None:
-            return self.inner.aclient
-        if self._aclient is None:
-            self._aclient = httpx.AsyncClient(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
-        return self._aclient
-
-    async def _adiscard_client_after_transport_failure(self, exc: BaseException) -> None:
-        """Async twin of :meth:`_discard_client_after_transport_failure`."""
-        if not isinstance(exc, httpx.TransportError):
-            return
-        if self.inner is not None:
-            await self.inner.adiscard_aclient()
-        if self._aclient is None:
-            return
-        client, self._aclient = self._aclient, None
-        with contextlib.suppress(Exception):
-            await client.aclose()
-
-    async def _areraise_stream_failure(self, exc: BaseException, *, emitted_any: bool) -> None:
-        """Async twin of :meth:`_reraise_stream_failure`."""
-        await self._adiscard_client_after_transport_failure(exc)
-        if emitted_any:
-            raise ClassifiedFailure(
-                "stream failed after output was already shown",
-                failure_class=FailureClass.APPLICATION,
-                code="STREAM_PARTIAL",
-            ) from exc
-        raise exc
-
-    @classmethod
-    def wrap(
-        cls,
-        inner: Any,
-        params: dict[str, Any] | None = None,
-        *,
-        call_kinds: tuple[str, ...] | None = None,
-    ) -> "OpenAILLMProvider":
-        payload = dict(params or {})
-        payload["inner"] = inner
-        wrapped = cls.from_infra_spec(payload)
-        if call_kinds is not None:
-            wrapped.call_kinds = call_kinds
-        return wrapped
-
-    @classmethod
-    def protocol_layers(cls, spec: dict[str, Any] | None) -> list[dict[str, Any]]:
-        """``protocol: openai`` plus a url is sugar for ``[http, openai]``, bottom first."""
-        raw = dict(spec or {})
-        proxy = raw.get("proxy") if isinstance(raw.get("proxy"), dict) else raw
-        api_base = str(proxy.get("api_base") or raw.get("api_base") or "").strip()
-        http_params: dict[str, Any] = {}
-        if api_base:
-            http_params["url"] = api_base
-        timeout = proxy.get("timeout")
-        if timeout is None:
-            timeout = raw.get("timeout")
-        # The provider's own budget (OpenAILLMProvider._timeout) is 120s; the transport keeps it.
-        http_params["timeout"] = float(timeout) if timeout is not None else 120.0
-        for key in ("verify_ssl", "ca_bundle"):
-            value = proxy.get(key) if proxy.get(key) is not None else raw.get(key)
-            if value is not None:
-                http_params[key] = value
-        openai_params = {
-            k: v for k, v in raw.items() if k not in {"inner", "pipeline", "layer", "middleware", "for", "per", "proxy"}
-        }
-        return [
-            {"layer": "http", "for": ["llm"], "params": http_params},
-            {"layer": "openai", "for": ["llm"], "params": openai_params},
-        ]
-
-    @classmethod
-    def from_provider_spec(cls, spec: dict[str, Any]) -> "OpenAILLMProvider":
-        """Bind from ``spec.models[]`` (plus infra endpoint defaults), like tools."""
-        return cls.from_infra_spec(spec)
-
-    @classmethod
-    def from_infra_spec(cls, spec: dict[str, Any]) -> "OpenAILLMProvider":
-        """Bind from a resolved ``llm_proxy`` dict or infra ``spec``."""
-        proxy = spec.get("proxy") if isinstance(spec.get("proxy"), dict) else spec
-        llm_proxy = spec.get("llm_proxy") if isinstance(spec.get("llm_proxy"), dict) else spec
-        timeout = None
-        for src in (proxy, spec, llm_proxy):
-            if isinstance(src, dict) and src.get("timeout") is not None:
-                timeout = float(src["timeout"])
-                break
-        inst = cls(
-            api_base=str(proxy.get("api_base") or spec.get("api_base") or "https://api.openai.com/v1"),
-            api_key_env=str(proxy.get("api_key_env") or spec.get("api_key_env") or "OPENAI_API_KEY"),
-            llm_proxy=llm_proxy if isinstance(llm_proxy, dict) else spec,
-            stream=bool(spec.get("stream", False)),
-            reasoning=spec.get("reasoning"),
-            reasoning_effort=str(spec["reasoning_effort"]) if spec.get("reasoning_effort") else None,
-            extra_body=spec.get("extra") if isinstance(spec.get("extra"), dict) else None,
-            http_timeout=timeout,
-            inner=spec.get("inner"),
-        )
-        return inst
-
-    async def ainvoke(self, io: Any) -> Any:
-        from mas.runtime.engine.infra_pipeline import _PROVIDER_CALL, _provider_result_return
-
-        payload = _PROVIDER_CALL.get()
-        if not isinstance(payload, dict):
-            raise RuntimeError("openai layer invoked without a chat_completion in flight")
-        call = {key: value for key, value in payload.items() if key != "_result"}
-        return _provider_result_return(io, payload, await self.achat_completion(**call))
-
-    async def achat_completion(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.7,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        stream: bool | None = None,
-        on_stream_chunk: Callable[[str], None] | None = None,
-        api_key: str | None = None,
-        reasoning_effort: str | None = None,
-        reasoning: ReasoningSettings | dict[str, Any] | None = None,
-        extra_body: dict[str, Any] | None = None,
-        extra_headers: dict[str, Any] | None = None,
-        extra_query: dict[str, Any] | None = None,
-        sampling: dict[str, Any] | None = None,
-        tool_choice: Any = None,
-        stream_options: dict[str, Any] | None = None,
-        reasoning_stream: ReasoningStream | None = None,
-        **_: Any,
-    ) -> dict[str, Any]:
-        key = api_key if api_key is not None else os.environ.get(self.api_key_env, "")
-        if not key:
-            raise RuntimeError(f"Missing API key env {self.api_key_env} for live LLM.")
-        use_stream = self.stream if stream is None else stream
-        settings = coerce_reasoning_settings(
-            reasoning if reasoning is not None else self.reasoning, effort=reasoning_effort
-        )
-        try:
-            return await self._apost_chat(
-                model=model,
-                messages=messages,
-                tools=tools,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                max_completion_tokens=max_completion_tokens,
-                api_key=key,
-                stream=use_stream,
-                on_stream_chunk=on_stream_chunk,
-                reasoning=settings,
-                extra_body=extra_body,
-                extra_headers=extra_headers,
-                extra_query=extra_query,
-                sampling=sampling,
-                tool_choice=tool_choice,
-                stream_options=stream_options,
-                reasoning_stream=reasoning_stream or ReasoningStream(None),
-            )
-        except ClassifiedFailure:
-            raise
-        except Exception as exc:
-            logger.debug("OpenAI-compatible LLM call failed", exc_info=True)
-            classified = classify_llm_failure(exc)
-            raise ClassifiedFailure(
-                classify_llm_http_error(exc),
-                failure_class=classified.failure_class,
-                code=classified.code,
-            ) from exc
+    async def _complete(self, **kwargs: Any) -> dict[str, Any]:
+        if kwargs.get("reasoning_stream") is None:
+            kwargs = dict(kwargs)
+            kwargs["reasoning_stream"] = ReasoningStream(None)
+        return await super()._complete(**kwargs)
 
     def _build_chat_request(
         self,
@@ -277,10 +84,12 @@ class OpenAILLMProvider(LayerLifecycle):
         sampling: dict[str, Any] | None = None,
         tool_choice: Any = None,
         stream_options: dict[str, Any] | None = None,
+        response_format: Any = None,
+        **_: Any,
     ) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
         url = self.api_base.rstrip("/") + "/chat/completions"
         payload: dict[str, Any] = apply_reasoning_payload(
-            {"model": model, "messages": messages},
+            {"model": model, "messages": _wire_messages(messages)},
             reasoning,
             max_tokens=max_tokens,
         )
@@ -292,6 +101,13 @@ class OpenAILLMProvider(LayerLifecycle):
         from mas.runtime.engine.llm_model_catalog import default_model_catalog
 
         info = default_model_catalog().get(model)
+        # Explicit-cache markers have no chat-completions field; key and retention need a host that takes them.
+        payload.pop("prompt_cache_breakpoints", None)
+        for name in ("prompt_cache_key", "prompt_cache_retention"):
+            if not self.forwards_prompt_cache_fields or (info is not None and not info.supports(name)):
+                payload.pop(name, None)
+        if "prompt_cache_retention" in payload:
+            payload["prompt_cache_retention"] = _retention(payload["prompt_cache_retention"])
         payload["temperature"] = info.clamp("temperature", temperature) if info is not None else temperature
         extra = merge_extra_body(getattr(self, "extra_body", None), nested_extra, extra_body)
         if extra:
@@ -305,6 +121,8 @@ class OpenAILLMProvider(LayerLifecycle):
         )
         if stream_options:
             payload["stream_options"] = stream_options
+        if response_format and "response_format" not in payload:
+            payload["response_format"] = response_format
         if tools:
             payload["tools"] = tools
             choice = tool_choice if tool_choice is not None else llm_tool_choice(messages, tools=tools)
@@ -323,81 +141,24 @@ class OpenAILLMProvider(LayerLifecycle):
 
     @staticmethod
     def _message_from_completion(
-        data: dict[str, Any], reasoning: ReasoningSettings, reasoning_stream: ReasoningStream
+        data: dict[str, Any],
+        reasoning: ReasoningSettings,
+        reasoning_stream: ReasoningStream | None = None,
+        **_: Any,
     ) -> dict[str, Any]:
+        reasoning_stream = reasoning_stream or ReasoningStream(None)
         choices = data.get("choices") or []
         if not choices:
             return {}
         message = dict(choices[0].get("message") or {})
-        # The whole response arrived at once: its reasoning is reported now, as received.
         reasoning_stream.received(reasoning_text(message) + think_block_text(message.get("content")))
-        usage = data.get("usage") or {}
+        usage = normalize_usage(data.get("usage"))
         if usage:
             message["usage"] = usage
         finish_reason = choices[0].get("finish_reason")
         if finish_reason:
             message["finish_reason"] = finish_reason
         return sanitize_assistant_message(message, exclude=reasoning.exclude)
-
-    async def _apost_chat(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        temperature: float,
-        max_tokens: int | None,
-        max_completion_tokens: int | None,
-        api_key: str,
-        stream: bool,
-        on_stream_chunk: Callable[[str], None] | None,
-        reasoning: ReasoningSettings,
-        extra_body: dict[str, Any] | None = None,
-        extra_headers: dict[str, Any] | None = None,
-        extra_query: dict[str, Any] | None = None,
-        sampling: dict[str, Any] | None = None,
-        tool_choice: Any = None,
-        stream_options: dict[str, Any] | None = None,
-        reasoning_stream: ReasoningStream,
-    ) -> dict[str, Any]:
-        url, payload, headers, query = self._build_chat_request(
-            model=model,
-            messages=messages,
-            tools=tools,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_completion_tokens=max_completion_tokens,
-            api_key=api_key,
-            reasoning=reasoning,
-            extra_body=extra_body,
-            extra_headers=extra_headers,
-            extra_query=extra_query,
-            sampling=sampling,
-            tool_choice=tool_choice,
-            stream_options=stream_options,
-        )
-        if stream:
-            return await self._achat_completion_streamed(
-                url,
-                payload,
-                headers,
-                on_stream_chunk=on_stream_chunk,
-                reasoning=reasoning,
-                params=query,
-                reasoning_stream=reasoning_stream,
-            )
-        resp = await arequest_once(
-            self._get_async_client(),
-            "POST",
-            url,
-            json=payload,
-            headers=headers,
-            params=query,
-            get_client=self._get_async_client,
-            on_failure=self._adiscard_client_after_transport_failure,
-        )
-        resp.raise_for_status()
-        return self._message_from_completion(resp.json(), reasoning, reasoning_stream)
 
     async def _achat_completion_streamed(
         self,
@@ -407,25 +168,23 @@ class OpenAILLMProvider(LayerLifecycle):
         *,
         on_stream_chunk: Callable[[str], None] | None,
         reasoning: ReasoningSettings,
-        reasoning_stream: ReasoningStream,
         params: dict[str, Any] | None = None,
+        **extra: Any,
     ) -> dict[str, Any]:
-        """Async SSE-streamed variant — same OpenAI-compatible message shape."""
+        reasoning_stream = extra.get("reasoning_stream") or ReasoningStream(None)
         stream_payload = dict(payload)
         stream_payload["stream"] = True
-
         content_parts: list[str] = []
         tool_call_accum: dict[int, dict[str, Any]] = {}
         finish_reason = ""
         usage: dict[str, Any] = {}
         splitter = ThinkTagSplitter()
         emitted_any = False
-
         try:
             async with self._get_async_client().stream(
                 "POST", url, json=stream_payload, headers=headers, params=params
             ) as resp:
-                resp.raise_for_status()
+                await araise_for_status(resp)
                 async for raw_line in resp.aiter_lines():
                     line = raw_line if isinstance(raw_line, str) else raw_line.decode("utf-8", "replace")
                     if not line.startswith("data:"):
@@ -438,7 +197,7 @@ class OpenAILLMProvider(LayerLifecycle):
                     except (TypeError, ValueError):
                         continue
                     if isinstance(chunk.get("usage"), dict):
-                        usage = chunk["usage"]
+                        usage = normalize_usage(chunk["usage"])
                     choices = chunk.get("choices") or []
                     if not choices:
                         continue
@@ -447,7 +206,6 @@ class OpenAILLMProvider(LayerLifecycle):
                     if fr:
                         finish_reason = fr
                     delta = choice.get("delta") or {}
-                    # Reasoning deltas start the thinking interval; the first answer delta ends it.
                     answer = reasoning_stream.feed_delta(delta, splitter)
                     text = answer if reasoning.exclude else delta.get("content")
                     if text:
@@ -474,7 +232,6 @@ class OpenAILLMProvider(LayerLifecycle):
         except Exception as exc:
             await self._areraise_stream_failure(exc, emitted_any=emitted_any)
         reasoning_stream.close()
-
         message: dict[str, Any] = {"content": "".join(content_parts) or None}
         if tool_call_accum:
             message["tool_calls"] = [tool_call_accum[i] for i in sorted(tool_call_accum)]
