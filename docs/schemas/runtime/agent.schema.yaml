@@ -996,6 +996,27 @@ properties:
               ref: { type: string }
               params: { type: object, additionalProperties: true }
 
+      runner:
+        description: >
+          Who runs this agent's tasks. Absent, the kernel main loop runs them, as always. Named, a task
+          that reaches the agent (an A2A message, a lab run) goes to that agent_runner plugin instead,
+          for example one that drives an external harness: ``a2a-harness`` (a remote A2A agent) or
+          ``stdio-harness`` (a command on stdin and stdout). Transports, identity, governance (the
+          Controls) and observability stay with MAS Lab at the boundary; the harness decides what it does
+          inside, so per-tool governance does not apply there. The agent then needs no model, tools or
+          context of its own. Plugin ids are hyphenated.
+        x-merge:
+          strategy: plugin_binding_merge
+        oneOf:
+          - type: string
+            minLength: 1
+          - type: object
+            additionalProperties: false
+            required: [type]
+            properties:
+              type: { type: string, minLength: 1 }
+              params: { type: object, additionalProperties: true }
+
       llm:
         $ref: "./fragments/llm-binding.schema.yaml"
         description: >

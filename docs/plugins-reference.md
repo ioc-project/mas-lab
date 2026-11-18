@@ -47,6 +47,13 @@ practical examples.
 | ------------- | ---------------------------------- | ------------- |
 | `A2AExposure` | `library_ioa.plugins.a2a.exposure` | `library-ioa` |
 
+### Agent_Runner
+
+| Class                | Full module path                                    | Library            |
+| -------------------- | --------------------------------------------------- | ------------------ |
+| `A2AHarnessRunner`   | `library_ioa.plugins.a2a.harness`                   | `library-ioa`      |
+| `StdioHarnessRunner` | `mas.library.standard.plugins.runner.stdio_harness` | `library-standard` |
+
 ### Assembler
 
 | Class                    | Full module path                                 | Library            |
@@ -332,6 +339,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | -------------------------------- | -------------------- | ------------------- |
 | `A2AAgentComm`                   | agent_comm           | `library-ioa`       |
 | `A2AExposure`                    | agent_expose         | `library-ioa`       |
+| `A2AHarnessRunner`               | agent_runner         | `library-ioa`       |
 | `A2ALayer`                       | layer                | `library-ioa`       |
 | `A2ATransportClassifier`         | transport_classifier | `library-ioa`       |
 | `ActivateSkillPlugin`            | system_plugin        | `library-skills`    |
@@ -444,6 +452,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `StackAgentComm`                 | agent_comm           | `library-standard`  |
 | `StackConversation`              | context_manager      | `library-standard`  |
 | `StateMachinePlugin`             | design_pattern       | `library-standard`  |
+| `StdioHarnessRunner`             | agent_runner         | `library-standard`  |
 | `StructuredLayer`                | layer                | `library-standard`  |
 | `SubagentSpawner`                | engine_tool_provider | `library-standard`  |
 | `SubagentsPlugin`                | system_plugin        | `library-standard`  |

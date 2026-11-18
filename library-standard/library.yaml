@@ -39,6 +39,7 @@ types:
   - hitl_responder
   - control_protocol
   - checkpoint_store
+  - agent_runner
   - runtime
 
 plugins:
@@ -909,6 +910,16 @@ plugins:
     shortcuts:
       - auto-deny
       - auto_deny
+  - type: agent_runner
+    name: stdio-harness
+    urn: mas.agent_runner.stdio-harness
+    module: mas.library.standard.plugins.runner.stdio_harness
+    class: StdioHarnessRunner
+    description: >
+      Drive an external harness over stdin and stdout: an allow-listed absolute command, no shell,
+      explicit environment, deadlines and size caps, line or JSON-RPC framing.
+    shortcuts:
+      - stdio-harness
 
 defaults:
   tool_provider: local
