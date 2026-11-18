@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import socket
+import sys
 import time
 
 import httpx
@@ -62,3 +65,60 @@ def test_two_background_servers_listen_on_distinct_ports() -> None:
     finally:
         handle_a.close()
         handle_b.close()
+
+
+class _FakeUvicorn:
+    """Stands in for the ``uvicorn`` module: records the config and where ``run`` and ``serve`` execute."""
+
+    def __init__(self) -> None:
+        self.configs: list[dict] = []
+        self.run_saw: list[str] = []
+        self.served = 0
+        outer = self
+
+        class Config:
+            def __init__(self, app, **kwargs) -> None:
+                outer.configs.append({"app": app, **kwargs})
+
+        class Server:
+            def __init__(self, config) -> None:
+                self.config = config
+                self.should_exit = False
+                self.install_signal_handlers = True
+
+            def run(self) -> None:
+                outer.run_saw.append(_CALLER.get())
+
+            async def serve(self) -> None:
+                outer.served += 1
+
+        self.Config = Config
+        self.Server = Server
+
+
+_CALLER: contextvars.ContextVar[str] = contextvars.ContextVar("webserver_test_caller", default="empty")
+
+
+def test_serve_async_serves_with_the_given_address(monkeypatch) -> None:
+    fake = _FakeUvicorn()
+    monkeypatch.setitem(sys.modules, "uvicorn", fake)
+
+    asyncio.run(UvicornWebServer().serve_async("app", host="127.0.0.1", port=1234))
+
+    assert fake.served == 1
+    assert fake.configs == [{"app": "app", "host": "127.0.0.1", "port": 1234, "log_level": "warning"}]
+
+
+def test_serve_background_runs_the_server_in_a_thread_with_an_empty_context(monkeypatch) -> None:
+    fake = _FakeUvicorn()
+    monkeypatch.setitem(sys.modules, "uvicorn", fake)
+    _CALLER.set("caller")
+
+    handle = UvicornWebServer().serve_background("app", host="127.0.0.1", port=1234)
+    handle.thread.join(timeout=5)
+
+    assert fake.run_saw == ["empty"]
+    assert handle.server.install_signal_handlers is False
+    assert handle.thread.daemon is True
+    handle.close()
+    assert handle.server.should_exit is True

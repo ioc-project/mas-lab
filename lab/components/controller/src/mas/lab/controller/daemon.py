@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Controller daemon — Unix socket IPC + optional HTTP."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,6 +18,7 @@ from mas.lab.controller import config as cfg
 from mas.lab.controller.api import ControllerAPI, set_controller_api
 from mas.lab.controller.config import DEFAULT_HTTP_PORT, ensure_mas_dirs
 from mas.lab.controller.sessions import SessionRegistry
+from mas.runtime.aio import new_thread
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +159,11 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _handle_signal)
 
     threads = [
-        threading.Thread(target=_serve_socket, args=(socket,), daemon=True, name="ipc"),
+        new_thread(target=_serve_socket, args=(socket,), daemon=True, name="ipc"),
     ]
     if not args.no_http:
         threads.append(
-            threading.Thread(
+            new_thread(
                 target=_serve_http,
                 kwargs={"host": args.host, "port": args.port, "settings": http_settings},
                 daemon=True,
@@ -175,9 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         while not _shutdown.is_set():
             if _sessions.should_shutdown(_api):
-                logger.info(
-                    "Idle shutdown — no client sessions and no active workers"
-                )
+                logger.info("Idle shutdown — no client sessions and no active workers")
                 _shutdown.set()
                 break
             _shutdown.wait(timeout=5.0)

@@ -128,6 +128,7 @@ tasks:
           tests/test_ci_paths.py \
           tests/test_ci_python.py \
           tests/test_ci_gate.py \
+          tests/test_no_raw_threads.py \
           runtime/tests/ \
           lab/components/core/tests/ \
           lab/components/bench/tests/ \
@@ -229,6 +230,7 @@ tasks:
           tests/test_ci_paths.py \
           tests/test_ci_python.py \
           tests/test_ci_gate.py \
+          tests/test_no_raw_threads.py \
           -q --tb=line --durations=20
 
   verify-coverage:

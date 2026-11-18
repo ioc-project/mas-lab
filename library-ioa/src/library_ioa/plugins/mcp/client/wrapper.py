@@ -9,6 +9,8 @@ import weakref
 from collections.abc import Coroutine
 from typing import Any, Dict, List, TypeVar
 
+from mas.runtime.aio import new_thread
+
 from library_ioa.plugins.mcp.client import MCPClient
 
 _T = TypeVar("_T")
@@ -34,7 +36,7 @@ def run_sync(coro: Coroutine[Any, Any, _T]) -> _T:
         except BaseException as exc:  # noqa: BLE001 — re-raised on the caller thread
             holder["error"] = exc
 
-    thread = threading.Thread(target=_worker, name="mcp-run-sync", daemon=True)
+    thread = new_thread(target=_worker, name="mcp-run-sync", daemon=True)
     thread.start()
     thread.join()
     if "error" in holder:
@@ -74,7 +76,7 @@ class _DedicatedLoop:
                     loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
                 loop.close()
 
-            self._thread = threading.Thread(target=_run, name="mcp-loop", daemon=True)
+            self._thread = new_thread(target=_run, name="mcp-loop", daemon=True)
             self._thread.start()
             self._ready.wait()
             assert self._loop is not None

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from threading import Thread
 from typing import Any
 
+from mas.runtime.aio import new_thread
+
 
 @dataclass
 class UvicornHandle:
@@ -26,9 +28,7 @@ class UvicornWebServer:
     async def serve_async(self, app: Any, *, host: str, port: int) -> None:
         import uvicorn
 
-        server = uvicorn.Server(
-            uvicorn.Config(app, host=host, port=port, log_level="warning")
-        )
+        server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning"))
         await server.serve()
 
     def serve_background(self, app: Any, *, host: str, port: int) -> UvicornHandle:
@@ -36,6 +36,6 @@ class UvicornWebServer:
 
         server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning"))
         server.install_signal_handlers = False
-        thread = Thread(target=server.run, daemon=True)
+        thread = new_thread(target=server.run, daemon=True)
         thread.start()
         return UvicornHandle(server=server, thread=thread)

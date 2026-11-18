@@ -67,10 +67,6 @@
       {
         "path": "library-telemetry/tests/test_lab_cli.py::test_convert_realtime",
         "reason": "needs the telemetry [observe] extra, which does not resolve on 3.14t (the SDK's OpenTelemetry pins conflict with the protobuf versions that have free-threaded wheels)"
-      },
-      {
-        "path": "runtime/tests/test_obs_call_frames.py::test_call_frames_are_isolated_between_threads",
-        "reason": "a new thread inherits the caller's context variables on the free-threaded build (a real difference, see docs/python-support.md)"
       }
     ]
   }

@@ -16,6 +16,7 @@ from typing import Any, Callable
 from mas.lab.controller.io_capture import capture_worker_io
 from mas.lab.controller.registry import WorkerRegistry
 from mas.lab.controller.worker_model import WorkerKind, WorkerRecord, WorkerStatus
+from mas.runtime.aio import new_thread
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ class WorkerRunner:
                 record.finished_at = time.time()
                 self._cancel_flags.pop(record.id, None)
 
-        threading.Thread(target=_run, daemon=True, name=f"worker-{record.id}").start()
+        new_thread(target=_run, daemon=True, name=f"worker-{record.id}").start()
 
     def cancel(self, worker_id: str) -> bool:
         event = self._cancel_flags.get(worker_id)

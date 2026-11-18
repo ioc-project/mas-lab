@@ -3,9 +3,9 @@
 """Call-frame isolation across concurrent tasks and threads."""
 
 import asyncio
-import threading
 
 import pytest
+from mas.runtime.aio import new_thread
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 
 
@@ -53,7 +53,7 @@ def test_call_frames_are_isolated_between_threads():
         operator.push_call_frame("worker-exec")
         observed.append(operator._frames.stack)
 
-    thread = threading.Thread(target=worker)
+    thread = new_thread(target=worker)
     thread.start()
     thread.join()
 

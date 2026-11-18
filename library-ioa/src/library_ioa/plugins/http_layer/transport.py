@@ -20,7 +20,7 @@ from mas.library.standard.lib.comm.payload import MAX_MESSAGE_SIZE
 from mas.library.standard.lib.stack import Envelope, Layer
 from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.library.standard.plugins.llm.http import resolve_ssl_verify
-from mas.runtime.aio import LoopCache
+from mas.runtime.aio import LoopCache, new_thread
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
 # Headers the HTTP client writes from the request itself; a row or a send that set them could split or
@@ -233,7 +233,7 @@ def _close_orphan(client: httpx.AsyncClient) -> None:
         with contextlib.suppress(Exception):
             asyncio.run(client.aclose())
 
-    thread = threading.Thread(target=run, name="http-call-transport-close", daemon=True)
+    thread = new_thread(target=run, name="http-call-transport-close", daemon=True)
     thread.start()
     thread.join(5)
 

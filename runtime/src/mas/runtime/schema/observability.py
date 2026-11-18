@@ -55,16 +55,3 @@ class ObservabilityEvent(BaseModel):
     actor_id: str = "kernel"
     attribution_code: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
-
-
-class AuditReport(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    event_count: int
-    correlation_ids: list[int]
-    machines_touched: list[str]
-    has_full_envelope: bool
-    auditability: bool
-    accountability: bool
-    attribution: bool
-    gaps: list[str] = Field(default_factory=list)

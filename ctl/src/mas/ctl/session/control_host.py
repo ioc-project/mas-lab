@@ -11,6 +11,7 @@ from typing import Any
 
 from mas.library.standard.plugins.control.attach import ControlHost, serve_and_advertise
 from mas.library.standard.plugins.control.directory import FileSessionDirectory
+from mas.runtime.aio import new_thread
 
 
 class ControlDirectoryHost:
@@ -67,7 +68,7 @@ class ControlDirectoryHost:
             finally:
                 loop.close()
 
-        self._thread = threading.Thread(target=runner, daemon=True, name="mas-ctl-control-host")
+        self._thread = new_thread(target=runner, daemon=True, name="mas-ctl-control-host")
         self._thread.start()
         if not self._ready.wait(timeout=5):
             self.close()
