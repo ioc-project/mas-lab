@@ -1,0 +1,28 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#transport-protocol-config"
+title: TransportProtocolConfig
+description: >
+  Capture switches for one protocol's transport observability, set on
+  native.transport. The same set applies to every protocol. Defaults:
+  enabled true, hooks true, internals false, sdk_spans false,
+  propagate_metadata false. Projection and aliases live on otel.transport.
+type: object
+additionalProperties: false
+properties:
+  enabled:
+    type: boolean
+    default: true
+  hooks:
+    type: boolean
+    default: true
+  internals:
+    type: boolean
+    default: false
+  sdk_spans:
+    type: boolean
+    default: false
+  propagate_metadata:
+    type: boolean
+    default: false

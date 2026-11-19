@@ -22,6 +22,7 @@ types:
   - agent_expose
   - layer
   - webserver
+  - transport_classifier
 
 plugins:
   - type: tool_provider
@@ -95,3 +96,27 @@ plugins:
     urn: mas.webserver.uvicorn
     module: library_ioa.plugins.webserver
     class: UvicornWebServer
+  - type: transport_classifier
+    name: a2a
+    urn: mas.transport_classifier.a2a
+    module: library_ioa.plugins.a2a.classifier
+    class: A2ATransportClassifier
+    attributes:
+      default_sdk_spans: false
+      default_propagate_metadata: false
+  - type: transport_classifier
+    name: mcp
+    urn: mas.transport_classifier.mcp
+    module: library_ioa.plugins.mcp.classifier
+    class: MCPTransportClassifier
+    attributes:
+      default_sdk_spans: false
+      default_propagate_metadata: false
+  - type: transport_classifier
+    name: slim
+    urn: mas.transport_classifier.slim
+    module: library_ioa.plugins.slim.classifier
+    class: SlimTransportClassifier
+    attributes:
+      default_sdk_spans: false
+      default_propagate_metadata: false

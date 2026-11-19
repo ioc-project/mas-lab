@@ -48,6 +48,13 @@ def observability_options(fn: Callable) -> Callable:
         type=click.Choice(["native", "boundary", "both", "otel"], case_sensitive=False),
         help="native, otel, and both replace the plugin set. boundary only sets the transform chain.",
     )(fn)
+    fn = click.option(
+        "--transport-observability",
+        "transport_observability",
+        multiple=True,
+        default=(),
+        help="Protocol transport capture, e.g. a2a=off or a2a.sdk_spans=true. Repeatable.",
+    )(fn)
     return fn
 
 
@@ -57,6 +64,7 @@ def resolve_observability_config(
     events_file: str | None,
     events_stdout: bool,
     events_format: str | None,
+    transport_observability: tuple[str, ...] = (),
     agent_id: str = "",
     mas_id: str = "",
     manifest: dict | None = None,
@@ -74,7 +82,9 @@ def resolve_observability_config(
     ``[]``) or leftover agent observability named plugins.
     ``--events-file`` and ``--events-stdout`` add native when it is not selected.
     """
-    return observability_config_from_manifest(
+    from mas.ctl.session.transport_obs import parse_cli_patches
+
+    cfg = observability_config_from_manifest(
         manifest,
         deployment=deployment,
         agent_id=agent_id,
@@ -88,3 +98,9 @@ def resolve_observability_config(
         entry_id=entry_id,
         delegate_ids=delegate_ids,
     )
+    patches = parse_cli_patches(transport_observability)
+    if patches:
+        from dataclasses import replace
+
+        cfg = replace(cfg, transport_cli=patches)
+    return cfg

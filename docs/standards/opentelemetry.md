@@ -31,8 +31,13 @@ shortcuts: `telemetry:pipelines/native-to-otel-json.yaml` and
 `export-otel-collector.yaml`.
 
 The native event model (an announced stream, not a query interface) is
-[Event model](../references/event-model.md). SCOPE consumes the same runs;
-see [IoC integrations](../discover/integrations.md) and
+[Event model](../references/event-model.md). Protocol SDK spans never reach
+an exporter directly: they become native `transport.*` events. The otel
+sink emits the observe-sdk names SCOPE already reads as log records
+(`a2a.message.*`, `slim.message.*`, `a2a.agent_card`,
+`mcp.tools.discovered`). See
+[Transport observability](../references/transport-observability.md),
+[IoC integrations](../discover/integrations.md), and
 [Tutorial 9](../tutorials/09-kg-scope/README.md).
 
 ## Dependencies

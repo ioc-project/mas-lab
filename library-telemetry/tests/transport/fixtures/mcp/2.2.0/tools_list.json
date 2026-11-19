@@ -1,0 +1,56 @@
+{
+  "protocol": "mcp",
+  "scenario": "tools_list",
+  "sdk_version": "2.2.0",
+  "span_count": 3,
+  "spans": [
+    {
+      "attributes": {
+        "mcp.method.name": "notifications/initialized",
+        "mcp.protocol.version": "2025-11-25"
+      },
+      "events": [],
+      "kind": "SERVER",
+      "name": "notifications/initialized",
+      "parent_span_id": null,
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-2",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {
+        "jsonrpc.request.id": "2",
+        "mcp.method.name": "tools/list",
+        "mcp.protocol.version": "2025-11-25"
+      },
+      "events": [],
+      "kind": "SERVER",
+      "name": "tools/list",
+      "parent_span_id": "$span-5",
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-4",
+      "status": "UNSET",
+      "trace_id": "$trace-3"
+    },
+    {
+      "attributes": {
+        "jsonrpc.request.id": "2",
+        "mcp.method.name": "tools/list"
+      },
+      "events": [],
+      "kind": "CLIENT",
+      "name": "MCP send tools/list",
+      "parent_span_id": null,
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-5",
+      "status": "UNSET",
+      "trace_id": "$trace-3"
+    }
+  ],
+  "token_context_error": false,
+  "token_error_count": 0
+}

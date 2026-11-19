@@ -1,0 +1,31 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "https://json-schema.org/draft-07/schema#"
+$id: "mas/v1#otel-transport-config"
+title: OtelTransportConfig
+description: >
+  How captured transport events leave on the otel sink. projection is the
+  what the otel sink emits (none, contract). aliases emit the observe-sdk
+  names SCOPE's norm already reads (a2a.message.*, slim.message.*,
+  a2a.agent_card, mcp.tools.discovered). auto is on for contract.
+  Protocol keys other than projection and aliases override those two fields.
+type: object
+properties:
+  projection:
+    type: string
+    enum: [none, contract]
+    default: contract
+  aliases:
+    type: string
+    enum: [auto, on, off]
+    default: auto
+additionalProperties:
+  type: object
+  additionalProperties: false
+  properties:
+    projection:
+      type: string
+      enum: [none, contract]
+    aliases:
+      type: string
+      enum: [auto, on, off]

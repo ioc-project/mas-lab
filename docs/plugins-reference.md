@@ -293,6 +293,14 @@ practical examples.
 | `LocalToolProvider` | `mas.library.standard.plugins.tools.local` | `library-standard` |
 | `MCPToolProvider`   | `library_ioa.plugins.mcp.provider`         | `library-ioa`      |
 
+### Transport_Classifier
+
+| Class                     | Full module path                      | Library       |
+| ------------------------- | ------------------------------------- | ------------- |
+| `A2ATransportClassifier`  | `library_ioa.plugins.a2a.classifier`  | `library-ioa` |
+| `MCPTransportClassifier`  | `library_ioa.plugins.mcp.classifier`  | `library-ioa` |
+| `SlimTransportClassifier` | `library_ioa.plugins.slim.classifier` | `library-ioa` |
+
 ### User_Io_Contract
 
 | Class                    | Full module path                              | Library            |
@@ -325,6 +333,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `A2AAgentComm`                   | agent_comm           | `library-ioa`       |
 | `A2AExposure`                    | agent_expose         | `library-ioa`       |
 | `A2ALayer`                       | layer                | `library-ioa`       |
+| `A2ATransportClassifier`         | transport_classifier | `library-ioa`       |
 | `ActivateSkillPlugin`            | system_plugin        | `library-skills`    |
 | `ADKSkillPlugin`                 | skill_impl           | `library-skills`    |
 | `AnthropicLLMProvider`           | llm_provider         | `library-standard`  |
@@ -390,6 +399,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `LocalToolProvider`              | tool_provider        | `library-standard`  |
 | `McpLayer`                       | layer                | `library-ioa`       |
 | `MCPToolProvider`                | tool_provider        | `library-ioa`       |
+| `MCPTransportClassifier`         | transport_classifier | `library-ioa`       |
 | `MistralLLMProvider`             | llm_provider         | `library-standard`  |
 | `MistralLLMProvider`             | layer                | `library-standard`  |
 | `ModeratedRoundsPlugin`          | design_pattern       | `library-standard`  |
@@ -430,6 +440,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `SkillToolsPlugin`               | skill_tools          | `library-skills`    |
 | `SlidingWindowConversation`      | context_manager      | `library-standard`  |
 | `SlimAgentComm`                  | layer                | `library-ioa`       |
+| `SlimTransportClassifier`        | transport_classifier | `library-ioa`       |
 | `StackAgentComm`                 | agent_comm           | `library-standard`  |
 | `StackConversation`              | context_manager      | `library-standard`  |
 | `StateMachinePlugin`             | design_pattern       | `library-standard`  |

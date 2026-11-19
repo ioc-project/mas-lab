@@ -121,6 +121,7 @@ class RuntimeInstance(Lifecycle):
         obs_binding: ObservabilityBinding | None = None,
         obs_base_dir: Path | None = None,
         obs_agent_id: str | None = None,
+        attach_obs_plugins: bool = True,
     ) -> RuntimeInstance:
         resolved_config = config or KernelConfig()
         kernel = RuntimeKernel(config=resolved_config)
@@ -137,19 +138,25 @@ class RuntimeInstance(Lifecycle):
         instance = cls(kernel=kernel, driver=driver)
 
         if obs_binding is not None and op is not None:
-            from mas.runtime.boundary.obs.plugins import ObsPluginSet, build_observability_plugins
+            from mas.runtime.boundary.obs.plugins import (
+                ObsPluginSet,
+                bind_transport_if_idle,
+                build_observability_plugins,
+            )
 
-            plugins = build_observability_plugins(
-                obs_binding,
-                base_dir=obs_base_dir or Path("."),
-                agent_id=obs_agent_id,
-            )
-            plugin_set = ObsPluginSet(plugins=plugins)
-            plugin_set.subscribe_to(
-                op,
-                agent_id=obs_agent_id or "",
-            )
-            instance.obs_plugin_set = plugin_set
+            bind_transport_if_idle(obs_binding)
+            if attach_obs_plugins:
+                plugins = build_observability_plugins(
+                    obs_binding,
+                    base_dir=obs_base_dir or Path("."),
+                    agent_id=obs_agent_id,
+                )
+                plugin_set = ObsPluginSet(plugins=plugins)
+                plugin_set.subscribe_to(
+                    op,
+                    agent_id=obs_agent_id or "",
+                )
+                instance.obs_plugin_set = plugin_set
 
         return instance
 
@@ -170,6 +177,7 @@ class RuntimeInstance(Lifecycle):
         enable_governance: bool = True,
         enable_observability: bool = True,
         runtime_engine: dict[str, Any] | None = None,
+        attach_obs_plugins: bool = True,
     ) -> RuntimeInstance:
         """Build a RuntimeInstance from a raw agent spec dict.
 
@@ -213,6 +221,7 @@ class RuntimeInstance(Lifecycle):
             obs_agent_id=agent_id,
             enable_coordination=enable_coordination,
             enable_observability=enable_observability,
+            attach_obs_plugins=attach_obs_plugins,
         )
 
     def stop(self) -> None:

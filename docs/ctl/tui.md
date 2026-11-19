@@ -49,6 +49,7 @@ mas-ctl tui agent.yaml --control docs/schemas/examples/controls/observability-na
 | `--events-file PATH` | **`events.jsonl`** output path. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
 | `--events-stderr` | Also stream JSONL on stderr (`--events-stdout` is a legacy alias) |
 | `--events-format` | `native` · `otel` · `both` replace the plugin set; `boundary` is the transform chain |
+| `--transport-observability` | Protocol capture overlay (`a2a=off`). Repeatable. |
 
 Full reference: [cli/observability.md](../cli/observability.md) ·
 [mas-ctl flags](../cli/mas-ctl.md).

@@ -34,6 +34,12 @@ oneOf:
                           type: string
                         events_file:
                           type: string
+                        transport:
+                          additionalProperties:
+                            $ref: "./transport-protocol-config.schema.yaml"
+                          properties:
+                            defaults:
+                              $ref: "./transport-protocol-config.schema.yaml"
                     otel:
                       type: object
                       additionalProperties: false
@@ -65,6 +71,8 @@ oneOf:
                           type: boolean
                         extensions:
                           type: boolean
+                        transport:
+                          $ref: "./otel-transport-config.schema.yaml"
           remove:
             type: array
             items:

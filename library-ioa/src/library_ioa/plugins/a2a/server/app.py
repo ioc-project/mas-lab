@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from email.utils import format_datetime
@@ -38,6 +39,8 @@ A2A_JSON = "application/a2a+json"
 JSON_CONTENT_TYPE = "application/json"
 _ACCEPTED_CONTENT_TYPES = frozenset({A2A_JSON, JSON_CONTENT_TYPE})
 _REST_PREFIX = "/a2a/rest"
+_logger = logging.getLogger(__name__)
+
 _TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_COMPLETED,
     TaskState.TASK_STATE_FAILED,
@@ -48,16 +51,10 @@ _TERMINAL_TASK_STATES = {
 
 class _A2ARequestHandler(DefaultRequestHandler):
     def _validate_required_extensions(self, context: Any) -> None:
-        required = {
-            extension.uri
-            for extension in self._agent_card.capabilities.extensions
-            if extension.required
-        }
+        required = {extension.uri for extension in self._agent_card.capabilities.extensions if extension.required}
         missing = required - context.requested_extensions
         if missing:
-            raise ExtensionSupportRequiredError(
-                f"Required extensions were not requested: {', '.join(sorted(missing))}"
-            )
+            raise ExtensionSupportRequiredError(f"Required extensions were not requested: {', '.join(sorted(missing))}")
 
     def _reject_unsupported_part_media(self, message: Any) -> None:
         accepted: set[str] = set()
@@ -78,13 +75,82 @@ class _A2ARequestHandler(DefaultRequestHandler):
     async def on_message_send(self, params: Any, context: Any):
         self._validate_required_extensions(context)
         self._reject_unsupported_part_media(params.message)
-        return await super().on_message_send(params, context)
+        self._emit_received(params)
+        try:
+            result = await super().on_message_send(params, context)
+        except BaseException as exc:
+            self._emit_error(params, exc)
+            raise
+        self._emit_completed(params)
+        return result
 
     async def on_message_send_stream(self, params: Any, context: Any):
         self._validate_required_extensions(context)
         self._reject_unsupported_part_media(params.message)
-        async for event in super().on_message_send_stream(params, context):
-            yield event
+        self._emit_received(params)
+        try:
+            async for event in super().on_message_send_stream(params, context):
+                yield event
+        except BaseException as exc:
+            self._emit_error(params, exc)
+            raise
+        self._emit_completed(params)
+
+    def _transport_key(self, params: Any) -> tuple[str, str]:
+        from library_ioa.plugins.a2a.hooks import correlation_key
+
+        message = getattr(params, "message", None)
+        message_id = str(getattr(message, "message_id", "") or "")
+        key = correlation_key(
+            context_id=str(getattr(message, "context_id", "") or ""),
+            task_id=str(getattr(message, "task_id", "") or ""),
+            message_id=message_id,
+        )
+        return key, message_id
+
+    def _emit_received(self, params: Any) -> None:
+        try:
+            from library_ioa.plugins.a2a.hooks import _cfg, emit_received, read_observe_metadata
+
+            if not _cfg().hooks:
+                return
+            key, message_id = self._transport_key(params)
+            observe = read_observe_metadata(getattr(getattr(params, "message", None), "metadata", None))
+            target = str(getattr(self._agent_card, "name", "") or "")
+            emit_received(
+                key=key,
+                source=str(observe.get("last_agent_name") or ""),
+                target=target,
+                # A peer's session id cannot be checked; keep it as a claim, not this run's session.
+                peer_session_id=str(observe.get("session_id") or ""),
+                agent_id=target,
+                message_id=message_id,
+            )
+        except Exception:
+            _logger.debug("a2a received hook failed", exc_info=True)
+
+    def _emit_completed(self, params: Any) -> None:
+        try:
+            from library_ioa.plugins.a2a.hooks import _cfg, emit_completed
+
+            if not _cfg().hooks:
+                return
+            key, message_id = self._transport_key(params)
+            target = str(getattr(self._agent_card, "name", "") or "")
+            emit_completed(side="server", key=key, source="", target=target, agent_id=target, message_id=message_id)
+        except Exception:
+            _logger.debug("a2a completed hook failed", exc_info=True)
+
+    def _emit_error(self, params: Any, error: BaseException) -> None:
+        try:
+            from library_ioa.plugins.a2a.hooks import _cfg, emit_error
+
+            if not _cfg().hooks:
+                return
+            key, message_id = self._transport_key(params)
+            emit_error(side="server", key=key, message_id=message_id, error_type=type(error).__name__)
+        except Exception:
+            _logger.debug("a2a error hook failed", exc_info=True)
 
     async def on_subscribe_to_task(self, params: Any, context: Any):
         try:
@@ -94,9 +160,7 @@ class _A2ARequestHandler(DefaultRequestHandler):
             task = await self.task_store.get(params.id, context)
             if task is None or task.status.state not in _TERMINAL_TASK_STATES:
                 raise
-            raise UnsupportedOperationError(
-                "Cannot subscribe to a terminal task"
-            ) from error
+            raise UnsupportedOperationError("Cannot subscribe to a terminal task") from error
 
     async def aclose(self) -> None:
         try:
@@ -133,11 +197,7 @@ class _ClosingActiveTaskRegistry(ActiveTaskRegistry):
 
 def _remove_task_arg(active_task: ActiveTask) -> Any:
     """a2a-sdk 1.1 takes the task id string; 1.3 takes the task object."""
-    names = [
-        name
-        for name in inspect.signature(ActiveTaskRegistry._remove_task).parameters
-        if name != "self"
-    ]
+    names = [name for name in inspect.signature(ActiveTaskRegistry._remove_task).parameters if name != "self"]
     return active_task if names and names[0] != "task_id" else active_task.task_id
 
 
@@ -164,9 +224,7 @@ def _ignore_unknown_proto_fields(value: Any, descriptor: Any) -> Any:
             cleaned[name] = field_value
         elif is_repeated and isinstance(field_value, list):
             cleaned[name] = [
-                _ignore_unknown_proto_fields(item, message_type)
-                if isinstance(item, dict)
-                else item
+                _ignore_unknown_proto_fields(item, message_type) if isinstance(item, dict) else item
                 for item in field_value
             ]
         elif isinstance(field_value, dict):
@@ -220,9 +278,7 @@ def _coerce_agent_card(card: AgentCard | dict[str, Any]) -> AgentCard:
     if payload.get("agent_url"):
         documentation_url = payload["agent_url"]
     capabilities = _coerce_agent_capabilities(payload.get("capabilities", {}))
-    supported_interfaces = payload.get("supportedInterfaces") or payload.get(
-        "supported_interfaces"
-    )
+    supported_interfaces = payload.get("supportedInterfaces") or payload.get("supported_interfaces")
     if not supported_interfaces and agent_url:
         supported_interfaces = [
             AgentInterface(
@@ -244,14 +300,10 @@ def _coerce_agent_card(card: AgentCard | dict[str, Any]) -> AgentCard:
         capabilities=capabilities,
         supported_interfaces=supported_interfaces or [],
         default_input_modes=list(
-            payload.get("defaultInputModes")
-            or payload.get("default_input_modes")
-            or ["text/plain"]
+            payload.get("defaultInputModes") or payload.get("default_input_modes") or ["text/plain"]
         ),
         default_output_modes=list(
-            payload.get("defaultOutputModes")
-            or payload.get("default_output_modes")
-            or ["text/plain"]
+            payload.get("defaultOutputModes") or payload.get("default_output_modes") or ["text/plain"]
         ),
         skills=list(payload.get("skills") or []),
     )
@@ -274,11 +326,7 @@ def build_app(
         agent_card=card,
         push_config_store=push_config_store,
         push_sender=push_sender,
-        extended_agent_card=(
-            _coerce_agent_card(extended_agent_card)
-            if extended_agent_card is not None
-            else None
-        ),
+        extended_agent_card=(_coerce_agent_card(extended_agent_card) if extended_agent_card is not None else None),
     )
     request_handler._active_task_registry = _ClosingActiveTaskRegistry(
         agent_executor=executor,
@@ -313,9 +361,7 @@ def build_app(
                         payload = await request.json()
                     except (json.JSONDecodeError, UnicodeDecodeError):
                         payload = {}
-                    return JSONResponse(
-                        build_error_response(payload.get("id"), error)
-                    )
+                    return JSONResponse(build_error_response(payload.get("id"), error))
                 error_payload = build_rest_error_payload(error)
                 return JSONResponse(
                     status_code=int(error_payload["error"]["code"]),
@@ -340,6 +386,16 @@ def build_app(
             response.headers.setdefault("Cache-Control", "public, max-age=300")
             response.headers.setdefault("ETag", card_etag)
             response.headers.setdefault("Last-Modified", card_last_modified)
+            try:
+                from library_ioa.plugins.a2a.hooks import emit_agent_card
+
+                emit_agent_card(
+                    {"name": card.name, "description": card.description},
+                    side="server",
+                    agent_id=card.name,
+                )
+            except Exception:
+                _logger.debug("a2a agent card hook failed", exc_info=True)
         return response
 
     from a2a.server.routes import add_a2a_routes_to_fastapi

@@ -93,6 +93,43 @@ def test_list_and_call_each_close_http_transport() -> None:
     assert "read_timeout_seconds" not in session.call_tool.call_args.kwargs
 
 
+def test_list_and_call_emit_when_hooks_are_on() -> None:
+    from mas.runtime.schema.transport import TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+    emit.bind_sink(Sink())
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search", "inputSchema": {"type": "object"}})])])
+    try:
+        with (
+            patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+            patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+        ):
+            asyncio.run(client.list_tools(agent_id="worker"))
+            asyncio.run(client.list_tools(agent_id="worker"))  # cached: discovery already announced
+            asyncio.run(client.call_tool("web-search", {"query": "Apple"}))
+            session.call_tool = AsyncMock(side_effect=RuntimeError("down"))
+            with pytest.raises(RuntimeError):
+                asyncio.run(client.call_tool("web-search", {}))
+    finally:
+        emit.reset()
+    kinds = [e.kind for e in captured]
+    assert "transport.discovery" in kinds
+    assert "transport.message.sent" in kinds
+    assert "transport.message.completed" in kinds
+    assert "transport.error" in kinds
+    assert all(e.agent_id != "ctx.user" for e in captured if e.kind == "transport.discovery")
+
+
 def test_call_tool_forwards_timeout_and_meta() -> None:
     client = MCPClient(url="http://127.0.0.1:9001/mcp", timeout=9)
     session = _Session()
@@ -469,6 +506,64 @@ def test_list_tools_private_cache_is_per_user() -> None:
     ):
         assert [t["name"] for t in asyncio.run(client.list_tools(user="bob"))] == ["b"]
         assert [t["name"] for t in asyncio.run(client.list_tools(user="alice"))] == ["a"]
+
+
+def test_list_tools_emits_discovery_once_hooks_are_on() -> None:
+    """Mutation: tools/list while the bus is off is cached forever, so later capture never emits."""
+    from library_ioa.plugins.mcp.hooks import PROTOCOL
+    from mas.runtime.schema.transport import DISCOVERY, TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search"})])])
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        assert asyncio.run(client.list_tools())[0]["name"] == "web-search"
+        assert captured == []
+        emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+        emit.bind_sink(Sink())
+        assert asyncio.run(client.list_tools())[0]["name"] == "web-search"
+    emit.reset()
+    kinds = [e.kind for e in captured if e.protocol == PROTOCOL]
+    assert kinds == [DISCOVERY]
+    session.list_tools.assert_awaited_once()
+
+
+def test_list_tools_stamps_the_listing_agent_not_the_mcp_user() -> None:
+    """Mutation: emit_tools_discovered uses user= (often empty) so SCOPE agent.name is missing."""
+    from mas.runtime.schema.transport import TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search"})])])
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+    emit.bind_sink(Sink())
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools(user="", agent_id="worker"))
+    emit.reset()
+    assert captured[0].agent_id == "worker"
+    assert captured[0].attributes.get("source") == "worker"
 
 
 def test_run_sync_from_running_event_loop() -> None:

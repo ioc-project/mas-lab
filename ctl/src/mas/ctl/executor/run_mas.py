@@ -149,6 +149,7 @@ def execute_run_mas(
     events_file: str | None = None,
     events_stdout: bool = False,
     events_format: str | None = None,
+    transport_observability: tuple[str, ...] = (),
     trace: bool = False,
     trace_timestamps: bool = False,
     trace_engine: bool = False,
@@ -209,6 +210,7 @@ def execute_run_mas(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
+            transport_observability=transport_observability,
             manifest=result.mas_config,
             deployment=deployment_doc,
             flavour_spec=flavour_spec,
@@ -216,6 +218,7 @@ def execute_run_mas(
             entry_id=declared,
         )
     result.bind.hitl_mode = "auto" if (auto_hitl and not interactive) else "block"
+    result.bind.obs_config = obs_config
     from mas.ctl.session.params_sidecar import params_from_mas_config
 
     runtime_params = params_from_mas_config(result.mas_config)
@@ -291,7 +294,11 @@ def execute_run_mas(
 
         def new_conversation() -> Any:
             """A new A2A conversation: the whole MAS built again, so it shares nothing with this run."""
-            fresh = materialize_mas_compose(result, mas_base_dir=manifest_dir or manifest.parent)
+            result.bind.obs_attach_plugins = False
+            try:
+                fresh = materialize_mas_compose(result, mas_base_dir=manifest_dir or manifest.parent)
+            finally:
+                result.bind.obs_attach_plugins = True
             try:
                 opened = open_entry_session(fresh, session_args, display=_QuietDisplay())
             except BaseException:
@@ -299,7 +306,12 @@ def execute_run_mas(
                 raise
             live = opened.instance
             if conversation_plugin_set is not None and live.driver.observability is not None:
-                conversation_plugin_set.subscribe_to(live.driver.observability, agent_id=str(entry))
+                from mas.ctl.session.observability import _release_plugin_set
+                from mas.runtime.boundary.obs.plugins import attach_observability_plugin_set
+
+                if live.obs_plugin_set is not None and live.obs_plugin_set is not conversation_plugin_set:
+                    _release_plugin_set(live)
+                attach_observability_plugin_set(conversation_plugin_set, live, agent_id=str(entry), begin_run=False)
             live.conversation_close = fresh.stack_handles.close
             return live
 

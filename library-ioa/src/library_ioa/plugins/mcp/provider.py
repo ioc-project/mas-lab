@@ -172,8 +172,11 @@ class MCPToolProvider(ToolProvider):
     def _list_user(self, ctx: Any) -> str:
         return str(getattr(ctx, "user", "") or "")
 
+    def _list_agent_id(self, ctx: Any) -> str:
+        return str(getattr(ctx, "agent_id", "") or "")
+
     def _list_coro(self, ctx: Any):
-        return self._client.list_tools(user=self._list_user(ctx))
+        return self._client.list_tools(user=self._list_user(ctx), agent_id=self._list_agent_id(ctx))
 
     def close(self) -> None:
         """Close the held MCP session (and a stdio server process). Idempotent."""

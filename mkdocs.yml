@@ -218,6 +218,10 @@ nav:
           - Context management: references/context-management.md
           - Reliability: references/reliability.md
           - Event model: references/event-model.md
+          - Transport observability:
+              - Overview: references/transport-observability.md
+              - Inventory: references/transport-observability-inventory.md
+              - KG mapping: references/transport-observability-kg-mapping.md
           - Communication headers: references/comm-headers.md
           - Communication stack: references/comm-stack.md
           - LLM cache: references/llm-cache.md

@@ -85,6 +85,16 @@ def test_unknown_category_is_an_error() -> None:
         parse_categories("capabilities,bogus")
 
 
+def test_transport_scope_kinds_fold_without_category() -> None:
+    events = [
+        _event("execution_start"),
+        _event("transport.message.sent", call_id=""),
+    ]
+    kept = _kinds(normalize_events(events, ONTOLOGY, "run-1"))
+    assert "transport.message.sent" in kept
+    assert "execution_start" in kept
+
+
 # -- class-level filtering in normalize_events ------------------------------------------------
 
 _CORE = [

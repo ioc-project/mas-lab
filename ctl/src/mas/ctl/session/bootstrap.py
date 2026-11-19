@@ -120,6 +120,8 @@ class InstantiationOptions:
     flavour_spec: dict | None = None
     obs_binding_override: Any | None = None
     obs_from_cli: bool = False
+    obs_config: Any | None = None
+    obs_attach_plugins: bool = True
     entry_id: str | None = None
     delegate_ids: tuple[str, ...] = ()
 
@@ -348,6 +350,7 @@ def instantiate_runtime(
         runtime_engine=_runtime_engine,
         obs_binding_override=options.obs_binding_override,
         obs_from_cli=options.obs_from_cli,
+        attach_obs_plugins=options.obs_attach_plugins,
     )
     working_memory_spec = spec.get("working_memory")
     if isinstance(working_memory_spec, dict):
@@ -381,6 +384,12 @@ def instantiate_runtime(
             )
 
     instance.capture_session_baseline()
+    ctx_obj = getattr(instance.driver, "ctx", None)
+    if ctx_obj is not None and not str(getattr(ctx_obj, "agent_id", "") or ""):
+        ctx_obj.agent_id = agent_id
+    if not getattr(instance.driver, "agent_id", None):
+        instance.driver.agent_id = agent_id
+    _arm_transport_before_tools(options, instance, agent_id)
     # Attach tools even in CLI-only mode (manifest_dir may be None for --tool flags)
     if options.agent_manifest:
         from mas.runtime.engine.manifest_tool_provider import attach_manifest_tools_to_instance
@@ -412,8 +421,51 @@ def instantiate_runtime(
             ),
         )
     if rebuild is not None:
-        instance.conversation_factory = lambda: instantiate_runtime(_conversation_options(rebuild), hitl=hitl)[0]
+
+        def _new_conversation(
+            _options: InstantiationOptions = rebuild,
+            _hitl: Any = hitl,
+            _parent: RuntimeInstance = instance,
+            _agent_id: str = agent_id,
+        ) -> RuntimeInstance:
+            child, _ = instantiate_runtime(_conversation_options(_options), hitl=_hitl)
+            plugin_set = _parent.obs_plugin_set
+            if plugin_set is not None:
+                from mas.runtime.boundary.obs.plugins import attach_observability_plugin_set
+
+                attach_observability_plugin_set(plugin_set, child, agent_id=_agent_id, begin_run=False)
+            return child
+
+        instance.conversation_factory = _new_conversation
     return instance, store
+
+
+def _arm_transport_before_tools(
+    options: InstantiationOptions,
+    instance: "RuntimeInstance",
+    agent_id: str,
+) -> None:
+    """Bind sinks and the process bus before MCP ``tools/list`` (and other protocol I/O)."""
+    from mas.ctl.session.observability import _apply_transport, obs_config_to_binding, setup_instance_obs
+
+    if not options.enable_observability:
+        _apply_transport(None)
+        return
+    if options.obs_config is None:
+        return
+    if instance.obs_plugin_set is None and options.obs_attach_plugins:
+        setup_instance_obs(
+            instance,
+            options.obs_config,
+            base_dir=options.manifest_dir or Path.cwd(),
+            agent_id=agent_id,
+        )
+        return
+    _apply_transport(obs_config_to_binding(options.obs_config))
+    plugin_set = instance.obs_plugin_set
+    op = instance.driver.observability
+    if plugin_set is not None and op is not None:
+        plugin_set.begin_run(op)
 
 
 def _conversation_options(options: InstantiationOptions) -> InstantiationOptions | None:
@@ -431,6 +483,7 @@ def _conversation_options(options: InstantiationOptions) -> InstantiationOptions
         experiment_model_slots=dict(options.experiment_model_slots or {}) or None,
         checkpoint_path=None,
         checkpoint_dir=None,
+        obs_attach_plugins=False,
     )
 
 

@@ -27,6 +27,7 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
     ) -> None:
         self.endpoint = url
         self._client = A2AClient(url=url, headers=headers, timeout=timeout)
+        self._client.peer_id = url
 
     async def aprobe(self, target_agent_id: str) -> bool:
         """Fetch the remote agent card afresh: the peer answers, or this raises."""
@@ -58,16 +59,21 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
         kind = str(getattr(context, "intent", None) or "task").strip().lower() or "task"
         if kind not in self.HONOURED_SEND_INTENTS:
             raise AgentCommError(f"intent {kind!r} is not supported")
-        del target_agent_id, headers, context
+        # The sender is what the link says it speaks for. ``context.sender`` is caller supplied and not trusted.
+        sender = str(self.agent_id or "")
+        del headers, context
+        from library_ioa.plugins.a2a.hooks import bound_identity
+
         try:
-            response = await self._client.asend_message(
-                task,
-                context_id=context_id,
-                metadata={
-                    "mas.correlation_id": str(correlation_id),
-                    "mas.caller_call_id": caller_call_id,
-                },
-            )
+            with bound_identity(sender, str(target_agent_id or "")):
+                response = await self._client.asend_message(
+                    task,
+                    context_id=context_id,
+                    metadata={
+                        "mas.correlation_id": str(correlation_id),
+                        "mas.caller_call_id": caller_call_id,
+                    },
+                )
         except Exception as exc:
             raise AgentCommError(str(exc)) from exc
 

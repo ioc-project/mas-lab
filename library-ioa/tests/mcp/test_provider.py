@@ -35,6 +35,23 @@ class _Client:
         return {"tool": tool_name, "arguments": arguments, **self.result}
 
 
+def test_discover_tools_forwards_ctx_agent_id_not_user() -> None:
+    """Mutation: list_tools is keyed only by ctx.user, so attach-time discovery has no agent name."""
+    from types import SimpleNamespace
+
+    captured: dict = {}
+
+    class Client(_Client):
+        async def list_tools(self, **kwargs):
+            captured.update(kwargs)
+            return await super().list_tools(**kwargs)
+
+    provider = MCPToolProvider(Client(), provider_name="search", tools_claim="*")
+    provider.discover_tools(ctx=SimpleNamespace(user="alice", agent_id="worker"))
+    assert captured["user"] == "alice"
+    assert captured["agent_id"] == "worker"
+
+
 def test_from_provider_spec_http_binds_client_fields() -> None:
     provider = MCPToolProvider.from_provider_spec(
         {

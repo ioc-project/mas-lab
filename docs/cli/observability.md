@@ -87,7 +87,7 @@ Source: [observability-native.yaml](../schemas/examples/controls/observability-n
 
 ### Option 3: pass flags for one session
 
-These flags work on `chat`, `tui`, and `run-mas`. They override the manifest for that session.
+These flags work on `chat`, `tui`, `serve`, and `run-mas`. They override the manifest for that session.
 
 | Flag | Default | Description |
 | --- | --- | --- |
@@ -95,6 +95,7 @@ These flags work on `chat`, `tui`, and `run-mas`. They override the manifest for
 | `--events-file PATH` | `traces/events.jsonl` under the run directory | Write the native JSONL log here. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
 | `--events-stderr` | off | Also stream JSONL records on stderr. Stdout stays the conversation. `--events-stdout` is a legacy alias. Adds `native` when it is not in the plugin set; never replaces a plugin. |
 | `--events-format FORMAT` | manifest | `native`, `otel`, and `both` replace the plugin set. `boundary` is the transform chain only. |
+| `--transport-observability` | manifest | Protocol capture overlay, e.g. `a2a=off`. Repeatable. Needs native or otel. |
 
 On a silent agent, `--events` records native events for one run. For benchmarks, use the overlay or the manifest when you want every scenario to see the same settings. `--events` on an agent that already declares plugins keeps those plugins.
 
@@ -184,9 +185,21 @@ mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --progress
 
 For pipeline and figure workflows, see [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
 
+## Transport (protocol boundaries)
+
+Listing `native` records A2A, MCP, and SLIM crossings as native
+`transport.*` events (hooks on, internals off). Listing `otel` also emits
+the observe-sdk names SCOPE already reads (`a2a.message.*`,
+`slim.message.*`, `a2a.agent_card`, `mcp.tools.discovered`). Capture is
+`native.transport`; projection and aliases are `otel.transport`. Neither
+is a plugin. `mas-ctl chat agent.yaml --transport-observability a2a=off`
+flips one protocol. See
+[Transport observability](../references/transport-observability.md).
+
 ## Related
 
 - [Event model](../references/event-model.md): the native announced stream
+- [Transport observability](../references/transport-observability.md)
 - [OpenTelemetry](../standards/opentelemetry.md)
 - [ctl/tui.md](../ctl/tui.md): the same `--events*` flags
 - [Web UI](../ui/index.md): browse run artifacts

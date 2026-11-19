@@ -94,6 +94,7 @@ class MCPClient:
         self.cache_ttl_ms = cache_ttl_ms
         self.cache_scope = cache_scope if cache_scope in {"public", "private"} else None
         self._list_cache: dict[str, tuple[float, list[dict[str, Any]], int | None]] = {}
+        self._discovery_emitted: set[str] = set()
         self._sticky = False
         self._owner: asyncio.Task | None = None
         self._stop: asyncio.Event | None = None
@@ -110,6 +111,7 @@ class MCPClient:
 
     def invalidate_list_cache(self) -> None:
         self._list_cache.clear()
+        self._discovery_emitted.clear()
 
     def _cache_key(self, user: str) -> str:
         if self.cache_scope == "private":
@@ -275,10 +277,22 @@ class MCPClient:
         self._sticky = False
         await self._close_held()
 
-    async def list_tools(self, *, user: str = "") -> list[dict[str, Any]]:
+    def _emit_listed(self, tools: list[dict[str, Any]], user: str, *, agent_id: str = "") -> None:
+        from library_ioa.plugins.mcp.hooks import emit_tools_discovered, hooks_enabled
+
+        if not hooks_enabled():
+            return
+        key = self._cache_key(user)
+        if key in self._discovery_emitted:
+            return
+        emit_tools_discovered(tools, agent_id=agent_id or user)
+        self._discovery_emitted.add(key)
+
+    async def list_tools(self, *, user: str = "", agent_id: str = "") -> list[dict[str, Any]]:
         """Return the advertised set, following MCP ``nextCursor`` when enabled."""
         cached = self._cached_list(user)
         if cached is not None:
+            self._emit_listed(cached, user, agent_id=agent_id)
             return cached
         async with self._use_session() as session:
             collected: list[dict[str, Any]] = []
@@ -300,6 +314,7 @@ class MCPClient:
                     break
                 seen.add(cursor)
             self._store_list(user, collected, server_ttl=server_ttl)
+            self._emit_listed(collected, user, agent_id=agent_id)
             return collected
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any], **options: Any) -> dict[str, Any]:
@@ -317,6 +332,25 @@ class MCPClient:
         ):
             if src in options and options[src] is not None:
                 call_kwargs[dest] = options[src]
-        async with self._use_session() as session:
-            result = await session.call_tool(tool_name, arguments, **call_kwargs)
-            return result.model_dump(mode="json", by_alias=True)
+        from library_ioa.plugins.mcp.hooks import (
+            emit_call_completed,
+            emit_call_error,
+            emit_call_sent,
+            hooks_enabled,
+            new_call_key,
+        )
+
+        announce = hooks_enabled()
+        key = new_call_key(tool_name) if announce else ""
+        if announce:
+            emit_call_sent(tool=tool_name, source="", target="", key=key)
+        try:
+            async with self._use_session() as session:
+                result = await session.call_tool(tool_name, arguments, **call_kwargs)
+        except BaseException as exc:
+            if announce:
+                emit_call_error(side="client", tool=tool_name, key=key, error_type=type(exc).__name__)
+            raise
+        if announce:
+            emit_call_completed(side="client", tool=tool_name, source="", target="", key=key)
+        return result.model_dump(mode="json", by_alias=True)

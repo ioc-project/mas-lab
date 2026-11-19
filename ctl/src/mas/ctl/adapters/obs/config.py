@@ -19,6 +19,8 @@ class ObservabilityConfig:
     mas_id: str = ""
     plugins: list[str] = field(default_factory=list)
     plugin_configs: dict[str, dict] = field(default_factory=dict)
+    #: ``--transport-observability`` patches, applied over the manifest when the binding is built.
+    transport_cli: dict[str, dict] = field(default_factory=dict)
 
 
 __all__ = ["ObservabilityConfig"]
