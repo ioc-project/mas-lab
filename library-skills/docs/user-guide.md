@@ -200,7 +200,8 @@ Reads one file from the skill's directory. The path is relative to that director
 `run_skill_script` executes scripts from a skill's `scripts/` directory.
 It is added implicitly when a listed skill already has a `scripts/` file.
 To opt in without shipping scripts, declare the system tool (or set
-`auto_inject` on the skill engine):
+`auto_inject` on the skill engine). A skill that only uses one-off commands
+(see below) has no `scripts/` file, so it needs this opt-in:
 
 ```yaml
 spec:
@@ -217,6 +218,20 @@ mas-ctl chat agent.yaml \
 ```
 
 Warning: enable this only in trusted environments where skill scripts have been reviewed. The subprocess runs with the agent process's operating-system permissions.
+
+### One-off commands
+
+A `SKILL.md` can tell the agent to run a published package directly, with no
+`scripts/` file ([Agent Skills: one-off commands](https://agentskills.io/skill-creation/using-scripts#one-off-commands)).
+The agent passes the command as an argv list in `command`, instead of `script`:
+
+```json
+{"skill": "my-skill", "command": ["uvx", "ruff@0.8.0", "check", "."]}
+```
+
+- Allowed launchers: `uvx`, `npx`, `bunx`, `pipx run`, `deno run`, `go run`. Anything else is rejected.
+- Native skill backend only. The command runs from the skill directory, in the same sandbox as scripts (filtered env, resource limits, 120 s cap).
+- Pin versions (`ruff@0.8.0`) and state prerequisites (`Requires uv`) in `SKILL.md`. The launcher must be on the agent's `PATH`.
 
 To grant it to every skill-declaring agent in a deployment without hand-listing
 the tool ref on each one, opt in per-deployment instead:
