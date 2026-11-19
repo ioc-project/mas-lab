@@ -77,14 +77,14 @@ library — do not put `library.yaml` on the lab root.
 
 ## Local plugins
 
-A **plugin** is a runtime or pipeline extension registered by a library. Put
+A **plugin** is a harness or pipeline extension registered by a library. Put
 plugin Python and YAML inside a library, lab-local or shipped. There is no third
 "plugins folder" beside labs and libraries.
 
 | What you are adding | Where it lives |
 | --- | --- |
 | One-off bench/pipeline step for this experiment | That lab’s local library (catalogued in `library.yaml`) |
-| Agent/runtime plugin (design pattern, memory, tool provider, …) | Declared in that library’s `library.yaml` so discovery finds it |
+| Agent (harness) plugin (design pattern, memory, tool provider, …) | Declared in that library’s `library.yaml` so discovery finds it |
 | Experiment pack (scenarios, overlays, lab-owned datasets) | The lab, not a library |
 
 A pipeline step is a plugin of type `step`. The lab runs the experiment. The
@@ -104,10 +104,10 @@ library registers the step.
    them in a subfolder with `library.yaml`, list it in `lab.libraries`, and
    refer to it as `name:path`.
 3. **A shipped or workspace library** fits when more than one lab, or `mas-ctl`
-   and the runtime, should reuse the code. Make it an installable package or add
+   and the harness, should reuse the code. Make it an installable package or add
    its path to `manifest_libraries:` in `config.yaml`.
 4. **A local plugin** lives inside a library (option 2 or 3). A bench step for
-   one experiment stays in the lab's local library. An agent or runtime plugin
+   one experiment stays in the lab's local library. An agent (harness) plugin
    is declared in that library's `library.yaml`.
 
 ---

@@ -48,7 +48,7 @@ A lab can ship its own library: see [labs-and-libraries.md](../../labs-and-libra
 
 ## Overview
 
-An agent manifest (`kind: Agent`) says what the agent does, not how. The runtime handles the how:
+An agent manifest (`kind: Agent`) says what the agent does, not how. The harness handles the how:
 design pattern, tool calls, context management, and tracing. You will:
 
 1. Write a minimal agent manifest and run it.
@@ -93,7 +93,7 @@ Everything else has a default. Run `mas-ctl compile agent.yaml` to print the exp
 | `spec.assembler` | `assembler` | Builds `messages[]`. [context-assembly.md](../../manifests/context-assembly.md) |
 | `spec.context_manager` | `summarising` | Keeps the last 10 user turns verbatim; `summarizer: llm`. [summarization.md](../../manifests/summarization.md) |
 
-### How the runtime reaches an LLM
+### How the harness reaches an LLM
 
 | Layer | Answers | Holds |
 |-------|---------|-------|
@@ -103,7 +103,7 @@ Everything else has a default. Run `mas-ctl compile agent.yaml` to print the exp
 | `.env` | Secret | API key, never committed |
 
 The manifest model name (`gpt-4o`) is canonical. Infra can map it to the provider's name, such as `azure/gpt-4o`.
-The runtime finds tools and skills next to the manifest first, then in the standard library.
+The harness finds tools and skills next to the manifest first, then in the standard library.
 
 A flavour (`kind: Flavour`) links the agents to the infra; the shipped ones live in `library-standard`.
 Select one with `--flavour NAME` or `--flavour PATH`. `local` is the bundled name and the default.
@@ -179,7 +179,7 @@ LLM[gpt-4o] -> AGENT[qa-agent] Tokyo is about 6.7 times larger than Paris.
 
 ## Step 3 — Stack a skill overlay
 
-A skill is a markdown document that gives the agent domain expertise. You reference it by name; the runtime searches
+A skill is a markdown document that gives the agent domain expertise. You reference it by name; the harness searches
 `skills/` next to the manifest, then the installed libraries.
 
 ```yaml
@@ -193,7 +193,7 @@ patch:
 
 - `skills/answer-formatting/SKILL.md` must start with YAML frontmatter (`---`, then `name` and `description`).
   A comment before the frontmatter makes the file a body with no name.
-- Listing a skill makes the runtime add the `activate_skill` system plugin ([System plugins](../../manifests/system-plugins.md)).
+- Listing a skill makes the harness add the `activate_skill` system plugin ([System plugins](../../manifests/system-plugins.md)).
   The `description` is the when-to-use text in the catalog; the body loads on activation.
 
 ```bash
@@ -209,7 +209,7 @@ The model activates the skill, then answers with a one-sentence summary, bullets
 
 ## Step 4 — Add memory
 
-Memory is a resource, not a tool. The runtime injects relevant memories into the prompt
+Memory is a resource, not a tool. The harness injects relevant memories into the prompt
 (retrieval-augmented generation, RAG), and the agent calls memory tools.
 
 ```yaml
@@ -235,7 +235,7 @@ $XDG_DATA_HOME/mas/memory/semantic/<agent_id>.sqlite    # default: ~/.local/shar
 
 Run 1 below leaves a fact in that file, and a later run of `qa-agent` can recall it. Delete the file to start clean.
 `db_path` is a constructor argument of `SemanticMemoryPlugin` (it accepts `{agent_id}`). No overlay sets it today, and there is no `semantic-persistent` mode.
-Plain `memory: semantic` is accepted by the schema but not read by the runtime ([agent.md](../../manifests/agent.md#memoryconfig)).
+Plain `memory: semantic` is accepted by the schema but not read by the harness ([agent.md](../../manifests/agent.md#memoryconfig)).
 
 Check the full stack before running it. `validate` prints one `OK` line per overlay and one for the agent:
 
@@ -459,7 +459,7 @@ Live `mas-ctl chat` steps need `TUTORIAL_ONLINE=1` and a configured LLM.
 ## What you learned
 
 - An agent is a small `kind: Agent` manifest. You add behaviour by stacking Overlay and Control files with `-o`.
-- You declare tools, skills, and memory by reference or name. The runtime and infra layer resolve them.
+- You declare tools, skills, and memory by reference or name. The harness and infra layer resolve them.
 - `mas-ctl compile` shows the merged agent. `events.jsonl` and `mas-lab plot` show what it did.
 
 See the [glossary](../../glossary.md) and the [user guide](../../user-guide.md).

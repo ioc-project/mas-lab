@@ -40,7 +40,7 @@ The Python packaging layout is generated into the
 | Paper experiments | `labs/design-space.lab`, `labs/lifecycle-control.lab`, `labs/extensions.lab` |
 | Tutorial walkthroughs | `docs/tutorials/` |
 | CLI implementation | `ctl/`, `lab/` |
-| Runtime kernel | `runtime/` |
+| Runtime package (kernel) | `runtime/` |
 | Web studio | `ui/` |
 
 A **lab** folder (`*.lab/` plus `lab-config.yaml`) is not a library. A **library**

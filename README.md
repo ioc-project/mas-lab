@@ -127,9 +127,9 @@ Details:
 
 | Directory | Role |
 | --------- | ---- |
-| `runtime/` | Agent runtime — contracts, plugins, design patterns |
+| `runtime/` | Runtime package (the kernel of the harness) — contracts, plugins, design patterns |
 | `ctl/` | Orchestration — `chat`, `run-mas`, `validate` ([flags](docs/cli/mas-ctl.md)) |
-| `.` (repo root) | Meta-package — installs the runtime, control plane, lab components, and libraries |
+| `.` (repo root) | Meta-package — installs the runtime package, control plane, lab components, and libraries |
 | `lab/components/core/` | Lab CLI (`mas-lab`) plus contracts, telemetry, and shared utilities |
 | `library-standard/` | Flavours, overlays, infra bundles |
 

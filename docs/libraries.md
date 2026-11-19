@@ -25,10 +25,10 @@ Requires **Python 3.11+** ([version support](python-support.md)).
 
 | Layer | Directory | What it does |
 |-------|-----------|--------------|
-| **Runtime** | `runtime/` | Executes agents and teams from YAML manifests — contracts, plugins, traces |
+| **Runtime package** | `runtime/` | The kernel of the harness: executes agents and teams from YAML manifests — contracts, plugins, traces |
 | **Control plane** | `ctl/` | Chat, validate, compile, compose, and run multi-agent workflows (`run-mas`) |
 | **Lab** | `lab/components/` | Benchmark experiments, pipelines, reports, and the web UI controller. The root meta-package installs this stack. |
-| **Standard library** | `library-standard/` | Flavours, overlays, infra bundles, and built-in runtime plugins |
+| **Standard library** | `library-standard/` | Flavours, overlays, infra bundles, and built-in harness plugins |
 | **Samples** | `library-samples/` | Reference apps (e.g. trip planner), datasets, and tutorial fixtures |
 | **Optional libraries** | `library-skills/`, `library-ioa/`, `library-kg/`, `library-telemetry/` | Agent skills, MCP/A2A, trace-to-knowledge-graph pipelines, OpenTelemetry conversion and export |
 
@@ -84,7 +84,7 @@ Manifest field reference: [References](references/index.md).
 
 | Area | Extend | Entry points |
 |------|--------|--------------|
-| **Agent runtime** | Design patterns, tools, overlays, observability | Runtime plugin registry — see [`runtime/docs/`](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/index.md) |
+| **Agent harness** | Design patterns, tools, overlays, observability | Harness plugin registry — see [`runtime/docs/`](https://github.com/ioc-project/mas-lab/blob/main/runtime/docs/index.md) |
 | **Benchmark pipelines** | Custom step types (metrics, plots, reports) | Pipeline `type:` in `experiment.yaml` — see [lab manifests](manifests/pipeline.md) |
 | **Evaluation** | Session-level judges and metrics | `library-eval/` / MCE integration — see [Tutorial 3](tutorials/03-experiments-and-analysis/README.md) |
 | **Deployment** | Controller backends for the lab UI | `mas.lab.controller.plugins` entry-point group |

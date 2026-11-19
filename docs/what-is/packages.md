@@ -10,7 +10,7 @@ Each layer depends only on the layers above it. There are no cycles.
 
 | Layer | Directory | Role |
 |---|---|---|
-| **Runtime** | `runtime/` | The kernel, contracts, plugins and design patterns. Library only; the console script points at `mas-ctl` |
+| **Runtime package** | `runtime/` | The kernel, contracts, plugins and design patterns. Library only; the console script points at `mas-ctl` |
 | **Orchestration** | `ctl/` | Builds and runs sessions: `chat`, `run-mas`, `validate`, `compile`, `compose` |
 | **Lab** | `lab/components/core/` | Shared contracts, telemetry types, and the `mas-lab` command |
 | | `lab/components/bench/` | Runs benchmarks and analysis pipelines |
