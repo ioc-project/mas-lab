@@ -73,7 +73,7 @@ class RunSkillScriptPlugin(ToolContract):
                             "items": {"type": "string"},
                             "description": (
                                 "One-off command as an argv list, run from the skill "
-                                "directory, e.g. [\"uvx\", \"ruff@0.8.0\", \"check\", \".\"]. "
+                                'directory, e.g. ["uvx", "ruff@0.8.0", "check", "."]. '
                                 "First item must be uvx, npx, bunx, pipx, deno or go "
                                 "(pipx, deno and go require `run`). Pin package versions."
                             ),

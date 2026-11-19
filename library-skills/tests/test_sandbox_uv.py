@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from sandbox.runner import _build_command
+import pytest
+from sandbox import run_command
+from sandbox.runner import _build_command, validate_one_off_command
 
 _INLINE = '# /// script\n# dependencies = ["tomli-w"]\n# ///\nprint(1)\n'
 
@@ -36,11 +38,6 @@ def test_inline_metadata_without_uv_falls_back(tmp_path: Path) -> None:
 
 # --- one-off package-launcher commands ------------------------------------
 
-import pytest  # noqa: E402
-
-from sandbox import run_command  # noqa: E402
-from sandbox.runner import validate_one_off_command  # noqa: E402
-
 
 @pytest.mark.parametrize(
     "command",
@@ -59,7 +56,15 @@ def test_one_off_command_accepted(command: list[str]) -> None:
 
 @pytest.mark.parametrize(
     "command",
-    [[], ["uvx"], ["rm", "-rf", "/"], ["bash", "-c", "id"], ["pipx", "install", "x"], ["go", "build", "."], ["deno", "eval", "1"]],
+    [
+        [],
+        ["uvx"],
+        ["rm", "-rf", "/"],
+        ["bash", "-c", "id"],
+        ["pipx", "install", "x"],
+        ["go", "build", "."],
+        ["deno", "eval", "1"],
+    ],
 )
 def test_one_off_command_rejected(command: list[str]) -> None:
     assert validate_one_off_command(command) is not None

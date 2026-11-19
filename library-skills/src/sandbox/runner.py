@@ -20,26 +20,49 @@ _MAX_TIMEOUT = 120
 
 # Environment variables that are safe to pass through to scripts.
 # All other env vars (API keys, tokens, credentials, etc.) are stripped.
-_SAFE_ENV_KEYS: frozenset[str] = frozenset({
-    "PATH",
-    "HOME",
-    "TMPDIR", "TMP", "TEMP",
-    "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES",
-    "PYTHONPATH", "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED",
-    "VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "LD_LIBRARY_PATH",
-    "UV_PROJECT_ENVIRONMENT",
-    # uv config so PEP 723 scripts can install packages (cache, mirrors, proxies)
-    "UV_CACHE_DIR", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL", "UV_DEFAULT_INDEX",
-    "UV_PYTHON", "UV_OFFLINE", "UV_NO_CACHE", "UV_NATIVE_TLS",
-    "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
-    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
-    "http_proxy", "https_proxy", "no_proxy",
-    "PWD",
-    "USER", "LOGNAME",
-})
+_SAFE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "LC_MESSAGES",
+        "PYTHONPATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONUNBUFFERED",
+        "VIRTUAL_ENV",
+        "VIRTUAL_ENV_PROMPT",
+        "LD_LIBRARY_PATH",
+        "UV_PROJECT_ENVIRONMENT",
+        # uv config so PEP 723 scripts can install packages (cache, mirrors, proxies)
+        "UV_CACHE_DIR",
+        "UV_INDEX_URL",
+        "UV_EXTRA_INDEX_URL",
+        "UV_DEFAULT_INDEX",
+        "UV_PYTHON",
+        "UV_OFFLINE",
+        "UV_NO_CACHE",
+        "UV_NATIVE_TLS",
+        "SSL_CERT_FILE",
+        "REQUESTS_CA_BUNDLE",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "PWD",
+        "USER",
+        "LOGNAME",
+    }
+)
 
 # POSIX resource limits (best-effort — ignored on platforms without resource module)
-_POSIX_CPU_LIMIT_SECS = 60        # hard upper bound on CPU time
+_POSIX_CPU_LIMIT_SECS = 60  # hard upper bound on CPU time
 _POSIX_MEM_LIMIT_BYTES = 512 * 1024 * 1024  # 512 MiB address space
 
 
@@ -49,13 +72,14 @@ class ScriptResult:
 
     The `ok` field is automatically set based on exit_code during __post_init__.
     """
+
     exit_code: int
     stdout: str
     stderr: str
     ok: bool = field(init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, 'ok', self.exit_code == 0)
+        object.__setattr__(self, "ok", self.exit_code == 0)
 
 
 def run_script(
@@ -291,6 +315,7 @@ def _posix_set_limits() -> None:
     """Apply POSIX resource limits before exec (called in child process)."""
     try:
         import resource as _resource
+
         # CPU time — hard cap prevents spin-loops from consuming indefinitely
         try:
             _resource.setrlimit(
