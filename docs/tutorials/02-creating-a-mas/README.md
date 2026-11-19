@@ -59,7 +59,7 @@ that the agent loads on demand ([Tutorial 6](../06-agent-skills/README.md)).
 
 ## Step 2 — Read the moderator
 
-The moderator is the entry point. It has no domain tools. The runtime injects delegation tools instead.
+The moderator is the entry point. It has no domain tools. The harness injects delegation tools instead.
 
 ```yaml
 # agents/moderator/agent.yaml (abridged)

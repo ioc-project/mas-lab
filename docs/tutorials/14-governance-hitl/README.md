@@ -31,7 +31,7 @@ applies, and `--control` attaches it. All files are in `docs/tutorials/14-govern
 | `controls/governance-auto-approve.yaml`, `governance-auto-deny.yaml` | 5 | Decide without a person |
 | `overlays/agent-asks-user.yaml` | 7 | Agent asks a question |
 
-The runtime enforces the rule. The agent cannot bypass it by changing its
+The harness enforces the rule. The agent cannot bypass it by changing its
 answer or tool arguments. The flow is: the agent proposes a tool call, a rule
 asks for approval, a reject stops it, an approval runs the tool, and an
 optional second approval comes before the model sees the result.

@@ -86,7 +86,7 @@ head -5 "$TRACE"
 # offline: head -5 docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl
 ```
 
-Each line is one event at a runtime boundary. These are the fixture's first lines (abridged):
+Each line is one event at a harness boundary. These are the fixture's first lines (abridged):
 
 ```json
 {"kind":"user_input","agent_id":"mas","call_id":"t3-mas-001","session_id":"t3-session-001","content":"What is 17 × 23? ...","timestamp":1716200000.0}

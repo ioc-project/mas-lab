@@ -50,7 +50,7 @@ No single layer gives all the guarantees. They add up across the three.
 
 | | Source | What it covers |
 |---|---|---|
-| **By design** | The specification and the runtime | Declared roles, allowed tools, policy checks, controlled execution |
+| **By design** | The specification and the harness | Declared roles, allowed tools, policy checks, controlled execution |
 | **By validation** | Labs | Building blocks and combinations tested before release |
 | **By observation** | Traces and guardrails | What only appears under real workloads, delays and policies |
 
