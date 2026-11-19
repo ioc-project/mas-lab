@@ -176,7 +176,7 @@ mas-lab telemetry push     spans.jsonl --endpoint http://localhost:4318
 2. Overlays on scenarios, or on the whole experiment with `-x`.
 3. Defaults in the MAS manifest.
 
-The level hooks in `experiment.yaml` run after execution: `run.post`, `item.post`, `scenario.post`, and the experiment `post:`.
+The level hooks in `experiment.yaml` run around execution at each level (`run`, `item`, `scenario`, and the experiment root): `pre:` steps before it, `post:` steps after it.
 
 ```bash
 mas-lab benchmark run labs/lifecycle-control.lab/experiment.yaml --progress
