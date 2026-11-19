@@ -34,7 +34,9 @@ The experiment's `design` chooses which scenario and item pairs to run:
 Use `one_factor` to vary one thing at a time. Set `design.max_executions` to stop a
 plan that is larger than you intended. Set `dataset.limit` for a quick smoke run.
 
-Analysis steps live in these level hooks. An experiment has no separate `pipeline:`
+Steps live in these level hooks. A `pre:` step runs before a level executes (for
+example `service_start`, which brings up a service the runs need). A `post:` step runs
+after it (analysis, and `service_stop`). An experiment has no separate `pipeline:`
 key. You can still run a standalone pipeline file with `mas-lab benchmark pipeline run`.
 
 See the [experiment manifest](../manifests/experiment.md), the

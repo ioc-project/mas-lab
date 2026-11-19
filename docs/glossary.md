@@ -33,10 +33,10 @@ up here when another page uses it without explanation.
 | **Dataset** | The input items (prompts, expected fields) the experiment runs over. Referenced as `dataset:` in `experiment.yaml`. |
 | **Run** | One execution of the agent or MAS for a given scenario, item, and repeat index. It writes `traces/events.jsonl`. |
 | **`n_runs`** | How many times to repeat each (scenario, item) for variance. Declared under `run.n_runs`. |
-| **Benchmark** | `mas-lab benchmark run` — executes all runs, then runs level hooks. |
+| **Benchmark** | `mas-lab benchmark run` — runs the level hooks around execution: the `pre` hooks of a level before it executes, then the runs, then the `post` hooks. |
 | **Pipeline** | Ordered **pipeline steps** that read run artifacts and write CSV/PNG under `results/`. A pipeline is not a separate key of the experiment: it is declared as steps in the level hooks (inline, or by reference to a pipeline file). |
-| **Level hooks** | `run.post` / `item.post` / `scenario.post` / experiment `post:` in `experiment.yaml` — the places where pipeline steps are attached, one per level of the hierarchy experiment → scenario → item → run. |
-| **Pipeline step** | One unit in a level hook (e.g. `extract_trace_stats`, `plotnine`). Declared with `name`, `type`, `config`. |
+| **Level hooks** | `pre:` and `post:` lists of pipeline steps in `experiment.yaml`, one pair per level of the hierarchy experiment → scenario → item → run (`run.pre`, `run.post`, `item.pre`, `item.post`, `scenario.pre`, `scenario.post`, and the experiment-root `pre:` / `post:`). `pre` steps run before that level executes (for example to start a service the runs need); `post` steps run after it (analysis, tear-down). |
+| **Pipeline step** | One unit in a level hook (e.g. `extract_trace_stats`, `plotnine`, or `service_start` under `pre:` with its `service_stop` under `post:`). Declared with `name`, `type`, `config`. |
 | **Hierarchy levels** | The experiment hierarchy is *experiment → scenario → item → run*. Older material may say *test* for *item*, or *application* for the experiment level; use the names above. |
 | **`events.jsonl`** | The machine-readable trace of a run: one JSON object per line (model calls, tool calls, governance, routing). |
 | **Exchange log** | Human-readable transcript on stderr during `mas-ctl chat` (`--trace` = summary + timestamps; `--trace full` for the payload dump). Persist with `mas_ctl.trace` in `config.yaml`. Not used for experiment scoring. |
