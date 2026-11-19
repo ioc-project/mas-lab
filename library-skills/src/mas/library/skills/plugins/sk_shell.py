@@ -14,7 +14,7 @@ from typing import Any
 
 from agentskills import SkillRegistry
 from mas.runtime.contracts.tool_contract import ToolContract
-from sandbox import guard_path_traversal, run_script
+from sandbox import guard_path_traversal, run_command, run_script
 
 from .skill_plugin_base import (
     require_dict_arg,
@@ -51,7 +51,9 @@ class RunSkillScriptPlugin(ToolContract):
             {
                 "name": "run_skill_script",
                 "description": (
-                    "Execute a support script from a skill's scripts/ directory. "
+                    "Execute a support script from a skill's scripts/ directory, or "
+                    "a one-off package command (uvx, npx, bunx, pipx run, deno run, "
+                    "go run) given as `command`. Give `script` or `command`, not both. "
                     "Returns stdout, stderr, and exit code. "
                     "Scripts run in a sandboxed environment with resource limits."
                 ),
@@ -65,6 +67,16 @@ class RunSkillScriptPlugin(ToolContract):
                         "script": {
                             "type": "string",
                             "description": "Script filename (plain name, no path).",
+                        },
+                        "command": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "One-off command as an argv list, run from the skill "
+                                "directory, e.g. [\"uvx\", \"ruff@0.8.0\", \"check\", \".\"]. "
+                                "First item must be uvx, npx, bunx, pipx, deno or go "
+                                "(pipx, deno and go require `run`). Pin package versions."
+                            ),
                         },
                         "args": {
                             "type": "array",
@@ -92,7 +104,7 @@ class RunSkillScriptPlugin(ToolContract):
                             ),
                         },
                     },
-                    "required": ["skill", "script"],
+                    "required": ["skill"],
                 },
                 "semantics": {"concept": "skill", "op": "execute", "subject_arg": "skill"},
             }
@@ -112,12 +124,25 @@ class RunSkillScriptPlugin(ToolContract):
         try:
             skill = require_str_arg(arguments, "skill")
             script = require_str_arg(arguments, "script")
+            command = require_str_list_arg(arguments, "command")
             args = require_str_list_arg(arguments, "args")
             env = require_dict_arg(arguments, "env")
             timeout = min(require_number_arg(arguments, "timeout", _DEFAULT_TIMEOUT), _MAX_TIMEOUT)
             stdin = require_str_arg(arguments, "stdin")
         except TypeError as exc:
             return {"error": str(exc)}
+        if command:
+            if script or args:
+                return {"error": "Give either `command` or `script`/`args`, not both"}
+            return self._run_command(
+                skill=skill,
+                command=command,
+                timeout=timeout,
+                extra_env=sanitize_extra_env(env),
+                registry=registry,
+                backend_plugin=backend_plugin,
+                stdin=stdin,
+            )
         return self._run_script(
             skill=skill,
             script=script,
@@ -131,6 +156,44 @@ class RunSkillScriptPlugin(ToolContract):
 
     def on_collect_tools(self, **_: Any) -> list[dict[str, Any]]:
         return self.list_tools()
+
+    def _run_command(
+        self,
+        skill: str,
+        command: list[str],
+        timeout: int,
+        extra_env: dict[str, str],
+        registry: SkillRegistry | None,
+        backend_plugin: Any | None,
+        stdin: str = "",
+    ) -> dict[str, Any]:
+        if not skill:
+            return {"error": "skill is required"}
+        record = registry.get(skill) if registry else None
+        if record is None:
+            available = registry.names() if registry else []
+            return {"error": f"Skill {skill!r} not found in registry. Available: {available}"}
+        if backend_plugin is not None:
+            return {"error": "One-off commands are only supported by the native skill backend"}
+        logger.info("RunSkillScriptPlugin: one-off skill=%r command=%r timeout=%ds", skill, command, timeout)
+        try:
+            result = run_command(
+                command,
+                cwd=record.base_dir,
+                timeout=timeout,
+                env_extra=extra_env,
+                stdin=stdin,
+            )
+        except Exception as exc:
+            return {"error": f"Cannot run command {command!r} for skill {skill!r}: {exc}"}
+        return {
+            "skill": skill,
+            "command": command,
+            "exit_code": result.exit_code,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "ok": result.ok,
+        }
 
     def _run_script(
         self,

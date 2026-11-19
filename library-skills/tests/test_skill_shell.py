@@ -269,7 +269,8 @@ def test_list_tools_schema():
     assert "timeout" in params["properties"]
     assert "env" in params["properties"]  # extra env support
     assert "stdin" in params["properties"]
-    assert set(params["required"]) == {"skill", "script"}
+    assert "command" in params["properties"]  # one-off launcher commands
+    assert set(params["required"]) == {"skill"}
     assert tools[0]["semantics"] == {
         "concept": "skill",
         "op": "execute",
@@ -481,3 +482,48 @@ def test_posix_set_limits_is_callable():
 
     # Should not raise even on platforms without resource module
     _posix_set_limits()
+
+
+# ---------------------------------------------------------------------------
+# run_skill_script — one-off commands (uvx, npx, ...)
+# ---------------------------------------------------------------------------
+
+
+def test_one_off_command_runs_in_skill_dir(tmp_path: Path, monkeypatch):
+    reg = _registry_with_scripts(tmp_path)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    uvx = fake_bin / "uvx"
+    uvx.write_text('#!/bin/sh\necho "$PWD|$*"\n')
+    uvx.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{fake_bin}:/usr/bin:/bin")
+    result = RunSkillScriptPlugin().on_execute_tool(
+        "run_skill_script",
+        {"skill": "my-skill", "command": ["uvx", "ruff@0.8.0", "check", "."]},
+        ctx=_FakeCtx(reg),
+    )
+    assert result["ok"] is True
+    cwd, _, argv = result["stdout"].strip().partition("|")
+    assert Path(cwd).resolve() == (tmp_path / "my-skill").resolve()
+    assert argv == "ruff@0.8.0 check ."
+
+
+def test_one_off_command_rejects_other_executables(tmp_path: Path):
+    reg = _registry_with_scripts(tmp_path)
+    result = RunSkillScriptPlugin().on_execute_tool(
+        "run_skill_script",
+        {"skill": "my-skill", "command": ["bash", "-c", "id"]},
+        ctx=_FakeCtx(reg),
+    )
+    assert result["ok"] is False
+    assert "must start with one of" in result["stderr"]
+
+
+def test_command_and_script_are_exclusive(tmp_path: Path):
+    reg = _registry_with_scripts(tmp_path)
+    result = RunSkillScriptPlugin().on_execute_tool(
+        "run_skill_script",
+        {"skill": "my-skill", "script": "hello.py", "command": ["uvx", "x"]},
+        ctx=_FakeCtx(reg),
+    )
+    assert "not both" in result["error"]

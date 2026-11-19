@@ -25,7 +25,9 @@ metadata:
 spec:
   description: >
     Sandboxed execution of skill support scripts.  Only scripts inside the
-    skill's scripts/ subdirectory may be run.  Returns stdout, stderr, and
+    skill's scripts/ subdirectory may be run.  Alternatively a one-off
+    package command (uvx, npx, bunx, pipx run, deno run, go run) may be run
+    from the skill directory via the `command` argument.  Returns stdout, stderr, and
     exit code.  Passes through the runtime governance policy engine before
     execution.
 
