@@ -464,6 +464,14 @@ class MasBenchRunner:
         # Bench runs are unattended: nobody can answer request_human_input.
         bind.hitl_mode = "auto"
         entry = entry_agent_id(compose.mas_config)
+        _, obs_cfg = bench_obs_config(
+            output_dir,
+            entry_manifest,
+            entry_manifest_path,
+            mas_config=compose.mas_config,
+            flavour=flavour,
+        )
+        bind.obs_config = obs_cfg
 
         if len(bind.agents) <= 1:
             pattern_plugin_id = resolve_entry_pattern_plugin_id(compose, entry, entry_manifest=entry_manifest)
@@ -482,6 +490,7 @@ class MasBenchRunner:
                     hitl_contract=hitl_contract_for_mode("auto"),
                     events_file=str(output_dir / "traces" / "events.jsonl"),
                     flavour_spec=flavour_spec_of(flavour),
+                    obs_config=obs_cfg,
                 ),
             )
             _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -498,13 +507,6 @@ class MasBenchRunner:
         materialized = materialize_mas_compose(compose, mas_base_dir=resolved_mas_path.parent)
 
         try:
-            events_path, obs_cfg = bench_obs_config(
-                output_dir,
-                entry_manifest,
-                entry_manifest_path,
-                mas_config=compose.mas_config,
-                flavour=flavour,
-            )
             try:
                 prepared = prepare_delegation_entry_session(
                     materialized,

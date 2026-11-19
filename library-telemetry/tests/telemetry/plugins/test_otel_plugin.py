@@ -139,3 +139,131 @@ def test_on_transition_falls_back_to_override_field_when_event_has_none() -> Non
 
     assert converter.processed
     assert all(rec.get("session_id") == "override-session-id" for rec in converter.processed)
+
+
+def test_emit_is_silent_without_aliases_or_a_logger() -> None:
+    from mas.runtime.schema.transport import MESSAGE_SENT, SOURCE_HOOK, TransportEvent
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+    from mas.runtime.transport.emit import bind_config, reset
+
+    event = TransportEvent(
+        kind=MESSAGE_SENT,
+        protocol="a2a",
+        side="client",
+        correlation_key="k",
+        source=SOURCE_HOOK,
+        timestamp=1.0,
+        attributes={"source": "a", "target": "b"},
+    )
+    bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig(aliases="off")))
+    plugin = OtelObservabilityPlugin(converter=None)
+    try:
+        plugin.emit(event)
+    finally:
+        plugin.close()
+        reset()
+
+    bind_config(TransportObservabilityConfig(present=True))
+    plugin = OtelObservabilityPlugin(converter=_DummyConverter())
+    try:
+        plugin.emit(event)  # dummy has no _event_logger
+    finally:
+        plugin.close()
+        reset()
+
+
+def test_alias_table_is_loaded_from_the_classifier_registry(monkeypatch) -> None:
+    from library_ioa.plugins.a2a.classifier import A2ATransportClassifier
+    from mas.runtime.schema.transport import MESSAGE_SENT, SOURCE_HOOK, TransportEvent
+    from mas.runtime.transport.config import TransportObservabilityConfig
+    from mas.runtime.transport.emit import bind_config, reset
+
+    class _Entry:
+        urn = "mas.transport.classifier.a2a"
+
+        def resolve(self):
+            class _Resolved:
+                def load_class(self):
+                    return A2ATransportClassifier
+
+            return _Resolved()
+
+    class _Registry:
+        def get_by_category(self, category: str):
+            assert category == "transport_classifier"
+            return [_Entry()]
+
+    monkeypatch.setattr("mas.runtime.registry.get_registry", lambda: _Registry())
+    bind_config(TransportObservabilityConfig(present=True))
+    plugin = OtelObservabilityPlugin(converter=_DummyConverter())
+    try:
+        table = plugin._alias_table("a2a")
+        assert table.events
+        assert plugin._alias_table("a2a") is table
+        plugin.emit(
+            TransportEvent(
+                kind=MESSAGE_SENT,
+                protocol="a2a",
+                side="client",
+                correlation_key="k",
+                source=SOURCE_HOOK,
+                timestamp=1.0,
+                attributes={"source": "a", "target": "b"},
+            )
+        )
+    finally:
+        plugin.close()
+        reset()
+
+
+def test_emit_writes_observe_sdk_alias() -> None:
+    from mas.runtime.schema.transport import MESSAGE_SENT, SOURCE_HOOK, TransportEvent
+    from mas.runtime.transport.classifier import Alias, AliasTable
+    from mas.runtime.transport.config import TransportObservabilityConfig
+    from mas.runtime.transport.emit import bind_config, reset
+
+    class _Logger:
+        def __init__(self) -> None:
+            self.records: list = []
+
+        def emit(self, rec: object) -> None:
+            self.records.append(rec)
+
+    class _Converter:
+        def __init__(self) -> None:
+            self._event_logger = _Logger()
+
+        def finish(self, *, emit_graph: bool | None = None) -> None:
+            del emit_graph
+
+    bind_config(TransportObservabilityConfig(present=True))
+    plugin = OtelObservabilityPlugin(converter=_Converter())
+    plugin._alias_tables["example"] = AliasTable(
+        events={
+            MESSAGE_SENT: Alias(
+                event="a2a.message.sent",
+                attributes={"source": "source.agent", "target": "target.agent"},
+            )
+        }
+    )
+    try:
+        plugin.emit(
+            TransportEvent(
+                kind=MESSAGE_SENT,
+                protocol="example",
+                side="client",
+                correlation_key="k",
+                source=SOURCE_HOOK,
+                timestamp=1.0,
+                mas_id="demo",
+                attributes={"source": "planner", "target": "worker"},
+            )
+        )
+        records = plugin.converter._event_logger.records
+        assert records
+        assert records[0].body == "a2a.message.sent"
+        assert records[0].attributes["source.agent"] == "planner"
+        assert records[0].attributes["target.agent"] == "worker"
+    finally:
+        plugin.close()
+        reset()

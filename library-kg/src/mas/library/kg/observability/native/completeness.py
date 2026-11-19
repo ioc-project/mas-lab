@@ -24,8 +24,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Tuple
 
-from mas.library.kg.core.event_mappings import KIND_TO_CLASS
+from mas.library.kg.core.event_mappings import KIND_TO_CLASS, TRANSPORT_EVENT_KINDS
 from mas.library.kg.core.graph_builder import _annotation_id
+from mas.library.kg.core.native_graph_builder import catalog_node_id
 
 CheckResult = Tuple[bool, List[Dict[str, Any]]]
 
@@ -42,9 +43,7 @@ def check_native_trace_completeness(
     ``(False, violations)`` with one entry per unaccounted event
     (``kind``, ``call_id``, ``timestamp``).
     """
-    call_ids_present: set[str] = {
-        str(n.get("callId")) for n in nodes if n.get("callId")
-    }
+    call_ids_present: set[str] = {str(n.get("callId")) for n in nodes if n.get("callId")}
     node_ids_present: set[str] = {str(n.get("id")) for n in nodes if n.get("id")}
 
     violations: List[Dict[str, Any]] = []
@@ -57,6 +56,31 @@ def check_native_trace_completeness(
             pass
         elif KIND_TO_CLASS[kind] is None:
             continue  # deliberately suppressed by design (legacy_kinds)
+
+        if kind in TRANSPORT_EVENT_KINDS:
+            if str(ev.get("protocol") or "") == "mcp" and kind.startswith("transport.message"):
+                continue
+            attrs = ev.get("attributes") or {}
+            if not isinstance(attrs, dict):
+                attrs = {}
+            candidates = [
+                str(attrs.get("source") or ""),
+                str(attrs.get("target") or ""),
+                str(ev.get("agent_id") or ""),
+            ]
+            card = attrs.get("card") or {}
+            if isinstance(card, dict):
+                candidates.append(str(card.get("name") or ""))
+            if any(c and c in node_ids_present for c in candidates):
+                continue
+            tools = attrs.get("tools")
+            entries = tools.get("tools") if isinstance(tools, dict) else None
+            if isinstance(entries, list) and any(
+                catalog_node_id("Tool", str(item.get("name") or "")) in node_ids_present
+                for item in entries
+                if isinstance(item, dict) and item.get("name")
+            ):
+                continue
 
         # Try both identity schemes regardless of suffix shape: several
         # _start/_end-suffixed kinds (agent_communication_*, checkpoint_*)

@@ -8,6 +8,7 @@ import os
 from typing import Any
 
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
+from mas.runtime.transport.config import TransportObservabilityConfig
 
 
 class SpecBindingError(ValueError):
@@ -54,9 +55,7 @@ def _parse_obs_list(
                 if isinstance(cfg, dict):
                     configs[name] = dict(cfg)
         else:
-            raise SpecBindingError(
-                f"observability list entries must be str or dict, got {type(item).__name__}"
-            )
+            raise SpecBindingError(f"observability list entries must be str or dict, got {type(item).__name__}")
     return plugins, configs
 
 
@@ -66,11 +65,13 @@ def parse_obs_spec(raw: list | None) -> ObservabilityBinding:
         return ObservabilityBinding(plugins=[])
 
     if not isinstance(raw, list):
-        raise SpecBindingError(
-            f"spec.observability must be a list, got {type(raw).__name__}"
-        )
+        raise SpecBindingError(f"spec.observability must be a list, got {type(raw).__name__}")
 
     plugins, configs = _parse_obs_list(raw)
+    if any(name == "transport" or name.endswith(".transport") for name in plugins):
+        raise SpecBindingError(
+            "transport is not an observability plugin; set capture on native.transport and projection on otel.transport"
+        )
 
     events_file: str | None = None
     otlp_endpoint_env: str | None = None
@@ -86,6 +87,7 @@ def parse_obs_spec(raw: list | None) -> ObservabilityBinding:
         plugin_configs=configs,
         otlp_endpoint_env=otlp_endpoint_env,
         events_file=events_file,
+        transport=TransportObservabilityConfig.from_plugins(plugins, configs),
     )
 
 

@@ -88,6 +88,7 @@ def tui_cmd(
     events_file: str | None,
     events_stdout: bool,
     events_format: str | None,
+    transport_observability: tuple[str, ...] = (),
 ) -> None:
     """Curses chat UI — manifest, overlays, infra, and HITL parity with mas-ctl chat."""
     from mas.ctl.env import load_dotenv
@@ -189,6 +190,7 @@ def tui_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
+            transport_observability=transport_observability,
             agent_id=agent_id,
             manifest=agent_data,
             flavour_spec=flavour_spec,
@@ -212,6 +214,7 @@ def tui_cmd(
                 obs_binding_override=(
                     obs_config_to_binding(obs_cfg) if cli_replaced_plugin_set(events, events_format) else None
                 ),
+                obs_config=obs_cfg,
             ),
             hitl=hitl_responder,
         )

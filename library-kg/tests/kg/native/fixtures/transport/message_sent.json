@@ -1,0 +1,72 @@
+{
+  "events": [
+    {
+      "kind": "transport.message.sent",
+      "timestamp": 1.0,
+      "run_id": "r1",
+      "agent_id": "planner",
+      "mas_id": "demo",
+      "protocol": "example",
+      "side": "client",
+      "correlation_key": "k",
+      "source": "hook",
+      "attributes": {
+        "source": "planner",
+        "target": "researcher"
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "node_type": "Agent",
+      "id": "planner",
+      "name": "planner",
+      "declared": true,
+      "@type": "Agent",
+      "description": ""
+    },
+    {
+      "node_type": "Agent",
+      "id": "researcher",
+      "name": "researcher",
+      "declared": true,
+      "@type": "Agent",
+      "description": ""
+    },
+    {
+      "node_type": "MAS",
+      "id": "catalog:mas:demo",
+      "name": "demo",
+      "declared": true,
+      "@type": "MAS",
+      "description": ""
+    },
+    {
+      "node_type": "Session",
+      "id": "session-r1",
+      "sessionId": "session-r1",
+      "name": "Session session-r1",
+      "@type": "Session"
+    }
+  ],
+  "edges": [
+    {
+      "edge_type": "belongsToMAS",
+      "from_id": "planner",
+      "to_id": "catalog:mas:demo",
+      "id": "belongsToMAS:planner->catalog:mas:demo",
+      "@type": "belongsToMAS",
+      "source_id": "planner",
+      "target_id": "catalog:mas:demo"
+    },
+    {
+      "edge_type": "belongsToMAS",
+      "from_id": "researcher",
+      "to_id": "catalog:mas:demo",
+      "id": "belongsToMAS:researcher->catalog:mas:demo",
+      "@type": "belongsToMAS",
+      "source_id": "researcher",
+      "target_id": "catalog:mas:demo"
+    }
+  ]
+}

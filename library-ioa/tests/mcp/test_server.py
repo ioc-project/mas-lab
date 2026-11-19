@@ -139,6 +139,66 @@ def test_factory_injects_sdk_context_only_when_declared(tmp_path: Path) -> None:
     assert wrapped(a=2, b=3, ctx=context) == {"has_context": True}
 
 
+def test_wrapped_tool_emits_received_completed_and_error(tmp_path: Path) -> None:
+    from mas.runtime.schema.transport import TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+    emit.bind_sink(Sink())
+    try:
+        sync = MCPToolServerFactory.from_manifest(_write_tool(tmp_path))._tools[0]["fn"]
+        sync(a=2, b=3)
+        boom_path = tmp_path / "boom"
+        boom_path.mkdir()
+        boom = MCPToolServerFactory.from_manifest(
+            _write_tool(
+                boom_path,
+                class_body=("class SampleTool:\n    def execute(self, **kwargs):\n        raise RuntimeError('no')\n"),
+            )
+        )._tools[0]["fn"]
+        with pytest.raises(RuntimeError):
+            boom(a=2, b=3)
+        async_path = tmp_path / "async_tool"
+        async_path.mkdir()
+        async_fn = MCPToolServerFactory.from_manifest(
+            _write_tool(
+                async_path,
+                class_body=(
+                    "class SampleTool:\n"
+                    "    async def execute(self, **kwargs):\n"
+                    "        return {'answer': kwargs['a'] + kwargs['b']}\n"
+                ),
+            )
+        )._tools[0]["fn"]
+        assert asyncio.run(async_fn(a=2, b=3))
+        fail_path = tmp_path / "async_fail"
+        fail_path.mkdir()
+        async_fail = MCPToolServerFactory.from_manifest(
+            _write_tool(
+                fail_path,
+                class_body=(
+                    "class SampleTool:\n    async def execute(self, **kwargs):\n        raise RuntimeError('no')\n"
+                ),
+            )
+        )._tools[0]["fn"]
+        with pytest.raises(RuntimeError):
+            asyncio.run(async_fail(a=2, b=3))
+    finally:
+        emit.reset()
+    kinds = [e.kind for e in captured]
+    assert kinds.count("transport.message.received") >= 3
+    assert kinds.count("transport.message.completed") >= 2
+    assert kinds.count("transport.error") >= 2
+
+
 def test_factory_optional_parameter_and_unknown_type() -> None:
     assert _python_type_for_schema("integer") is int
     assert _python_type_for_schema("unknown") is not int

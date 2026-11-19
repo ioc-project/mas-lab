@@ -1,0 +1,41 @@
+{
+  "protocol": "mcp",
+  "scenario": "initialize",
+  "sdk_version": "2.2.0",
+  "span_count": 2,
+  "spans": [
+    {
+      "attributes": {
+        "jsonrpc.request.id": "1",
+        "mcp.method.name": "initialize",
+        "mcp.protocol.version": "2025-11-25"
+      },
+      "events": [],
+      "kind": "SERVER",
+      "name": "initialize",
+      "parent_span_id": "$span-3",
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-2",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {
+        "jsonrpc.request.id": "1",
+        "mcp.method.name": "initialize"
+      },
+      "events": [],
+      "kind": "CLIENT",
+      "name": "MCP send initialize",
+      "parent_span_id": null,
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-3",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    }
+  ],
+  "token_context_error": false,
+  "token_error_count": 0
+}

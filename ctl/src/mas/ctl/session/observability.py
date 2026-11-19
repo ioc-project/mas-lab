@@ -21,6 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import click
 from mas.ctl.adapters.obs.config import ObservabilityConfig
 from mas.ctl.adapters.obs.session import SessionObservabilityRecorder
 from mas.library.standard.plugins.observability.native_plugin import NativeObservabilityPlugin
@@ -30,6 +31,7 @@ from mas.runtime.boundary.obs.plugins import (
     attach_observability_plugin_set,
     build_observability_plugin_set,
 )
+from mas.runtime.transport.config import TransportObservabilityConfig
 
 if TYPE_CHECKING:
     from mas.runtime.driver.instance import RuntimeInstance
@@ -50,15 +52,40 @@ def obs_config_to_binding(config: ObservabilityConfig) -> ObservabilityBinding |
         native_cfg = dict(plugin_configs.get("native") or {})
         native_cfg.setdefault("path", config.events_file)
         plugin_configs["native"] = native_cfg
+    transport = TransportObservabilityConfig.from_plugins(plugins, plugin_configs).overlay_cli(config.transport_cli)
+    if config.transport_cli and not transport.present:
+        raise click.UsageError(
+            "--transport-observability needs the native or otel sink: list one under spec.observability"
+        )
     binding = ObservabilityBinding(
         plugins=plugins,
         plugin_configs=plugin_configs,
         events_file=config.events_file,
         stdout=config.events_stdout,
+        transport=transport,
     )
     if config.mas_id:
         binding = binding.with_mas_id(config.mas_id)
     return binding
+
+
+def _apply_transport(binding: ObservabilityBinding | None) -> None:
+    """Install process transport config (or turn it off) and attach SDK-span intake when asked."""
+    from mas.runtime.boundary.obs.plugins import _bind_transport
+
+    if binding is None:
+        _bind_transport(TransportObservabilityConfig())
+        from mas.ctl.session.transport_obs import apply_sdk_span_env
+
+        apply_sdk_span_env(TransportObservabilityConfig())
+        return
+    _bind_transport(binding.transport)
+    if not binding.transport.present:
+        return
+    from mas.ctl.session.transport_obs import apply_sdk_span_env, install_configured_intake
+
+    sdk_imported_first = apply_sdk_span_env(binding.transport)
+    install_configured_intake(binding.transport, sdk_imported_first=sdk_imported_first)
 
 
 def setup_instance_obs(
@@ -72,6 +99,7 @@ def setup_instance_obs(
     binding = obs_config_to_binding(config)
     effective_agent_id = agent_id or config.agent_id
     plugin_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=effective_agent_id)
+    _apply_transport(binding)
     if plugin_set is None:
         return None
     attach_observability_plugin_set(plugin_set, instance, agent_id=effective_agent_id)
@@ -88,6 +116,7 @@ def setup_shared_obs(
     """One plugin set shared across all agents in a multi-agent run."""
     binding = obs_config_to_binding(config)
     shared_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=entry_agent_id)
+    _apply_transport(binding)
     if shared_set is None:
         return None
     for agent_id, instance in instances.items():
@@ -134,11 +163,15 @@ def _plugin_set_of(instance: object) -> ObsPluginSet | None:
 
 def _release_plugin_set(instance: "RuntimeInstance") -> None:
     """Unsubscribe a private set without ``close()`` (that would emit ``mas_call_end``)."""
+    from mas.runtime.transport.emit import unbind_sink
+
     plugin_set = _plugin_set_of(instance)
     op = instance.driver.observability
-    if plugin_set is not None and op is not None:
+    if plugin_set is not None:
         for plugin in plugin_set.plugins:
-            op.unsubscribe(plugin)
+            if op is not None:
+                op.unsubscribe(plugin)
+            unbind_sink(plugin)
     instance.obs_plugin_set = None
 
 
@@ -213,11 +246,13 @@ def setup_run_observability(
     when *obs_config* is ``None`` (observability disabled for this run).
     """
     if obs_config is None or not obs_config.enabled:
+        _apply_transport(None)
         if obs_config is not None and not obs_config.enabled:
             for instance in instances.values():
                 if _plugin_set_of(instance) is not None:
                     _release_plugin_set(instance)
         return None, []
+    _apply_transport(obs_config_to_binding(obs_config))
     shared_instances, scoped_instances = partition_instances_by_observability(instances)
     plugin_set = None
     if shared_instances:
@@ -244,12 +279,15 @@ def setup_observability(
     """
     existing = _plugin_set_of(instance)
     if not config.enabled:
+        _apply_transport(None)
         if existing is not None:
             _release_plugin_set(instance)
         return None
-    if existing is not None and existing.plugins:
-        return SessionObservabilityRecorder(plugin_set=existing)
     binding = obs_config_to_binding(config)
+    _apply_transport(binding)
+    if existing is not None and existing.plugins:
+        attach_observability_plugin_set(existing, instance, agent_id=config.agent_id)
+        return SessionObservabilityRecorder(plugin_set=existing)
     plugin_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=config.agent_id)
     if plugin_set is None:
         return None
@@ -270,6 +308,7 @@ def create_shared_observability(
     binding = obs_config_to_binding(config)
     entry_agent_id = config.agent_id
     shared_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=entry_agent_id)
+    _apply_transport(binding)
     if shared_set is None:
         return None, None
 
@@ -292,6 +331,7 @@ def setup_observability_from_binding(
 ) -> SessionObservabilityRecorder | None:
     """New path: ObservabilityBinding → runtime plugins → ObsPluginSet."""
     if binding is None or not binding.plugins:
+        _apply_transport(binding)
         return None
 
     plugin_set = _plugin_set_of(instance)
@@ -299,6 +339,7 @@ def setup_observability_from_binding(
         plugin_set = build_observability_plugin_set(binding, base_dir=base_dir, agent_id=agent_id)
         if plugin_set is None:
             return None
+    _apply_transport(binding)
 
     attach_observability_plugin_set(plugin_set, instance, agent_id=agent_id)
     return SessionObservabilityRecorder(plugin_set=plugin_set)

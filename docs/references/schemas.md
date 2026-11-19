@@ -123,6 +123,8 @@ Sample overlays and bindings under [`schemas/examples/`](https://github.com/ioc-
 - [`overlays/llm-reasoning.yaml`](../schemas/examples/overlays/llm-reasoning.yaml)
 - [`overlays/llm-sampling.yaml`](../schemas/examples/overlays/llm-sampling.yaml)
 - [`controls/observability-native.yaml`](../schemas/examples/controls/observability-native.yaml)
+- [`controls/observability-transport-a2a-off.yaml`](../schemas/examples/controls/observability-transport-a2a-off.yaml)
+- [`controls/observability-transport-native-only.yaml`](../schemas/examples/controls/observability-transport-native-only.yaml)
 - [`infra/mcp-localhost.yaml`](../schemas/examples/infra/mcp-localhost.yaml)
 - [`library-samples/infra/mcp-localhost-deploy.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost-deploy.yaml): MCP server deployment posture
 - [`tools/annotated.tool.yaml`](../schemas/examples/tools/annotated.tool.yaml)

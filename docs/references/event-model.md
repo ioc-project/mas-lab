@@ -81,6 +81,7 @@ As of v0.2.0 the model is implemented as follows.
 - **Projection.** `boundary_event_to_transition()` (`mas.runtime.boundary.obs.transition`) projects each record to a `TransitionEvent`. It adds `agent_id`, `session_id`, `task_id`, `call_id`, `parent_call_id`, and `upstream_correlation_id`. These are the parent and child edges described above.
 - **Live stream.** `EventStream` (`mas.runtime.boundary.obs.event_stream`) is an in-process publish/subscribe bus. The native observability plugin (`library-standard`, `plugins/observability/native_plugin.py`) publishes projected records onto it. Nothing subscribes unless a host or pipeline step does.
 - **Written stream.** JSONL emitters write the same records to a file or stdout for later reading: `JsonlFileEmitter`, `StdoutJsonlEmitter`, `FanOutEmitter`, and `NullEmitter` in `mas.library.standard.lib.observability.emit`.
+- **Transport.** Protocol plugins emit `transport.*` records (`mas.runtime.schema.transport.TransportEvent`) onto the same JSONL stream. They are not kernel Mealy symbols. See [Transport observability](transport-observability.md).
 - **Cross-process tail.** `ExchangeHub` (`mas.runtime.boundary.obs.exchange_hub`) fans out driver exchange records to control-protocol subscribers. The host injects it. It is not a process-wide singleton.
 
 ## Related
@@ -88,4 +89,5 @@ As of v0.2.0 the model is implemented as follows.
 - [Contracts](contracts.md): where this stream fits among the runtime's other boundaries.
 - [CLI observability](../cli/observability.md)
 - [OpenTelemetry](../standards/opentelemetry.md)
+- [Transport observability](transport-observability.md)
 - [Tutorial 8: telemetry](../tutorials/08-telemetry/README.md)

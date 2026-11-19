@@ -1,0 +1,12 @@
+{
+  "protocol": "slim",
+  "published": [
+    "ping"
+  ],
+  "scenario": "channel_session",
+  "sdk_version": "2.2.0",
+  "span_count": 0,
+  "spans": [],
+  "token_context_error": false,
+  "token_error_count": 0
+}

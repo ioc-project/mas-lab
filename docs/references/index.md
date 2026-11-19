@@ -69,6 +69,7 @@ The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 | Kernel operations | [kernel-primitives.md](kernel-primitives.md) |
 | Run logs | [Observability](../cli/observability.md) (CLI) |
 | Native event stream | [Event model](event-model.md) |
+| Protocol boundary telemetry (A2A, MCP, SLIM) | [Transport observability](transport-observability.md) · [inventory](transport-observability-inventory.md) · [KG mapping](transport-observability-kg-mapping.md) |
 
 ---
 

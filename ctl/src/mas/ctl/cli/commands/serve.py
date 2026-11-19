@@ -88,6 +88,7 @@ def serve_agent_cmd(
     events_file: str | None,
     events_stdout: bool,
     events_format: str | None,
+    transport_observability: tuple[str, ...] = (),
 ) -> None:
     """Serve an agent through the agent_expose plugin selected by its infra endpoint."""
     from mas.ctl.paths import manifest_cwd
@@ -164,6 +165,7 @@ def serve_agent_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
+            transport_observability=transport_observability,
             agent_id=agent_id,
             manifest=manifest,
             flavour_spec=flavour_spec,
@@ -183,6 +185,7 @@ def serve_agent_cmd(
                 events_file=obs_config.events_file,
                 obs_from_cli=replaced,
                 obs_binding_override=obs_config_to_binding(obs_config) if replaced else None,
+                obs_config=obs_config,
             )
         )
         recorder = setup_observability(

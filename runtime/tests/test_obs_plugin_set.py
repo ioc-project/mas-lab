@@ -32,13 +32,19 @@ class _FakeInstance:
 
 
 def test_build_observability_plugin_set_returns_none_for_none_binding(tmp_path) -> None:
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
     assert build_observability_plugin_set(None, base_dir=tmp_path) is None
+    assert emit.is_enabled() is False
+    emit.reset()
 
 
 def test_build_observability_plugin_set_returns_none_for_empty_plugin_list(tmp_path) -> None:
     binding = ObservabilityBinding(plugins=[])
-    # An explicitly empty list still means "nothing to build".
-    assert binding.plugins == []
+    assert build_observability_plugin_set(binding, base_dir=tmp_path) is None
 
 
 def test_build_observability_plugin_set_builds_real_plugins(tmp_path) -> None:
@@ -98,3 +104,99 @@ def test_attach_observability_plugin_set_respects_explicit_disablement(tmp_path)
     assert instance.obs_plugin_set is plugin_set
     assert plugin_set._all_operators == []
     assert not plugin_set._run_started
+
+
+def test_from_parts_with_native_binding_enables_the_bus_and_binds_a_sink(tmp_path) -> None:
+    """Mutation: from_parts used build_observability_plugins, so bind_config never ran."""
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.transport import emit
+
+    emit.reset()
+    inst = RuntimeInstance.from_parts(
+        obs_binding=ObservabilityBinding(
+            plugins=["native"],
+            plugin_configs={"native": {"path": str(tmp_path / "events.jsonl")}},
+        ),
+        obs_base_dir=tmp_path,
+        obs_agent_id="planner",
+    )
+    try:
+        assert emit.is_enabled()
+        assert inst.obs_plugin_set is not None
+        assert inst.obs_plugin_set.plugins[0] in emit._fanout._sinks  # noqa: SLF001
+    finally:
+        if inst.obs_plugin_set is not None:
+            inst.obs_plugin_set.close()
+        emit.reset()
+
+
+def test_child_instance_without_binding_leaves_the_session_bus_alone(tmp_path) -> None:
+    """Mutation: from_parts() turned the process bus off, silencing every agent spawned after the session was set up."""
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    emit.reset()
+    session = TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig())
+    emit.bind_config(session)
+    RuntimeInstance.from_parts()
+    assert emit.is_enabled() is True
+    assert emit._config is session  # noqa: SLF001
+    emit.reset()
+
+
+def test_rebuild_without_attach_does_not_add_a_second_sink(tmp_path) -> None:
+    """Mutation: conversation rebuild constructed plugins and bind_sink'd them beside the parent."""
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.transport import emit
+
+    emit.reset()
+    binding = ObservabilityBinding(
+        plugins=["native"],
+        plugin_configs={"native": {"path": str(tmp_path / "events.jsonl")}},
+    )
+    parent = RuntimeInstance.from_parts(
+        obs_binding=binding,
+        obs_base_dir=tmp_path,
+        obs_agent_id="planner",
+    )
+    try:
+        assert len(emit._fanout._sinks) == 1  # noqa: SLF001
+        child = RuntimeInstance.from_parts(
+            obs_binding=binding,
+            obs_base_dir=tmp_path,
+            obs_agent_id="planner",
+            attach_obs_plugins=False,
+        )
+        assert child.obs_plugin_set is None
+        assert len(emit._fanout._sinks) == 1  # noqa: SLF001
+        assert emit.is_enabled()
+    finally:
+        if parent.obs_plugin_set is not None:
+            parent.obs_plugin_set.close()
+        emit.reset()
+
+
+def test_child_instance_with_its_own_binding_does_not_replace_the_session_config(tmp_path) -> None:
+    """Mutation: a child spec with its own obs block rebound the process config the CLI had set."""
+    from mas.runtime.driver.instance import RuntimeInstance
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    emit.reset()
+    session = TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig())
+    emit.bind_config(session)
+    inst = RuntimeInstance.from_parts(
+        obs_binding=ObservabilityBinding(
+            plugins=["native"],
+            plugin_configs={"native": {"path": str(tmp_path / "child.jsonl")}},
+        ),
+        obs_base_dir=tmp_path,
+        obs_agent_id="child",
+    )
+    try:
+        assert emit._config is session  # noqa: SLF001
+    finally:
+        if inst.obs_plugin_set is not None:
+            inst.obs_plugin_set.close()
+        emit.reset()

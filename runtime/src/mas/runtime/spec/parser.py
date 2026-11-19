@@ -85,7 +85,9 @@ def parse_agent_spec(
     kernel_config = apply_runtime_engine_to_kernel(kernel_config, runtime_engine)
 
     obs_binding = parse_obs_spec(obs_raw)
-    obs_result: ObservabilityBinding | None = obs_binding if obs_binding.plugins else None
+    obs_result: ObservabilityBinding | None = (
+        obs_binding if (obs_binding.plugins or obs_binding.transport.present) else None
+    )
 
     return kernel_config, obs_result
 
