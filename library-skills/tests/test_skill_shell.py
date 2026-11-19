@@ -527,3 +527,41 @@ def test_command_and_script_are_exclusive(tmp_path: Path):
         ctx=_FakeCtx(reg),
     )
     assert "not both" in result["error"]
+
+
+def test_one_off_command_needs_a_known_skill(tmp_path: Path):
+    reg = _registry_with_scripts(tmp_path)
+    plugin = RunSkillScriptPlugin()
+    command = ["uvx", "ruff@0.8.0"]
+    missing = plugin.on_execute_tool("run_skill_script", {"skill": "", "command": command}, ctx=_FakeCtx(reg))
+    assert missing == {"error": "skill is required"}
+    unknown = plugin.on_execute_tool("run_skill_script", {"skill": "nope", "command": command}, ctx=_FakeCtx(reg))
+    assert "not found in registry" in unknown["error"]
+
+
+def test_one_off_command_not_supported_by_other_backends(tmp_path: Path):
+    reg = _registry_with_scripts(tmp_path)
+    ctx = _FakeCtx(reg)
+    ctx.skill_backend_plugin = object()
+    result = RunSkillScriptPlugin().on_execute_tool(
+        "run_skill_script",
+        {"skill": "my-skill", "command": ["uvx", "ruff@0.8.0"]},
+        ctx=ctx,
+    )
+    assert "native skill backend" in result["error"]
+
+
+def test_one_off_command_sandbox_error_is_reported(tmp_path: Path, monkeypatch):
+    reg = _registry_with_scripts(tmp_path)
+
+    def boom(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("mas.library.skills.plugins.sk_shell.run_command", boom)
+    result = RunSkillScriptPlugin().on_execute_tool(
+        "run_skill_script",
+        {"skill": "my-skill", "command": ["uvx", "ruff@0.8.0"]},
+        ctx=_FakeCtx(reg),
+    )
+    assert "Cannot run command" in result["error"]
+    assert "boom" in result["error"]

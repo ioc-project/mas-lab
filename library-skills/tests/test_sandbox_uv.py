@@ -87,3 +87,10 @@ def test_run_command_reports_missing_launcher(tmp_path: Path) -> None:
         result = run_command(["uvx", "concord"], cwd=tmp_path)
     assert result.exit_code == 127
     assert "not installed" in result.stderr
+
+
+def test_unreadable_script_is_not_treated_as_inline(tmp_path: Path) -> None:
+    script = tmp_path / "s.py"
+    script.write_bytes(b"\xff\xfe\x00 not utf-8")
+    with patch("sandbox.runner.shutil.which", return_value="/bin/uv"):
+        assert _build_command(script, []) == [sys.executable, str(script)]
