@@ -32,7 +32,7 @@ Override the directory with --control-dir or MAS_CONTROL_DIR.
 
 Governance / HITL (when a Control sets hitl_on_tool):
   Interactive mode (-i) prompts on stderr: SCHEDULE (allow), BLOCK, SKIP
-  Batch (-q) auto-approves unless hitl_mode: auto-deny in the Control
+  Batch (-q) refuses a hold unless the Control sets hitl_mode: auto-approve
   Full-screen HITL: mas-ctl tui (same --control files)
 
 Context model (see docs/design/context-sources.md):

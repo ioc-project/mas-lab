@@ -30,6 +30,7 @@ class GovernanceBinding:
     max_cot_pass: int | None = None
     max_gov_retries: int | None = None
     hitl_mode: str | None = None
+    hitl_responder: dict[str, Any] | None = None
     hitl_once_per_turn: bool | None = None
     policies: list[dict[str, Any]] = field(default_factory=list)
     active_profile: str | None = None
@@ -108,6 +109,7 @@ def parse_gov_spec(raw: list | None) -> GovernanceBinding:
         max_cot_pass=flat.get("max_cot_pass"),
         max_gov_retries=flat.get("max_gov_retries"),
         hitl_mode=str(flat["hitl_mode"]) if flat.get("hitl_mode") is not None else None,
+        hitl_responder=_hitl_responder_params(flat.get("hitl_responder")),
         hitl_once_per_turn=flat.get("hitl_once_per_turn"),
         policies=policies,
         active_profile=flat.get("active_profile"),
@@ -118,6 +120,14 @@ def parse_gov_spec(raw: list | None) -> GovernanceBinding:
         error_policy=flat.get("error_policy") if isinstance(flat.get("error_policy"), dict) else None,
         ingress_plugins=ingress_plugins,
     )
+
+
+def _hitl_responder_params(raw: Any) -> dict[str, Any] | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise SpecBindingError(f"spec.governance.hitl_responder must be a mapping, got {type(raw).__name__}")
+    return dict(raw)
 
 
 def _constructor_kwargs(plugin_cls: Any, cfg: dict[str, Any]) -> dict[str, Any]:

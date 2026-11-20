@@ -26,6 +26,9 @@ class EgressIntentView:
     offered_tools: tuple[str, ...] | None = None
     # The running spec this call runs under. None outside a managed session: the declared spec is all there is.
     running_spec: dict | None = None
+    # A human approved this very call. A chain reads a HITL hold as ALLOW for the plugin that raised it
+    # and still applies every other verdict (deny, RETRY, MODIFY, LOG) as if there were no approval.
+    hitl_approved: bool = False
 
 
 _PROFILE_LABEL: dict[GovPolicyProfile, str] = {

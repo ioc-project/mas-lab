@@ -221,16 +221,26 @@ def test_hitl_on_tool_flag_produces_its_own_reason_regression() -> None:
     assert "hitl_on_tool" in reason
 
 
-def test_evaluate_egress_at_chokepoint_hitl_gov_override() -> None:
-    config = KernelConfig()
+def test_evaluate_egress_at_chokepoint_hitl_gov_override_only_answers_a_hold() -> None:
+    config = KernelConfig(hitl_on_tool=True)
     decision, policy_name, reason = evaluate_egress_at_chokepoint(
-        _intent(destructive=True),
+        _intent(destructive=False),
         config=config,
         hitl_gov_override=True,
     )
     assert decision.value == "ALLOW"
     assert policy_name == "hitl-override"
     assert "human approval" in reason
+
+
+def test_evaluate_egress_at_chokepoint_hitl_gov_override_never_beats_a_deny() -> None:
+    config = KernelConfig(gov_policy_profile=GovPolicyProfile.BLOCK_DESTRUCTIVE, gov_block_destructive=True)
+    decision, _, _ = evaluate_egress_at_chokepoint(
+        _intent(destructive=True),
+        config=config,
+        hitl_gov_override=True,
+    )
+    assert decision.value == "BLOCK"
 
 
 # --- ingress_governance_outcome ---------------------------------------------

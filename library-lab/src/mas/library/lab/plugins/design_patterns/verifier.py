@@ -21,7 +21,7 @@ class DeterministicVerifierPlugin(_DeterministicBase):
         st = self._state()
         if not st.participants:
             return self._no_participants(q)
-        tool_results = self._extract_tool_results(run)
+        tool_results = self._extract_tool_results(run, q)
 
         if st.round_num == 1 and st.next_idx == 0:
             st.next_idx = 1

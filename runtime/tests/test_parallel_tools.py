@@ -170,7 +170,7 @@ def test_parallel_batch_all_denied_feeds_one_llm_call() -> None:
 
 
 def test_parallel_batch_hitl_does_not_orphan_earlier_siblings() -> None:
-    """HITL on a later call stops the batch; earlier calls leave no dangling wait."""
+    """HITL on a later call holds that call; the earlier call runs, the later one is queued, no wait dangles."""
     from mas.runtime.schema.egress import EmitHitlRequest
 
     class _HitlNamed:
@@ -188,8 +188,11 @@ def test_parallel_batch_hitl_does_not_orphan_earlier_siblings() -> None:
 
     assert any(isinstance(sym, EmitHitlRequest) for sym in out)
     hitl_cid = next(sym.request_id for sym in out if isinstance(sym, EmitHitlRequest))
-    assert set(pending_for_validate(q)) <= {hitl_cid}
-    assert q.pending_tools_by_cid == {}
+    invoked = {sym.correlation_id for sym in out if isinstance(sym, InvokeEngineIo)}
+    assert len(invoked) == 1
+    assert set(pending_for_validate(q)) == {hitl_cid} | invoked
+    assert set(q.pending_tools_by_cid) == invoked
+    assert [t["tool_name"] for t in q.queued_tools] == ["tool_2"]
 
 
 def _batch_invariants(decisions: tuple[GovDecision, ...]) -> None:
@@ -222,8 +225,8 @@ def _batch_invariants(decisions: tuple[GovDecision, ...]) -> None:
     # 1. Every outbound wait has an emitted call, and every emitted call a wait.
     assert set(pending_for_validate(q)) - paused == invoked, ctx
     assert set(q.pending_tools_by_cid) == emitted, ctx
-    # 2. A batch that stops (HITL / error) emits no tool call at all.
-    stopped = any(isinstance(sym, (RaiseBoundaryError, EmitHitlRequest)) for sym in out)
+    # 2. A batch that ends in an error emits no tool call at all (a hold does not end it: see below).
+    stopped = any(isinstance(sym, RaiseBoundaryError) for sym in out)
     assert not (stopped and emitted), ctx
 
     # 3. Every contract_call start without an end belongs to an emitted call.

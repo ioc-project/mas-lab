@@ -95,14 +95,18 @@ def test_modified_ingress_return_stops_on_block_or_non_tool_result() -> None:
 
 def _pending_tool_gate(q: QProduct, *, request_id: int, tool_name: str) -> None:
     q.pending_tool_name = tool_name
-    gov_enter_hitl_pending(q, request_id=request_id, pending_schedule="TOOL_CALL")
+    gov_enter_hitl_pending(q, request_id=request_id, pending_schedule="TOOL_CALL", tool_name=tool_name)
 
 
 def _pending_tool_result(q: QProduct, event: EngineIoReturn) -> None:
     q.pending_tool_name = event.tool_name or "tool"
-    q.hitl_pending_ingress = event.response_kind
-    q.pending_ingress_return = event.model_dump(mode="json")
-    gov_enter_hitl_pending(q, request_id=event.correlation_id, pending_schedule="NONE")
+    gov_enter_hitl_pending(
+        q,
+        request_id=event.correlation_id,
+        pending_schedule="NONE",
+        tool_name=event.tool_name or "tool",
+        ingress_return=event.model_dump(mode="json"),
+    )
 
 
 def test_schedule_block_ends_the_turn_with_steering() -> None:
@@ -151,7 +155,7 @@ def test_ingress_block_does_not_call_the_follow_up_llm() -> None:
         evaluate=evaluate,
     )
     evaluate.assert_not_called()
-    assert q.hitl_pending_ingress == ""
+    assert q.hitl_holds == {}
     assert q.dp is DpState.IDLE
     assert isinstance(out[0], EmitClientResponse)
     assert "blocked tool result" in out[0].content
@@ -209,7 +213,7 @@ def test_ingress_unknown_resolution_is_a_noop() -> None:
         evaluate=MagicMock(return_value=[NoOp()]),
     )
     assert out == [NoOp()]
-    assert q.hitl_pending_ingress == "TOOL_RESULT"
+    assert set(q.hitl_holds) == {9}
 
 
 def test_hitl_resolve_reads_message_as_steering_and_defaults_operator() -> None:

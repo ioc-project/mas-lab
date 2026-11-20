@@ -100,8 +100,9 @@ When two Controls name the same plugin id, the later Control's config wins. When
 |-----|---------|--------|
 | `hitl_on_tool` | `false` | Ask a human before a tool call runs (egress). |
 | `hitl_on_tool_result` | `false` | Ask a human before a tool result enters working memory (ingress). |
-| `hitl_once_per_turn` | `false` | After one tool call is approved in a turn, later tool calls in that turn skip the prompt. |
-| `hitl_mode` | `interactive` | Who answers HITL prompts: `interactive` (terminal operator), `auto_approve`, or `auto_deny`. A non-interactive session with `interactive` auto_approves. |
+| `hitl_once_per_turn` | `false` | `false`: an approval covers the one call it was asked for. `true`: after one tool call is approved in a turn, later tool calls in that turn skip the prompt. The plugins still run, and a deny from any of them wins. |
+| `hitl_mode` | `interactive` | Who answers HITL prompts: `interactive` (terminal operator), `auto_approve`, or `auto_deny`. A session with no operator (batch, `-q`, CI) and `interactive` refuses the hold (`BLOCK`); it approves only with an explicit `auto_approve`. |
+| `hitl_responder` | unset | A mapping handed to the responder that `hitl_mode` names, as constructor arguments. `env:VAR` values are resolved once by `mas-ctl`; the responder never reads the environment. A key the responder does not accept is an error. Unset: the responder is built with no arguments. |
 | `gov_policy_profile` | `BLOCK_DESTRUCTIVE` | Built-in policy for destructive tools: `PERMISSIVE`, `BLOCK_DESTRUCTIVE`, `HITL_DESTRUCTIVE`, `LOG_ALL`, `MODIFY_DESTRUCTIVE`, `TERMINATE_DESTRUCTIVE`, `SKIP_DESTRUCTIVE`, `BLACKLIST_DESTRUCTIVE`. |
 | `gov_block_destructive` / `gov_trigger_destructive` | `false` | Turn the destructive-tool policy on. |
 | `gov_ingress_profile` | `PERMISSIVE` | Ingress decision on engine `ERROR` when no recovery plugin is installed: `PERMISSIVE`, `RETRY_ON_ERROR`, `BLOCK_ON_ERROR`, `SKIP_ON_ERROR`. |
@@ -130,6 +131,33 @@ the batch.
 the user-visible answer. Optional steering is appended to the denial. `SKIP`
 injects optional steering as the tool result and lets the model continue.
 Walkthrough: [Tutorial 14](../tutorials/14-governance-hitl/README.md).
+
+## Checking a HITL answer
+
+A governance plugin that holds a call (`HITL`) can also check the answer before it takes effect. It adds an optional method:
+
+```python
+def evaluate_hitl_resolve(self, request: EmitHitlRequest, resolve: HitlResolve) -> EgressDecision | None: ...
+```
+
+The kernel calls it after the human or the responder answered ALLOW (or SCHEDULE) for a held call, and before the call starts. `request` names the held operation (`context_data` has `op`, and for a tool call `tool` and `arguments`); `resolve` is the answer, including `operator_context`, where a responder can put a signature or token for the plugin to check.
+
+- `None` (or no method): no opinion, the ALLOW stands.
+- `BLOCK` (any deny verdict): the ALLOW is refused. The call does not start, and the kernel applies the same BLOCK as for a human refusal, with the plugin's reason as the tool result. Write a value-free reason: it reaches the model and the trace.
+- An exception, or a verdict that is not `(decision, name, reason)`: `BLOCK`, with a fixed reason that carries nothing from the error.
+- Chain: plugins are asked in chain order; the first deny wins and later plugins are not asked.
+
+The hook sees egress holds only (tool calls and the other egress operations). It does not see `hitl_on_tool_result` holds.
+
+### How far an approval reaches
+
+By default an approval covers exactly the call it was asked for: the next tool call of the turn is evaluated again, and a plugin can hold it again. `hitl_once_per_turn: true` is the turn-wide choice (see the table above); there is no second switch. An approval answers a hold only: it never overrides a `BLOCK`, `SKIP`, `TERMINATE` or `BLACKLIST` from any plugin (egress, and later ingress plugins after a result hold has been answered this turn). An approval not used by its call (for example the tool was blacklisted meanwhile) is dropped, not carried to the next call. Several holds can be pending at once (the results of a parallel batch each ask): each is answered by its own request id. A pause keeps pending holds. An answer given while paused is applied once, when the session resumes; an abort drops them.
+
+### No operator
+
+A hold in a run with nobody to answer is refused: with `hitl_mode` unset or `interactive` and a non-interactive session, `mas-ctl` wires a responder that answers BLOCK. Only `hitl_mode: auto_approve` in the spec approves without an operator.
+
+This covers holds from the `hitl_on_tool` and `hitl_on_tool_result` flags too. They are options of a governance plugin (`sample_governance`), so the kernel sees the same hold request as for any other plugin: the decision's policy name is not part of the request, and telling a flag from a plugin would mean matching plugin names. A batch run that used to rely on the implicit approval sets `hitl_mode: auto_approve` (tutorial 1 ships `governance-hitl-auto-approve.yaml` for this).
 
 ## See also
 

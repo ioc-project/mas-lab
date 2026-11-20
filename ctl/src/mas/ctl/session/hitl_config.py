@@ -7,19 +7,23 @@ Architecture
 - **Kernel** emits ``EmitHitlRequest`` from ``M_gov`` egress gate only.
 - **Interactive sessions** terminate HITL at the ctl surface (``OperatorConsole`` /
   curses TUI) — no in-process ``HitlTerminal`` on the controller.
-- **Batch / pipe** sessions wire an in-process ``HitlResponder`` (auto-approve, etc.).
+- **Batch / pipe** sessions wire an in-process ``HitlResponder``: the one ``hitl_mode`` names,
+  or auto-deny when it is unset (a hold is never approved without an explicit auto-approve).
+  ``spec.governance.hitl_responder`` is the mapping handed to that responder.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from mas.ctl.infra.env_resolve import resolve_manifest_values
 from mas.ctl.manifest.spec_bindings import parse_governance
 from mas.runtime.boundary.hitl.responders import HitlResponder
 from mas.runtime.registry import get_registry
+from mas.runtime.spec.gov import _constructor_kwargs
 
 
-def _load_hitl_responder(mode: str) -> HitlResponder | None:
+def _load_hitl_responder(mode: str, params: dict[str, Any] | None = None) -> HitlResponder | None:
     key = (mode or "").strip().lower()
     if not key or key == "interactive":
         return None
@@ -29,7 +33,16 @@ def _load_hitl_responder(mode: str) -> HitlResponder | None:
         raise ValueError(
             f"unsupported spec.governance.hitl_mode: {mode!r}; expected one of {sorted([*names, 'interactive'])}"
         )
-    return variant.load_class()()
+    cls = variant.load_class()
+    if not params:
+        return cls()
+    # ``env:VAR`` refs are resolved here, once; the responder never reads the environment.
+    resolved = resolve_manifest_values(dict(params))
+    kwargs = _constructor_kwargs(cls, resolved)
+    unknown = sorted(str(k) for k in set(resolved) - set(kwargs))
+    if unknown:
+        raise ValueError(f"spec.governance.hitl_responder: {key!r} does not accept {unknown}")
+    return cls(**kwargs)
 
 
 def resolve_hitl_from_manifest(
@@ -56,10 +69,17 @@ def resolve_hitl_from_manifest(
         delegate_ids=delegate_ids,
     )
     gov = parse_governance(spec.get("governance"))
-    if not gov.hitl_on_tool and not gov.hitl_on_tool_result:
+    holds_possible = bool(
+        gov.plugins or gov.hitl_on_tool or gov.hitl_on_tool_result or gov.policies or gov.gov_policy_profile
+    )
+    if not holds_possible:
         return None, None
 
-    mode = (getattr(gov, "hitl_mode", None) or "interactive").strip().lower()
-    if mode == "interactive" and not session_interactive:
-        return _load_hitl_responder("auto-approve"), None
-    return _load_hitl_responder(mode), None
+    mode = (gov.hitl_mode or "interactive").strip().lower()
+    if mode == "interactive":
+        if session_interactive:
+            return None, None
+        # No operator can answer: a hold is refused, never approved. Approval is
+        # only ever an explicit ``hitl_mode: auto-approve``.
+        return _load_hitl_responder("auto-deny"), None
+    return _load_hitl_responder(mode, gov.hitl_responder), None

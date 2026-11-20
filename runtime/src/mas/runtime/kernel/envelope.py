@@ -81,6 +81,8 @@ class EnvelopeContext:
     policy_name: str = "sample_governance"
     destructive: bool = False
     hitl_gov_override: bool = False
+    # A result hold was already answered this turn: the chain must not stop on HITL.
+    skip_hitl: bool = False
     # Set for LLM_CALL only; stamped on ENGINE_IO / llm_call_start.
     llm_request: LlmCallRequest | None = None
 
@@ -308,6 +310,7 @@ def _evaluate_ingress(ctx: EnvelopeContext) -> IngressGovDecision:
             failure_code=getattr(ev, "failure_code", "") or "",
         ),
         config=ctx.config,
+        skip_hitl=ctx.skip_hitl,
     )
     # Every ingress plugin always populates message; this generic fallback
     # only matters for a custom third-party plugin that doesn't.

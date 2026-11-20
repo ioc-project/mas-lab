@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
@@ -86,3 +86,27 @@ class OutboundWait:
     correlation_id: int
     kind: InflightKind
     op: ScheduledEgress | str = "NONE"
+
+
+@dataclass
+class HitlHold:
+    """One human answer the kernel is waiting for, kept in ``QProduct.hitl_holds`` under its request id.
+
+    An egress hold keeps the call it stopped (``tool_name``, ``tool_arguments``). An ingress hold parks the
+    engine return it stopped (``ingress_return``, a dumped ``EngineIoReturn``). ``deferred`` is an answer
+    that arrived while the lifecycle was paused: it is applied on resume, once.
+    """
+
+    request_id: int
+    pending_schedule: ScheduledEgress = "NONE"
+    question_type: str = "CONFIRM"
+    tool_name: str = ""
+    tool_arguments: dict = field(default_factory=dict)
+    ingress_return: dict = field(default_factory=dict)
+    # Which declared tool call of its model reply the held call is (``call_<model id>_<index>``); "" for a single call.
+    call_id: str = ""
+    deferred: dict = field(default_factory=dict)
+
+    @property
+    def is_ingress(self) -> bool:
+        return bool(self.ingress_return)

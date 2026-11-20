@@ -7,11 +7,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from mas.runtime.kernel.config import KernelConfig
 from mas.library.standard.plugins.design_patterns.cot import CotPlugin
+from mas.runtime.kernel.config import KernelConfig
+from mas.runtime.kernel.state import DpState, QProduct, RunLedger
 from mas.runtime.schema.egress import EgressSymbol, NoOp
 from mas.runtime.schema.ingress import IngressSymbol, UserInputReceived
-from mas.runtime.kernel.state import DpState, QProduct, RunLedger
 
 
 def _parse_thoughts(text: str) -> list[dict[str, Any]]:
@@ -56,7 +56,6 @@ class TreeOfThoughtsPlugin(CotPlugin):
     ) -> list[EgressSymbol]:
         if isinstance(event, UserInputReceived) and q.dp == DpState.IDLE:
             q.dp_data = {"tot_phase": "GENERATE", "tot_pass": 0, "best_score": 0.0}
-            q.cot_pass = 0
         return super().handle_event(q, run, event, config=config)
 
     def _evaluate(self, q: QProduct, run: RunLedger, config: KernelConfig) -> list[EgressSymbol]:

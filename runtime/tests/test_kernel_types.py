@@ -18,12 +18,12 @@ def test_kernel_types_has_no_machines_import():
 
 def test_gov_state_lives_in_kernel_types():
     from mas.runtime.kernel.state import QProduct
-    from mas.runtime.kernel.types import GovState
+    from mas.runtime.kernel.types import GovState, HitlHold
     from mas.runtime.machines.gov import gov_is_hitl_pending
 
     q = QProduct()
     q.gov_state = GovState.HITL_PENDING.value
-    q.hitl_request_id = 1
+    q.hitl_holds[1] = HitlHold(request_id=1)
     assert gov_is_hitl_pending(q) is True
 
 

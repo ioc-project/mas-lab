@@ -55,6 +55,10 @@ async def test_dispatch_engine_batch_records_correct_tool_per_correlation_id():
     q = kernel.q
     q.pending_tools_by_cid[1] = ("delegate_to_schedule_agent", {"task": "look up trains"})
     q.pending_tools_by_cid[2] = ("delegate_to_concierge_agent", {"task": "check fares"})
+    from mas.runtime.kernel.inflight import register_inflight
+
+    for cid in (1, 2):  # the kernel registers a call's wait when it authorizes it
+        register_inflight(q, cid, kind="TOOL", op="TOOL_CALL")
     # Simulates the leftover state after schedule_parallel_tools_egress's loop
     # has run: these single fields hold whichever spec was set LAST.
     q.pending_tool_name = "delegate_to_concierge_agent"

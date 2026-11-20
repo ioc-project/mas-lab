@@ -14,6 +14,7 @@ from mas.runtime.boundary.gov.ingress_plugin import (
     ingress_from_profile,
 )
 from mas.runtime.kernel.config import KernelConfig
+from mas.runtime.schema.governance import GovernanceAction
 
 
 class ChainableIngressPlugin(Protocol):
@@ -35,14 +36,21 @@ def evaluate_ingress_chain(
     *,
     config: KernelConfig,
     plugins: list[RegisteredIngressPlugin] | None = None,
+    skip_hitl: bool = False,
 ) -> IngressGovDecision:
-    """First matching plugin wins unless it returns chain=continue."""
+    """First matching plugin wins unless it returns chain=continue.
+
+    ``skip_hitl``: a result hold was already answered this turn, so a plugin's HITL is not
+    a match. Later plugins still run, and a deny from one of them still wins.
+    """
     chain = plugins if plugins is not None else list(getattr(config, "ingress_governance_plugins", ()))
     for entry in chain:
         if not entry.filter.matches_ingress(intent):
             continue
         decision = entry.plugin.evaluate_ingress(intent, config=config)
         if decision.chain == "continue" or entry.chain == "continue":
+            continue
+        if skip_hitl and decision.action == GovernanceAction.HITL:
             continue
         _log_ingress(intent, decision)
         return decision

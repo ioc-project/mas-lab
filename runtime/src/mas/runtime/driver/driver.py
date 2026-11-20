@@ -33,7 +33,7 @@ from mas.runtime.engine.llm_request import sampling_temperature
 from mas.runtime.engine.simulated import SimulatedEngine
 from mas.runtime.engine.tools import current_spec_for_advertise
 from mas.runtime.kernel.envelope import LlmCallRequest
-from mas.runtime.kernel.inflight import pending_for_validate, register_inflight
+from mas.runtime.kernel.inflight import is_inflight, pending_for_validate
 from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.kernel.run_event import max_event_seq, new_run_events
 from mas.runtime.kernel.runtime_context import runtime_binding
@@ -437,7 +437,7 @@ class KernelDriver(Lifecycle):
 
         while queue and _within_auto_step_budget(auto_steps, self.max_auto_steps):
             ingress = queue.popleft()
-            self.kernel.q.running_spec = current_spec_for_advertise(self.ctx) or None if self.ctx is not None else None
+            self.kernel.set_running_spec(current_spec_for_advertise(self.ctx) or None if self.ctx is not None else None)
             if not validate_ingress(
                 ingress,
                 last_correlation_id=(self.kernel.run.records[-1].correlation_id if self.kernel.run.records else 0),
@@ -727,7 +727,11 @@ class KernelDriver(Lifecycle):
         from mas.runtime.engine.inflight_llm import register as register_inflight_llm
 
         inner = asyncio.create_task(ainvoke_call(self.engine, io))
-        register_inflight_llm(self.session_id, inner)
+        # The store holds one task per session and only a model call is interruptible. A tool of a parallel
+        # batch registering here replaced the model's task, and its end cleared the entry for the others.
+        is_llm = io.op == "LLM_CALL"
+        if is_llm:
+            register_inflight_llm(self.session_id, inner)
         try:
             return await inner
         except asyncio.CancelledError:
@@ -772,7 +776,8 @@ class KernelDriver(Lifecycle):
                 text=str(exc),
             )
         finally:
-            clear_inflight(self.session_id)
+            if is_llm:
+                clear_inflight(self.session_id)
 
     async def _adispatch_engine_batch(self, ios: list[InvokeEngineIo], trace: DriverTrace) -> list[IngressSymbol]:
         """Bookkeeping per call, then the engine calls run with ``asyncio.gather`` in chunks of the queue depth."""
@@ -818,8 +823,6 @@ class KernelDriver(Lifecycle):
                     setter = getattr(engine, "set_scheduled_tool", None)
                     if callable(setter):
                         setter(q.pending_tool_name, q.pending_tool_args)
-            egress_kind = "MODEL" if orig.op == "LLM_CALL" else "TOOL"
-            register_inflight(q, orig.correlation_id, kind=egress_kind, op=orig.op)
             from mas.runtime.boundary.gov.telemetry import get_bound_observability
             from mas.runtime.kernel.envelope import (
                 EnvelopeContext,
@@ -856,11 +859,15 @@ class KernelDriver(Lifecycle):
             prepared.append(orig)
         depth = max(1, self.kernel.config.engine_queue_depth)
         results: list[EngineIoReturn] = []
+        dispatched: list[InvokeEngineIo] = []
         for start in range(0, len(prepared), depth):
-            chunk = prepared[start : start + depth]
+            # The kernel registered each call's wait when it authorized it. A pause or abort that landed while
+            # this coroutine was awaiting dropped the wait: that call is not sent (it is answered as interrupted).
+            chunk = [sym for sym in prepared[start : start + depth] if is_inflight(q, sym.correlation_id)]
+            dispatched.extend(chunk)
             results.extend(await asyncio.gather(*(self._ainvoke_engine(sym) for sym in chunk)))
         out: list[IngressSymbol] = []
-        for sym, ret in zip(prepared, results, strict=True):
+        for sym, ret in zip(dispatched, results, strict=True):
             self._record_engine_return(trace, sym, ret)
             self._record_wait_state_obs(sym, q, boundary="end")
             out.append(ret)

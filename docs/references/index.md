@@ -66,6 +66,7 @@ The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 | Contracts & Mealy envelope | [Contracts](contracts.md) · [runtime package docs](runtime.md) |
 | Thin waist (plugin vs catalog) | [thin-waist.md](thin-waist.md) |
 | Snapshots vs checkpoints | [snapshots.md](snapshots.md) |
+| Kernel invariants | [kernel-invariants.md](kernel-invariants.md) |
 | Kernel operations | [kernel-primitives.md](kernel-primitives.md) |
 | Run logs | [Observability](../cli/observability.md) (CLI) |
 | Native event stream | [Event model](event-model.md) |
