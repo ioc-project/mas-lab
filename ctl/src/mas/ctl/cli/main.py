@@ -37,6 +37,9 @@ def app(ctx: click.Context, verbose: int, env_file: str | None) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     load_dotenv(explicit=Path(env_file) if env_file else None)
+    from mas.ctl.session.llm_scheduler_env import install_env_overrides
+
+    install_env_overrides()
     setup_logging(verbosity=verbose)
     set_run_progress(verbose)
 

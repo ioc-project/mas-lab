@@ -205,7 +205,10 @@ def _run_job(job: dict[str, Any], events: Any, batch_cache: Any | None = None) -
             batch_cache=cache,
             extra=extra,
         )
-        result = invoke_runner(ctx)
+        from mas.lab.benchmark.host_overrides import apply as apply_host
+
+        with apply_host(job.get("host")):
+            result = invoke_runner(ctx)
         return {
             "content": result.content,
             "status": result.status,
@@ -223,14 +226,16 @@ def _run_job(job: dict[str, Any], events: Any, batch_cache: Any | None = None) -
             cache.clear()
 
 
-def worker_main(jobs: Any, results: Any, events: Any) -> None:
+def worker_main(jobs: Any, results: Any, events: Any, host_env: dict[str, str] | None = None) -> None:
     """Entry for a spawn worker. Rebuilds context; never unpickles a RunContext.
 
     Exits when it is told to, and also when its parent process is gone: a
     parent killed without cleanup must not leave workers behind.
     """
+    from mas.runtime import hostenv
     from mas.runtime.spec.batch_cache import BatchCache
 
+    hostenv.install(host_env)  # what the parent hands over; a worker reads no environment itself
     parent = multiprocessing.parent_process()
     cache = BatchCache()
     while True:
@@ -258,7 +263,11 @@ class _Worker:
         self.jobs = ctx.Queue()
         self.results = ctx.Queue()
         self.runs = 0
-        self.proc = ctx.Process(target=worker_main, args=(self.jobs, self.results, events), daemon=True)
+        from mas.runtime import hostenv
+
+        self.proc = ctx.Process(
+            target=worker_main, args=(self.jobs, self.results, events, hostenv.snapshot()), daemon=True
+        )
         self.proc.start()
 
     @property

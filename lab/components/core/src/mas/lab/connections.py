@@ -40,11 +40,13 @@ Quick-start (Neo4j graph store — internal extension, not shipped in OSS)::
 
     export NEO4J_PASSWORD=<secret>
 """
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+from mas.runtime import hostenv
 
 try:
     import yaml as _yaml  # type: ignore
@@ -61,6 +63,7 @@ _CONNECTIONS_FILE = mas_config_dir() / CONNECTIONS_CONFIG_FILENAME
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _load_dotenv() -> Dict[str, str]:
     """Minimal .env parser (walks up from CWD).  Does NOT modify os.environ.
@@ -120,7 +123,7 @@ def _resolve_value(v: Any, dotenv: Dict[str, str]) -> str:
             default = default.strip()
         else:
             var, default = rest, ""
-        return os.environ.get(var) or dotenv.get(var) or default
+        return hostenv.get(var) or dotenv.get(var) or default
     return str(v) if v is not None else ""
 
 
@@ -156,10 +159,7 @@ def _load_infra_store(store_id: str) -> Optional[Any]:
             return None
 
         # Try mas.lab > mas_ctl sections for the infra ref (same fallback as mas-lab eval)
-        infra_ref: Optional[str] = (
-            ws.get("mas_lab", "infra")
-            or ws.get("mas_ctl", "infra")
-        )
+        infra_ref: Optional[str] = ws.get("mas_lab", "infra") or ws.get("mas_ctl", "infra")
         if not infra_ref:
             return None
 
@@ -174,11 +174,12 @@ def _load_infra_store(store_id: str) -> Optional[Any]:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def resolve_clickhouse_conn(
     *,
-    host:     Optional[str] = None,
-    port:     Optional[int] = None,
-    user:     Optional[str] = None,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    user: Optional[str] = None,
     database: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return fully-resolved ClickHouse HTTP connection parameters.
@@ -203,13 +204,13 @@ def resolve_clickhouse_conn(
             resolved = _resolve_value(cfg[key], dotenv)
             if resolved:
                 return resolved
-        return os.environ.get(env_var) or dotenv.get(env_var) or default
+        return hostenv.get(env_var) or dotenv.get(env_var) or default
 
     password = ""
     if "password" in cfg:
         password = _resolve_value(cfg["password"], dotenv)
     if not password:
-        password = os.environ.get("CLICKHOUSE_PASSWORD") or dotenv.get("CLICKHOUSE_PASSWORD") or ""
+        password = hostenv.get("CLICKHOUSE_PASSWORD") or dotenv.get("CLICKHOUSE_PASSWORD") or ""
 
     raw_port = _pick_ch("port", port, "CLICKHOUSE_PORT", 8123)
     try:
@@ -218,9 +219,9 @@ def resolve_clickhouse_conn(
         resolved_port = 8123
 
     return {
-        "host":     _pick_ch("host",     host,     "CLICKHOUSE_HOST",     "localhost"),
-        "port":     resolved_port,
-        "user":     _pick_ch("user",     user,     "CLICKHOUSE_USER",     "admin"),
+        "host": _pick_ch("host", host, "CLICKHOUSE_HOST", "localhost"),
+        "port": resolved_port,
+        "user": _pick_ch("user", user, "CLICKHOUSE_USER", "admin"),
         "password": password,
         "database": _pick_ch("database", database, "CLICKHOUSE_DATABASE", "default"),
     }
@@ -228,8 +229,8 @@ def resolve_clickhouse_conn(
 
 def resolve_neo4j_conn(
     *,
-    uri:      Optional[str] = None,
-    user:     Optional[str] = None,
+    uri: Optional[str] = None,
+    user: Optional[str] = None,
     database: Optional[str] = None,
     store_id: str = "neo4j",
 ) -> Dict[str, Any]:
@@ -249,16 +250,20 @@ def resolve_neo4j_conn(
     # Try infra manifest store first
     store = _load_infra_store(store_id) if store_id else None
     if store is not None:
-        store_uri  = getattr(store, "uri",  None) or ""
+        store_uri = getattr(store, "uri", None) or ""
         store_user = getattr(store, "user", None) or ""
-        store_db   = getattr(store, "database", None) or ""
-        pw_env     = getattr(store, "password_env", None) or "NEO4J_PASSWORD"
-        store_pass = os.environ.get(pw_env) or dotenv.get(pw_env) or ""
+        store_db = getattr(store, "database", None) or ""
+        pw_env = getattr(store, "password_env", None) or "NEO4J_PASSWORD"
+        store_pass = hostenv.get(pw_env) or dotenv.get(pw_env) or ""
         return {
-            "uri":      uri      or store_uri  or os.environ.get("NEO4J_URI")      or dotenv.get("NEO4J_URI")      or "bolt://localhost:7687",
-            "user":     user     or store_user or os.environ.get("NEO4J_USER")     or dotenv.get("NEO4J_USER")     or "neo4j",  # noqa: E501
+            "uri": uri or store_uri or hostenv.get("NEO4J_URI") or dotenv.get("NEO4J_URI") or "bolt://localhost:7687",
+            "user": user or store_user or hostenv.get("NEO4J_USER") or dotenv.get("NEO4J_USER") or "neo4j",  # noqa: E501
             "password": store_pass,
-            "database": database or store_db   or os.environ.get("NEO4J_DATABASE") or dotenv.get("NEO4J_DATABASE") or "neo4j",  # noqa: E501
+            "database": database
+            or store_db
+            or hostenv.get("NEO4J_DATABASE")
+            or dotenv.get("NEO4J_DATABASE")
+            or "neo4j",  # noqa: E501
         }
 
     def _pick(key: str, cli_val, env_var: str, default: Any) -> Any:
@@ -268,18 +273,18 @@ def resolve_neo4j_conn(
             resolved = _resolve_value(cfg[key], dotenv)
             if resolved:
                 return resolved
-        return os.environ.get(env_var) or dotenv.get(env_var) or default
+        return hostenv.get(env_var) or dotenv.get(env_var) or default
 
     password = ""
     if "password" in cfg:
         password = _resolve_value(cfg["password"], dotenv)
     if not password:
         pw_env = cfg.get("password_env", "NEO4J_PASSWORD")
-        password = os.environ.get(pw_env) or dotenv.get(pw_env) or ""
+        password = hostenv.get(pw_env) or dotenv.get(pw_env) or ""
 
     return {
-        "uri":      _pick("uri",      uri,      "NEO4J_URI",      "bolt://localhost:7687"),
-        "user":     _pick("user",     user,     "NEO4J_USER",     "neo4j"),
+        "uri": _pick("uri", uri, "NEO4J_URI", "bolt://localhost:7687"),
+        "user": _pick("user", user, "NEO4J_USER", "neo4j"),
         "password": password,
         "database": _pick("database", database, "NEO4J_DATABASE", "neo4j"),
     }
@@ -315,9 +320,7 @@ def ensure_service_running(
     import urllib.error
     import urllib.request
 
-    url = (mas_lab_url
-           or os.environ.get("MAS_LAB_URL")
-           or "http://localhost:8090").rstrip("/")
+    url = (mas_lab_url or hostenv.get("MAS_LAB_URL") or "http://localhost:8090").rstrip("/")
 
     body = _json.dumps({"services": [service_name], "profile": profile}).encode()
     req = urllib.request.Request(
@@ -330,10 +333,7 @@ def ensure_service_running(
         with urllib.request.urlopen(req, timeout=10) as r:
             result = _json.loads(r.read())
     except urllib.error.URLError as exc:
-        raise RuntimeError(
-            f"Could not reach mas-lab server at {url}: {exc}\n"
-            "Is 'mas-lab serve' running?"
-        ) from exc
+        raise RuntimeError(f"Could not reach mas-lab server at {url}: {exc}\nIs 'mas-lab serve' running?") from exc
 
     job_id = result.get("job_id")
     if not job_id:
@@ -349,14 +349,12 @@ def ensure_service_running(
                 return
             if status == "error":
                 raise RuntimeError(
-                    f"Service start failed for {service_name!r} "
-                    f"(profile={profile}): {job.get('stderr', '')}"
+                    f"Service start failed for {service_name!r} (profile={profile}): {job.get('stderr', '')}"
                 )
         except urllib.error.URLError:
             pass
         _time.sleep(1.5)
 
     raise RuntimeError(
-        f"Timed out waiting for service {service_name!r} to start "
-        f"(profile={profile}, timeout={timeout}s)"
+        f"Timed out waiting for service {service_name!r} to start (profile={profile}, timeout={timeout}s)"
     )

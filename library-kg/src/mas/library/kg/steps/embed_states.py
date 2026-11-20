@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """EmbedStatesStep — embed every State node in the KG.
 
 Reads ``kg.json`` when present (optional normalization extension), extracts State nodes,
@@ -40,15 +39,17 @@ Config keys::
     max_content: int      max characters stored in record (default: 500)
 """
 
+from __future__ import annotations
+
 import json
 import logging
-import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
+from mas.runtime import hostenv
+
 from mas.library.kg.embeddings.state_embeddings import default_openai_embed_fn
 
 logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class EmbedStatesStep(PipelineStep):
         overwrite = self.config.get("overwrite", False)
         max_content = int(self.config.get("max_content", 500))
 
-        api_key = os.environ.get(api_key_env, "")
+        api_key = hostenv.get(api_key_env, "")
 
         # Load KG
         kg = json.loads(kg_path.read_text(encoding="utf-8"))
@@ -104,10 +105,11 @@ class EmbedStatesStep(PipelineStep):
                     try:
                         existing_ids.add(json.loads(line).get("state_id", ""))
                     except json.JSONDecodeError:
-                        logger.debug('suppressed', exc_info=True)
+                        logger.debug("suppressed", exc_info=True)
 
         to_embed = [
-            s for s in states
+            s
+            for s in states
             if s.get("id", s.get("stateNodeId", "")) not in existing_ids
             and s.get("content", "").strip()
         ]

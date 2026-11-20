@@ -14,9 +14,10 @@ import os
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 try:
     import fcntl
@@ -28,13 +29,64 @@ _POLICY: "SchedulerPolicy | None" = None
 
 _VALID_KEYS = frozenset({"provider", "model", "user"})
 
+# Explicit overrides a host (``mas-ctl``, ``mas-lab``) installs for this process.
+# The runtime never reads the environment: the CLI reads its variables once and
+# hands the values over here. Keys: ``requests_per_minute``, ``max_in_flight``,
+# ``user``, ``provider``, ``model``, ``state_path``. A key set here wins over
+# the step's ``params``.
+_OVERRIDES: dict[str, Any] = {}
+_OVERRIDE_KEYS = frozenset({"requests_per_minute", "max_in_flight", "user", "provider", "model", "state_path"})
+
+
+def install_overrides(overrides: Mapping[str, Any] | None) -> None:
+    """Replace the process-wide scheduler overrides (``None`` clears them)."""
+    unknown = set(overrides or {}) - _OVERRIDE_KEYS
+    if unknown:
+        raise ValueError(f"unknown llm_scheduler override(s): {sorted(unknown)}")
+    _OVERRIDES.clear()
+    _OVERRIDES.update({k: v for k, v in (overrides or {}).items() if v not in (None, "")})
+
+
+_DEFAULT_USER: ContextVar[str] = ContextVar("mas_llm_scheduler_default_user", default="")
+
+
+def _effective_overrides() -> dict[str, Any]:
+    out = dict(_OVERRIDES)
+    if not out.get("user") and _DEFAULT_USER.get():
+        out["user"] = _DEFAULT_USER.get()
+    return out
+
+
+def current_overrides() -> dict[str, Any]:
+    """What a spawned worker needs to reproduce: the installed overrides plus this run's default user."""
+    return _effective_overrides()
+
+
+def explicit_overrides() -> dict[str, Any]:
+    """Only what a host installed (no run default), for save and restore."""
+    return dict(_OVERRIDES)
+
+
+@contextmanager
+def default_user(user: str) -> Iterator[None]:
+    """Fairness key for one run (this context) unless the host already overrode ``user``.
+
+    Scoped to the block and to the calling context, not the process: the next experiment in a
+    long-lived controller does not inherit this one's name.
+    """
+    token = _DEFAULT_USER.set(user or "")
+    try:
+        yield
+    finally:
+        _DEFAULT_USER.reset(token)
+
 
 def resolve_state_path(path: str | Path | None = None) -> Path:
     if path:
         return Path(path).expanduser().resolve()
-    env = os.environ.get("MAS_LLM_SCHEDULER_STATE", "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
+    override = _OVERRIDES.get("state_path")
+    if override:
+        return Path(str(override)).expanduser().resolve()
     from mas.runtime.xdg import mas_cache_root
 
     return (mas_cache_root() / "llm_scheduler.json").resolve()
@@ -57,24 +109,20 @@ class SchedulerPolicy:
         if isinstance(raw_keys, str):
             raw_keys = [part.strip() for part in raw_keys.split(",") if part.strip()]
         keys = tuple(k for k in raw_keys if k in _VALID_KEYS) or ("provider", "model")
-        env_rpm = os.environ.get("MAS_LLM_RPM", "").strip()
-        env_flight = os.environ.get("MAS_LLM_MAX_IN_FLIGHT", "").strip()
+        over = _effective_overrides()
         rpm_raw = params.get("requests_per_minute", params.get("rpm"))
-        rpm = float(env_rpm) if env_rpm else float(0.0 if rpm_raw is None else rpm_raw)
-        if env_flight:
-            flight = int(env_flight)
+        if over.get("requests_per_minute") is not None:
+            rpm = float(over["requests_per_minute"])
+        else:
+            rpm = float(0.0 if rpm_raw is None else rpm_raw)
+        if over.get("max_in_flight") is not None:
+            flight = int(over["max_in_flight"])
         elif params.get("max_in_flight") is not None:
             flight = int(params.get("max_in_flight"))
         else:
             flight = 8
-        user = (
-            os.environ.get("MAS_LLM_SCHEDULER_USER", "").strip()
-            or str(params.get("user") or "default")
-        )
-        provider = (
-            os.environ.get("MAS_LLM_SCHEDULER_PROVIDER", "").strip()
-            or str(params.get("provider") or "")
-        )
+        user = str(over.get("user") or params.get("user") or "default")
+        provider = str(over.get("provider") or params.get("provider") or "")
         path_raw = params.get("state_path") or params.get("path")
         raw_timeout = params.get("timeout_s")
         timeout_s = 300.0 if raw_timeout is None else float(raw_timeout)
@@ -325,15 +373,15 @@ def infer_model(engine: Any) -> str:
     model = call_model(engine)
     if model:
         return model
-    return os.environ.get("MAS_LLM_SCHEDULER_MODEL", "").strip()
+    return str(_OVERRIDES.get("model") or "")
 
 
 def infer_provider(engine: Any, fallback: str = "") -> str:
     if fallback:
         return fallback
-    env = os.environ.get("MAS_LLM_SCHEDULER_PROVIDER", "").strip()
-    if env:
-        return env
+    override = str(_OVERRIDES.get("provider") or "")
+    if override:
+        return override
     from urllib.parse import urlparse
 
     from mas.runtime.engine.infra_pipeline import call_api_base

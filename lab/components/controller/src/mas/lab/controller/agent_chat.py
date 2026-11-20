@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,6 @@ class _SilentDisplay:
 
 def _load_workspace_dotenv(base_dir: Path) -> None:
     """Load optional .env files; container env from docker/.env still wins (override=False)."""
-    import os
 
     try:
         from dotenv import load_dotenv
@@ -93,7 +93,7 @@ def _load_workspace_dotenv(base_dir: Path) -> None:
     candidates = [
         Path("/workspace/.env"),
         base_dir / ".env",
-        Path(os.environ.get("MAS_WORKSPACE_ROOT", "")) / ".env",
+        Path(hostenv.get("MAS_WORKSPACE_ROOT", "")) / ".env",
     ]
     for path in candidates:
         if path.is_file():
@@ -102,11 +102,11 @@ def _load_workspace_dotenv(base_dir: Path) -> None:
 
 def _quiet_logging_for_chat() -> None:
     """Suppress exchange logs; UI chat must not capture CLI-style stdout."""
-    import os
 
     from mas.ctl.logging_setup import setup_logging
+    from mas.runtime import hostenv
 
-    os.environ.pop("LOG_LEVEL", None)
+    hostenv.set_overlay({"LOG_LEVEL": ""})
     setup_logging(verbosity=0)
     logging.getLogger("mas.runtime").setLevel(logging.WARNING)
     logging.getLogger("mas.ctl").setLevel(logging.WARNING)

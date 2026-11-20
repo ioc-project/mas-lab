@@ -67,3 +67,44 @@ def test_reads_legacy_top_level_services(tmp_path: Path) -> None:
     )
     mgr = ServiceManager(path)
     assert "demo" in mgr._services
+
+
+def test_a_process_service_sees_what_an_earlier_service_exports(tmp_path: Path) -> None:
+    import sys
+    import time
+
+    from mas.lab.benchmark.service_manager import shared_manager, stop_all_shared
+
+    seen = tmp_path / "seen.txt"
+    code = f"import os,time; open({str(seen)!r}, 'w').write(os.environ.get('SVC_ENDPOINT', 'missing')); time.sleep(30)"
+    path = tmp_path / "bundle.yaml"
+    path.write_text(
+        "\n".join(
+            [
+                "apiVersion: infra/v1",
+                "kind: ServiceBundle",
+                "metadata: {name: demo}",
+                "spec:",
+                "  services:",
+                "    first:",
+                "      backend: process",
+                f'      command: [{sys.executable!r}, -c, "import time; time.sleep(30)"]',
+                "      env: {SVC_ENDPOINT: 'http://first'}",
+                "    second:",
+                "      backend: process",
+                f"      command: [{sys.executable!r}, -c, {code!r}]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    mgr = shared_manager(path, output_dir=tmp_path, base_env={"PATH": "/usr/bin:/bin"})
+    try:
+        assert mgr.start("first") and mgr.start("second")
+        for _ in range(300):
+            if seen.exists() and seen.read_text():
+                break
+            time.sleep(0.05)
+        assert seen.read_text() == "http://first"
+    finally:
+        stop_all_shared(include_keep_running=True)

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 collect_ignore = ["pending_port"]
 
 

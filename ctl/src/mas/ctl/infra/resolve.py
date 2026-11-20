@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +14,7 @@ from mas.ctl.infra.models import InfraManifest, ModelsSpec, ProxySpec, proxy_pro
 from mas.ctl.infra.pipeline_chain import BidirectionalInfraPipeline
 from mas.ctl.libraries.bundles import list_manifest_libraries
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+from mas.runtime import hostenv
 from mas.runtime.engine.call_kinds import as_str_list, read_aliased_field
 from mas.runtime.engine.infra_pipeline import stamp_middleware_step
 from mas.runtime.spec.endpoint_usage import CONNECT, LISTEN, usage_modes
@@ -385,7 +385,7 @@ def _entry_point_bundle_path(ref: str) -> Path | None:
         if path is not None:
             return path
 
-    mas_lab = os.environ.get("MAS_LAB_ROOT")
+    mas_lab = hostenv.get("MAS_LAB_ROOT")
     if mas_lab:
         rel = bundle_name.replace(":", "/")
         for root in (
@@ -853,4 +853,4 @@ def _hydrate_pipeline_cache_paths(pipeline: list[dict[str, Any]], *, cache_path:
 def api_key_for_infra(llm_proxy: dict[str, Any]) -> str:
     """Read secret from env var named by the infra manifest ``api_key_env`` field."""
     env_name = llm_proxy.get("api_key_env") or "OPENAI_API_KEY"
-    return os.environ.get(str(env_name), "").strip()
+    return hostenv.get(str(env_name), "").strip()

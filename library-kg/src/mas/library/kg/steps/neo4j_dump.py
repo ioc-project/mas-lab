@@ -5,9 +5,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Optional, Union
+
+from mas.runtime import hostenv
 
 from mas.library.kg.artifact import KGArtifact
 
@@ -56,10 +57,10 @@ def run_neo4j_dump(
     if not session_id and not run_id:
         raise ValueError("Either session_id or run_id must be provided")
 
-    resolved_uri = uri or os.environ.get(_ENV_URI, "bolt://localhost:7687")
-    resolved_user = username or os.environ.get(_ENV_USER, "neo4j")
-    resolved_password = password or os.environ.get(password_env or _ENV_PASSWORD, "")
-    resolved_database = database or os.environ.get(_ENV_DATABASE, "neo4j")
+    resolved_uri = uri or hostenv.get(_ENV_URI, "bolt://localhost:7687")
+    resolved_user = username or hostenv.get(_ENV_USER, "neo4j")
+    resolved_password = password or hostenv.get(password_env or _ENV_PASSWORD, "")
+    resolved_database = database or hostenv.get(_ENV_DATABASE, "neo4j")
 
     logger.info(
         "neo4j_dump: fetching session_id=%s run_id=%s from %s",

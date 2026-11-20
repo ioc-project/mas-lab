@@ -14,12 +14,12 @@ inside runtime.
 
 from __future__ import annotations
 
-import os
 import uuid
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
@@ -83,7 +83,7 @@ class ObsPluginSet:
         for plugin in self.plugins:
             op.subscribe(plugin)
         op.enable_async_plugins()
-        op.set_context(agent_id=agent_id, run_id=run_id or os.environ.get("UI_RUN_ID", ""))
+        op.set_context(agent_id=agent_id, run_id=run_id or hostenv.get("UI_RUN_ID", ""))
         self._all_operators.append(op)
         if self._operator is None:
             self._operator = op

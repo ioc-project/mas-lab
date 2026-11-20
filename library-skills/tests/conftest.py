@@ -17,6 +17,8 @@ import deepagents  # noqa: F401
 import google.adk.skills  # noqa: F401
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

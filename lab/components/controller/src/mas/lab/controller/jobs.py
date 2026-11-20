@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 import uuid
 from dataclasses import dataclass, field
@@ -14,6 +13,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +272,13 @@ def submit_agent_chat_job(
 
     task = asyncio.create_task(
         run_agent_chat_job(
-            job, manifest_yaml, query, lib_dir, flavour, sid, timeout,
+            job,
+            manifest_yaml,
+            query,
+            lib_dir,
+            flavour,
+            sid,
+            timeout,
         )
     )
     job._task = task
@@ -291,7 +298,7 @@ def submit_job(
     cleanup_paths: list[Path] | None = None,
 ) -> Job:
     """Create a job, launch it in the background, return immediately."""
-    env = os.environ.copy()
+    env = hostenv.snapshot()
     if env_override:
         env.update(env_override)
 

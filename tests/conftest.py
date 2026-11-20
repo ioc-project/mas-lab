@@ -13,6 +13,8 @@ from pathlib import Path
 import mas.third_party_otel  # noqa: F401
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 # Allow `from ci_llm import ...` in tests/ without making tests a package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

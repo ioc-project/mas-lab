@@ -8,7 +8,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -17,6 +16,7 @@ from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.models import ConfigParam
 from mas.lab.benchmark.pipeline.run_artifacts import missing_run_events_message, resolve_run_events, run_dir_from_ctx
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ def _inputs_digest(
     payload = {
         "v": _DIGEST_VERSION,
         "impl": _metric_impl_version(),
-        "offline": os.environ.get("MAS_MCE_OFFLINE", "").lower() in ("1", "true", "yes"),
+        "offline": hostenv.get("MAS_MCE_OFFLINE", "").lower() in ("1", "true", "yes"),
         "events": _file_sha256(events_path),
         "side": side,
         "metrics": sorted(str(m) for m in metric_names),

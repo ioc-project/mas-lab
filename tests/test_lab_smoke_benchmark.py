@@ -44,6 +44,9 @@ def smoke_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MAS_INFRA_REFS", mas_infra_refs_for_ci())
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg-config"))
     monkeypatch.setenv("MAS_LLM_CACHE", str(tmp_path / "llm_cache.json"))
+    from mas.runtime.engine import llm_cache as _llm_cache
+
+    monkeypatch.setitem(_llm_cache._PATHS, "cli", str(tmp_path / "llm_cache.json"))
     monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(_SAMPLE_WS))
     require_ci_cache()
     preexisting = {p.name for p in _DEFAULT_GLOBAL_CACHE.iterdir()} if _DEFAULT_GLOBAL_CACHE.exists() else set()

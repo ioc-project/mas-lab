@@ -55,7 +55,7 @@ multithreaded and multiprocess workers cannot DDoS the provider.
 | --- | --- |
 | `[provider, model]` (default) | One ceiling for that model on that host, shared by every runtime, pipeline, and experiment on this machine. |
 | `[provider]` | One ceiling for the whole provider (all models). |
-| `[provider, model, user]` | Fairness across callers. Set `MAS_LLM_SCHEDULER_USER` (experiments set this to the experiment name). |
+| `[provider, model, user]` | Fairness across callers. Set `user` (experiments default it to the experiment name; `MAS_LLM_SCHEDULER_USER` overrides it). |
 
 Per-run isolation is the wrong default: eight parallel runs of the same
 experiment would each think they own eight in-flight slots. Leave `user` out
@@ -96,15 +96,16 @@ mas-ctl chat agent.yaml \
   --infra-ref standard:openai
 ```
 
-Env overrides (last resort, same as other `MAS_LLM_*` knobs):
+Env overrides (last resort, same as other `MAS_LLM_*` knobs). Only the `mas-ctl` and `mas-lab` entry points read these variables. They hand the values to the scheduler as explicit overrides (`mas.runtime.engine.llm_scheduler.install_overrides`), which win over the step's `params`. The runtime and the plugin never read the environment; a host that embeds the runtime calls `install_overrides` itself:
 
 | Variable | Overrides |
 | --- | --- |
 | `MAS_LLM_MAX_IN_FLIGHT` | `max_in_flight` |
 | `MAS_LLM_RPM` | `requests_per_minute` |
-| `MAS_LLM_SCHEDULER_USER` | `user` (lab execute sets this to the experiment name when unset) |
+| `MAS_LLM_SCHEDULER_USER` | `user` (a lab run sets it to the experiment name when neither the CLI nor the environment gave one) |
 | `MAS_LLM_SCHEDULER_PROVIDER` | `provider` |
 | `MAS_LLM_SCHEDULER_STATE` | `state_path` |
+| `MAS_LLM_SCHEDULER_MODEL` | model name used for the bucket when the engine reports none |
 
 ---
 

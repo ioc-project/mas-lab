@@ -5,17 +5,71 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections import Counter
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
+from dataclasses import dataclass, field
 from typing import Any
 
 from mas.lab.benchmark.pipeline.channel import get_channel, get_stream_id
 from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.kinds import is_control_kind, is_lifecycle_kind
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
 _demo_ui_scope: ContextVar[dict[str, Any] | None] = ContextVar("mas_demo_ui_scope", default=None)
+
+
+@dataclass(frozen=True)
+class DemoUiBinding:
+    """Where a run posts its live records, handed over by the host (never read from env here)."""
+
+    ingest_url: str = ""
+    ref: Mapping[str, Any] = field(default_factory=dict)
+
+
+_BINDING_LOCK = threading.Lock()
+_BOUND: ContextVar[DemoUiBinding | None] = ContextVar("mas_demo_ui_binding", default=None)  # one run's
+_CLI_DEFAULT = DemoUiBinding()  # the CLI's, process-wide
+
+
+def install_cli_defaults(binding: DemoUiBinding | None) -> None:
+    """The CLI's own default (from ``MAS_DEMO_UI_INGEST_URL`` / ``MAS_DEMO_UI_REF``)."""
+    global _CLI_DEFAULT
+    with _BINDING_LOCK:
+        _CLI_DEFAULT = binding or DemoUiBinding()
+
+
+@contextmanager
+def bind_demo_ui(binding: DemoUiBinding | None) -> Iterator[None]:
+    """Bind the ingest target for the duration of one run (no-op for ``None``)."""
+    if binding is None:
+        yield
+        return
+    token = _BOUND.set(binding)
+    try:
+        yield
+    finally:
+        _BOUND.reset(token)
+
+
+def demo_ui_binding_from_env(env: Mapping[str, str]) -> DemoUiBinding:
+    """Parse the CLI's variables. Only CLI entry points call this."""
+    import json
+
+    ref: dict[str, Any] = {}
+    raw = str(env.get("MAS_DEMO_UI_REF") or "").strip()
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            ref = parsed
+    return DemoUiBinding(ingest_url=str(env.get("MAS_DEMO_UI_INGEST_URL") or "").strip(), ref=ref)
 
 
 def push_demo_ui_scope(extra: dict[str, Any]) -> Token:
@@ -100,27 +154,24 @@ def scope_progress_envelope(
 def post_ingest(record: dict[str, Any], url: str | None = None, ref: dict[str, Any] | None = None) -> None:
     """Subscriber adapter: channel records → demo-ui ``POST /api/ingest``."""
     import json
-    import os
     import urllib.request
 
-    dest = str(url or os.environ.get("MAS_DEMO_UI_INGEST_URL") or "").strip()
+    bound = _BOUND.get() or DemoUiBinding()
+    with _BINDING_LOCK:
+        default = _CLI_DEFAULT
+    dest = str(url or bound.ingest_url or default.ingest_url or "").strip()
     if not dest:
         return
     extra_ref = {**current_demo_ui_scope(), **dict(ref or {})}
-    raw_ref = os.environ.get("MAS_DEMO_UI_REF") or ""
-    if raw_ref.strip():
-        try:
-            parsed = json.loads(raw_ref)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, dict):
-            extra_ref = {**parsed, **extra_ref}
+    bound_ref = dict(bound.ref or default.ref or {})
+    if bound_ref:
+        extra_ref = {**bound_ref, **extra_ref}
     stamped = dict(record)
     for key, value in current_demo_ui_scope().items():
         stamped.setdefault(key, value)
     body = json.dumps({"ref": extra_ref, "record": stamped, "replay": False}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    token = str(os.environ.get("MAS_DEMO_UI_TOKEN") or "").strip()
+    token = str(hostenv.get("MAS_DEMO_UI_TOKEN") or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(dest, data=body, headers=headers, method="POST")

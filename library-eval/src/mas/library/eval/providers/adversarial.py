@@ -31,11 +31,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
 from mas.library.eval.evaluator import EvalProvider, MetricScore
+from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
 from mas.runtime.spec.source import load_dataset_items_file as _load_dataset_file
 
@@ -211,12 +211,12 @@ class AdversarialProvider(EvalProvider):
             except ImportError as exc:
                 raise ImportError("OpenAI client not available. Install with: pip install openai") from exc
 
-            api_key = os.environ.get(self._api_key_env)
+            api_key = hostenv.get(self._api_key_env)
             if not api_key:
                 raise ValueError(f"API key not found in environment variable {self._api_key_env}")
 
             # Use provided api_base or fall back to OPENAI_BASE_URL, then the older OPENAI_API_BASE
-            api_base = self._api_base or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE")
+            api_base = self._api_base or hostenv.get("OPENAI_BASE_URL") or hostenv.get("OPENAI_API_BASE")
 
             if api_base:
                 self._client = OpenAI(api_key=api_key, base_url=api_base)

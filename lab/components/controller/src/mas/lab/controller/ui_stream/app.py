@@ -34,13 +34,6 @@ from mas.lab.controller.ui_stream.refs import (
     use_clock,
     use_nonce,
 )
-from mas.lab.controller.ui_stream.timeline import (
-    envelopes_to_scheduled,
-    merge_timeline,
-    pump_timeline,
-    records_to_scheduled,
-)
-from mas.lab.controller.ui_stream.ui_trace import split_envelopes, write_ui_trace
 from mas.lab.controller.ui_stream.replay import (
     custom_panel_records,
     demo_records,
@@ -51,6 +44,14 @@ from mas.lab.controller.ui_stream.replay import (
 from mas.lab.controller.ui_stream.run_index import RunRecord, infer_mas_rel, resolve_run
 from mas.lab.controller.ui_stream.spec_load import snapshot_for_ref
 from mas.lab.controller.ui_stream.stream import command_payload, is_command_frame, parse_frame
+from mas.lab.controller.ui_stream.timeline import (
+    envelopes_to_scheduled,
+    merge_timeline,
+    pump_timeline,
+    records_to_scheduled,
+)
+from mas.lab.controller.ui_stream.ui_trace import split_envelopes, write_ui_trace
+from mas.runtime import hostenv
 from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 from pydantic import BaseModel, Field
 
@@ -85,7 +86,7 @@ def _stock_layouts() -> Path:
 
 
 def layouts_root() -> Path:
-    override = os.environ.get("MAS_DEMO_UI_LAYOUTS")
+    override = hostenv.get("MAS_DEMO_UI_LAYOUTS")
     if override:
         first = override.split(os.pathsep)[0].strip()
         if first:
@@ -104,11 +105,11 @@ def layout_roots() -> list[Path]:
             roots.append(resolved)
 
     _add(_stock_layouts())
-    for raw in os.environ.get("MAS_DEMO_UI_LAYOUTS", "").split(os.pathsep):
+    for raw in hostenv.get("MAS_DEMO_UI_LAYOUTS", "").split(os.pathsep):
         raw = raw.strip()
         if raw:
             _add(Path(raw))
-    for raw in os.environ.get("MAS_LIBRARY_PATHS", "").split(os.pathsep):
+    for raw in hostenv.get("MAS_LIBRARY_PATHS", "").split(os.pathsep):
         raw = raw.strip()
         if not raw:
             continue
@@ -128,7 +129,7 @@ def layout_roots() -> list[Path]:
 
 
 def _controller_ingest_url() -> str:
-    base = os.environ.get("MAS_CONTROLLER_URL") or os.environ.get("MAS_DEMO_UI_INGEST_URL") or "http://127.0.0.1:8090"
+    base = hostenv.get("MAS_CONTROLLER_URL") or hostenv.get("MAS_DEMO_UI_INGEST_URL") or "http://127.0.0.1:8090"
     return base.rstrip("/") + ("/api/ingest" if not base.rstrip("/").endswith("/api/ingest") else "")
 
 
@@ -343,7 +344,7 @@ def _live_overlays(targets: list[DataSourceRef]) -> dict[str, list[str]]:
 
 
 def _session_dir() -> Path:
-    raw = os.environ.get("MAS_SESSION_DIRECTORY") or os.environ.get("MAS_CONTROL_DIRECTORY")
+    raw = hostenv.get("MAS_SESSION_DIRECTORY") or hostenv.get("MAS_CONTROL_DIRECTORY")
     if raw:
         return Path(raw).expanduser()
     return Path.home() / ".local" / "share" / "mas" / "sessions"
@@ -1108,9 +1109,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         topics = list(dict.fromkeys([*get_topics, *sub_topics]))
         ref = ref_from_mapping(hello.get("ref"))
         raw_inspect = hello.get("inspect")
-        inspect_ids = (
-            tuple(raw_inspect) if isinstance(raw_inspect, list) else tuple(infer_inspect(topics))
-        )
+        inspect_ids = tuple(raw_inspect) if isinstance(raw_inspect, list) else tuple(infer_inspect(topics))
         nonce = str(hello.get("nonce") or "").strip() or None
         sub = state.bus.subscribe(sub_topics or topics, ref, nonce=nonce)
         state._inspect_ids[id(sub)] = inspect_ids
@@ -1240,11 +1239,7 @@ async def _start_replay(body: CommandBody, ref: DataSourceRef) -> dict[str, Any]
             progress=record.artefacts.get("progress"),
             events=native,
         ),
-        *[
-            custom_panel_records(path)
-            for key, path in record.artefacts.items()
-            if key.startswith("custom_")
-        ],
+        *[custom_panel_records(path) for key, path in record.artefacts.items() if key.startswith("custom_")],
     )
     if not records:
         raise HTTPException(status_code=400, detail="no demo events in run artefact")
@@ -1311,7 +1306,9 @@ def _seal_live_artefacts(ref: DataSourceRef) -> None:
     state.ingest.seal_artefacts(ref)
 
 
-async def _finish_job(job_id: str, ref: DataSourceRef, extra: dict[str, Any] | None = None, *, status: str = "completed") -> None:
+async def _finish_job(
+    job_id: str, ref: DataSourceRef, extra: dict[str, Any] | None = None, *, status: str = "completed"
+) -> None:
     job = _job_payload(job_id, status, ref, extra or {"command": "replay"})
     state._job_seen[job_id] = status
     _remember_run(job, ref)
@@ -1423,9 +1420,7 @@ def _on_job_progress(
             return
         last_pub["n"] = n
         last_pub["wall"] = wall
-        state.bus.publish(
-            envelope("job.progress", ref, "job", payload, replay=True, ts=prog.get("t"))
-        )
+        state.bus.publish(envelope("job.progress", ref, "job", payload, replay=True, ts=prog.get("t")))
 
     return on_progress
 
@@ -1534,6 +1529,7 @@ async def _pump_envelopes(
     _seed_job_progress(job_id, items, lanes)
     _publish_job_clock(job_id, first_ref, speed=speed)
     try:
+
         def emit(item):
             env = item.envelope or {}
             if has_runtime and str(getattr(item, "tree", "") or "") == "pipeline" and _is_chat_snapshot(env):
@@ -1544,23 +1540,15 @@ async def _pump_envelopes(
                 state.ingest.ingest(ref, payload, replay=False)
                 return
             state.bus.publish(envelope_from_mapping(env))
-            if (
-                has_runtime
-                and item.tree == "runtime"
-                and isinstance(payload, dict)
-                and payload.get("kind")
-            ):
+            if has_runtime and item.tree == "runtime" and isinstance(payload, dict) and payload.get("kind"):
+
                 def _emit_chat(target: DataSourceRef, rec: dict[str, Any]) -> None:
                     plot_kind = str(rec.get("kind") or "")
                     if not plot_kind.startswith("custom.chat"):
                         return
-                    state.bus.publish(
-                        envelope(plot_kind, target, "custom", rec, replay=False, complete=False)
-                    )
+                    state.bus.publish(envelope(plot_kind, target, "custom", rec, replay=False, complete=False))
 
-                state.ingest._plots.apply(
-                    _emit_chat, ref, payload, skip={"custom.topology", "series"}
-                )
+                state.ingest._plots.apply(_emit_chat, ref, payload, skip={"custom.topology", "series"})
 
         await pump_timeline(
             items,
@@ -1604,7 +1592,7 @@ async def _start_live_experiment(body: CommandBody, ref: DataSourceRef) -> dict[
             pre.extend(item.get("pre") or [])
     _run_pre_steps(lib_dir, pre)
     experiment_path = resolve_experiment_path(lib_dir, experiment)
-    ingest = os.environ.get("MAS_DEMO_UI_INGEST_URL") or _controller_ingest_url()
+    ingest = hostenv.get("MAS_DEMO_UI_INGEST_URL") or _controller_ingest_url()
     target_refs = [ref.merge(item) if isinstance(item, dict) else ref for item in (body.targets or [])]
     if not target_refs:
         target_refs = [ref]
@@ -1626,7 +1614,6 @@ async def _start_live_experiment(body: CommandBody, ref: DataSourceRef) -> dict[
         "endpoint": f"/api/libraries/{ref.library}/experiment/run",
         "command": f"mas-lab experiment run {experiment_path.name}",
     }
-    os.environ.setdefault("MAS_DEMO_UI_INGEST_KINDS", "all")
     state._closed_until_run = False
     result = get_controller_api().submit_experiment(spec)
     job_id = str(result.get("job_id") or result.get("worker_id") or "")
@@ -1653,8 +1640,7 @@ async def _start_live_mas(body: CommandBody, ref: DataSourceRef) -> dict[str, An
     if not mas_rel:
         raise HTTPException(status_code=400, detail="needs: experiment (to infer MAS)")
     overlays = body.overlays or ([ref.overlay] if ref.overlay else [])
-    ingest = os.environ.get("MAS_DEMO_UI_INGEST_URL") or _controller_ingest_url()
-    os.environ.setdefault("MAS_DEMO_UI_INGEST_KINDS", "all")
+    ingest = hostenv.get("MAS_DEMO_UI_INGEST_URL") or _controller_ingest_url()
     state._closed_until_run = False
     req = RunMASRequest(
         query=body.query or body.text,
@@ -1893,7 +1879,7 @@ def _arm_job(job_id: str, ref: DataSourceRef, *, command: str = "ingest") -> Non
 
 
 def _dump_job_trace(job_id: str, ref: DataSourceRef) -> None:
-    dest_root = os.environ.get("MAS_DEMO_UI_TRACE_DIR")
+    dest_root = hostenv.get("MAS_DEMO_UI_TRACE_DIR")
     if not dest_root:
         return
     dest = Path(dest_root) / job_id
@@ -1947,11 +1933,7 @@ async def _delete_ui_run(ref: DataSourceRef) -> dict[str, Any]:
     from mas.lab.controller.api import peek_controller_api
 
     keys = {part for part in (ref.batch, ref.run, ref.session) if part}
-    ids = [
-        str(item["id"])
-        for item in state._runs
-        if item.get("id") in keys or item.get("batch") in keys
-    ]
+    ids = [str(item["id"]) for item in state._runs if item.get("id") in keys or item.get("batch") in keys]
     for job_id, pinned in list(state._job_refs.items()):
         if job_id in keys or pinned.batch in keys or pinned.run in keys:
             ids.append(job_id)
@@ -2037,17 +2019,11 @@ _DEMO_UI_SKIP = frozenset({"api", "health", "ws", "docs", "redoc", "openapi.json
 
 
 def _demo_ui_dev_origin() -> str:
-    return str(os.environ.get("MAS_DEMO_UI_DEV_ORIGIN") or "").rstrip("/")
+    return str(hostenv.get("MAS_DEMO_UI_DEV_ORIGIN") or "").rstrip("/")
 
 
 def _esc_html(value: Any) -> str:
-    return (
-        str(value or "")
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
+    return str(value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
 def _gallery_html(catalog: list[dict[str, Any]]) -> str:
@@ -2063,7 +2039,7 @@ def _gallery_html(catalog: list[dict[str, Any]]) -> str:
             + group
             + "</span><strong>"
             + title
-            + "</strong><span class=\"slug\">"
+            + '</strong><span class="slug">'
             + slug
             + "</span></a>"
         )
@@ -2080,7 +2056,9 @@ def _gallery_html(catalog: list[dict[str, Any]]) -> str:
     h1 {{ font-size: 1.4rem; font-weight: 600; margin: 0 0 0.35rem; }}
     p {{ color: #94a3b8; margin: 0 0 1.5rem; }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.85rem; }}
-    .card {{ display: flex; flex-direction: column; gap: 0.3rem; padding: 0.9rem 1rem; border: 1px solid #1f2937; border-radius: 10px; background: #111827; color: inherit; text-decoration: none; }}
+    .card {{ display: flex; flex-direction: column; gap: 0.3rem; padding: 0.9rem 1rem;
+      border: 1px solid #1f2937; border-radius: 10px;
+      background: #111827; color: inherit; text-decoration: none; }}
     .card:hover {{ border-color: #38bdf8; }}
     .card strong {{ font-size: 1rem; }}
     .group {{ font-size: 0.7rem; letter-spacing: 0.04em; text-transform: uppercase; color: #64748b; }}

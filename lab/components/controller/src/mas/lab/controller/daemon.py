@@ -18,6 +18,7 @@ from mas.lab.controller import config as cfg
 from mas.lab.controller.api import ControllerAPI, set_controller_api
 from mas.lab.controller.config import DEFAULT_HTTP_PORT, ensure_mas_dirs
 from mas.lab.controller.sessions import SessionRegistry
+from mas.runtime import hostenv
 from mas.runtime.aio import new_thread
 
 logger = logging.getLogger(__name__)
@@ -113,8 +114,9 @@ def _serve_socket(path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    hostenv.install(os.environ)  # the daemon is an entry point: its environment is the host's
     parser = argparse.ArgumentParser(description="MAS Lab controller daemon")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("MAS_CONTROLLER_PORT", DEFAULT_HTTP_PORT)))
+    parser.add_argument("--port", type=int, default=int(hostenv.get("MAS_CONTROLLER_PORT", DEFAULT_HTTP_PORT)))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--socket", type=Path, default=None)
     parser.add_argument("--no-http", action="store_true")
@@ -124,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workspace", type=Path, default=None)
     args = parser.parse_args(argv)
     if args.workspace is not None:
-        os.environ["MAS_WORKSPACE_ROOT"] = str(Path(args.workspace).expanduser().resolve())
+        hostenv.set_overlay({"MAS_WORKSPACE_ROOT": str(Path(args.workspace).expanduser().resolve())})
     socket = args.socket or cfg.socket_path()
 
     from mas.lab.controller.settings import ControllerSettings, load_token_file

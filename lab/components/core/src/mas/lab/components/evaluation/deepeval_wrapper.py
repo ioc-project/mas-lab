@@ -13,9 +13,12 @@ import random
 import time
 from typing import Any, Dict, List
 
+from mas.runtime import hostenv
+
 try:
     from deepeval.metrics import AnswerRelevancyMetric as _RealAnswerRelevancyMetric
     from deepeval.test_case import LLMTestCase
+
     DEEPEVAL_AVAILABLE = True
 except ImportError:
     _RealAnswerRelevancyMetric = None
@@ -38,12 +41,11 @@ def _resolve_model_arg(model: Any) -> Any:
     if model is not None and not isinstance(model, str):
         return model
     try:
-        import os
-
         from mas.library.eval.mce.runner import _deepeval_llm_cls, _resolve_infra
+
         api_base, api_key_env, default_model = _resolve_infra()
         effective_model = model or default_model or "gpt-4o"
-        api_key = os.environ.get(api_key_env) or os.environ.get("OPENAI_API_KEY") or "none"
+        api_key = hostenv.get(api_key_env) or hostenv.get("OPENAI_API_KEY") or "none"
         cls = _deepeval_llm_cls()
         return cls(
             model=effective_model,
@@ -133,31 +135,24 @@ class DeepEvalEvaluator:
     """
     Evaluator that uses DeepEval metrics to judge agent performance.
     """
-    
+
     def __init__(self):
         self.relevancy_metric = AnswerRelevancyMetric(threshold=0.7)
-        
+
     def evaluate_response(self, input_prompt: str, output_response: str, context: List[str] = None) -> Dict[str, Any]:
         """
         Evaluate a single response using LLM-as-a-Judge.
-        
+
         Args:
             input_prompt: The user's original query.
             output_response: The agent's final answer.
             context: (Optional) Retrieved context chunks.
-            
+
         Returns:
             Dictionary with score and reason.
         """
-        test_case = LLMTestCase(
-            input=input_prompt,
-            actual_output=output_response,
-            retrieval_context=context
-        )
-        
+        test_case = LLMTestCase(input=input_prompt, actual_output=output_response, retrieval_context=context)
+
         score = self.relevancy_metric.measure(test_case)
-        
-        return {
-            "answer_relevancy": score,
-            "reason": self.relevancy_metric.reason
-        }
+
+        return {"answer_relevancy": score, "reason": self.relevancy_metric.reason}

@@ -13,6 +13,7 @@ import os
 import sys
 
 import click
+from mas.runtime import hostenv
 from mas.runtime.registry import get_registry
 from mas.runtime.transport.config import _PROTOCOL_KEYS, TransportObservabilityConfig
 from mas.third_party_otel import A2A_SDK_OTEL_FLAG
@@ -36,7 +37,7 @@ def apply_sdk_span_env(config: TransportObservabilityConfig) -> bool:
     global _we_set_a2a_flag
     a2a = config.for_protocol("a2a")
     wanted = a2a.enabled and a2a.sdk_spans
-    previous = os.environ.get(A2A_SDK_OTEL_FLAG, "").strip().lower()
+    previous = hostenv.get(A2A_SDK_OTEL_FLAG, "").strip().lower()
     imported = "a2a.utils.telemetry" in sys.modules
     if wanted:
         os.environ[A2A_SDK_OTEL_FLAG] = "true"

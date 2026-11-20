@@ -32,10 +32,11 @@ var that holds it.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from mas.runtime import hostenv
 
 NEO4J_KIND = "Neo4j"
 
@@ -50,17 +51,17 @@ class Neo4jTarget:
     password_env: str = "NEO4J_PASSWORD"
 
     def resolved_uri(self, override: Optional[str] = None) -> str:
-        return override or self.uri or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+        return override or self.uri or hostenv.get("NEO4J_URI", "bolt://localhost:7687")
 
     def resolved_username(self, override: Optional[str] = None) -> str:
-        return override or self.username or os.environ.get("NEO4J_USER", "neo4j")
+        return override or self.username or hostenv.get("NEO4J_USER", "neo4j")
 
     def resolved_database(self, override: Optional[str] = None) -> str:
-        return override or self.database or os.environ.get("NEO4J_DB_AGENT", "neo4j")
+        return override or self.database or hostenv.get("NEO4J_DB_AGENT", "neo4j")
 
     def password(self) -> str:
         """Read the password from the configured env var (never from the manifest)."""
-        return os.environ.get(self.password_env, "")
+        return hostenv.get(self.password_env, "")
 
 
 def _load_manifest(manifest: str | Path | Dict[str, Any]) -> Dict[str, Any]:
@@ -103,7 +104,7 @@ def resolve_neo4j(
             username=target.resolved_username(),
             password_env=target.password_env,
         )
-    resolved = (uri or os.environ.get("NEO4J_URI", "")).strip()
+    resolved = (uri or hostenv.get("NEO4J_URI", "")).strip()
     if not resolved:
         raise ValueError(
             "no Neo4j URI — pass infra=, uri=, or set $NEO4J_URI "
@@ -111,8 +112,8 @@ def resolve_neo4j(
         )
     return Neo4jTarget(
         uri=resolved,
-        database=os.environ.get("NEO4J_DB_AGENT", "neo4j"),
-        username=os.environ.get("NEO4J_USER", "neo4j"),
+        database=hostenv.get("NEO4J_DB_AGENT", "neo4j"),
+        username=hostenv.get("NEO4J_USER", "neo4j"),
         password_env="NEO4J_PASSWORD",
     )
 

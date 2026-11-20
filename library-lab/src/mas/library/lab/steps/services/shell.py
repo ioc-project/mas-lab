@@ -1,8 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
-
 """ShellStep — run an inline shell command as a pipeline step."""
+
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.pipeline import ConfigParam, PipelineStep, StepOutput
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class ShellStep(PipelineStep):
             "-c",
             command,
             cwd=str(workdir),
+            env=hostenv.snapshot(),  # the host's environment, incl. what services of this run export
         )
         code = await proc.wait()
         if code != 0:

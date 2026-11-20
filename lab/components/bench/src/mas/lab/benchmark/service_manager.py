@@ -1,8 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 # ruff: noqa: E402
-from __future__ import annotations
-
 """ServiceManager — declarative management of Docker Compose services for mas-lab.
 
 Reads ``infra/services.yaml`` (co-located with the experiment) and manages the
@@ -38,6 +36,8 @@ Manual CLI usage::
     mas-lab services status --experiment path/to/mas-experiment.yaml
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -49,6 +49,7 @@ from typing import Any, Mapping, Optional
 from urllib.error import URLError
 
 import yaml
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,11 @@ def stop_all_shared(*, include_keep_running: bool = False) -> None:
             if not include_keep_running and is_keep_running(name, mgr._services_yaml):
                 continue
             mgr.stop(name)
+
+
+def _child_env(resolved: dict[str, str]) -> dict[str, str]:
+    """The host environment (with values other services exported), then this service's own."""
+    return {**hostenv.snapshot(), **resolved}
 
 
 # ---------------------------------------------------------------------------
@@ -438,8 +444,8 @@ class ServiceManager:
                     value, count, prev = _EXPORTED[k]
                     _EXPORTED[k] = (value, count + 1, prev)
                 else:
-                    _EXPORTED[k] = (v, 1, os.environ.get(k))
-                    os.environ[k] = v
+                    _EXPORTED[k] = (v, 1, hostenv.get(k))
+                    hostenv.set_overlay({k: v})
                 svc._prev_env[k] = None
                 logger.debug("Set %s=%s", k, v)
 
@@ -453,9 +459,9 @@ class ServiceManager:
                     continue
                 del _EXPORTED[k]
                 if prev is None:
-                    os.environ.pop(k, None)
+                    hostenv.clear_overlay([k])
                 else:
-                    os.environ[k] = prev
+                    hostenv.set_overlay({k: prev})
         svc._prev_env.clear()
 
     def _compose_up(self, svc: ServiceDef) -> bool:
@@ -471,7 +477,7 @@ class ServiceManager:
                     Path(_v).mkdir(parents=True, exist_ok=True)
                 except Exception:
                     logger.debug("suppressed", exc_info=True)
-        compose_env = {**os.environ, **resolved_env}
+        compose_env = _child_env(resolved_env)
         logger.info("Starting service %r …", svc.name)
         result = subprocess.run(
             [
@@ -596,7 +602,10 @@ class ServiceManager:
         resolved_env = self._resolve_env(svc)
         from mas.lab.benchmark.environment.fixtures import scrubbed_environ
 
-        proc_env = {**scrubbed_environ(self.base_env if self.base_env is not None else os.environ), **resolved_env}
+        inherited = self.base_env if self.base_env is not None else hostenv.snapshot()
+        with _EXPORTED_LOCK:
+            exported = {k: v[0] for k, v in _EXPORTED.items()}  # what other services of this run export
+        proc_env = {**scrubbed_environ(inherited), **exported, **resolved_env}
 
         logger.info("Starting process service %r: %s", svc.name, " ".join(svc.command))
         try:

@@ -1,18 +1,19 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Client session registry — idle auto-shutdown when no users and no workers."""
+
 from __future__ import annotations
 
-import os
 import time
 from typing import TYPE_CHECKING, Optional
 
 from mas.lab.controller.worker_model import WorkerStatus
+from mas.runtime import hostenv
 
 if TYPE_CHECKING:
     from mas.lab.controller.api import ControllerAPI
 
-IDLE_SHUTDOWN_SEC = float(os.environ.get("MAS_CONTROLLER_IDLE_SEC", "30"))
+IDLE_SHUTDOWN_SEC = float(hostenv.get("MAS_CONTROLLER_IDLE_SEC", "30"))
 
 
 class SessionRegistry:
@@ -37,11 +38,7 @@ class SessionRegistry:
         return len(self._sessions)
 
     def active_worker_count(self, api: ControllerAPI) -> int:
-        return sum(
-            1
-            for w in api.workers.list_workers()
-            if w.status in (WorkerStatus.PENDING, WorkerStatus.RUNNING)
-        )
+        return sum(1 for w in api.workers.list_workers() if w.status in (WorkerStatus.PENDING, WorkerStatus.RUNNING))
 
     def should_shutdown(self, api: ControllerAPI, *, idle_sec: float | None = None) -> bool:
         """True when no sessions, no active workers, and idle for *idle_sec*."""

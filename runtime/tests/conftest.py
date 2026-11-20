@@ -8,6 +8,8 @@ import os
 
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 # pytest runtime/tests does not load repo-root tests/conftest.py.
 os.environ.pop("MAS_LIBRARY_PATHS", None)
 os.environ.pop("MAS_WORKSPACE_ROOT", None)

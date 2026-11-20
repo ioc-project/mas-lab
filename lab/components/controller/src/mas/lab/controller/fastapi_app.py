@@ -14,7 +14,6 @@ import asyncio
 import hashlib
 import hmac
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -26,6 +25,7 @@ from mas.lab.controller.deps import _manifest_store, get_manifest_store
 from mas.lab.controller.jobs import Job, JobStatus, _jobs
 from mas.lab.controller.routes import register_routes
 from mas.lab.controller.settings import ControllerSettings, is_loopback_host
+from mas.runtime import hostenv
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
         await asyncio.to_thread(preload_run_path)
     except Exception as exc:
         logger.warning("Startup preload failed: %s", exc)
-    if os.environ.get("MAS_CONTROLLER_DISABLE_STARTUP_DISCOVERY", "").strip().lower() in {
+    if hostenv.get("MAS_CONTROLLER_DISABLE_STARTUP_DISCOVERY", "").strip().lower() in {
         "1",
         "true",
         "yes",

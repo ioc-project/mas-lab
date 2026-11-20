@@ -9,19 +9,55 @@ import json
 import os
 import threading
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
+# Cache paths a host hands over. The runtime never reads the environment:
+# ``cli`` is the CLI's own override (``MAS_LLM_CACHE``), ``default`` a host's
+# default for one run (for example a UI live job). ``cli`` wins over ``default``.
+# The CLI's own value is process-wide; what a host binds for one run lives in a
+# ContextVar, so two runs in one process (the controller daemon) never see each other's.
+_PATHS: dict[str, str | None] = {"cli": None, "default": None}
+_BOUND: ContextVar[dict[str, str] | None] = ContextVar("mas_llm_cache_bound", default=None)
+
+
+def install_cli_path(path: str | Path | None) -> None:
+    """The CLI's cache path override (``None`` clears it)."""
+    _PATHS["cli"] = str(path) if path else None
+
+
+@contextmanager
+def bind_paths(*, cli: str | None = None, default: str | None = None) -> Iterator[None]:
+    """Set the host cache paths for a block; ``None`` leaves a slot as it is."""
+    bound = dict(_BOUND.get() or {})
+    if cli:
+        bound["cli"] = str(cli)
+    if default:
+        bound["default"] = str(default)
+    token = _BOUND.set(bound)
+    try:
+        yield
+    finally:
+        _BOUND.reset(token)
+
+
+def snapshot_paths() -> dict[str, str | None]:
+    bound = _BOUND.get() or {}
+    return {slot: bound.get(slot) or _PATHS[slot] for slot in ("cli", "default")}
+
 
 def resolve_cache_path(cache_path: str | Path | None = None) -> Path:
-    """Explicit ``cache_path`` wins, then ``MAS_LLM_CACHE``, then the shared
-    XDG cache root (``$XDG_CACHE_HOME/mas/llm_cache.json`` — same convention
+    """Explicit ``cache_path`` wins, then the CLI override, then a host default, then the
+    shared XDG cache root (``$XDG_CACHE_HOME/mas/llm_cache.json`` — same convention
     as the trace/artifacts caches in ``mas.runtime.xdg``)."""
     if cache_path:
         return Path(cache_path).expanduser().resolve()
-    env = os.environ.get("MAS_LLM_CACHE", "").strip()
-    if env:
-        return Path(env).expanduser().resolve()
+    for chosen in snapshot_paths().values():
+        if chosen:
+            return Path(chosen).expanduser().resolve()
     from mas.runtime.xdg import mas_cache_root
 
     return (mas_cache_root() / "llm_cache.json").resolve()

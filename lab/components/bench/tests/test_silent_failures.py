@@ -43,8 +43,9 @@ def test_missing_scenario_config_is_an_error(tmp_path: Path):
 
 def test_service_env_conflict_between_benchmarks_is_an_error(tmp_path: Path, monkeypatch):
     from mas.lab.benchmark.service_manager import ServiceDef, ServiceManager
+    from mas.runtime import hostenv
 
-    monkeypatch.delenv("MAS_TEST_SVC_ENDPOINT", raising=False)
+    hostenv.clear_overlay(["MAS_TEST_SVC_ENDPOINT"])
     first = ServiceManager(tmp_path / "none.yaml")
     second = ServiceManager(tmp_path / "none.yaml")
     a = ServiceDef(name="a", env={"MAS_TEST_SVC_ENDPOINT": "http://a"})
@@ -56,11 +57,9 @@ def test_service_env_conflict_between_benchmarks_is_an_error(tmp_path: Path, mon
     with pytest.raises(RuntimeError, match="conflicts"):
         second._apply_env(b)
     first._restore_env(a)
-    import os
-
-    assert os.environ["MAS_TEST_SVC_ENDPOINT"] == "http://a"
+    assert hostenv.get("MAS_TEST_SVC_ENDPOINT") == "http://a"
     second._restore_env(same)
-    assert "MAS_TEST_SVC_ENDPOINT" not in os.environ
+    assert hostenv.get("MAS_TEST_SVC_ENDPOINT") is None
 
 
 def test_service_env_unknown_placeholder_is_an_error(tmp_path: Path):

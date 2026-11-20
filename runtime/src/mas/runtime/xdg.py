@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from mas.runtime import hostenv
 from mas.runtime.constants import USER_CONFIG_FILENAME
 
 _APP = "mas"
@@ -26,7 +26,7 @@ CONTROLLER_SOCKET_SOURCE = "$XDG_DATA_HOME/mas/controller.sock"
 
 
 def _env_path(name: str, default: Path) -> Path:
-    raw = os.environ.get(name, "").strip()
+    raw = hostenv.get(name, "").strip()
     if not raw:
         return default
     return Path(raw).expanduser().resolve()

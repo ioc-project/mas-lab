@@ -4,9 +4,9 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
+from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.transport.config import TransportObservabilityConfig
 
@@ -27,7 +27,7 @@ def _resolve_manifest_cfg_value(cfg: dict[str, Any], key: str, *, default: str =
         return str(direct).strip()
     env_key = cfg.get(f"{key}_env")
     if env_key:
-        return os.environ.get(str(env_key), default).strip()
+        return hostenv.get(str(env_key), default).strip()
     return default
 
 

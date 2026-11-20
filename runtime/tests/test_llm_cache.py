@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import pytest
 from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
 from mas.library.standard.plugins.llm.cache import CacheLLMProvider
 from mas.runtime.engine.llm_cache import (
     assistant_message_from_cache_content,
     bind_route_cache_key,
+    install_cli_path,
     legacy_preview_cache_key,
     llm_cache_key,
     lookup_preview_cache,
@@ -29,22 +31,43 @@ def _llm_cache_layer(provider):
     raise AssertionError(f"no llm_cache layer on {type(provider).__name__}")
 
 
+@pytest.fixture(autouse=True)
+def _clean_cache_paths():
+    from mas.runtime.engine import llm_cache
+
+    before = llm_cache.snapshot_paths()
+    yield
+    llm_cache._PATHS.update(before)
+
+
 def test_resolve_cache_path_prefers_explicit_argument(tmp_path, monkeypatch):
-    monkeypatch.setenv("MAS_LLM_CACHE", str(tmp_path / "env-cache.json"))
+    install_cli_path(tmp_path / "cli-cache.json")
     explicit = tmp_path / "explicit-cache.json"
     assert resolve_cache_path(explicit) == explicit.resolve()
 
 
-def test_resolve_cache_path_falls_back_to_env_var(tmp_path, monkeypatch):
-    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
-    env_path = tmp_path / "env-cache.json"
-    monkeypatch.setenv("MAS_LLM_CACHE", str(env_path))
-    assert resolve_cache_path() == env_path.resolve()
+def test_resolve_cache_path_uses_cli_path_then_host_default(tmp_path, monkeypatch):
+    from mas.runtime.engine.llm_cache import bind_paths
+
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
+    host = tmp_path / "host.json"
+    cli = tmp_path / "cli.json"
+    with bind_paths(default=str(host)):
+        assert resolve_cache_path() == host.resolve()
+        install_cli_path(cli)
+        assert resolve_cache_path() == cli.resolve()
+    install_cli_path(None)
+    assert resolve_cache_path() == tmp_path / "xdg" / "mas" / "llm_cache.json"
+
+
+def test_resolve_cache_path_ignores_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("MAS_LLM_CACHE", str(tmp_path / "env-cache.json"))
+    assert resolve_cache_path() == tmp_path / "mas" / "llm_cache.json"
 
 
 def test_resolve_cache_path_defaults_under_shared_xdg_cache_root(tmp_path, monkeypatch):
     """Same $XDG_CACHE_HOME/mas root as the trace/artifacts caches (mas.runtime.xdg)."""
-    monkeypatch.delenv("MAS_LLM_CACHE", raising=False)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     assert resolve_cache_path() == tmp_path / "mas" / "llm_cache.json"
 

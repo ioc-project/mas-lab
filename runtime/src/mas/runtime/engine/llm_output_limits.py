@@ -21,10 +21,11 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
+
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 _WARNED_CONTEXT_MODELS: set[str] = set()
@@ -173,7 +174,7 @@ def resolve_output_limits(
     from mas.runtime.engine.llm_model_catalog import default_model_catalog
     from mas.runtime.engine.llm_request import resolve_model_context
 
-    env = os.environ if env is None else env
+    env = hostenv.snapshot() if env is None else env
     entry, fallback, name = resolve_model_context(manifest, model=model)
     entry = entry or {}
     fallback = fallback or {}
@@ -333,11 +334,7 @@ def estimate_model_cost_usd(
     if min(input_rate, output_rate, cached_rate) < 0:
         return None
     uncached_tokens = prompt_tokens - cached_tokens
-    return (
-        uncached_tokens * input_rate
-        + cached_tokens * cached_rate
-        + completion_tokens * output_rate
-    ) / 1_000_000
+    return (uncached_tokens * input_rate + cached_tokens * cached_rate + completion_tokens * output_rate) / 1_000_000
 
 
 def output_token_kwargs(model: str | None = None, *, generation: Mapping[str, Any] | None = None) -> dict[str, int]:

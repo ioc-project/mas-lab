@@ -17,6 +17,7 @@ from mas.library.standard.plugins.infra.llm_scheduler import LlmSchedulerMiddlew
 from mas.runtime.engine.llm_scheduler import (
     SchedulerPolicy,
     current_policy,
+    install_overrides,
     install_policy,
     llm_slot,
     reset_policy,
@@ -55,13 +56,11 @@ class _SlowEngine:
 
 @pytest.fixture(autouse=True)
 def _reset_scheduler(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
-    monkeypatch.delenv("MAS_LLM_MAX_IN_FLIGHT", raising=False)
-    monkeypatch.delenv("MAS_LLM_RPM", raising=False)
-    monkeypatch.delenv("MAS_LLM_SCHEDULER_USER", raising=False)
+    install_overrides({"state_path": str(tmp_path / "sched.json")})
     reset_policy()
     yield
     reset_policy()
+    install_overrides(None)
 
 
 async def test_scheduler_caps_in_flight(tmp_path: Path) -> None:
@@ -275,3 +274,53 @@ def test_multiprocess_shares_file_state(tmp_path: Path) -> None:
     b = json.loads(b_out.read_text(encoding="utf-8"))
     overlap = min(a["end"], b["end"]) - max(a["start"], b["start"])
     assert overlap <= 0.05
+
+
+def test_scheduler_ignores_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name, value in {
+        "MAS_LLM_RPM": "99",
+        "MAS_LLM_MAX_IN_FLIGHT": "77",
+        "MAS_LLM_SCHEDULER_USER": "env-user",
+        "MAS_LLM_SCHEDULER_PROVIDER": "env-provider",
+        "MAS_LLM_SCHEDULER_STATE": "/nonexistent/env.json",
+    }.items():
+        monkeypatch.setenv(name, value)
+    pol = SchedulerPolicy.from_params({"max_in_flight": 3, "user": "spec-user"})
+    assert pol.max_in_flight == 3
+    assert pol.requests_per_minute == 0.0
+    assert pol.user == "spec-user"
+    assert pol.provider == ""
+    assert "env.json" not in str(pol.state_path)
+
+
+def test_overrides_win_over_params_and_clear() -> None:
+    install_overrides({"max_in_flight": 2, "requests_per_minute": 30, "user": "cli", "provider": "p"})
+    pol = SchedulerPolicy.from_params({"max_in_flight": 9, "rpm": 5, "user": "spec"})
+    assert (pol.max_in_flight, pol.requests_per_minute, pol.user, pol.provider) == (2, 30.0, "cli", "p")
+    install_overrides(None)
+    pol = SchedulerPolicy.from_params({"max_in_flight": 9, "rpm": 5, "user": "spec"})
+    assert (pol.max_in_flight, pol.requests_per_minute, pol.user) == (9, 5.0, "spec")
+
+
+def test_default_user_never_replaces_an_override() -> None:
+    from mas.runtime.engine.llm_scheduler import default_user
+
+    with default_user("experiment-a"):
+        assert SchedulerPolicy.from_params({}).user == "experiment-a"
+        install_overrides({"user": "cli"})
+        with default_user("experiment-b"):
+            assert SchedulerPolicy.from_params({}).user == "cli"
+    install_overrides(None)
+    assert SchedulerPolicy.from_params({}).user == "default"
+
+
+def test_unknown_override_is_refused() -> None:
+    with pytest.raises(ValueError, match="unknown llm_scheduler override"):
+        install_overrides({"rpmm": 1})
+
+
+def test_runtime_scheduler_module_reads_no_environment() -> None:
+    import mas.runtime.engine.llm_scheduler as mod
+
+    text = Path(mod.__file__).read_text(encoding="utf-8")
+    assert "os.environ" not in text and "getenv" not in text

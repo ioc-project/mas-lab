@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
+
+from mas.runtime import hostenv
 
 
 class Hook:
@@ -17,13 +18,13 @@ class Hook:
 
 
 def _read_current_run_id() -> str | None:
-    run_id_file = os.getenv("UI_RUN_ID_FILE", "").strip()
+    run_id_file = hostenv.get("UI_RUN_ID_FILE", "").strip()
     if not run_id_file:
-        return os.getenv("UI_RUN_ID")
+        return hostenv.get("UI_RUN_ID")
     try:
         value = Path(run_id_file).read_text(encoding="utf-8").strip()
     except OSError:
-        return os.getenv("UI_RUN_ID")
+        return hostenv.get("UI_RUN_ID")
     return value or None
 
 
@@ -62,7 +63,8 @@ def normalize_event(event: Dict[str, Any], source: str) -> Dict[str, Any]:
         tool_key
         and raw_kind in {"tool_call", "tool_result", "tool_unavailable"}
         and (
-            tool_lower in {"memory.read", "memory.write", "memory.search", "memory_read", "memory_write", "memory_search"}  # noqa: E501
+            tool_lower
+            in {"memory.read", "memory.write", "memory.search", "memory_read", "memory_write", "memory_search"}  # noqa: E501
             or tool_lower.startswith("memory.")
         )
     )
@@ -159,12 +161,13 @@ class HookBus:
 
     @classmethod
     def from_env(cls, default_hooks: str, source: str) -> "HookBus":
-        hook_list = os.getenv("HOOKS", default_hooks)
+        hook_list = hostenv.get("HOOKS", default_hooks)
         hooks: List[Hook] = []
         for item in [value.strip() for value in hook_list.split(",") if value.strip()]:
             if item == "ui":
                 from mas.lab import paths as _paths
-                feed_path = os.getenv("UI_FEED_PATH", str(_paths.lab_output() / "ui_feed.jsonl"))
+
+                feed_path = hostenv.get("UI_FEED_PATH", str(_paths.lab_output() / "ui_feed.jsonl"))
                 hooks.append(UIHook(feed_path, source))
             elif item == "cli":
                 hooks.append(CLIHook(source))

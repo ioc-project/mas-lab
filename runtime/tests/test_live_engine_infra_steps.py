@@ -10,7 +10,7 @@ import threading
 import pytest
 from mas.runtime.engine.infra_pipeline import PipedLLMProvider
 from mas.runtime.engine.llm_live import LiveLlmEngine
-from mas.runtime.engine.llm_scheduler import reset_policy
+from mas.runtime.engine.llm_scheduler import install_overrides, reset_policy
 from mas.runtime.schema.egress import InvokeEngineIo
 
 
@@ -120,8 +120,14 @@ def test_live_engine_ainvoke_fault_rate_one_skips_provider() -> None:
     assert provider.calls == 0
 
 
+@pytest.fixture(autouse=True)
+def _clear_scheduler_overrides():
+    yield
+    install_overrides(None)
+
+
 async def test_live_engine_invoke_scheduler_paces(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
+    install_overrides({"state_path": str(tmp_path / "sched.json")})
     reset_policy()
     provider = _SlowProvider()
     engine = _engine(provider)
@@ -192,7 +198,7 @@ async def _run_two_models(piped: PipedLLMProvider) -> list[BaseException]:
 
 
 async def test_leaf_scheduler_two_models_get_separate_buckets(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
+    install_overrides({"state_path": str(tmp_path / "sched.json")})
     reset_policy()
     provider = _SlowProvider()
     piped = _leaf_with_scheduler(provider, tmp_path)
@@ -204,7 +210,7 @@ async def test_leaf_scheduler_two_models_get_separate_buckets(tmp_path, monkeypa
 
 
 async def test_leaf_scheduler_keys_model_separates_buckets(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("MAS_LLM_SCHEDULER_STATE", str(tmp_path / "sched.json"))
+    install_overrides({"state_path": str(tmp_path / "sched.json")})
     reset_policy()
     provider = _SlowProvider()
     piped = _leaf_with_scheduler(provider, tmp_path, keys=["model"])

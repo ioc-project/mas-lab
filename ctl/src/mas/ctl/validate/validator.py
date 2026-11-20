@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +16,7 @@ from mas.ctl.validate.refs import check_refs, resolve_refs_enabled
 from mas.ctl.validate.schema_errors import humanize_schema_error
 from mas.ctl.validate.schemas import declared_kind, lab_schema_registry, load_schema, schema_path_for_kind
 from mas.ctl.validate.separation import check_separation
+from mas.runtime import hostenv
 
 
 def _path_sort_key(path: Iterable[str | int]) -> tuple[tuple[int, str | int], ...]:
@@ -50,11 +50,11 @@ class ValidationResult:
 
 
 def validation_enabled() -> bool:
-    return os.environ.get("MAS_MANIFEST_VALIDATE", "1") not in ("0", "false", "False")
+    return hostenv.get("MAS_MANIFEST_VALIDATE", "1") not in ("0", "false", "False")
 
 
 def strict_mode() -> bool:
-    return os.environ.get("MAS_MANIFEST_STRICT", "1") not in ("0", "false", "False")
+    return hostenv.get("MAS_MANIFEST_STRICT", "1") not in ("0", "false", "False")
 
 
 def _looks_like_path_ref(value: str) -> bool:
