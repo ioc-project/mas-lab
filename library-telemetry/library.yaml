@@ -16,6 +16,13 @@ plugins:
       run_path_params: [output_path]
     requires: [opentelemetry.sdk.trace]
     extra: convert
+    warm:
+      - ioa_observe.sdk.tracing.runtime_events
+      - ioa_observe.sdk.utils.const
+      - mas.library.telemetry.conversion.semconv
+      - mas.library.telemetry.conversion.converter
+      - mas.library.telemetry.conversion.session
+      - mas.library.telemetry.collector.clickhouse
   - type: step
     name: events_to_otel
     module: mas.library.telemetry.bench

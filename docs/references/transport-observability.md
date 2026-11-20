@@ -278,7 +278,7 @@ Capture (`native.transport`):
 
 | Attribute | Default | What it controls |
 | --- | --- | --- |
-| `enabled` | `true` | Hooks, intake, and events for the protocol. Off leaves the contract boundary events (send, tool call, model call) in place. |
+| `enabled` | `true` | Hooks, intake, and events for the protocol. Off removes only the `transport.*` events of that protocol (with `defaults`, of every protocol): the events file is still written and keeps the kernel, contract boundary (send, tool call, model call) and identity events. |
 | `hooks` | `true` | Message, discovery and error events from the protocol plugin's typed hooks (the facts SCOPE's norm maps). |
 | `internals` | `false` | Session setup and SDK-span internals. Off so one crossing is one event. |
 | `sdk_spans` | `false` | Use the SDK's own spans as an input. Chosen at process start. |

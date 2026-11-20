@@ -10,6 +10,7 @@ Run via controller daemon:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -66,7 +67,15 @@ class BearerTokenMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Emit discovery report once the API process starts."""
+    """Import the run path once, then emit the discovery report, when the API process starts."""
+    # Chat and job turns run on worker threads: import the plugins once, here, so no two threads first-import them.
+    # Not behind the discovery flag below: that flag skips a log line, not the protection.
+    try:
+        from mas.ctl.preload import preload_run_path
+
+        await asyncio.to_thread(preload_run_path)
+    except Exception as exc:
+        logger.warning("Startup preload failed: %s", exc)
     if os.environ.get("MAS_CONTROLLER_DISABLE_STARTUP_DISCOVERY", "").strip().lower() in {
         "1",
         "true",
@@ -99,13 +108,9 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
     if settings.token:
         application.add_middleware(BearerTokenMiddleware, token=settings.token)
         if not is_loopback_host(settings.host):
-            logger.warning(
-                "Bearer auth is enabled; clients must send Authorization: Bearer"
-            )
+            logger.warning("Bearer auth is enabled; clients must send Authorization: Bearer")
     elif not is_loopback_host(settings.host):
-        raise RuntimeError(
-            f"refusing to bind {settings.host} without --token-file"
-        )
+        raise RuntimeError(f"refusing to bind {settings.host} without --token-file")
 
     origins = settings.cors_allow_origins
     if origins:

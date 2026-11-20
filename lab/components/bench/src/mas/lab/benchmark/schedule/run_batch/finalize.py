@@ -1,17 +1,18 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+"""Finalize benchmark results — CSV, metadata, post-pipeline."""
 
 from __future__ import annotations
 
-"""Finalize benchmark results — CSV, metadata, post-pipeline."""
-
+import asyncio
 import csv
 import json
 import logging
 from pathlib import Path
 from typing import Any, Optional
 
-from mas.lab.benchmark.schedule.run_batch.execute import ExecutionResult
+from mas.lab.benchmark.schedule.pipeline import PipelineExecutionError
+from mas.lab.benchmark.schedule.run_batch.execute import ExecutionResult, close_exit_stack
 from mas.lab.benchmark.schedule.run_batch.load import LoadedExperiment
 from mas.lab.benchmark.schedule.run_batch.prepare import PreparedBatch
 
@@ -81,6 +82,8 @@ def update_metadata(
     mas_meta.completed_scenarios = execution.total_ok
     mas_meta.failed_scenarios = execution.total_fail
     mas_meta.n_scenarios = len(prepared.loaded_ids)
+    # Declared scenarios x items; an item's ``scenarios`` list leaves pairs out of the plan, not out of this count
+    # (``show`` and ``list`` derive items per scenario from it).
     mas_meta.n_tests = len(prepared.loaded_ids) * len(prepared.dataset_items)
     mas_meta.n_runs_per_test = loaded.n_runs
     if success:
@@ -112,6 +115,42 @@ def print_summary(
     print("=" * 70)
 
 
+_FATAL = (GeneratorExit, SystemExit)
+_INTERRUPTS = (KeyboardInterrupt, asyncio.CancelledError)
+
+
+def _note_failure(exc: BaseException) -> str:
+    return f"{type(exc).__name__}: {exc}".strip(": ")
+
+
+class _Outcome:
+    """What went wrong while finishing a batch. Nothing here stops the remaining cleanup."""
+
+    def __init__(self) -> None:
+        self.ok = True
+        self.error = ""
+        self.what = ""
+        self.pending: BaseException | None = None
+
+    def fail(self, exc: BaseException, what: str, *, text: str | None = None) -> None:
+        """Record *exc*; ``GeneratorExit`` / ``SystemExit`` still propagate, an interrupt is re-raised last."""
+        if isinstance(exc, _FATAL):
+            raise exc
+        logger.error("%s failed: %s", what, exc, exc_info=not isinstance(exc, PipelineExecutionError))
+        self.ok = False
+        if not self.error:
+            self.what = what
+            self.error = text if text is not None else _note_failure(exc)
+        if isinstance(exc, _INTERRUPTS) and self.pending is None:
+            self.pending = exc
+
+    def close_services(self, stack: Any) -> None:
+        """Stop the batch's services (idempotent: a closed stack does nothing)."""
+        exc = close_exit_stack(stack)
+        if exc is not None:
+            self.fail(exc, "stopping services")
+
+
 async def finalize_batch(
     loaded: LoadedExperiment,
     prepared: PreparedBatch,
@@ -120,64 +159,86 @@ async def finalize_batch(
     progress: bool = True,
     data_cache_dir: Optional[Path] = None,
 ) -> bool:
-    """Write CSV, run post-pipeline, update metadata, return success."""
-    from mas.lab.benchmark.schedule.pipeline import PipelineExecutionError
+    """Write CSV, stop services, run post-pipeline, update metadata, return success.
 
-    write_results_csv(prepared.csv_path, execution.results_rows)
-    write_session_mappings(prepared.output_dir, execution.results_rows)
-    print_summary(loaded, prepared, execution)
-
-    execution.exit_stack.close()
-
-    pipeline_ok = True
-    pipeline_error = ""
-    if loaded.pipeline_specs and not execution.pipeline_drained:
+    Every stage runs even when an earlier one failed; the first failure names the batch's
+    error, and an interrupt is re-raised once the metadata is written.
+    """
+    outcome = _Outcome()
+    runs_ok = False
+    try:
         try:
-            from mas.lab.benchmark.pipeline.expand import planned_nodes
-            from mas.lab.benchmark.schedule.pipeline import run_pipeline_phase
+            write_results_csv(prepared.csv_path, execution.results_rows)
+            write_session_mappings(prepared.output_dir, execution.results_rows)
+            print_summary(loaded, prepared, execution)
+        except BaseException as exc:
+            outcome.fail(exc, "writing results")
+        outcome.close_services(execution.exit_stack)
+        # An interrupt while writing the results ends the batch: the post steps do not run over it.
+        if loaded.pipeline_specs and not execution.pipeline_drained and outcome.pending is None:
+            try:
+                from mas.lab.benchmark.pipeline.expand import planned_nodes
+                from mas.lab.benchmark.schedule.pipeline import run_pipeline_phase
 
-            keys = list(execution.run_keys or [])
-            nodes = planned_nodes(keys, prepared.output_dir) if keys else None
-            await run_pipeline_phase(
-                phase="post",
-                exp=loaded.exp,
-                experiment_yaml=loaded.experiment_yaml,
-                output_dir=prepared.output_dir,
-                specs=loaded.pipeline_specs,
-                scenario_ids=prepared.loaded_ids,
-                infra_name=loaded.infra_name,
-                step_overrides=loaded.step_overrides_dict,
-                progress=progress,
-                data_cache_dir=data_cache_dir,
-                nodes=nodes,
+                keys = list(execution.run_keys or [])
+                nodes = planned_nodes(keys, prepared.output_dir) if keys else None
+                await run_pipeline_phase(
+                    phase="post",
+                    exp=loaded.exp,
+                    experiment_yaml=loaded.experiment_yaml,
+                    output_dir=prepared.output_dir,
+                    specs=loaded.pipeline_specs,
+                    scenario_ids=prepared.loaded_ids,
+                    infra_name=loaded.infra_name,
+                    step_overrides=loaded.step_overrides_dict,
+                    progress=progress,
+                    data_cache_dir=data_cache_dir,
+                    nodes=nodes,
+                )
+            except PipelineExecutionError as exc:
+                outcome.fail(exc, "post-pipeline", text=str(exc))
+            except BaseException as exc:
+                outcome.fail(exc, "post-pipeline")
+    finally:
+        # Reached with services still running only when a fatal exception skipped the first stop.
+        outcome.close_services(execution.exit_stack)
+        runs_ok = execution.total_fail == 0 and bool(execution.results_rows)
+        if not execution.results_rows:
+            print("Benchmark failed: no run was executed (check scenarios and dataset items).")
+            logger.error("Benchmark executed no runs")
+        if not outcome.ok:
+            print(
+                f"{outcome.what} failed (executions {execution.total_ok} ok / "
+                f"{execution.total_fail} error): {outcome.error}"
             )
-        except PipelineExecutionError as exc:
-            pipeline_error = str(exc)
-            logger.error("Post-pipeline failed: %s", exc)
-            pipeline_ok = False
-        except Exception as exc:
-            pipeline_error = str(exc)
-            logger.error("Post-pipeline failed: %s", exc)
-            pipeline_ok = False
+        try:
+            update_metadata(
+                prepared.mas_meta,
+                prepared,
+                loaded,
+                execution,
+                success=runs_ok and outcome.ok,
+                pipeline_error=outcome.error if not outcome.ok else "",
+            )
+        except Exception:
+            logger.error("writing metadata after the batch failed", exc_info=True)
+    if outcome.pending is not None:
+        raise outcome.pending
+    return runs_ok and outcome.ok
 
-    runs_ok = execution.total_fail == 0 and bool(execution.results_rows)
-    if not execution.results_rows:
-        print("Benchmark failed: no run was executed (check scenarios and dataset items).")
-        logger.error("Benchmark executed no runs")
-    if not pipeline_ok:
-        if not pipeline_error:
-            pipeline_error = "post-pipeline failed"
-        print(
-            f"Post-pipeline failed (executions {execution.total_ok} ok / "
-            f"{execution.total_fail} error): {pipeline_error}"
-        )
-        logger.error("Post-pipeline failed: %s", pipeline_error)
-    update_metadata(
-        prepared.mas_meta,
-        prepared,
-        loaded,
-        execution,
-        success=runs_ok and pipeline_ok,
-        pipeline_error=pipeline_error if not pipeline_ok else "",
-    )
-    return runs_ok and pipeline_ok
+
+def abort_batch(prepared: PreparedBatch, cause: BaseException) -> list[str]:
+    """Mark a batch that raised or was interrupted as failed; return the errors met doing so.
+
+    The services are already stopped by ``execute_batch``. The ``post`` steps do not run: they
+    analyse a complete batch, and over the partial output of an aborted one they would cost
+    time and model calls to produce results that look finished. Nothing is raised, so the
+    caller can re-raise *cause* (a ``KeyboardInterrupt`` stays one).
+    """
+    try:
+        prepared.mas_meta.mark_failed(_note_failure(cause))
+        prepared.mas_meta.to_yaml(prepared.output_dir / "metadata.yaml")
+    except Exception as exc:
+        logger.error("cleanup after %s failed: metadata: %s", type(cause).__name__, exc)
+        return [f"metadata: {exc}"]
+    return []

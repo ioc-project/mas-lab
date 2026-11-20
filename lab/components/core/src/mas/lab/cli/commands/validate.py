@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """``mas-lab validate`` — validate experiment, pipeline, and lab-config manifests."""
+
 from __future__ import annotations
 
 import sys
@@ -14,13 +15,15 @@ import yaml
 @click.command("validate")
 @click.argument("manifests", nargs=-1, required=True, metavar="MANIFEST...")
 @click.option(
-    "--kind", "-k",
+    "--kind",
+    "-k",
     type=click.Choice(["experiment", "pipeline", "lab-config"], case_sensitive=False),
     default=None,
     help="Manifest kind (auto-detected from top-level key when omitted).",
 )
 @click.option(
-    "--base-dir", "-b",
+    "--base-dir",
+    "-b",
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     default=None,
     help="Base directory for resolving relative-path references (defaults to the manifest's own directory).",
@@ -112,23 +115,36 @@ def validate_cmd(
         effective_base_dir = base_dir or manifest_path.parent
 
         try:
-            deprecations = validate_manifest(
-                data,
-                source=str(manifest_path),
-                kind=effective_kind,
-                strict=strict,
-                base_dir=effective_base_dir,
-                resolve_refs=resolve_refs,
-            ) or []
-            if deprecations:
-                click.echo(
-                    f"OK     {manifest_path_str}  [{effective_kind}]  "
-                    f"({len(deprecations)} deprecated)"
+            deprecations = (
+                validate_manifest(
+                    data,
+                    source=str(manifest_path),
+                    kind=effective_kind,
+                    strict=strict,
+                    base_dir=effective_base_dir,
+                    resolve_refs=resolve_refs,
                 )
+                or []
+            )
+            to_run = None
+            if effective_kind == "experiment":
+                from mas.lab.manifests.ref_checks import experiment_manifest_to_run
+
+                try:
+                    to_run = experiment_manifest_to_run(data, effective_base_dir)
+                except ValueError as exc:
+                    click.echo(f"FAIL   {manifest_path_str}  [{effective_kind}]", err=True)
+                    click.echo(f"       {exc}", err=True)
+                    failed += 1
+                    continue
+            if deprecations:
+                click.echo(f"OK     {manifest_path_str}  [{effective_kind}]  ({len(deprecations)} deprecated)")
                 for warning in deprecations:
                     click.echo(f"       deprecated: {warning}")
             else:
                 click.echo(f"OK     {manifest_path_str}  [{effective_kind}]")
+            if to_run is not None:
+                click.echo(f"       runs: {to_run}")
         except ManifestValidationError as exc:
             click.echo(f"FAIL   {manifest_path_str}  [{effective_kind}]", err=True)
             for violation in exc.violations:

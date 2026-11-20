@@ -6,8 +6,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from mas.ctl.benchmark.runner import MasBenchRunner, select_mas_runner
-from mas.ctl.benchmark.runner_dispatch import is_mas_manifest_kind, mas_manifest_path
+from mas.ctl.benchmark.runner_dispatch import UnrecognisedManifestError, is_mas_manifest_kind, mas_manifest_path
 from mas.ctl.compose.models import AgentBindSlice, EffectiveBindManifest, PlacementPlan
 from mas.ctl.compose.runner import ComposeResult
 from mas.ctl.executor.mas_session import MaterializedMas, agent_manifest_label
@@ -510,3 +511,120 @@ def test_attach_tool_fixtures_sets_every_agent_context():
     _attach_tool_fixtures(agents, fixtures, {"region": "eu-west-1"})
     assert all(a.driver.ctx.tool_fixtures is fixtures for a in agents)
     assert all(a.driver.ctx.runtime_params == {"region": "eu-west-1"} for a in agents)
+
+
+def test_standalone_agent_run_passes_the_run_obs_binding(tmp_path: Path):
+    manifest = {
+        "kind": "agent",
+        "metadata": {"name": "agent"},
+        "spec": {"observability": [{"native": {}}]},
+    }
+    agent_path = tmp_path / "agent.yaml"
+    agent_path.write_text("kind: agent\n", encoding="utf-8")
+    with patch("mas.ctl.benchmark.runner.instantiate_runtime") as inst:
+        inst.return_value = (object(), None)
+        with patch.object(MasBenchRunner, "_run_controller_turns") as turns:
+            turns.return_value = RunResult(content="ok")
+            MasBenchRunner().run(
+                "hello",
+                config=manifest,
+                spec_path=agent_path,
+                output_dir=tmp_path / "out",
+            )
+    options = inst.call_args[0][0]
+    assert options.obs_from_cli is True
+    assert options.obs_binding_override is not None
+    assert str(options.events_file).endswith("traces/events.jsonl")
+
+
+def test_named_mas_yml_is_the_manifest_that_runs(tmp_path: Path):
+    path = tmp_path / "mas.yml"
+    path.write_text("kind: mas\n", encoding="utf-8")
+    assert mas_manifest_path({}, path) == path
+
+
+def test_named_manifest_wins_over_sibling_mas_yaml(tmp_path: Path):
+    """The file named runs; a sibling mas.yaml never replaces it."""
+    (tmp_path / "mas.yaml").write_text("kind: mas\n", encoding="utf-8")
+    payer = tmp_path / "payer.yaml"
+    payer.write_text("kind: app\n", encoding="utf-8")
+    assert mas_manifest_path({"kind": "app"}, payer) == payer
+
+
+def test_unrecognised_kind_refuses_and_names_file_and_sibling(tmp_path: Path):
+    (tmp_path / "mas.yaml").write_text("kind: mas\n", encoding="utf-8")
+    payer = tmp_path / "payer.yaml"
+    payer.write_text("kind: other\n", encoding="utf-8")
+    with pytest.raises(UnrecognisedManifestError) as err:
+        mas_manifest_path({"kind": "other"}, payer)
+    text = str(err.value)
+    assert "payer.yaml" in text and "mas, app, workflow" in text and "mas.yaml is NOT used" in text
+    assert is_mas_manifest_kind({"kind": "other"}, payer) is False
+
+
+def test_unrecognised_kind_refuses_when_the_sibling_is_mas_yml(tmp_path: Path):
+    (tmp_path / "mas.yml").write_text("kind: mas\n", encoding="utf-8")
+    payer = tmp_path / "payer.yaml"
+    with pytest.raises(UnrecognisedManifestError) as err:
+        mas_manifest_path({"kind": "other"}, payer)
+    assert "mas.yml is NOT used" in str(err.value)
+
+
+def test_kindless_file_without_sibling_is_a_standalone_agent(tmp_path: Path):
+    assert mas_manifest_path({}, tmp_path / "agent.yaml") is None
+
+
+def test_kindless_file_next_to_a_mas_is_refused(tmp_path: Path):
+    (tmp_path / "mas.yaml").write_text("kind: mas\n", encoding="utf-8")
+    with pytest.raises(UnrecognisedManifestError) as err:
+        mas_manifest_path({}, tmp_path / "agent.yaml")
+    assert "agent.yaml" in str(err.value) and "mas.yaml is NOT used" in str(err.value)
+
+
+def test_oasf_record_next_to_a_mas_is_a_standalone_agent(tmp_path: Path):
+    (tmp_path / "mas.yaml").write_text("kind: mas\n", encoding="utf-8")
+    record = {"metadata": {"name": "a"}, "spec": {"x": 1}}
+    assert mas_manifest_path(record, tmp_path / "agent.yaml") is None
+
+
+def test_misspelled_kind_without_sibling_is_refused(tmp_path: Path):
+    with pytest.raises(UnrecognisedManifestError):
+        mas_manifest_path({"kind": "Applicaton"}, tmp_path / "app.yaml")
+
+
+def test_only_exact_mas_file_names_are_a_mas(tmp_path: Path):
+    for name in ("mas.old.yaml", "mas.yaml.bak", "mas.md"):
+        assert is_mas_manifest_kind({}, tmp_path / name) is False
+    assert is_mas_manifest_kind({}, tmp_path / "MAS.YAML") is True
+
+
+def test_explicit_agent_kind_next_to_sibling_stays_an_agent(tmp_path: Path):
+    (tmp_path / "mas.yaml").write_text("kind: mas\n", encoding="utf-8")
+    agent = tmp_path / "moderator.yaml"
+    assert mas_manifest_path({"kind": "agent"}, agent) is None
+    assert mas_manifest_path({"kind": " Agent "}, agent) is None
+
+
+def test_agent_kind_on_disk_with_whitespace_is_still_an_agent(tmp_path: Path):
+    from mas.ctl.benchmark.runner import _manifest_kind_on_disk
+
+    agent = tmp_path / "moderator.yaml"
+    agent.write_text("kind: ' Agent '\nmetadata:\n  name: moderator\nspec: {}\n", encoding="utf-8")
+    assert _manifest_kind_on_disk(agent) == "agent"
+    with patch("mas.ctl.benchmark.runner.instantiate_runtime") as inst:
+        inst.return_value = (object(), None)
+        with patch.object(MasBenchRunner, "_run_controller_turns") as turns:
+            turns.return_value = RunResult(content="ok")
+            MasBenchRunner().run(
+                "hello",
+                config={"kind": " Agent ", "metadata": {"name": "moderator"}, "spec": {}},
+                spec_path=agent,
+                output_dir=tmp_path / "out",
+            )
+    assert inst.called
+    assert inst.call_args[0][0].obs_from_cli is True
+
+
+def test_kindless_mas_dot_name_is_refused_not_run_as_an_agent(tmp_path: Path):
+    with pytest.raises(UnrecognisedManifestError):
+        mas_manifest_path({"agents": []}, tmp_path / "mas.v2.yaml")

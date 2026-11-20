@@ -123,6 +123,7 @@ Each item follows `run-input.schema.yaml`.
 | `expectations.metrics` | string list | no | Metrics this item is scored on. |
 | `expectations.details` | object | no | Free-form app- or tool-specific ground truth. The schema rejects any other top-level `expectations` key. |
 | `category` / `group` / `type` / `tags` | string / list | no | Filtering metadata (`experiment.dataset.filter`). Coupled mode uses `id` only. |
+| `scenarios` | string or string list | no (every scenario) | Scenario ids the item applies to. A lone string is one id. The planner skips the item in the other scenarios (no run, no run folder), including a coupling that names the item in a scenario it does not list, and reports `n items skipped by scenario` in the dry run and at the start of a run. |
 | `metadata` | object | no | Free-form item metadata, carried into results. |
 
 `expectations` may also be `{ref: file}`, which loads the whole block from a file.

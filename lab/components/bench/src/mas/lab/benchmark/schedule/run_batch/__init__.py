@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from mas.lab.benchmark.schedule.run_batch.execute import execute_batch
-from mas.lab.benchmark.schedule.run_batch.finalize import finalize_batch
+from mas.lab.benchmark.schedule.run_batch.finalize import abort_batch, finalize_batch
 from mas.lab.benchmark.schedule.run_batch.load import load_experiment, print_dry_run
 from mas.lab.benchmark.schedule.run_batch.prepare import prepare_batch
 
@@ -97,13 +97,17 @@ async def run_mas_benchmark(
         data_cache_dir=data_cache_dir,
         clean_stale=clean_stale,
     )
-    execution = await execute_batch(
-        loaded,
-        prepared,
-        progress=progress,
-        force=force,
-        strategy=strategy,
-    )
+    try:
+        execution = await execute_batch(
+            loaded,
+            prepared,
+            progress=progress,
+            force=force,
+            strategy=strategy,
+        )
+    except BaseException as exc:
+        abort_batch(prepared, exc)
+        raise
     return await finalize_batch(
         loaded,
         prepared,

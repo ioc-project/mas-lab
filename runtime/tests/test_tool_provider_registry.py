@@ -598,3 +598,109 @@ def test_explicit_claim_advertises_server_schema_to_the_model():
     assert provider.discovered == 0  # routing did not ask the server
     specs = registry.list_tools()
     assert specs[0]["parameters"]["properties"] == {"query": {"type": "string"}}
+
+
+def _star_remote(*, refuse: bool, names: int):
+    class _Remote:
+        provider_name = "remote"
+        tools_claim = "*"
+        origin = "external"
+
+        def __init__(self) -> None:
+            self.asked = 0
+
+        def has_tools(self):
+            return True
+
+        def discover_tools(self, *, ctx=None):
+            self.asked += 1
+            if refuse and self.asked > 1:
+                raise RuntimeError("refused")
+            return [{"name": f"t{i}", "description": "remote"} for i in range(names)]
+
+        def list_tools(self, *, ctx=None):
+            return self.discover_tools(ctx=ctx)
+
+        def call_tool(self, tool_name, arguments, *, ctx=None, user=""):
+            return {}
+
+    return _Remote()
+
+
+@pytest.mark.parametrize("names", [1, 8])
+def test_one_pass_asks_a_provider_a_bounded_number_of_times_whatever_the_names(names):
+    """A star provider serving N names is asked the same number of times in a pass for any N, not once per name."""
+    from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
+
+    remote = _star_remote(refuse=False, names=names)
+    provider = ManifestToolProvider(overlay_providers=[remote])
+    provider.list_tools()
+    before = remote.asked
+    assert len(provider.list_tools()) == names
+    assert remote.asked - before <= 2
+
+
+def test_a_yielding_list_tools_is_kept_for_the_pass():
+    """A generator listing is consumed once; it is not stored as empty and dropped."""
+
+    class _Remote:
+        provider_name = "remote"
+        tools_claim = "*"
+        origin = "external"
+
+        def __init__(self) -> None:
+            self.asked = 0
+
+        def has_tools(self):
+            return True
+
+        def list_tools(self, *, ctx=None):
+            self.asked += 1
+
+            def pages():
+                yield {"name": "a", "description": "remote"}
+                yield {"name": "b", "description": "remote"}
+
+            return pages()
+
+        def call_tool(self, tool_name, arguments, *, ctx=None, user=""):
+            return {}
+
+    remote = _Remote()
+    registry = ToolProviderRegistry()
+    registry.register_provider(remote)
+    specs = registry.list_tools()
+    assert {spec["name"] for spec in specs} == {"a", "b"}
+    asked = remote.asked
+    registry.list_tools()
+    assert remote.asked - asked == 1
+
+
+def test_a_refused_listing_is_refused_once_per_pass():
+    from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
+
+    remote = _star_remote(refuse=True, names=8)
+    provider = ManifestToolProvider(overlay_providers=[remote])
+    provider.list_tools()
+    before = remote.asked
+    provider.list_tools()
+    assert remote.asked - before <= 1
+
+
+def test_a_malformed_listing_is_named_once_and_keeps_the_well_formed_specs(caplog):
+    from mas.runtime.registry.tool_provider_registry import _as_spec_list
+
+    handler = object()
+    with caplog.at_level("WARNING"):
+        assert _as_spec_list({"name": "a"}, handler) == []
+        assert _as_spec_list([{"name": "a"}, "junk", 3], handler) == [{"name": "a"}]
+    assert sum("not a list" in r.message for r in caplog.records) == 1
+    assert sum("not tool specs" in r.message for r in caplog.records) == 1
+
+
+def test_a_mapping_that_is_not_a_dict_still_lists():
+    from types import MappingProxyType
+
+    from mas.runtime.registry.tool_provider_registry import _as_spec_list
+
+    assert _as_spec_list([MappingProxyType({"name": "a"})]) == [{"name": "a"}]

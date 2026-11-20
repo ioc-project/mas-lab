@@ -11,6 +11,9 @@ plugins:
     name: normalize_events
     module: mas.library.kg.bench
     class: NormalizeEventsStep
+    warm:
+      - mas.library.kg.observability.native.handlers
+      - mas.library.kg.observability.otel_completion
     attributes:
       worker_safe: true
   - type: step

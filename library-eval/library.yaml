@@ -24,6 +24,11 @@ plugins:
     name: toy_echo
     module: mas.library.eval.metrics.toy
     class: ToyEchoMetric
+    warm:
+      - mas.library.eval.steps
+      - mas.library.eval.cli
+      - mas.library.eval.metrics.stock
+      - mas.library.eval.providers.mce
     description: Example session metric that scores 1.0 when a native trace exists.
     attributes:
       provider: mce

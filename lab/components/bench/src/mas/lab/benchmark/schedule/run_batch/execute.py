@@ -154,6 +154,25 @@ class ExecutionResult:
     pipeline_drained: bool = False
 
 
+def close_exit_stack(stack: Any) -> BaseException | None:
+    """Stop the batch's services. A close error is logged and does not replace the original one.
+
+    ``KeyboardInterrupt`` / ``CancelledError`` from a closer is returned so the caller can
+    re-raise it after metadata; ``GeneratorExit`` / ``SystemExit`` still propagate.
+    """
+    try:
+        stack.close()
+    except Exception:
+        logger.error("stopping services failed", exc_info=True)
+    except BaseException as exc:
+        if isinstance(exc, (GeneratorExit, SystemExit)):
+            raise
+        logger.error("stopping services failed", exc_info=True)
+        if isinstance(exc, (KeyboardInterrupt, asyncio.CancelledError)):
+            return exc
+    return None
+
+
 async def execute_batch(
     loaded: LoadedExperiment,
     prepared: PreparedBatch,
@@ -163,14 +182,50 @@ async def execute_batch(
     strategy: Optional[str] = None,
     data_cache_dir: Optional[Path] = None,
 ) -> ExecutionResult:
-    """Run all planned (scenario × item × run) executions."""
+    """Run all planned (scenario × item × run) executions.
+
+    Services started for the batch are stopped when the batch fails or is interrupted
+    (``Exception``, ``KeyboardInterrupt``, cancellation); on success the stack is handed to
+    the caller in :class:`ExecutionResult` and closed by ``finalize_batch``.
+    """
     import contextlib
 
+    exit_stack = contextlib.ExitStack()
+    try:
+        return await _execute_batch(
+            loaded,
+            prepared,
+            exit_stack,
+            progress=progress,
+            force=force,
+            strategy=strategy,
+            data_cache_dir=data_cache_dir,
+        )
+    except BaseException:
+        close_exit_stack(exit_stack)
+        raise
+
+
+async def _execute_batch(
+    loaded: LoadedExperiment,
+    prepared: PreparedBatch,
+    _exit_stack: Any,
+    *,
+    progress: bool = True,
+    force: bool = False,
+    strategy: Optional[str] = None,
+    data_cache_dir: Optional[Path] = None,
+) -> ExecutionResult:
     from mas.lab.benchmark.service_manager import ServiceManager as _ServiceManager
     from mas.lab.emulation_resolver import resolve_emulation_plugins
     from mas.lab.lab.config import ExperimentScheduleSpec
 
     exp = loaded.exp
+    from mas.ctl.preload import preload_run_path
+
+    imported = await asyncio.to_thread(preload_run_path)
+    if imported:
+        logger.info("preloaded %d plugin modules before the first run", len(imported))
     experiment_yaml = loaded.experiment_yaml
     if not os.environ.get("MAS_LLM_SCHEDULER_USER", "").strip():
         os.environ["MAS_LLM_SCHEDULER_USER"] = getattr(exp, "name", "") or "experiment"
@@ -186,7 +241,6 @@ async def execute_batch(
         experiment_dir=experiment_yaml.parent,
         output_dir=output_dir,
     )
-    _exit_stack = contextlib.ExitStack()
     _exit_stack.enter_context(_svc_mgr)
 
     from mas.library_roots import clear_library_discovery_cache
@@ -218,17 +272,12 @@ async def execute_batch(
         or (getattr(_schedule, "strategy", None) if _schedule else None)
         or "coverage"
     )
-    _design_obj = getattr(exp, "design", None)
-    _design_dict = (
-        _design_obj.as_plan_dict() if _design_obj is not None and hasattr(_design_obj, "as_plan_dict") else None
-    )
     _execution_plan = build_execution_plan(
         prepared.loaded_ids,
         prepared.dataset_items,
         loaded.n_runs,
         strategy=_effective_strategy,
         execution=execution_as_dict(exp),
-        design=_design_dict,
     )
 
     _parallel = max(1, (getattr(_schedule, "parallel_scenarios", 1) if _schedule else 1) or 1)
@@ -307,6 +356,10 @@ async def execute_batch(
         print(f"  strategy   : {_effective_strategy}")
         n_sc, n_items = len(prepared.loaded_ids), len(prepared.dataset_items)
         print(f"  {n_sc} scenarios × {n_items} items × {loaded.n_runs} run(s) = {len(_execution_plan)} executions")
+        from mas.lab.benchmark.execution.plan import skipped_by_scenario
+
+        skipped = skipped_by_scenario(prepared.loaded_ids, prepared.dataset_items, execution=execution_as_dict(exp))
+        print(f"  {skipped} items skipped by scenario")
         print(f"  parallel   : {_parallel}   pause: {_pause}s   max_attempts: {_max_attempts}")
         if _worker_processes > 1:
             print(f"  workers    : {_worker_processes} processes")
