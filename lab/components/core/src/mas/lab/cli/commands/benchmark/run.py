@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import click
@@ -247,6 +248,8 @@ def run_cmd(
         "pipeline_attachments": list(pipeline_attachments),
         "experiment_overlays": list(experiment_overlays),
         "clean_stale": clean_stale,
+        # The CLI is where the environment is read; fixture processes inherit it (minus secret-looking names).
+        "fixture_env": dict(os.environ),
     }
 
     client = ControllerClient()

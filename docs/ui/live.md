@@ -47,6 +47,7 @@ The browser connects to the controller (`mas-lab serve`) over one WebSocket. The
 - **Metrics.** Tokens, cached tokens, duration, and call counts tick while the MAS runs. A key shows `—` until its first real value. Null is never shown as 0.
 - **Structure.** Periodic `control.structure` frames show stream offset, digest, and event-kind counts.
 - **Governance context.** Context size per LLM call, only if the layout mounts a plugin that asks for it.
+- **Environment timeline.** Wall-time lanes from `custom.environment` (`traces/environment.jsonl`): one bar per fixture (`ready`→`stopped`), trigger diamonds labelled `id #occurrence`, action spans coloured by outcome, clock steps. Layout: `demo-ui/layouts/examples/run-view-environment.yaml`. See [environment.md](../manifests/environment.md).
 
 Duration freezes on `mas_call_end` / `execution_end`. At run end, `metrics.json` overrides live ticks.
 

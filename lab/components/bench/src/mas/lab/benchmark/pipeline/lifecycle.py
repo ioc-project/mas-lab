@@ -39,6 +39,13 @@ def publish_lifecycle(kind: str, key: RunKey, **extra: Any) -> None:
 
 
 def begin_run(key: RunKey, **extra: Any):
+    channel = get_channel()
+    reopen = getattr(channel, "reopen", None)
+    if callable(reopen):
+        try:
+            reopen(key.stream_id())  # a sealed stream here is an earlier batch of this process
+        except Exception:
+            logger.debug("stream reopen failed", exc_info=True)
     token = set_stream_id(key.stream_id())
     publish_lifecycle("run.started", key, **extra)
     return token

@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """
 PlotStep — declarative plot pipeline step (plot library specs only).
 
@@ -36,17 +39,18 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name, resolve_step_folder
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 
 logger = logging.getLogger(__name__)
 
 
-class PlotStep(PipelineStep):
+class PlotStep(FigureStep):
     """Generate a visualisation from a plot-library spec and upstream step data."""
 
     type = "plot"
+    HONORS = frozenset()
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
         config = self.config

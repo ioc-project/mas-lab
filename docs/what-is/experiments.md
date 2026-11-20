@@ -41,6 +41,9 @@ key. You can still run a standalone pipeline file with `mas-lab benchmark pipeli
 
 See the [experiment manifest](../manifests/experiment.md), the
 [pipeline manifest](../manifests/pipeline.md),
+[environment](../manifests/environment.md) (fixtures and clock on the
+experiment; per-item triggers on the dataset — complementary to memory
+seeds and tool fixtures),
 [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md) and
 [Discover → Labs](../discover/labs.md).
 

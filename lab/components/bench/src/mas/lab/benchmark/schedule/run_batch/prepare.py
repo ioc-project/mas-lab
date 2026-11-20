@@ -11,7 +11,7 @@ import os
 import shutil as _shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from mas.lab.benchmark.run_manager import BenchmarkRunManager
 from mas.lab.benchmark.schedule.metadata import register_mas_run
@@ -89,6 +89,7 @@ class PreparedBatch:
     overlay_base_dir: Optional[Path] = None
     infra_refs: list[str] = field(default_factory=list)
     dataset_items: list = field(default_factory=list)
+    fixture_registry: Any = None
 
 
 def setup_output_dir(
@@ -304,12 +305,23 @@ async def prepare_batch(
     force: bool = False,
     data_cache_dir: Optional[Path] = None,
     clean_stale: Optional[bool] = None,
+    base_env: Optional[Mapping[str, str]] = None,
 ) -> PreparedBatch:
     """Set up output, preload scenarios, run pre-pipeline phase."""
     from mas.lab.benchmark.schedule.pipeline import run_pipeline_phase
     from mas.lab.benchmark.stale_cleanup import maybe_handle_stale_outputs
 
     output_dir, csv_path, mas_meta = setup_output_dir(loaded, output_dir=output_dir, force=force)
+    from mas.lab.benchmark.environment.fixtures import FixtureRegistry, reap_stale_fixtures
+
+    reaped = reap_stale_fixtures(output_dir)
+    if reaped:
+        logger.warning("reaped leftover fixtures: %s", ", ".join(reaped))
+    fixture_registry = FixtureRegistry(
+        output_dir=output_dir,
+        work_dir=loaded.experiment_yaml.parent,
+        base_env=dict(os.environ if base_env is None else base_env),
+    )
     if not force:
         maybe_handle_stale_outputs(
             output_dir,
@@ -364,4 +376,5 @@ async def prepare_batch(
         overlay_base_dir=loaded.experiment_yaml.parent,
         infra_refs=infra_refs,
         dataset_items=dataset_items,
+        fixture_registry=fixture_registry,
     )

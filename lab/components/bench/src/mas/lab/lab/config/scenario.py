@@ -1,5 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from mas.runtime.spec.source import resolve_path as resolve_path_ref
+
 
 @dataclass
 class OverlayStack:
@@ -89,6 +91,28 @@ class MASScenarioSpec:
     search paths (experiment-local ``flavours/``, workspace root, bundled).
     """
 
+    environment: Dict[str, Any] = field(default_factory=dict)
+    """Scenario-level ``environment:`` merged over the experiment block."""
+
+    depends_on: List[str] = field(default_factory=list)
+    """Producer scenario ids. A ``resume_from`` consumer waits for that
+    published checkpoint file (not the full producer run). Other
+    dependencies wait until the producer finishes. The consumer takes a
+    ``parallel_scenarios`` slot only when it runs.
+    """
+
+    resume_from: Optional[str] = None
+    """Named checkpoint this scenario loads (producer ``produce_checkpoints``)."""
+
+    resume_index: int = 1
+    """1-based occurrence when the producer trigger fired more than once."""
+
+    produce_checkpoints: List[str] = field(default_factory=list)
+    """Checkpoint ids this scenario publishes (``experiment.session_checkpoints``)."""
+
+    debug: Optional[Dict[str, Any]] = None
+    """Structured checkpoint/pause trigger, or a raw gdb ``script`` override."""
+
     pipeline_resources: List[Dict[str, Any]] = field(default_factory=list)
     """Scoped resource declarations local to this scenario.
 
@@ -119,6 +143,7 @@ class MASScenarioSpec:
             overlay_stack = OverlayStack.from_dict(raw_overlays, scenario_id=data["id"])
         raw_version = data.get("version")
         version: Optional[int] = int(raw_version) if raw_version is not None else None
+        resume_from, resume_index = _parse_resume_from(data.get("resume_from"), data.get("resume_index"))
         return cls(
             id=data["id"],
             description=data.get("description", ""),
@@ -130,7 +155,58 @@ class MASScenarioSpec:
             tags=data.get("tags", []),
             user_prompt=data.get("user_prompt", ""),
             pipeline_resources=data.get("pipeline_resources", []),
+            environment=dict(data.get("environment") or {}),
+            depends_on=_str_list(data.get("depends_on"), "depends_on"),
+            resume_from=resume_from,
+            resume_index=resume_index,
+            produce_checkpoints=_str_list(data.get("produce_checkpoints"), "produce_checkpoints"),
+            debug=_debug_block(data.get("debug")),
         )
+
+
+def _str_list(raw: object, name: str) -> list[str]:
+    """A list of names; a bare string is one name (not its characters)."""
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, str):
+        return [raw]
+    if isinstance(raw, (list, tuple)):
+        return [str(item) for item in raw]
+    raise ValueError(f"{name} must be a name or a list of names, got {type(raw).__name__}")
+
+
+def _debug_block(raw: object) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"debug must be a mapping, got {type(raw).__name__}")
+    return dict(raw)
+
+
+def _positive_index(raw: object, name: str) -> int:
+    if raw is None or raw == "":
+        return 1
+    if isinstance(raw, bool) or not isinstance(raw, (int, str)) or not str(raw).strip().lstrip("+").isdigit():
+        raise ValueError(f"{name} must be a positive integer, got {raw!r}")
+    value = int(str(raw).strip())
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1, got {raw!r}")
+    return value
+
+
+def _parse_resume_from(raw: object, resume_index: object) -> tuple[Optional[str], int]:
+    index = _positive_index(resume_index, "resume_index")
+    if raw is None or raw == "":
+        return None, index
+    if isinstance(raw, str):
+        return raw, index
+    if isinstance(raw, dict):
+        cid = str(raw.get("id") or "").strip() or None
+        nested = raw.get("index", raw.get("occurrence"))
+        if nested is not None:
+            index = _positive_index(nested, "resume_from.index")
+        return cid, index
+    raise ValueError("resume_from must be a name or {id, index}")
 
 
 @dataclass
@@ -213,12 +289,10 @@ class MASSpec:
         # ── configs_dir: path/  (legacy) ─────────────────────────────────────
         if "configs_dir" not in data:
             raise ValueError(
-                "MASSpec requires one of: 'app', 'manifest', or 'configs_dir'. "
-                f"Got keys: {list(data.keys())}"
+                f"MASSpec requires one of: 'app', 'manifest', or 'configs_dir'. Got keys: {list(data.keys())}"
             )
         configs_dir = resolve_path_ref(str(data["configs_dir"]), base_dir)
         return cls(
             configs_dir=configs_dir,
             base_scenario=data.get("base_scenario", "baseline"),
         )
-

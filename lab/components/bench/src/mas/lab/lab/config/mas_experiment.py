@@ -64,10 +64,11 @@ class MASExperimentConfig(MASRunBase):
     default_infra: Optional[str] = None
     """Default infra bundle name for service/codec pipeline steps."""
 
-    checkpoints: list[CheckpointAxisEntry] = field(
-        default_factory=lambda: [CheckpointAxisEntry(id="none")]
-    )
+    checkpoints: list[CheckpointAxisEntry] = field(default_factory=lambda: [CheckpointAxisEntry(id="none")])
     checkpoints_explicit: bool = False
+
+    session_checkpoints: list[dict] = field(default_factory=list)
+    """Named persist points compiled to environment checkpoint/pause triggers."""
 
     @property
     def n_runs(self) -> int:
@@ -80,17 +81,13 @@ class MASExperimentConfig(MASRunBase):
         return 1
 
     @classmethod
-    def from_yaml(
-        cls, path: Path, *, model_override: Optional[str] = None
-    ) -> "MASExperimentConfig":
+    def from_yaml(cls, path: Path, *, model_override: Optional[str] = None) -> "MASExperimentConfig":
         """Load a MASExperimentConfig from an experiment YAML file."""
         data, _manifest_version = load_experiment_data(path)
         return cls.from_data(data, path, model_override=model_override)
 
     @classmethod
-    def from_data(
-        cls, data: dict, path: Path, *, model_override: Optional[str] = None
-    ) -> "MASExperimentConfig":
+    def from_data(cls, data: dict, path: Path, *, model_override: Optional[str] = None) -> "MASExperimentConfig":
         """Construct from an already-loaded dict (e.g. after CLI merges).
 
         Accepts the same ``data`` shape that :func:`load_experiment_data`
@@ -116,9 +113,7 @@ class MASExperimentConfig(MASRunBase):
                 f"(applications: is deprecated)"
             )
 
-        base = cls._load_base_fields(
-            exp_data, base_dir, yaml_path=path, model_override=model_override
-        )
+        base = cls._load_base_fields(exp_data, base_dir, yaml_path=path, model_override=model_override)
 
         legacy = exp_data.get("execution")
         if legacy:
@@ -161,6 +156,10 @@ class MASExperimentConfig(MASRunBase):
         default_infra = exp_data.get("default_infra") or None
         checkpoints_explicit = "checkpoints" in exp_data
         checkpoints = _parse_checkpoint_axis(exp_data.get("checkpoints"), base_dir)
+        raw_checkpoints = exp_data.get("session_checkpoints") or []
+        if not isinstance(raw_checkpoints, list) or not all(isinstance(item, dict) for item in raw_checkpoints):
+            raise ValueError("session_checkpoints must be a list of mappings")
+        session_checkpoints = [dict(item) for item in raw_checkpoints]
 
         config = cls(
             **base,
@@ -173,6 +172,7 @@ class MASExperimentConfig(MASRunBase):
             default_infra=default_infra,
             checkpoints=checkpoints,
             checkpoints_explicit=checkpoints_explicit,
+            session_checkpoints=session_checkpoints,
         )
         config._path = path
         return config
@@ -193,8 +193,7 @@ def _parse_checkpoint_axis(raw: object, base_dir: Path) -> list[CheckpointAxisEn
             not isinstance(checkpoint_id, str)
             or not checkpoint_id
             or any(
-                char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
-                for char in checkpoint_id
+                char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for char in checkpoint_id
             )
         ):
             raise ValueError(f"experiment.checkpoints[{index}].id must use letters, digits, '-' or '_'")

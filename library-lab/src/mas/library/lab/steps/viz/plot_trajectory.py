@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """PlotTrajectoryStep — pipeline step that renders an agent trajectory diagram.
 
 Config keys::
@@ -24,18 +27,20 @@ Example pipeline YAML::
 
 import logging
 
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_named_file
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.library.lab.steps._io import path_from_config_or_deps
 
 logger = logging.getLogger(__name__)
 
 
-class PlotTrajectoryStep(PipelineStep):
+class PlotTrajectoryStep(FigureStep):
     """Generate an agent trajectory diagram from a MAS trace."""
 
     type = "plot_trajectory"
+    HONORS = frozenset({"format"})
+    FORMATS = ("mermaid", "md", "table", "html", "svg", "svg_native")
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
         """Render trajectory diagram.
@@ -49,7 +54,7 @@ class PlotTrajectoryStep(PipelineStep):
         """
         from mas.lab.plots.trajectory import load_trace, plot_trajectory
 
-        config = self.config
+        config = self.apply_style(self.config, ctx)
         fmt = config.get("format", "mermaid").lower()
         include_prompts = config.get("include_prompts", True)
         highlight_agents   = config.get("highlight_agents")  or None

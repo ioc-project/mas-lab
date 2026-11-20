@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """mas-lab manifest validator — two-layer validation for experiment/pipeline/lab-config YAML.
 
 Two layers of validation are enforced in order:
@@ -42,6 +41,7 @@ Last-resort environment overrides (prefer the CLI flags above):
   ``MAS_LAB_MANIFEST_RESOLVE_REFS=0``  — skip reference availability checks (step 2).
 """
 
+from __future__ import annotations
 
 import logging
 import os
@@ -68,22 +68,25 @@ def _schema_dir() -> Path:
         _SCHEMA_DIR = lab_schema_dir()
     return _SCHEMA_DIR
 
+
 #: Maps the ``kind`` parameter to the corresponding ``.schema.yaml`` file.
 _KIND_SCHEMA: Dict[str, str] = {
-    "experiment":  "experiment.schema.yaml",
-    "pipeline":    "pipeline.schema.yaml",
-    "lab-config":  "lab-config.schema.yaml",
-    "lab":         "lab.schema.yaml",
-    "dataset":     "dataset.schema.yaml",
+    "experiment": "experiment.schema.yaml",
+    "pipeline": "pipeline.schema.yaml",
+    "lab-config": "lab-config.schema.yaml",
+    "lab": "lab.schema.yaml",
+    "dataset": "dataset.schema.yaml",
 }
 
 # ---------------------------------------------------------------------------
 # Environment-variable gates
 # ---------------------------------------------------------------------------
 
+
 # Read per call: a long-lived process (controller daemon) must not freeze them.
 def _env_off(name: str) -> bool:
     return os.environ.get(name, "1").strip() in ("0", "false", "no")
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -117,9 +120,7 @@ def detect_kind(data: Dict[str, Any]) -> Optional[str]:
         return "pipeline"
     if "lab" in data:
         lab = data.get("lab") or {}
-        if isinstance(lab, dict) and any(
-            k in lab for k in ("mas", "scenarios", "ui", "dataset", "evaluation")
-        ):
+        if isinstance(lab, dict) and any(k in lab for k in ("mas", "scenarios", "ui", "dataset", "evaluation")):
             return "lab-config"
         return "lab"
     if data.get("kind") == "Dataset" and data.get("apiVersion") == "lab/v1":
@@ -156,7 +157,6 @@ def _validate_against_schema(data: Dict[str, Any], kind: str) -> List[str]:
         return []
 
     from mas.ctl.validate.schema_errors import humanize_schema_error
-
     from mas.lab.schemas.validate import lab_schema_registry
 
     validator = jsonschema.Draft7Validator(schema, registry=lab_schema_registry())
@@ -262,7 +262,10 @@ def validate_manifest(
     if kind is None:
         kind = detect_kind(data)
     if kind is None:
-        msg = f"Cannot detect manifest kind from top-level keys in '{source}'. Expected one of: experiment, pipeline, lab."
+        msg = (
+            f"Cannot detect manifest kind from top-level keys in '{source}'. "
+            "Expected one of: experiment, pipeline, lab."
+        )
         if strict and strict_mode:
             raise ManifestValidationError(source, [msg])
         logger.warning("[manifest] %s", msg)
@@ -299,6 +302,15 @@ def validate_manifest(
             for msg in path_violations:
                 logger.warning("[manifest][%s] %s: %s", kind, source, msg)
         deprecations.extend(path_deprecations)
+    if kind == "experiment":
+        from mas.lab.benchmark.environment.attach import environment_violations
+
+        env_violations = environment_violations(data, _base_dir)
+        if env_violations:
+            if effective_strict:
+                raise ManifestValidationError(source, env_violations)
+            for msg in env_violations:
+                logger.warning("[manifest][%s] %s: %s", kind, source, msg)
     if kind == "experiment":
         schema = _load_kind_schema(kind)
         if schema is not None:

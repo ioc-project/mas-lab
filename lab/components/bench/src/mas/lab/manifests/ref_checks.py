@@ -144,6 +144,8 @@ def check_recursive_refs(
     ctx = overlay_context or {}
 
     for field_path, ref in iter_manifest_refs(data):
+        if field_path.endswith(".health.path") or field_path.endswith(".clock.path"):
+            continue
         w = backward_traversal_warning(ref, field=field_path, source=source)
         if w:
             logger.warning("[manifest] %s", w)

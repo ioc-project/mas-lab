@@ -6,9 +6,22 @@
 
 This page explains how pipelines work: hooks, caching, parallelism, and dataflow. Read it before you add or debug a pipeline step.
 
-A **pipeline** is a list of **pipeline steps**. They run after **benchmark** execution and write shared artifacts under `results/`.
+A **pipeline** is a list of **pipeline steps** attached to a level as `pre:` or `post:`. They write shared artifacts under `results/`.
+
+Two axes, not one:
+
+- **`pre` / `post`** — when the hook fires relative to that level (`run`, `item`, `scenario`, experiment). `pre` runs before the level, so it has no telemetry and no other artifacts the level has not produced yet. `post` runs after, and may read those artifacts: one run's `events.jsonl`, or a group of runs (metrics, then a figure).
+- **Realtime or not** — how a **`run.post`** step reads that run's events. It is still `post`. YAML `realtime:` selects the mode when a class implements both `on_batch` and `execute`. `true` folds records as they arrive. `false` waits until every input has arrived (a barrier). A class that only implements `execute` is enough for non-realtime — you do not need the YAML flag. A class that only implements `on_batch` still folds live.
+
+Paper labs (`eval_mce` under `run.post`, `collect_metrics` / `plotnine` under experiment `post:`) are not realtime. They keep working because those steps only implement `execute`. The final figure is experiment `post:`: it starts after every run is terminal.
+
+`role: batch` is a leftover v2 class tag (`native` / `wrap` / `batch`). The scheduler ignores it. Converter `realtime:` on `events_to_otel` is a span-shape flag, not this axis.
 
 Smallest working command: `mas-lab benchmark run experiment.yaml --progress`. Hooks in `experiment.yaml` run automatically.
+
+A live `run.post` step can emit an environment event with
+`ExecutionContext.emit_event(name)` (routed by run key; delivered at the
+next governance boundary). See [environment.md](../../docs/manifests/environment.md).
 
 Terms: [glossary.md](../../docs/glossary.md).
 
@@ -103,6 +116,31 @@ async def execute(self, ctx):
 ```
 
 `run_dir_from_ctx` derives the run directory from `ctx.scope_context` when present (the `per_run: true` path). It falls back to `config["run_dir"]` for backward compatibility.
+
+## Pipeline context (`$path`)
+
+Every step sees a context bag for the place it is running. A **run** step
+sees `$experiment`, `$scenario`, `$test`, and `$run`. A **scenario** step
+sees `$experiment` and `$scenario` (child run rows still carry their own
+ids after `gather_level`). An **experiment** step sees `$experiment`, and
+per-series or per-row bindings for the rest.
+
+A YAML value that starts with `$` and is a dotted path is a binding
+(ggplot `aes()`, d3 accessor). Anything else is free text (ggplot `labs()`):
+
+```yaml
+title: Session trajectories                 # free text
+legend: $scenario.metadata.legend           # per series / row
+ribbon: $test.metadata.ci                   # a key the plot invented
+```
+
+Write `$$foo` for a literal `$foo`. `{key}` substitution (`--var`) is
+separate and runs when the pipeline is materialized. `$path` is resolved
+when the step executes, so the same standalone pipeline file can run
+against several experiments.
+
+In Python: `ctx.bind(value)`, `ctx.pipeline_vars`, or
+`FigureStep.bind` / `style_for`. See [pipeline-steps.md](pipeline-steps.md#figure-keys-every-plot-step).
 
 `resolve_run_events` handles all storage modes: inline `traces/events.jsonl`, a symlinked `traces/` directory, and `.run_ref` content-addressed cache indirection.
 

@@ -264,6 +264,90 @@ plugins:
     attributes:
       worker_safe: true
   - type: step
+    name: http_call
+    module: mas.library.lab.steps.environment.http_call
+    class: HttpCallStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: clock_advance
+    module: mas.library.lab.steps.environment.clock_advance
+    class: ClockAdvanceStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: sleep
+    module: mas.library.lab.steps.environment.sleep
+    class: SleepStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: emit
+    module: mas.library.lab.steps.environment.emit
+    class: EmitStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: fixture_restart
+    module: mas.library.lab.steps.environment.fixture_control
+    class: FixtureRestartStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: fixture_stop
+    module: mas.library.lab.steps.environment.fixture_control
+    class: FixtureStopStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: steer
+    module: mas.library.lab.steps.environment.steer
+    class: SteerStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: inject
+    module: mas.library.lab.steps.environment.inject
+    class: InjectStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: pause
+    module: mas.library.lab.steps.environment.pause
+    class: PauseStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: resume
+    module: mas.library.lab.steps.environment.resume
+    class: ResumeStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: checkpoint
+    module: mas.library.lab.steps.environment.checkpoint
+    class: CheckpointStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: kill_switch
+    module: mas.library.lab.steps.environment.kill_switch
+    class: KillSwitchStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: hitl_answer
+    module: mas.library.lab.steps.environment.hitl_answer
+    class: HitlAnswerStep
+    attributes:
+      worker_safe: true
+  - type: step
+    name: threshold_alarm
+    module: mas.library.lab.steps.environment.threshold_alarm
+    class: ThresholdAlarmStep
+    attributes:
+      worker_safe: true
+  - type: step
     name: to_dataframe
     module: mas.library.lab.steps.data.to_dataframe
     class: ToDataFrameStep
@@ -362,3 +446,7 @@ plugins:
     name: series
     module: mas.library.lab.artifact_types
     class: LoopSeries
+  - type: artifact
+    name: environment
+    module: mas.library.lab.artifact_types
+    class: Environment

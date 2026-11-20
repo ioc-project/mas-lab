@@ -202,6 +202,11 @@ _SCENARIOS = [
         REPO_ROOT,
         "tuto-14",
     ),
+    (
+        REPO_ROOT / "docs/tutorials/15-world-events-and-fixtures/demo/scenario.yaml",
+        REPO_ROOT,
+        "tuto-15",
+    ),
 ]
 
 if (REPO_ROOT / "library-telemetry/examples/qa-agent").is_dir():

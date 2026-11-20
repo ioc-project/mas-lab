@@ -4,8 +4,9 @@ $schema: "http://json-schema.org/draft-07/schema#"
 $id: "mas-lab/dataset/v1"
 title: "mas-lab Dataset manifest (v1)"
 description: >
-  Dataset items use the Run Input Envelope (inputs + expectations).
-  See run-input.schema.yaml for item shape. Loaders still accept
+  Dataset items use the Run Input Envelope (inputs + expectations)
+  plus an optional environment overlay (timers and triggers, no
+  fixtures). See run-input.schema.yaml for item shape. Loaders still accept
   pre-envelope items (prompt/query, top-level ground_truth, a bare YAML
   list) and emit a deprecation warning; those shapes are marked
   deprecated below. Migration:
@@ -157,6 +158,8 @@ properties:
             metadata:
               type: object
               additionalProperties: true
+            environment:
+              $ref: "urn:mas-lab:fragments:environment-item:v1"
 
       path:
         type: string

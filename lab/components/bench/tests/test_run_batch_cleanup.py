@@ -295,3 +295,43 @@ def test_finalize_batch_skips_post_when_writing_results_is_interrupted(tmp_path:
         asyncio.run(finalize.finalize_batch(loaded, prepared, execution))
     assert phases == []
     assert prepared.mas_meta.status is BenchmarkStatus.FAILED
+
+
+def test_a_finishing_batch_does_not_stop_the_services_of_one_still_running(tmp_path: Path, monkeypatch):
+    """Two batches in one process (the controller daemon): only the last to end stops the shared services."""
+    from mas.lab.benchmark import service_manager
+
+    stops: list[bool] = []
+    monkeypatch.setattr(service_manager, "stop_all_shared", lambda *, include_keep_running=False: stops.append(True))
+    loaded, prepared = _batch(tmp_path)
+
+    async def prepare(*_a, **_kw):
+        return prepared
+
+    async def finalize_ok(*_a, **_kw):
+        return True
+
+    monkeypatch.setattr(rb, "load_experiment", lambda *_a, **_kw: loaded)
+    monkeypatch.setattr(rb, "prepare_batch", prepare)
+    monkeypatch.setattr(rb, "finalize_batch", finalize_ok)
+
+    async def scenario():
+        release = asyncio.Event()
+
+        async def slow_execute(*_a, **_kw):
+            await release.wait()
+
+        async def quick_execute(*_a, **_kw):
+            return None
+
+        monkeypatch.setattr(rb, "execute_batch", slow_execute)
+        first = asyncio.create_task(rb.run_mas_benchmark(tmp_path / "a.yaml"))
+        await asyncio.sleep(0.05)
+        monkeypatch.setattr(rb, "execute_batch", quick_execute)
+        await rb.run_mas_benchmark(tmp_path / "b.yaml")
+        assert stops == [], "the second batch ended while the first still ran"
+        release.set()
+        await first
+        assert stops == [True]
+
+    asyncio.run(scenario())

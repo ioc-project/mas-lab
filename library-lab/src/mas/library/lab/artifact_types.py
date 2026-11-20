@@ -58,6 +58,16 @@ class TopologySnapshot(ArtifactType):
     description = "Folded graph for the topology HTML plot."
 
 
+class Environment(ArtifactType):
+    path = "{run_dir}/traces/environment.jsonl"
+    format = "jsonl"
+    stream = "custom.environment"
+    plot = "timeline"
+    realtime = True
+    schema = "artefacts/environment.schema.json"
+    description = "World-event stream for one run (fixtures, triggers, actions)."
+
+
 class LoopSeries(ArtifactType):
     path = "{run_dir}/plots/series.svg"
     format = "svg"

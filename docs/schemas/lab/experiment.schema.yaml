@@ -93,6 +93,10 @@ properties:
         type: string
         description: "Default infra bundle name for service/codec pipeline steps."
 
+      environment:
+        $ref: "urn:mas-lab:fragments:environment:v1"
+        description: "Experiment-level fixtures, clock, timers and triggers."
+
       # ── MAS under test (CLI has no --application depth; this is the MAS binding) ─
       application:
         description: >
@@ -236,6 +240,41 @@ properties:
             flavour:
               type: string
               description: "Per-scenario flavour override (name or path)."
+            environment:
+              $ref: "urn:mas-lab:fragments:environment:v1"
+              description: "Scenario-level environment overlay (merged over experiment)."
+            depends_on:
+              type: array
+              items:
+                type: string
+                minLength: 1
+              description: >
+                Scenario ids that must finish first. A resume_from consumer
+                waits for the named checkpoint those producers published.
+            resume_from:
+              $ref: "#/$defs/resume_from"
+              description: >
+                Named session checkpoint this scenario loads (id, or
+                {id, index} for the Nth firing).
+            produce_checkpoints:
+              type: array
+              items:
+                type: string
+                minLength: 1
+                pattern: "^[A-Za-z0-9_-]+$"
+              description: >
+                session_checkpoints ids this scenario publishes.
+            debug:
+              $ref: "#/$defs/debug_spec"
+
+      session_checkpoints:
+        type: array
+        minItems: 1
+        description: >
+          Named persist points compiled to environment checkpoint/pause
+          triggers. Distinct from the checkpoints starting-state axis.
+        items:
+          $ref: "#/$defs/session_checkpoint"
 
       checkpoints:
         type: array
@@ -570,6 +609,101 @@ properties:
 
 # ── Shared definitions ────────────────────────────────────────────────────────
 $defs:
+  resume_from:
+    description: >
+      Checkpoint id (first firing) or {id, index} for the Nth firing
+      of that trigger (1-based).
+    oneOf:
+      - type: string
+        minLength: 1
+        pattern: "^[A-Za-z0-9_-]+$"
+      - type: object
+        required: [id]
+        additionalProperties: false
+        properties:
+          id:
+            type: string
+            minLength: 1
+            pattern: "^[A-Za-z0-9_-]+$"
+          index:
+            type: integer
+            minimum: 1
+  debug_trigger:
+    type: object
+    additionalProperties: false
+    properties:
+      on:
+        type: string
+        enum: [tool_call, tool_result, llm_call, turn_start, turn_end]
+      tool:
+        type: string
+      agent:
+        type: string
+  debug_spec:
+    type: object
+    additionalProperties: false
+    properties:
+      script:
+        type: string
+      script_file:
+        type: string
+      id:
+        type: string
+      when:
+        type: object
+        additionalProperties: true
+      trigger:
+        $ref: "#/$defs/debug_trigger"
+      occurrence:
+        oneOf:
+          - type: string
+            enum: [first, every]
+          - type: integer
+            minimum: 1
+      persist:
+        oneOf:
+          - type: string
+          - type: boolean
+      after:
+        type: string
+        enum: [pause, stop, continue]
+      breakpoints:
+        type: array
+        items:
+          type: object
+          additionalProperties: true
+  session_checkpoint:
+    type: object
+    required: [id]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        minLength: 1
+        pattern: "^[A-Za-z0-9_-]+$"
+      description:
+        type: string
+      when:
+        type: object
+        additionalProperties: true
+      trigger:
+        $ref: "#/$defs/debug_trigger"
+      occurrence:
+        oneOf:
+          - type: string
+            enum: [first, every]
+          - type: integer
+            minimum: 1
+      persist:
+        oneOf:
+          - type: string
+          - type: boolean
+      after:
+        type: string
+        enum: [pause, stop, continue]
+    anyOf:
+      - required: [when]
+      - required: [trigger]
   mas_binding:
     type: object
     additionalProperties: false
@@ -997,6 +1131,14 @@ $defs:
           concurrency: 1 (default) preserves sequential behavior.
           concurrency: N > 1 wraps all run instances in a concurrent runner
           backed by asyncio.Semaphore(N).
+      realtime:
+        type: boolean
+        description: >
+          How a run.post step that implements both on_batch and execute
+          reads events. true folds records as they arrive. false waits
+          until every input has arrived. Omit when the class has only
+          execute or only on_batch. This is a step key, not a figure
+          config key.
       config:
         type: object
         additionalProperties: true

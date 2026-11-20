@@ -24,7 +24,7 @@ from mas.runtime.session import SessionStatus
 
 PLUGIN_ID = "gdb"
 
-BreakpointKind = Literal["tool_call", "tool_result"]
+BreakpointKind = Literal["tool_call", "tool_result", "llm_call", "turn_start", "turn_end"]
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,8 @@ class Breakpoint:
     tool_name: str = ""
     first_only: bool = False
     commands: tuple[str, ...] = ()
+    agent: str = ""
+    occurrence: int | Literal["first", "every"] | None = None
 
 
 @dataclass
@@ -81,6 +83,8 @@ def parse_debug_script(text: str) -> list[Breakpoint]:
                     tool_name=pending.tool_name,
                     first_only=pending.first_only,
                     commands=tuple(collecting),
+                    agent=pending.agent,
+                    occurrence=pending.occurrence,
                 )
                 breakpoints.append(pending)
                 pending = None
@@ -110,23 +114,31 @@ def parse_debug_script(text: str) -> list[Breakpoint]:
 
 def _parse_break(rest: list[str]) -> Breakpoint:
     if not rest:
-        raise ValueError("break requires tool_call or tool_result")
-    kind_token = rest[0].lower().replace("-", "_")
-    if kind_token not in {"tool_call", "tool_result"}:
-        raise ValueError(f"break target must be tool_call or tool_result, got {rest[0]!r}")
-    tool_name = ""
-    first_only = False
-    idx = 1
-    if idx < len(rest) and rest[idx].lower() not in {"if"}:
-        tool_name = rest[idx]
-        idx += 1
-    if idx < len(rest):
-        if rest[idx].lower() != "if" or idx + 1 >= len(rest) or rest[idx + 1].lower() != "first":
-            raise ValueError(f"unsupported break condition {' '.join(rest[idx:])!r}")
-        first_only = True
-        if kind_token != "tool_result":
-            raise ValueError("if first is only valid on break tool_result")
-    return Breakpoint(kind=kind_token, tool_name=tool_name, first_only=first_only)
+        raise ValueError("break requires tool_call, tool_result, llm_call, turn_start or turn_end")
+    from mas.library.standard.lib.triggers import parse_break_line
+
+    when = parse_break_line("break " + " ".join(rest))
+    kind_token = when.on
+    if kind_token not in {"tool_call", "tool_result", "llm_call", "turn_start", "turn_end"}:
+        raise ValueError(
+            f"break target must be tool_call, tool_result, llm_call, turn_start or turn_end, got {rest[0]!r}"
+        )
+    has_if = any(tok.lower() == "if" for tok in rest)
+    first_only = bool(has_if and when.occurrence in {"first", 1})
+    if first_only and kind_token != "tool_result":
+        raise ValueError("if first is only valid on break tool_result")
+    occurrence: int | Literal["first", "every"] | None
+    if not has_if:
+        occurrence = "every"
+    else:
+        occurrence = when.occurrence
+    return Breakpoint(
+        kind=kind_token,  # type: ignore[arg-type]
+        tool_name=when.tool,
+        first_only=first_only,
+        agent=when.agent,
+        occurrence=occurrence,
+    )
 
 
 def _read_script_file(script_file: str, *, manifest_dir: str = "") -> str:
@@ -190,10 +202,33 @@ class DebugScriptPlugin:
         self.out = out if out is not None else sys.stderr
         self.checkpoints: list[MemoryCheckpoint] = []
         self.log: list[str] = []
-        self._hits: dict[int, int] = {}
         self._session: Any = None
         self._control: Any = None
         self._manager: Any = None
+        self._matcher = None
+        if self.breakpoints:
+            from mas.library.standard.lib.triggers import Trigger, TriggerMatcher, When
+
+            compiled: list[Trigger] = []
+            for index, breakpoint in enumerate(self.breakpoints):
+                occurrence = breakpoint.occurrence if breakpoint.occurrence is not None else "every"
+                if breakpoint.first_only:
+                    occurrence = "first"
+                every = occurrence in {None, "every"}
+                compiled.append(
+                    Trigger(
+                        id=f"bp-{index}",
+                        when=When(
+                            on=breakpoint.kind,  # type: ignore[arg-type]
+                            tool=breakpoint.tool_name,
+                            agent=breakpoint.agent,
+                            occurrence=occurrence if occurrence != "every" else "every",
+                        ),
+                        repeat=every,
+                        max_fires=10_000 if every else 1,
+                    )
+                )
+            self._matcher = TriggerMatcher(tuple(compiled))
 
     def bind_session(self, session: Any, *, control: Any = None, manager: Any = None) -> None:
         self._session = session
@@ -201,10 +236,14 @@ class DebugScriptPlugin:
         self._manager = manager
 
     def transition_filters(self) -> list[GovTransitionFilter]:
-        return [
-            GovTransitionFilter(hook="egress", op=("TOOL_CALL",)),
-            GovTransitionFilter(hook="ingress", response_kind=("TOOL_RESULT",)),
-        ]
+        from mas.library.standard.lib.triggers import Trigger
+        from mas.library.standard.plugins.governance.environment import _NOBODY, _filters_for
+
+        if self._matcher is None:
+            # An empty list would subscribe the plugin to every transition at the driver.
+            return [_NOBODY]
+        triggers: tuple[Trigger, ...] = self._matcher.triggers
+        return _filters_for(triggers)
 
     def evaluate_egress(self, intent: EgressIntentView, *, config: KernelConfig):
         return (
@@ -214,14 +253,34 @@ class DebugScriptPlugin:
         )
 
     def on_transition(self, transition: object) -> None:
-        for index, breakpoint in enumerate(self.breakpoints):
-            if self._matches(breakpoint, index, transition):
-                self._emit(
-                    f"Breakpoint {index}: {breakpoint.kind}"
-                    + (f" {breakpoint.tool_name}" if breakpoint.tool_name else "")
-                )
-                self._record_breakpoint(breakpoint, index, transition)
-                self._run_commands(breakpoint, transition)
+        if self._matcher is None:
+            return
+        if _is_tool_call(transition):
+            on = "tool_call"
+        elif _is_tool_result(transition):
+            on = "tool_result"
+        elif getattr(transition, "hook", "") == "egress" and getattr(transition, "op", "") == "LLM_CALL":
+            on = "llm_call"
+        elif getattr(transition, "hook", "") == "ingress" and getattr(transition, "kind", "") == "USER_INPUT_RECEIVED":
+            on = "turn_start"
+        elif getattr(transition, "hook", "") == "ingress" and getattr(transition, "response_kind", "") == "MODEL_TEXT":
+            on = "turn_end"
+        else:
+            return
+        name = _transition_tool_name(transition)
+        agent = str(getattr(transition, "agent_id", "") or "")
+        entry = ""
+        if self._session is not None:
+            entry = str(getattr(self._session, "entry_agent_id", "") or "")
+        hits = self._matcher.match(on=on, tool=name, agent=agent, entry_agent=entry)
+        for trigger in hits:
+            index = int(trigger.id.split("-", 1)[1])
+            breakpoint = self.breakpoints[index]
+            self._emit(
+                f"Breakpoint {index}: {breakpoint.kind}" + (f" {breakpoint.tool_name}" if breakpoint.tool_name else "")
+            )
+            self._record_breakpoint(breakpoint, index, transition)
+            self._run_commands(breakpoint, transition)
 
     def _record_breakpoint(self, breakpoint: Breakpoint, index: int, transition: object) -> None:
         obs = getattr(getattr(getattr(self._session, "instance", None), "driver", None), "observability", None)
@@ -240,19 +299,6 @@ class DebugScriptPlugin:
             breakpoint_kind=breakpoint.kind,
             breakpoint_index=index,
         )
-
-    def _matches(self, breakpoint: Breakpoint, index: int, transition: object) -> bool:
-        if breakpoint.kind == "tool_call" and not _is_tool_call(transition):
-            return False
-        if breakpoint.kind == "tool_result" and not _is_tool_result(transition):
-            return False
-        name = _transition_tool_name(transition)
-        if breakpoint.tool_name and name != breakpoint.tool_name:
-            return False
-        self._hits[index] = self._hits.get(index, 0) + 1
-        if breakpoint.first_only and self._hits[index] != 1:
-            return False
-        return True
 
     def _run_commands(self, breakpoint: Breakpoint, transition: object) -> None:
         commands = breakpoint.commands or (
@@ -283,7 +329,52 @@ class DebugScriptPlugin:
         if verb in {"continue", "resume"}:
             self._cmd_resume(transition)
             return
+        if verb == "env":
+            self._cmd_env(rest, transition)
+            return
+        if verb == "emit":
+            self._cmd_emit(rest, transition)
+            return
         raise ValueError(f"unknown breakpoint command {command!r}")
+
+    def _cmd_env(self, name: str, transition: object) -> None:
+        from mas.library.standard.lib.environment_port import get_environment_port
+
+        port = get_environment_port()
+        if port is None:
+            self._emit("env skipped (no lab environment)")
+            return
+        run = getattr(port, "run_named_action", None)
+        if not callable(run):
+            self._emit("env skipped (port has no named actions)")
+            return
+        try:
+            run(name.strip())
+        except KeyError:
+            self._emit(f"env skipped (unknown action {name.strip()})")
+            return
+        self._emit(f"env {name.strip()}")
+
+    def _cmd_emit(self, name: str, transition: object) -> None:
+        from mas.library.standard.lib.environment_port import get_environment_port
+
+        port = get_environment_port()
+        folded = name.strip()
+        if not folded.startswith("user."):
+            folded = f"user.{folded}"
+        if port is None:
+            self._emit("emit skipped (no lab environment)")
+            return
+        emit = getattr(port, "emit_named", None)
+        if not callable(emit):
+            self._emit("emit skipped (port has no emit)")
+            return
+        try:
+            emit(folded, source={"type": "gdb", "id": "gdb"})
+        except ValueError as exc:
+            self._emit(f"emit skipped ({exc})")
+            return
+        self._emit(f"emit {folded}")
 
     def _cmd_checkpoint(self, breakpoint: Breakpoint, transition: object) -> None:
         session_id = str(getattr(transition, "session_id", "") or self._session_id())

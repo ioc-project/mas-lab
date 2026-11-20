@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Batch pipeline orchestration — resolve once, materialize, execute."""
+
 from __future__ import annotations
 
 import copy
@@ -21,25 +22,31 @@ from mas.lab.benchmark.schedule.run_discovery import (
 
 logger = logging.getLogger(__name__)
 
-_INFRA_STEP_TYPES = frozenset(
-    {"service_start", "service_stop", "serialize", "deserialize"}
-)
+_INFRA_STEP_TYPES = frozenset({"service_start", "service_stop", "serialize", "deserialize"})
 
 # The scheduler runs each instance as its own node (max_active + per-type concurrency).
 
 
-def substitute_template_vars(obj: Any, template_vars: dict[str, str]) -> Any:
+def substitute_template_vars(obj: Any, template_vars: dict[str, Any]) -> Any:
     """Replace ``{key}`` placeholders in nested config structures."""
     if isinstance(obj, str):
         out = obj
         for key, value in template_vars.items():
-            out = out.replace(f"{{{key}}}", value)
+            if isinstance(value, str):
+                out = out.replace(f"{{{key}}}", value)
         return out
     if isinstance(obj, dict):
         return {k: substitute_template_vars(v, template_vars) for k, v in obj.items()}
     if isinstance(obj, list):
         return [substitute_template_vars(v, template_vars) for v in obj]
     return obj
+
+
+def _pipeline_template_vars(exp: Any, output_dir: Path) -> dict[str, Any]:
+    from mas.lab.benchmark.pipeline.binding import pipeline_catalog
+
+    catalog = pipeline_catalog(exp)
+    return {"output_dir": str(output_dir), **catalog}
 
 
 def _base_step_name(spec: Any) -> str:
@@ -103,9 +110,7 @@ def _filter_scenario(refs: list, scenario_ids: list[str]) -> list:
     return [r for r in refs if r.scenario in allowed]
 
 
-def _nodes_for_scope(
-    scope: str, output_dir: Path, scenario_ids: list[str]
-) -> list[_Node]:
+def _nodes_for_scope(scope: str, output_dir: Path, scenario_ids: list[str]) -> list[_Node]:
     """Discover the folders/instances for one scope, shared by every spec at
     that scope in this ``materialize_step_dicts`` call.
 
@@ -175,9 +180,7 @@ _CHILD_LEVEL = {
 }
 
 
-def _child_artifact_filename(
-    inputs: list[str], child_artifacts: dict[str, Any]
-) -> str:
+def _child_artifact_filename(inputs: list[str], child_artifacts: dict[str, Any]) -> str:
     """Resolve the fan-in filename for artifact ``inputs[0]``.
 
     Prefers the child level's own declared ``ArtifactSpec`` (honoring a
@@ -199,9 +202,7 @@ def _child_artifact_filename(
     type_name = name if info else "dataframe"
     if not info:
         info = type_info("dataframe")
-    spec = ArtifactSpec(
-        name=name, type=type_name, path=info.get("path") or ""
-    )
+    spec = ArtifactSpec(name=name, type=type_name, path=info.get("path") or "")
     return str(spec.relative_path())
 
 
@@ -262,7 +263,7 @@ def _finalize_cfg(
     *,
     infra_name: Optional[str],
     step_overrides: Optional[dict],
-    tmpl: dict[str, str],
+    tmpl: dict[str, Any],
 ) -> dict[str, Any]:
     if infra_name and spec.type in _INFRA_STEP_TYPES:
         cfg.setdefault("infra", infra_name)
@@ -273,7 +274,7 @@ def _finalize_cfg(
 
 
 def _step_dict(spec: Any, name: str, cfg: dict[str, Any], deps: list[str]) -> dict:
-    return {
+    out = {
         "name": name,
         "type": spec.type,
         "phase": spec.phase,
@@ -284,6 +285,9 @@ def _step_dict(spec: Any, name: str, cfg: dict[str, Any], deps: list[str]) -> di
         "refresh": str(spec.refresh or ""),
         "concurrency": int(spec.concurrency or 1),
     }
+    if spec.realtime is not None:
+        out["realtime"] = bool(spec.realtime)
+    return out
 
 
 def _emit_instances(
@@ -335,9 +339,7 @@ def _dataflow_deps(phase_specs: list) -> dict[str, list[str]]:
     producers: dict[str, list[tuple[int, str]]] = {}
     for sp in phase_specs:
         for art in getattr(sp, "outputs", None) or []:
-            producers.setdefault(art, []).append(
-                (_SCOPE_RANK.get(_effective_scope(sp), 3), _base_step_name(sp))
-            )
+            producers.setdefault(art, []).append((_SCOPE_RANK.get(_effective_scope(sp), 3), _base_step_name(sp)))
     derived: dict[str, list[str]] = {}
     for sp in phase_specs:
         me = _base_step_name(sp)
@@ -349,7 +351,8 @@ def _dataflow_deps(phase_specs: list) -> dict[str, list[str]]:
                 if art not in _ENGINE_ARTIFACTS:
                     logger.warning(
                         "step %r reads artifact %r (in:), but no step in this phase writes it (out:)",
-                        me, art,
+                        me,
+                        art,
                     )
                 continue
             nearest = max(rk for rk, _ in cands)
@@ -367,7 +370,7 @@ def materialize_step_dicts(
     scenario_ids: list[str],
     infra_name: Optional[str],
     step_overrides: Optional[dict],
-    template_vars: Optional[dict[str, str]] = None,
+    template_vars: Optional[dict[str, Any]] = None,
     level_artifacts: Optional[dict[str, dict[str, Any]]] = None,
     scopes: Optional[set[str]] = None,
     nodes: Optional[dict[str, list[_Node]]] = None,
@@ -384,11 +387,7 @@ def materialize_step_dicts(
     filename from its own declared path when the caller has it; without it,
     fan-in falls back to the artifact type's default path.
     """
-    phase_specs = (
-        [s for s in specs if getattr(s, "phase", "post") == phase]
-        if phase is not None
-        else list(specs)
-    )
+    phase_specs = [s for s in specs if getattr(s, "phase", "post") == phase] if phase is not None else list(specs)
     if scopes is not None:
         wanted = {node_scope(sc) for sc in scopes}
         phase_specs = [s for s in phase_specs if node_scope(_effective_scope(s)) in wanted]
@@ -396,12 +395,11 @@ def materialize_step_dicts(
         return []
 
     tmpl = template_vars or {}
-    output_dir = Path(tmpl.get("output_dir", "."))
+    output_dir = Path(str(tmpl.get("output_dir", ".")))
     ids = list(scenario_ids or [])
     if nodes is None:
         nodes = {
-            scope: _nodes_for_scope(scope, output_dir, ids)
-            for scope in ("run", "test", "scenario", "application")
+            scope: _nodes_for_scope(scope, output_dir, ids) for scope in ("run", "test", "scenario", "application")
         }
     else:
         nodes = {node_scope(k): list(v) for k, v in nodes.items()}
@@ -409,9 +407,7 @@ def materialize_step_dicts(
             nodes.setdefault(scope, [])
     nodes["item"] = nodes["test"]
     nodes["experiment"] = nodes["application"]
-    name_scope = {
-        _base_step_name(spec): _effective_scope(spec) for spec in phase_specs
-    }
+    name_scope = {_base_step_name(spec): _effective_scope(spec) for spec in phase_specs}
     level_arts = level_artifacts or {}
     derived_deps = _dataflow_deps(phase_specs)
 
@@ -433,7 +429,10 @@ def materialize_step_dicts(
             declared = list(spec.depends_on or [])
             deps = _expand_deps(
                 declared + [d for d in derived_deps.get(base_name, []) if d not in declared],
-                node, name_scope, nodes, set(),
+                node,
+                name_scope,
+                nodes,
+                set(),
             )
             instances.append((name, cfg, deps))
         step_dicts.extend(_emit_instances(spec, base_name, instances))
@@ -467,7 +466,7 @@ def start_pipeline_scheduler(
         scenario_ids=list(scenario_ids or sorted({k.scenario for k in keys})),
         infra_name=infra_name,
         step_overrides=step_overrides,
-        template_vars={"output_dir": str(output_dir)},
+        template_vars=_pipeline_template_vars(exp, output_dir),
         level_artifacts=_level_artifacts(exp),
         nodes=nodes,
     )
@@ -490,7 +489,7 @@ def start_pipeline_scheduler(
         data_cache_dir=data_cache_dir,
     )
     bound = executor.bind(
-        template_vars={"output_dir": str(output_dir)},
+        template_vars=_pipeline_template_vars(exp, output_dir),
         parallel=True,
     )
     install_scope_gates(bound.sched, keys)
@@ -536,10 +535,7 @@ def build_runtime_pipeline(
         PipelineStep,
     )
 
-    steps = [
-        PipelineStep.from_dict(s, base_dir=experiment_yaml.parent)
-        for s in step_dicts
-    ]
+    steps = [PipelineStep.from_dict(s, base_dir=experiment_yaml.parent) for s in step_dicts]
     try:
         label = pipeline_name or str(exp.name)
     except AttributeError:
@@ -588,7 +584,7 @@ async def execute_runtime_pipeline(
     output_dir: Path,
     progress: bool = True,
     data_cache_dir: Optional[Path] = None,
-    template_vars: Optional[dict[str, str]] = None,
+    template_vars: Optional[dict[str, Any]] = None,
     force_rerun: list[str] | None = None,
     phase_label: str = "",
 ) -> bool:
@@ -617,12 +613,10 @@ async def execute_runtime_pipeline(
         )
         print(result.summary())
         if not result.success:
-            detail = "; ".join(
-                f"{name}: {msg}" for name, msg in list(result.step_errors.items())[:3]
-            ) or ", ".join(result.failed_steps[:3])
-            raise PipelineExecutionError(
-                f"{phase_label or 'pipeline'} failed — {detail or 'see step errors above'}"
+            detail = "; ".join(f"{name}: {msg}" for name, msg in list(result.step_errors.items())[:3]) or ", ".join(
+                result.failed_steps[:3]
             )
+            raise PipelineExecutionError(f"{phase_label or 'pipeline'} failed — {detail or 'see step errors above'}")
         return True
     except PipelineExecutionError:
         raise
@@ -639,11 +633,7 @@ def _load_generated_dataset(output_dir: Path) -> list | None:
         from mas.runtime.spec.source import load_yaml_file
 
         gds_data = load_yaml_file(gen_ds_path)
-        gen_items = (
-            gds_data.get("items", [])
-            if isinstance(gds_data, dict)
-            else gds_data
-        )
+        gen_items = gds_data.get("items", []) if isinstance(gds_data, dict) else gds_data
         if gen_items:
             logger.info(
                 "Pre-phase: loaded %d generated dataset items from %s",
@@ -696,7 +686,7 @@ async def run_pipeline_phase(
         scenario_ids=list(scenario_ids or []),
         infra_name=infra_name,
         step_overrides=step_overrides,
-        template_vars={"output_dir": str(output_dir)},
+        template_vars=_pipeline_template_vars(exp, output_dir),
         level_artifacts=_level_artifacts(exp),
         scopes=scopes,
         nodes=nodes,

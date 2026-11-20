@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """GatherLevelStep — concatenate child dataframe artifacts at this folder."""
+
 from __future__ import annotations
 
 import logging
@@ -74,9 +75,7 @@ class GatherLevelStep(PipelineStep):
                 if not path.exists():
                     logger.warning("gather_level '%s': missing %s", self.name, path)
                     continue
-                df_part = (
-                    pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
-                )
+                df_part = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path)
                 if df_part is None or df_part.empty:
                     continue
                 frames.append(df_part)
@@ -93,21 +92,24 @@ class GatherLevelStep(PipelineStep):
                     "found for this level, or the `in:` artifact name didn't "
                     "resolve to anything the level below declares"
                 )
-            raise RuntimeError(
-                f"gather_level '{self.name}': {detail} — fan-in produced nothing to concatenate."
-            )
+            raise RuntimeError(f"gather_level '{self.name}': {detail} — fan-in produced nothing to concatenate.")
 
         from mas.lab.benchmark.pipeline.gather import gather_records
 
         df = pd.concat(frames, ignore_index=True)
         df = _filter_identity(df, config)
+        from mas.lab.benchmark.pipeline.binding import fill_scope_columns
+
+        extra = fill_scope_columns(df.columns, ctx)
+        if extra:
+            df = df.copy()
+            for col, val in extra.items():
+                df[col] = val
         if annotate:
             rows = gather_records([df.to_dict(orient="records")], annotate=annotate)
             df = pd.DataFrame(rows) if rows else df.iloc[0:0]
 
-        output_path = resolve_step_artifact_path(
-            ctx, None, self.name, f"data.{fmt}", config, name_keys=(), mkdir=True
-        )
+        output_path = resolve_step_artifact_path(ctx, None, self.name, f"data.{fmt}", config, name_keys=(), mkdir=True)
         if fmt == "parquet":
             df.to_parquet(output_path, index=False)
         else:

@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """CIPlotStep — compute confidence intervals across runs and render a plot.
 
 Reads a tidy CSV produced by ``collect_metrics`` (one row per run × item ×
@@ -78,9 +81,12 @@ Example YAML — minimal, single metric::
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
+
+if TYPE_CHECKING:
+    from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.artifact_paths import (
     resolve_step_artifact_path,
     resolve_step_input_path,
@@ -153,15 +159,16 @@ def _compute_ci(
     return mean, std, n, float(ci_low), float(ci_high), float(ci_half)
 
 
-class CIPlotStep(PipelineStep):
+class CIPlotStep(FigureStep):
     """Compute confidence intervals across runs and render a figure."""
 
     type = "ci_plot"
+    HONORS = frozenset({"labels", "title", "subtitle", "xlabel", "ylabel", "caption"})
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
         import pandas as pd
 
-        config = self.config
+        config = self.apply_style(self.config, ctx)
 
         # ── Input ──────────────────────────────────────────────────────
         data_path = resolve_step_input_path(ctx, self.name, config, "data")
@@ -213,11 +220,11 @@ class CIPlotStep(PipelineStep):
                 logger.warning(
                     "CIPlotStep '%s': group %s has only %d run(s) — CI may be unreliable",
                     self.name,
-                    dict(zip(groupby, group_keys)),
+                    dict(zip(groupby, group_keys, strict=False)),
                     n,
                 )
             mean, std, n, ci_low, ci_high, ci_half = _compute_ci(values, ci_method, ci_level)
-            row = dict(zip(groupby, group_keys))
+            row = dict(zip(groupby, group_keys, strict=False))
             row.update(
                 mean=mean,
                 std=std,
@@ -323,12 +330,17 @@ def _render_ci_figure(
 ) -> None:
     """Render a bar + errorbar figure from the CI summary dataframe."""
     from plotnine import (
-        ggplot, aes,
-        geom_col, geom_errorbar,
-        facet_wrap, facet_grid,
-        labs, theme_minimal, theme, element_text,
+        aes,
+        element_text,
+        facet_grid,
+        facet_wrap,
+        geom_col,
+        geom_errorbar,
+        ggplot,
+        labs,
         scale_fill_brewer,
-        position_dodge,
+        theme,
+        theme_minimal,
     )
 
     # ── Aesthetic mapping ──────────────────────────────────────────────

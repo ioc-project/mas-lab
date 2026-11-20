@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """PipelineDiagramStep — render the current pipeline as a static SVG flow diagram.
 
 Produces an SVG that mirrors the pipeline canvas in mas-lab-studio: nodes are
@@ -46,12 +49,9 @@ Example YAML — explicit step list (for documentation)::
 """
 
 import logging
-import math
-import textwrap
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 
 logger = logging.getLogger(__name__)
@@ -198,8 +198,8 @@ def _layout(
     # Group nodes per layer
     from collections import defaultdict
     by_layer: Dict[int, List[str]] = defaultdict(list)
-    for n, l in layers.items():
-        by_layer[l].append(n)
+    for n, layer in layers.items():
+        by_layer[layer].append(n)
 
     max_layer = max(by_layer.keys()) if by_layer else 0
     max_col   = max(len(v) for v in by_layer.values()) if by_layer else 1
@@ -274,7 +274,6 @@ def _render_svg(
     def sxr(v: float) -> str: return f"{sx(v):.1f}"
     def syr(v: float) -> str: return f"{sy(v):.1f}"
 
-    name_map = {s["name"]: s for s in steps}
     deps_map  = {s["name"]: s.get("depends_on", []) for s in steps}
 
     lines: List[str] = []
@@ -305,8 +304,6 @@ def _render_svg(
             f'font-size="{sy(13):.1f}" fill="{tok["text_secondary"]}">'
             f'{_esc(title)}</text>'
         )
-
-    td = sy(title_h)  # vertical offset for title
 
     # ── Edges ─────────────────────────────────────────────────────────────────
     for name, preds in deps_map.items():
@@ -440,7 +437,7 @@ def _render_svg(
 
 # ── Step implementation ───────────────────────────────────────────────────────
 
-class PipelineDiagramStep(PipelineStep):
+class PipelineDiagramStep(FigureStep):
     """Render the current (or an explicit) pipeline as a static SVG flow diagram.
 
     Uses the same colour tokens and node style as mas-lab-studio's pipeline canvas.
@@ -448,9 +445,10 @@ class PipelineDiagramStep(PipelineStep):
     """
 
     type = "pipeline_diagram"
+    HONORS = frozenset({"theme", "title"})
 
     async def execute(self, ctx) -> StepOutput:
-        cfg = self.config
+        cfg = self.apply_style(self.config, ctx)
 
         # ── Resolve step list ─────────────────────────────────────────────────
         raw_steps: Optional[List[Dict[str, Any]]] = cfg.get("steps")
@@ -525,7 +523,7 @@ class PipelineDiagramStep(PipelineStep):
 
         # ── Render ────────────────────────────────────────────────────────────
         direction = cfg.get("direction", "LR")
-        theme     = cfg.get("theme", "dark")
+        theme     = cfg.get("theme", "light")
         title     = cfg.get("title", "")
         override_w = cfg.get("width")
         override_h = cfg.get("height")

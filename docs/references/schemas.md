@@ -95,12 +95,13 @@ Shared fragments live under [`runtime/fragments/`](https://github.com/ioc-projec
 | [`lab/pipeline.schema.yaml`](../schemas/lab/pipeline.schema.yaml) | Pipeline step definitions |
 | [`lab/lab.schema.yaml`](../schemas/lab/lab.schema.yaml) | Lab folder metadata |
 | [`lab/lab-config.schema.yaml`](../schemas/lab/lab-config.schema.yaml) | Lab config, including `lab.libraries` |
-| [`lab/run-input.schema.yaml`](../schemas/lab/run-input.schema.yaml) | Per-run inputs |
+| [`lab/run-input.schema.yaml`](../schemas/lab/run-input.schema.yaml) | Per-run inputs, including the item `environment` overlay |
 | [`lab/pipeline-manifest.schema.json`](../schemas/lab/pipeline-manifest.schema.json) | Serialized pipeline manifest |
 | [`lab/artefacts/run_info.schema.json`](../schemas/lab/artefacts/run_info.schema.json) | Run metadata artefact |
 | [`lab/artefacts/metrics.schema.json`](../schemas/lab/artefacts/metrics.schema.json) | Metrics artefact |
+| [`lab/artefacts/environment.schema.json`](../schemas/lab/artefacts/environment.schema.json) | One line of `traces/environment.jsonl` |
 
-Shared lab fragments live under [`lab/fragments/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/lab/fragments/): `memory-seed-entry`, `message` (conversation message), `ref` (file ref), and `tool-fixture-mapping`.
+Shared lab fragments live under [`lab/fragments/`](https://github.com/ioc-project/mas-lab/tree/main/docs/schemas/lab/fragments/): `memory-seed-entry`, `message` (conversation message), `ref` (file ref), `tool-fixture-mapping`, `environment` (full experiment / scenario block), and `environment-item` (dataset / run-input overlay; no fixtures).
 
 ---
 

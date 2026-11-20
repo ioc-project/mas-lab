@@ -76,9 +76,10 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
     for flag in ("force", "dry_run", "single_run", "force_lock"):
         if spec.get(flag):
             cmd_parts.append(f"--{flag.replace('_', '-')}")
+    # The CLI's environment travels in the spec for the fixtures; the record is shown to clients and must not.
     record = registry.create(
         WorkerKind.BENCHMARK,
-        spec=spec,
+        spec={key: value for key, value in spec.items() if key != "fixture_env"},
         command=" ".join(cmd_parts),
         endpoint="/api/benchmark/run",
     )

@@ -31,6 +31,8 @@ spec:
     gov_no_undeclared_tool@v1: mas.gov.no_undeclared_tool
     budget@v1: mas.gov.budget
     gdb@v1: mas.gov.gdb
+    environment@v1: mas.gov.environment
+    environment: mas.gov.environment
     retry_on_error: mas.gov.retry_on_error
     retry_on_error@v1: mas.gov.retry_on_error
     sample_governance: mas.gov.sample

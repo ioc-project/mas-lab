@@ -63,6 +63,12 @@ flowchart LR
 | **Item** | One case of the dataset (`item:` hooks, CLI `--item`). Older material calls it `test:`. |
 | **Dataset** | The input items (prompts, expected fields) the experiment runs over. Referenced as `dataset:` in `experiment.yaml`. |
 | **Run** | One execution of the agent or MAS for a given scenario, item, and repeat index. It writes `traces/events.jsonl`. |
+| **Environment** | The world around a run: fixtures, clock, timers, triggers and world actions (`environment:` on the experiment, scenario, or dataset item). Not Flavour / Control / Infra, and not Tutorial 0 (machine setup). See [environment.md](manifests/environment.md). |
+| **Fixture** | A paired process the lab starts for a run (or item / scenario scope) and always stops. Not `inputs.tool_fixtures` (mock payloads) and not pipeline `service_start`. |
+| **World action** | An environment step (`http_call`, `clock_advance`, `sleep`, …) that changes the world, not the kernel. |
+| **Trigger** | A `when` → `do` rule. Structured YAML and gdb `break` lines compile to the same model. |
+| **Timer** | A trigger whose `when.on` is `timer` (virtual due-time or wall). |
+| **Environment event** | One line of `traces/environment.jsonl` (`custom.environment`). Value-free. |
 | **`n_runs`** | How many times to repeat each (scenario, item) for variance. Declared under `run.n_runs`. |
 | **Benchmark** | `mas-lab benchmark run` — runs the level hooks around execution: the `pre` hooks of a level before it executes, then the runs, then the `post` hooks. |
 | **Pipeline** | Ordered **pipeline steps** that read run artifacts and write CSV/PNG under `results/`. A pipeline is not a separate key of the experiment: it is declared as steps in the level hooks (inline, or by reference to a pipeline file). |

@@ -86,7 +86,7 @@ async def test_outcome_table_matches_at_worker_1_and_n(scaling_lab: Path, tmp_pa
     """Same status, output and per-call codes at worker_processes 1 and N, parallel_scenarios 1 and 4."""
     from mas.lab.benchmark.schedule.run_batch.workers import cpu_count
 
-    workers = min(4, cpu_count())
+    workers = min(2, cpu_count())  # two prove the worker path; each extra spawn re-imports the stack
     if workers < 2:
         pytest.skip("need at least 2 CPUs for process workers")
     out_w1_p4 = await run_scaling_lab(

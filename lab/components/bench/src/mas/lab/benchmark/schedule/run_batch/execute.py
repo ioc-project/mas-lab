@@ -173,6 +173,16 @@ def close_exit_stack(stack: Any) -> BaseException | None:
     return None
 
 
+def _run_ref_is_stale(run_output_dir: Path, run_hash: str) -> bool:
+    """True when the run folder points at a different content hash than the run we are about to do."""
+    ref = run_output_dir / ".run_ref"
+    try:
+        recorded = ref.read_text(encoding="utf-8").strip() if ref.is_file() else ""
+    except OSError:
+        return False
+    return bool(recorded) and recorded != run_hash
+
+
 async def execute_batch(
     loaded: LoadedExperiment,
     prepared: PreparedBatch,
@@ -233,6 +243,17 @@ async def _execute_batch(
     _flavour_name = loaded.flavour_name
     trace_cache_dir = loaded.trace_cache_dir
     output_dir = prepared.output_dir
+    from mas.lab.benchmark.schedule.whatif import (
+        apply_session_checkpoint_triggers,
+        validate_scenario_graph,
+    )
+
+    validate_scenario_graph(exp.scenarios, getattr(exp, "session_checkpoints", None) or [])
+    apply_session_checkpoint_triggers(
+        exp.scenarios,
+        getattr(exp, "session_checkpoints", None) or [],
+        base_dir=experiment_yaml.parent,
+    )
 
     _mas_manifest_path = exp.mas.manifest if (exp.mas and exp.mas.manifest) else experiment_yaml
 
@@ -280,6 +301,15 @@ async def _execute_batch(
         execution=execution_as_dict(exp),
     )
 
+    from mas.lab.benchmark.environment.attach import validate_environments
+
+    validate_environments(exp=exp, plan=_execution_plan)
+    _worker_count = _schedule.worker_processes if isinstance(_schedule, ExperimentScheduleSpec) and _schedule else 1
+    if _worker_count > 1:
+        from mas.lab.benchmark.environment.attach import refuse_environment_in_workers
+
+        refuse_environment_in_workers(exp=exp, plan=_execution_plan)
+
     _parallel = max(1, (getattr(_schedule, "parallel_scenarios", 1) if _schedule else 1) or 1)
     _pause = max(0.0, (getattr(_schedule, "pause_between_runs", 0.0) if _schedule else 0.0) or 0.0)
     _max_attempts, _retry_backoff = lab_run_retry_settings(_schedule)
@@ -289,6 +319,75 @@ async def _execute_batch(
     _sem = asyncio.Semaphore(_parallel)
     _io_lock = asyncio.Lock()
     _run_pool = None
+    _done: dict[tuple, asyncio.Event] = {}
+    _dep_status: dict[tuple, str] = {}
+    for _plan_sid, _plan_item, _plan_ridx in _execution_plan:
+        _done[(_plan_sid, _plan_item.get("id", 0), _plan_ridx)] = asyncio.Event()
+
+    async def _wait_published_checkpoint(
+        scenario_id: str,
+        dep: str,
+        name: str,
+        index: int,
+        item: dict,
+        run_idx: int,
+    ) -> None:
+        from mas.lab.benchmark.schedule.whatif import checkpoint_key, published_checkpoint_path
+
+        path = published_checkpoint_path(output_dir, name, index=int(index), key=checkpoint_key(item, run_idx))
+        item_id = item.get("source_item_id", item.get("id", 0))
+        keys = (
+            (dep, item_id, run_idx),
+            (dep, item.get("id", 0), run_idx),
+        )
+        started = _time.monotonic()
+        next_report = 30.0
+        while True:
+            if path.is_file():
+                return
+            waited = _time.monotonic() - started
+            if waited >= next_report:
+                logger.warning(
+                    "scenario %s: still waiting %.0fs for checkpoint %s from %r",
+                    scenario_id,
+                    waited,
+                    path,
+                    dep,
+                )
+                next_report += 30.0
+            status = next((s for k in keys if (s := _dep_status.get(k))), None)
+            ev = next((e for k in keys if (e := _done.get(k))), None)
+            finished = ev is not None and ev.is_set()
+            if status and status != "ok":
+                raise RuntimeError(f"scenario {scenario_id}: producer {dep!r} ended with status {status}")
+            if finished and not path.is_file():
+                raise FileNotFoundError(
+                    f"scenario {scenario_id}: resume_from {name!r} index {index} not published at {path}"
+                )
+            await asyncio.sleep(0.05)
+
+    async def _wait_dependencies(scenario_id: str, item: dict, run_idx: int) -> None:
+        spec = exp.get_scenario(scenario_id)
+        if spec is None:
+            return
+        from mas.lab.benchmark.schedule.whatif import consumer_gate
+
+        item_id = item.get("source_item_id", item.get("id", 0))
+        gate, resume_id, resume_index = consumer_gate(spec)
+        for dep in getattr(spec, "depends_on", None) or []:
+            key = (dep, item_id, run_idx)
+            event = _done.get(key) or _done.get((dep, item.get("id", 0), run_idx))
+            if event is None:
+                raise ValueError(f"scenario {scenario_id}: depends_on {dep!r} is not in the execution plan")
+            dep_spec = exp.get_scenario(dep)
+            produced = list(getattr(dep_spec, "produce_checkpoints", None) or [])
+            if gate == "checkpoint" and resume_id and resume_id in produced:
+                await _wait_published_checkpoint(scenario_id, dep, resume_id, resume_index, item, run_idx)
+                continue
+            await event.wait()
+            status = _dep_status.get(key) or _dep_status.get((dep, item.get("id", 0), run_idx))
+            if status and status != "ok":
+                raise RuntimeError(f"scenario {scenario_id}: producer {dep!r} ended with status {status}")
 
     from mas.lab.benchmark.pipeline.channel import get_channel, install_channel
     from mas.lab.benchmark.pipeline.config import pipeline_settings
@@ -416,6 +515,38 @@ async def _execute_batch(
 
     async def _run_one(scenario_id: str, item: dict, run_idx: int) -> None:
         nonlocal total_ok, total_fail
+        await _wait_dependencies(scenario_id, item, run_idx)
+        _sc_whatif = exp.get_scenario(scenario_id)
+        if _sc_whatif is not None and getattr(_sc_whatif, "resume_from", None):
+            from mas.lab.benchmark.schedule.whatif import checkpoint_key, published_checkpoint_path
+
+            ck_path = published_checkpoint_path(
+                output_dir,
+                _sc_whatif.resume_from,
+                index=int(getattr(_sc_whatif, "resume_index", 1) or 1),
+                key=checkpoint_key(item, run_idx),
+            )
+            if not ck_path.is_file():
+                raise FileNotFoundError(
+                    f"scenario {scenario_id}: resume_from {_sc_whatif.resume_from!r} "
+                    f"index {getattr(_sc_whatif, 'resume_index', 1)} "
+                    f"not published at {ck_path}"
+                )
+            inputs = dict(item.get("inputs") or {})
+            checkpoint = dict(inputs.get("checkpoint") or {})
+            checkpoint["load"] = str(ck_path)
+            inputs["checkpoint"] = checkpoint
+            item = dict(item)
+            item["inputs"] = inputs
+            item["checkpoint_id"] = _sc_whatif.resume_from
+            item["forked_from_checkpoint"] = str(ck_path)
+        if _sc_whatif is not None and getattr(_sc_whatif, "produce_checkpoints", None):
+            inputs = dict(item.get("inputs") or {})
+            checkpoint = dict(inputs.get("checkpoint") or {})
+            checkpoint["save"] = True
+            inputs["checkpoint"] = checkpoint
+            item = dict(item)
+            item["inputs"] = inputs
         config, spec_path = prepared.scenario_configs[scenario_id]
         item_id = item.get("id", 0)
         source_item_id = item.get("source_item_id", item_id)
@@ -466,6 +597,26 @@ async def _execute_batch(
             )
 
         _flavour_info = extract_flavour_info(_sc_flavour)
+        from mas.lab.benchmark.environment.attach import (
+            bind_run_environment,
+            blocks_for_run,
+            control_refs_for_run,
+            digest_for_run,
+            replay_cached_environment,
+            start_run_fixtures,
+            stop_run_fixtures,
+            write_fixture_llm_infra,
+        )
+        from mas.lab.benchmark.environment.engine import compile_environment, write_environment_control
+        from mas.lab.benchmark.environment.model import RunCoordinates
+
+        _env_block = blocks_for_run(exp=exp, scenario=exp.get_scenario(scenario_id), item=item)
+        _env_digest = digest_for_run(
+            exp=exp,
+            scenario=exp.get_scenario(scenario_id),
+            item=item,
+            work_dir=experiment_yaml.parent,
+        )
         _run_hash = compute_run_hash(
             config,
             _run_input_dict,
@@ -474,6 +625,7 @@ async def _execute_batch(
             _flavour_info,
             base_path=spec_path,
             infra_info=_infra_info,
+            environment_digest=_env_digest,
         )
         _trace_cache = get_trace_cache_dir(explicit=trace_cache_dir)
         _global_run_dir = _trace_cache / _run_hash
@@ -526,6 +678,11 @@ async def _execute_batch(
             and not force
             and not _global_hit
             and not _events_path.is_symlink()
+            # A traces/ directory that links into the trace cache names ONE content hash. We are
+            # past the global lookup for the current hash, so that link is a different, stale run:
+            # a changed config, overlay, fixture script or environment must run again.
+            and not _events_path.parent.is_symlink()
+            and not _run_ref_is_stale(run_output_dir, _run_hash)
             and _events_path.exists()
             and _events_path.stat().st_size > 0
         )
@@ -583,6 +740,15 @@ async def _execute_batch(
             )
             if progress:
                 print(f"  ⏩  [{scenario_id}] item={item_id} run={run_idx + 1} ({_src}, skipping)")
+            if _sc_whatif is not None and getattr(_sc_whatif, "produce_checkpoints", None):
+                from mas.lab.benchmark.schedule.whatif import checkpoint_key, publish_named_checkpoints
+
+                publish_named_checkpoints(
+                    run_checkpoint_dir=_global_run_dir / "checkpoints",
+                    output_dir=output_dir,
+                    names=_sc_whatif.produce_checkpoints,
+                    key=checkpoint_key(item, run_idx),
+                )
             resolved_events = _cached_events if _global_hit else _events_path
             async with _io_lock:
                 results_rows.append(
@@ -621,6 +787,7 @@ async def _execute_batch(
                             continue
                         if isinstance(rec, dict):
                             _live_sink.emit(rec)
+                replay_cached_environment(_global_run_dir)
             except Exception:
                 logger.debug("cache-hit stream replay skipped", exc_info=True)
             terminal_run(_v2_key, "cached")
@@ -671,9 +838,38 @@ async def _execute_batch(
             _global_run_dir.mkdir(parents=True, exist_ok=True)
             result_dict: dict = {}
             _attempts_used = 0
+            _watch: asyncio.Task[None] | None = None
+            if _sc_whatif is not None and getattr(_sc_whatif, "produce_checkpoints", None):
+                from mas.lab.benchmark.schedule.whatif import checkpoint_key, publish_named_checkpoints
+
+                _ck_key = checkpoint_key(item, run_idx)
+
+                async def _publish_ready() -> None:
+                    reported: set[str] = set()
+                    while True:
+                        try:
+                            publish_named_checkpoints(
+                                run_checkpoint_dir=_global_run_dir / "checkpoints",
+                                output_dir=output_dir,
+                                names=_sc_whatif.produce_checkpoints,
+                                missing_ok=True,
+                                key=_ck_key,
+                            )
+                        except Exception as exc:
+                            if str(exc) not in reported:
+                                reported.add(str(exc))
+                                logger.warning("checkpoint publish for %s: %s", scenario_id, exc)
+                        await asyncio.sleep(0.05)
+
+                _watch = asyncio.create_task(_publish_ready())
             try:
 
                 def _do_mas_run() -> dict:
+                    from mas.lab.benchmark.environment.attach import run_with_cleanups
+
+                    return run_with_cleanups(_do_mas_run_body)
+
+                def _do_mas_run_body(_pending: list) -> dict:
                     from mas.lab.benchmark.pipeline.ui_bridge import forward_native_to_channel
                     from mas.lab.runners.infer import infer_runner_id
                     from mas.runtime.boundary.obs.event_stream import (
@@ -757,14 +953,97 @@ async def _execute_batch(
                     _stream = _ScenarioStream()
                     _stream.subscribe(forward_native_to_channel)
                     _token = set_event_stream(_stream)
+                    _pending.append(lambda tok=_token: reset_event_stream(tok))
                     _sid_token = begin_run(_v2_key)
+                    _env_spec = compile_environment(_env_block)
+                    _bound = None
+                    _run_flavour = _sc_flavour
+                    _ctl_path = None
+                    if _env_spec.triggers or _env_spec.fixtures or _env_spec.script:
+                        if _env_spec.triggers or _env_spec.script:
+                            _ctl_path = write_environment_control(
+                                run_output_dir / ".environment" / "control.yaml",
+                                script=_env_spec.script,
+                            )
+                            from mas.ctl.session.flavour_control import (
+                                control_search_dirs,
+                                session_flavour_with_controls,
+                            )
+
+                            _run_flavour = session_flavour_with_controls(
+                                _run_flavour,
+                                controls=[str(_ctl_path)],
+                                search_dirs=control_search_dirs(experiment_yaml.parent, Path.cwd()),
+                            )
+                        _bound = bind_run_environment(
+                            spec=_env_spec,
+                            run=RunCoordinates(
+                                experiment=str(getattr(exp, "name", "") or ""),
+                                scenario=scenario_id,
+                                item=f"item{item_id}",
+                                run=f"r{run_idx + 1}",
+                            ),
+                            run_dir=_global_run_dir,
+                            work_dir=experiment_yaml.parent,
+                            output_dir=output_dir,
+                            fixtures=prepared.fixture_registry,
+                            key=_v2_key,
+                            session_id=str(_run_input.session_id or ""),
+                        )
+                        _pending.append(_bound.close)
                     try:
                         from mas.lab.benchmark.pipeline.channel import set_stream_id
                     except Exception:
                         set_stream_id = None  # type: ignore[assignment]
                     if set_stream_id is not None and _sid_token is None:
                         _sid_token = set_stream_id(_v2_key.stream_id())
+                    if _bound is not None:
+                        _fixture_keys = {
+                            "run_key": f"{scenario_id}/item{item_id}/r{run_idx + 1}",
+                            "item_key": f"{scenario_id}/item{item_id}",
+                            "scenario_key": str(scenario_id),
+                        }
+                        # Registered before the start: a failure halfway still releases the first ones.
+                        _pending.append(
+                            lambda: stop_run_fixtures(_env_spec, prepared.fixture_registry, **_fixture_keys)
+                        )
+                        start_run_fixtures(
+                            _env_spec,
+                            prepared.fixture_registry,
+                            env=_bound.env,
+                            **_fixture_keys,
+                        )
 
+                    if _bound is not None:
+                        # The control this environment generated is part of the flavour the runner sees.
+                        _runner_id = infer_runner_id(
+                            execution_runner=(
+                                getattr(_schedule, "runner", None)
+                                if _schedule
+                                else (
+                                    exp.execution.runner
+                                    if exp.execution and getattr(exp.execution, "runner", None)
+                                    else None
+                                )
+                            ),
+                            mas_manifest=(Path(_mas_manifest_path) if _mas_manifest_path is not None else None),
+                            agent_config=config,
+                            flavour=_run_flavour if isinstance(_run_flavour, dict) else None,
+                        )
+                        try:
+                            _model_url = _bound.env.fixture_url("scripted-model")
+                        except KeyError:
+                            _model_url = ""
+                        if _model_url:
+                            _infra_refs = [
+                                *_infra_refs,
+                                str(
+                                    write_fixture_llm_infra(
+                                        run_output_dir / ".environment" / "openai-direct.yaml",
+                                        _model_url,
+                                    )
+                                ),
+                            ]
                     ctx = RunContext(
                         prompt=prompt,
                         config=config,
@@ -772,7 +1051,7 @@ async def _execute_batch(
                         output_dir=_global_run_dir,
                         runner_id=_runner_id,
                         run_input=_run_input,
-                        flavour=_sc_flavour,
+                        flavour=_run_flavour,
                         run_seed=run_idx,
                         overlay_refs=_overlay_refs,
                         overlays_dir=prepared.overlays_dir,
@@ -785,7 +1064,10 @@ async def _execute_batch(
                             "experiment_default_model": getattr(exp, "model", None),
                             "experiment_model_slots": getattr(exp, "model_slots", None),
                             "workspace_root": experiment_yaml.parent,
-                            "controls": list(loaded.controls or ()),
+                            "controls": control_refs_for_run(
+                                loaded=list(loaded.controls or ()),
+                                control_path=_ctl_path,
+                            ),
                         },
                     )
                     try:
@@ -807,6 +1089,7 @@ async def _execute_batch(
                                 "overlay": _ov_name or None,
                             }
                         )
+                    _pending.clear()  # the try/finally below owns the cleanup from here
                     try:
                         result = invoke_runner(ctx)
                         return {
@@ -827,6 +1110,18 @@ async def _execute_batch(
                         except Exception:
                             pass
                         reset_event_stream(_token)
+                        if _bound is not None:
+                            try:
+                                stop_run_fixtures(
+                                    _env_spec,
+                                    prepared.fixture_registry,
+                                    run_key=f"{scenario_id}/item{item_id}/r{run_idx + 1}",
+                                    item_key=f"{scenario_id}/item{item_id}",
+                                    scenario_key=str(scenario_id),
+                                )
+                            except Exception:
+                                logger.debug("run fixture stop failed", exc_info=True)
+                            _bound.close()
 
                 def _on_retry(failed_attempt: int, attempts: int, err: str) -> None:
                     attempt_reset(_v2_key)
@@ -883,6 +1178,8 @@ async def _execute_batch(
                     else:
                         total_ok += 1
             finally:
+                if _watch is not None:
+                    _watch.cancel()
                 link_trace_to_cache_entry(run_output_dir, _global_run_dir, _run_hash)
                 if _cached_events_backup is not None and _cached_events_backup.exists():
                     if _cached_events.exists() and _cached_events.stat().st_size > 0:
@@ -951,12 +1248,64 @@ async def _execute_batch(
         if progress:
             tag = "✅" if status == "ok" else "❌"
             print(f"  {tag} [{scenario_id}] item={item_id} run={run_idx + 1} ({elapsed_ms:.0f}ms)")
+        if _sc_whatif is not None and status == "ok" and getattr(_sc_whatif, "produce_checkpoints", None):
+            from mas.lab.benchmark.schedule.whatif import checkpoint_key, publish_named_checkpoints
+
+            publish_named_checkpoints(
+                run_checkpoint_dir=_global_run_dir / "checkpoints",
+                output_dir=output_dir,
+                names=_sc_whatif.produce_checkpoints,
+                key=checkpoint_key(item, run_idx),
+            )
 
     async def _dispatch_all() -> None:
+        async def _guarded(sid: str, itm: dict, ridx: int) -> None:
+            nonlocal total_fail
+            key = (sid, itm.get("id", 0), ridx)
+            try:
+                await _run_one(sid, itm, ridx)
+            except Exception as exc:
+                _dep_status[key] = "error"
+                item_id = itm.get("id", 0)
+                async with _io_lock:
+                    total_fail += 1
+                    results_rows.append(
+                        {
+                            "run_id": f"{sid}__item{item_id}__r{ridx + 1}",
+                            "scenario": sid,
+                            "item_id": item_id,
+                            "run": ridx + 1,
+                            "source_item_id": itm.get("source_item_id", item_id),
+                            "experiment_id": exp.name,
+                            "session_id": "",
+                            "checkpoint_id": "",
+                            "forked_from_checkpoint": "",
+                            "group": itm.get("group", ""),
+                            "target_agents": ",".join(itm.get("target_agents", [])),
+                            "prompt": "",
+                            "status": "error",
+                            "output": "",
+                            "output_length": 0,
+                            "trace_path": "",
+                            "elapsed_ms": 0.0,
+                            "error": str(exc),
+                            "attempts": 0,
+                        }
+                    )
+                if progress:
+                    print(f"  ❌ [{sid}] item={item_id} run={ridx + 1} ({exc})")
+            finally:
+                if key not in _dep_status:
+                    from mas.lab.benchmark.schedule.whatif import row_status
+
+                    found = row_status(results_rows, sid, itm.get("id", 0), ridx + 1)
+                    _dep_status[key] = found
+                _done[key].set()
+
         tasks = []
         for sid, itm, ridx in _execution_plan:
-            tasks.append(asyncio.create_task(_run_one(sid, itm, ridx)))
-        await asyncio.gather(*tasks)
+            tasks.append(asyncio.create_task(_guarded(sid, itm, ridx)))
+        await asyncio.gather(*tasks)  # _guarded turns a run's failure into an error row
 
     try:
         if _worker_processes > 1:
