@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Worker model types."""
+
 from __future__ import annotations
 
 import enum
@@ -44,37 +45,47 @@ class WorkerRecord:
     stderr: List[str] = field(default_factory=list)
     stdout_text: str = ""
     stderr_text: str = ""
+    _stdout_joined: str | None = None
+    _stderr_joined: str | None = None
     result: Any = None
     parent_id: Optional[str] = None
     pid: Optional[int] = None
 
     def append_stdout(self, line: str) -> None:
         self.stdout.append(line)
+        self._stdout_joined = None
 
     def append_stderr(self, line: str) -> None:
         self.stderr.append(line)
+        self._stderr_joined = None
 
     def append_stdout_chunk(self, text: str) -> None:
         self.stdout_text += text
+        self._stdout_joined = None
 
     def append_stderr_chunk(self, text: str) -> None:
         self.stderr_text += text
+        self._stderr_joined = None
 
     def combined_stdout(self) -> str:
-        parts = []
-        if self.stdout:
-            parts.append("\n".join(self.stdout))
-        if self.stdout_text:
-            parts.append(self.stdout_text)
-        return "\n".join(parts)
+        if self._stdout_joined is None:
+            parts = []
+            if self.stdout:
+                parts.append("\n".join(self.stdout))
+            if self.stdout_text:
+                parts.append(self.stdout_text)
+            self._stdout_joined = "\n".join(parts)
+        return self._stdout_joined
 
     def combined_stderr(self) -> str:
-        parts = []
-        if self.stderr:
-            parts.append("\n".join(self.stderr))
-        if self.stderr_text:
-            parts.append(self.stderr_text)
-        return "\n".join(parts)
+        if self._stderr_joined is None:
+            parts = []
+            if self.stderr:
+                parts.append("\n".join(self.stderr))
+            if self.stderr_text:
+                parts.append(self.stderr_text)
+            self._stderr_joined = "\n".join(parts)
+        return self._stderr_joined
 
     def to_job_summary(self) -> Dict[str, Any]:
         origin = _ui_origin(self.spec)
@@ -95,12 +106,18 @@ class WorkerRecord:
             summary["error"] = self.error
         return summary
 
-    def to_job_detail(self) -> Dict[str, Any]:
+    def to_job_detail(self, *, stdout_from: int = 0, stderr_from: int = 0) -> Dict[str, Any]:
+        stdout = self.combined_stdout()
+        stderr = self.combined_stderr()
+        start_out = max(0, int(stdout_from or 0))
+        start_err = max(0, int(stderr_from or 0))
         detail = self.to_job_summary()
         detail.update(
             {
-                "stdout": self.combined_stdout(),
-                "stderr": self.combined_stderr(),
+                "stdout": stdout[start_out:],
+                "stderr": stderr[start_err:],
+                "stdout_offset": len(stdout),
+                "stderr_offset": len(stderr),
                 "error": self.error,
                 "request_body": self.spec,
             }

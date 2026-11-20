@@ -27,6 +27,11 @@ def as_path(value: Path | str) -> Path:
 def read_mapping(path: Path, *, what: str) -> dict[str, Any]:
     """YAML mapping from *path*, or a ControlError that names the file."""
     try:
+        from mas.runtime.spec.batch_cache import current_batch_cache
+
+        cache = current_batch_cache()
+        if cache is not None:
+            return cache.load_mapping(path)
         return load_yaml_mapping(path)
     except (OSError, yaml.YAMLError, ValueError) as exc:
         raise ControlError(f"{what} {str(path)!r} cannot be read: {exc}") from None

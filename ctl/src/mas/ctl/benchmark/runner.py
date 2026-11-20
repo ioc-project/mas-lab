@@ -282,63 +282,74 @@ class MasBenchRunner:
         experiment_default_model = kwargs.get("experiment_default_model")
         experiment_model_slots = kwargs.get("experiment_model_slots")
         controls = list(kwargs.get("controls") or ())
+        batch_cache = kwargs.get("batch_cache")
         if not experiment_default_model and isinstance(experiment_model_slots, dict):
             from mas.runtime.spec.model_ref import SLOT_MAIN, slot_model
 
             experiment_default_model = slot_model(experiment_model_slots, SLOT_MAIN)
-        try:
-            resolved = self._resolve_target(
-                config=config,
-                spec_path=spec_path,
-                mas_path=mas_path,
-                overlay_refs=_overlay_refs,
-                overlays_dir=_overlays_dir,
-                overlay_base_dir=_overlay_base,
-                infra_refs=_infra,
-                memory_seeds=memory_seeds,
-                checkpoint_path=checkpoint_path,
-                checkpoint_dir=checkpoint_dir,
-                checkpoint_save=checkpoint_save,
-                queries=queries,
-                output_dir=output_dir,
-                run_seed=run_seed,
-                flavour=flavour,
-                experiment_default_model=experiment_default_model,
-                experiment_model_slots=experiment_model_slots if isinstance(experiment_model_slots, dict) else None,
-                workspace_root=kwargs.get("workspace_root"),
-                tool_fixtures=tool_fixtures,
-                run_params=run_params,
-                controls=controls,
-            )
-        except ChainStartError as exc:
-            return self._with_bench_metadata(RunResult(content="", status="error", error=str(exc)), run_seed=run_seed)
-        if isinstance(resolved, RunResult):
-            return self._with_bench_metadata(resolved, run_seed=run_seed)
+        from mas.runtime.spec.batch_cache import bind_batch_cache, reset_batch_cache
 
+        _cache_token = bind_batch_cache(batch_cache) if batch_cache is not None else None
         try:
-            result = self._run_controller_turns(
-                instance=resolved.instance,
-                store=resolved.store,
-                config=resolved.manifest,
-                spec_path=resolved.manifest_path,
-                output_dir=output_dir,
-                queries=queries,
-                memory_seeds=memory_seeds,
-                checkpoint_save=checkpoint_save,
-                checkpoint_path=checkpoint_path,
-                run_seed=run_seed,
-                topology=resolved.topology,
-                session_id=resolved.session_id,
-                working_memory_registry=resolved.working_memory_registry,
-                obs_recorder=resolved.obs_recorder,
-                obs_pipeline=resolved.obs_pipeline,
-                scoped_recorders=resolved.scoped_recorders,
-                flavour=flavour,
-                turn_guard=resolved.turn_guard,
-            )
+            try:
+                resolved = self._resolve_target(
+                    config=config,
+                    spec_path=spec_path,
+                    mas_path=mas_path,
+                    overlay_refs=_overlay_refs,
+                    overlays_dir=_overlays_dir,
+                    overlay_base_dir=_overlay_base,
+                    infra_refs=_infra,
+                    memory_seeds=memory_seeds,
+                    checkpoint_path=checkpoint_path,
+                    checkpoint_dir=checkpoint_dir,
+                    checkpoint_save=checkpoint_save,
+                    queries=queries,
+                    output_dir=output_dir,
+                    run_seed=run_seed,
+                    flavour=flavour,
+                    experiment_default_model=experiment_default_model,
+                    experiment_model_slots=experiment_model_slots if isinstance(experiment_model_slots, dict) else None,
+                    workspace_root=kwargs.get("workspace_root"),
+                    tool_fixtures=tool_fixtures,
+                    run_params=run_params,
+                    controls=controls,
+                    batch_cache=batch_cache,
+                )
+            except ChainStartError as exc:
+                return self._with_bench_metadata(
+                    RunResult(content="", status="error", error=str(exc)), run_seed=run_seed
+                )
+            if isinstance(resolved, RunResult):
+                return self._with_bench_metadata(resolved, run_seed=run_seed)
+
+            try:
+                result = self._run_controller_turns(
+                    instance=resolved.instance,
+                    store=resolved.store,
+                    config=resolved.manifest,
+                    spec_path=resolved.manifest_path,
+                    output_dir=output_dir,
+                    queries=queries,
+                    memory_seeds=memory_seeds,
+                    checkpoint_save=checkpoint_save,
+                    checkpoint_path=checkpoint_path,
+                    run_seed=run_seed,
+                    topology=resolved.topology,
+                    session_id=resolved.session_id,
+                    working_memory_registry=resolved.working_memory_registry,
+                    obs_recorder=resolved.obs_recorder,
+                    obs_pipeline=resolved.obs_pipeline,
+                    scoped_recorders=resolved.scoped_recorders,
+                    flavour=flavour,
+                    turn_guard=resolved.turn_guard,
+                )
+            finally:
+                resolved.chains.close()
+            return self._with_bench_metadata(result, run_seed=run_seed)
         finally:
-            resolved.chains.close()
-        return self._with_bench_metadata(result, run_seed=run_seed)
+            if _cache_token is not None:
+                reset_batch_cache(_cache_token)
 
     @staticmethod
     def _with_bench_metadata(result: RunResult, *, run_seed: int) -> RunResult:
@@ -380,6 +391,7 @@ class MasBenchRunner:
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
         controls: Sequence[str] = (),
+        batch_cache: Any = None,
     ) -> RunResult | _ControllerTarget:
         entry_manifest = config
         entry_manifest_path = spec_path
@@ -440,6 +452,7 @@ class MasBenchRunner:
                 overlay_paths=overlay_paths,
                 infra_refs=infra_refs,
                 validate=False,
+                cache=batch_cache,
             )
         )
         try:

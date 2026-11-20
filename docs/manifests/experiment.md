@@ -494,6 +494,7 @@ experiment:
     retry_backoff_s: 2.0     # delay before the first re-issue; doubles each time
     runner: native           # optional override of inferred adapter
     reset_state: false
+    worker_processes: 1      # 1 = threads in this process
 ```
 
 | Key | Default | Meaning |
@@ -506,8 +507,12 @@ experiment:
 | `retry_backoff_s` | `2.0` | Base delay before the first re-issue; doubles on each later one. |
 | `runner` | `native` | Lab runner (adapter) id from the `mas.lab.runners` entry point group. When omitted, inferred from the application's `spec.framework.default_adapter` (MAS) or `spec.framework_adapter` (agent). |
 | `reset_state` | `false` | Reset emulation and runtime state between runs. |
+| `worker_processes` | `1` | Process workers for MAS runs. `1` keeps today's threads. The batch refuses a count above the machine's cores when it starts (the file itself parses anywhere). With more than 1, every pipeline step must declare `worker_safe` (shipped library steps declare it; a test reads their sources for process patches). Workers start with `spawn` and rebuild their own run context from a plain job. |
+| `worker_max_runs` | (off) | Recycle each worker after this many runs. Omit to keep the worker for the batch. |
 
 `--strategy` on `mas-lab benchmark run` overrides `schedule.ordering`.
+
+How wall time scales with `parallel_scenarios` and `worker_processes`: [Lab run throughput](../references/lab-throughput.md).
 
 ### `bench_emulation`
 

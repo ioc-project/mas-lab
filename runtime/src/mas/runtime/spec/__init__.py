@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Manifest loading and source resolution (spec layer)."""
 
+from mas.runtime.spec.batch_cache import BatchCache, bind_batch_cache, reset_batch_cache
 from mas.runtime.spec.checkpoint import (
     CheckpointPolicy,
     CheckpointSpecError,
@@ -22,6 +23,9 @@ from mas.runtime.spec.source import (
 )
 
 __all__ = [
+    "BatchCache",
+    "bind_batch_cache",
+    "reset_batch_cache",
     "clear_yaml_file_cache",
     "load_yaml_file",
     "load_yaml_mapping",

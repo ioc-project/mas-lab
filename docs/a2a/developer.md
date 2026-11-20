@@ -55,7 +55,7 @@ An *AgentCard* is the JSON document that describes an agent to A2A clients. `age
 - One `AgentSkill` per `spec.skills` entry. A single general skill when there are none.
 - `provider` comes from `spec.provider`. `organization` defaults to `MAS Lab`.
 - Capabilities come from the endpoint's `a2a.capabilities`. Default input and output modes are `text/plain`.
-- Interfaces: JSON-RPC at the advertised URL, HTTP+JSON at `<url>/a2a/rest`, and gRPC when `a2a.grpc_port` (or `a2a.grpc_url`) is set.
+- Interfaces: JSON-RPC at the advertised URL, HTTP+JSON at `<url>/a2a/rest`, and gRPC when `a2a.grpc_port` (or `a2a.grpc_url`) is set. gRPC needs extra `a2a-grpc` of `mas-lab-library-ioa` and is served only by `mas-ctl serve`.
 
 ## Task lifecycle
 

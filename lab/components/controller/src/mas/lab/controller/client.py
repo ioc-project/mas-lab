@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Unix-socket JSON-RPC client for the controller daemon."""
+
 from __future__ import annotations
 
 import atexit
@@ -112,8 +113,7 @@ class ControllerClient:
             self._stop_stale(drift)
         if not auto_start:
             raise RuntimeError(
-                f"Controller daemon is not running (socket {self.socket_path}). "
-                "Start it with: mas-lab control start"
+                f"Controller daemon is not running (socket {self.socket_path}). Start it with: mas-lab control start"
             )
         start_daemon(port=port, detach=True)
         for _ in range(40):
@@ -230,27 +230,42 @@ def follow_worker(
 
     client = ControllerClient()
     client.ensure_running()
-    last_stdout = ""
-    last_stderr = ""
+    stdout_from = 0
+    stderr_from = 0
     deadline = time.time() + timeout
     terminal = {"completed", "failed", "cancelled"}
 
     while time.time() < deadline:
-        detail = client.call("get_worker", {"worker_id": worker_id})
+        detail = client.call(
+            "get_worker",
+            {
+                "worker_id": worker_id,
+                "stdout_from": stdout_from,
+                "stderr_from": stderr_from,
+            },
+        )
         if detail is None:
             raise RuntimeError(f"Worker {worker_id!r} not found")
 
         if stream:
             stdout = detail.get("stdout") or ""
             stderr = detail.get("stderr") or ""
-            if len(stdout) > len(last_stdout):
-                sys.stdout.write(stdout[len(last_stdout) :])
+            if "stdout_offset" in detail:
+                sys.stdout.write(stdout)
                 sys.stdout.flush()
-                last_stdout = stdout
-            if len(stderr) > len(last_stderr):
-                sys.stderr.write(stderr[len(last_stderr) :])
+                stdout_from = int(detail.get("stdout_offset") or stdout_from + len(stdout))
+            elif len(stdout) > stdout_from:
+                sys.stdout.write(stdout[stdout_from:])
+                sys.stdout.flush()
+                stdout_from = len(stdout)
+            if "stderr_offset" in detail:
+                sys.stderr.write(stderr)
                 sys.stderr.flush()
-                last_stderr = stderr
+                stderr_from = int(detail.get("stderr_offset") or stderr_from + len(stderr))
+            elif len(stderr) > stderr_from:
+                sys.stderr.write(stderr[stderr_from:])
+                sys.stderr.flush()
+                stderr_from = len(stderr)
 
         status = detail.get("status")
         if status in terminal:

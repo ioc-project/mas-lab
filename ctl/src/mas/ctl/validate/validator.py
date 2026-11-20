@@ -399,6 +399,13 @@ def validate_data(
 
         for path, msg in collect_endpoint_usage_deprecation(data):
             result.issues.append(ValidationIssue("warning", msg, path=path))
+        try:
+            from library_ioa.plugins.a2a.grpc_extra import collect_a2a_grpc_issues
+        except ImportError:
+            collect_a2a_grpc_issues = None
+        if collect_a2a_grpc_issues is not None:
+            for path, msg in collect_a2a_grpc_issues(data):
+                result.issues.append(ValidationIssue("error", msg, path=path))
 
     if any(i.level == "error" for i in result.issues):
         result.ok = False

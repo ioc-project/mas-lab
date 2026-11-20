@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
 
+
 @dataclass
 class InfraEmulationSpec:
     """L1 infrastructure emulation: which backing resources are live vs controlled.
@@ -283,6 +284,12 @@ class ExperimentScheduleSpec:
     reset_state: bool = False
     """Reset emulation/runtime state between runs when true."""
 
+    worker_processes: int = 1
+    """Process workers for MAS runs. ``1`` (default) uses threads in this process."""
+
+    worker_max_runs: Optional[int] = None
+    """Recycle each worker after this many runs. ``None`` keeps the worker for the batch."""
+
     @property
     def strategy(self) -> str:
         """Deprecated alias for :attr:`ordering`."""
@@ -290,6 +297,8 @@ class ExperimentScheduleSpec:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ExperimentScheduleSpec":
+        from mas.lab.benchmark.schedule.run_batch.workers import validate_worker_max_runs, validate_worker_processes
+
         ordering = data.get("ordering", data.get("strategy", "coverage"))
         return cls(
             parallel_scenarios=data.get("parallel_scenarios", 4),
@@ -303,6 +312,8 @@ class ExperimentScheduleSpec:
             ordering=ordering or "coverage",
             runner=data.get("runner", DEFAULT_LAB_RUNNER_ID),
             reset_state=bool(data.get("reset_state", False)),
+            worker_processes=validate_worker_processes(data.get("worker_processes", 1)),
+            worker_max_runs=validate_worker_max_runs(data.get("worker_max_runs")),
         )
 
 
@@ -344,9 +355,7 @@ class ExperimentDesignSpec:
     def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ExperimentDesignSpec":
         data = data or {}
         if "pin" in data:
-            raise ValueError(
-                "design.pin is not read; use pin_scenarios / pin_items with one_factor"
-            )
+            raise ValueError("design.pin is not read; use pin_scenarios / pin_items with one_factor")
         return cls(
             mode=data.get("mode", "cartesian"),
             max_executions=data.get("max_executions"),
@@ -396,6 +405,7 @@ def split_legacy_execution(execution: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # ExecutionSpec — compatibility view of the split blocks
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MASExecutionSpec:
@@ -511,6 +521,7 @@ class MASExecutionSpec:
 # ReplaySpec — multi-turn conversation replay configuration
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ReplaySpec:
     """Controls how multi-turn dataset items are replayed.
@@ -559,4 +570,3 @@ class ReplaySpec:
             recording_path=data.get("recording_path"),
             diverge_from_cache=data.get("diverge_from_cache", True),
         )
-

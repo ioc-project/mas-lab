@@ -50,7 +50,11 @@ def _handle_request(payload: dict) -> dict:
         "acquire_session": lambda p: _sessions.acquire(p["session_id"]) or {"ok": True},
         "release_session": lambda p: _sessions.release(p["session_id"]) or {"ok": True},
         "list_workers": lambda p: _api.list_workers(kind=p.get("kind"), status=p.get("status")),
-        "get_worker": lambda p: _api.get_worker(p["worker_id"]),
+        "get_worker": lambda p: _api.get_worker(
+            p["worker_id"],
+            stdout_from=int(p.get("stdout_from") or 0),
+            stderr_from=int(p.get("stderr_from") or 0),
+        ),
         "cancel_worker": lambda p: {"ok": _api.cancel_worker(p["worker_id"])},
         "submit_benchmark": lambda p: _api.submit_benchmark(p),
         "submit_application": lambda p: _api.submit_application(p),

@@ -20,23 +20,35 @@ plugins:
     name: events_to_otel
     module: mas.library.telemetry.bench
     class: EventsToOtelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: verify_otel
     module: mas.library.telemetry.bench
     class: VerifyOtelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: compare_otel_spans
     module: mas.library.telemetry.bench
     class: CompareOtelSpansStep
+    attributes:
+      worker_safe: true
   - type: step
     name: export_otel
     module: mas.library.telemetry.bench
     class: ExportOtelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: clickhouse_dump
     module: mas.library.telemetry.bench
     class: ClickhouseDumpStep
+    attributes:
+      worker_safe: true
   - type: step
     name: list_clickhouse_sessions
     module: mas.library.telemetry.steps.list_clickhouse_sessions
     class: ListClickhouseSessionsStep
+    attributes:
+      worker_safe: true

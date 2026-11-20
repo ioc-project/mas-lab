@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """ControllerAPI — pure Python backend for CLI and HTTP."""
+
 from __future__ import annotations
 
 import logging
@@ -78,9 +79,17 @@ class ControllerAPI:
         status_enum = WorkerStatus(status) if status else None
         return [w.to_job_summary() for w in self.workers.list_workers(kind=kind_enum, status=status_enum)]
 
-    def get_worker(self, worker_id: str) -> Optional[Dict[str, Any]]:
+    def get_worker(
+        self,
+        worker_id: str,
+        *,
+        stdout_from: int = 0,
+        stderr_from: int = 0,
+    ) -> Optional[Dict[str, Any]]:
         record = self.workers.get(worker_id)
-        return record.to_job_detail() if record else None
+        if record is None:
+            return None
+        return record.to_job_detail(stdout_from=stdout_from, stderr_from=stderr_from)
 
     def cancel_worker(self, worker_id: str) -> bool:
         return self.runner.cancel(worker_id)

@@ -44,7 +44,7 @@ For configured agents, use `RuntimeBuilder` (`mas.runtime.factory.builder`) to w
 
 - **`HookRegistry` / `BaseAgent` / `skeleton/`** — removed; do not reintroduce a parallel hook-plane.
 - **`topology/`** — removed; workflow routing belongs in design-pattern plugins and manifest delegation config.
-- **gRPC transport** — no production gRPC transport is shipped; the `grpc` extra only installs the client libraries.
+- **gRPC transport** — A2A over gRPC is extra `a2a-grpc` of `mas-lab-library-ioa`. The runtime has no gRPC extra.
 
 ## Related docs
 

@@ -1,0 +1,21 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: ServiceBundle
+metadata:
+  name: services
+  description: Loopback fake model and MCP tool server (shifted ports).
+spec:
+  services:
+    fake-model:
+      backend: process
+      command: [PYTHON, MODEL_SCRIPT, --port, "18765"]
+      health_check:
+        url: http://127.0.0.1:18765/health
+        timeout: 15
+    fake-tools:
+      backend: process
+      command: [PYTHON, TOOLS_SCRIPT, --port, "18766", --health-port, "18767"]
+      health_check:
+        url: http://127.0.0.1:18767/health
+        timeout: 15

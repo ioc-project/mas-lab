@@ -71,6 +71,19 @@ def get_step(name: str | None = None, *, attributes: dict[str, Any] | None = Non
     return info.load_class() if info is not None else None
 
 
+def step_worker_safety(step_type: str, *, base_dir: Optional[Path] = None) -> bool | None:
+    """The declared ``worker_safe`` of a step type, or ``None`` when nothing declares it.
+
+    A registry entry declares it as ``worker_safe`` under ``attributes``; any other
+    step (a class path, a lab-local step) declares it on its class.
+    """
+    for entry in get_registry().entries_named(step_type, "step"):
+        if "worker_safe" in entry.attributes:
+            return bool(entry.attributes["worker_safe"])
+    step_class = resolve_step_class(step_type, base_dir=base_dir, required_base=PipelineStep)
+    return step_class.declared_worker_safe()
+
+
 def list_steps() -> dict[str, Any]:
     """Return registered pipeline steps as ``{name: class_or_none}``.
 
@@ -215,6 +228,23 @@ class PipelineStep(ABC):
     def on_batch(self, batch: List[Dict[str, Any]], ctx: "ExecutionContext") -> None:  # noqa: F821
         """Fold a batch of records. Default is a no-op; override to consume streams."""
         del batch, ctx
+        return None
+
+    worker_safe: ClassVar[bool]
+    """Declared by each step class that may run beside ``schedule.worker_processes > 1``.
+
+    Pipeline steps run in the parent process; process workers run only the MAS.
+    ``True`` says the step patches no process state that MAS runs depend
+    on. There is no default: a step that does not declare it is refused when the
+    schedule asks for process workers (see :func:`step_worker_safety`).
+    """
+
+    @classmethod
+    def declared_worker_safe(cls) -> bool | None:
+        """The nearest class-level ``worker_safe`` declaration, or ``None`` when no class declares it."""
+        for klass in cls.__mro__:
+            if "worker_safe" in vars(klass):
+                return bool(vars(klass)["worker_safe"])
         return None
 
     async def finish(self, ctx: "ExecutionContext") -> StepOutput:  # noqa: F821

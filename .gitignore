@@ -15,6 +15,7 @@ config.yaml
 !docs/tutorials/**/config.yaml
 !labs/**/config.yaml
 !library-samples/sample-workspace/config.yaml
+!lab/components/bench/tests/fixtures/**/config.yaml
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/

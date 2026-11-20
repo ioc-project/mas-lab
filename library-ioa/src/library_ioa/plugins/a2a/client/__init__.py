@@ -5,13 +5,34 @@ import logging
 from typing import Any
 
 import httpx
-from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.helpers import new_text_message
 from a2a.types import Role, SendMessageRequest
 from google.protobuf.json_format import MessageToDict
 from mas.runtime.aio import LoopCache
 
 logger = logging.getLogger(__name__)
+
+
+_SDK_NAMES = frozenset({"A2ACardResolver", "ClientConfig", "create_client"})
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve the SDK client names on first access so loading the plugin does not import grpc."""
+    if name not in _SDK_NAMES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import a2a.client as sdk
+
+    value = vars(sdk)[name]
+    globals()[name] = value
+    return value
+
+
+def _sdk(name: str) -> Any:
+    """A module-level SDK name: a patched or already resolved value, else the lazy import."""
+    try:
+        return globals()[name]
+    except KeyError:
+        return __getattr__(name)
 
 
 class A2AClient:
@@ -89,7 +110,7 @@ class A2AClient:
         return dict(data)
 
     async def _sdk_get_agent_card(self, httpx_client: httpx.AsyncClient) -> dict[str, Any]:
-        resolver = A2ACardResolver(httpx_client=httpx_client, base_url=self.url)
+        resolver = _sdk("A2ACardResolver")(httpx_client=httpx_client, base_url=self.url)
         card = await resolver.get_agent_card()
         return self._record_agent_card(card)
 
@@ -229,24 +250,25 @@ class _Connection:
             if found is not None:
                 return found
             if self._card is None:
-                resolver = A2ACardResolver(httpx_client=self._http, base_url=self._owner.url)
+                resolver = _sdk("A2ACardResolver")(httpx_client=self._http, base_url=self._owner.url)
                 self._card = await resolver.get_agent_card()
                 if self.card_data is None:
                     self.card_data = self._owner._record_agent_card(self._card)
             owner = self._owner
             grpc_channel_factory = None
             if owner.transport == "GRPC":
-                import grpc
+                from library_ioa.plugins.a2a.grpc_extra import load_a2a_grpc
 
+                grpc = load_a2a_grpc()
                 grpc_channel_factory = grpc.aio.insecure_channel
-            config = ClientConfig(
+            config = _sdk("ClientConfig")(
                 streaming=streaming,
                 httpx_client=self._http,
                 grpc_channel_factory=grpc_channel_factory,
                 supported_protocol_bindings=[owner.transport] if owner.transport else [],
                 use_client_preference=owner.transport is not None,
             )
-            found = self._clients[streaming] = await create_client(
+            found = self._clients[streaming] = await _sdk("create_client")(
                 agent=self._card,
                 client_config=config,
                 interceptors=list(owner._transport_interceptors()),

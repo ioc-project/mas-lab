@@ -329,9 +329,22 @@ def expose_agent(
     protocol = str(endpoint.get("protocol") or "").strip()
     if not protocol:
         raise ValueError("Application endpoint requires protocol")
+    try:
+        from library_ioa.plugins.a2a.grpc_extra import (
+            a2a_plugin_type,
+            a2a_row_grpc_reason,
+            require_a2a_grpc,
+        )
+    except ImportError:
+        a2a_plugin_type = None
+        a2a_row_grpc_reason = None
+    grpc_reason = a2a_row_grpc_reason(endpoint) if a2a_row_grpc_reason is not None else None
+    if grpc_reason is not None:
+        require_a2a_grpc(grpc_reason)
+    plugin_type = a2a_plugin_type(protocol) if a2a_plugin_type is not None else protocol
     exposure = get_registry().create(
         "agent_expose",
-        binding={"type": protocol},
+        binding={"type": plugin_type},
         endpoint=endpoint,
     )
     handler = make_runtime_handler(

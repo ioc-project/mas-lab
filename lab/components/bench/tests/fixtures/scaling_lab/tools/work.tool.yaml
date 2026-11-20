@@ -1,0 +1,25 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Tool
+
+metadata:
+  name: work
+  description: Fixed CPU work for the loopback fixture.
+  version: "1.0.0"
+
+spec:
+  description: >
+    Hash a buffer n times and return the hex digest. n is small in always-on
+    tests and larger in the optional wall-time tests.
+
+  parameters:
+    - name: n
+      type: integer
+      description: Number of SHA-256 rounds.
+      required: true
+
+  impl:
+    kind: python
+    module_path: ./work.py
+    class_name: WorkTool

@@ -224,11 +224,7 @@ Register it in a library manifest as a `type: governance` entry (see the `mas.go
 
 ## 8. Packaging
 
-`mas-runtime` has one optional dependency group besides `dev`:
-
-| Extra | Packages |
-|-------|----------|
-| `grpc` | `grpcio`, `grpcio-tools` |
+`mas-runtime` has a `dev` extra. A2A over gRPC is extra `a2a-grpc` of `mas-lab-library-ioa`, not of this package.
 
 Install from a repository checkout:
 

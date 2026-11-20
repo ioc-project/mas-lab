@@ -19,8 +19,13 @@ def test_worker_model_helpers():
     rec.append_stderr("err1")
     summary = rec.to_job_summary()
     assert summary["status"] == "pending"
+    rec.append_stdout("line2")
     detail = rec.to_job_detail()
     assert "line1" in detail["stdout"]
+    delta = rec.to_job_detail(stdout_from=len("line1"))
+    assert delta["stdout"].lstrip("\n") == "line2"
+    assert delta["stdout_offset"] == len(rec.combined_stdout())
+    assert "line1" not in delta["stdout"]
     rec.status = WorkerStatus.FAILED
     rec.error = "llm_cache miss"
     assert rec._job_status() == "failed"
