@@ -9,7 +9,7 @@ from collections import Counter
 from contextvars import ContextVar, Token
 from typing import Any
 
-from mas.lab.benchmark.pipeline.channel import frame_at, get_channel, get_stream_id
+from mas.lab.benchmark.pipeline.channel import get_channel, get_stream_id
 from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.kinds import is_control_kind, is_lifecycle_kind
 
@@ -162,10 +162,7 @@ class IngestSubscriber:
         if rec and str(body.get("kind") or "").startswith("artifact."):
             post_ingest(metric_envelope(rec, key=key), url=self.url)
         if key is not None and (
-            self._since_dump >= 8
-            or kind.endswith("_end")
-            or is_lifecycle_kind(kind)
-            or is_control_kind(kind)
+            self._since_dump >= 8 or kind.endswith("_end") or is_lifecycle_kind(kind) or is_control_kind(kind)
         ):
             self._since_dump = 0
             dump = structure_envelope(
@@ -208,14 +205,10 @@ class LiveRunSink:
     def __init__(self, url: str | None = None) -> None:
         self._sub = IngestSubscriber(url=url)
 
-    def emit(self, record: dict[str, Any]) -> None:
+    def emit(self, record: dict[str, Any], *, stream_id: str | None = None) -> None:
         ch = get_channel()
-        sid = get_stream_id()
+        sid = stream_id or get_stream_id()
         if ch is None or not sid:
             return
-        offset = ch.publish_sync(sid, record)
-        frame = frame_at(ch, sid, offset)
-        if frame is not None:
-            self._sub.on_frame(frame)
-        else:
-            post_ingest(record, url=self._sub.url)
+        frame = ch.publish_frame_sync(sid, record)
+        self._sub.on_frame(frame)

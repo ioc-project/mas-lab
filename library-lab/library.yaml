@@ -39,162 +39,242 @@ plugins:
     name: analysis
     module: mas.library.lab.steps.data.analysis
     class: AnalysisStep
+    attributes:
+      worker_safe: true
   - type: step
     name: annotate_metrics
     module: mas.library.lab.steps.eval.annotate_metrics
     class: AnnotateMetricsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: ci_plot
     module: mas.library.lab.steps.viz.ci_plot
     class: CIPlotStep
+    attributes:
+      worker_safe: true
   - type: step
     name: collect_dataframe
     module: mas.library.lab.steps.data.collect_dataframe
     class: CollectDataFrameStep
+    attributes:
+      worker_safe: true
   - type: step
     name: collect_metrics
     module: mas.library.lab.steps.eval.collect_metrics
     class: CollectMetricsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: compute_ci
     module: mas.library.lab.steps.eval.compute_ci
     class: ComputeCIStep
+    attributes:
+      worker_safe: true
   - type: step
     name: compute_drift
     module: mas.library.lab.steps.eval.compute_drift
     class: ComputeDriftStep
+    attributes:
+      worker_safe: true
   - type: step
     name: dataset
     module: mas.library.lab.steps.data.dataset
     class: DatasetStep
+    attributes:
+      worker_safe: true
   - type: step
     name: deserialize
     module: mas.library.lab.steps.data.deserialize
     class: DeserializeStep
+    attributes:
+      worker_safe: true
   - type: step
     name: diff_trajectories
     module: mas.library.lab.steps.data.diff_trajectories
     class: DiffTrajectoriesStep
+    attributes:
+      worker_safe: true
   - type: step
     name: embed_trajectories
     module: mas.library.lab.steps.data.embed_trajectories
     class: EmbedStep
+    attributes:
+      worker_safe: true
   - type: step
     name: eval_mce
     module: mas.library.lab.steps.eval.mce
     class: EvalMceStep
+    attributes:
+      worker_safe: true
   - type: step
     name: events_to_otel
     module: mas.library.lab.steps.services.events_to_otel
     class: EventsToOtelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: experiment
     module: mas.library.lab.steps.data.experiment
     class: ExperimentStep
+    attributes:
+      worker_safe: true
   - type: step
     name: export_otel
     module: mas.library.lab.steps.services.export_otel
     class: ExportOtelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: extract_mealy_stats
     module: mas.library.lab.steps.extract.mealy_stats
     class: ExtractMealyStatsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: extract_sys_stats
     module: mas.library.lab.steps.extract.sys_stats
     class: ExtractSysStatsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: extract_trace_stats
     module: mas.library.lab.steps.extract.trace_stats
     class: ExtractTraceStatsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: file_tail
     module: mas.library.lab.steps.services.file_tail
     class: FileTailStep
+    attributes:
+      worker_safe: true
   - type: step
     name: shell
     module: mas.library.lab.steps.services.shell
     class: ShellStep
+    attributes:
+      worker_safe: true
   - type: step
     name: extract_trajectories
     module: mas.library.lab.steps.extract.trajectories
     class: ExtractTrajectoriesStep
+    attributes:
+      worker_safe: true
   - type: step
     name: gather_level
     module: mas.library.lab.steps.data.gather_level
     class: GatherLevelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: generate_dataset
     module: mas.library.lab.steps.data.generate_dataset
     class: GenerateDatasetStep
+    attributes:
+      worker_safe: true
   - type: step
     name: ggplot
     module: mas.library.lab.steps.viz.plot_ggplot
     class: PlotPipelineStep
+    attributes:
+      worker_safe: true
   - type: step
     name: join_dataframe
     module: mas.library.lab.steps.data.join_dataframe
     class: JoinDataFrameStep
+    attributes:
+      worker_safe: true
   - type: step
     name: metrics_comparison_plot
     module: mas.library.lab.steps.viz.metrics_comparison_plot
     class: MetricsComparisonPlotStep
+    attributes:
+      worker_safe: true
   - type: step
     name: metrics_to_dataframe
     module: mas.library.lab.steps.eval.metrics_to_dataframe
     class: MetricsToDataFrameStep
+    attributes:
+      worker_safe: true
   - type: step
     name: pipeline_diagram
     module: mas.library.lab.steps.viz.pipeline_diagram
     class: PipelineDiagramStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plot
     module: mas.library.lab.steps.viz.plot
     class: PlotStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plot_communication_flow
     module: mas.library.lab.steps.viz.plot_communication_flow
     class: PlotCommunicationFlowStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plot_message_graph
     module: mas.library.lab.steps.viz.plot_message_graph
     class: PlotMessageGraphStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plot_multilevel_trajectory
     module: mas.library.lab.steps.viz.plot_multilevel_trajectory
     class: PlotMultilevelTrajectoryStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plot_trajectory
     module: mas.library.lab.steps.viz.plot_trajectory
     class: PlotTrajectoryStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plotnine
     module: mas.library.lab.steps.viz.plotnine
     class: PlotNineStep
+    attributes:
+      worker_safe: true
   - type: step
     name: processor
     module: mas.library.lab.steps.data.processor
     class: ProcessorStep
+    attributes:
+      worker_safe: true
   - type: step
     name: serialize
     module: mas.library.lab.steps.data.serialize
     class: SerializeStep
+    attributes:
+      worker_safe: true
   - type: step
     name: service_start
     module: mas.library.lab.steps.services.service_start
     class: ServiceStartStep
+    attributes:
+      worker_safe: true
   - type: step
     name: service_stop
     module: mas.library.lab.steps.services.service_stop
     class: ServiceStopStep
+    attributes:
+      worker_safe: true
   - type: step
     name: to_dataframe
     module: mas.library.lab.steps.data.to_dataframe
     class: ToDataFrameStep
+    attributes:
+      worker_safe: true
   - type: step
     name: validate_outputs
     module: mas.library.lab.steps.eval.validate_outputs
     class: ValidateOutputsStep
+    attributes:
+      worker_safe: true
   - type: codec
     name: otel_traces-otlp
     urn: mas.codec.otel_traces_otlp

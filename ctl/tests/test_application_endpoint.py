@@ -51,8 +51,14 @@ def test_application_infra_preserves_protocol_listen_block(tmp_path: Path) -> No
         encoding="utf-8",
     )
 
+    from library_ioa.plugins.a2a.grpc_extra import grpc_is_importable
+
     validation = validate_file(infra_path, kind="infra", strict=True)
-    assert validation.ok, validation.issues
+    if grpc_is_importable():
+        assert validation.ok, validation.issues
+    else:
+        assert not validation.ok
+        assert any("mas-lab-library-ioa[a2a-grpc]" in issue.message for issue in validation.issues)
 
     resolved = resolve_infra_refs(
         [str(infra_path)],

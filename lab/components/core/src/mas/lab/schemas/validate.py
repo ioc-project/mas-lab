@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Load lab JSON Schema documents with cross-file $id refs."""
+
 from __future__ import annotations
 
 import hashlib
@@ -42,9 +43,18 @@ def schema_registry_from_dir(root: Path):
     from referencing.jsonschema import DRAFT7
 
     resolved = Path(root).resolve()
+    from mas.runtime.spec.batch_cache import current_batch_cache
+
+    batch = current_batch_cache()
+    if batch is not None:
+        cached = batch.schema_registry(resolved)
+        if cached is not None:
+            return cached
     stamp = _schema_dir_stamp(resolved)
     hit = _REGISTRY_CACHE.get(resolved)
     if hit is not None and hit[0] == stamp:
+        if batch is not None:
+            batch.store_schema_registry(resolved, hit[1])
         return hit[1]
     resources: list[tuple[str, Any]] = []
     for path in sorted(resolved.rglob("*")):
@@ -60,6 +70,8 @@ def schema_registry_from_dir(root: Path):
         resources.append((uri, resource))
     registry = Registry().with_resources(resources).crawl()
     _REGISTRY_CACHE[resolved] = (stamp, registry)
+    if batch is not None:
+        batch.store_schema_registry(resolved, registry)
     return registry
 
 

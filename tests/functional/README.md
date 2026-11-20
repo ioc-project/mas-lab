@@ -2,7 +2,7 @@
 
 Tests here need something CI does not provide: network access, a Docker daemon, or API keys.
 They carry the `functional` pytest marker, which the default run excludes
-(`addopts = -m "not functional"` in the root `pyproject.toml`), so CI never collects them.
+(`addopts = -m "not functional and not perf"` in the root `pyproject.toml`), so CI never collects them.
 
 | File | Needs |
 | --- | --- |

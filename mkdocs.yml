@@ -233,6 +233,7 @@ nav:
           - Package docs: references/runtime.md
       - Lab:
           - Experiment: manifests/experiment.md
+          - Lab run throughput: references/lab-throughput.md
           - Dataset: manifests/dataset.md
           - Pipeline: manifests/pipeline.md
           - Lab folder: manifests/lab.md

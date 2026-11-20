@@ -1,3 +1,5 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
 from typing import Any
@@ -8,8 +10,10 @@ from .executor import MasLabAgentExecutor
 
 async def start_grpc_server(request_handler: Any, *, host: str, port: int) -> Any:
     """Start an SDK gRPC service around an existing A2A request handler."""
+    from library_ioa.plugins.a2a.grpc_extra import load_a2a_grpc
+
+    grpc = load_a2a_grpc()
     try:
-        import grpc
         from a2a.server.request_handlers.grpc_handler import GrpcHandler
         from a2a.types.a2a_pb2_grpc import add_A2AServiceServicer_to_server
         from a2a.utils.constants import VERSION_HEADER
@@ -25,7 +29,9 @@ async def start_grpc_server(request_handler: Any, *, host: str, port: int) -> An
         from google.rpc import error_details_pb2, status_pb2
         from packaging.version import InvalidVersion, Version
     except ImportError as exc:
-        raise RuntimeError("A2A gRPC serving requires the library-ioa grpc extra") from exc
+        from library_ioa.plugins.a2a.grpc_extra import A2AGrpcExtraError
+
+        raise A2AGrpcExtraError("the A2A gRPC transport") from exc
 
     class _A2AGrpcHandler(GrpcHandler):
         def _build_call_context(self, context: Any, request: Any) -> Any:
@@ -44,8 +50,7 @@ async def start_grpc_server(request_handler: Any, *, host: str, port: int) -> An
             if not supported:
                 raise VersionNotSupportedError(
                     message=(
-                        f"A2A version '{actual_version}' is not supported by this handler. "
-                        "Expected version '1.0'."
+                        f"A2A version '{actual_version}' is not supported by this handler. Expected version '1.0'."
                     )
                 )
             return server_context

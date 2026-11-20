@@ -26,6 +26,8 @@ cli = ["mcp[cli]"]
 # (npx) — do not vendor mcp-python-sdk or mcp-conformance checkouts.
 all = ["mcp[cli]"]
 slim = ["slim-bindings>=2.2,<3"]
+# A2A over gRPC. The SDK extra ships grpcio; we do not pin grpcio ourselves.
+a2a-grpc = ["a2a-sdk[grpc]>=1.1.5"]
 
 [project.scripts]
 mas-mcp = "library_ioa.plugins.mcp.server:main"

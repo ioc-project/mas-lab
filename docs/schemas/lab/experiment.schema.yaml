@@ -724,6 +724,21 @@ $defs:
       reset_state:
         type: boolean
         description: "Reset emulation/runtime state between runs when true."
+      worker_processes:
+        type: integer
+        minimum: 1
+        default: 1
+        description: >
+          Process workers for MAS runs. 1 (default) uses threads in this
+          process. A batch refuses a count above the machine's cores when it
+          starts. Workers start with spawn, not fork, and rebuild their own
+          run context from a plain job.
+      worker_max_runs:
+        type: integer
+        minimum: 1
+        description: >
+          Recycle each worker after this many runs. Omit to keep the worker
+          for the whole batch.
 
   bench_emulation:
     type: object

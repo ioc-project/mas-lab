@@ -86,6 +86,11 @@ def clear_yaml_file_cache() -> None:
 
 
 def load_yaml_file(path: Path) -> Any:
+    from mas.runtime.spec.batch_cache import current_batch_cache
+
+    cache = current_batch_cache()
+    if cache is not None:
+        return cache.load_yaml(path)
     return deepcopy(cached_yaml_document(path))
 
 

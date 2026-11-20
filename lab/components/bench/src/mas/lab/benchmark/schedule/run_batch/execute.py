@@ -168,6 +168,7 @@ async def execute_batch(
 
     from mas.lab.benchmark.service_manager import ServiceManager as _ServiceManager
     from mas.lab.emulation_resolver import resolve_emulation_plugins
+    from mas.lab.lab.config import ExperimentScheduleSpec
 
     exp = loaded.exp
     experiment_yaml = loaded.experiment_yaml
@@ -187,6 +188,24 @@ async def execute_batch(
     )
     _exit_stack = contextlib.ExitStack()
     _exit_stack.enter_context(_svc_mgr)
+
+    from mas.library_roots import clear_library_discovery_cache
+    from mas.runtime.spec.batch_cache import BatchCache, bind_batch_cache, reset_batch_cache
+
+    clear_library_discovery_cache()
+    _batch_cache = BatchCache()
+    _batch_token = bind_batch_cache(_batch_cache)
+    _batch_released: list[bool] = []
+
+    def _release_batch_cache() -> None:
+        if _batch_released:
+            return
+        _batch_released.append(True)
+        reset_batch_cache(_batch_token)
+        _batch_cache.clear()
+        clear_library_discovery_cache()
+
+    _exit_stack.callback(_release_batch_cache)
 
     results_rows: list = []
     total_ok = 0
@@ -215,10 +234,14 @@ async def execute_batch(
     _parallel = max(1, (getattr(_schedule, "parallel_scenarios", 1) if _schedule else 1) or 1)
     _pause = max(0.0, (getattr(_schedule, "pause_between_runs", 0.0) if _schedule else 0.0) or 0.0)
     _max_attempts, _retry_backoff = lab_run_retry_settings(_schedule)
+    _worker_schedule = _schedule if isinstance(_schedule, ExperimentScheduleSpec) else None
+    _worker_processes = _worker_schedule.worker_processes if _worker_schedule else 1
+    _worker_max_runs = _worker_schedule.worker_max_runs if _worker_schedule else None
     _sem = asyncio.Semaphore(_parallel)
     _io_lock = asyncio.Lock()
+    _run_pool = None
 
-    from mas.lab.benchmark.pipeline.channel import install_channel
+    from mas.lab.benchmark.pipeline.channel import get_channel, install_channel
     from mas.lab.benchmark.pipeline.config import pipeline_settings
     from mas.lab.benchmark.pipeline.keys import run_key_from_parts
     from mas.lab.benchmark.pipeline.lifecycle import attempt_reset, begin_run, terminal_run
@@ -265,6 +288,12 @@ async def execute_batch(
     _live_sink = LiveRunSink()
     set_channel_emitter(_live_sink.emit)
 
+    if _worker_processes > 1:
+        from mas.lab.benchmark.schedule.run_batch.workers import require_cores, require_worker_safe
+
+        require_cores(_worker_processes)
+        require_worker_safe(loaded.pipeline_specs, base_dir=experiment_yaml.parent)
+
     _emulation = getattr(exp, "bench_emulation", None) or getattr(getattr(exp, "execution", None), "emulation", None)
     _cache_policy = (
         getattr(getattr(_emulation, "runtime", None), "cache", "content-addressed")
@@ -279,6 +308,8 @@ async def execute_batch(
         n_sc, n_items = len(prepared.loaded_ids), len(prepared.dataset_items)
         print(f"  {n_sc} scenarios × {n_items} items × {loaded.n_runs} run(s) = {len(_execution_plan)} executions")
         print(f"  parallel   : {_parallel}   pause: {_pause}s   max_attempts: {_max_attempts}")
+        if _worker_processes > 1:
+            print(f"  workers    : {_worker_processes} processes")
         if _emulation:
             _inf = _emulation.infra
             _state_parts = [f"llm={_inf.llm}", f"tools={_inf.tools}", f"memory={_inf.memory}"]
@@ -598,6 +629,72 @@ async def execute_batch(
                         set_event_stream,
                     )
 
+                    _runner_id = infer_runner_id(
+                        execution_runner=(
+                            getattr(_schedule, "runner", None)
+                            if _schedule
+                            else (
+                                exp.execution.runner
+                                if exp.execution and getattr(exp.execution, "runner", None)
+                                else None
+                            )
+                        ),
+                        mas_manifest=(Path(_mas_manifest_path) if _mas_manifest_path is not None else None),
+                        agent_config=config,
+                        flavour=_sc_flavour if isinstance(_sc_flavour, dict) else None,
+                    )
+                    _overlay_refs = list(prepared.scenario_overlay_stacks.get(scenario_id, []))
+                    _infra_refs = _infra_refs_for_scenario(scenario_id, prepared)
+                    if _run_pool is not None:
+                        from dataclasses import asdict, is_dataclass
+
+                        from mas.lab.benchmark.pipeline.channel import reset_stream_id
+                        from mas.lab.benchmark.schedule.run_batch.workers import plain, run_input_payload
+
+                        emulation_payload = None
+                        if _emulation is not None and is_dataclass(_emulation) and not isinstance(_emulation, type):
+                            emulation_payload = plain(asdict(_emulation), "emulation")
+                        _sid_token = begin_run(_v2_key)
+                        try:
+                            return _run_pool.run_job(
+                                {
+                                    "job_id": f"{run_id}-{_time.time_ns()}",
+                                    "scenario_id": scenario_id,
+                                    "item_id": item_id,
+                                    "run_idx": run_idx,
+                                    "stream_id": _v2_key.stream_id(),
+                                    "prompt": prompt,
+                                    "config": plain(config, "config"),
+                                    "spec_path": str(spec_path),
+                                    "output_dir": str(_global_run_dir),
+                                    "runner_id": _runner_id,
+                                    "run_input": run_input_payload(_run_input),
+                                    "flavour": None if _sc_flavour is None else plain(_sc_flavour, "flavour"),
+                                    "run_seed": run_idx,
+                                    "overlay_refs": plain(_overlay_refs, "overlay_refs"),
+                                    "overlays_dir": str(prepared.overlays_dir) if prepared.overlays_dir else None,
+                                    "overlay_base_dir": str(prepared.overlay_base_dir)
+                                    if prepared.overlay_base_dir
+                                    else None,
+                                    "infra_refs": list(_infra_refs),
+                                    "session_id": _run_input.session_id,
+                                    "emulation": emulation_payload,
+                                    "faults": plain(_faults_dict, "faults") if _faults_dict is not None else None,
+                                    "extra": plain(
+                                        {
+                                            "experiment_default_model": getattr(exp, "model", None),
+                                            "experiment_model_slots": getattr(exp, "model_slots", None),
+                                            "workspace_root": str(experiment_yaml.parent),
+                                            "controls": list(loaded.controls or ()),
+                                        },
+                                        "extra",
+                                    ),
+                                }
+                            )
+                        finally:
+                            if _sid_token is not None:
+                                reset_stream_id(_sid_token)
+
                     class _ScenarioStream(EventStream):
                         def publish(self, event: dict) -> None:
                             if scenario_id and isinstance(event, dict) and not event.get("scenario"):
@@ -615,22 +712,6 @@ async def execute_batch(
                     if set_stream_id is not None and _sid_token is None:
                         _sid_token = set_stream_id(_v2_key.stream_id())
 
-                    _runner_id = infer_runner_id(
-                        execution_runner=(
-                            getattr(_schedule, "runner", None)
-                            if _schedule
-                            else (
-                                exp.execution.runner
-                                if exp.execution and getattr(exp.execution, "runner", None)
-                                else None
-                            )
-                        ),
-                        mas_manifest=(Path(_mas_manifest_path) if _mas_manifest_path is not None else None),
-                        agent_config=config,
-                        flavour=_sc_flavour if isinstance(_sc_flavour, dict) else None,
-                    )
-                    _overlay_refs = list(prepared.scenario_overlay_stacks.get(scenario_id, []))
-                    _infra_refs = _infra_refs_for_scenario(scenario_id, prepared)
                     ctx = RunContext(
                         prompt=prompt,
                         config=config,
@@ -646,6 +727,7 @@ async def execute_batch(
                         infra_refs=_infra_refs,
                         session_id=_run_input.session_id,
                         emulation_plugins=_emulation_plugins,
+                        batch_cache=_batch_cache,
                         extra={
                             "experiment_default_model": getattr(exp, "model", None),
                             "experiment_model_slots": getattr(exp, "model_slots", None),
@@ -821,23 +903,45 @@ async def execute_batch(
         tasks = []
         for sid, itm, ridx in _execution_plan:
             tasks.append(asyncio.create_task(_run_one(sid, itm, ridx)))
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks)
 
-    await _dispatch_all()
+    try:
+        if _worker_processes > 1:
+            from mas.lab.benchmark.schedule.run_batch.workers import RunWorkerPool
 
-    live_ok = False
-    if _live_post is not None:
-        try:
-            await _live_post.wait()
-            live_ok = bool(_live_post.done and _live_post.error is None)
-        except Exception:
-            logger.error("live run-post failed", exc_info=True)
+            _run_pool = RunWorkerPool(
+                _worker_processes,
+                max_runs=int(_worker_max_runs or 0),
+                on_event=_live_sink.emit,
+                timeout_s=float(_schedule.timeout or 300),
+            )
+        await _dispatch_all()
 
-    return ExecutionResult(
-        results_rows=results_rows,
-        total_ok=total_ok,
-        total_fail=total_fail,
-        exit_stack=_exit_stack,
-        run_keys=_v2_keys or _v2_plan_keys,
-        pipeline_drained=live_ok,
-    )
+        _plan_order = {(sid, itm.get("id", 0), ridx + 1): idx for idx, (sid, itm, ridx) in enumerate(_execution_plan)}
+        results_rows.sort(
+            key=lambda row: _plan_order.get((row.get("scenario"), row.get("item_id"), row.get("run")), 10**9)
+        )
+
+        live_ok = False
+        if _live_post is not None:
+            try:
+                await _live_post.wait()
+                live_ok = bool(_live_post.done and _live_post.error is None)
+            except Exception:
+                logger.error("live run-post failed", exc_info=True)
+
+        return ExecutionResult(
+            results_rows=results_rows,
+            total_ok=total_ok,
+            total_fail=total_fail,
+            exit_stack=_exit_stack,
+            run_keys=_v2_keys or _v2_plan_keys,
+            pipeline_drained=live_ok,
+        )
+    finally:
+        if _run_pool is not None:
+            _run_pool.close()
+        channel = get_channel()
+        if channel is not None:
+            channel.close()
+        _release_batch_cache()

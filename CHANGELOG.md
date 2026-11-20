@@ -61,6 +61,11 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- Keep one append handle per `events.jsonl` and stream log; emit or publish after close raises. See `docs/references/lab-throughput.md`.
+- Serialize a stream event once; `follow_worker` fetches only new log bytes; `reset_channel` restores the previous log. See `docs/references/lab-throughput.md`.
+- Cache parsed YAML by path and content hash for a lab batch, and memoize installed library roots. See `docs/references/lab-throughput.md`.
+- Run each MAS in a spawn child (`schedule.worker_processes`); a step must declare `worker_safe`; a dead worker or a duplicate `job_id` is one error row. See `docs/references/lab-throughput.md`.
+- Put A2A gRPC in extra `a2a-grpc` of `mas-lab-library-ioa`; `a2a.grpc_port` is served only by `mas-ctl serve`; importing the runtime, the lab, and the default A2A plugin does not import `grpc`.
 - The runtime is async end to end: the driver, engines, call layers, LLM providers, context assembly, tool dispatch, send, delegation, spawn, the inbound serve chain and the session turn are awaited on one event loop. Write new plugins as `async def` (`achat_completion`, `asend`, `ainvoke`, `acall`, `on_execute_tool`); see [Writing plugins](docs/references/async-plugins.md).
 - Sync plugins keep working. A plugin that only has the sync method (`chat_completion`, `send`, `invoke`, `call`, a `def` tool or hook) runs on worker threads, and the runtime logs one warning per class naming the async method to write. `engine.sync_threads` in the RuntimeEngine manifest sets how many threads they share (default 1).
 - A non-async caller uses `SessionController.run_turn`, `feed` or `submit_hitl`; each runs the async implementation on its own loop and raises inside a running loop. The helper loop thread of the sync tool path is gone.

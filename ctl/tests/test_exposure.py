@@ -221,6 +221,37 @@ def test_expose_agent_blocking_is_the_serve_path() -> None:
     exposure.serve_background.assert_not_called()
 
 
+def test_expose_agent_maps_a2a_plus_grpc_to_the_a2a_plugin() -> None:
+    instance = SimpleNamespace(driver=SimpleNamespace())
+    exposure = MagicMock()
+    bindings: list[dict[str, str]] = []
+
+    def _create(spec_key: str, binding=None, **kwargs):
+        del spec_key, kwargs
+        bindings.append(dict(binding or {}))
+        return exposure
+
+    with patch("mas.runtime.registry.get_registry", return_value=SimpleNamespace(create=_create)):
+        with patch("library_ioa.plugins.a2a.grpc_extra.require_a2a_grpc"):
+            assert (
+                expose_agent(
+                    instance,
+                    {"metadata": {"name": "qa-agent"}},
+                    {
+                        "protocol": "a2a+grpc",
+                        "usage": "listen",
+                        "url": "http://127.0.0.1:9005",
+                        "a2a": {"grpc_port": 9006},
+                    },
+                    blocking=True,
+                )
+                is None
+            )
+
+    assert bindings == [{"type": "a2a"}]
+    exposure.serve_blocking.assert_called_once()
+
+
 def test_start_hosted_exposures_closes_on_listen_failure() -> None:
     handle = MagicMock()
     handle.host = "127.0.0.1"

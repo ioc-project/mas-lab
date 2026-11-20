@@ -86,6 +86,7 @@ class ComposeRequest:
     middleware_refs: list[str] = field(default_factory=list)
     kernel_backend: str | None = None  # CLI override of deployment.spec.runtime_id
     validate: bool = True
+    cache: Any = None
 
 
 @dataclass
@@ -142,10 +143,11 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
     if req.validate and validation_enabled():
         validate_file(req.manifest, kind="mas").raise_if_failed()
 
-    mas = load_yaml_mapping(req.manifest)
+    load_mapping = req.cache.load_mapping if req.cache is not None else load_yaml_mapping
+    mas = load_mapping(req.manifest)
     agent_patches: dict[str, dict] = {}
     for ov_path in req.overlay_paths:
-        overlay = load_yaml_mapping(ov_path)
+        overlay = load_mapping(ov_path)
         if is_control_document(overlay):
             if req.validate and validation_enabled():
                 validate_file(ov_path, kind="control").raise_if_failed()
@@ -194,11 +196,17 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
         rows += [(f"tool_servers[{k}]", v) for k, v in resolved.tool_server_registry.items()]
         for _path, msg in collect_endpoint_usage_deprecation(rows=rows):
             print(f"warning: {msg}", file=sys.stderr)
+        try:
+            from library_ioa.plugins.a2a.grpc_extra import require_a2a_grpc_rows
+        except ImportError:
+            require_a2a_grpc_rows = None
+        if require_a2a_grpc_rows is not None:
+            require_a2a_grpc_rows(rows)
 
     if req.deployment_path:
         if req.validate and validation_enabled():
             validate_file(req.deployment_path, kind="deployment").raise_if_failed()
-        deployment = load_yaml_mapping(req.deployment_path)
+        deployment = load_mapping(req.deployment_path)
     else:
         deployment = load_deployment(
             manifest_dir=req.manifest.parent,

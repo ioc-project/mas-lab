@@ -80,6 +80,7 @@ Experiments, datasets, pipelines, and analysis (`mas-lab`).
 | Topic | Reference |
 |-------|-----------|
 | Experiment manifest | [experiment.md](../manifests/experiment.md) |
+| Lab run throughput | [lab-throughput.md](lab-throughput.md) |
 | Dataset | [dataset.md](../manifests/dataset.md) |
 | Pipeline steps | [pipeline.md](../manifests/pipeline.md) |
 | Interactive lab demo | [lab.md](../manifests/lab.md) |

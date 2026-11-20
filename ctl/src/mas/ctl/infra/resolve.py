@@ -455,7 +455,10 @@ def _load_file(
 ) -> InfraManifest:
     path = path.resolve()
     seen = (_seen or frozenset()) | {path}
-    data = load_yaml_file(path)
+    from mas.runtime.spec.batch_cache import current_batch_cache
+
+    cache = current_batch_cache()
+    data = cache.load_yaml(path) if cache is not None else load_yaml_file(path)
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected mapping")
     data = resolve_manifest_values(data)
