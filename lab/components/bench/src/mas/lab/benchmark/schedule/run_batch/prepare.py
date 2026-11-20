@@ -109,7 +109,9 @@ def setup_output_dir(
     _mas_meta = register_mas_run(output_dir, loaded.experiment_yaml, exp)
     _mas_run_manager = BenchmarkRunManager()
     _mas_run_manager.record_last_run(
-        _mas_meta, output_dir, experiment_yaml=loaded.experiment_yaml,
+        _mas_meta,
+        output_dir,
+        experiment_yaml=loaded.experiment_yaml,
     )
     logger.info("Benchmark ID: %s  (%s)", _mas_meta.short_id, output_dir)
 
@@ -156,7 +158,8 @@ def preload_scenario_configs(
                 overlays.append(item)
             if overlays and exp.mas and exp.mas.manifest:
                 _cfg, _bp = load_stacked_config(
-                    exp.mas.manifest, overlays,
+                    exp.mas.manifest,
+                    overlays,
                     overlays_dir=configs_dir,
                     base_dir=experiment_yaml.parent,
                     infra_refs=infra_refs,
@@ -285,15 +288,11 @@ def build_scenario_overlay_refs(
                 configs_dir=configs_dir,
                 experiment_yaml=experiment_yaml,
             )
-            _scenario_overlay_refs[_sid] = workspace_relative_path(
-                _resolved, start=ws or experiment_yaml.parent
-            )
+            _scenario_overlay_refs[_sid] = workspace_relative_path(_resolved, start=ws or experiment_yaml.parent)
         elif configs_dir:
             _ov_path = configs_dir / f"{_sid}.yaml"
             _scenario_overlay_refs[_sid] = (
-                workspace_relative_path(_ov_path, start=ws or experiment_yaml.parent)
-                if _ov_path.exists()
-                else ""
+                workspace_relative_path(_ov_path, start=ws or experiment_yaml.parent) if _ov_path.exists() else ""
             )
     return _scenario_overlay_refs
 
@@ -320,9 +319,7 @@ async def prepare_batch(
             trace_cache_dir=loaded.trace_cache_dir,
         )
     infra_refs = _resolve_run_infra_refs(loaded)
-    scenario_configs, scenario_overlay_stacks, loaded_ids = preload_scenario_configs(
-        loaded, infra_refs=infra_refs
-    )
+    scenario_configs, scenario_overlay_stacks, loaded_ids = preload_scenario_configs(loaded, infra_refs=infra_refs)
     scenario_flavours = resolve_scenario_flavours(loaded, loaded_ids, loaded.flavour_name)
     mas_app, mas_app_version, mas_ref = extract_mas_provenance(loaded)
     scenario_overlay_refs = build_scenario_overlay_refs(loaded, loaded_ids)
@@ -346,6 +343,10 @@ async def prepare_batch(
     )
     if _pre_dataset is not None:
         dataset_items = _pre_dataset
+        # Items a ``pre`` step produced were not seen by the load-time check.
+        from mas.lab.benchmark.execution.plan import check_item_scenarios
+
+        check_item_scenarios(loaded.declared_scenario_ids or loaded_ids, dataset_items)
 
     return PreparedBatch(
         output_dir=output_dir,

@@ -54,6 +54,20 @@ plugins:
     urn: mas.agent_comm.a2a
     module: library_ioa.plugins.a2a.agent_comm
     class: A2AAgentComm
+    warm:
+      - a2a.client
+      - a2a.server.agent_execution
+      - a2a.server.events
+      - a2a.server.request_handlers
+      - a2a.server.routes
+      - a2a.server.tasks
+      - a2a.utils.grpc_status
+      - a2a.types.a2a_pb2_grpc
+      - a2a.server.request_handlers.grpc_handler
+      - grpc
+      - grpc.aio
+      - google.rpc.status_pb2
+      - fastapi
     attributes:
       protocol_name: a2a
       url_schemes: {a2a: http, a2as: https}

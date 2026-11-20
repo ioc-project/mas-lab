@@ -53,6 +53,7 @@ def _variant_info_from_data(vdata: dict[str, Any], *, source: Path | None = None
         description=str(vdata.get("description") or ""),
         requires=[str(r) for r in (vdata.get("requires") or [])],
         extra=extra,
+        warm=[str(m) for m in (vdata.get("warm") or [])],
     )
 
 
@@ -164,6 +165,7 @@ def _candidate_from_manifest_item(
                 class_name=factory_attr,
                 description=str(item.get("description") or ""),
                 requires=[str(r) for r in (item.get("requires") or [])],
+                warm=[str(m) for m in (item.get("warm") or [])],
                 extra=expand_extra(
                     str(item.get("extra") or ""),
                     module=factory_module or None,

@@ -143,6 +143,14 @@ properties:
           type: array
           items:
             type: string
+        warm:
+          type: array
+          items:
+            type: string
+          description: >
+            Modules the plugin imports lazily on first use. A lab batch imports
+            them (those that are installed) before the first run, with the plugin
+            modules, so two run threads never first-import them together.
         requires:
           type: array
           items:

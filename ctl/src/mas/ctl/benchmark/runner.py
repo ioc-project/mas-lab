@@ -13,7 +13,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from mas.ctl.adapters.memory_seed import MemorySeed, MemorySeedLoader, apply_memory_seeds
-from mas.ctl.benchmark.runner_dispatch import mas_manifest_path
+from mas.ctl.benchmark.runner_dispatch import is_oasf_document, manifest_kind, mas_manifest_path
+from mas.ctl.cli.obs_flags import resolve_observability_config
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.compose.runner import ComposeRequest, compose_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
@@ -35,6 +36,7 @@ from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.session.bootstrap import InstantiationOptions, hitl_contract_for_mode, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
 from mas.ctl.session.flavour_control import ControlError, control_search_dirs, session_flavour_with_controls
+from mas.ctl.session.observability import obs_config_to_binding
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.lab.manifest.load import (
     agent_manifest_from_path,
@@ -113,7 +115,7 @@ def _manifest_kind_on_disk(spec_path: Path) -> str:
         doc = load_yaml_mapping(spec_path)
     except (FileNotFoundError, OSError):
         return ""
-    return str((doc or {}).get("kind", "")).lower()
+    return manifest_kind(doc or {})
 
 
 def bench_obs_config(
@@ -125,7 +127,6 @@ def bench_obs_config(
     flavour: Any = None,
 ) -> tuple[Path, Any]:
     """Return ``(events_path, obs_cfg)`` for one bench run output dir."""
-    from mas.ctl.cli.obs_flags import resolve_observability_config
     from mas.ctl.session.manifest_config import mas_id_from_manifest
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -398,7 +399,7 @@ class MasBenchRunner:
 
         resolved_mas_path = mas_path or mas_manifest_path(config, spec_path)
         if resolved_mas_path is None:
-            has_oasf_doc = isinstance(config.get("metadata"), dict) and isinstance(config.get("spec"), dict)
+            has_oasf_doc = is_oasf_document(config)
             if _manifest_kind_on_disk(spec_path) == "agent" and (is_loaded_mas_raw(config) or not has_oasf_doc):
                 entry_manifest, entry_manifest_path = agent_manifest_from_path(
                     spec_path,
@@ -406,7 +407,7 @@ class MasBenchRunner:
                     overlays_dir=overlays_dir,
                     overlay_base_dir=overlay_base_dir,
                 )
-            elif str(config.get("kind", "")).lower() == "agent" and not has_oasf_doc:
+            elif manifest_kind(config) == "agent" and not has_oasf_doc:
                 entry_manifest, entry_manifest_path = agent_manifest_from_path(
                     spec_path,
                     overlay_refs=overlay_refs,
@@ -420,7 +421,7 @@ class MasBenchRunner:
                     flavour=flavour,
                     entry_manifest=entry_manifest,
                     entry_manifest_path=entry_manifest_path,
-                    events_file=str(output_dir / "traces" / "events.jsonl"),
+                    output_dir=output_dir,
                     infra_refs=infra_refs,
                     checkpoint_path=checkpoint_path,
                     checkpoint_dir=checkpoint_dir,
@@ -504,6 +505,8 @@ class MasBenchRunner:
                     events_file=str(output_dir / "traces" / "events.jsonl"),
                     flavour_spec=flavour_spec_of(flavour),
                     obs_config=obs_cfg,
+                    obs_from_cli=True,
+                    obs_binding_override=obs_config_to_binding(obs_cfg),
                 ),
             )
             _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -604,7 +607,7 @@ class MasBenchRunner:
         workspace_root: Path | None = None,
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
-        events_file: str | None = None,
+        output_dir: Path,
         controls: Sequence[str] = (),
     ) -> _ControllerTarget:
         workspace = WorkspaceConfig.load(workspace_root or entry_manifest_path.parent)
@@ -624,6 +627,9 @@ class MasBenchRunner:
         )
         resolved = bind_session(resolved, flavour, agent_ids=[entry_id])
         pattern_plugin_id = resolve_entry_pattern_plugin_id(None, entry_id, entry_manifest=entry_manifest)
+        # The run's own events file, whatever ``observability`` the agent or a Control names: without it a
+        # ``native`` entry the manifest carries builds its sink at its own default path and the run has no events.
+        events_path, obs_cfg = bench_obs_config(output_dir, entry_manifest, entry_manifest_path, flavour=flavour)
         instance, store = instantiate_runtime(
             InstantiationOptions(
                 agent_manifest=entry_manifest,
@@ -637,8 +643,11 @@ class MasBenchRunner:
                 experiment_default_model=experiment_default_model,
                 experiment_model_slots=experiment_model_slots,
                 hitl_contract=hitl_contract_for_mode("auto"),
-                events_file=events_file,
+                events_file=str(events_path),
                 flavour_spec=flavour_spec_of(flavour),
+                obs_config=obs_cfg,
+                obs_from_cli=True,
+                obs_binding_override=obs_config_to_binding(obs_cfg),
             ),
         )
         _attach_tool_fixtures([instance], tool_fixtures, run_params)

@@ -125,6 +125,15 @@ def require_worker_safe(specs: list[Any], *, base_dir: Path) -> None:
             )
 
 
+def iter_overlay_refs(refs: Any) -> list[Any]:
+    """One overlay entry per item. A lone string is one path, not a sequence of characters."""
+    if refs is None or (isinstance(refs, str) and not refs.strip()):
+        return []
+    if isinstance(refs, (str, Path, dict)):
+        return [refs]
+    return list(refs)
+
+
 def _run_job(job: dict[str, Any], events: Any, batch_cache: Any | None = None) -> dict[str, Any]:
     pause_s = float(job.get("pause_s") or 0)
     if pause_s > 0:
@@ -187,7 +196,7 @@ def _run_job(job: dict[str, Any], events: Any, batch_cache: Any | None = None) -
             run_input=run_input,
             flavour=job.get("flavour"),
             run_seed=int(job.get("run_seed") or 0),
-            overlay_refs=list(job.get("overlay_refs") or []),
+            overlay_refs=iter_overlay_refs(job.get("overlay_refs")),
             overlays_dir=Path(job["overlays_dir"]) if job.get("overlays_dir") else None,
             overlay_base_dir=Path(job["overlay_base_dir"]) if job.get("overlay_base_dir") else None,
             infra_refs=list(job.get("infra_refs") or []),

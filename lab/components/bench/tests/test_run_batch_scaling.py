@@ -222,7 +222,7 @@ def test_wall_clock_items_are_marked(scaling_lab: Path) -> None:
     assert {item["id"] for item in marked} == {23, 24}
 
 
-def test_fake_model_parses_work_rounds_and_wait() -> None:
+def test_fake_model_parses_work_rounds_and_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib.util
 
     path = Path(__file__).resolve().parent / "fixtures" / "scaling_lab" / "servers" / "fake_model.py"
@@ -231,7 +231,9 @@ def test_fake_model_parses_work_rounds_and_wait() -> None:
     fake_model = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fake_model)
     sleeps: list[float] = []
-    fake_model.time.sleep = sleeps.append
+    # fake_model.time is the shared time module: restore time.sleep when the test ends, or every thread that
+    # sleeps afterwards (a library reporter thread, for one) spins instead.
+    monkeypatch.setattr(fake_model.time, "sleep", sleeps.append)
     waited = fake_model.script({"messages": [{"role": "user", "content": "wait"}]})
     assert waited["content"] == "waited"
     assert sleeps == [0.05]

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 from library_ioa import package_root
-from library_ioa.plugins.mcp import MCPClientFactory, MCPProviderSpec, MCPToolProvider
+from library_ioa.plugins.mcp.provider import MCPClientFactory, MCPToolProvider
+from library_ioa.plugins.mcp.spec import MCPProviderSpec
 from mas.runtime.registry import get_registry
 
 

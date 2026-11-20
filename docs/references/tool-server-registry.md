@@ -100,8 +100,8 @@ These fields apply when `transport` is `stdio`, or when `command` is set and `ur
 | Field | Default | Notes |
 |-------|---------|--------|
 | `follow_pagination` | `true` | Walk MCP `tools/list` `nextCursor` pages and flatten them. `false` reads the first page only. |
-| `cache_ttl_ms` | omit | Client `tools/list` cache TTL in milliseconds. Omit to cache until `invalidate`. `0` disables the cache. |
-| `cache_scope` | omit | `public` (one list for all users) or `private` (list cache keyed by user). |
+| `cache_ttl_ms` | omit | Client `tools/list` cache TTL in milliseconds. Omit to use the `ttlMs` the server sends, else 60 s. `notifications/tools/list_changed`, `invalidate` or a tool call that fails with a protocol error drops the list sooner. `0` disables the cache. |
+| `cache_scope` | omit | `public` (one list for all users) or `private` (list cache keyed by user). Use `private` when the tools a server lists differ by caller. |
 | `tools` | `"*"` | Discover all names, or declare an explicit list in infra. |
 
 These are **not** ToolContract fields. A tool's advertise document does not know how the client paginates or caches `tools/list`.

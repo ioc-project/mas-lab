@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -14,7 +15,8 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
-from mcp.types import PaginatedRequestParams
+from mcp.types import PaginatedRequestParams, ToolListChangedNotification
+from pydantic import BaseModel
 
 try:  # mcp 2.x
     from mcp.shared.exceptions import MCPError as McpError
@@ -26,15 +28,40 @@ logger = logging.getLogger(__name__)
 _HTTP_TRANSPORTS = {"streamable-http", "http"}
 _SSE_TRANSPORTS = {"sse"}
 
+# A listing the server gave no ``ttlMs`` for is kept this long: a safety net for servers that never send
+# ``notifications/tools/list_changed`` and for sessions that are not held open to receive it.
+DEFAULT_LIST_TTL_MS = 60_000
+
 
 _CONNECTION_CLOSED = -32000  # mcp.types.CONNECTION_CLOSED
 
 
-def _connection_closed(exc: BaseException) -> bool:
+def _error_code(exc: BaseException) -> Any:
     code = getattr(exc, "code", None)
     if code is None:
         code = getattr(getattr(exc, "error", None), "code", None)
-    return code == _CONNECTION_CLOSED
+    return code
+
+
+def _connection_closed(exc: BaseException) -> bool:
+    return _error_code(exc) == _CONNECTION_CLOSED
+
+
+_METHOD_NOT_FOUND = -32601
+_INVALID_PARAMS = -32602
+
+
+def _names_missing_tool(exc: BaseException) -> bool:
+    """True when the server says the tool is not (or no longer) there.
+
+    "Invalid params" is also how servers answer a model's bad arguments, which says nothing about the
+    list, so it counts only when the message names an unknown tool.
+    """
+    code = _error_code(exc)
+    if code == _METHOD_NOT_FOUND:
+        return True
+    text = str(exc).lower()
+    return code == _INVALID_PARAMS and ("unknown tool" in text or "tool not found" in text or "no such tool" in text)
 
 
 def _streams_from_transport(transport: Any) -> tuple[Any, Any]:
@@ -42,6 +69,18 @@ def _streams_from_transport(transport: Any) -> tuple[Any, Any]:
     if isinstance(transport, (tuple, list)) and len(transport) >= 2:
         return transport[0], transport[1]
     raise TypeError(f"unexpected MCP transport yield: {type(transport)!r}")
+
+
+def _announced_ttl_ms(result: Any) -> int | None:
+    """The ``ttlMs`` the server sent, or ``None`` when it sent none.
+
+    The SDK's result model fills an absent ``ttlMs`` with ``0``, which reads as
+    "do not cache". Only a value the server set counts; without one the client
+    keeps the listing for ``DEFAULT_LIST_TTL_MS``.
+    """
+    if isinstance(result, BaseModel):
+        return result.ttl_ms if "ttl_ms" in result.model_fields_set else None
+    return result.ttl_ms
 
 
 def _current_task() -> asyncio.Task | None:
@@ -62,8 +101,11 @@ class MCPClient:
     so the provider reuses initialize.
 
     ``cache_ttl_ms`` / ``cache_scope`` control the client's ``tools/list``
-    cache. Omit TTL to keep the list until ``invalidate_list_cache``. ``0``
-    disables the cache. ``private`` keys the cache by user.
+    cache. Omit TTL to use the ``ttlMs`` the server sends, or
+    ``DEFAULT_LIST_TTL_MS`` when it sends none; a ``notifications/tools/list_changed``,
+    ``invalidate_list_cache`` or a tool call that fails with a protocol error drops
+    the list earlier. ``0`` disables the cache. ``private`` keys the cache by user;
+    use it when the tools a server lists differ by caller.
     """
 
     def __init__(
@@ -93,7 +135,7 @@ class MCPClient:
         self.follow_pagination = follow_pagination
         self.cache_ttl_ms = cache_ttl_ms
         self.cache_scope = cache_scope if cache_scope in {"public", "private"} else None
-        self._list_cache: dict[str, tuple[float, list[dict[str, Any]], int | None]] = {}
+        self._list_cache: dict[str, tuple[float, list[dict[str, Any]], int]] = {}
         self._discovery_emitted: set[str] = set()
         self._sticky = False
         self._owner: asyncio.Task | None = None
@@ -101,6 +143,7 @@ class MCPClient:
         self._lock: asyncio.Lock | None = None
         self._lock_loop: asyncio.AbstractEventLoop | None = None
         self._session: ClientSession | None = None
+        self._list_generation = 0
         self._loop_id: int | None = None
         if transport:
             self.transport = transport
@@ -110,8 +153,18 @@ class MCPClient:
             self.transport = "stdio"
 
     def invalidate_list_cache(self) -> None:
+        # A listing already on the wire must not be stored after this: it may predate the change.
+        self._list_generation += 1
         self._list_cache.clear()
         self._discovery_emitted.clear()
+
+    async def _on_session_message(self, message: Any) -> None:
+        """A server that announces a changed tool list makes the next listing go to the wire."""
+        if isinstance(message, ToolListChangedNotification):
+            self.invalidate_list_cache()
+
+    def _client_session(self, read_stream: Any, write_stream: Any) -> ClientSession:
+        return ClientSession(read_stream, write_stream, message_handler=self._on_session_message)
 
     def _cache_key(self, user: str) -> str:
         if self.cache_scope == "private":
@@ -125,18 +178,28 @@ class MCPClient:
         if packed is None:
             return None
         stored_at, payload, ttl_ms = packed
-        if ttl_ms is None:
-            return payload
         age_ms = (time.monotonic() - stored_at) * 1000
         if age_ms >= ttl_ms:
             return None
         return payload
 
-    def _store_list(self, user: str, payload: list[dict[str, Any]], *, server_ttl: int | None = None) -> None:
+    def _store_list(
+        self, user: str, payload: list[dict[str, Any]], *, server_ttl: int | None = None, generation: int | None = None
+    ) -> None:
         if self.cache_ttl_ms == 0:
             return
-        ttl = self.cache_ttl_ms if self.cache_ttl_ms is not None else server_ttl
-        self._list_cache[self._cache_key(user)] = (time.monotonic(), payload, ttl)
+        if generation is not None and generation != self._list_generation:
+            return
+        if self.cache_ttl_ms is not None:
+            ttl = self.cache_ttl_ms
+        elif server_ttl is not None:
+            ttl = server_ttl
+        else:
+            ttl = DEFAULT_LIST_TTL_MS
+        now = time.monotonic()
+        for key in [k for k, (at, _p, ttl_ms) in self._list_cache.items() if (now - at) * 1000 >= ttl_ms]:
+            del self._list_cache[key]  # expired entries of other users do not accumulate
+        self._list_cache[self._cache_key(user)] = (now, payload, ttl)
 
     async def _enter_session(self, stack: AsyncExitStack) -> ClientSession:
         if self.transport in _SSE_TRANSPORTS:
@@ -147,7 +210,7 @@ class MCPClient:
                 sse_kw["headers"] = self.headers
             transport = await stack.enter_async_context(sse_client(self.url, **sse_kw))
             read_stream, write_stream = _streams_from_transport(transport)
-            session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+            session = await stack.enter_async_context(self._client_session(read_stream, write_stream))
             await session.initialize()
             return session
 
@@ -165,7 +228,7 @@ class MCPClient:
             else:
                 transport = await stack.enter_async_context(streamable_http_client(self.url))
             read_stream, write_stream = _streams_from_transport(transport)
-            session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+            session = await stack.enter_async_context(self._client_session(read_stream, write_stream))
             await session.initialize()
             return session
 
@@ -175,7 +238,7 @@ class MCPClient:
         params = StdioServerParameters(command=self.command, args=self.args, env=self.env or None, cwd=self.cwd)
         transport = await stack.enter_async_context(stdio_client(params))
         read_stream, write_stream = _streams_from_transport(transport)
-        session = await stack.enter_async_context(ClientSession(read_stream, write_stream))
+        session = await stack.enter_async_context(self._client_session(read_stream, write_stream))
         await session.initialize()
         return session
 
@@ -211,6 +274,8 @@ class MCPClient:
                 self._stop = None
 
     async def _close_held(self) -> None:
+        if self._session is not None or self._owner is not None:
+            self.invalidate_list_cache()
         owner, stop = self._owner, self._stop
         self._session = None
         self._owner = None
@@ -293,8 +358,10 @@ class MCPClient:
         cached = self._cached_list(user)
         if cached is not None:
             self._emit_listed(cached, user, agent_id=agent_id)
-            return cached
+            return copy.deepcopy(cached)
         async with self._use_session() as session:
+            # Taken once the session is in hand: opening it may itself invalidate (a reconnect).
+            generation = self._list_generation
             collected: list[dict[str, Any]] = []
             cursor: str | None = None
             seen: set[str] = set()
@@ -303,7 +370,7 @@ class MCPClient:
                 params = PaginatedRequestParams(cursor=cursor) if cursor else None
                 result = await session.list_tools(params=params)
                 collected.extend(tool.model_dump(mode="json", by_alias=True) for tool in result.tools)
-                page_ttl = getattr(result, "ttl_ms", None)
+                page_ttl = _announced_ttl_ms(result)
                 if page_ttl is not None:
                     page_ttl_i = int(page_ttl)
                     server_ttl = page_ttl_i if server_ttl is None else min(server_ttl, page_ttl_i)
@@ -313,9 +380,10 @@ class MCPClient:
                 if not cursor or cursor in seen:
                     break
                 seen.add(cursor)
-            self._store_list(user, collected, server_ttl=server_ttl)
-            self._emit_listed(collected, user, agent_id=agent_id)
-            return collected
+            self._store_list(user, collected, server_ttl=server_ttl, generation=generation)
+            if generation == self._list_generation:  # a listing that predates a change is not announced
+                self._emit_listed(collected, user, agent_id=agent_id)
+            return copy.deepcopy(collected)
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any], **options: Any) -> dict[str, Any]:
         call_kwargs: dict[str, Any] = {}
@@ -348,6 +416,10 @@ class MCPClient:
             async with self._use_session() as session:
                 result = await session.call_tool(tool_name, arguments, **call_kwargs)
         except BaseException as exc:
+            if isinstance(exc, McpError) and _names_missing_tool(exc):
+                # The tool may be gone or renamed: list again before the next routing decision. Other
+                # refusals (auth, rate limit) say nothing about the list and must not add a listing per call.
+                self.invalidate_list_cache()
             if announce:
                 emit_call_error(side="client", tool=tool_name, key=key, error_type=type(exc).__name__)
             raise

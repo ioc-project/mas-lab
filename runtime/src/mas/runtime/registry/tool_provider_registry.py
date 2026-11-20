@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Mapping
 from typing import Any, Dict, List
 
 from mas.runtime.contracts.tool_contract import invoke_call_tool
@@ -127,7 +128,31 @@ def provider_name(provider: Any) -> str:
 
 
 def _tool_names(specs: list[dict[str, Any]] | None) -> tuple[str, ...]:
-    return tuple(str(s.get("name") or "") for s in (specs or []) if s.get("name"))
+    return tuple(str(s.get("name") or "") for s in (specs or []) if isinstance(s, Mapping) and s.get("name"))
+
+
+def _as_spec_list(value: Any, handler: Any = None) -> list[dict[str, Any]]:
+    """The listing a provider returned, as a list of specs. A generator is consumed once.
+
+    A provider that returns something else (a mapping, a string, entries that are not mappings) is
+    named in a warning, once per pass, and contributes only the well-formed specs.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes, Mapping)):
+        logger.warning("Provider %s listed tools as %s, not a list; ignoring it", handler, type(value).__name__)
+        return []
+    try:
+        entries = value if isinstance(value, list) else list(value)
+    except TypeError:
+        logger.warning("Provider %s listed tools as %s, not a list; ignoring it", handler, type(value).__name__)
+        return []
+    specs = [dict(spec) for spec in entries if isinstance(spec, Mapping)]
+    if len(specs) != len(entries):
+        logger.warning(
+            "Provider %s listed %d entries that are not tool specs; ignoring them", handler, len(entries) - len(specs)
+        )
+    return specs
 
 
 class ToolProviderRegistry:
@@ -273,17 +298,33 @@ class ToolProviderRegistry:
             )
         return external_claims + local_claims
 
-    def _spec_from_handler(self, handler: Any, tool_name: str, *, ctx: Any = None) -> dict[str, Any] | None:
-        try:
-            for spec in handler.list_tools(ctx=ctx) or []:
-                if str(spec.get("name") or "") == tool_name:
-                    return self._with_advertised_schema(handler, spec, ctx=ctx)
-        except Exception as exc:
-            logger.error("Error listing tools from provider %s: %s", handler, exc, exc_info=True)
+    def _spec_from_handler(
+        self, handler: Any, tool_name: str, *, ctx: Any = None, pass_cache: dict[tuple[int, str], Any] | None = None
+    ) -> dict[str, Any] | None:
+        """The spec of one routed name.
+
+        ``pass_cache`` holds what each provider answered in this pass, so a pass asks a
+        provider once however many names route to it (a refused listing is then refused
+        once, not once per name).
+        """
+        cache = pass_cache if pass_cache is not None else {}
+        key = (id(handler), "list")
+        if key not in cache:
+            try:
+                listed = handler.list_tools(ctx=ctx)
+            except Exception as exc:
+                logger.error("Error listing tools from provider %s: %s", handler, exc, exc_info=True)
+                listed = []
+            cache[key] = _as_spec_list(listed, handler)
+        for spec in cache[key]:
+            if str(spec.get("name") or "") == tool_name:
+                return self._with_advertised_schema(handler, spec, ctx=ctx, pass_cache=cache)
         return None
 
     @staticmethod
-    def _with_advertised_schema(handler: Any, spec: dict[str, Any], *, ctx: Any = None) -> dict[str, Any]:
+    def _with_advertised_schema(
+        handler: Any, spec: dict[str, Any], *, ctx: Any = None, pass_cache: dict[tuple[int, str], Any] | None = None
+    ) -> dict[str, Any]:
         """Give the model real parameters for an explicitly claimed tool.
 
         An explicit claim routes by name without asking the server, so its
@@ -297,12 +338,18 @@ class ToolProviderRegistry:
         discover = getattr(handler, "discover_tools", None)
         if not callable(discover):
             return spec
-        try:
-            for found in discover(ctx=ctx) or []:
-                if str(found.get("name") or "") == str(spec.get("name") or ""):
-                    return found
-        except Exception:  # noqa: BLE001 - the bare entry still routes
-            logger.debug("schema lookup failed for tool %r", spec.get("name"), exc_info=True)
+        cache = pass_cache if pass_cache is not None else {}
+        key = (id(handler), "discover")
+        if key not in cache:
+            try:
+                found_list = discover(ctx=ctx)
+            except Exception:  # noqa: BLE001 - the bare entry still routes
+                logger.debug("schema lookup failed for tool %r", spec.get("name"), exc_info=True)
+                found_list = []
+            cache[key] = _as_spec_list(found_list, handler)
+        for found in cache[key]:
+            if str(found.get("name") or "") == str(spec.get("name") or ""):
+                return found
         return spec
 
     def list_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
@@ -310,12 +357,13 @@ class ToolProviderRegistry:
         self.initialize(ctx=ctx)
         out: List[Dict[str, Any]] = []
         seen: set[str] = set()
+        pass_cache: dict[tuple[int, str], Any] = {}
         for name, route in (self._routes or {}).items():
             if not name or name in seen:
                 continue
             if route.handler is None:
                 continue
-            routed = self._spec_from_handler(route.handler, name, ctx=ctx)
+            routed = self._spec_from_handler(route.handler, name, ctx=ctx, pass_cache=pass_cache)
             if routed:
                 out.append(routed)
                 seen.add(name)
