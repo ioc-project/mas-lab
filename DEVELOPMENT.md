@@ -64,7 +64,7 @@ With go-task installed, use these tasks:
 | `task verify-ctl` | `ctl/tests` (CI job **Ctl**) |
 | `task verify-lab-unit` | Lab core/bench unit + import-linter (CI job **Lab**) |
 | `task verify-repo` | Manifest and CI-script tests (CI job **Repo**) |
-| `task verify-coverage` | `verify-unit` with `coverage.xml`, then the 90% changed-line gate |
+| `task verify-coverage` | `verify-unit` with `coverage.xml`, then the 90% changed-line gate (the package floors run in `verify-ctl` and `verify-lab-unit`) |
 | `task verify-library` | One library: `LIB=library-standard COV=mas.library.standard` |
 | `task verify-controller` | Controller unit tests |
 | `task verify-lab-smoke` | Lab smoke + envelope parity + cache invalidation |
@@ -78,7 +78,7 @@ With go-task installed, use these tasks:
 | `task docs-gen` | Regenerate `docs/packages-reference.md`, `docs/plugins-reference.md` and path snippets; commit the result when you touch packages, plugins or path defaults |
 | `task docs-serve` | Serve the documentation site locally |
 
-GitHub Actions runs those `verify-*` tasks as separate jobs, not `task ci`. Lint starts immediately. Jobs wait for lint and run in parallel. Path groups (`scripts/ci_paths.py`) skip jobs the diff does not need: a docs PR does not run unit tests; a runtime PR runs **Runtime** (not Ctl/Lab/Repo, and not A2A/MCP or other libraries); each `library-*` tree has its own lint, pytest, and changed-line coverage job. MCP conformance runs when `library-ioa` MCP plugin, tests, or compliance files change; A2A TCK runs for the A2A plugin tree. Both still run every week (`weekly.yml`) and on a published release. Python 3.11 runs on `main` (when any unit part runs); every supported Python version runs weekly and before a release (`python-matrix.yml`, see [Python version support](docs/python-support.md)). Pushes to `main` also enforce the package 90% coverage report per unit part.
+GitHub Actions runs those `verify-*` tasks as separate jobs, not `task ci`. Lint starts immediately. Jobs wait for lint and run in parallel. Path groups (`scripts/ci_paths.py`) skip jobs the diff does not need: a docs PR does not run unit tests; a runtime PR runs **Runtime** (not Ctl/Lab/Repo, and not A2A/MCP or other libraries); each `library-*` tree has its own lint, pytest, and changed-line coverage job. MCP conformance runs when `library-ioa` MCP plugin, tests, or compliance files change; A2A TCK runs for the A2A plugin tree. Both still run every week (`weekly.yml`) and on a published release. Python 3.11 runs on `main` (when any unit part runs); every supported Python version runs weekly and before a release (`python-matrix.yml`, see [Python version support](docs/python-support.md)). Pull requests and pushes to `main` run the same package coverage gate per unit part, with a floor per package (Runtime 90, Ctl 85, Lab 67; raise a floor when coverage rises, never lower it). Python 3.11 is the one gate that only `main` runs.
 
 The merge proof is the GitHub check named **ci-summary** (the repository ruleset on `main` requires that exact name). The PR merge box lists only that check. Lint, unit, library, and the rest are jobs inside the Test workflow on the Actions tab. `ci-summary` stays on "Waiting for status to be reported" until the workflow file is valid and that last job starts. A path flag of true means that job must succeed; skipped is a failure. A path flag of false allows skipped. `changes` and `lint` must succeed.
 

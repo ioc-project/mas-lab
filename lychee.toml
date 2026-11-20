@@ -3,10 +3,12 @@
 # Lychee link checker configuration (https://github.com/lycheeverse/lychee)
 # Run locally with: task docs-links
 
-max_concurrency = 10
+# github.com answers 503 to a burst of page requests (a different URL each run): fewer in parallel,
+# more and slower retries. A 503 that survives all of them is still a failure.
+max_concurrency = 4
 timeout = 20
-max_retries = 3
-retry_wait_time = 5
+max_retries = 5
+retry_wait_time = 10
 max_cache_age = "1d"
 method = "get"
 cache = true

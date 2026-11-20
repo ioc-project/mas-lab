@@ -36,8 +36,7 @@ class SeparationValidator(ABC):
 
     @classmethod
     @abstractmethod
-    def _collect_violations(cls, data: dict[str, Any]) -> list[str]:
-        ...
+    def _collect_violations(cls, data: dict[str, Any]) -> list[str]: ...
 
 
 class FlavourSeparationValidator(SeparationValidator):
@@ -79,17 +78,11 @@ class AgentSeparationValidator(SeparationValidator):
                 "$XDG_CONFIG_HOME/mas/runtime/, or --runtime-ref"
             )
         if spec.get("runtime_refs") or spec.get("runtime_ref"):
-            violations.append(
-                "spec.runtime_refs is forbidden on Agent — use workspace config or CLI"
-            )
+            violations.append("spec.runtime_refs is forbidden on Agent — use workspace config or CLI")
         if spec.get("infra_refs") or spec.get("infra_ref"):
-            violations.append(
-                "spec.infra_refs is forbidden on Agent — use workspace config.yaml or --infra-ref"
-            )
+            violations.append("spec.infra_refs is forbidden on Agent — use workspace config.yaml or --infra-ref")
         if spec.get("infra_interceptors") or spec.get("infra_interceptor"):
-            violations.append(
-                "spec.infra_interceptors is forbidden on Agent — use workspace config or CLI"
-            )
+            violations.append("spec.infra_interceptors is forbidden on Agent — use workspace config or CLI")
         return violations
 
 
@@ -102,17 +95,11 @@ class MASSeparationValidator(SeparationValidator):
         violations: list[str] = []
         spec = data.get("spec", {}) or {}
         if spec.get("runtime_refs") or spec.get("runtime_ref"):
-            violations.append(
-                "spec.runtime_refs is forbidden on MAS — use workspace config or CLI"
-            )
+            violations.append("spec.runtime_refs is forbidden on MAS — use workspace config or CLI")
         if spec.get("infra_refs") or spec.get("infra_ref"):
-            violations.append(
-                "spec.infra_refs is forbidden on MAS — use workspace config.yaml or --infra-ref"
-            )
+            violations.append("spec.infra_refs is forbidden on MAS — use workspace config.yaml or --infra-ref")
         if spec.get("infra_interceptors") or spec.get("infra_interceptor"):
-            violations.append(
-                "spec.infra_interceptors is forbidden on MAS — use workspace config or CLI"
-            )
+            violations.append("spec.infra_interceptors is forbidden on MAS — use workspace config or CLI")
         for path, val in _iter_paths(data):
             if path.startswith("spec.agency.agents["):
                 continue
@@ -134,17 +121,11 @@ class OverlaySeparationValidator(MASSeparationValidator):
         target_kind = str((spec.get("target") or {}).get("kind") or "").strip().lower()
         patch = spec.get("patch") if isinstance(spec.get("patch"), dict) else {}
         if spec.get("runtime_refs") or spec.get("runtime_ref"):
-            violations.append(
-                "spec.runtime_refs is forbidden on Overlay — use workspace config or CLI"
-            )
+            violations.append("spec.runtime_refs is forbidden on Overlay — use workspace config or CLI")
         if spec.get("infra_refs") or spec.get("infra_ref"):
-            violations.append(
-                "spec.infra_refs is forbidden on Overlay — use workspace config.yaml or --infra-ref"
-            )
+            violations.append("spec.infra_refs is forbidden on Overlay — use workspace config.yaml or --infra-ref")
         if spec.get("infra_interceptors") or spec.get("infra_interceptor"):
-            violations.append(
-                "spec.infra_interceptors is forbidden on Overlay — use workspace config or CLI"
-            )
+            violations.append("spec.infra_interceptors is forbidden on Overlay — use workspace config or CLI")
         for path, val in _iter_paths(data):
             if "agency.agents[" in path:
                 continue
@@ -159,21 +140,13 @@ class OverlaySeparationValidator(MASSeparationValidator):
                 violations.append(f"{path} is model-selection — move to agent spec.models")
         if isinstance(patch, dict):
             if patch.get("execution"):
-                violations.append(
-                    "spec.patch.execution is forbidden — use workspace runtime_refs or --runtime-ref"
-                )
+                violations.append("spec.patch.execution is forbidden — use workspace runtime_refs or --runtime-ref")
             if patch.get("runtime_refs") or patch.get("runtime_ref"):
-                violations.append(
-                    "spec.patch.runtime_refs is forbidden — use workspace config or CLI"
-                )
+                violations.append("spec.patch.runtime_refs is forbidden — use workspace config or CLI")
             if patch.get("infra_refs") or patch.get("infra_ref"):
-                violations.append(
-                    "spec.patch.infra_refs is forbidden — use workspace config or CLI"
-                )
+                violations.append("spec.patch.infra_refs is forbidden — use workspace config or CLI")
             if patch.get("infra_interceptors") or patch.get("infra_interceptor"):
-                violations.append(
-                    "spec.patch.infra_interceptors is forbidden — use workspace config or CLI"
-                )
+                violations.append("spec.patch.infra_interceptors is forbidden — use workspace config or CLI")
         return violations
 
 
@@ -191,8 +164,7 @@ class PlacementPlanSeparationValidator(SeparationValidator):
             if "runtime" in agent and isinstance(agent["runtime"], dict):
                 if "pattern_plugin_id" in agent["runtime"]:
                     violations.append(
-                        f"spec.agents[{aid!r}].runtime.pattern_plugin_id belongs in "
-                        "EffectiveBind, not PlacementPlan"
+                        f"spec.agents[{aid!r}].runtime.pattern_plugin_id belongs in EffectiveBind, not PlacementPlan"
                     )
             if "engine" in agent:
                 violations.append(

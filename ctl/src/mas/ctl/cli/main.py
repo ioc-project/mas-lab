@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
-import mas.third_party_otel  # noqa: F401
+import mas.third_party_otel  # noqa: F401  # isort: skip -- must import before anything that imports a2a
 
 from pathlib import Path
 
 import click
-
 from mas.ctl.cli.commands.bundles import list_bundles_cmd
 from mas.ctl.cli.commands.chat import chat_cmd
 from mas.ctl.cli.commands.checkpoint import checkpoint_group
