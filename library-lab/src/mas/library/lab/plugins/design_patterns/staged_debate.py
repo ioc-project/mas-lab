@@ -6,17 +6,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from mas.library.standard.plugins.design_patterns.base import _DeterministicBase, _TurnState
+from mas.library.standard.plugins.design_patterns.utils import dispatch_parallel, majority_vote
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.state import QProduct, RunLedger
 from mas.runtime.schema.egress import EgressSymbol
-
-from mas.library.standard.plugins.design_patterns.base import _DeterministicBase, _TurnState
-from mas.library.standard.plugins.design_patterns.utils import dispatch_parallel, majority_vote
 
 
 @dataclass
 class _DebateTurnState(_TurnState):
     """Extended turn state carrying round-1 peer outputs for round-2 revision."""
+
     debate_prev_round_outputs: list[str] = field(default_factory=list)
 
 
@@ -34,7 +34,7 @@ class DeterministicStagedDebatePlugin(_DeterministicBase):
 
     @staticmethod
     def _debate_prompt(original_task: str, prev_outputs: list[str]) -> str:
-        peer = "\n\n".join(f"Peer answer {i+1}:\n{o}" for i, o in enumerate(prev_outputs))
+        peer = "\n\n".join(f"Peer answer {i + 1}:\n{o}" for i, o in enumerate(prev_outputs))
         return (
             "[Staged debate — round 2] Revise your answer using the peer outputs below.\n\n"
             f"Original task:\n{original_task}\n\n"
@@ -45,8 +45,8 @@ class DeterministicStagedDebatePlugin(_DeterministicBase):
         st = self._debate_state()
         if not st.participants:
             return self._no_participants(q)
-        tool_results = self._extract_tool_results(run)
-        new_results = tool_results[st.processed_tool_results:]
+        tool_results = self._extract_tool_results(run, q)
+        new_results = tool_results[st.processed_tool_results :]
         if new_results:
             st.processed_tool_results = len(tool_results)
 

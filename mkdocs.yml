@@ -227,6 +227,7 @@ nav:
           - LLM cache: references/llm-cache.md
           - Contracts: references/contracts.md
           - Snapshots vs checkpoints: references/snapshots.md
+          - Kernel invariants: references/kernel-invariants.md
           - Kernel operations: references/kernel-primitives.md
           - Thin waist: references/thin-waist.md
           - System tools: references/system-tools.md

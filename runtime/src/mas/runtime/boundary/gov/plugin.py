@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Protocol
 
 from mas.runtime.boundary.gov.policy import EgressIntentView, resolve_egress_governance
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.coupling import GovDecision
+from mas.runtime.schema.egress import EmitHitlRequest
+from mas.runtime.schema.ingress import HitlResolve
 
 _DENY = {
     GovDecision.BLOCK,
@@ -29,6 +32,46 @@ class GovernancePlugin(Protocol):
     """Evaluate egress at chokepoint (policy/HITL rules live in plugins, not in M_tool/M_dp)."""
 
     def evaluate_egress(self, intent: EgressIntentView, *, config: KernelConfig) -> EgressDecision: ...
+
+
+class HitlResolveVerifier(Protocol):
+    """Optional second hook: check a HITL answer before an ALLOW takes effect.
+
+    A plugin that asked for a hold (``HITL``) may also want to check the answer
+    (a signature, a token in ``resolve.operator_context``). It implements
+    ``evaluate_hitl_resolve``; a plugin without it has no opinion.
+
+    Return ``None`` for no opinion (or ``ALLOW``). Any deny verdict
+    (``BLOCK``, ``SKIP``, ``TERMINATE``, ``BLACKLIST``) refuses the ALLOW and
+    the kernel applies ``BLOCK`` instead. The reason must not carry the answer
+    or any secret: it is written to the tool result and the trace.
+    """
+
+    def evaluate_hitl_resolve(self, request: EmitHitlRequest, resolve: HitlResolve) -> EgressDecision | None: ...
+
+
+_RESOLVE_HOOK_FAILED: EgressDecision = (
+    GovDecision.BLOCK,
+    "hitl-resolve-hook-error",
+    "the governance check of the approval failed, so the call is refused",
+)
+
+
+def _verify_with(plugin: object, request: EmitHitlRequest, resolve: HitlResolve) -> EgressDecision | None:
+    hook = getattr(plugin, "evaluate_hitl_resolve", None)
+    if not callable(hook):
+        return None
+    try:
+        verdict = hook(request, resolve)
+    except Exception:
+        return _RESOLVE_HOOK_FAILED
+    if verdict is None:
+        return None
+    try:
+        decision, name, reason = verdict
+        return (GovDecision(decision), str(name), str(reason)) if decision in _DENY else None
+    except (TypeError, ValueError):
+        return _RESOLVE_HOOK_FAILED
 
 
 class GovernancePluginChain:
@@ -70,6 +113,8 @@ class GovernancePluginChain:
         allow: EgressDecision | None = None
         for plugin in self._plugins:
             decision, name, reason = plugin.evaluate_egress(intent, config=config)
+            if decision == GovDecision.HITL and intent.hitl_approved:
+                decision, name, reason = GovDecision.ALLOW, "hitl-override", "a prior human approval covers this call"
             if decision in _DENY:
                 return decision, name, reason
             if decision in _HOLD and hold is None:
@@ -88,6 +133,14 @@ class GovernancePluginChain:
                 "all governance plugins passed this call",
             )
         )
+
+    def evaluate_hitl_resolve(self, request: EmitHitlRequest, resolve: HitlResolve) -> EgressDecision | None:
+        """First deny wins, in chain order, as for egress. An exception or a malformed verdict is a BLOCK."""
+        for plugin in self._plugins:
+            verdict = _verify_with(plugin, request, resolve)
+            if verdict is not None:
+                return verdict
+        return None
 
     def on_transition(self, transition: object) -> None:
         for plugin in self._plugins:
@@ -134,14 +187,23 @@ def evaluate_egress_at_chokepoint(
     plugin: GovernancePlugin | None = None,
     hitl_gov_override: bool = False,
 ) -> EgressDecision:
-    """Return the ``(decision, policy_name, reason)`` egress verdict for one
-    call. A prior human approval (``hitl_gov_override``) short-circuits to
-    ALLOW before ``plugin`` (or ``config.egress_governance_plugin``) is
-    consulted; otherwise the parametric profile applies.
+    """Return the ``(decision, policy_name, reason)`` egress verdict for one call.
+
+    The chain always runs. A prior human approval (``hitl_gov_override``) only
+    turns a HITL hold into ALLOW for this call; a deny from any plugin still
+    wins, and so does a hold of another kind (RETRY, MODIFY).
     """
-    if hitl_gov_override:
-        return GovDecision.ALLOW, "hitl-override", "a prior human approval covers this call"
     impl = plugin or getattr(config, "egress_governance_plugin", None)
-    if impl is None:
-        return egress_from_config(intent, config=config)
-    return impl.evaluate_egress(intent, config=config)
+    if hitl_gov_override:
+        intent = replace(intent, hitl_approved=True)
+    verdict = egress_from_config(intent, config=config) if impl is None else impl.evaluate_egress(intent, config=config)
+    if hitl_gov_override and verdict[0] == GovDecision.HITL:
+        return GovDecision.ALLOW, "hitl-override", "a prior human approval covers this call"
+    return verdict
+
+
+def verify_hitl_resolve(plugin: object | None, request: EmitHitlRequest, resolve: HitlResolve) -> EgressDecision | None:
+    """Ask the governance plugin (or chain) to check a HITL answer. ``None`` means the ALLOW stands."""
+    if plugin is None:
+        return None
+    return _verify_with(plugin, request, resolve)

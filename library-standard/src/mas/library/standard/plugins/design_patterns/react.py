@@ -50,10 +50,6 @@ class ReactPlugin(DesignPatternPlugin):
             return []
 
         if isinstance(event, UserInputReceived) and q.dp == DpState.IDLE:
-            q.hitl_skip_committed = False
-            q.hitl_block_committed = False
-            q.hitl_tools_approved_turn = False
-            q.hitl_results_approved_turn = False
             q.dp = self.on_user_input(q, event)
             q.ctx = ctx_on_user_input(q.ctx)
             return [RequestCtxAssembly(collect_id=event.user_turn_id)]
@@ -68,9 +64,7 @@ class ReactPlugin(DesignPatternPlugin):
             return emit_scheduled_egress(q, run, config)
 
         if isinstance(event, EngineIoReturn) and q.dp == DpState.AWAITING_INGRESS:
-            return apply_engine_io_return(
-                q, run, event, config=config, evaluate=self._evaluate
-            )
+            return apply_engine_io_return(q, run, event, config=config, evaluate=self._evaluate)
 
         return []
 

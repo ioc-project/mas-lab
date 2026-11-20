@@ -136,7 +136,7 @@ def test_cli_batch_hitl_emits_hitl_gate(tmp_path: Path) -> None:
             "-o",
             "overlays/tools.yaml",
             "--control",
-            "controls/governance-hitl.yaml",
+            "controls/governance-hitl-auto-approve.yaml",
             "--events",
             "--events-file",
             str(events_file),

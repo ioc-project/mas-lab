@@ -18,6 +18,11 @@ from mas.runtime.machines.gov import GovState, gov_on_egress_allowed, gov_on_idl
 from mas.runtime.schema.envelope import EnvelopeSymbol
 
 
+def _holds_a_question(q) -> bool:
+    """A human answer is pending: closing another call's envelope must not clear it."""
+    return bool(q.hitl_holds)
+
+
 @dataclass
 class GovEnvelopeMachine:
     """M_gov — local state transitions + governance.decision on authorize/validate σ."""
@@ -40,13 +45,16 @@ class GovEnvelopeMachine:
             if ctx.gov_decision not in ("BLOCK", "TERMINATE", "HITL"):
                 gov_on_egress_allowed(q)
         elif symbol == EnvelopeSymbol.GOV_VALIDATE_START:
+            if _holds_a_question(q):
+                self._record(ctx, hook="ingress", checkpoint="before")
+                return
             q.gov_state = GovState.AUTHZ_INGRESS.value
             self._record(ctx, hook="ingress", checkpoint="before")
         elif symbol == EnvelopeSymbol.GOVERNANCE_VALIDATE:
             pass
         elif symbol == EnvelopeSymbol.GOV_VALIDATE_END:
             self._record(ctx, hook="ingress", checkpoint="after")
-            if q.gov_state != GovState.ERROR.value:
+            if q.gov_state != GovState.ERROR.value and not _holds_a_question(q):
                 gov_on_idle(q)
 
     def _record(self, ctx: EnvelopeContext, *, hook: str, checkpoint: str) -> None:

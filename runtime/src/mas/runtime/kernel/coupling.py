@@ -33,6 +33,7 @@ from mas.runtime.kernel.state import (
     QProduct,
     ScheduledEgress,
     ToolState,
+    end_turn,
 )
 from mas.runtime.machines.context import ctx_on_abort
 from mas.runtime.machines.gov import gov_enter_hitl_pending, gov_on_error
@@ -134,6 +135,7 @@ def apply_gov_hitl_hold(
     request_id: int,
     op: ScheduledEgress,
     question_type: str = "CONFIRM",
+    call_id: str = "",
 ) -> CouplingPatch:
     """M_gov enters HITL_PENDING; M_coord applies peer patches (not M_gov)."""
     gov_enter_hitl_pending(
@@ -141,6 +143,9 @@ def apply_gov_hitl_hold(
         request_id=request_id,
         pending_schedule=op,
         question_type=question_type,
+        tool_name=q.pending_tool_name if op == "TOOL_CALL" else "",
+        tool_arguments=q.pending_tool_args if op == "TOOL_CALL" else None,
+        call_id=call_id,
     )
     patch = coupling_for_gov_hitl_hold(op=op)
     apply_coupling_patch(q, patch)
@@ -160,11 +165,7 @@ def apply_gov_block(q: QProduct) -> CouplingPatch:
 def apply_gov_terminate(q: QProduct) -> CouplingPatch:
     patch = coupling_for_gov_terminate()
     q.ctrl = LifecycleState.STOPPED
-    apply_coupling_patch(q, patch)
-    q.ctx = ctx_on_abort(q.ctx)
-    q.model = model_on_abort(q.model)
-    q.tool = tool_on_abort(q.tool)
-    control_on_idle(q)
+    end_turn(q)
     return patch
 
 
@@ -270,33 +271,16 @@ def coupling_for_lifecycle_abort() -> CouplingPatch:
 
 
 def apply_lifecycle_pause(q: QProduct) -> CouplingPatch:
-    if q.dp not in {
-        DpState.EGRESS_PENDING,
-        DpState.AWAITING_INGRESS,
-        DpState.EVALUATING,
-    }:
-        patch = CouplingPatch(scheduled_egress="NONE", control_phase=ControlPhase.IDLE)
-    else:
-        patch = coupling_for_lifecycle_pause()
-    apply_coupling_patch(q, patch)
-    clear_inflight(q)
-    q.hitl_request_id = 0
-    q.hitl_pending_schedule = "NONE"
-    q.model = model_on_abort(q.model)
-    q.tool = tool_on_abort(q.tool)
-    from mas.runtime.machines.memory import memory_on_reset
-    from mas.runtime.machines.session import session_on_abort
-    from mas.runtime.machines.transport import transport_on_reset
-
-    q.memory = memory_on_reset(q.memory)
-    q.transport = transport_on_reset(q.transport)
-    q.session = session_on_abort(q.session)
-    control_on_idle(q)
+    """Pause stops the turn: no engine wait or pending call survives it. A pending human answer does: the
+    hold stays, and its operation is scheduled only once it is answered and the lifecycle runs again."""
+    patch = coupling_for_lifecycle_pause()
+    end_turn(q, keep_holds=True)
     return patch
 
 
 def apply_lifecycle_abort(q: QProduct) -> CouplingPatch:
     q.ctrl = LifecycleState.STOPPED
-    patch = apply_lifecycle_pause(q)
+    patch = coupling_for_lifecycle_pause()
+    end_turn(q)
     q.ctx = ctx_on_abort(q.ctx)
     return patch

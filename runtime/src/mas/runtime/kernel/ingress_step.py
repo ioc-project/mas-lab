@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from mas.runtime.boundary.gov.telemetry import get_bound_observability
 from mas.runtime.boundary.ingress_validate import ingress_governance_valid
 from mas.runtime.kernel.config import KernelConfig
@@ -26,25 +28,23 @@ from mas.runtime.kernel.envelope import (
 from mas.runtime.kernel.hitl_gate import emit_ingress_hitl_pause
 from mas.runtime.kernel.inflight import dismiss_inflight, pending_for_validate
 from mas.runtime.kernel.run_event import from_engine_return
-from mas.runtime.kernel.state import DpState, QProduct, RunLedger, ToolState
-from mas.runtime.machines.context import ctx_on_abort, ctx_on_cycle_reset
+from mas.runtime.kernel.state import DpState, QProduct, RunLedger, end_turn
+from mas.runtime.machines.context import ctx_on_abort
 from mas.runtime.machines.memory import memory_on_ingress
 from mas.runtime.machines.model import model_on_abort, model_on_ingress, model_on_preempt
 from mas.runtime.machines.session import session_on_done
 from mas.runtime.machines.tool import tool_on_abort, tool_on_ingress
 from mas.runtime.machines.transport import transport_on_ingress
-from mas.runtime.schema.egress import EgressSymbol, NoOp, RaiseBoundaryError
+from mas.runtime.schema.egress import EgressSymbol, InvokeEngineIo, NoOp, RaiseBoundaryError
 from mas.runtime.schema.governance import GovernanceAction
 from mas.runtime.schema.ingress import EngineIoReturn
 
+logger = logging.getLogger(__name__)
+
 
 def _ingress_hitl_skipped(q: QProduct, config: KernelConfig, event: EngineIoReturn) -> bool:
-    return bool(
-        config.hitl_once_per_turn
-        and q.hitl_results_approved_turn
-        and event.response_kind == "TOOL_RESULT"
-        and config.hitl_on_tool_result
-    )
+    """A result hold was already answered this turn, whether the flag or a plugin asked for it."""
+    return bool(config.hitl_once_per_turn and q.hitl_results_approved_turn and event.response_kind == "TOOL_RESULT")
 
 
 def commit_engine_io_return(
@@ -65,8 +65,19 @@ def commit_engine_io_return(
                 message="ENGINE returned TOOL_CALL without tool_name",
             )
         ]
-    run_append = run.append_inflight if inflight else run.append
-    run_append(from_engine_return(event))
+    # A result that is not the newest id (siblings of a batch, a result released by a hold) goes in by id.
+    late = bool(run.events) and event.correlation_id < run.events[-1].correlation_id
+    run_append = run.append_inflight if inflight or late else run.append
+    row = from_engine_return(event)
+    called = q.pending_tools_by_cid.get(event.correlation_id)
+    if called is None and q.pending_tool_name and event.correlation_id == q.pending_engine_correlation_id:
+        called = (q.pending_tool_name, q.pending_tool_args)  # the single call just sent (a batch has its own map)
+    if called is not None and event.response_kind in {"TOOL_RESULT", "ERROR"}:
+        # Name the call this result answers: results can arrive and be released in any order, and the
+        # transcript binds a result to its tool call by this, not by position.
+        row.tool_name, row.tool_arguments = called[0], dict(called[1])
+    row.call_id = q.call_slots.get(event.correlation_id, "")
+    run_append(row)
     if event.offered_tools is not None:
         q.offered_tools = tuple(event.offered_tools)
     if event.next_step == "TOOL_CALL":
@@ -94,6 +105,7 @@ def commit_engine_io_return(
     q.inflight_kind = "NONE"
     q.pending_engine_correlation_id = 0
     q.pending_tools_by_cid.clear()
+    q.call_slots.clear()
     if event.finish_reason == "preempted":
         # Decode stopped; the turn is not finished. M_model is IDLE so the
         # follow-up LLM_CALL after OperatorSteerReceived is a new CALLING.
@@ -143,7 +155,13 @@ def _ingress_envelope_context(
     # unlike q.tool — isn't cleared until the WHOLE batch is dismissed, so it
     # reliably answers "was THIS specific correlation_id a tool call" even
     # after an earlier sibling's ingress already moved q.tool off EXECUTING.
-    is_tool_call = event.correlation_id in q.pending_tools_by_cid or q.tool.value == "EXECUTING"
+    # The wait registered for the cid names its op (a retried call has a new cid that is in no batch map).
+    wait_op = next((w.op for w in q.outbound_waits if w.correlation_id == event.correlation_id), "NONE")
+    is_tool_call = (
+        wait_op == "TOOL_CALL"
+        or event.correlation_id in q.pending_tools_by_cid
+        or (wait_op == "NONE" and q.tool.value == "EXECUTING")
+    )
     # Memory ops dispatch one at a time (no parallel-batch tracking needed the
     # way tool calls have q.pending_tools_by_cid), so q.memory's own in-flight
     # states are enough to tell a MEMORY_OP return apart from an LLM_CALL one.
@@ -151,7 +169,7 @@ def _ingress_envelope_context(
     # "LLM_CALL", corrupting its (correlation_id, op)-keyed call_id lookup in
     # ObservabilityOperator (it would look for "MEMORY_OP" at open time but
     # "LLM_CALL" at close time — two different call_ids for the same call).
-    is_memory_op = not is_tool_call and q.memory.value in ("QUERYING", "WRITING")
+    is_memory_op = not is_tool_call and (wait_op == "MEMORY_OP" or q.memory.value in ("QUERYING", "WRITING"))
     scheduled_op = "TOOL_CALL" if is_tool_call else "MEMORY_OP" if is_memory_op else "LLM_CALL"
     tool_name = q.pending_tool_name
     tool_arguments = dict(q.pending_tool_args or {})
@@ -168,6 +186,7 @@ def _ingress_envelope_context(
         tool_name=tool_name,
         tool_arguments=tool_arguments,
         ingress_event=event,
+        skip_hitl=_ingress_hitl_skipped(q, config, event),
     )
 
 
@@ -179,6 +198,11 @@ def apply_engine_io_return(
     config: KernelConfig,
     evaluate,
 ) -> list[EgressSymbol]:
+    if any(row.correlation_id == event.correlation_id for row in run.events):
+        # The call was already answered in the ledger (a pause answered it as interrupted). The real result
+        # comes too late: it is dropped, not appended, so the ledger never holds two rows for one call.
+        logger.warning("late result for call %s dropped: the ledger already answered it", event.correlation_id)
+        return [NoOp()]
     last_cid = run.events[-1].correlation_id if run.events else 0
     inflight = pending_for_validate(q)
     coord_before_ingress(q)
@@ -193,13 +217,6 @@ def apply_engine_io_return(
         close_envelope(env_ctx, error="INGRESS_DENIED")
         return [RaiseBoundaryError(code="INGRESS_DENIED", recoverable=True)]
 
-    if _ingress_hitl_skipped(q, config, event):
-        # Pair CONTRACT_START / PRE_EXECUTE without re-running ingress HITL.
-        close_envelope(env_ctx, enable_governance=False)
-        control_on_result(q)
-        control_on_egress_gov(q)
-        return commit_engine_io_return(q, run, event, config=config, evaluate=evaluate)
-
     try:
         ingress_decision = run_ingress_validate_envelope(env_ctx)
     except Exception as exc:
@@ -211,20 +228,33 @@ def apply_engine_io_return(
     control_on_egress_gov(q)
 
     if action == GovernanceAction.HITL:
-        cid = run.next_correlation_id()
+        # Allocated, not peeked: another hold or call raised in the same step must not get the same id.
+        cid = run.allocate_correlation_id()
         return emit_ingress_hitl_pause(q, cid=cid, event=event)
 
     if action == GovernanceAction.RETRY:
         if q.gov_retry_count >= config.max_gov_retries:
-            q.dp = DpState.IDLE
+            end_turn(q)
             return [RaiseBoundaryError(code="INGRESS_RETRY_EXHAUSTED", recoverable=True)]
         q.gov_retry_count += 1
-        q.scheduled_egress = "TOOL_CALL" if q.tool == ToolState.EXECUTING else "LLM_CALL"
+        # The failed call is answered (by its error): drop its wait, then ask again for the same kind of call.
+        is_tool = env_ctx.scheduled_op == "TOOL_CALL"
+        if is_tool:
+            q.pending_tool_name, q.pending_tool_args = env_ctx.tool_name, dict(env_ctx.tool_arguments)
+        dismiss_inflight(q, event.correlation_id)
+        q.pending_tools_by_cid.pop(event.correlation_id, None)
+        q.pending_call_id = q.call_slots.pop(event.correlation_id, "")  # the retried call keeps its slot
+        q.scheduled_egress = "TOOL_CALL" if is_tool else "LLM_CALL"
         q.dp = DpState.EGRESS_PENDING
         q.inflight_kind = "NONE"
         q.model = model_on_abort(q.model) if q.model.value == "ERROR" else q.model
         q.tool = tool_on_abort(q.tool) if q.tool.value == "ERROR" else q.tool
-        return emit_scheduled_egress(q, run, config)
+        out = emit_scheduled_egress(q, run, config)
+        if is_tool:
+            for sym in out:
+                if isinstance(sym, InvokeEngineIo) and sym.op == "TOOL_CALL":
+                    q.pending_tools_by_cid[sym.correlation_id] = (env_ctx.tool_name, dict(env_ctx.tool_arguments))
+        return out
 
     if action == GovernanceAction.BACKTRACK:
         apply_ingress_deny(q)
@@ -237,10 +267,7 @@ def apply_engine_io_return(
         ]
 
     if action == GovernanceAction.BLOCK:
-        q.dp = DpState.IDLE
-        q.ctx = ctx_on_cycle_reset(q.ctx)
-        q.scheduled_egress = "NONE"
-        q.inflight_kind = "NONE"
+        end_turn(q)
         code = ingress_decision.boundary_code or "INGRESS_GOV_BLOCK"
         msg = ingress_decision.message
         recoverable = ingress_decision.recoverable
@@ -251,7 +278,8 @@ def apply_engine_io_return(
         return [RaiseBoundaryError(code="INGRESS_GOV_TERMINATE", recoverable=False)]
 
     if action == GovernanceAction.BLACKLIST:
-        q.tool_blacklisted = True
+        if env_ctx.scheduled_op == "TOOL_CALL" and env_ctx.tool_name not in q.tool_blacklist:
+            q.tool_blacklist.append(env_ctx.tool_name)
         return _commit_skip(q, run, event, config=config, evaluate=evaluate)
 
     if action == GovernanceAction.SKIP:

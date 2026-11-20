@@ -4,13 +4,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
-from mas.runtime.machines.gov import GovState
-from mas.runtime.schema.governance import GovernanceAction
-from mas.runtime.schema.observability import ObsPhase
 from mas.runtime.kernel.state import DpState, QProduct
+from mas.runtime.machines.gov import GovState
+from mas.runtime.schema.observability import ObsPhase
 
 
 class ObsState(str, Enum):
@@ -95,5 +94,3 @@ class ChokepointCoordinator:
     ) -> None:
         self.obs_state = ObsState.RECORDING
         self.mutation_count += 1
-        q.gov_state = self.gov_state.value
-        q.obs_state = self.obs_state.value

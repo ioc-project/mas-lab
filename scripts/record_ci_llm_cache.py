@@ -218,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
                 "-o",
                 "overlays/tools.yaml",
                 "--control",
-                "controls/governance-hitl.yaml",
+                "controls/governance-hitl-auto-approve.yaml",
                 "--events",
                 "--events-file",
                 str(events_file),

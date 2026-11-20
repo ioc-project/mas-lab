@@ -131,7 +131,7 @@ The engine evaluates only `deterministic`. The parser accepts any other `evaluat
 
 ## 3. Decisions and events
 
-Each egress decision is a `governance_decision` event in `events.jsonl`, with the policy name, decision, reason, and the `hook` and `checkpoint` it applied to; see [trajectory-schema.md](trajectory-schema.md). A HITL decision raises a `hitl_request`. The session resolves it through `mas-ctl chat` or `tui` (interactive) or the auto-approve responder (batch).
+Each egress decision is a `governance_decision` event in `events.jsonl`, with the policy name, decision, reason, and the `hook` and `checkpoint` it applied to; see [trajectory-schema.md](trajectory-schema.md). A HITL decision raises a `hitl_request`. The session resolves it through `mas-ctl chat` or `tui` (interactive) or, with no operator (batch), the responder `hitl_mode` names (auto-deny when unset).
 
 ## 4. Testing
 

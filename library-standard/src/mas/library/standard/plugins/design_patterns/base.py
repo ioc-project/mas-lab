@@ -30,6 +30,9 @@ class _TurnState:
     next_idx: int = 0
     processed_tool_results: int = 0
     round_num: int = 1
+    # Highest ledger seq when this turn's context was assembled: rows after it belong to this turn.
+    # Mirrored to ``q.dp_data["ledger_mark"]`` so a checkpoint restores it.
+    ledger_mark: int = 0
 
 
 class _DeterministicBase(DesignPatternPlugin):
@@ -51,11 +54,13 @@ class _DeterministicBase(DesignPatternPlugin):
     def _state(self) -> _TurnState:
         return self._turn_state
 
-    def _reset_state(self, participants: list[str], task: str) -> _TurnState:
+    def _reset_state(self, participants: list[str], task: str, q: QProduct | None = None) -> _TurnState:
         """Replace current turn state with a fresh one, populated with turn context."""
         self._turn_state = self._make_state()
         self._turn_state.participants = participants
         self._turn_state.original_task = task
+        if q is not None:
+            q.dp_data.pop("ledger_mark", None)
         return self._turn_state
 
     # --- Shared helpers ---
@@ -64,9 +69,16 @@ class _DeterministicBase(DesignPatternPlugin):
     def _delegate_tool_name(agent_id: str) -> str:
         return f"delegate_to_{agent_id}"
 
-    @staticmethod
-    def _extract_tool_results(run: RunLedger) -> list[str]:
-        return [e.text.strip() for e in run.events if e.response_kind == "TOOL_RESULT" and e.text.strip()]
+    def _extract_tool_results(self, run: RunLedger, q: QProduct | None = None) -> list[str]:
+        """Tool results of this turn only: the ledger also holds the results of every earlier turn.
+
+        The mark is read from the product state so a restored kernel (new plugin, same checkpoint)
+        still sees only this turn. The instance field is a cache of the same value.
+        """
+        mark = int((q.dp_data.get("ledger_mark") if q is not None else None) or self._state().ledger_mark or 0)
+        return [
+            e.text.strip() for e in run.events if e.seq > mark and e.response_kind == "TOOL_RESULT" and e.text.strip()
+        ]
 
     def _no_participants(self, q: QProduct) -> list[EgressSymbol]:
         """Return an early-exit response when no participants are configured."""
@@ -98,6 +110,7 @@ class _DeterministicBase(DesignPatternPlugin):
             self._reset_state(
                 participants=self._participants_from_spec(config),
                 task=str(event.text or ""),
+                q=q,
             )
             q.dp = DpState.CTX_BUILD
             q.ctx = ctx_on_user_input(q.ctx)
@@ -105,6 +118,9 @@ class _DeterministicBase(DesignPatternPlugin):
 
         if isinstance(event, CtxAssemblyComplete) and q.dp == DpState.CTX_BUILD:
             q.ctx = ctx_on_assembly_complete(q.ctx)
+            mark = run.max_seq()
+            self._state().ledger_mark = mark
+            q.dp_data["ledger_mark"] = mark
             q.dp = DpState.EVALUATING
             return self.evaluate_next(q, run, config=config)
 
@@ -123,6 +139,7 @@ class _DeterministicBase(DesignPatternPlugin):
         self._reset_state(
             participants=self._participants_from_spec(config),
             task=str(getattr(event, "context_text", "") or ""),
+            q=ctx,
         )
         return DpState.CTX_BUILD
 

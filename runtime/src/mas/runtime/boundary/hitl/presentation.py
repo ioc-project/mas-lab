@@ -7,17 +7,17 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from mas.runtime.schema.egress import EmitHitlRequest
 from mas.runtime.boundary.hitl.choices import format_hitl_choice_help
+from mas.runtime.schema.egress import EmitHitlRequest
 
 if TYPE_CHECKING:
     from mas.runtime.kernel.state import QProduct
 
 
-def tool_hitl_context(q: QProduct, *, user_text: str = "") -> dict:
+def tool_hitl_context(q: QProduct, *, user_text: str = "", pending_schedule: str = "") -> dict:
     """Structured payload for operator review before tool execution."""
     ctx: dict = {
-        "pending_schedule": q.hitl_pending_schedule or q.scheduled_egress,
+        "pending_schedule": pending_schedule or q.scheduled_egress,
         "tool_name": q.pending_tool_name or "",
         "tool_arguments": dict(q.pending_tool_args or {}),
         "hook": "egress",
@@ -27,7 +27,7 @@ def tool_hitl_context(q: QProduct, *, user_text: str = "") -> dict:
     return ctx
 
 
-def tool_result_hitl_context(q: QProduct, event: object) -> dict:
+def tool_result_hitl_context(q: QProduct, event: object, *, tool_name: str = "") -> dict:
     """Structured payload for operator review before tool result enters context."""
     from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -35,7 +35,7 @@ def tool_result_hitl_context(q: QProduct, event: object) -> dict:
         "hook": "ingress",
         "response_kind": getattr(event, "response_kind", ""),
         "correlation_id": getattr(event, "correlation_id", 0),
-        "tool_name": q.pending_tool_name or "",
+        "tool_name": tool_name or q.pending_tool_name or "",
     }
     if isinstance(event, EngineIoReturn) and event.text:
         preview = event.text
@@ -54,7 +54,7 @@ def enrich_hitl_request(
     """Merge tool / turn context into an egress or ingress HITL request."""
     data = dict(request.context_data or {})
     if q is not None and data.get("hook") != "ingress":
-        data.update(tool_hitl_context(q, user_text=user_text))
+        data.update(tool_hitl_context(q, user_text=user_text, pending_schedule=request.pending_schedule))
     tool = data.get("tool_name") or data.get("tool") or data.get("op", "")
     question = request.question
     if data.get("hook") == "ingress":
