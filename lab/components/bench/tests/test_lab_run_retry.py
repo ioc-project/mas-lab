@@ -93,6 +93,40 @@ async def test_invoke_lab_run_retries_exceptions() -> None:
     assert not error
 
 
+@pytest.mark.asyncio
+async def test_invoke_lab_run_applies_timeout_per_attempt() -> None:
+    import time
+
+    calls = {"n": 0}
+
+    def hang() -> dict:
+        calls["n"] += 1
+        time.sleep(0.5)
+        return {"status": "ok", "content": "late"}
+
+    _result, status, error, _output, used = await invoke_lab_run_with_retry(
+        hang,
+        max_attempts=2,
+        backoff_s=0,
+        timeout_s=0.05,
+    )
+    assert status == "error"
+    assert "timed out" in error
+    assert used == 2
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_invoke_lab_run_without_timeout_waits() -> None:
+    _result, status, _error, output, used = await invoke_lab_run_with_retry(
+        lambda: {"status": "ok", "content": "done"},
+        max_attempts=1,
+        backoff_s=0,
+        timeout_s=0,
+    )
+    assert (status, output, used) == ("ok", "done", 1)
+
+
 def test_write_run_result_replaces_error_cache(tmp_path) -> None:
     from mas.lab.benchmark.cache.trace_store import write_run_result
 
