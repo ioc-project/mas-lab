@@ -26,6 +26,7 @@ from mas.ctl.session.flavour import FlavourError, resolve_session_flavour
 from mas.ctl.session.infra_resolve import resolve_session_infra
 from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.observability import cli_replaced_plugin_set, obs_config_to_binding, setup_observability
+from mas.ctl.session.runner import runner_binding, runner_from_spec
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
 
@@ -173,6 +174,16 @@ def serve_agent_cmd(
             entry_id=agent_id,
         )
         replaced = cli_replaced_plugin_set(events, events_format)
+        if runner_binding(manifest) is not None:
+            _serve_with_runner(
+                manifest,
+                endpoint,
+                session=session,
+                flavour_spec=flavour_spec,
+                obs_config=obs_config,
+                replaced=replaced,
+            )
+            return
         instance, _ = instantiate_runtime(
             InstantiationOptions(
                 pattern_plugin_id=pattern_plugin_id,
@@ -217,3 +228,22 @@ def serve_agent_cmd(
             peer_handles.close()
             if recorder is not None:
                 recorder.close()
+
+
+def _serve_with_runner(manifest, endpoint, *, session, flavour_spec, obs_config, replaced) -> None:
+    """Serve an agent whose ``spec.runner`` names an agent_runner: no kernel, the same listener and boundary."""
+    try:
+        host = runner_from_spec(
+            manifest,
+            manifest_dir=session.manifest_dir,
+            flavour_spec=flavour_spec,
+            obs_binding_override=obs_config_to_binding(obs_config) if replaced else None,
+            obs_from_cli=replaced,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    host.recorder = setup_observability(host.shell, obs_config, base_dir=session.manifest_dir or session.original_cwd)
+    try:
+        expose_agent(None, manifest, endpoint, blocking=True, runner=host.runner)
+    finally:
+        host.close()

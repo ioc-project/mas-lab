@@ -63,6 +63,7 @@ The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 | LLM response cache (`llm_cache` infra middleware) | [llm-cache.md](llm-cache.md) |
 | Communication headers | [comm-headers.md](comm-headers.md) |
 | Communication stack | [comm-stack.md](comm-stack.md) |
+| Agent runner (front or drive another harness) | [agent-runner.md](agent-runner.md) |
 | Contracts & Mealy envelope | [Contracts](contracts.md) · [runtime package docs](runtime.md) |
 | Thin waist (plugin vs catalog) | [thin-waist.md](thin-waist.md) |
 | Snapshots vs checkpoints | [snapshots.md](snapshots.md) |

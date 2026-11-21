@@ -1,0 +1,1102 @@
+{
+ "events": [
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.mutation",
+   "machine_id": "M_ctx",
+   "payload": {
+    "action": "turn_start",
+    "call_id": "",
+    "committed_count": 0,
+    "content_preview": "",
+    "op": "",
+    "role": "",
+    "turn_index": 1,
+    "wm_count": 0
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 1
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.mutation",
+   "machine_id": "M_ctx",
+   "payload": {
+    "action": "wm_clear",
+    "call_id": "",
+    "committed_count": 0,
+    "content_preview": "",
+    "op": "",
+    "role": "",
+    "turn_index": 1,
+    "wm_count": 0
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 2
+  },
+  {
+   "actor_id": "engine",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "boundary.ingress",
+   "machine_id": "execution_engine",
+   "payload": {
+    "ingress_kind": "USER_INPUT_RECEIVED",
+    "product": {
+     "ctx": "COLLECTING",
+     "dp": "CTX_BUILD",
+     "gov": "IDLE",
+     "model": "IDLE",
+     "scheduled_egress": "NONE",
+     "tool": "IDLE"
+    }
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 3
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.steer",
+   "machine_id": "M_ctx",
+   "payload": {
+    "collect_id": "t1",
+    "operator_context": false,
+    "product": {
+     "ctx": "COLLECTING",
+     "dp": "CTX_BUILD"
+    }
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 4
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_authorize",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_authorize_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 5
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_authorize",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_authorize_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 6
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "before",
+    "decision": "",
+    "hook": "egress",
+    "op": "LLM_CALL",
+    "policy_name": "sample_governance",
+    "reason": ""
+   },
+   "phase": "AUTHZ",
+   "policy_name": "sample_governance",
+   "seq": 7
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "governance_authorize",
+    "boundary": "event",
+    "checkpoint": "authorize",
+    "contract": "model",
+    "decision": "ALLOW",
+    "hook": "egress",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "governance_authorize"
+   },
+   "phase": "AUTHZ",
+   "policy_name": "",
+   "seq": 8
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_authorize",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_authorize_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 9
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "after",
+    "decision": "ALLOW",
+    "hook": "egress",
+    "op": "LLM_CALL",
+    "policy_name": "block-destructive",
+    "reason": "action is non-destructive; the block-destructive policy only acts on destructive calls"
+   },
+   "phase": "AUTHZ",
+   "policy_name": "block-destructive",
+   "seq": 10
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_authorize",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_authorize_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 11
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "contract_call",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "contract_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 12
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "observability_pre_execute",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "observability_pre_execute",
+    "tool_name": "LLM_CALL"
+   },
+   "phase": "OBSERVABILITY_PRE",
+   "policy_name": "",
+   "seq": 13
+  },
+  {
+   "actor_id": "engine",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "boundary.ingress",
+   "machine_id": "execution_engine",
+   "payload": {
+    "ingress_kind": "CTX_ASSEMBLY_COMPLETE",
+    "product": {
+     "ctx": "COMMITTED",
+     "dp": "AWAITING_INGRESS",
+     "gov": "VALIDATING",
+     "model": "CALLING",
+     "scheduled_egress": "NONE",
+     "tool": "IDLE"
+    }
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 14
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "engine.io",
+   "machine_id": "M_model",
+   "payload": {
+    "destructive": false,
+    "envelope": true,
+    "op": "LLM_CALL",
+    "tool_name": ""
+   },
+   "phase": "EXECUTE",
+   "policy_name": "",
+   "seq": 15
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "contract_execute",
+    "boundary": "event",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "contract_execute",
+    "tool_arguments": {},
+    "tool_name": "LLM_CALL"
+   },
+   "phase": "EXECUTE",
+   "policy_name": "",
+   "seq": 16
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "engine.io.return",
+   "machine_id": "M_model",
+   "payload": {
+    "cache_events": [],
+    "cache_layer": "",
+    "envelope": true,
+    "next_step": "STOP",
+    "op": "LLM_CALL",
+    "pricing": {},
+    "response_kind": "MODEL_TEXT",
+    "text": "ok",
+    "tool_name": ""
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 17
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "observability_post_execute",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "response_kind": "MODEL_TEXT",
+    "symbol": "observability_post_execute",
+    "tool_name": "LLM_CALL"
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 18
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "contract_call",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "contract_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 19
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_validate",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_validate_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 20
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_validate",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_validate_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 21
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "before",
+    "decision": "",
+    "hook": "ingress",
+    "op": "LLM_CALL",
+    "policy_name": "sample_governance",
+    "reason": ""
+   },
+   "phase": "VALID",
+   "policy_name": "sample_governance",
+   "seq": 22
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "governance_validate",
+    "boundary": "event",
+    "checkpoint": "validate",
+    "contract": "model",
+    "decision": "ALLOW",
+    "hook": "ingress",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "governance_validate"
+   },
+   "phase": "VALID",
+   "policy_name": "",
+   "seq": 23
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_validate",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_validate_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 24
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "after",
+    "decision": "ALLOW",
+    "hook": "ingress",
+    "op": "LLM_CALL",
+    "policy_name": "sample_governance",
+    "reason": "permissive profile allows every engine response"
+   },
+   "phase": "VALID",
+   "policy_name": "sample_governance",
+   "seq": 25
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_validate",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_validate_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 26
+  },
+  {
+   "actor_id": "engine",
+   "attribution_code": "",
+   "correlation_id": 1,
+   "kind": "boundary.ingress",
+   "machine_id": "execution_engine",
+   "payload": {
+    "ingress_kind": "ENGINE_IO_RETURN",
+    "product": {
+     "ctx": "IDLE",
+     "dp": "IDLE",
+     "gov": "IDLE",
+     "model": "IDLE",
+     "scheduled_egress": "NONE",
+     "tool": "IDLE"
+    }
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 27
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "client.response",
+   "machine_id": "M_dp",
+   "payload": {
+    "finish_reason": "stop"
+   },
+   "phase": "END",
+   "policy_name": "",
+   "seq": 28
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.mutation",
+   "machine_id": "M_ctx",
+   "payload": {
+    "action": "turn_commit",
+    "call_id": "",
+    "committed_count": 2,
+    "content_preview": "ok",
+    "op": "",
+    "role": "",
+    "turn_index": 1,
+    "wm_count": 1
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 29
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.mutation",
+   "machine_id": "M_ctx",
+   "payload": {
+    "action": "turn_start",
+    "call_id": "",
+    "committed_count": 2,
+    "content_preview": "",
+    "op": "",
+    "role": "",
+    "turn_index": 2,
+    "wm_count": 0
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 30
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.mutation",
+   "machine_id": "M_ctx",
+   "payload": {
+    "action": "wm_clear",
+    "call_id": "",
+    "committed_count": 2,
+    "content_preview": "",
+    "op": "",
+    "role": "",
+    "turn_index": 2,
+    "wm_count": 0
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 31
+  },
+  {
+   "actor_id": "engine",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "boundary.ingress",
+   "machine_id": "execution_engine",
+   "payload": {
+    "ingress_kind": "USER_INPUT_RECEIVED",
+    "product": {
+     "ctx": "COLLECTING",
+     "dp": "CTX_BUILD",
+     "gov": "IDLE",
+     "model": "IDLE",
+     "scheduled_egress": "NONE",
+     "tool": "IDLE"
+    }
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 32
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.steer",
+   "machine_id": "M_ctx",
+   "payload": {
+    "collect_id": "t2",
+    "operator_context": false,
+    "product": {
+     "ctx": "COLLECTING",
+     "dp": "CTX_BUILD"
+    }
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 33
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_authorize",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_authorize_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 34
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_authorize",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_authorize_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 35
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "before",
+    "decision": "",
+    "hook": "egress",
+    "op": "LLM_CALL",
+    "policy_name": "sample_governance",
+    "reason": ""
+   },
+   "phase": "AUTHZ",
+   "policy_name": "sample_governance",
+   "seq": 36
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "governance_authorize",
+    "boundary": "event",
+    "checkpoint": "authorize",
+    "contract": "model",
+    "decision": "ALLOW",
+    "hook": "egress",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "governance_authorize"
+   },
+   "phase": "AUTHZ",
+   "policy_name": "",
+   "seq": 37
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_authorize",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_authorize_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 38
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "after",
+    "decision": "ALLOW",
+    "hook": "egress",
+    "op": "LLM_CALL",
+    "policy_name": "block-destructive",
+    "reason": "action is non-destructive; the block-destructive policy only acts on destructive calls"
+   },
+   "phase": "AUTHZ",
+   "policy_name": "block-destructive",
+   "seq": 39
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_authorize",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_authorize_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 40
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "contract_call",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "contract_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 41
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "observability_pre_execute",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "observability_pre_execute",
+    "tool_name": "LLM_CALL"
+   },
+   "phase": "OBSERVABILITY_PRE",
+   "policy_name": "",
+   "seq": 42
+  },
+  {
+   "actor_id": "engine",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "boundary.ingress",
+   "machine_id": "execution_engine",
+   "payload": {
+    "ingress_kind": "CTX_ASSEMBLY_COMPLETE",
+    "product": {
+     "ctx": "COMMITTED",
+     "dp": "AWAITING_INGRESS",
+     "gov": "VALIDATING",
+     "model": "CALLING",
+     "scheduled_egress": "NONE",
+     "tool": "IDLE"
+    }
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 43
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "engine.io",
+   "machine_id": "M_model",
+   "payload": {
+    "destructive": false,
+    "envelope": true,
+    "op": "LLM_CALL",
+    "tool_name": ""
+   },
+   "phase": "EXECUTE",
+   "policy_name": "",
+   "seq": 44
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "contract_execute",
+    "boundary": "event",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "contract_execute",
+    "tool_arguments": {},
+    "tool_name": "LLM_CALL"
+   },
+   "phase": "EXECUTE",
+   "policy_name": "",
+   "seq": 45
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "engine.io.return",
+   "machine_id": "M_model",
+   "payload": {
+    "cache_events": [],
+    "cache_layer": "",
+    "envelope": true,
+    "next_step": "STOP",
+    "op": "LLM_CALL",
+    "pricing": {},
+    "response_kind": "MODEL_TEXT",
+    "text": "ok",
+    "tool_name": ""
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 46
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "observability_post_execute",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "response_kind": "MODEL_TEXT",
+    "symbol": "observability_post_execute",
+    "tool_name": "LLM_CALL"
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 47
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "contract_call",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "contract_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 48
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_validate",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_validate_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 49
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_validate",
+    "boundary": "start",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_validate_start"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 50
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "before",
+    "decision": "",
+    "hook": "ingress",
+    "op": "LLM_CALL",
+    "policy_name": "sample_governance",
+    "reason": ""
+   },
+   "phase": "VALID",
+   "policy_name": "sample_governance",
+   "seq": 51
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "governance_validate",
+    "boundary": "event",
+    "checkpoint": "validate",
+    "contract": "model",
+    "decision": "ALLOW",
+    "hook": "ingress",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "governance_validate"
+   },
+   "phase": "VALID",
+   "policy_name": "",
+   "seq": 52
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "gov_validate",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "gov_validate_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 53
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "governance.decision",
+   "machine_id": "M_gov",
+   "payload": {
+    "checkpoint": "after",
+    "decision": "ALLOW",
+    "hook": "ingress",
+    "op": "LLM_CALL",
+    "policy_name": "sample_governance",
+    "reason": "permissive profile allows every engine response"
+   },
+   "phase": "VALID",
+   "policy_name": "sample_governance",
+   "seq": 54
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "envelope.activity",
+   "machine_id": "M_obs",
+   "payload": {
+    "activity": "obs_wrap_gov_validate",
+    "boundary": "end",
+    "contract": "model",
+    "op": "LLM_CALL",
+    "operation": "call",
+    "symbol": "obs_wrap_gov_validate_end"
+   },
+   "phase": "REQUEST",
+   "policy_name": "",
+   "seq": 55
+  },
+  {
+   "actor_id": "engine",
+   "attribution_code": "",
+   "correlation_id": 2,
+   "kind": "boundary.ingress",
+   "machine_id": "execution_engine",
+   "payload": {
+    "ingress_kind": "ENGINE_IO_RETURN",
+    "product": {
+     "ctx": "IDLE",
+     "dp": "IDLE",
+     "gov": "IDLE",
+     "model": "IDLE",
+     "scheduled_egress": "NONE",
+     "tool": "IDLE"
+    }
+   },
+   "phase": "RESULT",
+   "policy_name": "",
+   "seq": 56
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "client.response",
+   "machine_id": "M_dp",
+   "payload": {
+    "finish_reason": "stop"
+   },
+   "phase": "END",
+   "policy_name": "",
+   "seq": 57
+  },
+  {
+   "actor_id": "kernel",
+   "attribution_code": "",
+   "correlation_id": 0,
+   "kind": "context.mutation",
+   "machine_id": "M_ctx",
+   "payload": {
+    "action": "turn_commit",
+    "call_id": "",
+    "committed_count": 4,
+    "content_preview": "ok",
+    "op": "",
+    "role": "",
+    "turn_index": 2,
+    "wm_count": 1
+   },
+   "phase": "INGRESS",
+   "policy_name": "",
+   "seq": 58
+  }
+ ],
+ "results": [
+  {
+   "context_id": "s1",
+   "text": "ok"
+  },
+  {
+   "context_id": "s1",
+   "text": "ok"
+  }
+ ]
+}

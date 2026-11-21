@@ -185,6 +185,20 @@ def parse_contract_binding(raw: Any, *, field: str) -> None:
         raise SpecBindingError(f"{field}.params must be an object")
 
 
+def parse_runner(raw: Any) -> None:
+    """Validate ``spec.runner``: ``type`` names a registered ``agent_runner`` plugin, ``params`` its arguments."""
+    if raw is None:
+        return
+    if isinstance(raw, dict):
+        _reject_unknown_keys(raw, allowed=frozenset({"type", "params"}), field="spec.runner")
+    parse_contract_binding(raw, field="spec.runner")
+    name = (raw if isinstance(raw, str) else str(raw.get("type") or "")).strip()
+    from mas.runtime.registry import get_registry
+
+    if get_registry().resolve_by_type("agent_runner", name) is None:
+        raise SpecBindingError(f"spec.runner: {name!r} is not a registered agent_runner plugin")
+
+
 def parse_execution(raw: Any) -> None:
     if raw is None:
         return
@@ -300,6 +314,8 @@ def validate_agent_spec_bindings(spec: Any) -> None:
         raise SpecBindingError("spec.infra_interceptors is not allowed on Agent manifests — use workspace config")
     if "control" in spec:
         parse_control(spec["control"])
+    if "runner" in spec:
+        parse_runner(spec["runner"])
     if "design_pattern" in spec:
         parse_design_pattern(spec["design_pattern"])
     if "context_manager" in spec:

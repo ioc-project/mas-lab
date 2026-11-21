@@ -6,7 +6,7 @@
 
 A **plugin binding** is how an Agent manifest names a plugin and passes it parameters.
 A *plugin* is a class that a library manifest (`library.yaml`) registers under a type. The slot name is that type.
-Use a binding to pick a non-default plugin for `design_pattern`, `context_manager`, `assembler`, `hitl_contract`, or `user_io_contract`. Use it also for the list slots `governance`, `observability`, and `context_sources`.
+Use a binding to pick a non-default plugin for `design_pattern`, `context_manager`, `assembler`, `hitl_contract`, `user_io_contract`, or `runner` (an `agent_runner` plugin: see [Agent runner](../references/agent-runner.md)). Use it also for the list slots `governance`, `observability`, and `context_sources`.
 [plugins-reference.md](../plugins-reference.md) lists the registered plugins.
 
 Minimal working bindings, in shorthand:

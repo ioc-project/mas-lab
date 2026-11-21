@@ -224,6 +224,7 @@ nav:
               - KG mapping: references/transport-observability-kg-mapping.md
           - Communication headers: references/comm-headers.md
           - Communication stack: references/comm-stack.md
+          - Agent runner: references/agent-runner.md
           - LLM cache: references/llm-cache.md
           - Contracts: references/contracts.md
           - Snapshots vs checkpoints: references/snapshots.md

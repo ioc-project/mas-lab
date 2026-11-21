@@ -20,6 +20,7 @@ types:
   - tool_provider
   - agent_comm
   - agent_expose
+  - agent_runner
   - layer
   - webserver
   - transport_classifier
@@ -78,6 +79,15 @@ plugins:
     urn: mas.agent_expose.a2a
     module: library_ioa.plugins.a2a.exposure
     class: A2AExposure
+  - type: agent_runner
+    name: a2a-harness
+    urn: mas.agent_runner.a2a-harness
+    module: library_ioa.plugins.a2a.harness
+    class: A2AHarnessRunner
+    description: >
+      Drive a remote A2A agent as the agent's runner: send the task, return the reply.
+    shortcuts:
+      - a2a-harness
   - type: layer
     name: slim
     urn: mas.layer.slim
