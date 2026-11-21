@@ -96,13 +96,20 @@ async def invoke_lab_run_with_retry(
     backoff_s: float,
     on_retry=None,
     before_attempt=None,
+    timeout_s: float | None = None,
 ) -> tuple[dict, str, str, str, int]:
     """Run ``do_run`` up to ``max_attempts``. Returns result, status, error, output, attempts used.
 
     ``before_attempt`` (async, no arguments) runs before every attempt (``run.pre``
     steps: reset per-run state). If it raises, the run fails at once with that
     error and is not retried — the MAS never starts on unprepared state.
+
+    ``timeout_s`` bounds each attempt (``schedule.timeout``); a falsy or non-positive
+    value means no limit. An attempt that exceeds it is an ``error`` ("timed out")
+    and is retried like any other transient failure. The worker thread cannot be
+    interrupted, so it is abandoned and finishes in the background.
     """
+    limit = timeout_s if timeout_s and timeout_s > 0 else None
     result_dict: dict = {}
     status, error, output = "error", "not started", ""
     attempts = max(1, max_attempts)
@@ -113,8 +120,11 @@ async def invoke_lab_run_with_retry(
             except Exception as exc:
                 return {}, "error", str(exc), "", attempt + 1
         try:
-            result_dict = await asyncio.to_thread(do_run)
+            result_dict = await asyncio.wait_for(asyncio.to_thread(do_run), timeout=limit)
             status, error, output = _status_from_runner(result_dict)
+        except asyncio.TimeoutError:
+            result_dict = {}
+            status, error, output = "error", f"run timed out after {limit:g}s (schedule.timeout)", ""
         except Exception as exc:
             result_dict = {}
             status, error, output = "error", str(exc), ""
@@ -283,6 +293,7 @@ async def _execute_batch(
     _parallel = max(1, (getattr(_schedule, "parallel_scenarios", 1) if _schedule else 1) or 1)
     _pause = max(0.0, (getattr(_schedule, "pause_between_runs", 0.0) if _schedule else 0.0) or 0.0)
     _max_attempts, _retry_backoff = lab_run_retry_settings(_schedule)
+    _run_timeout = getattr(_schedule, "timeout", None) if _schedule is not None else None
     _worker_schedule = _schedule if isinstance(_schedule, ExperimentScheduleSpec) else None
     _worker_processes = _worker_schedule.worker_processes if _worker_schedule else 1
     _worker_max_runs = _worker_schedule.worker_max_runs if _worker_schedule else None
@@ -848,6 +859,7 @@ async def _execute_batch(
                     _do_mas_run,
                     max_attempts=_max_attempts,
                     backoff_s=_retry_backoff,
+                    timeout_s=_run_timeout,
                     on_retry=_on_retry,
                     before_attempt=(
                         (
