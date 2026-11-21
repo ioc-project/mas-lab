@@ -84,6 +84,9 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
         if isinstance(result, str):
             return result
         if isinstance(result, dict):
+            task_text = _task_text(result.get("task"))
+            if task_text:
+                return task_text
             message = result.get("message")
             if isinstance(message, dict):
                 parts = message.get("parts") or []
@@ -97,3 +100,18 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
             if text:
                 return text
         return str(result)
+
+
+def _task_text(task: Any) -> str:
+    """The reply text of a task result: its artifacts, else the text of its status message."""
+    if not isinstance(task, dict):
+        return ""
+
+    def parts_text(parts: Any) -> str:
+        return "".join(str(p.get("text") or "") for p in parts or [] if isinstance(p, dict))
+
+    artifacts = "".join(parts_text(a.get("parts")) for a in task.get("artifacts") or [] if isinstance(a, dict))
+    if artifacts:
+        return artifacts
+    message = (task.get("status") or {}).get("message")
+    return parts_text(message.get("parts")) if isinstance(message, dict) else ""

@@ -6,11 +6,61 @@ from typing import Any
 
 import httpx
 from a2a.helpers import new_text_message
-from a2a.types import Role, SendMessageRequest
+from a2a.types import Role, SendMessageRequest, StreamResponse, TaskState
 from google.protobuf.json_format import MessageToDict
 from mas.runtime.aio import LoopCache
+from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
 logger = logging.getLogger(__name__)
+
+#: Task states that end a send in failure, and the word the error says. The remote's own status text is not
+#: carried: it is the peer's, and an error shows only the word.
+_FAILED_STATES = {
+    TaskState.TASK_STATE_FAILED: "failed",
+    TaskState.TASK_STATE_REJECTED: "rejected",
+    TaskState.TASK_STATE_CANCELED: "canceled",
+}
+
+
+def _kind(response: Any) -> str:
+    """Which payload a stream response carries; ``""`` for anything that is not a ``StreamResponse``."""
+    return response.WhichOneof("payload") or "" if isinstance(response, StreamResponse) else ""
+
+
+def raise_if_failed(responses: list[Any]) -> None:
+    """``AgentCommError`` when an answer or a streamed update says the task failed, was rejected or was canceled."""
+    for response in responses:
+        payload = _kind(response)
+        if payload == "task":
+            state = response.task.status.state
+        elif payload == "status_update":
+            state = response.status_update.status.state
+        else:
+            continue
+        word = _FAILED_STATES.get(state)
+        if word:
+            raise AgentCommError(f"remote A2A task {word}")
+
+
+def streamed_text(responses: list[Any]) -> str:
+    """The text of the artifact updates and messages in a stream, in order: it ends on a status update with none."""
+    out: list[str] = []
+    for response in responses:
+        kind = _kind(response)
+        if kind == "artifact_update":
+            out.extend(part.text for part in response.artifact_update.artifact.parts)
+        elif kind == "message":
+            out.extend(part.text for part in response.message.parts)
+    return "".join(out)
+
+
+def closing_text(responses: list[Any]) -> str:
+    """The streamed text to reply with when the closing response carries none of its own, else ``""``."""
+    streamed = streamed_text(responses)
+    last = responses[-1]
+    kind = _kind(last)
+    bare_task = kind == "task" and not last.task.artifacts and not last.task.status.message.parts
+    return streamed if streamed and (bare_task or kind not in {"task", "message"}) else ""
 
 
 _SDK_NAMES = frozenset({"A2ACardResolver", "ClientConfig", "create_client"})
@@ -132,8 +182,9 @@ class A2AClient:
                 message, context_id=context_id, metadata=metadata, stream=stream, call_context=call_context
             )
         except BaseException as exc:
-            # a card or client kept from before the failure may be stale (the peer restarted, its card changed)
-            if isinstance(exc, Exception):
+            # a card or client kept from before the failure may be stale (the peer restarted, its card changed); a
+            # task the peer answered and failed leaves the connection fine
+            if isinstance(exc, Exception) and not isinstance(exc, AgentCommError):
                 self._connections.drop()
             self._finish_call(state, exc)
             raise
@@ -192,10 +243,14 @@ class A2AClient:
         chunks: list[Any] = []
         async for chunk in client.send_message(request, context=call_context):
             chunks.append(chunk)
+        raise_if_failed(chunks)
         if not chunks:
             return {"status": "completed", "result": ""}
         payload = self._normalize_sdk_payload(chunks[-1])
         payload.setdefault("status", "completed")
+        streamed = closing_text(chunks)
+        if streamed:
+            payload["result"] = streamed
         return payload
 
     async def aget_agent_card(self, *, fresh: bool = False) -> dict[str, Any]:
