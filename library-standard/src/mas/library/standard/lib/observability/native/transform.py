@@ -354,6 +354,9 @@ def _sh_user_input(record: dict, ctx: TransformContext) -> list[dict]:
     parent = record.get("parent_call_id") or ctx.mas_call_id
     if parent:
         rec["parent_call_id"] = str(parent)
+    # Set only when an agent loop other than the kernel loop took the turn.
+    if record.get("loop"):
+        rec["loop"] = str(record["loop"])
     return [*out, rec]
 
 
