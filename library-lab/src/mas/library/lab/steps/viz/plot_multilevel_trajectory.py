@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """PlotMultilevelTrajectoryStep — pipeline step for the multilevel trajectory diagram.
 
 Wraps :class:`~mas.lab.plots.multilevel_trajectory_processor.MultilevelTrajectoryPlotter`
@@ -38,7 +41,7 @@ Example pipeline YAML::
 import logging
 from pathlib import Path
 
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_named_file
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.library.lab.steps._io import pipeline_config_dir, resolve_pipeline_relative
@@ -96,16 +99,18 @@ def _load_annotations(config: dict, pipeline_dir: Path | None) -> dict | None:
     return ann or None
 
 
-class PlotMultilevelTrajectoryStep(PipelineStep):
+class PlotMultilevelTrajectoryStep(FigureStep):
     """Generate a multilevel MAS trajectory diagram from a trace."""
 
     type = "plot_multilevel_trajectory"
+    HONORS = frozenset({"format", "title"})
+    FORMATS = ("html", "svg")
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
-        from mas.lab.plots.trajectory import load_trace
         from mas.lab.plots.multilevel_trajectory import plot_multilevel_trajectory
+        from mas.lab.plots.trajectory import load_trace
 
-        config = self.config
+        config = self.apply_style(self.config, ctx)
         fmt = str(config.get("format", "html")).lower()
         title = str(config.get("title", "MAS Multilevel Trajectory"))
         width_mode = str(config.get("width_mode", "log"))
@@ -115,8 +120,8 @@ class PlotMultilevelTrajectoryStep(PipelineStep):
         annotations = _load_annotations(config, pipeline_config_dir(ctx))
 
         from mas.lab.benchmark.pipeline.run_artifacts import (
-            resolve_run_events,
             resolve_run_artifact,
+            resolve_run_events,
         )
 
         log_path: str | None = config.get("log_path") or config.get("events_path")

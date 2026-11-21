@@ -40,6 +40,7 @@ class BenchmarkRunOptions:
     experiment_overlays: list = field(default_factory=list)
     clean_stale: bool | None = None
     pipeline_engine: str | None = None
+    fixture_env: dict[str, str] | None = None  # the CLI's environment, for fixture processes
 
     @classmethod
     def from_spec(cls, spec: dict[str, Any]) -> "BenchmarkRunOptions":
@@ -71,6 +72,7 @@ class BenchmarkRunOptions:
             experiment_overlays=spec.get("experiment_overlays") or [],
             clean_stale=spec.get("clean_stale"),
             pipeline_engine=spec.get("pipeline_engine"),
+            fixture_env=spec.get("fixture_env"),
         )
 
 
@@ -153,6 +155,7 @@ async def run_benchmark(
         experiment_overlays=opts.experiment_overlays,
         clean_stale=opts.clean_stale,
         pipeline_engine=opts.pipeline_engine,
+        fixture_env=opts.fixture_env,
     )
 
 

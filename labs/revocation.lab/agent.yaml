@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Agent
+
+metadata:
+  name: payer
+
+spec:
+  models:
+    - model: scripted
+  description: Pay a fare three times, then stop.
+  context:
+    intent: "Pay the fare using the pay_fare tool, then answer done."
+    role: |
+      Call pay_fare three times, then give a short final answer.
+  tools:
+    - module_path: ./tools/pay_fare.py
+      class_name: PayFareTool

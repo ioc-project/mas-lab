@@ -56,6 +56,7 @@ experiment:
 ```
 
 A dataset item is the setup of one run: `inputs.user` (the prompt string) plus optional `hitl`, `memory_seeds`, and `tool_fixtures`.
+An optional `environment:` sibling overlays timers and triggers on the experiment world; fixtures stay on the experiment or scenario.
 File pointers use `{ref: path}`.
 Ground truth is `expectations` on the same item.
 

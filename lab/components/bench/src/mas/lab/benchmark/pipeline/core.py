@@ -15,7 +15,7 @@ import sys  # noqa: E402
 import warnings as _warnings_module  # noqa: E402
 from abc import ABC, abstractmethod  # noqa: E402
 from pathlib import Path  # noqa: E402
-from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union  # noqa: E402
+from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union  # noqa: E402
 
 import yaml  # noqa: E402
 from mas.lab.benchmark.pipeline.models import (  # noqa: E402
@@ -39,6 +39,16 @@ from mas.runtime.registry import get_registry, register_plugin  # noqa: E402
 # registered plugin at all, but a raw 'module.path:ClassName' or
 # './file.py:ClassName' reference straight from pipeline YAML.
 # ---------------------------------------------------------------------------
+
+
+def _artifact_names(value: Any) -> tuple[str, ...]:
+    if value is None or value == "":
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, Sequence):
+        return tuple(str(item) for item in value if item)
+    return (str(value),)
 
 
 def register_step(name: str, obj: Any, *, attributes: dict[str, Any] | None = None) -> None:
@@ -218,6 +228,9 @@ class PipelineStep(ABC):
         self.resource = str(resource or type(self).resource or "cpu")
         self.refresh = refresh
         self.concurrency = max(1, int(concurrency or 1))
+        self.ins: tuple[str, ...] = ()
+        self.out: tuple[str, ...] = ()
+        self.realtime: bool | None = None
 
     def is_persistent(self) -> bool:
         cfg_val = self.config.get("persist")
@@ -260,7 +273,26 @@ class PipelineStep(ABC):
 
     @property
     def output_artifacts(self) -> List[Tuple[str, Any]]:
-        return []
+        """Artifacts this step publishes, from YAML ``out:`` when set."""
+        names = tuple(self.out or ())
+        if not names:
+            return []
+        from mas.lab.benchmark.pipeline.resources import Artifact, Scope
+
+        arts: List[Tuple[str, Any]] = []
+        for name in names:
+            if name in {"plot", "figure"}:
+                rel = str((self.config or {}).get("output") or "plot.svg")
+                art = Artifact(
+                    name=Path(rel).stem,
+                    format=Path(rel).suffix.lstrip(".") or "svg",
+                    scope=Scope.EXPERIMENT,
+                )
+                art._relative_path = rel  # type: ignore[attr-defined]
+                arts.append(("output", art))
+            else:
+                arts.append((f"{name}_path", Artifact(name=name, format="json", scope=Scope.EXPERIMENT)))
+        return arts
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], base_dir: Optional[Path] = None) -> PipelineStep:
@@ -308,6 +340,12 @@ class PipelineStep(ABC):
         step.resource = resource
         step.refresh = refresh
         step.concurrency = max(1, concurrency)
+        step.ins = _artifact_names(data.get("in"))
+        step.out = _artifact_names(data.get("out"))
+        if data.get("realtime") is not None:
+            if not isinstance(data["realtime"], bool):
+                raise ValueError(f"step {step.name!r}: realtime must be true or false, got {data['realtime']!r}")
+            step.realtime = data["realtime"]
         return step
 
     @classmethod

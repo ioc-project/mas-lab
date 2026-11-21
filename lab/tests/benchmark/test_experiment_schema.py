@@ -105,6 +105,82 @@ def test_application_as_pipeline_level_is_spotted() -> None:
     assert any("pipeline level" in msg for msg in warnings)
 
 
+def test_environment_block_validates() -> None:
+    data = _canonical()
+    data["experiment"]["environment"] = {
+        "clock": {"kind": "virtual"},
+        "triggers": [
+            {
+                "id": "revoke-after-2",
+                "when": {"on": "tool_result", "tool": "pay_fare", "occurrence": 2},
+                "do": [{"type": "http_call", "config": {"fixture": "issuer", "path": "/admin/revoke"}}],
+            }
+        ],
+        "fixtures": [
+            {
+                "name": "issuer",
+                "kind": "process",
+                "command": ["python3", "fixtures/issuer.py"],
+                "port": "auto",
+            }
+        ],
+    }
+    warnings = validate_manifest(
+        data,
+        source="experiment.yaml",
+        kind="experiment",
+        strict=True,
+        resolve_refs=False,
+    )
+    assert warnings == []
+
+
+def test_session_checkpoints_and_resume_from_validate() -> None:
+    data = _canonical()
+    data["experiment"]["session_checkpoints"] = [
+        {
+            "id": "after-pay-2",
+            "when": {"on": "tool_result", "tool": "pay_fare", "occurrence": 2},
+        }
+    ]
+    data["experiment"]["scenarios"] = [
+        {
+            "id": "producer",
+            "overlays": {"logic": [], "control": [], "infra": []},
+            "produce_checkpoints": ["after-pay-2"],
+        },
+        {
+            "id": "fork",
+            "overlays": {"logic": [], "control": [], "infra": []},
+            "depends_on": ["producer"],
+            "resume_from": "after-pay-2",
+        },
+    ]
+    warnings = validate_manifest(
+        data,
+        source="experiment.yaml",
+        kind="experiment",
+        strict=True,
+        resolve_refs=False,
+    )
+    assert warnings == []
+
+
+def test_non_loopback_http_call_rejected_unless_allowlisted() -> None:
+    from mas.lab.benchmark.environment.limits import assert_url_allowed
+
+    with pytest.raises(ValueError, match="loopback"):
+        assert_url_allowed("http://example.com/x")
+    assert_url_allowed("http://evil.test/x", allow_network=("evil.test",))
+
+
+def test_unknown_environment_variable_fails() -> None:
+    from mas.lab.benchmark.environment.variables import Variables
+
+    with pytest.raises(ValueError, match="unknown environment variable"):
+        Variables().interpolate("${nope}")
+
+
 def test_dataset_path_without_name_validates() -> None:
     data = _canonical()
     data["experiment"]["dataset"] = {"path": "./datasets/queries.yaml"}
@@ -236,3 +312,22 @@ def test_coupled_without_couplings_fails_schema() -> None:
     data["experiment"]["design"] = {"mode": "coupled"}
     with pytest.raises(ManifestValidationError, match="couplings"):
         validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+
+
+def test_environment_fixture_env_and_timer_keys_validate() -> None:
+    data = _canonical()
+    data["experiment"]["environment"] = {
+        "fixtures": [
+            {
+                "name": "issuer",
+                "command": ["python3", "fixtures/issuer.py"],
+                "env": {"MODE": "strict"},
+                "passthrough": ["ISSUER_TOKEN"],
+                "health": {"path": "health"},
+            }
+        ],
+        "triggers": [{"id": "a", "when": {"on": "tool_call"}, "do": []}],
+        "timers": [{"id": "b", "after": "a", "delay": "5s", "do": []}],
+    }
+    warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    assert warnings == []

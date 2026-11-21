@@ -88,6 +88,8 @@ class TelemetryChannel(Protocol):
 
     def final_digest(self, stream_id: str) -> str | None: ...
 
+    def reopen(self, stream_id: str) -> bool: ...
+
 
 @dataclass
 class _StreamState:
@@ -256,6 +258,25 @@ class InprocChannel:
         with state.lock:
             return bool(state.sealed)
 
+    def reopen(self, stream_id: str) -> bool:
+        """Start a sealed stream over: a rerun of the same run key in one process.
+
+        Records and digest are dropped; subscribers waiting on the stream stay attached and are
+        woken. False when the stream was not sealed (nothing to do).
+        """
+        state = self._streams.get(stream_id)
+        if state is None:
+            return False
+        with state.lock:
+            if not state.sealed:
+                return False
+            state.records.clear()
+            state.digest = ""
+            state.sealed = False
+            waiters = list(state.waiters)
+        self._wake(waiters)
+        return True
+
     def seal_sync(self, stream_id: str) -> str:
         state = self._state(stream_id)
         with state.lock:
@@ -387,6 +408,15 @@ class LogChannel:
     def is_sealed(self, stream_id: str) -> bool:
         return self.inner.is_sealed(stream_id)
 
+    def reopen(self, stream_id: str) -> bool:
+        if not self.inner.reopen(stream_id):
+            return False
+        # The old epoch's file would otherwise keep growing and mix two runs' offsets.
+        self._close_log(stream_id)
+        self._path(stream_id).unlink(missing_ok=True)
+        (self.root / f"{stream_id.replace('/', '_').replace('#', '_')}.digest").unlink(missing_ok=True)
+        return True
+
     def replay(self, stream_id: str) -> list[StreamFrame]:
         return self.inner.replay(stream_id)
 
@@ -457,6 +487,11 @@ class CompositeChannel:
 
     def is_sealed(self, stream_id: str) -> bool:
         return self.inproc.is_sealed(stream_id)
+
+    def reopen(self, stream_id: str) -> bool:
+        if self.log is not None:
+            return self.log.reopen(stream_id)
+        return self.inproc.reopen(stream_id)
 
     def replay(self, stream_id: str) -> list[StreamFrame]:
         return self.inproc.replay(stream_id)

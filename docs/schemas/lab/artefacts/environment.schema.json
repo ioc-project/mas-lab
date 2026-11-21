@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mas-lab/artefacts/environment",
+  "title": "environment event record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "seq", "id", "name", "kind", "source", "time", "run", "outcome"],
+  "properties": {
+    "v": { "type": "integer", "const": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9._:-]{1,128}$" },
+    "name": { "type": "string", "pattern": "^[a-z0-9._:-]{1,128}$" },
+    "kind": {
+      "type": "string",
+      "enum": ["fixture", "clock", "timer", "trigger", "action", "event", "environment", "control"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["fixture", "timer", "trigger", "pipeline", "environment", "gdb", "observability"]
+        },
+        "id": { "type": "string" },
+        "step": { "type": "string" },
+        "fixture": { "type": "string" }
+      }
+    },
+    "time": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clock", "wall", "elapsed_ms"],
+      "properties": {
+        "clock": { "type": "string", "enum": ["wall", "virtual"] },
+        "virtual_s": { "type": "number" },
+        "wall": { "type": "string" },
+        "elapsed_ms": { "type": "number" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "experiment": { "type": "string" },
+        "scenario": { "type": "string" },
+        "item": { "type": "string" },
+        "run": { "type": "string" },
+        "attempt": { "type": "integer" }
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hook": { "type": "string" },
+        "op": { "type": "string" },
+        "tool": { "type": "string" },
+        "agent": { "type": "string" },
+        "occurrence": { "type": "integer" },
+        "after_seq": { "type": "integer" }
+      }
+    },
+    "outcome": { "type": "string", "enum": ["ok", "failed", "timeout", "skipped"] },
+    "payload": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "number" },
+          { "type": "boolean" },
+          { "type": "string", "pattern": "^[a-z0-9._:-]{1,128}$" },
+          { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+        ]
+      }
+    }
+  }
+}

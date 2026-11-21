@@ -14,6 +14,7 @@ experiments:
   - labs/lifecycle-control.lab/02-bit-exactness/experiment.yaml
   - labs/lifecycle-control.lab/experiment-whatif-smoke.yaml
   - labs/extensions.lab/experiment-fact-recall-smoke.yaml
+  - labs/revocation.lab/experiment.yaml
   # CI smoke + golden capture paths
   - tests/fixtures/lab-smoke/experiment.yaml
   - tests/fixtures/lab-smoke/design-space-patterns.yaml

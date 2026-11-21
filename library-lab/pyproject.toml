@@ -22,6 +22,7 @@ mcev1 = "mas.library.lab.eval.mcev1:MCEv1Provider"
 
 [project.entry-points."mas.lab.ui.plots"]
 series = "mas.library.lab.ui.series:SeriesPlots"
+timeline = "mas.library.lab.ui.timeline:TimelinePlots"
 
 [project.entry-points."mas.runtime.manifest_libraries"]
 lab = "mas.library.lab"

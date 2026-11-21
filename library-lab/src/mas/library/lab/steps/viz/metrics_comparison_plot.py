@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """MetricsComparisonPlotStep — aggregate metrics.json across scenarios into a bar chart.
 
 Reads ``<output_dir>/<scenario>/item*/r*/metrics.json`` for each scenario,
@@ -17,10 +20,12 @@ metrics        list[str]     Metric IDs to plot (default: all found in metrics.j
 import json
 import logging
 from collections import defaultdict
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
 
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
+
+if TYPE_CHECKING:
+    from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.artifact_paths import (
     resolve_step_artifact_path,
     resolve_step_root,
@@ -29,10 +34,11 @@ from mas.lab.benchmark.pipeline.artifact_paths import (
 logger = logging.getLogger(__name__)
 
 
-class MetricsComparisonPlotStep(PipelineStep):
+class MetricsComparisonPlotStep(FigureStep):
     """Produce a comparison bar chart from metrics.json files across scenarios."""
 
     type = "metrics_comparison_plot"
+    HONORS = frozenset()
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
         config = self.config
@@ -122,7 +128,7 @@ class MetricsComparisonPlotStep(PipelineStep):
                 vals = data[sid].get(mid, [])
                 means.append(np.mean(vals) if vals else 0)
                 stds.append(np.std(vals) if vals else 0)
-            bars = ax.bar(range(len(scenarios)), means, yerr=stds,
+            ax.bar(range(len(scenarios)), means, yerr=stds,
                           color=colors[:len(scenarios)], capsize=8, alpha=0.85)
             ax.set_xticks(range(len(scenarios)))
             ax.set_xticklabels(scenarios, fontsize=9)

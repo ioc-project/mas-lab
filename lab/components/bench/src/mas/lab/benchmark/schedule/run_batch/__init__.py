@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -12,6 +14,11 @@ from mas.lab.benchmark.schedule.run_batch.execute import execute_batch
 from mas.lab.benchmark.schedule.run_batch.finalize import abort_batch, finalize_batch
 from mas.lab.benchmark.schedule.run_batch.load import load_experiment, print_dry_run
 from mas.lab.benchmark.schedule.run_batch.prepare import prepare_batch
+
+logger = logging.getLogger(__name__)
+
+_ACTIVE = [0]  # batches running in this process
+_ACTIVE_LOCK = threading.Lock()
 
 
 async def run_mas_benchmark(
@@ -37,6 +44,7 @@ async def run_mas_benchmark(
     experiment_overlays: Optional[list] = None,
     clean_stale: Optional[bool] = None,
     pipeline_engine: Optional[str] = None,
+    fixture_env: Optional[dict[str, str]] = None,
 ) -> bool:
     """Run a MAS batch benchmark from a *MASExperimentConfig* YAML.
 
@@ -90,31 +98,81 @@ async def run_mas_benchmark(
         print_dry_run(loaded)
         return True
 
-    prepared = await prepare_batch(
-        loaded,
-        output_dir=output_dir,
-        force=force,
-        data_cache_dir=data_cache_dir,
-        clean_stale=clean_stale,
-    )
+    prepared = None
+    terminated = False
+    import atexit
+    import signal
+
+    def _stop_fixtures(*, force: bool, last: bool = True) -> None:
+        from mas.lab.benchmark.service_manager import stop_all_shared
+
+        registry = getattr(prepared, "fixture_registry", None)
+        if registry is not None:
+            try:
+                registry.close_all(force=force)
+            except Exception:
+                logger.warning("fixture shutdown failed", exc_info=True)
+        if last:  # a batch that ends while another runs in this process must not stop that one's services
+            stop_all_shared(include_keep_running=force)
+
+    def _at_exit() -> None:
+        _stop_fixtures(force=False)
+
+    atexit.register(_at_exit)
+
+    def _on_term(_signum: int, _frame: object) -> None:
+        # No cleanup here: a handler runs between any two bytecodes and could re-enter a lock the
+        # interrupted code holds. The ``finally`` below does the work, with ``force`` set.
+        nonlocal terminated
+        terminated = True
+        raise KeyboardInterrupt
+
+    prev_term = signal.getsignal(signal.SIGTERM)
     try:
-        execution = await execute_batch(
+        signal.signal(signal.SIGTERM, _on_term)
+    except (ValueError, OSError):
+        prev_term = None
+
+    with _ACTIVE_LOCK:
+        _ACTIVE[0] += 1
+    try:
+        prepared = await prepare_batch(
+            loaded,
+            output_dir=output_dir,
+            force=force,
+            data_cache_dir=data_cache_dir,
+            clean_stale=clean_stale,
+            base_env=fixture_env,
+        )
+        try:
+            execution = await execute_batch(
+                loaded,
+                prepared,
+                progress=progress,
+                force=force,
+                strategy=strategy,
+            )
+        except BaseException as exc:
+            abort_batch(prepared, exc)
+            raise
+        return await finalize_batch(
             loaded,
             prepared,
+            execution,
             progress=progress,
-            force=force,
-            strategy=strategy,
+            data_cache_dir=data_cache_dir,
         )
-    except BaseException as exc:
-        abort_batch(prepared, exc)
-        raise
-    return await finalize_batch(
-        loaded,
-        prepared,
-        execution,
-        progress=progress,
-        data_cache_dir=data_cache_dir,
-    )
+    finally:
+        if prev_term is not None:
+            try:
+                signal.signal(signal.SIGTERM, prev_term)
+            except (ValueError, OSError):
+                pass
+        with _ACTIVE_LOCK:
+            _ACTIVE[0] -= 1
+            last = _ACTIVE[0] == 0
+        _stop_fixtures(force=terminated, last=last)
+        atexit.unregister(_at_exit)  # one handler per batch, not one per call for the life of the process
 
 
 __all__ = ["run_mas_benchmark"]

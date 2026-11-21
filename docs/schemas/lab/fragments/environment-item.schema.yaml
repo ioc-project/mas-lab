@@ -1,0 +1,14 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "urn:mas-lab:fragments:environment-item:v1"
+title: item environment overlay
+description: >
+  Dataset item and run-input environment overlay. Same keys as the
+  experiment fragment except fixtures, which stay on the experiment or
+  scenario. Lists concatenate; mappings overlay experiment → scenario →
+  item.
+allOf:
+  - $ref: "urn:mas-lab:fragments:environment:v1"
+  - not:
+      required: [fixtures]

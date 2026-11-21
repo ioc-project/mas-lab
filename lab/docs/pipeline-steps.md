@@ -70,6 +70,60 @@ absolute paths and `..` are rejected. See [Output locations](../../docs/manifest
 | `ci_plot` | Confidence interval plots |
 | `pipeline_diagram` | Static SVG flow diagram of a pipeline |
 
+#### Figure keys (every plot step)
+
+Every step above is a `FigureStep` and accepts the same figure keys in its
+`config`:
+
+| Key | Values | Default |
+|-----|--------|---------|
+| `theme` | `dark`, `light` | `dark` for live HTML, `light` for file formats (`png`, `svg`, `pdf`) |
+| `palette` | `pastel`, `okabe-ito`, `petrol`, or a list of colours | `pastel` for live HTML, `okabe-ito` for file formats |
+| `format` | per step (its `FORMATS`) | per step |
+| `labels` | ggplot keys `title`/`subtitle`/`x`/`y`/`caption`; not trajectory series names | — |
+| `title` | text or `$path` | no title |
+| `subtitle` | text or `$path` under the title | none |
+| `xlabel` / `ylabel` | axis titles, text or `$path` | trajectory plots: `PC1` / `PC2` |
+| `caption` | small line under the figure | none |
+
+Live folding is the **step-level** YAML key `realtime:`, not a figure `config` key. `realtime: false` draws once at seal instead of folding live batches. Omit it when the class has only one handler.
+
+A value that is `$path` is a **binding** into the pipeline context
+(ggplot `aes()`, d3 accessor). Anything else is **free text** (ggplot
+`labs()`). Write `$$foo` for a literal `$foo`.
+
+```yaml
+title: Session trajectories              # free text
+title: $experiment.name                  # this experiment's name
+legend: $scenario.metadata.legend        # per series (aes)
+legend: skill vs empty                   # the same label on every series
+xlabel: $test.metadata.x_axis            # a key the plot did not invent
+```
+
+The path is looked up when the step runs, so a standalone pipeline file
+reused with several experiments keeps working. Roots a step can see:
+
+| Root | A run-scope step sees | A scenario-scope step sees | An experiment-scope step sees |
+| --- | --- | --- | --- |
+| `$experiment` | the experiment | the experiment | the experiment |
+| `$scenario` | this scenario | this scenario | empty, unless the step binds per series / row |
+| `$test` | this dataset item | aggregate / child rows | empty, unless bound per row |
+| `$run` | this repeat | aggregate / child rows | empty, unless bound per row |
+| `$artefact` / `$row` | the current input row | the current input row | the current input row |
+
+`gather_level` copies missing `experiment` / `scenario` / `test` / `run`
+id columns onto the concatenated frame so a later plot can still bind
+`$scenario.*` from those rows. plotnine `mapping:` values that are
+`$path` become columns (ggplot `aes`); `title` / `labels` stay figure-level.
+
+Each step declares the keys it implements (`HONORS`). A key set on a step
+that does not implement it logs a warning instead of being ignored
+silently. Trajectory and message plots typically implement `format` and
+`title`; `pipeline_diagram` implements `theme`/`title`; `plotnine`
+implements `palette`/`labels` and the figure-text keys; `ci_plot`
+implements `labels` and figure-text keys. `FigureStep.bind` resolves
+`$path` for any config key, including ones a new plot defines.
+
 ### data/ — plumbing
 
 | Type | Role |
@@ -95,7 +149,21 @@ absolute paths and `..` are rejected. See [Output locations](../../docs/manifest
 | `events_to_otel` | Replay native `events.jsonl` into OTel spans |
 | `export_otel` | Convert a run's events to OTel spans and route them to a destination |
 | `file_tail` | Watch a file glob and publish `custom.{owner}.raw` on change |
-| `shell` | Inline `/bin/sh -c` command (lab cwd) |
+| `shell` | Inline `/bin/sh -c` command (lab cwd). A trigger `do: {type: shell}` is the world action, not this process step. |
+
+### environment/
+
+World actions. They also run from a trigger's `do:` list. See [environment.md](../../docs/manifests/environment.md).
+
+| Type | Role |
+|------|------|
+| `http_call` | Loopback (or allow-listed) HTTP; records status and duration |
+| `clock_advance` | Advance a virtual run clock |
+| `sleep` | Wall pause, bounded by `limits.max_sleep_s` |
+| `emit` | Named `user.*` environment event |
+| `fixture_restart` / `fixture_stop` | Bounce or drop a fixture |
+| `steer` / `inject` / `pause` / `resume` / `checkpoint` / `kill_switch` / `hitl_answer` | Control-API session actions |
+| `threshold_alarm` | Emit an event when a live metric crosses a threshold |
 
 ## Steps from other libraries
 

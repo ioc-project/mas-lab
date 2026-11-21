@@ -1,0 +1,53 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+experiment:
+  name: revocation
+  description: >
+    After tool result 2, revoke the credential at the issuer. The virtual
+    wait cell then advances 21s so the payments cache refreshes to denied.
+  default_flavour: local
+  models:
+    main: scripted
+  application:
+    manifest: ./agent.yaml
+  scenarios:
+    - id: issuer-backed
+      description: Issuer-backed payments
+      overlays:
+        logic: []
+        control: []
+        infra: []
+  dataset:
+    path: ./dataset.yaml
+  run:
+    n_runs: 1
+  schedule:
+    parallel_scenarios: 1
+    max_attempts: 1
+  environment:
+    clock:
+      kind: virtual
+    fixtures:
+      - name: issuer
+        kind: process
+        command: [python3, fixtures/issuer.py, --port, "{port}"]
+        port: auto
+        health: {path: /health, timeout_s: 10}
+        clock: {path: /clock}
+      - name: payments
+        kind: process
+        command:
+          - python3
+          - fixtures/payments.py
+          - --port
+          - "{port}"
+          - --issuer
+          - "${fixture.issuer.url}"
+        port: auto
+        health: {path: /health, timeout_s: 10}
+        clock: {path: /clock}
+      - name: scripted-model
+        kind: process
+        command: [python3, fixtures/scripted_model.py, --port, "{port}"]
+        port: auto
+        health: {path: /, timeout_s: 10}

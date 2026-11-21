@@ -129,7 +129,7 @@ def test_execute_batch_preloads_before_the_pool_and_runs():
     source = inspect.getsource(execute._execute_batch)
     preload = source.index("preload_run_path)")
     assert preload < source.index("RunWorkerPool(")
-    assert preload < source.index("asyncio.create_task(_run_one")
+    assert preload < source.index("asyncio.create_task(_guarded")
 
 
 def test_spawn_worker_uses_iter_overlay_refs():

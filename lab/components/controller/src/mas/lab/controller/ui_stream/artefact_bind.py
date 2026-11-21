@@ -29,6 +29,7 @@ SHORTCUTS = {
     "trace": "events",
     "events": "events",
     "metrics": "metric",
+    "environment": "custom.environment",
 }
 
 # Live folds consume the events artefact and produce one named snapshot each.
@@ -72,6 +73,14 @@ LIVE_GRAPH: dict[str, dict[str, Any]] = {
         "outputs": ["metric"],
         "producers": ["fold.metrics"],
         "consumers": ["plot.metrics"],
+    },
+    "custom.environment": {
+        "stream": "custom.environment",
+        "plot": "timeline",
+        "inputs": [],
+        "outputs": ["custom.environment"],
+        "producers": ["environment"],
+        "consumers": ["plot.timeline"],
     },
 }
 
@@ -131,7 +140,8 @@ def name_of_stream(stream: str) -> str:
             return ".".join(parts[:2]) if len(parts) >= 2 else owner
     if owner.startswith("metric"):
         return "metric"
-    if owner.startswith(("native.", "spec.", "job.", "command.", "result.", "control.", "governance.", "io.")) or owner in {
+    native_owners = ("native.", "spec.", "job.", "command.", "result.", "control.", "governance.", "io.")
+    if owner.startswith(native_owners) or owner in {
         "native",
         "job",
         "spec",
@@ -302,7 +312,9 @@ def shard_is_complete(rows: list[dict[str, Any]], *, tree: str) -> bool:
     if any(row.get("complete") is True or is_sealed_topic(str(row.get("topic") or "")) for row in rows):
         return True
     if tree == "runtime":
-        kinds = {str((row.get("payload") or {}).get("kind") if isinstance(row.get("payload"), dict) else "") for row in rows}
+        kinds = {
+            str((row.get("payload") or {}).get("kind") if isinstance(row.get("payload"), dict) else "") for row in rows
+        }
         kinds.update(str(row.get("topic") or "").rsplit(".", 1)[-1] for row in rows)
         return bool(kinds & {"mas_call_end", "execution_end", "job.completed"})
     return False

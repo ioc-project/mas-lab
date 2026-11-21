@@ -96,6 +96,7 @@ class RunInput:
     checkpoint_save: Any = False
     session_id: Optional[str] = None
     expectations: Dict[str, Any] = field(default_factory=dict)
+    environment: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.turns:
@@ -120,9 +121,7 @@ class RunInput:
     def scripted_queries(self) -> List[str]:
         """Ordered user + HITL messages for SessionController (interleaved)."""
         return [
-            str(msg["content"])
-            for msg in self.dialogue()
-            if msg.get("role") in {"user", "hitl"} and msg.get("content")
+            str(msg["content"]) for msg in self.dialogue() if msg.get("role") in {"user", "hitl"} and msg.get("content")
         ]
 
 
@@ -215,9 +214,7 @@ def load_run_input(
         raise TypeError(f"{where}: inputs.checkpoint must be a mapping")
     load_val = checkpoint.get("load")
     checkpoint_load = (
-        resolve_file_slot(load_val, base_path)
-        if isinstance(load_val, str) or is_ref_object(load_val)
-        else load_val
+        resolve_file_slot(load_val, base_path) if isinstance(load_val, str) or is_ref_object(load_val) else load_val
     )
 
     return RunInput(
@@ -230,6 +227,7 @@ def load_run_input(
         checkpoint_save=checkpoint.get("save", False),
         session_id=inputs.get("session_id"),
         expectations=resolve_expectations(merged.get("expectations"), base_path, where=where),
+        environment=dict(item.get("environment") or {}),
     )
 
 
@@ -249,6 +247,8 @@ def run_input_to_dict(run_input: RunInput) -> Dict[str, Any]:
     out: Dict[str, Any] = {"inputs": inputs}
     if run_input.expectations:
         out["expectations"] = run_input.expectations
+    if run_input.environment:
+        out["environment"] = dict(run_input.environment)
     return out
 
 

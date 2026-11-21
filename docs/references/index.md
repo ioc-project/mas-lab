@@ -83,8 +83,9 @@ Experiments, datasets, pipelines, and analysis (`mas-lab`).
 | Topic | Reference |
 |-------|-----------|
 | Experiment manifest | [experiment.md](../manifests/experiment.md) |
+| World around a run | [environment.md](../manifests/environment.md) |
 | Lab run throughput | [lab-throughput.md](lab-throughput.md) |
-| Dataset | [dataset.md](../manifests/dataset.md) |
+| Dataset | [dataset.md](../manifests/dataset.md) · [dataset.md §10](../manifests/dataset.md#10-world-around-the-item-environment) |
 | Pipeline steps | [pipeline.md](../manifests/pipeline.md) |
 | Interactive lab demo | [lab.md](../manifests/lab.md) |
 | Bench design & steps | [Lab package docs](lab.md) |

@@ -1,0 +1,41 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: lab/v1
+kind: Dataset
+metadata:
+  name: revocation-queries
+spec:
+  items:
+    - id: revoked_mid
+      inputs:
+        user: "Pay the fare three times."
+      environment:
+        triggers:
+          - id: revoke-after-2
+            when: {"on": tool_result, tool: pay_fare, occurrence: 2}
+            do:
+              - type: http_call
+                config:
+                  method: POST
+                  fixture: issuer
+                  path: /admin/revoke
+                  expect_status: 200
+    - id: revoked_mid_wait
+      inputs:
+        user: "Pay the fare three times."
+      environment:
+        triggers:
+          - id: revoke-after-2
+            when: {"on": tool_result, tool: pay_fare, occurrence: 2}
+            do:
+              - type: http_call
+                config:
+                  method: POST
+                  fixture: issuer
+                  path: /admin/revoke
+                  expect_status: 200
+          - id: wait-refresh
+            when: {"on": tool_call, tool: pay_fare, occurrence: 3}
+            do:
+              - type: clock_advance
+                config: {by: 21s}

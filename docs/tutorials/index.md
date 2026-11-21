@@ -39,6 +39,7 @@ credentials, and a check that everything works. The CLI and web UI share it.
 | 12 | [Spawned subagents](12-subagents/README.md) | Run bounded, pre-authored subagent templates during a turn |
 | 13 | [Control attach and debug scripts](13-control-and-debug/README.md) | Interrupt a bad session, persist, resume; investigate; steer-to-fix on the restarted chat; auto-checkpoint tree; gdb `script_file` / `--debug-script` |
 | 14 | [Governance and HITL](14-governance-hitl/README.md) | Require human or policy approval (human in the loop, HITL) before a tool call runs |
+| 15 | [World events and fixtures](15-world-events-and-fixtures/README.md) | Experiment fixtures, per-item triggers, `environment.jsonl`, and the timeline lane |
 
 After Tutorial 14, reproduce the paper results in three labs: [Paper](../paper/index.md).
 

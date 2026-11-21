@@ -670,6 +670,16 @@ plugins:
     shortcuts:
       - budget
   - type: governance
+    name: environment
+    urn: mas.gov.environment
+    module: mas.library.standard.plugins.governance.environment
+    class: EnvironmentPlugin
+    description: >
+      Observer for lab environment triggers. Always ALLOW. Fires world
+      actions at the governance synchronous point when a port is bound.
+    attributes:
+      expose_as_system_tool: false
+  - type: governance
     name: gdb
     urn: mas.gov.gdb
     module: mas.library.standard.plugins.governance.debug_script

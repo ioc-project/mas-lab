@@ -1,6 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
+
 """service_start — pipeline step that provisions an infrastructure service.
 
 Starts a named service from an ``infra/v1`` ``ServiceBundle`` (or a legacy
@@ -24,15 +26,17 @@ infra : str, default "services"
 health_timeout : int, default 30
     Seconds to wait for the service's health URL to become reachable.  Zero
     disables the wait entirely (fire-and-forget).
+keep_running : bool, default false
+    Leave the service running after this level ends. The default is to stop
+    it at the end of the level even when ``service_stop`` is omitted.
 
-Example (experiment ``pipeline:`` section, phase=pre):
+Example (experiment-level ``pre:`` hook):
 
 .. code-block:: yaml
 
-    pipeline:
+    pre:
       - type: service_start
         name: start-otel
-        phase: pre
         config:
           service: otel-collector
           infra: local-test
@@ -42,8 +46,7 @@ Example (experiment ``pipeline:`` section, phase=pre):
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
-from urllib.request import urlopen
+from typing import Any, Optional
 from urllib.error import URLError
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
@@ -52,9 +55,7 @@ from mas.runtime.spec.infra_paths import experiment_infra_bundle_path, resolve_i
 logger = logging.getLogger(__name__)
 
 
-def _resolve_infra_yaml(
-    infra_name: str, ctx: Any, base_dir: Optional[Path] = None
-) -> Path:
+def _resolve_infra_yaml(infra_name: str, ctx: Any, base_dir: Optional[Path] = None) -> Path:
     """Resolve ``infra/<name>.yaml`` relative to the experiment directory.
 
     Resolution order:
@@ -67,9 +68,7 @@ def _resolve_infra_yaml(
     if base_dir is not None:
         exp_dir = base_dir
     else:
-        config_path: Optional[Path] = getattr(
-            getattr(ctx, "pipeline", None), "config_path", None
-        )
+        config_path: Optional[Path] = getattr(getattr(ctx, "pipeline", None), "config_path", None)
         exp_dir = config_path.parent if config_path else Path(".")
 
     found = resolve_infra_bundle(exp_dir, infra_name, search_workspace=True)
@@ -84,16 +83,24 @@ def _resolve_infra_yaml(
 
 
 def _wait_for_url(url: str, timeout: int) -> bool:
-    """Poll *url* until it returns 2xx or *timeout* seconds elapse."""
+    """Poll *url* until it returns 2xx or *timeout* seconds elapse.
+
+    Probes quickly at first (a local service is usually up within a few hundred ms) and
+    backs off to one probe per second, so a ready service does not cost a full second.
+    """
+    from mas.lab.benchmark.environment.fixtures import open_url
+
     deadline = time.monotonic() + timeout
+    pause = 0.05
     while time.monotonic() < deadline:
         try:
-            resp = urlopen(url, timeout=2)
+            resp = open_url(url, 2)
             if 200 <= resp.status < 300:
                 return True
         except (URLError, OSError):
-            logger.debug('suppressed', exc_info=True)
-        time.sleep(1)
+            logger.debug("suppressed", exc_info=True)
+        time.sleep(min(pause, max(0.0, deadline - time.monotonic())))
+        pause = min(pause * 2, 1.0)
     return False
 
 
@@ -116,28 +123,27 @@ class ServiceStartStep(PipelineStep):
         return False
 
     async def execute(self, ctx: Any) -> StepOutput:  # type: ignore[override]
-        from mas.lab.benchmark.service_manager import ServiceManager
+        from mas.lab.benchmark.service_manager import mark_keep_running, shared_manager
 
         service_name: str = self.config["service"]
         infra_name: str = self.config.get("infra", "services")
         health_timeout: int = int(self.config.get("health_timeout", 30))
 
         services_yaml = _resolve_infra_yaml(infra_name, ctx)
-        logger.info(
-            "service_start: starting %r from %s", service_name, services_yaml
-        )
+        logger.info("service_start: starting %r from %s", service_name, services_yaml)
 
-        mgr = ServiceManager(services_yaml=services_yaml)
+        output_dir = Path(getattr(ctx, "output_dir", ".") or ".")
+        mgr = shared_manager(services_yaml, output_dir=output_dir)
         ok = mgr.start(service_name)
+        if bool(self.config.get("keep_running")):
+            mark_keep_running(service_name, services_yaml)
 
         if not ok:
             logger.warning(
                 "service_start: failed to start service %r — continuing",
                 service_name,
             )
-            return StepOutput(
-                metadata={"service": service_name, "started": False, "healthy": False}
-            )
+            return StepOutput(metadata={"service": service_name, "started": False, "healthy": False})
 
         # Optional health-check wait
         healthy: Optional[bool] = None
@@ -145,16 +151,15 @@ class ServiceStartStep(PipelineStep):
             svc = mgr._services.get(service_name)
             health_url = (svc.health_check.url if svc else "") or ""
             if health_url:
-                logger.info(
-                    "service_start: waiting up to %ds for %s …", health_timeout, health_url
-                )
+                logger.info("service_start: waiting up to %ds for %s …", health_timeout, health_url)
                 healthy = _wait_for_url(health_url, health_timeout)
                 if healthy:
                     logger.info("service_start: %r is healthy", service_name)
                 else:
                     logger.warning(
                         "service_start: health check timed out for %r at %s",
-                        service_name, health_url,
+                        service_name,
+                        health_url,
                     )
 
         return StepOutput(

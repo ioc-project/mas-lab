@@ -130,6 +130,7 @@ practical examples.
 | `BacktrackOnErrorPlugin` | `mas.library.standard.plugins.governance.backtrack_on_error` | `library-standard` |
 | `BudgetPlugin`           | `mas.library.standard.plugins.governance.budget`             | `library-standard` |
 | `DebugScriptPlugin`      | `mas.library.standard.plugins.governance.debug_script`       | `library-standard` |
+| `EnvironmentPlugin`      | `mas.library.standard.plugins.governance.environment`        | `library-standard` |
 | `HardeningProfilePlugin` | `mas.library.standard.plugins.governance.hardening_profile`  | `library-standard` |
 | `NoUndeclaredPeerPlugin` | `mas.library.standard.plugins.governance.no_undeclared_peer` | `library-standard` |
 | `NoUndeclaredToolPlugin` | `mas.library.standard.plugins.governance.no_undeclared_tool` | `library-standard` |
@@ -378,6 +379,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `DropLayer`                      | layer                | `library-standard`  |
 | `DropSummarizer`                 | summarizer           | `library-standard`  |
 | `EmbedStatesStep`                | step                 | `library-kg`        |
+| `EnvironmentPlugin`              | governance           | `library-standard`  |
 | `EventsToOtelStep`               | step                 | `library-telemetry` |
 | `ExportOtelStep`                 | step                 | `library-telemetry` |
 | `FailLayer`                      | layer                | `library-standard`  |

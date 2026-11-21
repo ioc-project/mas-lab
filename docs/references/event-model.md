@@ -83,6 +83,7 @@ As of v0.2.0 the model is implemented as follows.
 - **Written stream.** JSONL emitters write the same records to a file or stdout for later reading: `JsonlFileEmitter`, `StdoutJsonlEmitter`, `FanOutEmitter`, and `NullEmitter` in `mas.library.standard.lib.observability.emit`. `JsonlFileEmitter` keeps one append-mode file descriptor, writes each whole line unbuffered, and closes when the plugin set closes; an emit after close raises. The lab stream log (`LogChannel`) keeps one line-buffered handle per stream and closes it on seal; a publish after `close` raises. How that used to open a file per event, and how it limits scaling: [Lab run throughput](lab-throughput.md).
 - **Transport.** Protocol plugins emit `transport.*` records (`mas.runtime.schema.transport.TransportEvent`) onto the same JSONL stream. They are not kernel Mealy symbols. See [Transport observability](transport-observability.md).
 - **Cross-process tail.** `ExchangeHub` (`mas.runtime.boundary.obs.exchange_hub`) fans out driver exchange records to control-protocol subscribers. The host injects it. It is not a process-wide singleton.
+- **World around a run.** The lab writes `traces/environment.jsonl` (`custom.environment`): fixtures, triggers, and world actions. That stream is not a kernel crossing. See [environment.md](../manifests/environment.md).
 
 ## Related
 

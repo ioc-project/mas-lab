@@ -156,6 +156,7 @@ nav:
           - "12 Spawned subagents": tutorials/12-subagents/README.md
           - "13 Control and debug": tutorials/13-control-and-debug/README.md
           - "14 Governance and HITL": tutorials/14-governance-hitl/README.md
+          - "15 World events and fixtures": tutorials/15-world-events-and-fixtures/README.md
       - Labs: discover/labs.md
       - Integrations:
           - IoC integrations: discover/integrations.md
@@ -237,6 +238,7 @@ nav:
       - Lab:
           - Experiment: manifests/experiment.md
           - Lab run throughput: references/lab-throughput.md
+          - Environment: manifests/environment.md
           - Dataset: manifests/dataset.md
           - Pipeline: manifests/pipeline.md
           - Lab folder: manifests/lab.md

@@ -7,7 +7,7 @@
 **Package:** `lab/components/bench` · **Schema:** `dataset.schema.yaml` · **apiVersion:** `lab/v1`
 
 A **dataset** manifest lists the inputs of a benchmark.
-Each **item** is one case. It holds a user prompt and, optionally, human-in-the-loop (HITL) replies, memory seeds, tool fixtures, and expected results.
+Each **item** is one case. It holds a user prompt and, optionally, human-in-the-loop (HITL) replies, memory seeds, tool fixtures, a world overlay (`environment:`), and expected results.
 Write a dataset when an **experiment** needs a fixed set of inputs to run every **scenario** against.
 The experiment pairs the dataset with its scenarios and `run.n_runs`.
 
@@ -43,9 +43,9 @@ An item has no chat-log `turns:` field.
 ## Contents
 
 - [Fields you always set](#fields-you-always-set): [1. Manifest format](#1-manifest-format), [2. Item fields](#2-item-fields-reference), [3. Path references](#3-path-references)
-- [Fields you sometimes set](#fields-you-sometimes-set): [4. Memory seeds](#4-memory-seeds-the-memory-state-slot), [5. HITL](#5-hitl-optional), [6. Session continuity](#6-session-continuity), [7. Experiment-level seeds](#7-experiment-level-seeds-and-merge-order), [8. Tool fixtures](#8-tool-fixtures), [9. Schemas for free-form parts](#9-schemas-for-the-free-form-parts)
+- [Fields you sometimes set](#fields-you-sometimes-set): [4. Memory seeds](#4-memory-seeds-the-memory-state-slot), [5. HITL](#5-hitl-optional), [6. Session continuity](#6-session-continuity), [7. Experiment-level seeds](#7-experiment-level-seeds-and-merge-order), [8. Tool fixtures](#8-tool-fixtures), [9. Schemas for free-form parts](#9-schemas-for-the-free-form-parts), [10. World around the item](#10-world-around-the-item-environment)
 - [Full example](#full-example)
-- [Advanced fields](#advanced-fields): [10. App-specific datasets](#10-app-specific-and-general-purpose-datasets), [11. `spec.source`](#11-specsource-meta-datasets-mmlu-pro)
+- [Advanced fields](#advanced-fields): [11. App-specific datasets](#11-app-specific-and-general-purpose-datasets), [12. `spec.source`](#12-specsource-meta-datasets-mmlu-pro)
 - [Common mistakes](#common-mistakes)
 
 ---
@@ -100,7 +100,7 @@ Check a Dataset file with `mas-lab validate datasets/my-dataset.yaml` (it detect
 | `metadata.display_name`, `description`, `tags` | no | Labels for reports and UIs. |
 | `spec.items` | one of `items` / `path` / `source` | Inline items (see [section 2](#2-item-fields-reference)). |
 | `spec.path` | | Sidecar file of already-shaped items (YAML, JSONL, or CSV) next to this file. `spec.format` (`yaml`, `jsonl`, or `csv`; default `yaml`) is a format hint. |
-| `spec.source` | | External corpus plus column map; see [section 11](#11-specsource-meta-datasets-mmlu-pro). |
+| `spec.source` | | External corpus plus column map; see [section 12](#12-specsource-meta-datasets-mmlu-pro). |
 | `spec.app` | no | Compatible app range: `[library:]name[@tag-or-range]` (`my-app@v1`, `my-app@^v1`, `my-app@>=v1,<v3`) or `{name, library, version}`. Omit for general-purpose datasets. |
 | `spec.schemas` | no | JSON Schemas for the free-form item parts; see [section 9](#9-schemas-for-the-free-form-parts). |
 | `spec.groups` | no | Declared item groups `[{id, description, count}]`. Documentation only: the loader does not read it. Items select a group with their own `group` key. |
@@ -116,6 +116,7 @@ Each item follows `run-input.schema.yaml`.
 | `inputs.hitl` | string, string list, or `{ref:}` | no | Operator replies after the prompt, in order. |
 | `inputs.memory_seeds` | list, `{ref:}`, or bare path | no | Initial memory state. See [section 4](#4-memory-seeds-the-memory-state-slot). |
 | `inputs.tool_fixtures` | `{ref:}`, bare path, or mapping | no | Mock-tool payloads. See [section 8](#8-tool-fixtures). |
+| `environment` | mapping | no | Per-item timers and triggers overlaid on the experiment world. Sibling of `inputs`, not inside it. See [section 10](#10-world-around-the-item-environment). |
 | `inputs.session_id` | string | no | Fixed conversation identifier. See [section 6](#6-session-continuity). |
 | `inputs.checkpoint.load` | path, `{ref: path}`, or `null` | no | Checkpoint to resume this item's run from. An experiment-level `checkpoints` axis overrides it when declared. See [checkpoint.md](checkpoint.md). |
 | `inputs.checkpoint.save` | boolean or string | no (`false`) | `true` (or a string) saves checkpoints under the run's `checkpoints/` folder after each turn. |
@@ -136,6 +137,7 @@ Which slots the agent sees:
 | `inputs.hitl` | As HITL replies. |
 | `inputs.memory_seeds` | Through memory. |
 | `inputs.tool_fixtures` | Through tools. |
+| `environment` | No. The world around the run, not a slot the agent reads. |
 | `inputs.checkpoint.load` | Through the restored session. |
 | `inputs.checkpoint.save`, `expectations` | No. |
 
@@ -414,7 +416,7 @@ apps/<app>/v1/datasets/<name>/
 
 mas-lab does not interpret payloads or `details`.
 A Dataset can still declare JSON Schemas for them in `spec.schemas`.
-Keys are dotted envelope paths, the same vocabulary as [`spec.source.map`](#112-map).
+Keys are dotted envelope paths, the same vocabulary as [`spec.source.map`](#122-map).
 Only free-form roots are allowed, because the run-input schema already checks the generic layer.
 
 ```yaml
@@ -434,6 +436,71 @@ Rules:
 - Violations, unknown keys, and missing schema files fail `Dataset.from_yaml` and `mas-lab validate`.
 - The loader checks `spec.source` rows when it materializes them.
 - A tool can ship its fixture schema next to its code. Datasets reference it by catalog path.
+
+### 10. World around the item (`environment:`)
+
+`environment:` on an item is the same key as on the experiment. It overlays
+timers and triggers onto the world the experiment already started. It is not
+a second world, and it does not replace `inputs.memory_seeds` or
+`inputs.tool_fixtures`.
+
+The split matches the one already used for seeds: knowledge every run should
+see lives on the agent or in a shared seed file; knowledge that differs per
+case lives on the item. Here, processes every run should see live on the
+experiment (or scenario); the event that differs per case lives on the item.
+
+| Layer | YAML | Holds |
+| --- | --- | --- |
+| Experiment | `experiment.environment` | Fixtures, clock kind, shared timers and triggers |
+| Scenario | `scenarios[].environment` | Overlay of the experiment block |
+| Dataset item | `spec.items[].environment` | Per-case timers and triggers only |
+
+Blocks merge experiment → scenario → item. `triggers` and `timers` concatenate.
+Nested mappings such as `clock` overlay. An item cannot declare `fixtures`
+(the schema and the compiler both refuse the key, including `fixtures: []`).
+
+```yaml
+# experiment.yaml — the world every item shares
+experiment:
+  environment:
+    clock: {kind: virtual}
+    fixtures:
+      - name: issuer
+        kind: process
+        command: [python3, fixtures/issuer.py, --port, "{port}"]
+        port: auto
+
+# dataset.yaml — what happens in this case
+- id: revoked_mid
+  inputs:
+    user: Pay the fare three times.
+  environment:
+    triggers:
+      - id: revoke-after-2
+        when: {"on": tool_result, tool: pay_fare, occurrence: 2}
+        do:
+          - type: http_call
+            config: {method: POST, fixture: issuer, path: /admin/revoke}
+```
+
+`environment` is a sibling of `inputs`, not a key inside it. The agent does
+not read it. Worked example: [Tutorial 15](../tutorials/15-world-events-and-fixtures/README.md).
+Field reference: [environment.md](environment.md).
+
+These slots stay. None of them is deprecated.
+
+| Slot | Use it for | Do not use it for |
+| --- | --- | --- |
+| `inputs.memory_seeds` | Facts the agent already knows | Starting a process |
+| `inputs.tool_fixtures` | Mock payloads a tool reads | A live loopback service |
+| `inputs.hitl` | Scripted operator replies at the start | A mid-run `hitl_answer` |
+| `environment` (item) | When a world action fires in this case | Declaring fixtures |
+| `experiment.environment` | Fixtures, clock, shared triggers | Per-item prompts or seeds |
+
+`service_start` / `service_stop` remain the pipeline pre/post pair for
+level-scoped infra. `gdb@v1` remains the operator debugger. They share a
+`when` model with environment triggers on purpose; gdb observes, a trigger
+`do:` list changes the world.
 
 ---
 
@@ -529,7 +596,7 @@ The 250-item trip-planner benchmark lives in `benchmark.yaml`.
 
 ## Advanced fields
 
-### 10. App-specific and general-purpose datasets
+### 11. App-specific and general-purpose datasets
 
 An app-specific dataset lives under the app version it evaluates.
 The catalog id and `spec.app` use that same version tag:
@@ -555,7 +622,7 @@ Omit `spec.app` for generic datasets.
 `library-samples` ships one complete trip-planner Dataset (`trip-planner-benchmark`).
 Cap rows in the experiment with `dataset.limit`, not with a reduced sidecar file.
 
-### 11. `spec.source`: meta-datasets (MMLU-Pro)
+### 12. `spec.source`: meta-datasets (MMLU-Pro)
 
 A **meta-dataset** is a Dataset document whose `spec.source` tells mas-lab where a third-party corpus lives.
 It also says how each row becomes one envelope item.
@@ -571,7 +638,7 @@ Worked copies:
 - HuggingFace MMLU-Pro (no rows in git): [`docs/schemas/examples/datasets/mmlu-pro.yaml`](../schemas/examples/datasets/mmlu-pro.yaml)
 - Offline jsonl slice (same `map`, tiny fixture): [`docs/schemas/examples/datasets/mmlu-pro-jsonl.yaml`](../schemas/examples/datasets/mmlu-pro-jsonl.yaml)
 
-#### 11.1 Fields
+#### 12.1 Fields
 
 | Field | Required | Meaning |
 |---|---|---|
@@ -590,7 +657,7 @@ Declare `source` on the Dataset manifest. A catalog id then wraps the map.
 `experiment.dataset.source` has the same shape. The loader merges it over the Dataset's `spec.source`.
 Use it to override `split`, `limit`, or `map` for one experiment without forking the Dataset file.
 
-#### 11.2 `map`
+#### 12.2 `map`
 
 Each key is a dotted envelope path. Each value is one of:
 
@@ -615,7 +682,7 @@ map:
   category: category
 ```
 
-#### 11.3 Examples
+#### 12.3 Examples
 
 **MMLU-Pro from HuggingFace** (needs the `datasets` package at load time):
 
@@ -699,7 +766,7 @@ spec:
       expectations.ground_truth: gt_answer_index
 ```
 
-#### 11.4 What this is not
+#### 12.4 What this is not
 
 - It is not a copy of MMLU-Pro into `spec.items`.
 - It is not a way to split information across agents. A benchmark that gives each agent a private shard of the facts needs its own dataset. MMLU-Pro rows have no per-agent split to map from.
@@ -719,6 +786,9 @@ spec:
 - **Coupling thousands of item ids.** Use a cartesian design for large corpora.
 - **An unquoted HITL reply that starts with `Operator:`.** YAML reads it as a mapping. Quote it.
 - **`memory_seeds` in `experiment.yaml`.** The experiment schema rejects it. Seed from items or from the agent.
+- **`fixtures` on a dataset item.** Fixtures stay on the experiment or scenario. Put per-case triggers on the item.
+- **`environment` under `inputs`.** It is a sibling of `inputs`, the same key as on the experiment.
+- **Using `tool_fixtures` in place of a live process.** Mock payloads go in `inputs.tool_fixtures`. A loopback issuer is an experiment fixture.
 - **Expecting `inputs.session_id` to pin the session.** The native runner ignores it today.
 
 ---
@@ -726,5 +796,7 @@ spec:
 ## See also
 
 - [dataset-migration.md](dataset-migration.md): prompt to `inputs.user` string
+- [environment.md](environment.md): world around a run (fixtures, clock, triggers)
 - [overlay.md](overlay.md): scenario-level memory seeds and params
 - [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md): hands-on benchmarks
+- [Tutorial 15](../tutorials/15-world-events-and-fixtures/README.md): experiment fixtures, per-item triggers

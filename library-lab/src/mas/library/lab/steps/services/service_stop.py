@@ -1,11 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
+
 """service_stop — pipeline step that tears down an infrastructure service.
 
 Stops a service that was previously started by :class:`service_start.ServiceStartStep`.
-Intended to run in the default ``post`` phase (after all benchmark runs) so
-that infrastructure services are kept alive for the duration of the experiment.
+Uses the same batch-scoped ServiceManager as ``service_start`` so a process
+backend is actually terminated. Idempotent if the service is already down.
 
 Config keys
 -----------
@@ -14,11 +16,11 @@ service : str (required)
 infra : str, default "services"
     Infra bundle name (must match the value used in ``service_start``).
 
-Example (experiment ``pipeline:`` section, phase=post / default):
+Example (experiment-level ``post:`` hook):
 
 .. code-block:: yaml
 
-    pipeline:
+    post:
       - type: service_stop
         name: stop-otel
         depends_on: [export-otel]   # optional, for explicit ordering
@@ -29,7 +31,7 @@ Example (experiment ``pipeline:`` section, phase=post / default):
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.library.lab.steps.services.service_start import _resolve_infra_yaml
@@ -50,17 +52,16 @@ class ServiceStopStep(PipelineStep):
         return False
 
     async def execute(self, ctx: Any) -> StepOutput:  # type: ignore[override]
-        from mas.lab.benchmark.service_manager import ServiceManager
+        from mas.lab.benchmark.service_manager import shared_manager
 
         service_name: str = self.config["service"]
         infra_name: str = self.config.get("infra", "services")
 
         services_yaml = _resolve_infra_yaml(infra_name, ctx)
-        logger.info(
-            "service_stop: stopping %r from %s", service_name, services_yaml
-        )
+        logger.info("service_stop: stopping %r from %s", service_name, services_yaml)
 
-        mgr = ServiceManager(services_yaml=services_yaml)
+        output_dir = Path(getattr(ctx, "output_dir", ".") or ".")
+        mgr = shared_manager(services_yaml, output_dir=output_dir)
         ok = mgr.stop(service_name)
 
         if ok:
