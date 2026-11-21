@@ -37,7 +37,7 @@ Configure LLM access for live runs as [Tutorial 0](docs/tutorials/00-environment
 3. Make focused changes. Add tests where behavior changes.
 4. Run the relevant test suites before you open a PR.
 5. Sign off your commits (`git commit -s`). Use a `type(scope): subject` message with a short bullet list of the changes.
-6. Open a pull request with a clear description and test plan.
+6. Open a pull request with a clear description and test plan. Leave the `Signed-off-by` line out of the description: the commit keeps it, and GitHub adds one when it squash-merges. The `PR body` check fails if the description has one.
 
 ## Running tests
 

@@ -1,0 +1,32 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# The repository squash-merges with the pull request description as the commit message, and
+# GitHub adds its own Signed-off-by line to it. A description that already has one ends up
+# with two on main. The commits on the branch keep their sign-off (the DCO check reads those);
+# the description must not carry one.
+#
+# Separate from test.yml on purpose: editing a description must not rerun the test suite.
+name: PR body
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  signoff:
+    name: PR body has no sign-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refuse a Signed-off-by line in the description
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n' "$BODY" | grep -qiE '^[[:space:]]*Signed-off-by:'; then
+            echo "::error::The pull request description has a Signed-off-by line. GitHub adds one when it squash-merges, so main would get two. Remove the line from the description (keep it in the commit)."
+            exit 1
+          fi
