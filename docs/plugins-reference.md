@@ -130,6 +130,7 @@ practical examples.
 | `BacktrackOnErrorPlugin` | `mas.library.standard.plugins.governance.backtrack_on_error` | `library-standard` |
 | `BudgetPlugin`           | `mas.library.standard.plugins.governance.budget`             | `library-standard` |
 | `DebugScriptPlugin`      | `mas.library.standard.plugins.governance.debug_script`       | `library-standard` |
+| `HardeningProfilePlugin` | `mas.library.standard.plugins.governance.hardening_profile`  | `library-standard` |
 | `NoUndeclaredPeerPlugin` | `mas.library.standard.plugins.governance.no_undeclared_peer` | `library-standard` |
 | `NoUndeclaredToolPlugin` | `mas.library.standard.plugins.governance.no_undeclared_tool` | `library-standard` |
 | `RetryOnErrorPlugin`     | `mas.library.standard.plugins.governance.retry_on_error`     | `library-standard` |
@@ -386,6 +387,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |
 | `GroqLLMProvider`                | llm_provider         | `library-standard`  |
 | `GroqLLMProvider`                | layer                | `library-standard`  |
+| `HardeningProfilePlugin`         | governance           | `library-standard`  |
 | `HealthProbeLayer`               | layer                | `library-standard`  |
 | `HttpLayer`                      | layer                | `library-ioa`       |
 | `HuggingFaceLLMProvider`         | llm_provider         | `library-standard`  |

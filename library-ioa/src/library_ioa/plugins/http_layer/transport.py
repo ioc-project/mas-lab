@@ -17,6 +17,7 @@ from mas.library.standard.lib.comm.capabilities import capability_set
 from mas.library.standard.lib.comm.endpoint import LOOPBACK, split_url
 from mas.library.standard.lib.comm.headers import validate_headers
 from mas.library.standard.lib.comm.payload import MAX_MESSAGE_SIZE
+from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack import Envelope, Layer
 from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.library.standard.plugins.llm.http import resolve_ssl_verify
@@ -355,6 +356,6 @@ class HttpLayer(Layer):
                         )
                 encoding = response.encoding or "utf-8"
         except httpx.HTTPError as exc:
-            detail = str(exc).replace(self.url, shown_url(self.url))
+            detail = safe_text(str(exc).replace(self.url, shown_url(self.url)))
             raise AgentCommError(f"http transport: {type(exc).__name__}: {detail}") from None
         return reply.decode(encoding, errors="replace")

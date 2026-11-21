@@ -649,6 +649,17 @@ plugins:
       - gov_no_undeclared_peer
       - no_undeclared_peer
   - type: governance
+    name: gov_hardening_profile
+    urn: mas.gov.hardening_profile
+    module: mas.library.standard.plugins.governance.hardening_profile
+    class: HardeningProfilePlugin
+    description: >
+      Production hardening at run time: records the start-of-session hardening
+      report and BLOCKs a tool call to a host outside allowed_hosts.
+    shortcuts:
+      - gov_hardening_profile
+      - hardening_profile
+  - type: governance
     name: budget
     urn: mas.gov.budget
     module: mas.library.standard.plugins.governance.budget

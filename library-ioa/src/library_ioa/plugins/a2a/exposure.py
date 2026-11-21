@@ -82,6 +82,7 @@ class A2AExposure:
         self.port = port
         self.grpc_port = grpc_port
         self.public_url: str | None = None
+        self.admission: dict[str, str] | None = None
         self.grpc_url: str | None = None
         self.capabilities = dict(capabilities or {})
         if endpoint is not None:
@@ -128,6 +129,13 @@ class A2AExposure:
             else None
         )
         self.capabilities = dict(a2a_config.get("capabilities") or {})
+        if "admission" in a2a_config:
+            from .server.app import checked_admission
+
+            callers = (a2a_config["admission"] or {}).get("callers")
+            self.admission = checked_admission(dict(callers) if isinstance(callers, dict) else {})
+            if self.grpc_port is not None:
+                raise ValueError("A2A admission is enforced on HTTP only; remove grpc_port or admission")
 
     def build_app(self, manifest: dict[str, Any], handler: Callable[..., Any]) -> Any:
         from .server.app import build_app
@@ -155,6 +163,7 @@ class A2AExposure:
             MasLabAgentExecutor(self._adapt_runtime_handler(handler)),
             push_config_store=push_config_store,
             push_sender=push_sender,
+            admission=self.admission,
         )
 
     @staticmethod
@@ -191,6 +200,10 @@ class A2AExposure:
                     context.context_id = session_id
                 except Exception:
                     pass
+            user = getattr(getattr(context, "call_context", None), "user", None)
+            caller = str(user.user_name or "") if user is not None and user.is_authenticated else ""
+            if caller:
+                runtime_kwargs["caller"] = caller
             result = handler(
                 prompt,
                 turn_id=(getattr(message, "message_id", "") or getattr(context, "task_id", "") or "u1"),

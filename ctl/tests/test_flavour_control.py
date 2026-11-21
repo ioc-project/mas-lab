@@ -644,7 +644,21 @@ def test_bind_events_is_not_an_unknown_key() -> None:
 
 
 def test_bundled_prod_resolves() -> None:
-    assert resolve_flavour("prod") == {"require_usage": True}
+    # prod sets exactly these: usage rows required, production hardening posture (no waiver), and the
+    # with-hardened Control on every agent
+    spec = resolve_flavour("prod")
+    assert spec["require_usage"] is True
+    assert spec["hardening"] == {"profile": "production"}
+    assert spec["control"] == [{"ref": "pkg://mas.library.standard/controls/with-hardened.yaml", "agents": "$all"}]
+    assert set(spec) == {"require_usage", "hardening", "control", "_controls"}
+    assert [row["name"] for row in spec["_controls"]] == ["with-hardened"]
+
+
+def test_other_flavours_do_not_select_a_hardening_posture() -> None:
+    # kills: the production posture leaking into local or the default Flavour
+    for name in (None, "local"):
+        assert "hardening" not in resolve_flavour(name)
+    assert resolve_flavour("local") == resolve_flavour()
 
 
 def test_bundled_flavours_have_no_leftover_unread_keys() -> None:

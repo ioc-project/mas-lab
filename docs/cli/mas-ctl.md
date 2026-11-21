@@ -353,7 +353,9 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 
 | Command | Purpose | Typical flags |
 | --- | --- | --- |
-| `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay` |
+| `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay`, `--profile default\|production` |
+| `mas-ctl hardening list` | List the named hardening checks with severity, rationale and fix. See [hardening.md](../references/hardening.md). | `--json` |
+| `mas-ctl hardening check MANIFEST` | Run the hardening checks over an Agent or MAS as a session resolves it. Default posture is advisory (exit 0); `production` exits 1 on a failed check. | `--profile`, `--flavour`, `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--control`, `--json` |
 | `mas-ctl schemas` | List registered schema kinds. | none |
 | `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--control`, `--flavour`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
 | `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--connect`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |

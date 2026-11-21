@@ -115,6 +115,7 @@ from the manifest, not from `mas.runtime`.
 |----|-------|----------------|
 | `gov_no_undeclared_tool` | `gov_no_undeclared_tool` | `NoUndeclaredToolPlugin` — BLOCK names not in this LLM call's `tools` list; chain rule (pass or stop) |
 | `gov_no_undeclared_peer` | `gov_no_undeclared_peer` | `NoUndeclaredPeerPlugin` — BLOCK leftover `delegate_to_*` dest not in this agent's `delegates_to` |
+| `gov_hardening_profile` | `gov_hardening_profile` | `HardeningProfilePlugin` — record the hardening report; under `production` BLOCK a tool call to a host outside `allowed_hosts` |
 | `retry_on_error@v1` | `retry_on_error` | `RetryOnErrorPlugin` — ingress `error_policy` classifier; egress PASSes |
 
 | `debug_script@v1` | `debug_script` | `DebugScriptPlugin` — gdb-like breakpoints on tool calls and results; observes, never blocks |
@@ -122,6 +123,7 @@ from the manifest, not from `mas.runtime`.
 Card: [governance/debug-script.md](governance/debug-script.md).
 Example: [examples/governance/debug-script/](../../../../../examples/governance/debug-script/).
 
+- Card: [governance/hardening-profile.md](governance/hardening-profile.md)
 - Card: [governance/no-undeclared-tool.md](governance/no-undeclared-tool.md)
 - Card: [governance/no-undeclared-peer.md](governance/no-undeclared-peer.md)
 - Card: [governance/retry-on-error.md](governance/retry-on-error.md)

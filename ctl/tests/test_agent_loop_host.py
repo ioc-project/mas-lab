@@ -209,7 +209,7 @@ def test_serve_with_a_loop_binds_no_kernel_and_hands_the_loop_to_the_listener(tm
     endpoint = {"protocol": "a2a", "usage": "deploy", "url": "http://127.0.0.1:9"}
     served: list = []
 
-    def fake_expose(instance, manifest, ep, *, blocking, loop):
+    def fake_expose(instance, manifest, ep, *, blocking, loop, flavour_spec=None):
         served.append((instance, ep, blocking, loop.loop_id, loop.run(LoopTask(text="hi")).text))
 
     with patch.object(serve_cmd, "expose_agent", fake_expose):

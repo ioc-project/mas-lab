@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import inspect
 import json
 import logging
@@ -28,6 +29,7 @@ from a2a.utils.errors import (
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from google.protobuf.descriptor import FieldDescriptor
+from starlette.authentication import SimpleUser
 
 _DYNAMIC_PROTO_MESSAGES = {
     "google.protobuf.Any",
@@ -309,6 +311,52 @@ def _coerce_agent_card(card: AgentCard | dict[str, Any]) -> AgentCard:
     )
 
 
+MIN_ADMISSION_TOKEN = 32
+_AGENT_CARD_PATH = "/.well-known/agent-card.json"
+
+
+def checked_admission(admission: dict[str, str]) -> dict[str, str]:
+    """``admission`` when it names at least one caller with a long enough token; ``ValueError`` otherwise.
+
+    An empty table is refused, not read as "no restrictions", and so is a token that is missing or short.
+    """
+    if not isinstance(admission, dict) or not admission:
+        raise ValueError("A2A admission names no caller; an empty policy is refused, not read as open")
+    checked: dict[str, str] = {}
+    for name, token in admission.items():
+        caller = str(name or "").strip()
+        if not caller or any(ord(char) < 32 or ord(char) == 127 for char in caller):
+            raise ValueError("A2A admission caller names must be non-empty text without control characters")
+        if not isinstance(token, str) or len(token.encode("utf-8")) < MIN_ADMISSION_TOKEN:
+            raise ValueError(
+                f"A2A admission token for caller {caller!r} is missing or shorter than {MIN_ADMISSION_TOKEN} bytes"
+            )
+        if token in checked.values():
+            raise ValueError(f"A2A admission caller {caller!r} shares a token with another caller; tokens must differ")
+        checked[caller] = token
+    return checked
+
+
+def _add_admission(app: FastAPI, admission: dict[str, str]) -> None:
+    table = [(name, sha256(token.encode("utf-8")).digest()) for name, token in admission.items()]
+
+    @app.middleware("http")
+    async def admit(request: Request, call_next: Any) -> Response:
+        if request.method == "GET" and request.url.path == _AGENT_CARD_PATH:
+            return await call_next(request)
+        scheme, _, value = request.headers.get("authorization", "").partition(" ")
+        caller = ""
+        if scheme.lower() == "bearer" and value.strip():
+            presented = sha256(value.strip().encode("utf-8")).digest()
+            for name, expected in table:  # walk the whole table: the time does not say which entry matched
+                if hmac.compare_digest(presented, expected):
+                    caller = name
+        if not caller:
+            return JSONResponse({"error": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
+        request.scope["user"] = SimpleUser(caller)
+        return await call_next(request)
+
+
 def build_app(
     agent_card: AgentCard | dict[str, Any],
     executor: Any,
@@ -316,8 +364,16 @@ def build_app(
     push_config_store: PushNotificationConfigStore | None = None,
     push_sender: PushNotificationSender | None = None,
     extended_agent_card: AgentCard | dict[str, Any] | None = None,
+    admission: dict[str, str] | None = None,
 ) -> FastAPI:
-    """Build an SDK-backed A2A FastAPI app with the official JSON-RPC and agent-card routes."""
+    """Build an SDK-backed A2A FastAPI app with the official JSON-RPC and agent-card routes.
+
+    ``admission`` maps a caller name to its bearer token. Given, every request but the public agent
+    card must carry a token of that table, and the caller is the table's name for it, never anything
+    the request says about itself. Omitted, the app admits everyone (the default).
+    """
+    if admission is not None:
+        admission = checked_admission(admission)
     card = _coerce_agent_card(agent_card)
     task_store = InMemoryTaskStore()
     request_handler = _A2ARequestHandler(
@@ -397,6 +453,9 @@ def build_app(
             except Exception:
                 _logger.debug("a2a agent card hook failed", exc_info=True)
         return response
+
+    if admission is not None:
+        _add_admission(app, admission)
 
     from a2a.server.routes import add_a2a_routes_to_fastapi
 

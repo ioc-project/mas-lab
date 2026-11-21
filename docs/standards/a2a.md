@@ -101,6 +101,7 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 | `headers`, `timeout` | Client-side options passed to the outbound A2A client (`usage: connect`). |
 | `a2a.listen.host` / `a2a.listen.port` | Local bind address when it differs from `url`. Required when `url` is `https://`. |
 | `a2a.grpc_port` / `a2a.grpc_url` | Also serve and advertise gRPC (dedicated `mas-ctl serve` only). Needs `pip install 'mas-lab-library-ioa[a2a-grpc]'`. |
+| `a2a.admission.callers` | Who may call a listener: a map of caller name to bearer token (`env:NAME`, at least 32 bytes). Given, every request but the public agent card needs a listed token, and the caller is the name in the map, never what the request claims; a conversation is then keyed by (caller, `contextId`). An empty map, or a short or unset token, is refused at start. Not served with `a2a.grpc_port` (refused). Omitted, everyone is admitted. |
 | `a2a.capabilities` | AgentCard capabilities: `streaming`, `pushNotifications`, `extendedAgentCard`, `extensions`. All default to off. |
 
 The endpoint serves `/.well-known/agent-card.json`, JSON-RPC at `/`, and HTTP+JSON under `/a2a/rest`. gRPC is added when `a2a.grpc_port` is set, and only `mas-ctl serve` starts that listener (`chat`, `tui`, and `run-mas` listen on HTTP).

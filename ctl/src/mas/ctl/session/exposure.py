@@ -16,12 +16,14 @@ owns those listen ports.
 from __future__ import annotations
 
 import logging
+import re
 import socket
 import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
 from contextlib import contextmanager
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
@@ -56,6 +58,22 @@ class _SilentDisplay:
 
 
 MAX_CONVERSATIONS = 1024
+_KEYED = re.compile(r"^[0-9a-f]{16}~")
+
+
+def session_key(caller: str, context_id: str) -> str:
+    """The key one conversation is stored under: the caller and the ``contextId`` together.
+
+    A ``contextId`` is chosen by whoever sends it. Keyed by it alone, a second caller that learns or
+    guesses an id joins the first caller's conversation and reads its history. With a verified
+    ``caller`` the key holds both, so the same id from two callers is two conversations. A listener
+    that verifies no one has no caller (``""``): the key is the id, as before.
+    """
+    if not caller:
+        if _KEYED.match(context_id):
+            raise ValueError("a contextId cannot look like a caller-keyed session id")
+        return context_id
+    return f"{sha256(caller.encode('utf-8')).hexdigest()[:16]}~{context_id}"
 
 
 class TooManyConversations(RuntimeError):
@@ -73,7 +91,9 @@ def make_runtime_handler(
     """Queue A2A ``message/send`` onto one runtime per conversation.
 
     ``session_id`` is A2A ``contextId``: pass it to continue that conversation,
-    omit it to start a new one. Every conversation runs on its own runtime
+    omit it to start a new one. ``caller`` is the verified caller, when the listener verifies one:
+    a conversation is then keyed by ``(caller, contextId)`` (:func:`session_key`).
+    Every conversation runs on its own runtime
     (kernel, context, engine), built by ``conversation_factory`` or, by
     default, ``instance.conversation_factory``. The template ``instance`` is
     never used for a conversation, so conversations never wait on each other
@@ -149,19 +169,24 @@ def make_runtime_handler(
         session_id: str | None = None,
         parent_call_id: str | None = None,
         upstream_correlation_id: int | None = None,
+        caller: str = "",
         **_: Any,
     ) -> Any:
-        return handler_result(
+        context_id = mailbox.resolve_session_id(session_id)
+        result = handler_result(
             loop.run(
                 LoopTask(
                     text=prompt,
-                    session_id=session_id or "",
+                    session_id=session_key(caller, context_id),
                     task_id=turn_id or "",
                     parent_call_id=parent_call_id or "",
                     upstream_correlation_id=upstream_correlation_id,
                 )
             )
         )
+        if isinstance(result, dict):
+            result["context_id"] = context_id
+        return result
 
     def close_conversations() -> None:
         """End the conversations this handler opened (not the template instance)."""
@@ -256,6 +281,7 @@ def start_hosted_exposures(
     conversation_ids: Iterable[str],
     manifests: dict[str, dict[str, Any]] | None = None,
     conversation_factories: dict[str, Callable[[], Any]] | None = None,
+    flavour_spec: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Bind background listeners for hosted deploy targets. Close the handles.
 
@@ -283,6 +309,7 @@ def start_hosted_exposures(
                     endpoint,
                     blocking=False,
                     conversation_factory=(conversation_factories or {}).get(agent_id),
+                    flavour_spec=flavour_spec,
                 )
             )
         except Exception:
@@ -332,8 +359,13 @@ def expose_agent(
     control_dir: Path | None = None,
     conversation_factory: Callable[[], Any] | None = None,
     loop: AgentLoop | None = None,
+    flavour_spec: dict[str, Any] | None = None,
 ) -> Any:
     """Create the ``agent_expose`` plugin and serve this instance.
+
+    Under the Flavour's ``production`` hardening posture a listener that verifies no caller is
+    refused here, before anything binds. Without ``flavour_spec`` (or without that posture) nothing
+    is checked.
 
     With a ``loop`` the agent is served by that loop and ``instance`` is unused (pass None): the
     listener, the A2A surface and the conversation id are the same, the task goes to the loop. Without
@@ -361,6 +393,7 @@ def expose_agent(
     if grpc_reason is not None:
         require_a2a_grpc(grpc_reason)
     plugin_type = a2a_plugin_type(protocol) if a2a_plugin_type is not None else protocol
+    _refuse_unhardened_listener(flavour_spec, manifest, endpoint)
     exposure = get_registry().create(
         "agent_expose",
         binding={"type": plugin_type},
@@ -402,6 +435,18 @@ def expose_agent(
     url = str(endpoint.get("url") or "").strip() or f"http://{handle.host}:{handle.port}"
     logger.info("agent %r: A2A interrogation listening on %s", (manifest.get("metadata") or {}).get("name") or "", url)
     return _ExposureWithConversations(handle, handler)
+
+
+def _refuse_unhardened_listener(
+    flavour_spec: dict[str, Any] | None, manifest: dict[str, Any], endpoint: dict[str, Any]
+) -> None:
+    from mas.ctl.hardening import HardeningInput, apply_posture
+    from mas.ctl.hardening.collect import a2a_exposure
+
+    if endpoint.get("protocol") != "a2a":
+        return
+    name = str((manifest.get("metadata") or {}).get("name") or "agent")
+    apply_posture(flavour_spec, lambda: HardeningInput(exposures=(a2a_exposure(name, endpoint),)))
 
 
 class _ExposureWithConversations:

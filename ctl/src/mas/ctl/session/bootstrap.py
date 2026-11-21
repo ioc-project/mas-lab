@@ -126,6 +126,32 @@ class InstantiationOptions:
     delegate_ids: tuple[str, ...] = ()
 
 
+def _enforce_hardening(options: InstantiationOptions, spec: dict) -> dict:
+    """Refuse to start under the Flavour's ``production`` hardening posture when a check fails.
+
+    Without ``spec.hardening.profile: production`` this does nothing and returns ``spec`` as it is.
+    With it, the report goes to the ``gov_hardening_profile`` plugin when the Control declares it.
+    """
+    from mas.ctl.hardening import apply_posture
+    from mas.ctl.hardening.collect import from_session, raw_infra_documents
+    from mas.ctl.hardening.posture import with_report
+    from mas.ctl.session.manifest_config import agent_id_from_manifest
+
+    agent_id = agent_id_from_manifest(options.agent_manifest)
+
+    def build():
+        infra = options.resolved_infra
+        refs = list(infra.refs) if infra is not None else []
+        anchor = Path(options.manifest_dir) if options.manifest_dir else Path.cwd()
+        documents = raw_infra_documents(refs, anchor)
+        if isinstance(options.agent_manifest, dict):
+            documents += ((f"agent {agent_id!r}", options.agent_manifest),)
+        return from_session({agent_id: spec}, infra, raw_documents=documents)
+
+    report = apply_posture(options.flavour_spec, build)
+    return spec if report is None else with_report(spec, report)
+
+
 def hitl_contract_for_mode(mode: str) -> object | None:
     """``auto``: unattended run, answer HITL at once; ``block``: default registry wait."""
     if mode != "auto":
@@ -253,6 +279,7 @@ def instantiate_runtime(
             entry_id=entry,
             delegate_ids=delegates,
         )
+    spec = _enforce_hardening(options, spec)
     spawn_params = spawn_subagent_params(spec)
     ctx.allow_subagent_spawning = is_spawn_subagent_enabled(spec)
     ctx.allow_control_tools = is_control_tools_enabled(spec)

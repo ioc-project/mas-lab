@@ -15,6 +15,7 @@ from mas.ctl.cli.commands.checkpoint import checkpoint_group
 from mas.ctl.cli.commands.compile import compile_cmd
 from mas.ctl.cli.commands.compose import compose_cmd, plan_cmd
 from mas.ctl.cli.commands.control import control_group
+from mas.ctl.cli.commands.hardening import hardening_group
 from mas.ctl.cli.commands.plugin import plugin_group
 from mas.ctl.cli.commands.registry import registry_group
 from mas.ctl.cli.commands.run_mas import run_mas_cmd
@@ -49,6 +50,7 @@ app.add_command(run_mas_cmd, name="run-mas")
 app.add_command(list_bundles_cmd, name="list-bundles")
 app.add_command(checkpoint_group, name="checkpoint")
 app.add_command(control_group, name="control")
+app.add_command(hardening_group, name="hardening")
 app.add_command(validate_cmd, name="validate")
 app.add_command(schemas_cmd, name="schemas")
 app.add_command(registry_group, name="registry")
