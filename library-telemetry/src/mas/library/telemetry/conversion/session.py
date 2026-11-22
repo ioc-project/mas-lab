@@ -9,7 +9,6 @@ only on :class:`MasOtelConverter`.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,7 @@ from mas.library.telemetry.conversion.profiles import (
     normalize_converter_profile,
 )
 from mas.library.telemetry.exceptions import OtelSdkUnavailableError
+from mas.runtime import hostenv
 
 
 def runtime_events_path(spans_path: str | Path) -> Path:
@@ -122,7 +122,7 @@ def create_otel_export(
     file_exporter = JSONLineFileSpanExporter(spans_path)
     exporters: list = [file_exporter]
     if not otlp_endpoint:
-        otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip() or None
+        otlp_endpoint = hostenv.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip() or None
     if otlp_endpoint:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 

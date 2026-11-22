@@ -13,7 +13,6 @@ plugin on the spec and set ``$OTEL_EXPORTER_OTLP_ENDPOINT``.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ from mas.library.standard.lib.observability.native.emit_transition import projec
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.library.telemetry.conversion.layers import ExportLayers, parse_export_layers
 from mas.library.telemetry.conversion.session import OtelExport, create_otel_export
+from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.transition import TransitionEvent
@@ -33,7 +33,7 @@ _TRUE = {"1", "true", "yes", "on"}
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
+    raw = hostenv.get(name)
     if raw is None:
         return default
     return raw.strip().lower() in _TRUE
@@ -211,7 +211,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             spans_path = (base_path / spans_path).resolve()
 
         env_name = str(otel_cfg.get("otlp_endpoint_env") or binding.otlp_endpoint_env or "OTEL_EXPORTER_OTLP_ENDPOINT")
-        endpoint = os.environ.get(env_name, "").strip() or None
+        endpoint = hostenv.get(env_name, "").strip() or None
 
         from mas.library.telemetry.conversion.topology import require_mas_name
 

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -36,6 +35,7 @@ from mas.library.standard.plugins.checkpoint import (
 from mas.library.standard.plugins.checkpoint import (
     JsonCheckpointStore as LibraryJsonCheckpointStore,
 )
+from mas.runtime import hostenv
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.context.manifest_context import context_chunks_from_spec
 from mas.runtime.driver.instance import RuntimeInstance
@@ -611,7 +611,7 @@ def _resolve_skill_plugin_config(
     Priority: spec.context_sources (plugin list, same shape as observability)
     > legacy manifest tool/context declarations > env var > default.
     """
-    env_impl = str(os.getenv("MAS_SKILL_IMPL") or "").strip().lower() or "native"
+    env_impl = str(hostenv.get("MAS_SKILL_IMPL") or "").strip().lower() or "native"
     supported_impls = _supported_skill_impls()
     impl = env_impl if env_impl in supported_impls else "native"
     rel_base: str | None = None

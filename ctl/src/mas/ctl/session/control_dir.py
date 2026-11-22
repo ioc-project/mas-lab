@@ -14,14 +14,16 @@ import os
 import tempfile
 from pathlib import Path
 
+from mas.runtime import hostenv
+
 
 def default_control_dir() -> Path:
     """Return a writable per-user control advertisement directory."""
-    override = str(os.environ.get("MAS_CONTROL_DIR") or "").strip()
+    override = str(hostenv.get("MAS_CONTROL_DIR") or "").strip()
     candidates: list[Path] = []
     if override:
         candidates.append(Path(override).expanduser())
-    xdg = str(os.environ.get("XDG_RUNTIME_DIR") or "").strip()
+    xdg = str(hostenv.get("XDG_RUNTIME_DIR") or "").strip()
     if xdg:
         candidates.append(Path(xdg) / "mas-ctl")
     try:
@@ -48,6 +50,4 @@ def default_control_dir() -> Path:
         except OSError as exc:
             last_error = exc
             continue
-    raise RuntimeError(
-        f"no writable control directory (tried {candidates!r})"
-    ) from last_error
+    raise RuntimeError(f"no writable control directory (tried {candidates!r})") from last_error

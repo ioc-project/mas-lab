@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """GenerateDatasetStep — pre-phase pipeline step that generates a benchmark
 dataset from the MAS agent's stated intent by calling an LLM.
 
@@ -39,17 +38,18 @@ Config keys::
     temperature: float        LLM temperature (default: 0.8).
 """
 
+from __future__ import annotations
+
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-
-from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
+from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,7 @@ def _parse_questions(raw: str, n_items: int) -> list[str]:
         if isinstance(parsed, list):
             return [str(q) for q in parsed[:n_items]]
     except json.JSONDecodeError:
-        logger.debug('suppressed', exc_info=True)
+        logger.debug("suppressed", exc_info=True)
 
     # Fallback: split on newlines, strip bullets/numbers
     lines = [ln.strip().lstrip("0123456789.-) ").strip() for ln in raw.splitlines()]
@@ -185,9 +185,11 @@ class GenerateDatasetStep(PipelineStep):
         n_items: int = int(cfg.get("n_items", 5))
         model: str = cfg.get("model", "gpt-4o-mini")
         topic_hint: str = cfg.get("topic_hint", "")
-        api_base: Optional[str] = cfg.get("api_base") or os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_BASE")
+        api_base: Optional[str] = (
+            cfg.get("api_base") or hostenv.get("OPENAI_BASE_URL") or hostenv.get("OPENAI_API_BASE")
+        )
         api_key_env: str = cfg.get("api_key_env", "OPENAI_API_KEY")
-        api_key: str = os.environ.get(api_key_env, "")
+        api_key: str = hostenv.get(api_key_env, "")
         temperature: float = float(cfg.get("temperature", 0.8))
         output_filename: str = str(cfg.get("output_filename") or "generated_dataset.yaml")
 
@@ -219,24 +221,16 @@ class GenerateDatasetStep(PipelineStep):
                         len(system_prompt),
                     )
                 except Exception as exc:
-                    logger.warning(
-                        "GenerateDatasetStep: failed to parse %s: %s", intent_path, exc
-                    )
+                    logger.warning("GenerateDatasetStep: failed to parse %s: %s", intent_path, exc)
             else:
-                logger.warning(
-                    "GenerateDatasetStep: intent_source not found: %s", intent_path
-                )
+                logger.warning("GenerateDatasetStep: intent_source not found: %s", intent_path)
 
         if not system_prompt:
             system_prompt = "A general-purpose AI question-answering assistant."
-            logger.warning(
-                "GenerateDatasetStep: no system prompt resolved — using generic fallback"
-            )
+            logger.warning("GenerateDatasetStep: no system prompt resolved — using generic fallback")
 
         # ── Build generation prompt ────────────────────────────────────────
-        topic_hint_block = (
-            f"Additional constraint: {topic_hint}\n" if topic_hint else ""
-        )
+        topic_hint_block = f"Additional constraint: {topic_hint}\n" if topic_hint else ""
         generation_prompt = _GENERATION_USER_TMPL.format(
             system_prompt=system_prompt,
             topic_hint_block=topic_hint_block,
@@ -244,9 +238,7 @@ class GenerateDatasetStep(PipelineStep):
         )
 
         # ── Call LLM ──────────────────────────────────────────────────────
-        logger.info(
-            "GenerateDatasetStep: generating %d questions with model=%s", n_items, model
-        )
+        logger.info("GenerateDatasetStep: generating %d questions with model=%s", n_items, model)
         try:
             raw_response = _call_llm(generation_prompt, model, api_base, api_key, temperature)
             questions = _parse_questions(raw_response, n_items)
@@ -282,8 +274,14 @@ class GenerateDatasetStep(PipelineStep):
         }
 
         out_path: Path = resolve_step_artifact_path(
-            ctx, None, "generate_dataset", "generated_dataset.yaml", cfg,
-            key="output_filename", name_keys=(), mkdir=True,
+            ctx,
+            None,
+            "generate_dataset",
+            "generated_dataset.yaml",
+            cfg,
+            key="output_filename",
+            name_keys=(),
+            mkdir=True,
         )
         with open(out_path, "w") as fh:
             yaml.dump(dataset, fh, allow_unicode=True, default_flow_style=False, sort_keys=False, width=120)

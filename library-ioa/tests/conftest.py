@@ -11,6 +11,8 @@ from collections.abc import Iterator
 import mas.third_party_otel  # noqa: F401
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 
 def pytest_configure(config) -> None:
     config.addinivalue_line(

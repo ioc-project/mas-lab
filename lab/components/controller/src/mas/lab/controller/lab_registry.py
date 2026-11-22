@@ -6,9 +6,9 @@ Extends the runtime object registry (``mas.registry``, plugin URN registry) with
 lab-specific resources: libraries, experiments, pipelines, datasets, MAS apps,
 and pipeline step types.
 """
+
 from __future__ import annotations
 
-import contextlib
 import importlib.resources
 import logging
 import os
@@ -18,12 +18,19 @@ from importlib.metadata import entry_points as _entry_points
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from mas.ctl.overlay.canvas import overlay_is_layout_only
+from mas.runtime import hostenv
+from mas.runtime.agent_defaults import (
+    agent_defaults as _agent_defaults,
+)
+from mas.runtime.agent_defaults import (
+    resolve_default_model,
+)
 from mas.runtime.constants import (
     LAB_CONFIG_FILENAME,
     LIBRARY_MANIFEST_FILENAME,
     WORKSPACE_CONFIG_FILENAME,
 )
-from mas.ctl.overlay.canvas import overlay_is_layout_only
 from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
@@ -78,12 +85,6 @@ def _manifest_library_names(path: Path) -> list[str]:
             if text and text not in names:
                 names.append(text)
     return names
-
-
-from mas.runtime.agent_defaults import (
-    agent_defaults as _agent_defaults,
-    resolve_default_model,
-)
 
 
 def _resolve_configured_path(entry: str, base: Path | None) -> Path:
@@ -183,9 +184,7 @@ def _mas_name_from_overlay_path(path: Path, lib_dir: Path) -> str | None:
     return None
 
 
-def infer_overlay_target(
-    path: Path, doc: dict[str, Any], *, lib_dir: Path
-) -> tuple[str, str] | None:
+def infer_overlay_target(path: Path, doc: dict[str, Any], *, lib_dir: Path) -> tuple[str, str] | None:
     """``(kind, name)`` this overlay attaches to, filling an empty MAS name from the path."""
     if not isinstance(doc, dict) or str(doc.get("kind") or "") != "Overlay":
         return None
@@ -221,7 +220,7 @@ class LabRegistry:
         # result is invariant until the next explicit refresh().
         self._manifest_file_cache: Dict[tuple[Path, str, str | None], List[Path]] = {}
         self._overlay_record_cache: Dict[Path, List[Dict[str, Any]]] = {}
-        eager = os.environ.get("MAS_LAB_REGISTRY_EAGER_REFRESH", "1").strip().lower()
+        eager = hostenv.get("MAS_LAB_REGISTRY_EAGER_REFRESH", "1").strip().lower()
         if eager not in {"0", "false", "no"}:
             self.refresh()
 
@@ -249,9 +248,7 @@ class LabRegistry:
         self._manifest_file_cache = {}
         self._overlay_record_cache = {}
 
-    def _cached_manifest_files(
-        self, lib_dir: Path, expected_kind: str, *, parent_dir: str | None = None
-    ) -> List[Path]:
+    def _cached_manifest_files(self, lib_dir: Path, expected_kind: str, *, parent_dir: str | None = None) -> List[Path]:
         """Scan-once wrapper around :func:`_iter_manifest_files`.
 
         The underlying scan (full ``rglob`` + YAML-parse-and-classify per file)
@@ -377,9 +374,7 @@ class LabRegistry:
     def catalog(self) -> Dict[str, Any]:
         """Full registry snapshot for ``GET /api/registry``."""
         runtime = self._runtime_registry()
-        spec_catalog = {
-            key: runtime.list(key) for key in sorted(self._runtime_spec_keys())
-        }
+        spec_catalog = {key: runtime.list(key) for key in sorted(self._runtime_spec_keys())}
         return {
             "runtime": self.list_runtime_object_names(),
             "spec": spec_catalog,
@@ -470,9 +465,7 @@ class LabRegistry:
         cache[lib_dir] = records
         return records
 
-    def layout_overlays_targeting(
-        self, lib_dir: Path, *, kind: str, name: str
-    ) -> List[tuple[Path, Dict[str, Any]]]:
+    def layout_overlays_targeting(self, lib_dir: Path, *, kind: str, name: str) -> List[tuple[Path, Dict[str, Any]]]:
         """Layout-only overlays registered against *kind*/*name*."""
         want_kind = kind.lower()
         matched: List[tuple[Path, Dict[str, Any]]] = []
@@ -516,9 +509,7 @@ class LabRegistry:
         return cls._ephemeral().collect_apps_in(root)
 
     @classmethod
-    def layout_overlays_in_directory(
-        cls, root: Path, *, kind: str, name: str
-    ) -> List[tuple[Path, Dict[str, Any]]]:
+    def layout_overlays_in_directory(cls, root: Path, *, kind: str, name: str) -> List[tuple[Path, Dict[str, Any]]]:
         """Layout-only overlays under ``root`` whose ``spec.target`` selects *kind*/*name*."""
         return cls._ephemeral().layout_overlays_targeting(root, kind=kind, name=name)
 
@@ -537,7 +528,7 @@ class LabRegistry:
         ws_root = self._workspace_root()
         return {
             "workspace_root": str(ws_root) if ws_root else None,
-            "mas_workspace_root_env": os.environ.get("MAS_WORKSPACE_ROOT") or None,
+            "mas_workspace_root_env": hostenv.get("MAS_WORKSPACE_ROOT") or None,
             "cwd": str(Path.cwd()),
             "labs_search_paths": self._labs_search_paths(),
             "libraries": [
@@ -576,9 +567,7 @@ class LabRegistry:
                         "config": {},
                     }
                 )
-                categories.setdefault(
-                    category, {"id": category, "label": category.title(), "color": "#888"}
-                )
+                categories.setdefault(category, {"id": category, "label": category.title(), "color": "#888"})
             return {"step_types": step_types, "categories": list(categories.values())}
         except Exception as exc:
             logger.debug("pipeline step types unavailable: %s", exc)
@@ -690,7 +679,7 @@ class LabRegistry:
             except Exception as exc:
                 logger.debug("manifest library discovery failed: %s", exc)
 
-        for entry in os.environ.get("MAS_LIBRARY_PATHS", "").split(os.pathsep):
+        for entry in hostenv.get("MAS_LIBRARY_PATHS", "").split(os.pathsep):
             entry = entry.strip()
             if not entry:
                 continue
@@ -820,9 +809,7 @@ class LabRegistry:
                     "path": rel,
                 }
                 if agent_manifest.is_file():
-                    entry["agents"][agent_manifest.stem] = agent_manifest.read_text(
-                        encoding="utf-8"
-                    )
+                    entry["agents"][agent_manifest.stem] = agent_manifest.read_text(encoding="utf-8")
                 seen.add(resolved)
                 result[catalog_id] = entry
                 return
@@ -901,9 +888,7 @@ class LabRegistry:
                     doc = load_yaml_file(mas_file)
                 except Exception:
                     doc = {}
-                name = (doc.get("metadata") or {}).get("name") or mas_file.stem.replace(
-                    "-bench", ""
-                )
+                name = (doc.get("metadata") or {}).get("name") or mas_file.stem.replace("-bench", "")
                 _add(str(name), mas_file.parent)
 
         # Pass 4: apps/<name>/<subdir>/mas.yaml where <subdir> is not a
@@ -942,7 +927,7 @@ class LabRegistry:
                 doc = load_yaml_file(mas_file)
             except Exception:
                 doc = {}
-            name = (doc.get("metadata") or {}).get("name") or mas_file.stem.replace("-bench", "")
+            (doc.get("metadata") or {}).get("name") or mas_file.stem.replace("-bench", "")
             return {
                 "mas_yaml": mas_file.read_text(encoding="utf-8"),
                 "agents": LabRegistry._load_agents_from_mas_refs(app_path, doc),
@@ -1053,9 +1038,7 @@ class LabRegistry:
     def _dataset_description(path: Path) -> str:
         try:
             data = load_yaml_file(path)
-            return str(
-                data.get("description") or (data.get("metadata") or {}).get("description") or ""
-            )
+            return str(data.get("description") or (data.get("metadata") or {}).get("description") or "")
         except Exception:
             return ""
 

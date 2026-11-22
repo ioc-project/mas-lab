@@ -1,17 +1,15 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 """Lab workspace helpers — project ``config.yaml`` accessors (not runtime shims)."""
 
+from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
 from mas.ctl.workspace.config import WorkspaceConfig, _find_workspace_file
-
+from mas.runtime import hostenv
 from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 
 _CONFIG_FILE = WORKSPACE_CONFIG_FILENAME
@@ -53,7 +51,7 @@ def project_workspace_root(start: Path | None = None) -> Path | None:
     ``$XDG_CONFIG_HOME/mas/config.yaml`` is not a project pin — it must
     not shrink or flood the catalog.
     """
-    env = os.environ.get("MAS_WORKSPACE_ROOT", "").strip()
+    env = hostenv.get("MAS_WORKSPACE_ROOT", "").strip()
     if env:
         path = Path(env).expanduser().resolve()
         return path if path.is_dir() else None

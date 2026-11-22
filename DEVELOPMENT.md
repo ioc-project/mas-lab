@@ -114,3 +114,11 @@ Report supply-chain concerns through the private process in [SECURITY.md](SECURI
 ## License
 
 Your contributions are licensed under the Apache License 2.0. See [LICENSE](LICENSE).
+
+## Environment variables
+
+Library, runtime and lab code does not touch `os.environ`. The CLI entry points (`mas-ctl`, `mas-lab`) read the environment once and install it with `mas.runtime.hostenv.install`; other code calls `hostenv.get(name)` (or `hostenv.snapshot()` for a child process). Values that code exports for a run (a service's `env:` values, `MAS_EXECUTE_ROOT` for a sandboxed tool) go through `hostenv.overlay`, never into the process environment. In tests, the `mas.runtime.hostenv_pytest` plugin makes `monkeypatch.setenv` visible.
+
+Explicit options come first: the scheduler and cache path take overrides the CLI installs (`mas.ctl.session.llm_scheduler_env`), live jobs of the controller carry the demo UI's choices in the run spec, and spawned run workers receive them in the job payload (`mas.lab.benchmark.host_overrides`).
+
+Exceptions, listed in `tests/test_no_env_reads_in_library.py`: CLI and daemon entry points, the two places that set flags a third-party SDK reads from the process environment (`third_party_otel`, telemetry `__init__`), and code that runs inside the skill sandbox process. `tests/test_no_env_reads_in_library.py` fails when a module outside that list uses `os.environ`.

@@ -1,7 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
-
 """FileTailStep — generic, reusable "watch a file, stream its content as it
 changes" primitive.
 
@@ -30,6 +28,8 @@ Config:
     owner: short name used in the default emitted kind, ``custom.{owner}.raw``.
 """
 
+from __future__ import annotations
+
 import glob as _glob
 import json
 import logging
@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from mas.lab.benchmark.pipeline import ConfigParam, PipelineStep, StepOutput
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +65,20 @@ def resolve_path_pattern(pattern: str, ctx: "Any" = None, *, owner: str = "") ->
     one-time warning (see ``FileTailStep.on_event``'s empty-token check), not
     quietly scan from filesystem root.
     """
-    skill_state_dir = os.environ.get("MAS_SKILL_STATE_DIR", "")
+    skill_state_dir = hostenv.get("MAS_SKILL_STATE_DIR", "")
     owner_env = f"MAS_{owner.upper()}_STATE_DIR" if owner else ""
-    state_dir = skill_state_dir or (os.environ.get(owner_env, "") if owner_env else "")
+    state_dir = skill_state_dir or (hostenv.get(owner_env, "") if owner_env else "")
     run_dir = ""
     if ctx is not None:
         run_dir = str(getattr(ctx, "run_dir", None) or getattr(ctx, "output_dir", None) or "")
     needs_skill_dir = "{skill_state_dir}" in pattern
     needs_state_dir = "{state_dir}" in pattern
     needs_run_dir = "{run_dir}" in pattern
-    if (needs_skill_dir and not skill_state_dir) or (needs_state_dir and not state_dir) or (needs_run_dir and not run_dir):
+    if (
+        (needs_skill_dir and not skill_state_dir)
+        or (needs_state_dir and not state_dir)
+        or (needs_run_dir and not run_dir)
+    ):
         return ""
     try:
         return pattern.format(skill_state_dir=skill_state_dir, state_dir=state_dir, run_dir=run_dir)
@@ -240,7 +245,9 @@ class FileTailStep(PipelineStep):
         # run (the exact "nothing shows up and no error" failure mode an
         # author configuring a new owner would otherwise hit blind).
         if not self._last_seen and not self._warned_no_match and self._event_count >= 20:
-            logger.warning("%s: path pattern %r has matched no files after %d events", self.name, pattern, self._event_count)
+            logger.warning(
+                "%s: path pattern %r has matched no files after %d events", self.name, pattern, self._event_count
+            )
             self._warned_no_match = True
 
     async def execute(self, ctx: "Any") -> StepOutput:  # noqa: F821

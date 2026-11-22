@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """EmbedStep — pipeline step that computes and stores embeddings for
 trajectory fields (session input, session output, eventually agent-level).
 
@@ -45,15 +44,17 @@ downstream semantic-grouping analysis (nearest-neighbour, cluster consistency,
 evaluation reuse) lives in notebooks / analysis steps, not here.
 """
 
+from __future__ import annotations
+
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ class EmbedStep(PipelineStep):
         overwrite = self.config.get("overwrite", False)
         batch_size = int(self.config.get("batch_size", 64))
 
-        api_key = os.environ.get(api_key_env, "")
+        api_key = hostenv.get(api_key_env, "")
 
         embeddings_dir = bench_dir / "embeddings"
         embeddings_dir.mkdir(parents=True, exist_ok=True)
@@ -92,7 +93,7 @@ class EmbedStep(PipelineStep):
                 try:
                     trajectories.append(json.loads(line))
                 except json.JSONDecodeError:
-                    logger.debug('suppressed', exc_info=True)
+                    logger.debug("suppressed", exc_info=True)
 
         if max_items is not None:
             trajectories = trajectories[:max_items]
@@ -114,12 +115,12 @@ class EmbedStep(PipelineStep):
                             try:
                                 existing_ids.add(json.loads(line).get("run_id", ""))
                             except json.JSONDecodeError:
-                                logger.debug('suppressed', exc_info=True)
+                                logger.debug("suppressed", exc_info=True)
 
                 to_embed = [
-                    t for t in trajectories
-                    if t.get("run_id") and t["run_id"] not in existing_ids
-                    and not t.get("_extraction_error")
+                    t
+                    for t in trajectories
+                    if t.get("run_id") and t["run_id"] not in existing_ids and not t.get("_extraction_error")
                 ]
 
                 if not to_embed:
@@ -130,12 +131,11 @@ class EmbedStep(PipelineStep):
                 run_ids = [t["run_id"] for t in to_embed]
 
                 logger.info("EmbedStep: embedding %d texts for %s/%s", len(texts), level, field)
-                vectors = _embed_batch(texts, model=model, api_base=api_base,
-                                       api_key=api_key, batch_size=batch_size)
+                vectors = _embed_batch(texts, model=model, api_base=api_base, api_key=api_key, batch_size=batch_size)
 
                 ts = datetime.now(timezone.utc).isoformat()
                 with open(out_path, "a", encoding="utf-8") as out_f:
-                    for run_id, vector in zip(run_ids, vectors):
+                    for run_id, vector in zip(run_ids, vectors, strict=False):
                         if vector is None:
                             continue
                         rec = {
@@ -161,6 +161,7 @@ class EmbedStep(PipelineStep):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_text(trajectory: dict[str, Any], level: str, field: str) -> str:
     if level == "session":

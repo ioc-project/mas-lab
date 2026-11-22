@@ -9,10 +9,11 @@ Demo-ui has no ``src/plugins`` tree. Chrome and the plot host live next to
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
+
+from mas.runtime import hostenv
 
 _META = re.compile(
     r"export const pluginMeta\s*=\s*(\{.*?\}|\[.*?\])\s*;",
@@ -23,7 +24,7 @@ _SHELL = ("plot-host.js", "chrome.js", "player.js", "layout-picker.js", "notes-o
 
 
 def demo_ui_src() -> Path:
-    env = os.environ.get("MAS_DEMO_UI_ROOT")
+    env = hostenv.get("MAS_DEMO_UI_ROOT")
     if env:
         cand = Path(env).expanduser() / "src"
         if cand.is_dir():
@@ -129,8 +130,7 @@ def list_plugins(
         out = [
             row
             for row in out
-            if format in [str(x) for x in (row.get("formats") or [])]
-            or str(row.get("format") or "") == format
+            if format in [str(x) for x in (row.get("formats") or [])] or str(row.get("format") or "") == format
         ]
     if realtime is True:
         out = [row for row in out if row.get("realtime") is True]

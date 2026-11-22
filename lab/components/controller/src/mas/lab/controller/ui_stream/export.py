@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,6 +23,7 @@ from mas.lab.controller.ui_stream.replay import (
     trace_metric_records,
 )
 from mas.lab.controller.ui_stream.spec_snapshot import snapshot_from_records
+from mas.runtime import hostenv
 
 BUNDLE_VERSION = 1
 
@@ -37,7 +37,7 @@ def find_demo_ui_root(explicit: str | Path | None = None) -> Path:
         if (nested / "index.html").is_file():
             return nested
         raise FileNotFoundError(f"demo-ui not found under {root}")
-    env = os.environ.get("MAS_DEMO_UI_ROOT")
+    env = hostenv.get("MAS_DEMO_UI_ROOT")
     if env:
         return find_demo_ui_root(env)
     here = Path(__file__).resolve()
@@ -49,7 +49,7 @@ def find_demo_ui_root(explicit: str | Path | None = None) -> Path:
 
 
 def default_layouts_root(ui_root: Path | None = None) -> Path:
-    override = os.environ.get("MAS_DEMO_UI_LAYOUTS")
+    override = hostenv.get("MAS_DEMO_UI_LAYOUTS")
     if override:
         return Path(override)
     root = ui_root or find_demo_ui_root()
@@ -250,10 +250,7 @@ def _write_bundle_js(path: Path, bundle: dict[str, Any]) -> None:
 
 
 def _patch_index(html: str) -> str:
-    inject = (
-        '<script>window.__DEMO_UI_OFFLINE__=true;</script>\n'
-        '<script src="./bundle.js"></script>\n'
-    )
+    inject = '<script>window.__DEMO_UI_OFFLINE__=true;</script>\n<script src="./bundle.js"></script>\n'
     if "window.__DEMO_UI_OFFLINE__" in html:
         return html
     if "<head>" in html:
@@ -265,7 +262,7 @@ def _patch_index(html: str) -> str:
 
 def build_static_ui(ui_root: Path, *, base: str = "./") -> Path:
     dist = ui_root / "dist"
-    env = os.environ.copy()
+    env = hostenv.snapshot()
     env["DEMO_UI_BASE"] = base
     subprocess.run(
         ["npm", "run", "build"],
@@ -305,9 +302,7 @@ def write_site(
                 shutil.copytree(item, target)
             else:
                 shutil.copy2(item, target)
-    (dest / "bundle.json").write_text(
-        json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    (dest / "bundle.json").write_text(json.dumps(bundle, ensure_ascii=False, indent=2), encoding="utf-8")
     _write_bundle_js(dest / "bundle.js", bundle)
     index = dest / "index.html"
     if index.is_file():
@@ -358,7 +353,7 @@ def export_trace(
 def main(argv: list[str] | None = None) -> int:
     import argparse
     import webbrowser
-    from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
     parser = argparse.ArgumentParser(description="Export a static demo-ui replay from a native trace.")
     parser.add_argument("trace", type=Path, help="events.jsonl or a trace/run directory")

@@ -4,12 +4,15 @@
 
 from __future__ import annotations
 
-import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+from mas.runtime import hostenv
 from mas.runtime.workspace_config import (
     _user_config_path,
     find_workspace_file,
@@ -22,13 +25,37 @@ _ENV_INFRA_REFS = "MAS_INFRA_REFS"
 _ENV_RUNTIME_REFS = "MAS_RUNTIME_REFS"
 
 
+# Workspace infra refs a host (the lab controller) binds for one run. ``None``: no
+# binding (the CLI's ``MAS_INFRA_REFS`` applies). ``[]``: ignore that variable and
+# use the workspace list. Non-empty: these refs replace the workspace list.
+# A ContextVar: two runs in one process (the controller daemon) never see each other's.
+_BOUND_INFRA_REFS: ContextVar[list[str] | None] = ContextVar("mas_bound_infra_refs", default=None)
+
+
+@contextmanager
+def bind_infra_refs(refs: list[str] | None) -> Iterator[None]:
+    if refs is None:
+        yield
+        return
+    token = _BOUND_INFRA_REFS.set([str(r) for r in refs if r])
+    try:
+        yield
+    finally:
+        _BOUND_INFRA_REFS.reset(token)
+
+
+def bound_infra_refs() -> list[str] | None:
+    refs = _BOUND_INFRA_REFS.get()
+    return None if refs is None else list(refs)
+
+
 def infra_refs_from_env() -> list[str]:
     """Parse ``MAS_INFRA_REFS`` (comma- or space-separated bundle refs).
 
     Last-resort override of workspace ``infra_refs`` (CLI ``--infra-ref`` still
     wins); declare refs in ``config.yaml`` or pass ``--infra-ref`` instead.
     """
-    raw = os.environ.get(_ENV_INFRA_REFS, "").strip()
+    raw = hostenv.get(_ENV_INFRA_REFS, "").strip()
     if not raw:
         return []
     parts = [p.strip() for p in raw.replace(",", " ").split() if p.strip()]
@@ -55,7 +82,7 @@ def merge_infra_refs(
 
 def runtime_refs_from_env() -> list[str]:
     """Parse ``MAS_RUNTIME_REFS`` (comma- or space-separated RuntimeEngine refs)."""
-    raw = os.environ.get(_ENV_RUNTIME_REFS, "").strip()
+    raw = hostenv.get(_ENV_RUNTIME_REFS, "").strip()
     if not raw:
         return []
     parts = [p.strip() for p in raw.replace(",", " ").split() if p.strip()]
@@ -159,6 +186,9 @@ class WorkspaceConfig:
     @property
     def effective_infra_refs(self) -> list[str]:
         """Workspace ``infra_refs`` with the last-resort ``MAS_INFRA_REFS`` override."""
+        bound = bound_infra_refs()
+        if bound is not None:
+            return bound or self.infra_refs
         env_refs = infra_refs_from_env()
         if env_refs:
             from mas.ctl.env import warn_env_override

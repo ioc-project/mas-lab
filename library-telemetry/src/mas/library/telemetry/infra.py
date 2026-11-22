@@ -30,12 +30,12 @@ manifest file when the env is set. ClickHouse read-back is the same idea with
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.library.telemetry._dist import extra_hint
+from mas.runtime import hostenv
 
 OTEL_COLLECTOR_KIND = "OtelCollector"
 CLICKHOUSE_KIND = "ClickHouse"
@@ -53,7 +53,7 @@ class OtelCollectorTarget:
 
     def resolved_endpoint(self, override: Optional[str] = None) -> str:
         """Endpoint with precedence: *override* → manifest → ``$OTEL_..._ENDPOINT``."""
-        return override or self.endpoint or os.environ.get(_ENDPOINT_ENV, "")
+        return override or self.endpoint or hostenv.get(_ENDPOINT_ENV, "")
 
 
 @dataclass(frozen=True)
@@ -68,16 +68,16 @@ class ClickHouseTarget:
     table: str = "otel_traces"
 
     def resolved_host(self) -> str:
-        return self.host or os.environ.get("CLICKHOUSE_HOST", "localhost")
+        return self.host or hostenv.get("CLICKHOUSE_HOST", "localhost")
 
     def resolved_port(self) -> int:
-        return self.port or int(os.environ.get("CLICKHOUSE_PORT", "8123"))
+        return self.port or int(hostenv.get("CLICKHOUSE_PORT", "8123"))
 
     def resolved_database(self) -> str:
-        return self.database or os.environ.get("CLICKHOUSE_DATABASE", "default")
+        return self.database or hostenv.get("CLICKHOUSE_DATABASE", "default")
 
     def resolved_user(self) -> str:
-        return self.user or os.environ.get("CLICKHOUSE_USER", "default")
+        return self.user or hostenv.get("CLICKHOUSE_USER", "default")
 
 
 def resolve_otel_collector(
@@ -94,17 +94,14 @@ def resolve_otel_collector(
         target = otel_collector_target(infra)
         resolved = target.resolved_endpoint(endpoint)
         if not resolved:
-            raise ValueError(
-                f"no OTLP endpoint — infra {infra!r} has an empty endpoint and "
-                f"${_ENDPOINT_ENV} is unset"
-            )
+            raise ValueError(f"no OTLP endpoint — infra {infra!r} has an empty endpoint and ${_ENDPOINT_ENV} is unset")
         return OtelCollectorTarget(
             endpoint=resolved,
             protocol=target.protocol,
             service_name=target.service_name,
             app_name=target.app_name,
         )
-    resolved = (endpoint or os.environ.get(_ENDPOINT_ENV, "")).strip()
+    resolved = (endpoint or hostenv.get(_ENDPOINT_ENV, "")).strip()
     if not resolved:
         raise ValueError(
             "no OTLP endpoint — pass infra=, endpoint=, or set "
@@ -122,17 +119,16 @@ def resolve_clickhouse(
     """
     if infra is not None:
         return clickhouse_target(infra)
-    host = os.environ.get("CLICKHOUSE_HOST", "").strip()
+    host = hostenv.get("CLICKHOUSE_HOST", "").strip()
     if not host:
         raise ValueError(
-            "no ClickHouse host — pass infra= or set $CLICKHOUSE_HOST "
-            "(env is a shortcut for local-clickhouse.yaml)"
+            "no ClickHouse host — pass infra= or set $CLICKHOUSE_HOST (env is a shortcut for local-clickhouse.yaml)"
         )
     return ClickHouseTarget(
         host=host,
-        port=int(os.environ.get("CLICKHOUSE_PORT", "8123")),
-        database=os.environ.get("CLICKHOUSE_DATABASE", "default"),
-        user=os.environ.get("CLICKHOUSE_USER", "default"),
+        port=int(hostenv.get("CLICKHOUSE_PORT", "8123")),
+        database=hostenv.get("CLICKHOUSE_DATABASE", "default"),
+        user=hostenv.get("CLICKHOUSE_USER", "default"),
         password_env="CLICKHOUSE_PASSWORD",
     )
 
@@ -146,10 +142,7 @@ def _load_manifest(manifest: str | Path | Dict[str, Any]) -> Dict[str, Any]:
         try:
             import yaml
         except ImportError as exc:  # pragma: no cover
-            raise RuntimeError(
-                "pyyaml is required to read YAML infra manifests: "
-                f"{extra_hint('verify')}"
-            ) from exc
+            raise RuntimeError(f"pyyaml is required to read YAML infra manifests: {extra_hint('verify')}") from exc
         return yaml.safe_load(text) or {}
     return json.loads(text)
 
@@ -184,14 +177,10 @@ def otel_collector_target(
     candidates = [
         t
         for t in _targets(doc)
-        if str(t.get("kind")) == OTEL_COLLECTOR_KIND
-        and (name is None or t.get("name") == name)
+        if str(t.get("kind")) == OTEL_COLLECTOR_KIND and (name is None or t.get("name") == name)
     ]
     if not candidates:
-        raise ValueError(
-            f"no {OTEL_COLLECTOR_KIND!r} target in infra manifest"
-            + (f" (name={name!r})" if name else "")
-        )
+        raise ValueError(f"no {OTEL_COLLECTOR_KIND!r} target in infra manifest" + (f" (name={name!r})" if name else ""))
     t = candidates[0]
     return OtelCollectorTarget(
         endpoint=str(t.get("endpoint") or ""),
@@ -209,16 +198,10 @@ def clickhouse_target(
     """Resolve the ``ClickHouse`` target from an infra manifest."""
     doc = _load_manifest(manifest)
     candidates = [
-        t
-        for t in _targets(doc)
-        if str(t.get("kind")) == CLICKHOUSE_KIND
-        and (name is None or t.get("name") == name)
+        t for t in _targets(doc) if str(t.get("kind")) == CLICKHOUSE_KIND and (name is None or t.get("name") == name)
     ]
     if not candidates:
-        raise ValueError(
-            f"no {CLICKHOUSE_KIND!r} target in infra manifest"
-            + (f" (name={name!r})" if name else "")
-        )
+        raise ValueError(f"no {CLICKHOUSE_KIND!r} target in infra manifest" + (f" (name={name!r})" if name else ""))
     t = candidates[0]
     return ClickHouseTarget(
         host=str(t.get("host") or "localhost"),

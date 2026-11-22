@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
-import os
 import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,13 +44,7 @@ _FATAL_RUN_MARKERS = (
 def _infra_refs_for_scenario(scenario_id: str, prepared: PreparedBatch) -> list[str]:
     """Prefer per-scenario demo-ui cache refs when the worker set them."""
     refs = list(prepared.infra_refs)
-    raw = os.environ.get("MAS_DEMO_UI_SCENARIO_INFRA")
-    if not raw:
-        return refs
-    try:
-        mapping = _json.loads(raw)
-    except ValueError:
-        return refs
+    mapping = prepared.scenario_infra_refs
     if not isinstance(mapping, dict):
         return refs
     extra = mapping.get(scenario_id) or mapping.get(str(scenario_id).lower())
@@ -237,8 +230,8 @@ async def _execute_batch(
     if imported:
         logger.info("preloaded %d plugin modules before the first run", len(imported))
     experiment_yaml = loaded.experiment_yaml
-    if not os.environ.get("MAS_LLM_SCHEDULER_USER", "").strip():
-        os.environ["MAS_LLM_SCHEDULER_USER"] = getattr(exp, "name", "") or "experiment"
+    from mas.lab.benchmark.host_overrides import capture as _host_capture
+
     _flavour = loaded.flavour
     _flavour_name = loaded.flavour_name
     trace_cache_dir = loaded.trace_cache_dir
@@ -927,6 +920,7 @@ async def _execute_batch(
                                     else None,
                                     "infra_refs": list(_infra_refs),
                                     "session_id": _run_input.session_id,
+                                    "host": _host_capture(),
                                     "emulation": emulation_payload,
                                     "faults": plain(_faults_dict, "faults") if _faults_dict is not None else None,
                                     "extra": plain(

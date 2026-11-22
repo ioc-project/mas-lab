@@ -44,12 +44,12 @@ Last-resort environment overrides (prefer the CLI flags above):
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import jsonschema
 import yaml
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ _KIND_SCHEMA: Dict[str, str] = {
 
 # Read per call: a long-lived process (controller daemon) must not freeze them.
 def _env_off(name: str) -> bool:
-    return os.environ.get(name, "1").strip() in ("0", "false", "no")
+    return hostenv.get(name, "1").strip() in ("0", "false", "no")
 
 
 # ---------------------------------------------------------------------------

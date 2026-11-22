@@ -31,18 +31,19 @@ Benchmark output layouts (both indexed by ``benchmark list``)
 * **Flat** — MAS batch runs with a fixed ``-o`` / ``output_dir`` write one
   ``metadata.yaml`` at the output root.
 """
+
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
+from mas.runtime import hostenv
 from mas.runtime.constants import LAB_CONFIG_FILENAME, WORKSPACE_CONFIG_FILENAME
 from mas.runtime.workspace_config import (
     RuntimeWorkspaceConfig,
-    find_workspace_file,
     _user_config_path,
+    find_workspace_file,
     resolve_config_relative,
 )
 from mas.runtime.xdg import (
@@ -55,13 +56,13 @@ from mas.runtime.xdg import (
 # -----------------------------------------------------------------
 # Environment-variable names (public — used by `mas-lab config`)
 # -----------------------------------------------------------------
-MAS_DATA_ROOT_ENV           = "MAS_DATA_ROOT"
-MAS_LABS_ROOT_ENV           = "MAS_LABS_ROOT"
-MAS_LAB_DATA_ENV            = "MAS_LAB_DATA"
-MAS_TRACE_CACHE_ENV         = "MAS_TRACE_CACHE"
-MAS_DATA_CACHE_ENV          = "MAS_DATA_CACHE"
-MAS_RUNS_ROOT_ENV           = "MAS_RUNS_ROOT"
-MAS_STANDALONE_RUNS_ENV     = "MAS_STANDALONE_RUNS_ROOT"
+MAS_DATA_ROOT_ENV = "MAS_DATA_ROOT"
+MAS_LABS_ROOT_ENV = "MAS_LABS_ROOT"
+MAS_LAB_DATA_ENV = "MAS_LAB_DATA"
+MAS_TRACE_CACHE_ENV = "MAS_TRACE_CACHE"
+MAS_DATA_CACHE_ENV = "MAS_DATA_CACHE"
+MAS_RUNS_ROOT_ENV = "MAS_RUNS_ROOT"
+MAS_STANDALONE_RUNS_ENV = "MAS_STANDALONE_RUNS_ROOT"
 
 PathKey = Literal["labs_dir", "cache_dir", "runs_dir"]
 
@@ -139,7 +140,7 @@ def resolve_path(
 
     _env = env_var or _ENV_FOR_KEY.get(key)
     if _env:
-        _raw_env = os.environ.get(_env, "").strip()
+        _raw_env = hostenv.get(_env, "").strip()
         if _raw_env:
             return ResolvedPath(Path(_raw_env).expanduser().resolve(), f"${_env}")
 
@@ -167,7 +168,7 @@ def resolve_path(
 
 def data_root() -> Path:
     """Return the root directory for all mas-lab persistent data."""
-    _raw = os.environ.get(MAS_DATA_ROOT_ENV, "").strip()
+    _raw = hostenv.get(MAS_DATA_ROOT_ENV, "").strip()
     if _raw:
         return Path(_raw).expanduser()
     labs = resolve_path("labs_dir")
@@ -188,10 +189,10 @@ def benchmark_root() -> Path:
 
 def data_dir() -> Path:
     """Return the directory for ephemeral / support data (trace cache, scratch)."""
-    _raw = os.environ.get(MAS_LAB_DATA_ENV, "").strip()
+    _raw = hostenv.get(MAS_LAB_DATA_ENV, "").strip()
     if _raw:
         return Path(_raw).expanduser()
-    _raw_data = os.environ.get(MAS_DATA_ROOT_ENV, "").strip()
+    _raw_data = hostenv.get(MAS_DATA_ROOT_ENV, "").strip()
     if _raw_data:
         return Path(_raw_data).expanduser() / "data"
     return mas_data_root() / "data"
@@ -206,13 +207,13 @@ def trace_cache(explicit: str | None = None) -> Path:
     """Return the directory used for run trace caching."""
     if explicit:
         return Path(explicit).expanduser()
-    _raw = os.environ.get(MAS_TRACE_CACHE_ENV, "").strip()
+    _raw = hostenv.get(MAS_TRACE_CACHE_ENV, "").strip()
     if _raw:
         return Path(_raw).expanduser()
     cache = resolve_path("cache_dir")
     if cache.source != DEFAULT_PATH_SOURCE:
         return cache.path / "traces"
-    if os.environ.get(MAS_DATA_ROOT_ENV) or os.environ.get(MAS_LAB_DATA_ENV):
+    if hostenv.get(MAS_DATA_ROOT_ENV) or hostenv.get(MAS_LAB_DATA_ENV):
         return data_dir() / "trace-cache"
     return mas_cache_root() / "traces"
 
@@ -226,13 +227,13 @@ def data_cache(explicit: str | None = None) -> Path:
     """Return the directory used for pipeline step caching."""
     if explicit:
         return Path(explicit).expanduser()
-    _raw = os.environ.get(MAS_DATA_CACHE_ENV, "").strip()
+    _raw = hostenv.get(MAS_DATA_CACHE_ENV, "").strip()
     if _raw:
         return Path(_raw).expanduser()
     cache = resolve_path("cache_dir")
     if cache.source != DEFAULT_PATH_SOURCE:
         return cache.path / "artifacts"
-    if os.environ.get(MAS_DATA_ROOT_ENV) or os.environ.get(MAS_LAB_DATA_ENV):
+    if hostenv.get(MAS_DATA_ROOT_ENV) or hostenv.get(MAS_LAB_DATA_ENV):
         return _pipeline_cache_under_data_dir(data_dir())
     return mas_cache_root() / "artifacts"
 
@@ -244,7 +245,7 @@ def runs_root() -> Path:
 
 def standalone_runs_root() -> Path:
     """Return the directory where standalone run records are stored."""
-    _raw = os.environ.get(MAS_STANDALONE_RUNS_ENV, "").strip()
+    _raw = hostenv.get(MAS_STANDALONE_RUNS_ENV, "").strip()
     return Path(_raw).expanduser() if _raw else data_dir() / "standalone-runs"
 
 
@@ -273,26 +274,26 @@ def path_resolution_summary() -> dict[str, ResolvedPath]:
 
 
 def _trace_cache_source() -> str:
-    if os.environ.get(MAS_TRACE_CACHE_ENV):
+    if hostenv.get(MAS_TRACE_CACHE_ENV):
         return f"${MAS_TRACE_CACHE_ENV}"
     cache = resolve_path("cache_dir")
     if cache.source != DEFAULT_PATH_SOURCE:
         return f"{cache.source} / traces"
-    if os.environ.get(MAS_DATA_ROOT_ENV) or os.environ.get(MAS_LAB_DATA_ENV):
+    if hostenv.get(MAS_DATA_ROOT_ENV) or hostenv.get(MAS_LAB_DATA_ENV):
         return _data_dir_source() + " / trace-cache"
     return "$XDG_CACHE_HOME/mas/traces"
 
 
 def _data_dir_source() -> str:
-    if os.environ.get(MAS_LAB_DATA_ENV):
+    if hostenv.get(MAS_LAB_DATA_ENV):
         return f"${MAS_LAB_DATA_ENV}"
-    if os.environ.get(MAS_DATA_ROOT_ENV):
+    if hostenv.get(MAS_DATA_ROOT_ENV):
         return f"${MAS_DATA_ROOT_ENV}/data"
     return "$XDG_DATA_HOME/mas/data"
 
 
 def _data_root_source() -> str:
-    if os.environ.get(MAS_DATA_ROOT_ENV):
+    if hostenv.get(MAS_DATA_ROOT_ENV):
         return f"${MAS_DATA_ROOT_ENV}"
     labs = resolve_path("labs_dir")
     if labs.source != DEFAULT_PATH_SOURCE:
@@ -309,7 +310,7 @@ def source_tag(
     """Return a short human-readable string describing the path source."""
     if lab_config:
         return LAB_CONFIG_FILENAME
-    if specific_env and os.environ.get(specific_env):
+    if specific_env and hostenv.get(specific_env):
         return f"${specific_env}"
     return resolve_path(key).source
 
@@ -361,7 +362,8 @@ def _artifact_path(directory: Path, artifact: str) -> Path:
     if not p.exists():
         raise FileNotFoundError(
             f"Artifact not found: {p}\n"
-            f"Contents of {directory}: {', '.join(sorted(f.name for f in directory.iterdir())) if directory.exists() else '(missing)'}"
+            f"Contents of {directory}: "
+            f"{', '.join(sorted(f.name for f in directory.iterdir())) if directory.exists() else '(missing)'}"
         )
     return p
 

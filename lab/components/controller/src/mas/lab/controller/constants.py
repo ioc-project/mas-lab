@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from mas.runtime import hostenv
 from mas.runtime.xdg import mas_cache_root, mas_data_root
 
 LIBRARIES_DIR = Path(
-    os.getenv(
+    hostenv.get(
         "MAS_LIBRARIES_DIR",
         str(Path.home() / "mas-lab"),
     )
@@ -19,7 +19,7 @@ LIBRARIES_DIR = Path(
 MAX_TIMEOUT = 1800
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
-MAS_LAB_ROOT = Path(os.environ.get("MAS_LAB_ROOT", mas_data_root()))
+MAS_LAB_ROOT = Path(hostenv.get("MAS_LAB_ROOT", mas_data_root()))
 
 WEB_SEARCH_CACHE_DIR = mas_cache_root() / "web_search"
 

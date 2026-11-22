@@ -18,6 +18,7 @@ from typing import Any, Dict, Optional
 
 from mas.lab.controller import config as cfg
 from mas.lab.controller.config import DEFAULT_HTTP_PORT, ensure_mas_dirs
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -184,14 +185,14 @@ def start_daemon(*, port: int = DEFAULT_HTTP_PORT, detach: bool = True, foregrou
         "--port",
         str(port),
     ]
-    if os.environ.get("MAS_CONTROLLER_NO_HTTP", "1").strip().lower() in ("1", "true", "yes"):
+    if hostenv.get("MAS_CONTROLLER_NO_HTTP", "1").strip().lower() in ("1", "true", "yes"):
         cmd.append("--no-http")
     if foreground:
         subprocess.run(cmd, check=False)
         return
-    env = os.environ.copy()
+    env = hostenv.snapshot()
     env.setdefault("MAS_CONTROLLER_PORT", str(port))
-    log_path = Path(os.environ.get("MAS_CONTROLLER_LOG", cfg.controller_dir() / "daemon.log"))
+    log_path = Path(hostenv.get("MAS_CONTROLLER_LOG", cfg.controller_dir() / "daemon.log"))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = open(log_path, "a", encoding="utf-8")
     subprocess.Popen(

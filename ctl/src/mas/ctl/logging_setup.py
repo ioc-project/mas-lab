@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import logging
-import os
+
+from mas.runtime import hostenv
 
 
 def setup_logging(log_level: str | None = None, verbosity: int = 0) -> None:
@@ -16,18 +17,16 @@ def setup_logging(log_level: str | None = None, verbosity: int = 0) -> None:
     * ``2`` (``-vv``) — DEBUG for mas.runtime
     * ``3`` (``-vvv``) — DEBUG for all loggers
     """
-    env_level = os.getenv("LOG_LEVEL")
+    env_level = hostenv.get("LOG_LEVEL")
     if log_level or env_level:
         level_str = log_level or env_level
         log_level_attr = getattr(logging, str(level_str).upper(), logging.INFO)
         _apply_root_logging(log_level_attr)
         return
 
-    log_format = os.getenv("LOG_FORMAT", "simple")
+    log_format = hostenv.get("LOG_FORMAT", "simple")
     format_str = (
-        "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"
-        if log_format == "full"
-        else "%(message)s"
+        "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s" if log_format == "full" else "%(message)s"
     )
 
     if verbosity >= 3:
@@ -53,11 +52,9 @@ def setup_logging(log_level: str | None = None, verbosity: int = 0) -> None:
 
 
 def _apply_root_logging(level: int) -> None:
-    log_format = os.getenv("LOG_FORMAT", "simple")
+    log_format = hostenv.get("LOG_FORMAT", "simple")
     format_str = (
-        "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s"
-        if log_format == "full"
-        else "%(message)s"
+        "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s" if log_format == "full" else "%(message)s"
     )
     logging.basicConfig(level=level, format=format_str, force=True)
     for noisy in ("sqlalchemy", "httpx", "openai", "httpcore"):

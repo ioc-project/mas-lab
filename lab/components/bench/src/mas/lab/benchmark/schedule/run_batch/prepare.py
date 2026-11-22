@@ -7,36 +7,32 @@ from __future__ import annotations
 
 import json as _json
 import logging
-import os
 import shutil as _shutil
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
 
 from mas.lab.benchmark.run_manager import BenchmarkRunManager
 from mas.lab.benchmark.schedule.metadata import register_mas_run
 from mas.lab.benchmark.schedule.run_batch.load import LoadedExperiment
+from mas.runtime import hostenv
 from mas.runtime.package_refs import path_ref_for_anchor
 from mas.runtime.spec.infra_paths import experiment_infra_bundle_path
 
 logger = logging.getLogger(__name__)
 
 
-def extra_overlays_for_scenario(scenario_id: str) -> list[str]:
-    """Layout-lane overlays the demo UI bound via ``MAS_DEMO_UI_SCENARIO_OVERLAYS``."""
-    raw = os.environ.get("MAS_DEMO_UI_SCENARIO_OVERLAYS")
-    if not raw:
-        return []
-    try:
-        mapping = _json.loads(raw)
-    except ValueError:
-        return []
-    if not isinstance(mapping, dict):
+def _scenario_mapping(mapping: Mapping[str, Any] | None, scenario_id: str) -> list[str]:
+    if not isinstance(mapping, Mapping):
         return []
     extra = mapping.get(scenario_id) or mapping.get(str(scenario_id).lower())
-    if not extra:
-        return []
-    return [str(item).strip() for item in extra if str(item).strip()]
+    return [str(item).strip() for item in (extra or []) if str(item).strip()]
+
+
+def extra_overlays_for_scenario(scenario_id: str, overlays: Mapping[str, Any] | None = None) -> list[str]:
+    """Layout-lane overlays the demo UI bound for *scenario_id* (``demo_ui.scenario_overlays``)."""
+    return _scenario_mapping(overlays, scenario_id)
 
 
 def _resolve_run_infra_refs(loaded: LoadedExperiment) -> list[str]:
@@ -88,6 +84,7 @@ class PreparedBatch:
     overlays_dir: Optional[Path] = None
     overlay_base_dir: Optional[Path] = None
     infra_refs: list[str] = field(default_factory=list)
+    scenario_infra_refs: Mapping[str, Any] = field(default_factory=dict)
     dataset_items: list = field(default_factory=list)
     fixture_registry: Any = None
 
@@ -133,6 +130,7 @@ def preload_scenario_configs(
     loaded: LoadedExperiment,
     *,
     infra_refs: list[str] | None = None,
+    scenario_overlays: Mapping[str, Any] | None = None,
 ) -> tuple[dict, dict, list[str]]:
     """Load scenario configs once per scenario."""
     from mas.lab.lab.config import load_scenario_config, load_stacked_config
@@ -151,7 +149,7 @@ def preload_scenario_configs(
             declared = list(_scenario_spec.overlays.flattened()) if _scenario_spec else []
             overlays = []
             seen: set[str] = set()
-            for item in [*declared, *extra_overlays_for_scenario(_sid)]:
+            for item in [*declared, *extra_overlays_for_scenario(_sid, scenario_overlays)]:
                 marker = _json.dumps(item, sort_keys=True) if isinstance(item, dict) else str(item)
                 if marker in seen:
                     continue
@@ -298,6 +296,15 @@ def build_scenario_overlay_refs(
     return _scenario_overlay_refs
 
 
+def fixture_base_env(base_env: Mapping[str, str] | None) -> dict[str, str]:
+    """What fixture processes may inherit: the CLI's environment when it sent one, else the host's.
+
+    A run started without the CLI (the controller, a program embedding the lab) has no ``fixture_env``;
+    an empty environment would leave its fixtures without ``PATH``.
+    """
+    return dict(base_env) if base_env is not None else hostenv.snapshot()
+
+
 async def prepare_batch(
     loaded: LoadedExperiment,
     *,
@@ -306,6 +313,7 @@ async def prepare_batch(
     data_cache_dir: Optional[Path] = None,
     clean_stale: Optional[bool] = None,
     base_env: Optional[Mapping[str, str]] = None,
+    demo_ui: Mapping[str, Any] | None = None,
 ) -> PreparedBatch:
     """Set up output, preload scenarios, run pre-pipeline phase."""
     from mas.lab.benchmark.schedule.pipeline import run_pipeline_phase
@@ -320,7 +328,7 @@ async def prepare_batch(
     fixture_registry = FixtureRegistry(
         output_dir=output_dir,
         work_dir=loaded.experiment_yaml.parent,
-        base_env=dict(os.environ if base_env is None else base_env),
+        base_env=fixture_base_env(base_env),
     )
     if not force:
         maybe_handle_stale_outputs(
@@ -331,7 +339,11 @@ async def prepare_batch(
             trace_cache_dir=loaded.trace_cache_dir,
         )
     infra_refs = _resolve_run_infra_refs(loaded)
-    scenario_configs, scenario_overlay_stacks, loaded_ids = preload_scenario_configs(loaded, infra_refs=infra_refs)
+    scenario_configs, scenario_overlay_stacks, loaded_ids = preload_scenario_configs(
+        loaded,
+        infra_refs=infra_refs,
+        scenario_overlays=(demo_ui or {}).get("scenario_overlays"),
+    )
     scenario_flavours = resolve_scenario_flavours(loaded, loaded_ids, loaded.flavour_name)
     mas_app, mas_app_version, mas_ref = extract_mas_provenance(loaded)
     scenario_overlay_refs = build_scenario_overlay_refs(loaded, loaded_ids)
@@ -375,6 +387,7 @@ async def prepare_batch(
         overlays_dir=loaded.configs_dir,
         overlay_base_dir=loaded.experiment_yaml.parent,
         infra_refs=infra_refs,
+        scenario_infra_refs=dict((demo_ui or {}).get("scenario_infra_refs") or {}),
         dataset_items=dataset_items,
         fixture_registry=fixture_registry,
     )

@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
+from mas.runtime import hostenv
 from mas.runtime.contracts import ToolContract
 
 logger = logging.getLogger(__name__)
@@ -24,13 +25,11 @@ class WebSearchTool(ToolContract):
     def __init__(self, cache_dir: str = None, max_results: int = 5):
         super().__init__()
         if cache_dir is None:
-            cache_dir = os.environ.get("MAS_WEB_SEARCH_CACHE", "").strip() or os.path.expanduser(
-                "~/.mas-cache/web_search"
-            )
+            cache_dir = hostenv.get("MAS_WEB_SEARCH_CACHE", "").strip() or os.path.expanduser("~/.mas-cache/web_search")
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_results = max_results
-        self._offline = os.environ.get("MAS_WEB_SEARCH_OFFLINE", "").strip().lower() in {
+        self._offline = hostenv.get("MAS_WEB_SEARCH_OFFLINE", "").strip().lower() in {
             "1",
             "true",
             "yes",

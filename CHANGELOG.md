@@ -115,6 +115,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
+- Library and runtime code no longer read `os.environ`. `mas-ctl`, `mas-lab` and the controller install their environment once with `mas.runtime.hostenv.install(os.environ)`, and library code reads `hostenv.get`. A program that embeds the library (calls `run_mas_benchmark`, builds sessions itself) must make that call first; without it the library sees an empty environment (no `PATH`, no API keys). Values a service exports for a run travel through `hostenv.overlay`, not the process environment.
+
 - `EngineToolContract.claims` takes the turn context: `claims(tool_name, *, ctx=None)`. A custom engine tool that defines `claims(tool_name)` must accept `ctx`.
 - The runtime names no layer and ships no pipeline data: default steps, the `spec.control` bridge keys and the response-store layer come from attributes on library rows (`default_steps`, `control_key`, `retry_overlay`, `stores_llm_responses`). The fallback `openai` default protocol and the `mock` non-protocol name are gone; `protocol: mock` is no longer read as the default. `RetryPolicy` and the retry loop moved to `mas.library.standard.lib.retry`; `ReliabilitySettings` is gone (the `spec.control` keys are checked by the layer that answers to them). `--connect` / `--listen` schemes come from the protocol plugin's row (`protocol_name`, `url_schemes`, `connect_as`).
 - `retry` and `circuit_breaker` with `per: all` on the shared engine call raise at install; they never saw a failure there. A non-idempotent tool is no longer retried on a connect error either.

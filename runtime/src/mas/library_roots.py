@@ -52,6 +52,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
+from mas.runtime import hostenv
 from mas.runtime.constants import LAB_CONFIG_FILENAME, LIBRARY_MANIFEST_FILENAME
 
 _LAB_DIR_SUFFIX = ".lab"
@@ -270,7 +271,7 @@ def _known_library_paths() -> list[Path]:
     Each ``os.pathsep``-separated entry is a **search path** (a library
     root, or a parent of sibling library folders).
     """
-    raw = os.environ.get("MAS_LIBRARY_PATHS", "")
+    raw = hostenv.get("MAS_LIBRARY_PATHS", "")
     roots: list[Path] = []
     seen: set[Path] = set()
     for entry in raw.split(os.pathsep):
