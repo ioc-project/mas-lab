@@ -157,5 +157,6 @@ tests/
 |-----------|-----------|
 | `read_skill_file` | Path resolved under skill `base_dir`; `ValueError` on escape |
 | `run_skill_script` | Basename only (no path separators); resolved under `scripts/`; `ValueError` on escape |
+| `run_skill_script` with `command` | argv list, never a shell string; first item must be `uvx`, `npx`, `bunx`, `pipx run`, `deno run` or `go run`; native backend only; runs from the skill directory in the same sandbox |
 | `subprocess.run` | `capture_output=True`; timeout capped at 120 s |
-| Interpreter | `.py` → `sys.executable`, `.sh` → `/bin/sh`, other → direct exec |
+| Interpreter | `.py` with a PEP 723 `# /// script` block and `uv` on `PATH` → `uv run --script` (installs the inline dependencies); other `.py` → `sys.executable`, `.sh` → `/bin/sh`, other → direct exec |

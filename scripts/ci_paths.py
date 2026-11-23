@@ -94,7 +94,7 @@ LIBRARY_ROWS = (
         "flag": "lib_skills",
         "name": "skills",
         "dir": "library-skills",
-        "cov": "mas.library.skills",
+        "cov": "mas.library.skills,sandbox",
         "fail_under": "90",
     },
     {

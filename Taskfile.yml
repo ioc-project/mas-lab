@@ -250,7 +250,7 @@ tasks:
       - python3 scripts/diff_cover_changed.py --coverage coverage.xml --fail-under 90
 
   verify-library:
-    desc: "Ruff check and format + pytest + changed-line coverage for one library"
+    desc: "Ruff check and format + pytest + changed-line coverage for one library (COV: comma-separated packages)"
     deps: [install-dev]
     vars:
       LIB: "{{.LIB}}"
@@ -261,7 +261,7 @@ tasks:
       - python3 scripts/ruff_changed.py format-check --root {{.LIB}}
       - |
         {{.VENV}}/pytest {{.LIB}}/tests \
-          --cov={{.COV}} \
+          {{range $c := splitList "," .COV}}--cov={{$c}} {{end}}\
           --cov-report=term-missing \
           --cov-report=xml:coverage.xml \
           --cov-fail-under=0 \
@@ -310,7 +310,7 @@ tasks:
       - task verify-library LIB=library-ioa COV=library_ioa
       - task verify-library LIB=library-telemetry COV=mas.library.telemetry
       - task verify-library LIB=library-kg COV=mas.library.kg FAIL_UNDER=80
-      - task verify-library LIB=library-skills COV=mas.library.skills
+      - task verify-library LIB=library-skills COV=mas.library.skills,sandbox
       - task verify-library LIB=library-samples COV=mas.library.samples
       - task verify-library LIB=library-lab COV=mas.library.lab
 
