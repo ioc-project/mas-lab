@@ -51,9 +51,10 @@ Per-lab commands: [labs-quickstart.md](labs-quickstart.md).
 ## More
 
 | Topic | Document |
-|-------|----------|
+| ------- | ---------- |
 | Pipeline YAML | [pipeline.md](pipeline.md) |
 | Pipeline step types | [pipeline-steps.md](pipeline-steps.md) |
 | Run state, locks, fingerprints | [benchmark-state-architecture.md](benchmark-state-architecture.md) |
 | Reproducibility | [Experiments and analysis](../../docs/tutorials/03-experiments-and-analysis/README.md) |
+| Export, publish, and import a run | [sharing-benchmarks.md](sharing-benchmarks.md) |
 | Paper labs | [paper/index.md](../../docs/paper/index.md) |
