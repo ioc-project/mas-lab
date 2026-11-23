@@ -185,7 +185,39 @@ How steps land there:
 | `SecretsProvider` | Secrets backend id and parameters | `provider`, `params` |
 | `RuntimeEngine` | Kernel/engine tuning; **rejected in `infra_refs`**, use `runtime_refs` ([runtime-engine.md](runtime-engine.md)) | `engine`, `cache`, `stream`, `parallel` |
 | `Stack` | Named layers a Flavour `bind.llm` / `bind.tools` (or `bind.agents.<id>.llm` / `.tools`) can pick (`{stack: NAME}`), bottom first | `layers[]` |
+| `Identity` | Named identity records: a scheme and its params. A layer of the `identity` kind names a record. See [Identity](#identity) | `identities[]` |
 | `Infrastructure` | Legacy alias of `LLMProxy` | as `LLMProxy` |
+
+### Identity
+
+An `Identity` document holds **records**: an `id`, a `scheme` (an installed `identity_scheme` plugin) and its `params`. A
+secret param is a `{secret: NAME}` reference; a value written in its place is refused, by the field name. An `identity`
+layer names one record with `params.identity`, and the Flavour that binds the stack gives the layer the record's scheme
+and params, the id of the agent whose stack it is on, and nothing else. The Agent and MAS manifests say nothing about
+identity: `mas-ctl validate` refuses an `identity`, `identities`, `credential` or `credentials` key under their `spec`.
+
+```yaml
+apiVersion: infra/v1
+kind: Identity
+metadata: {name: fare-desk-identities}
+spec:
+  identities:
+    - id: desk-badge
+      scheme: signed_badge
+      params: {key: {secret: desk-issuer-key}, subject: desk, claims: {group: infraadmin}}
+```
+
+Where the layer sits:
+
+| Where | How |
+| --- | --- |
+| A tool server | The server row's `pipeline` lists an `identity` step that names the record; it sits between the `http` transport and `mcp`. |
+| An LLM call | A `Stack` named by `bind.llm` or `bind.agents.<id>.llm`; `{agent}` in `params.identity` is the agent that rides it. |
+| A call between agents | A row of the agent's `bind.agent_comm` chain with `protocol: identity`. |
+
+`mas-ctl identity list | check | describe` read the records as a session would ([mas-ctl](../cli/mas-ctl.md#identity)).
+A record whose secret cannot be read stops the start with one `identity.startup` event (`refused:missing_secret`) and no
+value. See [Identity](../references/identity.md) and [Tutorial 16](../tutorials/16-identity/README.md).
 
 ### Not used yet
 

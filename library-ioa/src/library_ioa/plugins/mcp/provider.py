@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List
 
 from mas.library.standard.lib.comm.text import safe_text
+from mas.runtime.boundary.agentcomm.protocol import LayerRefusal
 from mas.runtime.registry.provider_protocol import ToolProvider
 from mas.runtime.spec.endpoint_usage import usage_connects
 
@@ -33,6 +34,38 @@ def _http_inner(binding: MCPProviderSpec) -> Any:
         return apply_layer(None, {"layer": "http", "for": ["tool"], "params": params})
     except LayerLoadError:
         return None
+
+
+def _protocol_steps(spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """The protocol-role steps of the row's pipeline other than ``mcp`` and ``http`` themselves (identity, ...)."""
+    if not spec.get("pipeline"):
+        return []
+    from mas.runtime.layers.compose import filter_pipeline_for_kind, layer_id, layer_role
+
+    named = [
+        step for step in filter_pipeline_for_kind(spec.get("pipeline"), "tool") if layer_id(step) not in {"mcp", "http"}
+    ]
+    return [step for step in named if layer_role(step) == "protocol"]
+
+
+def _under_protocol(inner: Any, spec: dict[str, Any]) -> Any:
+    """Apply the protocol-role steps of the row's pipeline (other than ``mcp`` itself) over the http transport.
+
+    A layer that belongs below the MCP layer (authorizing the requests, taking part in session setup) is named in
+    the tool-server row's ``pipeline``. Lowest priority goes first, so each wraps what is below it.
+    """
+    # only a step that declares itself a protocol-role layer is applied here, and ``apply_layer`` raises when one
+    # does not load; any other step is left as on a row without it
+    steps = _protocol_steps(spec)
+    if not steps:
+        return inner
+    from mas.runtime.layers.compose import apply_layer, order_steps
+
+    for step in reversed(order_steps(steps)):
+        # a tool-server row carries tool calls only: a layer that also declares ``llm`` must not take this transport
+        # for an LLM one (the identity layer picks its protocol, and the session hook of MCP, from the first kind)
+        inner = apply_layer(inner, {**step, "for": ["tool"]})
+    return inner
 
 
 _HTTP_TRANSPORTS = {"streamable-http", "http"}
@@ -120,7 +153,17 @@ class MCPToolProvider(ToolProvider):
 
         binding = MCPProviderSpec.from_dict(spec)
         inner = _http_inner(binding)
+        if inner is None:
+            carried = _protocol_steps(spec)
+            if carried:  # a row that names a layer its transport cannot carry is refused, never run without it
+                from mas.runtime.layers.compose import layer_id
+
+                raise ValueError(
+                    f"MCP server {binding.name!r}: transport {binding.transport!r} cannot carry the layer "
+                    f"{layer_id(carried[0])!r} its pipeline names (only streamable-http can)"
+                )
         if inner is not None:
+            inner = _under_protocol(inner, spec)
             layer = McpLayer.wrap(inner, spec)
             return cls(
                 layer.wrapper,
@@ -233,6 +276,10 @@ class MCPToolProvider(ToolProvider):
             if mapped.get("is_error"):
                 mapped.setdefault("tool", tool_name)
             return mapped
+        except LayerRefusal as exc:
+            # a layer's refusal is a value-free code: it is the whole story, with no traceback
+            logger.error("MCP tool %s refused: %s", tool_name, exc)
+            return translate_mcp_error(exc)
         except Exception as exc:
             logger.error("Error calling MCP tool %s: %s", safe_text(tool_name), mcp_error_text(exc))
             return translate_mcp_error(exc)

@@ -9,7 +9,7 @@ one into a ``Layer`` and every other module of the stack reads layers by their d
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from mas.library.standard.lib.comm.capabilities import read_capabilities
@@ -112,6 +112,11 @@ class LinkLayer(Layer):
             raise StackError(f"{type(self.link).__name__} cannot pass inbound requests to the layers above it")
         result = fn(handler)
         return handler if result is None else result
+
+    async def peer_facts(self, envelope: Envelope) -> Mapping[str, Any]:
+        if isinstance(self.link, LinkIdentity):
+            return await self.link.apeer_facts(str(envelope.meta.get("target") or ""))
+        return {}
 
     async def asend(self, envelope: Envelope) -> Any:
         target = str(envelope.meta["target"])

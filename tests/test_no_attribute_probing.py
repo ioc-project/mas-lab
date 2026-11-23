@@ -77,6 +77,14 @@ ALLOWED: dict[tuple[str, str, str], tuple[int, str]] = {
         1,
         f"{_RELEASED}: reads the optional SendContext intent",
     ),
+    (f"{IOA}/a2a/layer.py", "A2ALayer._on_serving_done", "getattr"): (
+        2,
+        "a link may have no actor, or an actor that has stopped: the server reconnects only a link still running",
+    ),
+    (f"{IOA}/a2a/layer.py", "A2ALayer._turn", "getattr"): (
+        3,
+        "the SDK call context may carry no user (or an unauthenticated one): the sender is then empty",
+    ),
 }
 
 _NAMES = {"getattr", "hasattr", "vars", "attrgetter", "runtime_checkable"}

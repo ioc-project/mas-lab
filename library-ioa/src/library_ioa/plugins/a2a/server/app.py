@@ -5,8 +5,10 @@ import hmac
 import inspect
 import json
 import logging
+import re
+from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from hashlib import sha256
@@ -14,13 +16,19 @@ from typing import Any
 
 from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
+from a2a.server.owner_resolver import resolve_user_scope
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
-from a2a.server.routes.common import DefaultServerCallContextBuilder
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 from a2a.server.tasks import InMemoryTaskStore, PushNotificationConfigStore, PushNotificationSender
-from a2a.types import AgentCapabilities, AgentCard, AgentInterface, TaskState
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentInterface,
+    SendMessageRequest,
+    TaskState,
+)
 from a2a.utils.error_handlers import build_rest_error_payload
 from a2a.utils.errors import (
     ContentTypeNotSupportedError,
@@ -31,7 +39,13 @@ from a2a.utils.errors import (
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from google.protobuf.descriptor import FieldDescriptor
+from google.protobuf.json_format import MessageToDict, ParseDict, ParseError
+from mas.library.standard.lib.stack import Envelope, Handler, PeerChallenge
 from starlette.authentication import SimpleUser
+
+from library_ioa.plugins.a2a.data_parts import DATA_PARTS_KEY, DataPartError, inbound_metadata
+from library_ioa.plugins.a2a.server.owner import VerifiedOwner, VerifiedOwnerContextBuilder
+from library_ioa.plugins.http_layer.challenge import challenge_headers
 
 _DYNAMIC_PROTO_MESSAGES = {
     "google.protobuf.Any",
@@ -42,8 +56,12 @@ _DYNAMIC_PROTO_MESSAGES = {
 A2A_JSON = "application/a2a+json"
 JSON_CONTENT_TYPE = "application/json"
 _ACCEPTED_CONTENT_TYPES = frozenset({A2A_JSON, JSON_CONTENT_TYPE})
+#: The longest context, task or message id a gated server accepts (the verifier reads no more of one).
+MAX_ID = 256
 _REST_PREFIX = "/a2a/rest"
 _logger = logging.getLogger(__name__)
+
+_AGENT_CARD_PATH = "/.well-known/agent-card.json"
 
 _TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_COMPLETED,
@@ -372,8 +390,9 @@ def without_credential_headers(headers: Any) -> dict[str, str]:
     return {str(key): str(value) for key, value in dict(headers).items() if str(key).lower() not in HTTP_SECRET_HEADERS}
 
 
-class _CallContextBuilder(DefaultServerCallContextBuilder):
-    """The SDK's call context with the credential headers left out of ``state["headers"]``."""
+class _CallContextBuilder(VerifiedOwnerContextBuilder):
+    """The SDK's call context with a verified owner as the user and the credential headers left out of
+    ``state["headers"]``."""
 
     def build(self, request: Request) -> Any:
         context = super().build(request)
@@ -406,7 +425,8 @@ def build_request_handler(
 ) -> DefaultRequestHandler:
     """The SDK request handler every A2A binding shares: the HTTP routes and the slimrpc server both call it."""
     card = _coerce_agent_card(agent_card)
-    task_store = InMemoryTaskStore()
+    # each owner (the SDK user's name) has its own tasks: said here, so a change of the SDK default cannot drop it
+    task_store = InMemoryTaskStore(owner_resolver=resolve_user_scope)
     request_handler = _A2ARequestHandler(
         agent_executor=executor,
         task_store=task_store,
@@ -423,6 +443,124 @@ def build_request_handler(
     return request_handler
 
 
+def _message_of(body: Any, *, rest: bool) -> dict[str, Any]:
+    """The message of a send request body, read as the binding of its route reads it, else ``{}``.
+
+    REST (``message:send``, ``message:stream``) has the message at the top level; JSON-RPC has it in ``params.message``.
+    The other place is not looked at: a body that carries both has one message the SDK reads and one decoy.
+    """
+    if not isinstance(body, dict):
+        return {}
+    if rest:
+        message = body.get("message")
+    else:
+        params = body.get("params")
+        message = params.get("message") if isinstance(params, dict) else None
+    return message if isinstance(message, dict) else {}
+
+
+@dataclass(frozen=True)
+class _Ids:
+    """What a request names, read the way the SDK reads it (the same protobuf parse, so the same spelling wins)."""
+
+    message: dict[str, Any]
+    text: str | None
+    context_id: str
+    message_id: str
+    task_id: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+    data: tuple[Any, ...] = ()
+
+
+_TASK_IN_PATH = re.compile(r"/tasks/([^/:]+)")
+
+
+def _ids_of(path: str, body: Any, *, rest: bool) -> _Ids:
+    """The ids and the text of a request. ``ValueError`` when the body does not parse as the SDK would parse it.
+
+    ``contextId`` and ``context_id`` (and the other pairs) are both accepted by the protobuf parse and the last one
+    wins: reading the dict by hand would let the gate see one and the SDK the other.
+    """
+    message = _message_of(body, rest=rest)
+    try:
+        if message:
+            source = body if rest else body["params"]
+            sent = ParseDict(source, SendMessageRequest(), ignore_unknown_fields=True).message
+            text = "".join(part.text for part in sent.parts if part.WhichOneof("content") == "text")
+            data = tuple(MessageToDict(part.data) for part in sent.parts if part.WhichOneof("content") == "data")
+            metadata = MessageToDict(sent.metadata) if sent.HasField("metadata") else {}
+            return _Ids(message, text, sent.context_id, sent.message_id, sent.task_id, metadata, data)
+        if rest:
+            found = _TASK_IN_PATH.search(path)
+            return _Ids({}, None, "", "", found.group(1) if found else "")
+        method = body.get("method") if isinstance(body, dict) else None
+        kind = JsonRpcDispatcher.METHOD_TO_MODEL.get(method) if isinstance(method, str) else None
+        params = body.get("params") if isinstance(body, dict) else None
+        if kind is None or not isinstance(params, dict):
+            return _Ids({}, None, "", "", "")
+        asked = ParseDict(params, kind(), ignore_unknown_fields=True)
+        names = {field.name for field in kind.DESCRIPTOR.fields}
+        # a push-config call names its task in ``task_id`` (``id`` is the config's); the others name it in ``id``
+        task = asked.task_id if "task_id" in names else asked.id if "id" in names else ""
+        return _Ids({}, None, "", "", task)
+    except (ParseError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError("request does not parse") from exc
+
+
+def message_text(message: Mapping[str, Any]) -> str:
+    """The text parts of a message, joined."""
+    return "".join(
+        str(part["text"]) for part in message.get("parts") or [] if isinstance(part, dict) and "text" in part
+    )
+
+
+def _challenge_body(refused: PeerChallenge) -> dict[str, Any]:
+    body: dict[str, Any] = {"code": refused.code, "challenge": refused.challenge}
+    if refused.wire is not None:
+        body["wire"] = refused.wire
+    if refused.carry:
+        body["carry"] = dict(refused.carry)
+    return body
+
+
+def with_message_text(body: Any, text: str, *, rest: bool) -> Any:
+    """``body`` with the text of its message replaced: the first text part holds ``text``, other text parts go."""
+    message = _message_of(body, rest=rest)
+    kept: list[Any] = []
+    placed = False
+    for part in message.get("parts") or []:
+        if isinstance(part, dict) and "text" in part:
+            if placed:
+                continue
+            part = {**part, "text": text}
+            placed = True
+        kept.append(part)
+    if not placed:
+        kept.append({"text": text})
+    message["parts"] = kept
+    return body
+
+
+def without_metadata_keys(body: Any, keys: set[str], *, rest: bool) -> Any | None:
+    """``body`` with the credential carriers named by ``keys`` removed from its message, or ``None`` when it has none.
+
+    A key is a metadata key; ``DATA_PARTS_KEY`` names the message's data parts, which are removed whole.
+    """
+    message = _message_of(body, rest=rest)
+    changed = False
+    metadata = message.get("metadata")
+    if isinstance(metadata, dict) and keys & set(metadata):
+        message["metadata"] = {k: v for k, v in metadata.items() if k not in keys}
+        changed = True
+    parts = message.get("parts")
+    if DATA_PARTS_KEY in keys and isinstance(parts, list):
+        kept = [part for part in parts if not (isinstance(part, dict) and "data" in part)]
+        if len(kept) != len(parts):
+            message["parts"] = kept
+            changed = True
+    return body if changed else None
+
+
 def build_app(
     agent_card: AgentCard | dict[str, Any],
     executor: Any,
@@ -431,12 +569,18 @@ def build_app(
     push_sender: PushNotificationSender | None = None,
     extended_agent_card: AgentCard | dict[str, Any] | None = None,
     admission: dict[str, Any] | list[AdmissionCaller] | None = None,
+    inbound: Callable[[Handler], Handler] | None = None,
 ) -> FastAPI:
     """Build an SDK-backed A2A FastAPI app with the official JSON-RPC and agent-card routes.
 
     ``admission`` maps a caller name to a SecretRef. Given, every request but the public agent
     card must carry a token of that table, and the caller is the table's name for it, never anything
     the request says about itself. Omitted, the app admits everyone (the default).
+
+    ``inbound`` is the layers' inbound chain (``Stack.serve``): it wraps the handler that lets a POST through to the
+    A2A routes, and runs before the SDK sees the request. A layer that refuses the caller raises
+    ``PeerChallenge`` and the request is answered 401 with ``WWW-Authenticate``; the routes never run.
+    Reading the agent card is not gated.
     """
     if admission is not None:
         admission = checked_admission(admission)
@@ -513,15 +657,87 @@ def build_app(
                 _logger.debug("a2a agent card hook failed", exc_info=True)
         return response
 
+    if inbound is not None:
+
+        async def proceed(envelope: Envelope) -> Response:
+            request, call_next, body, text, rest = envelope.meta["proceed"]
+            if envelope.payload != text:
+                # a verifier handed back the text with its identity layer removed: that is what the agent receives
+                request._body = json.dumps(
+                    with_message_text(body, str(envelope.payload), rest=rest), separators=(",", ":")
+                ).encode("utf-8")
+            keys = {"mas.headers", *(str(k) for k in envelope.meta.get("credential_keys") or ())}
+            stripped = without_metadata_keys(body, keys, rest=rest)
+            if stripped is not None:
+                # the credential carriers (the headers a peer put in the metadata, the keys the verifier says carried
+                # the credential) are not kept: the SDK's task store keeps the message and GetTask returns it
+                request._body = json.dumps(stripped, separators=(",", ":")).encode("utf-8")
+            owner = str(envelope.meta.get("owner") or "")
+            if owner:
+                # the SDK keeps tasks per user: each verified owner gets its own, never the shared anonymous one, and
+                # the executor makes the conversation a handler sees from this user (never from a caller's word)
+                request.scope["user"] = VerifiedOwner(owner)
+            return await call_next(request)
+
+        chain = inbound(proceed)
+
+        @app.middleware("http")
+        async def gate_inbound(request: Request, call_next: Any) -> Response:
+            if request.method in {"GET", "HEAD"} and request.url.path == _AGENT_CARD_PATH:
+                return await call_next(request)
+            try:
+                body = json.loads(await request.body())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                body = None
+            rest = request.url.path.startswith(_REST_PREFIX)
+            try:
+                ids = _ids_of(request.url.path, body, rest=rest)
+            except ValueError:
+                return JSONResponse(status_code=400, content={"error": {"code": "invalid_request"}})
+            if max(len(ids.context_id), len(ids.task_id), len(ids.message_id)) > MAX_ID:
+                # the verifier binds its evidence to the ids it reads: two ids that agree on a prefix must not share it
+                return JSONResponse(status_code=400, content={"error": {"code": "invalid_request"}})
+            try:
+                seen_metadata = inbound_metadata(ids.metadata, ids.data)
+            except DataPartError:
+                # a part that breaks the limits is refused before any verifier reads it; nothing of it is echoed
+                return JSONResponse(status_code=400, content={"error": {"code": "invalid_data_part"}})
+            # headers are what the caller sent; ids come from the request the transport parsed, never from the layer
+            envelope = Envelope(
+                payload=ids.text,
+                headers={key.lower(): value for key, value in request.headers.items()},
+                meta={
+                    "protocol": "a2a",
+                    "context_id": ids.context_id,
+                    "message_id": ids.message_id,
+                    # a follow-up on a task names it; a first message has none yet (the SDK assigns it after this gate)
+                    "task_id": ids.task_id,
+                    # the caller's namespaced message metadata and the data parts (the transport's reserved key)
+                    "metadata": seen_metadata,
+                    "proceed": (request, call_next, body, ids.text, rest),
+                },
+            )
+            try:
+                response = await chain(envelope)
+            except PeerChallenge as refused:
+                return JSONResponse(
+                    status_code=401,
+                    headers=challenge_headers(refused, "Challenge"),
+                    content={"error": _challenge_body(refused)},
+                )
+            return response
+
     if admission is not None:
         _add_admission(app, admission)
 
     from a2a.server.routes import add_a2a_routes_to_fastapi
 
+    context_builder = _CallContextBuilder()
+
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),
-        jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url="/", context_builder=_CallContextBuilder()),
-        rest_routes=create_rest_routes(request_handler, path_prefix="/a2a/rest", context_builder=_CallContextBuilder()),
+        jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url="/", context_builder=context_builder),
+        rest_routes=create_rest_routes(request_handler, path_prefix="/a2a/rest", context_builder=context_builder),
     )
     return app

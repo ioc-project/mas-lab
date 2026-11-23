@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
+from a2a.server.owner_resolver import resolve_user_scope
 from a2a.server.tasks import (
     BasePushNotificationSender,
     InMemoryPushNotificationConfigStore,
@@ -15,6 +16,7 @@ from a2a.server.tasks import (
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.proto_utils import to_stream_response
 from google.protobuf.json_format import MessageToDict
+from mas.library.standard.lib.stack import Handler, conversation_id
 from mas.runtime.boundary.webserver import WebServerContract, WebServerHandle
 from mas.runtime.spec.endpoint_usage import usage_listens
 
@@ -82,7 +84,9 @@ class A2AExposure:
         capabilities: dict[str, Any] | None = None,
         endpoint: dict[str, Any] | None = None,
         webserver: WebServerContract | None = None,
+        inbound: Callable[[Handler], Handler] | None = None,
     ) -> None:
+        self.inbound = inbound
         self.agent_card_enabled = agentCard
         self.host = host
         self.port = port
@@ -154,7 +158,7 @@ class A2AExposure:
         push_config_store = None
         push_sender = None
         if self.capabilities.get("pushNotifications"):
-            push_config_store = InMemoryPushNotificationConfigStore()
+            push_config_store = InMemoryPushNotificationConfigStore(owner_resolver=resolve_user_scope)
             push_sender = A2APushNotificationSender(
                 httpx.AsyncClient(timeout=10),
                 push_config_store,
@@ -170,6 +174,7 @@ class A2AExposure:
             push_config_store=push_config_store,
             push_sender=push_sender,
             admission=self.admission,
+            inbound=self.inbound,
         )
 
     @staticmethod
@@ -199,14 +204,25 @@ class A2AExposure:
                 runtime_kwargs["parent_call_id"] = caller_call_id
             if upstream_correlation_id is not None:
                 runtime_kwargs["upstream_correlation_id"] = upstream_correlation_id
-            session_id = str(getattr(context, "context_id", "") or "")
-            if not session_id:
-                session_id = str(uuid4())
-                try:
-                    context.context_id = session_id
-                except Exception:
-                    pass
-            user = getattr(getattr(context, "call_context", None), "user", None)
+            from .server.owner import VerifiedOwner
+
+            call = getattr(context, "call_context", None)
+            user = getattr(call, "user", None)
+            if isinstance(user, VerifiedOwner):
+                # behind a verifying layer the conversation belongs to the verified owner: the handler never sees the id
+                # the caller sent, so two callers that use one id are two conversations. A send that names only a task
+                # gets a fresh context id from the SDK; the conversation is the task's own.
+                task = context.current_task
+                client = str((task.context_id if task is not None else context.context_id) or "")
+                session_id = conversation_id(user.user_name, client)
+            else:
+                session_id = str(getattr(context, "context_id", "") or "")
+                if not session_id:
+                    session_id = str(uuid4())
+                    try:
+                        context.context_id = session_id
+                    except Exception:
+                        pass
             caller = str(user.user_name or "") if user is not None and user.is_authenticated else ""
             if caller:
                 runtime_kwargs["caller"] = caller

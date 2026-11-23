@@ -79,6 +79,7 @@ LIBRARY_TYPES = frozenset(
         "checkpoint_store",
         "eval_metric",
         "secret_store",
+        "identity_scheme",
     }
 )
 

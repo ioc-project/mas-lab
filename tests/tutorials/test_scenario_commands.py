@@ -196,6 +196,11 @@ _SCENARIOS = [
         REPO_ROOT,
         "tuto-15",
     ),
+    (
+        REPO_ROOT / "docs/tutorials/16-identity/demo/scenario.yaml",
+        REPO_ROOT,
+        "tuto-16",
+    ),
 ]
 
 if (REPO_ROOT / "library-telemetry/examples/qa-agent").is_dir():
@@ -365,9 +370,28 @@ def _scratch_working_dir(working_dir: Path, tmp_path_factory) -> Path:
     return _SCRATCH_DIRS[working_dir]
 
 
-@pytest.mark.parametrize("case", _CASES, ids=[scenario_case_id(c) for c in _CASES])
-def test_scenario_command(case: _CommandCase, tmp_path_factory):
-    run_scenario_case(case, cwd=_scratch_working_dir(case.working_dir, tmp_path_factory))
+def _cases_by_scenario() -> dict[str, list[_CommandCase]]:
+    grouped: dict[str, list[_CommandCase]] = {}
+    for case in _CASES:
+        grouped.setdefault(case.scenario_id, []).append(case)
+    return grouped
+
+
+_BY_SCENARIO = _cases_by_scenario()
+
+
+@pytest.mark.parametrize("scenario_id", list(_BY_SCENARIO))
+def test_scenario_commands(scenario_id: str, tmp_path_factory):
+    """Run one scenario's steps in order, in one process: a later step reads what an earlier one wrote.
+
+    The scenario, not the step, is the unit ``pytest -n`` hands to a worker: steps of one scenario share a
+    scratch copy of the tutorial directory, which exists only inside the worker that made it.
+    """
+    for case in _BY_SCENARIO[scenario_id]:
+        try:
+            run_scenario_case(case, cwd=_scratch_working_dir(case.working_dir, tmp_path_factory))
+        except AssertionError as error:
+            raise AssertionError(f"step {scenario_case_id(case)!r} failed:{error}") from error
 
 
 # ---------------------------------------------------------------------------

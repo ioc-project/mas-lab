@@ -17,5 +17,5 @@ class RuntimeCommEndpoint:
     agent_id: str
     instance: RuntimeInstance
 
-    def deliver(self, payload: EngineIoReturn) -> None:
-        self.instance.feed(payload)
+    async def adeliver(self, payload: EngineIoReturn) -> None:
+        await self.instance.afeed(payload)

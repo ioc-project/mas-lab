@@ -43,6 +43,23 @@ async def test_a_child_engine_runs_its_own_tool_not_the_one_its_parent_is_runnin
     assert child._pending_tools_by_cid == {}
 
 
+async def test_the_tool_in_flight_carries_the_kernels_correlation_id_of_its_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A layer below the engine names the call by the id its governance decision carries."""
+    seen: list[InFlightTool | None] = []
+
+    async def fake_execute(tool: str, **kwargs: Any) -> str:
+        seen.append(IN_FLIGHT_TOOL.get())
+        return "ok"
+
+    monkeypatch.setattr("mas.runtime.engine.tool_dispatch.aexecute_engine_tool", fake_execute)
+    engine = LiveLlmEngine(manifest=None, use_cache=False, llm_provider=_Provider())
+    engine._pending_tools_by_cid[17] = ("lookup", {})
+    await engine.ainvoke(InvokeEngineIo(correlation_id=17, op="TOOL_CALL"))
+    assert [(t.name, t.call) for t in seen if t is not None] == [("lookup", 17)]
+
+
 class _FailingTool:
     def __init__(self) -> None:
         self.calls = 0

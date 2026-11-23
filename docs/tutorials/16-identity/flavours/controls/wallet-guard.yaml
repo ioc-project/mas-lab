@@ -1,0 +1,11 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Step 5: the guard shuts the tools that change what the agent can do. Without an `allow`, `identity_delegate` and
+# `identity_revoke` are blocked; listing and describing change nothing and pass. `allow: {identity_revoke: hold}` would
+# ask a human first.
+apiVersion: control/v1
+kind: Control
+metadata: {name: wallet-guard}
+spec:
+  governance:
+    - identity-guard: {}

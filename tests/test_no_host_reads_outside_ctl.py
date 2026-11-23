@@ -98,6 +98,9 @@ HTTP_SENDERS = {
     f"{_STEPS}environment/http_call.py": "a loopback or allow-listed URL, Content-Type and declared headers",
     "library-telemetry/src/mas/library/telemetry/collector/otlp.py": "local collector export, Content-Type only",
     "library-ioa/src/library_ioa/plugins/a2a/exposure.py": "an A2A push: the credential its subscriber supplied",
+    "library-standard/src/mas/library/standard/testing/identity_conformance.py": (
+        "the identity kit builds a fake inbound and parent evidence carrying a canary credential; nothing is sent"
+    ),
 }
 
 

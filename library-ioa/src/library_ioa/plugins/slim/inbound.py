@@ -12,8 +12,8 @@ import logging
 from typing import Any
 
 from mas.library.standard.lib.comm.headers import bound_headers
+from mas.library.standard.lib.stack import StackError
 from mas.library.standard.lib.stack.agent_comm import inbound_envelope
-from mas.library.standard.lib.stack.errors import StackError
 from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, bound_inbound
 

@@ -31,6 +31,8 @@ class InFlightTool:
     owner: int
     name: str
     arguments: dict[str, Any]
+    #: The kernel's correlation id of this call (the one its governance decision and its tool records carry).
+    call: int = 0
 
 
 IN_FLIGHT_TOOL: contextvars.ContextVar[InFlightTool | None] = contextvars.ContextVar(

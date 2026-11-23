@@ -1,0 +1,16 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Step 2: who the desk is. One record: a scheme and its params. The issuer key is a {secret: NAME} reference,
+# revealed by the secret store when the session starts; this file holds no secret.
+# signed_badge is a stand-in for a real credential scheme (see the README).
+apiVersion: infra/v1
+kind: Identity
+metadata: {name: fare-desk-identities}
+spec:
+  identities:
+    - id: desk-badge
+      scheme: signed_badge
+      params:
+        key: {secret: desk-issuer-key}
+        subject: desk
+        claims: {group: infraadmin}

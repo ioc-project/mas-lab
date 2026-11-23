@@ -15,11 +15,13 @@ def _mcp_loop_threads() -> list[threading.Thread]:
 
 
 def test_eight_wrappers_start_eight_mcp_loop_threads() -> None:
+    # A session that another test opened keeps its loop thread for the life of the process: count only ours.
+    before = set(_mcp_loop_threads())
     wrappers = [MCPClientWrapper(MCPClient(url="http://127.0.0.1:9/mcp")) for _ in range(8)]
     try:
         for wrapper in wrappers:
             wrapper._loop.ensure()
-        assert len(_mcp_loop_threads()) == 8
+        assert len(set(_mcp_loop_threads()) - before) == 8
         loops = [wrapper._loop for wrapper in wrappers]
         assert len({id(loop) for loop in loops}) == 8
     finally:

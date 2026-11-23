@@ -11,7 +11,8 @@ import yaml
 from mas.ctl.validate import validate_file
 
 _ROOT = Path(__file__).resolve().parents[1]
-_SKIP_PARTS = {".venv", ".venv-test", "node_modules", "ui", "site", "__pycache__"}
+# ``broken`` folders hold manifests that are wrong on purpose (the tutorials show the refusal); they are not examples.
+_SKIP_PARTS = {".venv", ".venv-test", "node_modules", "ui", "site", "__pycache__", "broken"}
 _AGENT_ROOTS = (
     _ROOT / "docs" / "tutorials",
     _ROOT / "library-samples",

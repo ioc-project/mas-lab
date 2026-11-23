@@ -51,6 +51,9 @@ conditions would load it, host requests included. An unknown name, including
 `enabled: false` of an unknown plugin, is a load error. An agent with no skills
 and no named plugins gets none.
 
+The `identity` plugin is declared only. It gives the model four tools over the agent's own identities, on ids and never on
+a credential, and `identity-guard` governs the calls that change them ([Identity](../references/identity.md#the-agents-own-identities-the-surface-and-the-guard)).
+
 A plugin is named by its URN, its name, or a shortcut of its row (`create_subagent`
 names `subagents`). The match is exact; a fragment of a name is unknown.
 

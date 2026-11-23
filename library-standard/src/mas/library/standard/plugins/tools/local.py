@@ -371,6 +371,8 @@ def load_local_tool_provider(
     ``system_tools`` is the deprecated name of the host-requested ``system_plugins``.
     """
     local = provider or LocalToolProvider()
+    agent_id = str(containment_kw.pop("agent_id", "") or "")
+    bind_scope = str(containment_kw.pop("bind_scope", "") or "")
     skills_spec = containment_kw.pop("skills_spec", None)
     auto_inject_scripts = bool(containment_kw.pop("auto_inject_scripts", False))
     tools_dir_raw = containment_kw.pop("tools_dir", None)
@@ -396,6 +398,8 @@ def load_local_tool_provider(
         host_requested=host_plugins,
         session=SessionContext(
             spec=spec,
+            agent_id=agent_id,
+            bind_scope=bind_scope,
             hitl_contract=hitl_contract,
             user_io_contract=user_io_contract,
             skills_dir=skills_dir,

@@ -15,6 +15,20 @@ def _is_set(val: Any) -> bool:
     return val is not None and val != "" and val is not False
 
 
+# Identity is infra: an Agent, a MAS or an Overlay never names an identity or a credential directly under ``spec``.
+_IDENTITY_KEYS = ("identity", "identities", "credential", "credentials")
+
+
+def _identity_violations(node: Any, level: str = "spec") -> list[str]:
+    if not isinstance(node, dict):
+        return []
+    return [
+        f"{level}.{key} is an identity concern — declare an Identity infra row and bind it in the Flavour"
+        for key in _IDENTITY_KEYS
+        if _is_set(node.get(key)) and node.get(key) != [] and node.get(key) != {}
+    ]
+
+
 def _iter_paths(obj: Any, prefix: str = ""):
     if isinstance(obj, dict):
         for k, v in obj.items():
@@ -83,7 +97,7 @@ class AgentSeparationValidator(SeparationValidator):
             violations.append("spec.infra_refs is forbidden on Agent — use workspace config.yaml or --infra-ref")
         if spec.get("infra_interceptors") or spec.get("infra_interceptor"):
             violations.append("spec.infra_interceptors is forbidden on Agent — use workspace config or CLI")
-        return violations
+        return violations + _identity_violations(spec)
 
 
 class MASSeparationValidator(SeparationValidator):
@@ -100,6 +114,7 @@ class MASSeparationValidator(SeparationValidator):
             violations.append("spec.infra_refs is forbidden on MAS — use workspace config.yaml or --infra-ref")
         if spec.get("infra_interceptors") or spec.get("infra_interceptor"):
             violations.append("spec.infra_interceptors is forbidden on MAS — use workspace config or CLI")
+        violations += _identity_violations(spec)
         for path, val in _iter_paths(data):
             if path.startswith("spec.agency.agents["):
                 continue
@@ -126,6 +141,7 @@ class OverlaySeparationValidator(MASSeparationValidator):
             violations.append("spec.infra_refs is forbidden on Overlay — use workspace config.yaml or --infra-ref")
         if spec.get("infra_interceptors") or spec.get("infra_interceptor"):
             violations.append("spec.infra_interceptors is forbidden on Overlay — use workspace config or CLI")
+        violations += _identity_violations(spec) + _identity_violations(patch, "spec.patch")
         for path, val in _iter_paths(data):
             if "agency.agents[" in path:
                 continue

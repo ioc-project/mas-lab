@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Step 5: the same desk, now allowed to look at and manage its own identities. Naming the plugin gives the model four
+# tools that work on handles (ids), never on a credential. No identity is declared here: the records stay in infra.
+apiVersion: mas/v1
+kind: Agent
+
+metadata:
+  name: desk
+
+spec:
+  description: "Look up fares and manage my own identities."
+  system_plugins:
+    - identity
+  tools:
+    - ref: ../../tools/get_fares.tool.yaml
+  context:
+    role: |
+      You work on the fare desk. Use the fares tool, and the identity tools to see which identities you hold.

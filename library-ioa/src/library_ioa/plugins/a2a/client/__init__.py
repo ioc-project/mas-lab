@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import json
 import logging
 import re
 from collections.abc import Mapping
@@ -10,8 +12,11 @@ import httpx
 from a2a.helpers import new_text_message
 from a2a.types import Role, SendMessageRequest, TaskState
 from google.protobuf.json_format import MessageToDict
+from mas.library.standard.lib.stack import SessionHook, Unauthenticated
 from mas.runtime.aio import LoopCache
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+
+from library_ioa.plugins.a2a.handshake import complete
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +151,32 @@ def closing_text(responses: list[Any]) -> str:
     return streamed if streamed and (bare_task or kind not in {"task", "message"}) else ""
 
 
+#: Where the response hook of the HTTP client notes a 401 for the send that is waiting on it (see ``_Connection``).
+_UNAUTHORIZED: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar("a2a_unauthorized", default=None)
+
+
+def _unauthenticated(seen: dict[str, Any]) -> Unauthenticated:
+    """The peer's 401 as ``Unauthenticated``: the challenge and raw wire value of the body our servers send, else
+    the ``WWW-Authenticate`` header as the raw value."""
+    challenge: dict[str, Any] = {}
+    wire: str | None = None
+    carry: dict[str, str] = {}
+    try:
+        error = json.loads(seen.get("body") or b"{}").get("error")
+    except (ValueError, AttributeError):
+        error = None
+    if isinstance(error, dict):
+        if isinstance(error.get("challenge"), dict):
+            challenge = dict(error["challenge"])
+        if isinstance(error.get("wire"), str):
+            wire = error["wire"]
+        if isinstance(error.get("carry"), dict):
+            carry = {str(k): str(v) for k, v in error["carry"].items()}
+    if wire is None and seen.get("www_authenticate"):
+        wire = str(seen["www_authenticate"])
+    return Unauthenticated(challenge, wire, carry)
+
+
 _SDK_NAMES = frozenset({"A2ACardResolver", "ClientCallContext", "ClientConfig", "create_client"})
 
 
@@ -257,20 +288,28 @@ class A2AClient:
         message: str,
         *,
         context_id: str = "",
-        metadata: dict[str, str] | None = None,
+        metadata: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         stream: bool = False,
+        session_hook: SessionHook | None = None,
+        message_id: str = "",
     ) -> dict[str, Any]:
         call_context = self._call_context(headers)
         state = getattr(call_context, "state", None)
         try:
             payload = await self._send_once(
-                message, context_id=context_id, metadata=metadata, stream=stream, call_context=call_context
+                message,
+                context_id=context_id,
+                metadata=metadata,
+                stream=stream,
+                call_context=call_context,
+                session_hook=session_hook,
+                message_id=message_id,
             )
         except BaseException as exc:
             # a card or client kept from before the failure may be stale (the peer restarted, its card changed); a
-            # task the peer answered and failed leaves the connection fine
-            if isinstance(exc, Exception) and not isinstance(exc, AgentCommError):
+            # task the peer answered and failed, or a peer that answered (a challenge), leaves the connection fine
+            if isinstance(exc, Exception) and not isinstance(exc, (AgentCommError, Unauthenticated)):
                 self._connections.drop()
             self._finish_call(state, exc)
             raise
@@ -315,32 +354,61 @@ class A2AClient:
         message: str,
         *,
         context_id: str,
-        metadata: dict[str, str] | None,
+        metadata: Mapping[str, Any] | None,
         stream: bool,
         call_context: Any = None,
+        session_hook: SessionHook | None = None,
+        message_id: str = "",
     ) -> dict[str, Any]:
-        client = await (await self._connection()).client(bool(stream))
-        request = SendMessageRequest(
-            message=new_text_message(
-                message,
-                context_id=context_id or None,
-                role=Role.ROLE_USER,
+        connection = await self._connection()
+        if session_hook is not None:
+            connection.watch_unauthorized()  # before the SDK client is built: a layer above is on this connection
+        client = await connection.client(bool(stream))
+        seen: dict[str, Any] = {}
+        token: contextvars.Token[dict[str, Any] | None] | None = None
+        if session_hook is not None:
+            # only a send with a layer above it watches for a 401; with none, no hook and no context variable
+            seen["armed"] = True
+            token = _UNAUTHORIZED.set(seen)
+        try:
+            request = SendMessageRequest(
+                message=new_text_message(
+                    message,
+                    context_id=context_id or None,
+                    role=Role.ROLE_USER,
+                )
             )
-        )
-        if metadata:
-            request.message.metadata.update(metadata)
-        chunks: list[Any] = []
-        async for chunk in client.send_message(request, context=call_context):
-            chunks.append(chunk)
-        raise_if_failed(chunks)
-        if not chunks:
-            return {"status": "completed", "result": ""}
-        payload = self._normalize_sdk_payload(chunks[-1])
-        payload.setdefault("status", "completed")
-        streamed = closing_text(chunks)
-        if streamed:
-            payload["result"] = streamed
-        return payload
+            if message_id:
+                request.message.message_id = message_id
+            if metadata:
+                request.message.metadata.update(metadata)
+            chunks: list[Any] = []
+            try:
+                async for chunk in client.send_message(request, context=call_context):
+                    chunks.append(chunk)
+            except Exception:
+                # with an identity layer above, a 401 is the peer asking for proof: say so, once, with what it sent
+                if session_hook is not None and seen.get("status") == 401:
+                    raise _unauthenticated(seen) from None
+                raise
+
+            async def follow_up(message: Any) -> list[Any]:
+                return [c async for c in client.send_message(SendMessageRequest(message=message), context=call_context)]
+
+            # a peer that wants proof answers with an auth-required task; the hook replies on that task, once
+            chunks = await complete(chunks, session_hook, follow_up)
+            raise_if_failed(chunks)
+            if not chunks:
+                return {"status": "completed", "result": ""}
+            payload = self._normalize_sdk_payload(chunks[-1])
+            payload.setdefault("status", "completed")
+            streamed = closing_text(chunks)
+            if streamed:
+                payload["result"] = streamed
+            return payload
+        finally:
+            if token is not None:
+                _UNAUTHORIZED.reset(token)
 
     async def aget_agent_card(self, *, fresh: bool = False) -> dict[str, Any]:
         """The agent card, fetched once and kept; ``fresh`` fetches it again (a health check)."""
@@ -365,13 +433,35 @@ class A2AClient:
         message: str,
         *,
         context_id: str = "",
-        metadata: dict[str, str] | None = None,
+        metadata: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         stream: bool = False,
+        session_hook: SessionHook | None = None,
+        message_id: str = "",
     ) -> dict[str, Any]:
-        """Send one message; ``headers`` go on this call's HTTP request only, over the constructor's."""
+        """Send one message; ``headers`` go on this call's HTTP request only, over the constructor's.
+
+        ``session_hook`` answers an auth-required task on the task it came from (see ``handshake``).
+        ``message_id`` fixes the id of the message, so a layer that resends it after a challenge keeps it.
+        """
         return await self._sdk_send_message(
-            message, context_id=context_id, metadata=metadata, headers=headers, stream=stream
+            message,
+            context_id=context_id,
+            metadata=metadata,
+            headers=headers,
+            stream=stream,
+            session_hook=session_hook,
+            message_id=message_id,
+        )
+
+
+async def _note_unauthorized(response: httpx.Response) -> None:
+    """Note a 401 for the send waiting on it (what the peer put in the answer is lost once the SDK raises)."""
+    seen = _UNAUTHORIZED.get()
+    if seen is not None and seen.get("armed") and response.status_code == 401:
+        await response.aread()
+        seen.update(
+            status=401, body=response.content[:8192], www_authenticate=response.headers.get("www-authenticate", "")
         )
 
 
@@ -400,6 +490,7 @@ class _Connection:
             event_hooks={"request": [self._attach_headers]},
             **httpx_client_kwargs_for(owner.url),
         )
+        self._watching = False
         self._card: Any = None
         self.card_data: dict[str, Any] | None = None
         self._clients: dict[bool, Any] = {}
@@ -407,6 +498,27 @@ class _Connection:
 
     async def _attach_headers(self, request: httpx.Request) -> None:
         self._headers.apply(request)
+
+    def watch_unauthorized(self) -> None:
+        """Note a 401 for the sends that ask (those with a layer above). Installed on the first such send: a
+        connection used without one never carries the hook."""
+        if not self._watching:
+            self._watching = True
+            self._http.event_hooks["response"].append(_note_unauthorized)
+            # a layer above presents identity evidence and metadata on these requests: they go to the configured
+            # origin (or a listed one) only, never to whatever URL the peer's agent card names
+            self._http.event_hooks["request"].append(self._same_origin_only)
+
+    async def _same_origin_only(self, request: httpx.Request) -> None:
+        from mas.runtime.secrets.url import origin_text, same_origin
+
+        target = str(request.url)
+        allowed = [self._owner.url, *self._owner.allowed_origins]
+        if not any(same_origin(base, target, upgrade=True) for base in allowed):
+            raise AgentCommError(
+                f"a2a client: refusing to send identity evidence to {origin_text(target)}, "
+                f"which is not the configured origin {origin_text(self._owner.url)}"
+            )
 
     async def fetch_card(self, *, force: bool = False) -> dict[str, Any]:
         async with self._lock:
@@ -419,6 +531,9 @@ class _Connection:
             found = self._clients.get(streaming)
             if found is not None:
                 return found
+            if self._watching and self._owner.transport == "GRPC":
+                # the SDK's gRPC channel here is insecure: nothing identity-bearing goes over it
+                raise AgentCommError("a2a client: identity evidence is not sent over an insecure gRPC channel")
             if self._card is None:
                 resolver = _sdk("A2ACardResolver")(httpx_client=self._http, base_url=self._owner.url)
                 self._card = await resolver.get_agent_card()

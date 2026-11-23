@@ -69,6 +69,11 @@ LAZY_COMMANDS: dict[str, tuple[str, str, str]] = {
         "hardening_group",
         "Named hardening checks and the production posture.",
     ),
+    "identity": (
+        "identity",
+        "identity_group",
+        "The identities a session would use: check them, list them, describe one.",
+    ),
     "validate": (
         "validate",
         "validate_cmd",

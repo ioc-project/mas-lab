@@ -22,6 +22,10 @@ This page lists every tool a system plugin advertises. A *system plugin* is a ru
 | [`cancel_inflight`](#pause_session) | `library-standard` | with `pause_session` | — |
 | [`run_control_script`](#pause_session) | `library-standard` | with `pause_session` | — |
 | [`create_subagent`](#create_subagent) | `library-standard` | declared only (`subagents`) | — |
+| [`identity_list`](#identity-tools) | `library-standard` | declared only (`identity`) | — |
+| [`identity_describe`](#identity-tools) | `library-standard` | with `identity` | — |
+| [`identity_delegate`](#identity-tools) | `library-standard` | with `identity` | — |
+| [`identity_revoke`](#identity-tools) | `library-standard` | with `identity` | — |
 
 The skill tools require `library-skills`. Without it, declaring one fails with an unknown system plugin error.
 
@@ -177,6 +181,52 @@ The child cannot invent tools or templates. `mas-ctl` tears the instance down af
 
 Implementation: `mas.library.standard.plugins.system_tools.spawn_subagent.SpawnSubagentTool`
 (advertise) plus `mas.library.standard.plugins.engine_tools.subagent_spawner.SubagentSpawner` (run).
+
+## Identity tools
+
+### `identity_list`
+
+Lists the identities the agent holds: `record`, `id`, `kind`, opaque `subject`, `labels`, `status`, a grant summary, and what
+the identity can do (`can`). Never a credential.
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `record` | string | no | Only the identities of this record. |
+
+### `identity_describe`
+
+The public facts of one identity (grade, limits, scopes, expiry).
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `identity` | string | yes | An id from `identity_list`. |
+| `record` | string | no | Needed when two records list the same id. |
+
+### `identity_delegate`
+
+Derives a narrower identity from one the agent holds and returns its listing. The wallet narrows it and the host checks that
+it did; a grant that widens the parent's is refused (`identity: refused:delegation_widens`).
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `identity` | string | yes | The parent. |
+| `scopes` | array of string | yes | What the new identity may use. |
+| `ttl_s` | number > 0 | no | Seconds it lasts; absent, the parent's expiry. |
+| `record` | string | no | Needed when two records list the same id. |
+
+### `identity_revoke`
+
+Revokes one identity. Sessions opened with it close. Marked destructive.
+
+| Argument | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `identity` | string | yes | An id from `identity_list`. |
+| `record` | string | no | Needed when two records list the same id. |
+
+Setting: `tools` limits the plugin to some of the four. An argument the schema does not name is refused, and a refusal is
+`identity: <code>`, never a value. `identity-guard` blocks `identity_delegate` and `identity_revoke` unless a policy allows
+them, and the two tools refuse (`identity: refused:no_guard`) when no `identity-guard` of the agent allowed that call (or a human approved its hold).
+Implementation: `mas.library.standard.plugins.system_tools.identity.IdentityPlugin`.
 
 ## See also
 

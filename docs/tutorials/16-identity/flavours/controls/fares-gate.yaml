@@ -1,0 +1,16 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Step 3: policy, not identity. A fares lookup needs an identity whose group is infraadmin. The gate reads the public
+# view of the record the agent holds, never a secret, and refuses a call before it starts.
+apiVersion: control/v1
+kind: Control
+metadata: {name: fares-gate}
+spec:
+  governance:
+    - identity-gate:
+        max_age_s: 30
+        requirements:
+          get_fares:
+            identity: desk-badge
+            require:
+              - {fact: group, equals: infraadmin}

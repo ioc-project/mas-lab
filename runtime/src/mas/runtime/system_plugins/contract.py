@@ -64,6 +64,9 @@ class SessionContext:
     spec: Mapping[str, Any] = field(default_factory=dict)
     session_id: str = ""
     agent_id: str = ""
+    # the bind this session belongs to: a token the host stamps once per bind so concurrent runs in one process stay
+    # apart (empty outside a host)
+    bind_scope: str = ""
     hitl_contract: Any = None
     user_io_contract: Any = None
     skills_dir: Path | None = None

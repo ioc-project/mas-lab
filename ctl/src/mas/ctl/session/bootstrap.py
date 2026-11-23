@@ -280,6 +280,9 @@ def instantiate_runtime(
             delegate_ids=delegates,
         )
     spec = _enforce_hardening(options, spec)
+    if options.resolved_infra is not None and options.resolved_infra.identity_scope:
+        # the gate and the identity tools find this run's wallets under the token its layers hold
+        spec = {**spec, "identity_scope": options.resolved_infra.identity_scope}
     spawn_params = spawn_subagent_params(spec)
     ctx.allow_subagent_spawning = is_spawn_subagent_enabled(spec)
     ctx.allow_control_tools = is_control_tools_enabled(spec)
@@ -437,6 +440,8 @@ def instantiate_runtime(
             options.manifest_dir or Path.cwd(),
             app_root=options.app_root or options.manifest_dir,
             workspace_root=ws.root if ws.found else None,
+            agent_id=agent_id,
+            bind_scope=options.resolved_infra.identity_scope if options.resolved_infra is not None else "",
             hitl_contract=hitl_contract,
             user_io_contract=user_io_contract,
             auto_inject_scripts=skill_cfg.auto_inject_scripts,

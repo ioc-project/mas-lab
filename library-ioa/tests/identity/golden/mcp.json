@@ -1,0 +1,70 @@
+[
+  {
+    "body": {
+      "id": 1,
+      "jsonrpc": "2.0",
+      "method": "initialize",
+      "params": {
+        "capabilities": {},
+        "clientInfo": {
+          "name": "mcp",
+          "version": "0.1.0"
+        },
+        "protocolVersion": "2025-11-25"
+      }
+    },
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "content-type": "application/json"
+    },
+    "method": "POST",
+    "path": "/mcp"
+  },
+  {
+    "body": {
+      "jsonrpc": "2.0",
+      "method": "notifications/initialized"
+    },
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25"
+    },
+    "method": "POST",
+    "path": "/mcp"
+  },
+  {
+    "body": {
+      "id": 2,
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "q": 1
+        },
+        "name": "echo"
+      }
+    },
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25"
+    },
+    "method": "POST",
+    "path": "/mcp"
+  },
+  {
+    "body": {
+      "id": 3,
+      "jsonrpc": "2.0",
+      "method": "tools/list"
+    },
+    "headers": {
+      "accept": "application/json, text/event-stream",
+      "content-type": "application/json",
+      "mcp-protocol-version": "2025-11-25"
+    },
+    "method": "POST",
+    "path": "/mcp"
+  }
+]

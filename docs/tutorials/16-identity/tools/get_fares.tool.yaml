@@ -1,0 +1,25 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Tool
+
+metadata:
+  name: get_fares
+  description: "Look up the one-way fare of a route."
+  version: "1.0.0"
+
+spec:
+  description: >
+    Return the one-way fare of a route. The fares server behind it wants to know who is asking.
+
+  parameters:
+    - name: route_id
+      type: string
+      description: "Route identifier."
+      required: true
+      examples: ["CV", "VL"]
+
+  impl:
+    kind: python
+    module_path: ./get_fares.py
+    class_name: GetFaresTool

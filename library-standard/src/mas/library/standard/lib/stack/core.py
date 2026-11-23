@@ -39,6 +39,8 @@ class Stack:
             if not layer.needs_lower:
                 raise ValueError(f"layer {index} ({type(layer).__name__}) is a transport; only the first can be one")
             layer.bind(self._layers[index - 1])
+        for index, layer in enumerate(self._layers):
+            layer.bind_above(self._layers[index + 1 :])
         self._started = False
         self._stopped = False
 

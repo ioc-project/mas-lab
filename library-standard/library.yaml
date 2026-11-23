@@ -42,6 +42,7 @@ types:
   - agent_loop
   - runtime
   - secret_store
+  - identity_scheme
 
 plugins:
   - type: engine_tool_provider
@@ -88,6 +89,15 @@ plugins:
       - subagents
       - create_subagent
     attributes: {default_enabled: false, capability: orchestration, deprecated_names: [spawn_subagent]}
+
+  - type: system_plugin
+    name: identity
+    urn: mas.system_plugin.identity
+    module: mas.library.standard.plugins.system_tools.identity
+    class: IdentityPlugin
+    shortcuts:
+      - identity
+    attributes: {default_enabled: false, capability: identity}
 
   # Wire protocols (routed by spec.models[].kind / infra spec.protocol)
   - type: llm_provider
@@ -956,6 +966,62 @@ plugins:
     class: EnvSecretStore
     shortcuts:
       - env
+  - type: identity_scheme
+    name: none
+    urn: mas.identity_scheme.none
+    module: mas.library.standard.plugins.identity.none
+    class: NoIdentity
+    description: The explicit "no identity" scheme; presents nothing, verifies everyone as anonymous.
+  - type: identity_scheme
+    name: signed_badge
+    urn: mas.identity_scheme.signed_badge
+    module: mas.library.standard.testing.identity_signed_badge
+    class: SignedBadge
+    description: >
+      Reference double for tests and tutorials, not a production scheme. The holder presents claims and an HMAC in one
+      header, the verifier checks them offline; the claims are its public facts.
+  - type: layer
+    name: identity
+    urn: mas.layer.identity
+    module: mas.library.standard.plugins.identity.layer
+    class: IdentityLayer
+    description: >
+      Presents an identity on the way down and verifies one on the way up, over any scheme. Below the MCP or LLM
+      protocol layer on an HTTP call; above the protocol layer on an agent link.
+    shortcuts:
+      - identity
+    attributes:
+      protocol_layer: true
+      per: destination
+      call_kinds: [llm, tool]
+      priority: 10
+  - type: governance
+    name: identity_gate
+    urn: mas.gov.identity_gate
+    module: mas.library.standard.plugins.identity.gate
+    class: IdentityGate
+    description: >
+      Advisory identity gate: BLOCK a tool call whose agent identity does not cover the tool's requirement
+      (no_identity, credential_revoked, scope_uncovered, gate_stale), from the public view of the identity, in the
+      one requirement grammar.
+    shortcuts:
+      - identity-gate
+      - identity_gate
+    attributes:
+      identity_gate: true
+  - type: governance
+    name: identity_guard
+    urn: mas.gov.identity_guard
+    module: mas.library.standard.plugins.identity.guard
+    class: IdentityGuard
+    description: >
+      Shuts the wallet's own tools (identity_delegate, identity_revoke) by default: BLOCK unless a policy allows the
+      tool or holds it for a human.
+    shortcuts:
+      - identity-guard
+      - identity_guard
+    attributes:
+      identity_guard: true
 
 defaults:
   tool_provider: local

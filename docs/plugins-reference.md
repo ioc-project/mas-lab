@@ -132,6 +132,8 @@ practical examples.
 | `DebugScriptPlugin`      | `mas.library.standard.plugins.governance.debug_script`       | `library-standard` |
 | `EnvironmentPlugin`      | `mas.library.standard.plugins.governance.environment`        | `library-standard` |
 | `HardeningProfilePlugin` | `mas.library.standard.plugins.governance.hardening_profile`  | `library-standard` |
+| `IdentityGate`           | `mas.library.standard.plugins.identity.gate`                 | `library-standard` |
+| `IdentityGuard`          | `mas.library.standard.plugins.identity.guard`                | `library-standard` |
 | `NoUndeclaredPeerPlugin` | `mas.library.standard.plugins.governance.no_undeclared_peer` | `library-standard` |
 | `NoUndeclaredToolPlugin` | `mas.library.standard.plugins.governance.no_undeclared_tool` | `library-standard` |
 | `RetryOnErrorPlugin`     | `mas.library.standard.plugins.governance.retry_on_error`     | `library-standard` |
@@ -150,6 +152,13 @@ practical examples.
 | ---------------------- | ---------------------------------------------- | ------------------ |
 | `AutoApproveResponder` | `mas.library.standard.plugins.hitl.responders` | `library-standard` |
 | `AutoDenyResponder`    | `mas.library.standard.plugins.hitl.responders` | `library-standard` |
+
+### Identity_Scheme
+
+| Class         | Full module path                                     | Library            |
+| ------------- | ---------------------------------------------------- | ------------------ |
+| `NoIdentity`  | `mas.library.standard.plugins.identity.none`         | `library-standard` |
+| `SignedBadge` | `mas.library.standard.testing.identity_signed_badge` | `library-standard` |
 
 ### Layer
 
@@ -172,6 +181,7 @@ practical examples.
 | `HealthProbeLayer`         | `mas.library.standard.plugins.layers.health_probe`    | `library-standard` |
 | `HttpLayer`                | `library_ioa.plugins.http_layer.transport`            | `library-ioa`      |
 | `HuggingFaceLLMProvider`   | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
+| `IdentityLayer`            | `mas.library.standard.plugins.identity.layer`         | `library-standard` |
 | `LiteLLMLLMProvider`       | `mas.library.standard.plugins.llm.compatible`         | `library-standard` |
 | `LlmCacheMiddleware`       | `mas.library.standard.plugins.infra.llm_cache`        | `library-standard` |
 | `LlmSchedulerMiddleware`   | `mas.library.standard.plugins.infra.llm_scheduler`    | `library-standard` |
@@ -295,6 +305,7 @@ practical examples.
 | Class                        | Full module path                                                | Library            |
 | ---------------------------- | --------------------------------------------------------------- | ------------------ |
 | `ActivateSkillPlugin`        | `mas.library.skills.plugins.system_tools`                       | `library-skills`   |
+| `IdentityPlugin`             | `mas.library.standard.plugins.system_tools.identity`            | `library-standard` |
 | `InformUserPlugin`           | `mas.library.standard.plugins.system_tools.inform_user`         | `library-standard` |
 | `PauseSessionPlugin`         | `mas.library.standard.plugins.system_tools.control`             | `library-standard` |
 | `RequestHumanInputPlugin`    | `mas.library.standard.plugins.system_tools.request_human_input` | `library-standard` |
@@ -404,6 +415,10 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `HuggingFaceLLMProvider`         | llm_provider         | `library-standard`  |
 | `HuggingFaceLLMProvider`         | layer                | `library-standard`  |
 | `HybridCheckpointStore`          | checkpoint_store     | `library-standard`  |
+| `IdentityGate`                   | governance           | `library-standard`  |
+| `IdentityGuard`                  | governance           | `library-standard`  |
+| `IdentityLayer`                  | layer                | `library-standard`  |
+| `IdentityPlugin`                 | system_plugin        | `library-standard`  |
 | `InformUserPlugin`               | system_plugin        | `library-standard`  |
 | `InMemoryCheckpointStore`        | checkpoint_store     | `library-standard`  |
 | `IntrospectionPlugin`            | design_pattern       | `library-standard`  |
@@ -429,6 +444,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `Neo4jDumpStep`                  | step                 | `library-kg`        |
 | `Neo4jKGCodec`                   | codec                | `library-kg`        |
 | `Neo4jPushStep`                  | step                 | `library-kg`        |
+| `NoIdentity`                     | identity_scheme      | `library-standard`  |
 | `NormalizeEventsStep`            | step                 | `library-kg`        |
 | `NormalizeOtelStep`              | step                 | `library-kg`        |
 | `NoUndeclaredPeerPlugin`         | governance           | `library-standard`  |
@@ -456,6 +472,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `SemanticMemoryPlugin`           | memory               | `library-standard`  |
 | `SendPlugin`                     | system_plugin        | `library-standard`  |
 | `SendTool`                       | engine_tool_provider | `library-standard`  |
+| `SignedBadge`                    | identity_scheme      | `library-standard`  |
 | `SinglePassPlugin`               | design_pattern       | `library-standard`  |
 | `SkillCatalogPlugin`             | skill_catalog        | `library-skills`    |
 | `SkillToolsPlugin`               | skill_tools          | `library-skills`    |

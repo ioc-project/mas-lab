@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from mas.ctl.placement.bus.protocol import CommBus, CommEndpoint
+from mas.ctl.placement.bus.protocol import CommEndpoint
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -15,10 +15,10 @@ from mas.runtime.schema.ingress import EngineIoReturn
 class InProcessCommBus:
     """Zero-copy local routing between RuntimeInstance endpoints.
 
-    Safe for concurrent turns only while no method here ``await``s: routing
-    is a read plus a synchronous ``deliver()``, and registration happens
-    before concurrency starts. An ``await`` inside one would expose the
-    endpoint table mid-update.
+    Safe for concurrent turns because ``asend`` reads the endpoint table
+    before it awaits, and registration happens before concurrency starts.
+    The delivery is awaited: a sender runs on the event loop, and a
+    synchronous delivery would wait for async work inside the running loop.
     """
 
     _endpoints: dict[str, CommEndpoint] = field(default_factory=dict)
@@ -33,9 +33,7 @@ class InProcessCommBus:
     def resolve_address(self, agent_id: str) -> str:
         return f"inproc://{agent_id}"
 
-    def send(
-        self, *, from_agent: str, to_agent: str, intent: InvokeEngineIo
-    ) -> EngineIoReturn | None:
+    async def asend(self, *, from_agent: str, to_agent: str, intent: InvokeEngineIo) -> EngineIoReturn | None:
         target = self._endpoints.get(to_agent)
         if target is None:
             return EngineIoReturn(
@@ -48,5 +46,5 @@ class InProcessCommBus:
             response_kind="TRANSPORT_ACK",
             next_step="STOP",
         )
-        target.deliver(result)
+        await target.adeliver(result)
         return result
