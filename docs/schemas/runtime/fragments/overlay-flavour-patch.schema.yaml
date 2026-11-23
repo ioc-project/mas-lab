@@ -32,6 +32,8 @@ properties:
       - $ref: "./overlay-collection-ops-observability.schema.yaml"
   require_usage:
     $ref: "../flavour.schema.yaml#/properties/spec/properties/require_usage"
+  hardening:
+    $ref: "../flavour.schema.yaml#/properties/spec/properties/hardening"
   control:
     x-merge:
       strategy: mapping_ops

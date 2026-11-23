@@ -1,0 +1,275 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "urn:mas-lab:fragments:environment:v1"
+title: environment block
+description: >
+  Clock, timers, triggers, fixtures and limits around a run. Dataset item
+  blocks cannot declare fixtures.
+
+type: object
+additionalProperties: false
+properties:
+  clock:
+    type: object
+    additionalProperties: false
+    properties:
+      kind:
+        type: string
+        enum: [wall, virtual]
+        default: wall
+      start_s:
+        type: number
+      start:
+        type: string
+        pattern: "^[0-9]+(\\.[0-9]+)?(ms|s|m|h)$"
+      epoch:
+        type: string
+      tick:
+        type: object
+        additionalProperties:
+          oneOf:
+            - type: number
+            - type: string
+              pattern: "^[0-9]+(\\.[0-9]+)?(ms|s|m|h)$"
+  timers:
+    type: array
+    items:
+      $ref: "#/$defs/timer"
+  triggers:
+    type: array
+    items:
+      $ref: "#/$defs/trigger"
+  actions:
+    type: object
+    additionalProperties:
+      type: array
+      items:
+        $ref: "#/$defs/environment_step"
+  script:
+    type: string
+  fixtures:
+    type: array
+    items:
+      $ref: "#/$defs/fixture"
+  limits:
+    type: object
+    additionalProperties: false
+    properties:
+      max_sleep_s:
+        type: number
+        exclusiveMinimum: 0
+      action_timeout_s:
+        type: number
+        exclusiveMinimum: 0
+      max_events_per_run:
+        type: integer
+        minimum: 1
+      max_http_body_bytes:
+        type: integer
+        minimum: 1
+  allow_network:
+    oneOf:
+      - type: string
+      - type: array
+        items:
+          type: string
+  replay:
+    type: string
+    enum: [live, recorded]
+    default: live
+
+$defs:
+  duration:
+    type: string
+    pattern: "^[0-9]+(\\.[0-9]+)?(ms|s|m|h)$"
+  environment_step:
+    type: object
+    required: [type]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        minLength: 1
+      config:
+        type: object
+        additionalProperties: true
+  when:
+    oneOf:
+      - type: string
+        pattern: "^break\\s+"
+      - type: object
+        required: ["on"]
+        additionalProperties: false
+        properties:
+          "on":
+            type: string
+            enum:
+              - tool_call
+              - tool_result
+              - llm_call
+              - turn_start
+              - turn_end
+              - timer
+              - event
+              - observability
+          tool:
+            type: string
+          agent:
+            type: string
+          occurrence:
+            oneOf:
+              - type: integer
+                minimum: 1
+              - type: string
+                enum: [first, every]
+          at:
+            $ref: "#/$defs/duration"
+          at_s:
+            type: number
+          every:
+            $ref: "#/$defs/duration"
+          every_s:
+            type: number
+          after:
+            type: string
+          delay:
+            $ref: "#/$defs/duration"
+          delay_s:
+            type: number
+          event:
+            type: string
+          match:
+            type: object
+            additionalProperties:
+              type: string
+  trigger:
+    type: object
+    required: [id, when]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9._-]{1,64}$"
+      when:
+        $ref: "#/$defs/when"
+      do:
+        type: array
+        items:
+          $ref: "#/$defs/environment_step"
+      repeat:
+        type: boolean
+      max_fires:
+        type: integer
+        minimum: 1
+  timer:
+    type: object
+    required: [id]
+    additionalProperties: false
+    properties:
+      id:
+        type: string
+        pattern: "^[a-z0-9._-]{1,64}$"
+      at:
+        $ref: "#/$defs/duration"
+      every:
+        $ref: "#/$defs/duration"
+      after:
+        type: string
+      delay:
+        $ref: "#/$defs/duration"
+      when:
+        $ref: "#/$defs/when"
+      do:
+        type: array
+        items:
+          $ref: "#/$defs/environment_step"
+      repeat:
+        type: boolean
+      max_fires:
+        type: integer
+        minimum: 1
+  fixture:
+    type: object
+    required: [name]
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+        pattern: "^[a-z0-9_-]{1,64}$"
+      scope:
+        type: string
+        enum: [experiment, scenario, item, run]
+        default: run
+      kind:
+        type: string
+        enum: [process, service, step]
+        default: process
+      command:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      service:
+        type: string
+      infra:
+        type: string
+      start:
+        $ref: "#/$defs/environment_step"
+      stop:
+        $ref: "#/$defs/environment_step"
+      port:
+        oneOf:
+          - type: integer
+            minimum: 1
+          - type: string
+            enum: [auto]
+      health:
+        type: object
+        additionalProperties: false
+        properties:
+          path:
+            type: string
+          timeout_s:
+            type: number
+            exclusiveMinimum: 0
+          expect_status:
+            type: integer
+      clock:
+        oneOf:
+          - type: boolean
+          - type: object
+            additionalProperties: false
+            properties:
+              path:
+                type: string
+      watch:
+        description: Paths or globs, relative to the experiment, whose contents join the cache key (helper modules, data files a fixture reads).
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      env_mode:
+        description: inherit (default) drops secret-looking variables; minimal passes only what a process needs plus passthrough and env.
+        enum: [inherit, minimal]
+      stop_grace_s:
+        type: number
+        exclusiveMinimum: 0
+      keep_running:
+        type: boolean
+      env:
+        description: Explicit variables for the fixture process, added after the filtered inherited environment.
+        type: object
+        additionalProperties:
+          type: string
+      passthrough:
+        description: Inherited variable names to keep even though they look like secrets (KEY, TOKEN, SECRET, PASSWORD, ...).
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string

@@ -152,5 +152,41 @@ def test_follow_worker_streams_deltas(temp_mas_home, monkeypatch, capsys):
     detail = client_mod.follow_worker("w-stream", poll=0.01, stream=True)
     captured = capsys.readouterr()
     assert "line2" in captured.out
+    assert captured.out.count("line1") == 1
     assert "warn" in captured.err
     assert detail["status"] == "completed"
+
+
+def test_follow_worker_asks_for_log_bytes_since_offset(temp_mas_home, monkeypatch, capsys):
+    from mas.lab.controller import client as client_mod
+
+    seen: list[tuple[int, int]] = []
+    log = "line1\nline2\n"
+
+    class FakeClient:
+        def ensure_running(self, **kw):
+            return None
+
+        def call(self, method, params=None, timeout=30.0):
+            if method != "get_worker":
+                raise AssertionError(method)
+            stdout_from = int((params or {}).get("stdout_from") or 0)
+            stderr_from = int((params or {}).get("stderr_from") or 0)
+            seen.append((stdout_from, stderr_from))
+            done = len(seen) > 1
+            return {
+                "status": "completed" if done else "running",
+                "stdout": log[stdout_from:],
+                "stderr": "",
+                "stdout_offset": len(log),
+                "stderr_offset": 0,
+                "exit_code": 0 if done else None,
+            }
+
+    monkeypatch.setattr(client_mod, "ControllerClient", FakeClient)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    client_mod.follow_worker("w-delta", poll=0.01, stream=True)
+    captured = capsys.readouterr()
+    assert seen[0] == (0, 0)
+    assert seen[1][0] == len(log)
+    assert captured.out == log

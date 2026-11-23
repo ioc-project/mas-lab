@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
+# ruff: noqa: E402
 """ServiceManager — declarative management of Docker Compose services for mas-lab.
 
 Reads ``infra/services.yaml`` (co-located with the experiment) and manages the
@@ -36,17 +36,20 @@ Manual CLI usage::
     mas-lab services status --experiment path/to/mas-experiment.yaml
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
 import subprocess
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
-from urllib.request import urlopen
+from typing import Any, Mapping, Optional
 from urllib.error import URLError
 
 import yaml
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,61 @@ _COMPOSE_PROJECT_PREFIX = "mas-lab-svc"
 # several benchmarks (controller daemon), so exports are shared and refcounted.
 _EXPORTED: dict[str, tuple[str, int, Optional[str]]] = {}
 _EXPORTED_LOCK = threading.Lock()
+_MANAGERS: dict[str, "ServiceManager"] = {}
+_MANAGERS_LOCK = threading.Lock()
+_KEEP_RUNNING: set[tuple[str, str]] = set()
+
+
+def shared_manager(
+    services_yaml: Path,
+    *,
+    output_dir: Path | None = None,
+    base_env: Mapping[str, str] | None = None,
+) -> "ServiceManager":
+    """One ServiceManager per bundle path so start and stop share PIDs."""
+    key = str(Path(services_yaml).resolve())
+    with _MANAGERS_LOCK:
+        mgr = _MANAGERS.get(key)
+        if mgr is None:
+            template = {"output_dir": str(output_dir)} if output_dir is not None else None
+            mgr = ServiceManager(services_yaml, template_vars=template)
+            if output_dir is not None:
+                mgr._template_vars.setdefault("output_dir", str(output_dir))
+            _MANAGERS[key] = mgr
+        if base_env is not None:
+            mgr.base_env = base_env  # what a process service may inherit; the CLI supplies it
+        if output_dir is not None:
+            # The newest batch owns new pidfiles; a running service keeps the one it wrote.
+            mgr._template_vars["output_dir"] = str(output_dir)
+        return mgr
+
+
+def _bundle_key(services_yaml: Path | str) -> str:
+    return str(Path(services_yaml).resolve())
+
+
+def mark_keep_running(name: str, services_yaml: Path | str = "") -> None:
+    """Keep *name* of this services bundle running past the end of its level."""
+    _KEEP_RUNNING.add((_bundle_key(services_yaml) if services_yaml else "", name))
+
+
+def is_keep_running(name: str, services_yaml: Path | str = "") -> bool:
+    return (_bundle_key(services_yaml) if services_yaml else "", name) in _KEEP_RUNNING
+
+
+def stop_all_shared(*, include_keep_running: bool = False) -> None:
+    with _MANAGERS_LOCK:
+        managers = list(_MANAGERS.values())
+    for mgr in managers:
+        for name in list(mgr._started):
+            if not include_keep_running and is_keep_running(name, mgr._services_yaml):
+                continue
+            mgr.stop(name)
+
+
+def _child_env(resolved: dict[str, str]) -> dict[str, str]:
+    """The host environment (with values other services exported), then this service's own."""
+    return {**hostenv.snapshot(), **resolved}
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +137,7 @@ class ServiceDef:
     name: str
     description: str = ""
     backend: str = "docker-compose"
-    compose_file: str = ""           # relative to services.yaml
+    compose_file: str = ""  # relative to services.yaml
     command: list[str] = field(default_factory=list)  # backend=process only
     auto_start: bool = True
     env: dict[str, str] = field(default_factory=dict)
@@ -88,9 +146,7 @@ class ServiceDef:
 
     # runtime-resolved
     compose_file_abs: Path = field(default_factory=Path, init=False, repr=False)
-    _prev_env: dict[str, Optional[str]] = field(
-        default_factory=dict, init=False, repr=False
-    )
+    _prev_env: dict[str, Optional[str]] = field(default_factory=dict, init=False, repr=False)
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +181,8 @@ class ServiceManager:
         self._auto_start_names: set[str] = set()  # populated by for_benchmark
         self._catalogue: "Any | None" = None  # lazy CatalogueRegistry
         self._pids: dict[str, int] = {}  # backend=process: service_name → PID
+        self.base_env: Mapping[str, str] | None = None  # None: the process environment, as before
+        self._pid_roots: dict[str, Path] = {}  # where each service's pidfile was written
 
         if services_yaml.exists():
             self._load(services_yaml)
@@ -175,9 +233,7 @@ class ServiceManager:
             for svc in mgr._services.values():
                 if svc.auto_start and obs_backend in svc.triggers.observability_backends:
                     mgr._auto_start_names.add(svc.name)
-                    logger.info(
-                        "Service %r queued for auto-start (flavour backend=%r)", svc.name, obs_backend
-                    )
+                    logger.info("Service %r queued for auto-start (flavour backend=%r)", svc.name, obs_backend)
         return mgr
 
     # ------------------------------------------------------------------
@@ -200,7 +256,7 @@ class ServiceManager:
             return self._process_start(svc)
         if self._is_running(svc):
             logger.info("Service %r already running — skipping start", name)
-            self._apply_env(svc)   # still set env vars
+            self._apply_env(svc)  # still set env vars
             self._started.add(name)
             return True
         return self._compose_up(svc)
@@ -298,6 +354,7 @@ class ServiceManager:
             command_raw = spec.get("command", [])
             if isinstance(command_raw, str):
                 import shlex
+
                 command_raw = shlex.split(command_raw)
 
             # Auto-promote to catalogue backend: when no compose_file is given
@@ -306,9 +363,7 @@ class ServiceManager:
                 cat = self._get_catalogue()
                 if cat is not None and name in cat.available():
                     backend = "catalogue"
-                    logger.debug(
-                        "Service %r: no compose_file — promoting to backend=catalogue", name
-                    )
+                    logger.debug("Service %r: no compose_file — promoting to backend=catalogue", name)
 
             svc = ServiceDef(
                 name=name,
@@ -346,15 +401,14 @@ class ServiceManager:
 
     def _preflight(self, svc: ServiceDef) -> bool:
         if not svc.compose_file_abs.exists():
-            logger.warning(
-                "Compose file not found for service %r: %s", svc.name, svc.compose_file_abs
-            )
+            logger.warning("Compose file not found for service %r: %s", svc.name, svc.compose_file_abs)
             return False
         result = subprocess.run(["docker", "info"], capture_output=True)
         if result.returncode != 0:
             logger.warning(
                 "Docker not available (exit %d) — service %r will not start",
-                result.returncode, svc.name,
+                result.returncode,
+                svc.name,
             )
             return False
         return True
@@ -390,8 +444,8 @@ class ServiceManager:
                     value, count, prev = _EXPORTED[k]
                     _EXPORTED[k] = (value, count + 1, prev)
                 else:
-                    _EXPORTED[k] = (v, 1, os.environ.get(k))
-                    os.environ[k] = v
+                    _EXPORTED[k] = (v, 1, hostenv.get(k))
+                    hostenv.set_overlay({k: v})
                 svc._prev_env[k] = None
                 logger.debug("Set %s=%s", k, v)
 
@@ -405,9 +459,9 @@ class ServiceManager:
                     continue
                 del _EXPORTED[k]
                 if prev is None:
-                    os.environ.pop(k, None)
+                    hostenv.clear_overlay([k])
                 else:
-                    os.environ[k] = prev
+                    hostenv.set_overlay({k: prev})
         svc._prev_env.clear()
 
     def _compose_up(self, svc: ServiceDef) -> bool:
@@ -422,15 +476,19 @@ class ServiceManager:
                 try:
                     Path(_v).mkdir(parents=True, exist_ok=True)
                 except Exception:
-                    logger.debug('suppressed', exc_info=True)
-        compose_env = {**os.environ, **resolved_env}
+                    logger.debug("suppressed", exc_info=True)
+        compose_env = _child_env(resolved_env)
         logger.info("Starting service %r …", svc.name)
         result = subprocess.run(
             [
-                "docker", "compose",
-                "-p", self._compose_project(svc),
-                "-f", str(svc.compose_file_abs),
-                "up", "-d",
+                "docker",
+                "compose",
+                "-p",
+                self._compose_project(svc),
+                "-f",
+                str(svc.compose_file_abs),
+                "up",
+                "-d",
             ],
             env=compose_env,
             capture_output=True,
@@ -439,7 +497,9 @@ class ServiceManager:
         if result.returncode != 0:
             logger.warning(
                 "docker compose up for %r failed (exit %d):\n%s",
-                svc.name, result.returncode, result.stderr[:600],
+                svc.name,
+                result.returncode,
+                result.stderr[:600],
             )
             return False
 
@@ -454,9 +514,12 @@ class ServiceManager:
         logger.info("Stopping service %r …", svc.name)
         result = subprocess.run(
             [
-                "docker", "compose",
-                "-p", self._compose_project(svc),
-                "-f", str(svc.compose_file_abs),
+                "docker",
+                "compose",
+                "-p",
+                self._compose_project(svc),
+                "-f",
+                str(svc.compose_file_abs),
                 "down",
             ],
             capture_output=True,
@@ -464,9 +527,7 @@ class ServiceManager:
         self._restore_env(svc)
         self._started.discard(svc.name)
         if result.returncode != 0:
-            logger.warning(
-                "docker compose down for %r failed (exit %d)", svc.name, result.returncode
-            )
+            logger.warning("docker compose down for %r failed (exit %d)", svc.name, result.returncode)
             return False
         logger.info("Service %r stopped", svc.name)
         return True
@@ -484,10 +545,16 @@ class ServiceManager:
             return False
         result = subprocess.run(
             [
-                "docker", "compose",
-                "-p", self._compose_project(svc),
-                "-f", str(svc.compose_file_abs),
-                "ps", "--services", "--filter", "status=running",
+                "docker",
+                "compose",
+                "-p",
+                self._compose_project(svc),
+                "-f",
+                str(svc.compose_file_abs),
+                "ps",
+                "--services",
+                "--filter",
+                "status=running",
             ],
             capture_output=True,
             text=True,
@@ -503,7 +570,9 @@ class ServiceManager:
         if not url:
             return True
         try:
-            resp = urlopen(url, timeout=2)
+            from mas.lab.benchmark.environment.fixtures import open_url
+
+            resp = open_url(url, 2)
             return 200 <= resp.status < 300
         except (URLError, OSError):
             return False
@@ -521,20 +590,22 @@ class ServiceManager:
         re-applied and the call returns True immediately.
         """
         if not svc.command:
-            logger.warning(
-                "Service %r: backend=process but no 'command' defined — skipping", svc.name
-            )
+            logger.warning("Service %r: backend=process but no 'command' defined — skipping", svc.name)
             return False
 
         if self._process_is_running(svc):
-            logger.info("Service %r already running (pid=%d) — skipping start",
-                        svc.name, self._pids.get(svc.name, -1))
+            logger.info("Service %r already running (pid=%d) — skipping start", svc.name, self._pids.get(svc.name, -1))
             self._apply_env(svc)
             self._started.add(svc.name)
             return True
 
         resolved_env = self._resolve_env(svc)
-        proc_env = {**os.environ, **resolved_env}
+        from mas.lab.benchmark.environment.fixtures import scrubbed_environ
+
+        inherited = self.base_env if self.base_env is not None else hostenv.snapshot()
+        with _EXPORTED_LOCK:
+            exported = {k: v[0] for k, v in _EXPORTED.items()}  # what other services of this run export
+        proc_env = {**scrubbed_environ(inherited), **exported, **resolved_env}
 
         logger.info("Starting process service %r: %s", svc.name, " ".join(svc.command))
         try:
@@ -543,38 +614,115 @@ class ServiceManager:
                 env=proc_env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
         except FileNotFoundError as exc:
             logger.warning(
                 "Service %r: command not found (%s) — is %r installed?",
-                svc.name, exc, svc.command[0],
+                svc.name,
+                exc,
+                svc.command[0],
             )
             return False
 
         self._pids[svc.name] = proc.pid
+        self._write_pidfile(svc, proc.pid)
         self._apply_env(svc)
         self._started.add(svc.name)
         logger.info("Service %r started as PID %d", svc.name, proc.pid)
         return True
 
+    def _pidfile(self, svc: ServiceDef) -> Path:
+        known = self._pid_roots.get(svc.name)
+        if known is None:
+            known = Path(self._template_vars.get("output_dir") or self._services_yaml.parent) / ".services"
+        known.mkdir(parents=True, exist_ok=True)
+        return known / f"{svc.name}.pid"
+
+    def _write_pidfile(self, svc: ServiceDef, pid: int) -> None:
+        try:
+            pgid = os.getpgid(pid)
+        except ProcessLookupError:
+            pgid = pid
+        self._pid_roots[svc.name] = self._pidfile(svc).parent
+        # The command is recorded so a later process can tell this group from a recycled pid.
+        self._pidfile(svc).write_text(f"{pid} {pgid} {json.dumps(list(svc.command))}\n", encoding="utf-8")
+
+    def _read_pidfile(self, svc: ServiceDef) -> tuple[int, int, list[str]] | None:
+        path = self._pidfile(svc)
+        if not path.is_file():
+            return None
+        parts = path.read_text(encoding="utf-8").split(maxsplit=2)
+        try:
+            pid = int(parts[0])
+            pgid = int(parts[1]) if len(parts) > 1 else pid
+            command = json.loads(parts[2]) if len(parts) > 2 else []
+        except (IndexError, ValueError):
+            path.unlink(missing_ok=True)  # a corrupt record is not a reason to signal anything
+            return None
+        return pid, pgid, [str(part) for part in command]
+
+    @staticmethod
+    def _is_our_leftover(pid: int, command: list[str]) -> bool:
+        """A pid from an earlier process is ours only while it still runs the recorded command."""
+        from mas.lab.benchmark.environment.fixtures import _command_of, _pid_alive, _same_command
+
+        return bool(command) and _pid_alive(pid) and _same_command(_command_of(pid), tuple(command))
+
     def _process_stop(self, svc: ServiceDef) -> bool:
-        """Terminate the background process for *svc*."""
+        """Terminate the background process group for *svc*."""
         import signal
+        import time
 
         pid = self._pids.pop(svc.name, None)
+        pgid = pid
+        recorded = self._read_pidfile(svc)
+        if pid is None and recorded is not None:
+            pid, pgid, command = recorded
+            if not self._is_our_leftover(pid, command):
+                logger.warning("Service %r: pid %d is not this service any more — not signalled", svc.name, pid)
+                self._pidfile(svc).unlink(missing_ok=True)
+                pid = None
+        elif recorded is not None:
+            pgid = recorded[1]
         self._restore_env(svc)
         self._started.discard(svc.name)
         if pid is None:
             logger.debug("Service %r: no PID recorded — nothing to stop", svc.name)
             return True
+        if (pgid or pid) <= 1 or (pgid or pid) == os.getpgrp():
+            logger.warning("Service %r: refusing to signal process group %s", svc.name, pgid or pid)
+            return False
         try:
-            os.kill(pid, signal.SIGTERM)
-            logger.info("Service %r (PID %d) sent SIGTERM", svc.name, pid)
+            os.killpg(pgid or pid, signal.SIGTERM)
+            logger.info("Service %r (PID %d) sent SIGTERM to process group", svc.name, pid)
         except ProcessLookupError:
             logger.debug("Service %r PID %d already gone", svc.name, pid)
         except PermissionError as exc:
             logger.warning("Service %r: cannot terminate PID %d: %s", svc.name, pid, exc)
             return False
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            try:
+                os.waitpid(pid, os.WNOHANG)
+            except (ChildProcessError, OSError):
+                pass
+            try:
+                os.killpg(pgid or pid, 0)
+            except ProcessLookupError:
+                break
+            except PermissionError:
+                break
+            time.sleep(0.05)
+        else:
+            try:
+                os.killpg(pgid or pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+        pidfile = self._pidfile(svc)
+        if pidfile.exists():
+            pidfile.unlink()
+        self._pid_roots.pop(svc.name, None)
         return True
 
     def _process_is_running(self, svc: ServiceDef) -> bool:
@@ -601,11 +749,10 @@ class ServiceManager:
             return self._catalogue
         try:
             from mas.lab.services import CatalogueRegistry  # optional dep
+
             self._catalogue = CatalogueRegistry()
         except ImportError:
-            logger.debug(
-                "mas-lab-services not installed — catalogue backend unavailable"
-            )
+            logger.debug("mas-lab-services not installed — catalogue backend unavailable")
             self._catalogue = False  # sentinel: don't retry
         return self._catalogue if self._catalogue is not False else None
 
@@ -615,7 +762,8 @@ class ServiceManager:
         if cat is None:
             logger.warning(
                 "Cannot start catalogue service %r: mas-lab-services not installed. "
-                "Run: uv pip install -e mas-lab-services", svc.name
+                "Run: uv pip install -e mas-lab-services",
+                svc.name,
             )
             return False
         ok = cat.start(svc.name)
@@ -646,9 +794,9 @@ class ServiceManager:
         cat = self._get_catalogue()
         if cat is None or name not in cat.available():
             logger.warning(
-                "Unknown service %r — not in local services.yaml and not in catalogue "
-                "(available in catalogue: %s)",
-                name, cat.available() if cat else []
+                "Unknown service %r — not in local services.yaml and not in catalogue (available in catalogue: %s)",
+                name,
+                cat.available() if cat else [],
             )
             return False
         logger.info("Service %r not in services.yaml — using built-in catalogue", name)

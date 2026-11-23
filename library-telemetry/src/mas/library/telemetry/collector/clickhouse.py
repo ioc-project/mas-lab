@@ -15,11 +15,11 @@ Requires the ``clickhouse`` extra::
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.library.telemetry.exceptions import ClickHouseUnavailableError
+from mas.runtime import hostenv
 
 
 def _get_client(
@@ -36,11 +36,11 @@ def _get_client(
         raise ClickHouseUnavailableError() from exc
 
     return clickhouse_connect.get_client(
-        host=host or os.environ.get("CLICKHOUSE_HOST", "localhost"),
-        port=port or int(os.environ.get("CLICKHOUSE_PORT", "8123")),
-        username=user or os.environ.get("CLICKHOUSE_USER", "admin"),
-        password=os.environ.get(password_env, ""),
-        database=database or os.environ.get("CLICKHOUSE_DATABASE", "default"),
+        host=host or hostenv.get("CLICKHOUSE_HOST", "localhost"),
+        port=port or int(hostenv.get("CLICKHOUSE_PORT", "8123")),
+        username=user or hostenv.get("CLICKHOUSE_USER", "admin"),
+        password=hostenv.get(password_env, ""),
+        database=database or hostenv.get("CLICKHOUSE_DATABASE", "default"),
     )
 
 
@@ -76,7 +76,7 @@ def dump_spans(
     dict
         ``{"session_id", "query_by", "spans": int, "output": str}``.
     """
-    _database = database or os.environ.get("CLICKHOUSE_DATABASE", "default")
+    _database = database or hostenv.get("CLICKHOUSE_DATABASE", "default")
     out = Path(output_path) if output_path else Path(f"/tmp/{session_id}.otel.jsonl")
 
     if query_by == "session":
@@ -117,7 +117,7 @@ def list_apps(
     password_env: str = "CLICKHOUSE_PASSWORD",
 ) -> List[Dict[str, Any]]:
     """List apps (``ServiceName``) present in the ClickHouse ``otel_traces`` table."""
-    _database = database or os.environ.get("CLICKHOUSE_DATABASE", "default")
+    _database = database or hostenv.get("CLICKHOUSE_DATABASE", "default")
     query = (
         f"SELECT ServiceName, count() AS spans, "
         f"uniq(session_id) AS sessions "

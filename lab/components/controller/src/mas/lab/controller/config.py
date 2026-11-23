@@ -1,36 +1,39 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Controller daemon paths and defaults."""
+
 from __future__ import annotations
 
 import os
 from collections.abc import Mapping
 from pathlib import Path
 
+from mas.runtime import hostenv
 from mas.runtime.xdg import mas_data_root
 
-DEFAULT_HTTP_PORT = int(os.environ.get("MAS_CONTROLLER_PORT", "9000"))
+DEFAULT_HTTP_PORT = int(hostenv.get("MAS_CONTROLLER_PORT", "9000"))
 
 
 def mas_dir() -> Path:
-    return Path(os.environ.get("MAS_HOME", mas_data_root()))
+    return Path(hostenv.get("MAS_HOME", mas_data_root()))
 
 
 def controller_dir() -> Path:
-    return Path(os.environ.get("MAS_CONTROLLER_DIR", mas_dir() / "controller"))
+    return Path(hostenv.get("MAS_CONTROLLER_DIR", mas_dir() / "controller"))
 
 
 def socket_path() -> Path:
-    return Path(os.environ.get("MAS_CONTROLLER_SOCKET", mas_dir() / "controller.sock"))
+    return Path(hostenv.get("MAS_CONTROLLER_SOCKET", mas_dir() / "controller.sock"))
 
 
 def pid_path() -> Path:
-    return Path(os.environ.get("MAS_CONTROLLER_PID", controller_dir() / "controller.pid"))
+    return Path(hostenv.get("MAS_CONTROLLER_PID", controller_dir() / "controller.pid"))
 
 
 def ensure_mas_dirs() -> None:
     mas_dir().mkdir(parents=True, exist_ok=True)
     controller_dir().mkdir(parents=True, exist_ok=True)
+
 
 def code_fingerprint() -> str:
     """Identify the interpreter and installed ``mas.*`` sources.
@@ -57,7 +60,9 @@ def code_fingerprint() -> str:
 
 
 _RUN_ENV_PREFIXES = ("MAS_", "OPENAI_", "AZURE_", "ANTHROPIC_", "LLM_", "LITELLM_", "OTEL_")
-_RUN_ENV_NAMES = frozenset({"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"})
+_RUN_ENV_NAMES = frozenset(
+    {"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"}
+)
 # Set by the client/daemon machinery itself, not by the user.
 _DAEMON_ENV_PREFIXES = ("MAS_CONTROLLER_", "MAS_DOTENV_LOADED")
 
@@ -66,10 +71,9 @@ def env_fingerprint(environ: Mapping[str, str] | None = None) -> dict[str, str]:
     """Hash of each environment variable that can change a run; values never leave the process."""
     import hashlib
 
-    env = os.environ if environ is None else environ
+    env = hostenv.snapshot() if environ is None else environ
     return {
         name: hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
         for name, value in env.items()
-        if (name.startswith(_RUN_ENV_PREFIXES) or name in _RUN_ENV_NAMES)
-        and not name.startswith(_DAEMON_ENV_PREFIXES)
+        if (name.startswith(_RUN_ENV_PREFIXES) or name in _RUN_ENV_NAMES) and not name.startswith(_DAEMON_ENV_PREFIXES)
     }

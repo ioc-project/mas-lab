@@ -7,23 +7,7 @@ the production server factory, and the MCP Tasks extension. See the MCP
 quickstart and reference documentation for registration and deployment.
 """
 
-from library_ioa.plugins.mcp.contract import (
-    as_mas_tool_result,
-    as_mas_tool_spec,
-    mas_tool_document_to_mcp,
-)
-from library_ioa.plugins.mcp.layer import McpLayer
-from library_ioa.plugins.mcp.provider import MCPClientFactory, MCPToolProvider
-from library_ioa.plugins.mcp.spec import MCPProviderSpec
-from library_ioa.plugins.mcp.tasks import MCPTasksExtension
-
-__all__ = [
-    "MCPClientFactory",
-    "MCPProviderSpec",
-    "MCPToolProvider",
-    "McpLayer",
-    "MCPTasksExtension",
-    "as_mas_tool_result",
-    "as_mas_tool_spec",
-    "mas_tool_document_to_mcp",
-]
+# Import what you need from its module (.provider, .layer, .client, ...). This file imports
+# nothing: a package __init__ that imports its submodules makes importing any one of them import
+# all of them, and two threads that begin at different submodules then wait on each other's
+# module locks ("deadlock detected by _ModuleLock").

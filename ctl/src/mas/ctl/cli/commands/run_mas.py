@@ -86,6 +86,7 @@ def run_mas_cmd(
     events_file,
     events_stdout,
     events_format,
+    transport_observability: tuple[str, ...],
     trace_mode: str | None,
     no_trace: bool,
     trace_timestamps: bool | None,
@@ -161,6 +162,7 @@ def run_mas_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
+            transport_observability=transport_observability,
             flavour_spec=flavour_spec,
             **trace.as_session_kwargs(),
         )

@@ -34,25 +34,29 @@ def _tool_call_entry(call_id: str, tool_name: str, arguments: dict[str, Any] | N
 def next_unbound_tool_call_id(
     messages: Sequence[dict[str, Any]],
     extra_messages: Sequence[dict[str, Any]] | None = None,
+    *,
+    declared_id: str = "",
 ) -> str:
-    """Id of the next assistant tool_call that has no matching tool result yet.
+    """Id of the assistant tool_call, without a result yet, that this result answers.
 
-    HITL can dispatch parallel tools one-at-a-time, so tool-result correlation
-    ids do not match the ids recorded on the assistant message. Bind in order.
+    Tool-result correlation ids do not match the ids recorded on the assistant message (those are
+    ``call_<model cid>_<index>``). A result that carries the declared id of its call (``declared_id``) binds to
+    that call, so results released in any order, and identical calls, land on their own call. A result that
+    names nothing binds to the first open call, in order. Tool name and arguments on a row are for display.
     ``extra_messages`` is committed history: HITL pause folds WM there before
     the tool result arrives.
     """
     combined = list(extra_messages or []) + list(messages)
-    declared: list[str] = []
+    declared: list[dict[str, Any]] = []
     for msg in reversed(combined):
         if msg.get("role") == "assistant" and msg.get("tool_calls"):
-            declared = [str(c.get("id") or "") for c in (msg.get("tool_calls") or []) if c.get("id")]
+            declared = [c for c in (msg.get("tool_calls") or []) if c.get("id")]
             break
     bound = {str(m.get("tool_call_id") or "") for m in combined if m.get("role") == "tool"}
-    for tid in declared:
-        if tid not in bound:
-            return tid
-    return ""
+    open_calls = [c for c in declared if str(c["id"]) not in bound]
+    if declared_id and any(str(c["id"]) == declared_id for c in open_calls):
+        return declared_id
+    return str(open_calls[0]["id"]) if open_calls else ""
 
 
 @dataclass
@@ -106,7 +110,12 @@ class WorkingMemoryStore:
         provider_state = getattr(event, "provider_state", None) or {}
         if kind in {"TOOL_RESULT", "ERROR"}:
             bound = self.project_tool_result(
-                cid=cid, content=text, extra_messages=extra_messages, ctx=ctx, is_error=kind == "ERROR"
+                cid=cid,
+                content=text,
+                extra_messages=extra_messages,
+                ctx=ctx,
+                is_error=kind == "ERROR",
+                declared_id=str(getattr(event, "call_id", "") or ""),
             )
             if bound is not None:
                 return bound
@@ -162,6 +171,7 @@ class WorkingMemoryStore:
         extra_messages: Sequence[dict[str, Any]] | None = None,
         ctx: Any = None,
         is_error: bool = False,
+        declared_id: str = "",
     ) -> str | None:
         """Bind one committed TOOL_RESULT. Returns the tool_call_id written.
 
@@ -173,7 +183,9 @@ class WorkingMemoryStore:
         """
         if self.is_synced(cid):
             return None
-        call_id = next_unbound_tool_call_id(self.messages, extra_messages) or self._open_tool_call_id
+        call_id = (
+            next_unbound_tool_call_id(self.messages, extra_messages, declared_id=declared_id) or self._open_tool_call_id
+        )
         if not call_id:
             return None
         if self.messages and self.messages[-1].get("role") == "tool":

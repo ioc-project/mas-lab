@@ -1,21 +1,22 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Pipeline steps for MCE evaluation in mas-lab benchmarks."""
+
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from mas.lab.benchmark.pipeline import PipelineStep
 from mas.lab.benchmark.pipeline.artifact_paths import check_simple_name
 from mas.library.eval.mce import (
-    compute_session_metrics,
     build_session_from_trace,
+    compute_session_metrics,
 )
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -79,11 +80,10 @@ class EvalMceStep(PipelineStep):
             return context
 
         # Build LLM config
-        import os
         llm_config = {
             "LLM_MODEL_NAME": self.model,
             "LLM_BASE_MODEL_URL": self.api_base,
-            "LLM_API_KEY": os.environ.get(self.api_key_env, ""),
+            "LLM_API_KEY": hostenv.get(self.api_key_env, ""),
         }
 
         if not llm_config["LLM_API_KEY"]:

@@ -9,7 +9,6 @@ only on :class:`MasOtelConverter`.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +25,7 @@ from mas.library.telemetry.conversion.profiles import (
     normalize_converter_profile,
 )
 from mas.library.telemetry.exceptions import OtelSdkUnavailableError
+from mas.runtime import hostenv
 
 
 def runtime_events_path(spans_path: str | Path) -> Path:
@@ -73,12 +73,15 @@ def create_otel_export(
     timestamp_offset_s: float = 0.0,
     session_uuid: str | None = None,
     agent_llm_models: dict[str, str] | None = None,
+    runtime_logs: bool = False,
 ) -> OtelExport:
     """Stand up a TracerProvider + converter writing JSONL (and optional OTLP).
 
     With ``realtime``, a LoggerProvider also carries the ioa-observe runtime
     events (``topology.node.*``, ``tool.*``, ``llm.*``) as LogRecords, written
     to :func:`runtime_events_path` and, with an OTLP endpoint, to ``/v1/logs``.
+    ``runtime_logs`` stands up the same LoggerProvider for transport aliases
+    (observe-sdk names SCOPE already reads) without turning kernel realtime on.
     """
     if not OTEL_AVAILABLE:
         raise OtelSdkUnavailableError("required for OTel export")
@@ -119,7 +122,7 @@ def create_otel_export(
     file_exporter = JSONLineFileSpanExporter(spans_path)
     exporters: list = [file_exporter]
     if not otlp_endpoint:
-        otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip() or None
+        otlp_endpoint = hostenv.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip() or None
     if otlp_endpoint:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
@@ -148,13 +151,15 @@ def create_otel_export(
     sink = exporters[0] if len(exporters) == 1 else MultiSpanExporter(exporters)
     provider.add_span_processor(SimpleSpanProcessor(sink))
     logger_provider = None
-    if realtime:
-        try:
-            import ioa_observe.sdk.tracing.runtime_events  # noqa: F401
-        except ImportError as exc:
-            raise ImportError(
-                'realtime runtime events are the ioa-observe SDK\'s: pip install "mas-lab-library-telemetry[observe]"'
-            ) from exc
+    if realtime or runtime_logs:
+        if realtime:
+            try:
+                import ioa_observe.sdk.tracing.runtime_events  # noqa: F401
+            except ImportError as exc:
+                raise ImportError(
+                    "realtime runtime events are the ioa-observe SDK's: "
+                    'pip install "mas-lab-library-telemetry[observe]"'
+                ) from exc
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import SimpleLogRecordProcessor
 

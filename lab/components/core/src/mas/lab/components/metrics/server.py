@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from mas.lab import paths as _paths
+from mas.runtime import hostenv
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
@@ -34,9 +34,9 @@ def compute_metrics(
 ) -> dict:
     """Compute MAS metrics by reading the UI feed JSONL directly (no HTTP)."""
     if feed_path is None:
-        feed_path = Path(os.getenv("UI_FEED_PATH", str(_paths.lab_output() / "ui_feed.jsonl")))
+        feed_path = Path(hostenv.get("UI_FEED_PATH", str(_paths.lab_output() / "ui_feed.jsonl")))
     if trace_path is None:
-        trace_path = Path(os.getenv("OTEL_TRACES_PATH", "observability/otel-data/traces.json"))
+        trace_path = Path(hostenv.get("OTEL_TRACES_PATH", "observability/otel-data/traces.json"))
 
     metrics: dict[str, int] = {}
     if feed_path.exists():
@@ -59,7 +59,7 @@ def compute_metrics(
                 elif kind == "challenge_verification":
                     metrics["verification"] = metrics.get("verification", 0) + 1
 
-    if os.getenv("METRICS_INCLUDE_BASIC") == "1":
+    if hostenv.get("METRICS_INCLUDE_BASIC") == "1":
         metrics.setdefault("llm_calls", 0)
         metrics.setdefault("tool_calls", 0)
         metrics.setdefault("memory_reads", 0)
@@ -82,8 +82,8 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    host = os.getenv("METRICS_HOST", "0.0.0.0")
-    port = int(os.getenv("METRICS_PORT", "8090"))
+    host = hostenv.get("METRICS_HOST", "0.0.0.0")
+    port = int(hostenv.get("METRICS_PORT", "8090"))
     server = ReusableThreadingHTTPServer((host, port), MetricsHandler)
     server.serve_forever()
 

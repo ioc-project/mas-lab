@@ -4,18 +4,18 @@
 
 from __future__ import annotations
 
-import mas.third_party_otel  # noqa: F401
+import mas.third_party_otel  # noqa: F401  # isort: skip -- must import before anything that imports a2a
 
 from pathlib import Path
 
 import click
-
 from mas.ctl.cli.commands.bundles import list_bundles_cmd
 from mas.ctl.cli.commands.chat import chat_cmd
 from mas.ctl.cli.commands.checkpoint import checkpoint_group
 from mas.ctl.cli.commands.compile import compile_cmd
 from mas.ctl.cli.commands.compose import compose_cmd, plan_cmd
 from mas.ctl.cli.commands.control import control_group
+from mas.ctl.cli.commands.hardening import hardening_group
 from mas.ctl.cli.commands.plugin import plugin_group
 from mas.ctl.cli.commands.registry import registry_group
 from mas.ctl.cli.commands.run_mas import run_mas_cmd
@@ -37,6 +37,9 @@ def app(ctx: click.Context, verbose: int, env_file: str | None) -> None:
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
     load_dotenv(explicit=Path(env_file) if env_file else None)
+    from mas.ctl.session.llm_scheduler_env import install_env_overrides
+
+    install_env_overrides()
     setup_logging(verbosity=verbose)
     set_run_progress(verbose)
 
@@ -50,6 +53,7 @@ app.add_command(run_mas_cmd, name="run-mas")
 app.add_command(list_bundles_cmd, name="list-bundles")
 app.add_command(checkpoint_group, name="checkpoint")
 app.add_command(control_group, name="control")
+app.add_command(hardening_group, name="hardening")
 app.add_command(validate_cmd, name="validate")
 app.add_command(schemas_cmd, name="schemas")
 app.add_command(registry_group, name="registry")

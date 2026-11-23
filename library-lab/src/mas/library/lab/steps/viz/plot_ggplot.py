@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """PlotPipelineStep — wrap any MASPlot as a pipeline step.
 
 Returned by :meth:`MASPlot.to_step()`.  Can also be used directly via
@@ -27,24 +30,23 @@ returns the written file paths.
 """
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import (
     check_simple_name,
     resolve_step_folder,
     resolve_step_input_path,
 )
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 
 if TYPE_CHECKING:
-    from mas.lab.plots.mas_plot import MASPlot
     from mas.lab.benchmark.pipeline.executor import ExecutionContext
+    from mas.lab.plots.mas_plot import MASPlot
 
 logger = logging.getLogger(__name__)
 
 
-class PlotPipelineStep(PipelineStep):
+class PlotPipelineStep(FigureStep):
     """Execute a :class:`~mas.lab.plots.mas_plot.MASPlot` and write its output
     to the pipeline's output directory.
 
@@ -78,6 +80,7 @@ class PlotPipelineStep(PipelineStep):
     """
 
     type = "ggplot"
+    HONORS = frozenset()
 
     def __init__(
         self,
@@ -95,7 +98,6 @@ class PlotPipelineStep(PipelineStep):
     # ------------------------------------------------------------------
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:
-        from mas.lab.plots.mas_plot import MASPlot
 
         # Resolve plot instance
         plot: MASPlot = self._plot or self._import_plot(ctx)
@@ -144,6 +146,7 @@ class PlotPipelineStep(PipelineStep):
     def _import_plot(self, ctx: "ExecutionContext") -> "MASPlot":
         """Import a MASPlot subclass from ``config["class"]`` and instantiate."""
         import importlib
+
         from mas.lab.plots.mas_plot import MASPlot
 
         class_path = self.config.get("class")

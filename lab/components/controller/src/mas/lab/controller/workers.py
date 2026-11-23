@@ -76,9 +76,10 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
     for flag in ("force", "dry_run", "single_run", "force_lock"):
         if spec.get(flag):
             cmd_parts.append(f"--{flag.replace('_', '-')}")
+    # The CLI's environment travels in the spec for the fixtures; the record is shown to clients and must not.
     record = registry.create(
         WorkerKind.BENCHMARK,
-        spec=spec,
+        spec={key: value for key, value in spec.items() if key != "fixture_env"},
         command=" ".join(cmd_parts),
         endpoint="/api/benchmark/run",
     )
@@ -109,61 +110,25 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
     return record
 
 
-def _bind_demo_ui_env(spec: dict) -> dict[str, str | None]:
-    import json
-    import os
+def _run_spec_with_demo_ui(spec: dict) -> dict:
+    """The run spec the benchmark engine gets: the UI's choices as explicit keys.
 
-    keys = (
-        "MAS_DEMO_UI_INGEST_URL",
-        "MAS_DEMO_UI_INGEST_KINDS",
-        "MAS_DEMO_UI_REF",
-        "MAS_DEMO_UI_PROMPT",
-        "MAS_INFRA_REFS",
-        "MAS_DEMO_UI_SCENARIO_INFRA",
-        "MAS_DEMO_UI_SCENARIO_OVERLAYS",
-        "MAS_LLM_CACHE",
-    )
-    previous = {key: os.environ.get(key) for key in keys}
-    ingest = spec.get("demo_ui_ingest_url")
-    if ingest:
-        os.environ["MAS_DEMO_UI_INGEST_URL"] = str(ingest)
-        os.environ.setdefault("MAS_DEMO_UI_INGEST_KINDS", "all")
-    ref = spec.get("demo_ui_ref")
-    if ref:
-        os.environ["MAS_DEMO_UI_REF"] = json.dumps(ref)
-    query = spec.get("query")
-    if query:
-        os.environ["MAS_DEMO_UI_PROMPT"] = str(query)
-    refs = spec.get("infra_refs") or []
+    Nothing is written to ``os.environ``. ``workspace_infra_refs`` is the list that
+    replaces the workspace's (empty: ignore the process's ``MAS_INFRA_REFS`` and
+    use the workspace list; absent: leave the CLI's override alone, see
+    ``keep_process_infra``). ``llm_cache_path`` is the default judge cache of a
+    UI live job; the CLI's own ``MAS_LLM_CACHE`` still wins over it.
+    """
+    live = {**spec, "progress": False}
+    refs = [str(item) for item in (spec.get("infra_refs") or []) if item]
     if refs:
-        os.environ["MAS_INFRA_REFS"] = ",".join(str(item) for item in refs if item)
-    elif "MAS_INFRA_REFS" in os.environ and not spec.get("keep_process_infra"):
-        os.environ.pop("MAS_INFRA_REFS", None)
-    mapping = spec.get("scenario_infra_refs") or {}
-    if mapping:
-        os.environ["MAS_DEMO_UI_SCENARIO_INFRA"] = json.dumps(mapping)
-    elif "MAS_DEMO_UI_SCENARIO_INFRA" in os.environ and not spec.get("keep_process_infra"):
-        os.environ.pop("MAS_DEMO_UI_SCENARIO_INFRA", None)
-    overlays = spec.get("scenario_overlays") or {}
-    if overlays:
-        os.environ["MAS_DEMO_UI_SCENARIO_OVERLAYS"] = json.dumps(overlays)
-    elif "MAS_DEMO_UI_SCENARIO_OVERLAYS" in os.environ and not spec.get("keep_process_infra"):
-        os.environ.pop("MAS_DEMO_UI_SCENARIO_OVERLAYS", None)
+        live["workspace_infra_refs"] = refs
+    elif not spec.get("keep_process_infra"):
+        live["workspace_infra_refs"] = []
     cwd = spec.get("cwd")
-    if cwd and not os.environ.get("MAS_LLM_CACHE"):
-        eval_cache = Path(cwd) / "infra" / ".cache" / "eval.llm-cache.json"
-        os.environ["MAS_LLM_CACHE"] = str(eval_cache)
-    return previous
-
-
-def _restore_env(previous: dict[str, str | None]) -> None:
-    import os
-
-    for key, value in previous.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
+    if cwd and not spec.get("llm_cache_path"):
+        live["llm_cache_path"] = str(Path(cwd) / "infra" / ".cache" / "eval.llm-cache.json")
+    return live
 
 
 def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: dict) -> WorkerRecord:
@@ -181,8 +146,7 @@ def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec
 
         from mas.lab.benchmark.engine import BenchmarkRunOptions, run_benchmark
 
-        previous = _bind_demo_ui_env(spec)
-        live_spec = {**spec, "progress": False}
+        live_spec = _run_spec_with_demo_ui(spec)
         cwd = spec.get("cwd")
         prev_cwd = os.getcwd()
         with capture_worker_io(record):
@@ -200,7 +164,6 @@ def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec
                 raise
             finally:
                 os.chdir(prev_cwd)
-                _restore_env(previous)
             if not ok:
                 raise RuntimeError("experiment run failed — see the logged error above for the cause")
         return ok

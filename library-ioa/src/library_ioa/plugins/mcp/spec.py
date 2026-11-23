@@ -9,9 +9,10 @@ a runtime code change.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from typing import Any
+
+from mas.runtime import hostenv
 
 
 def _expand_env_ref(value: str) -> str:
@@ -30,7 +31,7 @@ def _expand_env_ref(value: str) -> str:
     default = default.strip() if sep else ""
     if not var:
         return default
-    resolved = os.environ.get(var)
+    resolved = hostenv.get(var)
     if resolved:
         return resolved
     return default

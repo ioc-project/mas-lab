@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import inspect
 import logging
-import os
 import ssl
 import sys
 from pathlib import Path
 from typing import Any
+
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ def _system_ssl_context() -> ssl.SSLContext | None:
 def _default_ca_bundle() -> str | None:
     """Prefer certifi PEM path; fall back to common platform bundle locations."""
     for env_key in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "MAS_LLM_CA_BUNDLE"):
-        raw = os.environ.get(env_key, "").strip()
+        raw = hostenv.get(env_key, "").strip()
         if raw and Path(raw).is_file():
             return raw
     try:
@@ -56,7 +57,7 @@ def _default_ca_bundle() -> str | None:
 
 def resolve_ssl_verify(llm_proxy: dict[str, Any] | None = None) -> bool | str | ssl.SSLContext:
     """Return httpx ``verify`` argument: SSLContext, CA bundle path, or False."""
-    env = os.environ.get("MAS_LLM_VERIFY_SSL", "").strip().lower()
+    env = hostenv.get("MAS_LLM_VERIFY_SSL", "").strip().lower()
     if env in ("0", "false", "no", "off"):
         logger.warning("MAS_LLM_VERIFY_SSL disables TLS certificate verification (dev only)")
         return False

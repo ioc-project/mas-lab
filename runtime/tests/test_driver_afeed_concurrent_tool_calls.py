@@ -9,6 +9,7 @@ import time
 
 import pytest
 from mas.runtime.driver.driver import DriverTrace, KernelDriver
+from mas.runtime.kernel.inflight import register_inflight
 from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
@@ -62,6 +63,8 @@ async def test_adispatch_engine_batch_runs_tool_calls_concurrently():
     q = kernel.q
     q.pending_tools_by_cid[1] = ("alpha", {"n": 1})
     q.pending_tools_by_cid[2] = ("beta", {"n": 2})
+    for cid in (1, 2):  # the kernel registers a call's wait when it authorizes it
+        register_inflight(q, cid, kind="TOOL", op="TOOL_CALL")
     started = time.monotonic()
     results = await driver._adispatch_engine_batch(_batch(), DriverTrace())
     elapsed = time.monotonic() - started

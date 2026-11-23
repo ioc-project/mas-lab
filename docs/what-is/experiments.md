@@ -34,11 +34,16 @@ The experiment's `design` chooses which scenario and item pairs to run:
 Use `one_factor` to vary one thing at a time. Set `design.max_executions` to stop a
 plan that is larger than you intended. Set `dataset.limit` for a quick smoke run.
 
-Analysis steps live in these level hooks. An experiment has no separate `pipeline:`
+Steps live in these level hooks. A `pre:` step runs before a level executes (for
+example `service_start`, which brings up a service the runs need). A `post:` step runs
+after it (analysis, and `service_stop`). An experiment has no separate `pipeline:`
 key. You can still run a standalone pipeline file with `mas-lab benchmark pipeline run`.
 
 See the [experiment manifest](../manifests/experiment.md), the
 [pipeline manifest](../manifests/pipeline.md),
+[environment](../manifests/environment.md) (fixtures and clock on the
+experiment; per-item triggers on the dataset — complementary to memory
+seeds and tool fixtures),
 [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md) and
 [Discover → Labs](../discover/labs.md).
 
@@ -48,7 +53,7 @@ No single layer gives all the guarantees. They add up across the three.
 
 | | Source | What it covers |
 |---|---|---|
-| **By design** | The specification and the runtime | Declared roles, allowed tools, policy checks, controlled execution |
+| **By design** | The specification and the harness | Declared roles, allowed tools, policy checks, controlled execution |
 | **By validation** | Labs | Building blocks and combinations tested before release |
 | **By observation** | Traces and guardrails | What only appears under real workloads, delays and policies |
 

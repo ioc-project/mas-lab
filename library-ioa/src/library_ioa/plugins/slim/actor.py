@@ -11,6 +11,7 @@ import threading
 from collections.abc import Coroutine
 from typing import Any
 
+from mas.library.standard.lib.comm.text import safe_text
 from mas.runtime.aio import new_thread
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
@@ -156,7 +157,7 @@ class ConnectionActor:
             raise
         except Exception as exc:
             self._abort_start()
-            raise AgentCommError(str(exc) or "slim link start failed") from exc
+            raise AgentCommError(safe_text(exc) or "slim link start failed") from exc
 
     def _abort_start(self) -> None:
         self.failed = True
@@ -189,7 +190,7 @@ class ConnectionActor:
         except (asyncio.CancelledError, concurrent.futures.CancelledError):
             raise AgentCommError("slim link is stopped") from None
         except Exception as exc:
-            raise AgentCommError(str(exc) or "slim binding error") from exc
+            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
 
     async def asubmit(self, coro: Coroutine[Any, Any, Any], *, timeout: float) -> Any:
         """``submit`` for a caller that awaits: run ``coro`` on the SLIM loop and wait at most ``timeout`` seconds.
@@ -309,7 +310,7 @@ class ConnectionActor:
         except (AttributeError, TypeError, KeyboardInterrupt, SystemExit):
             raise
         except Exception as exc:
-            raise AgentCommError(str(exc) or "slim binding error") from exc
+            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
 
     async def _ashutdown(self) -> None:
         self._stopping = True

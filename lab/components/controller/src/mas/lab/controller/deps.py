@@ -6,14 +6,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import time
 from pathlib import Path
 
 from fastapi import HTTPException
-from starlette.requests import Request
-
 from mas.lab.controller.constants import HIDDEN_FILES, LIBRARIES_DIR
+from mas.runtime import hostenv
+from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ def _refresh_interval_seconds() -> float:
 
     Set MAS_CONTROLLER_REFRESH_INTERVAL_S=0 to keep legacy refresh-on-every-call behavior.
     """
-    raw = os.environ.get("MAS_CONTROLLER_REFRESH_INTERVAL_S", "1.0").strip()
+    raw = hostenv.get("MAS_CONTROLLER_REFRESH_INTERVAL_S", "1.0").strip()
     try:
         interval = float(raw)
     except ValueError:
@@ -94,7 +93,7 @@ async def run_cli(
     env_override: dict[str, str] | None = None,
 ) -> dict:
     """Execute a CLI command synchronously (for quick operations like validate)."""
-    env = os.environ.copy()
+    env = hostenv.snapshot()
     if env_override:
         env.update(env_override)
 
@@ -115,12 +114,12 @@ async def run_cli(
         raise HTTPException(
             status_code=504,
             detail=f"Command timed out after {timeout}s: {' '.join(cmd)}",
-        )
+        ) from None
     except FileNotFoundError:
         raise HTTPException(
             status_code=500,
             detail=f"Command not found: {cmd[0]}. Ensure mas-runtime is on PATH.",
-        )
+        ) from None
 
     result = {
         "exit_code": proc.returncode,

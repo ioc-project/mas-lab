@@ -10,8 +10,9 @@ mas-lab never imports a use-case package by name.
 from __future__ import annotations
 
 import importlib
-import os
 from typing import Any, Protocol
+
+from mas.runtime import hostenv
 
 _CACHE: list[Any] | None = None
 
@@ -54,7 +55,7 @@ def load_plot_providers(*, refresh: bool = False) -> list[Any]:
     from mas.lab.plots.html_demo import HtmlDemoPlots
 
     _add(providers, seen, HtmlDemoPlots(), "html-demo")
-    for spec in str(os.environ.get("MAS_UI_PLOTS") or "").split(","):
+    for spec in str(hostenv.get("MAS_UI_PLOTS") or "").split(","):
         spec = spec.strip()
         if not spec:
             continue
@@ -68,11 +69,7 @@ def load_plot_providers(*, refresh: bool = False) -> list[Any]:
         from importlib.metadata import entry_points
 
         eps = entry_points()
-        group = (
-            eps.select(group="mas.lab.ui.plots")
-            if hasattr(eps, "select")
-            else eps.get("mas.lab.ui.plots", [])
-        )
+        group = eps.select(group="mas.lab.ui.plots") if hasattr(eps, "select") else eps.get("mas.lab.ui.plots", [])
         for ep in group or []:
             try:
                 _add(providers, seen, ep.load(), f"ep:{getattr(ep, 'name', ep)}")
@@ -130,9 +127,4 @@ def render_draw_module(kind: str) -> str:
     """ES module that exports install(d3, window, STATE, CHART) → masDraw."""
     spec = render_embedded(kind)
     js = spec["js"]
-    return (
-        "export default function install(d3, window, STATE, CHART) {\n"
-        f"{js}\n"
-        "  return window.masDraw;\n"
-        "}\n"
-    )
+    return f"export default function install(d3, window, STATE, CHART) {{\n{js}\n  return window.masDraw;\n}}\n"

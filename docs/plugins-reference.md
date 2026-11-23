@@ -47,6 +47,13 @@ practical examples.
 | ------------- | ---------------------------------- | ------------- |
 | `A2AExposure` | `library_ioa.plugins.a2a.exposure` | `library-ioa` |
 
+### Agent_Loop
+
+| Class              | Full module path                                  | Library            |
+| ------------------ | ------------------------------------------------- | ------------------ |
+| `A2AHarnessLoop`   | `library_ioa.plugins.a2a.harness`                 | `library-ioa`      |
+| `StdioHarnessLoop` | `mas.library.standard.plugins.loop.stdio_harness` | `library-standard` |
+
 ### Assembler
 
 | Class                    | Full module path                                 | Library            |
@@ -123,6 +130,8 @@ practical examples.
 | `BacktrackOnErrorPlugin` | `mas.library.standard.plugins.governance.backtrack_on_error` | `library-standard` |
 | `BudgetPlugin`           | `mas.library.standard.plugins.governance.budget`             | `library-standard` |
 | `DebugScriptPlugin`      | `mas.library.standard.plugins.governance.debug_script`       | `library-standard` |
+| `EnvironmentPlugin`      | `mas.library.standard.plugins.governance.environment`        | `library-standard` |
+| `HardeningProfilePlugin` | `mas.library.standard.plugins.governance.hardening_profile`  | `library-standard` |
 | `NoUndeclaredPeerPlugin` | `mas.library.standard.plugins.governance.no_undeclared_peer` | `library-standard` |
 | `NoUndeclaredToolPlugin` | `mas.library.standard.plugins.governance.no_undeclared_tool` | `library-standard` |
 | `RetryOnErrorPlugin`     | `mas.library.standard.plugins.governance.retry_on_error`     | `library-standard` |
@@ -293,6 +302,14 @@ practical examples.
 | `LocalToolProvider` | `mas.library.standard.plugins.tools.local` | `library-standard` |
 | `MCPToolProvider`   | `library_ioa.plugins.mcp.provider`         | `library-ioa`      |
 
+### Transport_Classifier
+
+| Class                     | Full module path                      | Library       |
+| ------------------------- | ------------------------------------- | ------------- |
+| `A2ATransportClassifier`  | `library_ioa.plugins.a2a.classifier`  | `library-ioa` |
+| `MCPTransportClassifier`  | `library_ioa.plugins.mcp.classifier`  | `library-ioa` |
+| `SlimTransportClassifier` | `library_ioa.plugins.slim.classifier` | `library-ioa` |
+
 ### User_Io_Contract
 
 | Class                    | Full module path                              | Library            |
@@ -324,7 +341,9 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | -------------------------------- | -------------------- | ------------------- |
 | `A2AAgentComm`                   | agent_comm           | `library-ioa`       |
 | `A2AExposure`                    | agent_expose         | `library-ioa`       |
+| `A2AHarnessLoop`                 | agent_loop           | `library-ioa`       |
 | `A2ALayer`                       | layer                | `library-ioa`       |
+| `A2ATransportClassifier`         | transport_classifier | `library-ioa`       |
 | `ActivateSkillPlugin`            | system_plugin        | `library-skills`    |
 | `ADKSkillPlugin`                 | skill_impl           | `library-skills`    |
 | `AnthropicLLMProvider`           | llm_provider         | `library-standard`  |
@@ -360,6 +379,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `DropLayer`                      | layer                | `library-standard`  |
 | `DropSummarizer`                 | summarizer           | `library-standard`  |
 | `EmbedStatesStep`                | step                 | `library-kg`        |
+| `EnvironmentPlugin`              | governance           | `library-standard`  |
 | `EventsToOtelStep`               | step                 | `library-telemetry` |
 | `ExportOtelStep`                 | step                 | `library-telemetry` |
 | `FailLayer`                      | layer                | `library-standard`  |
@@ -369,6 +389,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |
 | `GroqLLMProvider`                | llm_provider         | `library-standard`  |
 | `GroqLLMProvider`                | layer                | `library-standard`  |
+| `HardeningProfilePlugin`         | governance           | `library-standard`  |
 | `HealthProbeLayer`               | layer                | `library-standard`  |
 | `HttpLayer`                      | layer                | `library-ioa`       |
 | `HuggingFaceLLMProvider`         | llm_provider         | `library-standard`  |
@@ -390,6 +411,7 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `LocalToolProvider`              | tool_provider        | `library-standard`  |
 | `McpLayer`                       | layer                | `library-ioa`       |
 | `MCPToolProvider`                | tool_provider        | `library-ioa`       |
+| `MCPTransportClassifier`         | transport_classifier | `library-ioa`       |
 | `MistralLLMProvider`             | llm_provider         | `library-standard`  |
 | `MistralLLMProvider`             | layer                | `library-standard`  |
 | `ModeratedRoundsPlugin`          | design_pattern       | `library-standard`  |
@@ -430,9 +452,11 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `SkillToolsPlugin`               | skill_tools          | `library-skills`    |
 | `SlidingWindowConversation`      | context_manager      | `library-standard`  |
 | `SlimAgentComm`                  | layer                | `library-ioa`       |
+| `SlimTransportClassifier`        | transport_classifier | `library-ioa`       |
 | `StackAgentComm`                 | agent_comm           | `library-standard`  |
 | `StackConversation`              | context_manager      | `library-standard`  |
 | `StateMachinePlugin`             | design_pattern       | `library-standard`  |
+| `StdioHarnessLoop`               | agent_loop           | `library-standard`  |
 | `StructuredLayer`                | layer                | `library-standard`  |
 | `SubagentSpawner`                | engine_tool_provider | `library-standard`  |
 | `SubagentsPlugin`                | system_plugin        | `library-standard`  |

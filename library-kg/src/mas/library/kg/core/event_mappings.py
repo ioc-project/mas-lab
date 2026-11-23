@@ -147,6 +147,15 @@ KIND_TO_CLASS: Dict[str, Optional[str]] = {
     "governance_event": "GovernanceEvent",
     "governance_policy": "GovernanceEvent",
     "hitl_request": "GovernanceEvent",
+    # Transport — catalog declarations (Agent / Tool). Session, internals and
+    # errors have no ontology class today; they are suppressed.
+    "transport.message.sent": "Agent",
+    "transport.message.received": "Agent",
+    "transport.message.completed": "Agent",
+    "transport.discovery": "Agent",
+    "transport.session": None,
+    "transport.internal": None,
+    "transport.error": None,
 }
 
 
@@ -178,6 +187,18 @@ CATEGORY_CLASSES: Dict[str, FrozenSet[str]] = {
     "worker": frozenset({"Worker"}),
     "thinking": frozenset({"ThinkingCall"}),
 }
+
+TRANSPORT_EVENT_KINDS: FrozenSet[str] = frozenset(
+    {
+        "transport.message.sent",
+        "transport.message.received",
+        "transport.message.completed",
+        "transport.discovery",
+        "transport.session",
+        "transport.internal",
+        "transport.error",
+    }
+)
 
 DEFAULT_CATEGORIES: FrozenSet[str] = frozenset()
 

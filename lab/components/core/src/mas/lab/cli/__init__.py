@@ -9,6 +9,7 @@ Import and use programmatically::
 
     result = CliRunner().invoke(app, ["benchmark", "list"])
 """
+
 from __future__ import annotations
 
 import importlib
@@ -25,8 +26,7 @@ from mas.lab.cli.extensions import register_extension_components
 
 
 @click.group()
-@click.option("-v", "--verbose", count=True, default=0,
-              help="Verbosity: -v exchange log, -vv debug, -vvv full")
+@click.option("-v", "--verbose", count=True, default=0, help="Verbosity: -v exchange log, -vv debug, -vvv full")
 @click.pass_context
 def app(ctx: click.Context, verbose: int) -> None:
     """MAS Lab — evaluation, experimentation, and benchmarking tools.
@@ -65,21 +65,32 @@ def app(ctx: click.Context, verbose: int) -> None:
 
     try:
         from mas.ctl.logging_setup import setup_logging
+
         setup_logging(verbosity=verbose)
     except ImportError:
-        level = (logging.DEBUG if verbose >= 2
-                 else logging.INFO if verbose >= 1
-                 else logging.WARNING)
+        level = logging.DEBUG if verbose >= 2 else logging.INFO if verbose >= 1 else logging.WARNING
         logging.basicConfig(level=level, format="%(message)s")
 
     # Workspace config — loaded once, shared via ctx.obj
     try:
         from mas.lab.workspace import WorkspaceConfig
+
         ctx.obj["workspace"] = WorkspaceConfig.load()
     except ImportError:
         ctx.obj["workspace"] = None
 
     load_dotenv(find_dotenv(usecwd=True))
+    from mas.ctl.session.llm_scheduler_env import install_env_overrides
+
+    install_env_overrides()
+    import os
+
+    try:
+        from mas.lab.benchmark.pipeline.ui_bridge import demo_ui_binding_from_env, install_cli_defaults
+    except ImportError:
+        pass
+    else:
+        install_cli_defaults(demo_ui_binding_from_env(os.environ))
 
 
 def _add_if_importable(name: str, module: str, attr: str) -> None:

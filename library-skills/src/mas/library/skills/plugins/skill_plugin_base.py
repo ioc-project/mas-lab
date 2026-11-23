@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import atexit
 import logging
-import os
 import shutil
 import subprocess
 import sys
@@ -23,6 +22,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,19 @@ logger = logging.getLogger(__name__)
 # sk_shell.py's RunSkillScriptPlugin (native backend) — a single denylist
 # enforced at every subprocess-execution entry point, not just the tool-call
 # boundary, so direct SkillPlugin usage is defended too (defense in depth).
-ENV_DENYLIST = frozenset({
-    "PATH", "PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME",
-    "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT",
-    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
-})
+ENV_DENYLIST = frozenset(
+    {
+        "PATH",
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+        "PYTHONHOME",
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+    }
+)
 
 
 def sanitize_extra_env(raw: dict[str, Any] | None) -> dict[str, str]:
@@ -247,12 +256,10 @@ class SkillPlugin(ABC):
     def __init__(
         self,
         working_dir: Path | None = None,  # explicit override (legacy)
-        run_dir: Path | None = None,       # run output dir — preferred
+        run_dir: Path | None = None,  # run output dir — preferred
     ) -> None:
         # Explicit override wins (backwards compat); run_dir is the new path.
-        self._explicit_working_dir: Path | None = (
-            Path(working_dir).resolve() if working_dir else None
-        )
+        self._explicit_working_dir: Path | None = Path(working_dir).resolve() if working_dir else None
         # Do not resolve run_dir — let the OS handle symlinks at mkdir time
         # so paths remain consistent with callers (e.g. /var vs /private/var on macOS).
         self._run_dir: Path | None = Path(run_dir) if run_dir else None
@@ -420,9 +427,7 @@ def run_script_from_source(
 
     suffix = Path(script_name).suffix or ".py"
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=suffix, delete=False, encoding="utf-8"
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8") as tmp:
         tmp.write(source)
         tmp_path = Path(tmp.name)
 
@@ -444,7 +449,7 @@ def run_script_from_source(
         # Sanitized here (not just by callers) so this is safe even when
         # invoked directly, outside the RunSkillScriptPlugin tool-call path.
         safe_extra = sanitize_extra_env(env_extra)
-        env = {**os.environ, **safe_extra} if safe_extra else None
+        env = {**hostenv.snapshot(), **safe_extra}  # the host's environment incl. what services export
 
         try:
             result = subprocess.run(

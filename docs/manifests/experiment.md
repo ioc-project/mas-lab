@@ -66,7 +66,7 @@ The [Overlay manifest reference](overlay.md) defines the target, patch, preceden
 ## Contents
 
 - [Fields you always set](#fields-you-always-set): [top-level keys](#top-level-keys), [applications](#applications), [scenarios](#scenarios), [dataset](#dataset), [run levels](#run-levels-and-n_runs), [model slots](#model-slots-models-model)
-- [Fields you sometimes set](#fields-you-sometimes-set): [evaluation model](#evaluation-model-evaluationmodel), [level hooks and artifacts](#artifacts), [checkpoint axis](#checkpoint-axis)
+- [Fields you sometimes set](#fields-you-sometimes-set): [evaluation model](#evaluation-model-evaluationmodel), [level hooks and artifacts](#artifacts), [checkpoint axis](#checkpoint-axis), [session checkpoints](#session-checkpoints), [environment](#environment)
 - [Advanced fields](#advanced-fields): [design vs schedule](#design-vs-schedule), [bench emulation](#bench_emulation), [replay](#replay), [`output_schema`](#output_schema)
 - [Common mistakes](#common-mistakes)
 
@@ -291,6 +291,7 @@ See [summarization.md](summarization.md) for the full chain.
 | `trace_cache_portable` | `false` | Leave the resolved LLM infra (endpoint, model mapping) out of the trace-cache key. Set it on experiments whose cache you publish: a reader with another endpoint then hits the same entries. Agent model names still enter the key. |
 | `artifacts`, `pre`, `post` | none | Experiment-level artifacts and hooks. See [Artifacts](#artifacts). |
 | `scenario`, `item` | none | Level sections (`artifacts`, `pre`, `post`). |
+| `environment` | none | World around every run: fixtures, clock, timers, triggers. Dataset items overlay timers and triggers; they cannot declare fixtures. See [Environment](#environment). |
 | `ui` | none | Demo-UI hints (`port`, `mode`, `layout`, `node_positions`), same shape as in `lab-config.yaml`. `mas-lab benchmark run` ignores it. |
 
 ### Evaluation model (`evaluation.model`)
@@ -404,6 +405,61 @@ Rules:
 See the [checkpoint-axis example](../schemas/examples/checkpoint-axis.yaml) and [Tutorial 11](../tutorials/11-sessions-and-recovery/README.md).
 [checkpoint.md](checkpoint.md) describes the checkpoint files themselves.
 
+### Session checkpoints
+
+`experiment.session_checkpoints` is a catalog of persist points produced
+during a run, not a starting-state axis. Each entry is compiled to an
+environment trigger that snapshots and persists at a kernel `when`
+(pause to write, then resume so the producer continues). A scenario
+that lists `produce_checkpoints` publishes those files under
+`<output>/checkpoints/{item}/r{n}/`. A scenario that lists
+`depends_on` and `resume_from` waits for that file, then loads it as
+`inputs.checkpoint.load` when the session starts. The wait happens
+before a `parallel_scenarios` slot is taken. Two producers of the same
+id are refused.
+
+```yaml
+experiment:
+  session_checkpoints:
+    - id: after-pay-2
+      when: {"on": tool_result, tool: pay_fare, occurrence: 2}
+  scenarios:
+    - id: producer
+      overlays: {logic: [], control: [], infra: []}
+      produce_checkpoints: [after-pay-2]
+    - id: fork
+      overlays: {logic: [], control: [], infra: []}
+      depends_on: [producer]
+      resume_from: after-pay-2
+```
+
+Omit `scenarios[].overlays` and the loader infers a file named after the
+scenario id. Write empty lists when there is no overlay.
+
+### Environment
+
+`experiment.environment` (and `scenarios[].environment`) start the world
+every run shares: fixtures, the clock kind, shared timers and triggers.
+A dataset item may overlay timers and triggers on that world. It cannot
+declare fixtures.
+
+This is complementary to the slots you already have. It does not replace
+them.
+
+| Slot | Lives on | Role |
+| --- | --- | --- |
+| `environment` | experiment / scenario | Fixtures and the shared clock |
+| `environment` | dataset item | Per-case triggers and timers |
+| `inputs.memory_seeds` | dataset item | Facts the agent already knows |
+| `inputs.tool_fixtures` | dataset item | Mock payloads a tool reads |
+| `service_start` | level `pre:` | Pipeline infra for that level |
+| Flavour / Control / Infra | overlay stack | How the runtime is deployed |
+
+Merge order is experiment → scenario → item. Field reference:
+[environment.md](environment.md). Dataset overlay:
+[dataset.md §10](dataset.md#10-world-around-the-item-environment).
+Worked example: [Tutorial 15](../tutorials/15-world-events-and-fixtures/README.md).
+
 ---
 
 ## Advanced fields
@@ -494,6 +550,7 @@ experiment:
     retry_backoff_s: 2.0     # delay before the first re-issue; doubles each time
     runner: native           # optional override of inferred adapter
     reset_state: false
+    worker_processes: 1      # 1 = threads in this process
 ```
 
 | Key | Default | Meaning |
@@ -506,8 +563,12 @@ experiment:
 | `retry_backoff_s` | `2.0` | Base delay before the first re-issue; doubles on each later one. |
 | `runner` | `native` | Lab runner (adapter) id from the `mas.lab.runners` entry point group. When omitted, inferred from the application's `spec.framework.default_adapter` (MAS) or `spec.framework_adapter` (agent). |
 | `reset_state` | `false` | Reset emulation and runtime state between runs. |
+| `worker_processes` | `1` | Process workers for MAS runs. `1` keeps today's threads. The batch refuses a count above the machine's cores when it starts (the file itself parses anywhere). With more than 1, every pipeline step must declare `worker_safe` (shipped library steps declare it; a test reads their sources for process patches). Workers start with `spawn` and rebuild their own run context from a plain job. |
+| `worker_max_runs` | (off) | Recycle each worker after this many runs. Omit to keep the worker for the batch. |
 
 `--strategy` on `mas-lab benchmark run` overrides `schedule.ordering`.
+
+How wall time scales with `parallel_scenarios` and `worker_processes`: [Lab run throughput](../references/lab-throughput.md).
 
 ### `bench_emulation`
 
@@ -603,14 +664,17 @@ The loader rejects the removed keys `pipeline_bind`, `pipeline`, `plots`, `flavo
 - **A reduced copy of a dataset for smoke runs.** Use `dataset.limit`.
 - **Expecting `out:` to be enforced.** It documents the artifact a step writes and nothing more.
 - **Setting both `path` and `name` on `dataset`.** `path` wins and `name` is ignored.
+- **`environment.fixtures` on a dataset item.** Fixtures stay here or on the scenario. Put per-case triggers on the item.
+- **`environment` under `inputs`.** It is a sibling of `inputs`, the same key as on this file.
 
 ---
 
 ## See also
 
 - [lab.md](lab.md)
-- [dataset.md](dataset.md), [overlay.md](overlay.md), [flavour.md](flavour.md)
+- [dataset.md](dataset.md), [environment.md](environment.md), [overlay.md](overlay.md), [flavour.md](flavour.md)
 - [pipeline.md](pipeline.md)
+- [Tutorial 15](../tutorials/15-world-events-and-fixtures/README.md): experiment fixtures, per-item triggers
 - [summarization.md](summarization.md): judge model and conversation summarization
 - [runtime-engine.md](runtime-engine.md)
 - [Tutorial 03](../tutorials/03-experiments-and-analysis/README.md)

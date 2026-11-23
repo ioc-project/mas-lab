@@ -107,6 +107,23 @@ def test_setup_shared_obs_disabled_returns_none(tmp_path: Path) -> None:
     assert setup_shared_obs({}, ObservabilityConfig(enabled=False), base_dir=tmp_path, entry_agent_id="a") is None
 
 
+def test_release_unbinds_the_transport_sink(tmp_path: Path) -> None:
+    """Mutation: partition 'releases' default-native without unbind_sink, so JSONL is written twice."""
+    from mas.ctl.session.observability import partition_instances_by_observability
+    from mas.runtime.transport import emit
+
+    inst = _FakeInstance()
+    cfg = ObservabilityConfig(enabled=True, plugins=["native"], agent_id="planner")
+    first = setup_instance_obs(inst, cfg, base_dir=tmp_path)
+    assert first is not None
+    assert first.plugins[0] in emit._fanout._sinks  # noqa: SLF001
+    shared, scoped = partition_instances_by_observability({"planner": inst})
+    assert "planner" in shared and not scoped
+    assert first.plugins[0] not in emit._fanout._sinks  # noqa: SLF001
+    first.close()
+    emit.reset()
+
+
 def test_setup_observability_legacy_returns_recorder(tmp_path: Path) -> None:
     inst = _FakeInstance()
     cfg = ObservabilityConfig(enabled=True, plugins=["native"], agent_id="planner")

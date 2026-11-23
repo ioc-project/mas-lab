@@ -13,7 +13,8 @@ from types import SimpleNamespace
 from typing import Any
 
 from mas.ctl.adapters.memory_seed import MemorySeed, MemorySeedLoader, apply_memory_seeds
-from mas.ctl.benchmark.runner_dispatch import mas_manifest_path
+from mas.ctl.benchmark.runner_dispatch import is_oasf_document, manifest_kind, mas_manifest_path
+from mas.ctl.cli.obs_flags import resolve_observability_config
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.compose.runner import ComposeRequest, compose_run
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID
@@ -35,6 +36,8 @@ from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.session.bootstrap import InstantiationOptions, hitl_contract_for_mode, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
 from mas.ctl.session.flavour_control import ControlError, control_search_dirs, session_flavour_with_controls
+from mas.ctl.session.loop import loop_binding, loop_from_spec
+from mas.ctl.session.observability import obs_config_to_binding
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.lab.manifest.load import (
     agent_manifest_from_path,
@@ -113,7 +116,7 @@ def _manifest_kind_on_disk(spec_path: Path) -> str:
         doc = load_yaml_mapping(spec_path)
     except (FileNotFoundError, OSError):
         return ""
-    return str((doc or {}).get("kind", "")).lower()
+    return manifest_kind(doc or {})
 
 
 def bench_obs_config(
@@ -125,7 +128,6 @@ def bench_obs_config(
     flavour: Any = None,
 ) -> tuple[Path, Any]:
     """Return ``(events_path, obs_cfg)`` for one bench run output dir."""
-    from mas.ctl.cli.obs_flags import resolve_observability_config
     from mas.ctl.session.manifest_config import mas_id_from_manifest
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -282,63 +284,74 @@ class MasBenchRunner:
         experiment_default_model = kwargs.get("experiment_default_model")
         experiment_model_slots = kwargs.get("experiment_model_slots")
         controls = list(kwargs.get("controls") or ())
+        batch_cache = kwargs.get("batch_cache")
         if not experiment_default_model and isinstance(experiment_model_slots, dict):
             from mas.runtime.spec.model_ref import SLOT_MAIN, slot_model
 
             experiment_default_model = slot_model(experiment_model_slots, SLOT_MAIN)
-        try:
-            resolved = self._resolve_target(
-                config=config,
-                spec_path=spec_path,
-                mas_path=mas_path,
-                overlay_refs=_overlay_refs,
-                overlays_dir=_overlays_dir,
-                overlay_base_dir=_overlay_base,
-                infra_refs=_infra,
-                memory_seeds=memory_seeds,
-                checkpoint_path=checkpoint_path,
-                checkpoint_dir=checkpoint_dir,
-                checkpoint_save=checkpoint_save,
-                queries=queries,
-                output_dir=output_dir,
-                run_seed=run_seed,
-                flavour=flavour,
-                experiment_default_model=experiment_default_model,
-                experiment_model_slots=experiment_model_slots if isinstance(experiment_model_slots, dict) else None,
-                workspace_root=kwargs.get("workspace_root"),
-                tool_fixtures=tool_fixtures,
-                run_params=run_params,
-                controls=controls,
-            )
-        except ChainStartError as exc:
-            return self._with_bench_metadata(RunResult(content="", status="error", error=str(exc)), run_seed=run_seed)
-        if isinstance(resolved, RunResult):
-            return self._with_bench_metadata(resolved, run_seed=run_seed)
+        from mas.runtime.spec.batch_cache import bind_batch_cache, reset_batch_cache
 
+        _cache_token = bind_batch_cache(batch_cache) if batch_cache is not None else None
         try:
-            result = self._run_controller_turns(
-                instance=resolved.instance,
-                store=resolved.store,
-                config=resolved.manifest,
-                spec_path=resolved.manifest_path,
-                output_dir=output_dir,
-                queries=queries,
-                memory_seeds=memory_seeds,
-                checkpoint_save=checkpoint_save,
-                checkpoint_path=checkpoint_path,
-                run_seed=run_seed,
-                topology=resolved.topology,
-                session_id=resolved.session_id,
-                working_memory_registry=resolved.working_memory_registry,
-                obs_recorder=resolved.obs_recorder,
-                obs_pipeline=resolved.obs_pipeline,
-                scoped_recorders=resolved.scoped_recorders,
-                flavour=flavour,
-                turn_guard=resolved.turn_guard,
-            )
+            try:
+                resolved = self._resolve_target(
+                    config=config,
+                    spec_path=spec_path,
+                    mas_path=mas_path,
+                    overlay_refs=_overlay_refs,
+                    overlays_dir=_overlays_dir,
+                    overlay_base_dir=_overlay_base,
+                    infra_refs=_infra,
+                    memory_seeds=memory_seeds,
+                    checkpoint_path=checkpoint_path,
+                    checkpoint_dir=checkpoint_dir,
+                    checkpoint_save=checkpoint_save,
+                    queries=queries,
+                    output_dir=output_dir,
+                    run_seed=run_seed,
+                    flavour=flavour,
+                    experiment_default_model=experiment_default_model,
+                    experiment_model_slots=experiment_model_slots if isinstance(experiment_model_slots, dict) else None,
+                    workspace_root=kwargs.get("workspace_root"),
+                    tool_fixtures=tool_fixtures,
+                    run_params=run_params,
+                    controls=controls,
+                    batch_cache=batch_cache,
+                )
+            except ChainStartError as exc:
+                return self._with_bench_metadata(
+                    RunResult(content="", status="error", error=str(exc)), run_seed=run_seed
+                )
+            if isinstance(resolved, RunResult):
+                return self._with_bench_metadata(resolved, run_seed=run_seed)
+
+            try:
+                result = self._run_controller_turns(
+                    instance=resolved.instance,
+                    store=resolved.store,
+                    config=resolved.manifest,
+                    spec_path=resolved.manifest_path,
+                    output_dir=output_dir,
+                    queries=queries,
+                    memory_seeds=memory_seeds,
+                    checkpoint_save=checkpoint_save,
+                    checkpoint_path=checkpoint_path,
+                    run_seed=run_seed,
+                    topology=resolved.topology,
+                    session_id=resolved.session_id,
+                    working_memory_registry=resolved.working_memory_registry,
+                    obs_recorder=resolved.obs_recorder,
+                    obs_pipeline=resolved.obs_pipeline,
+                    scoped_recorders=resolved.scoped_recorders,
+                    flavour=flavour,
+                    turn_guard=resolved.turn_guard,
+                )
+            finally:
+                resolved.chains.close()
+            return self._with_bench_metadata(result, run_seed=run_seed)
         finally:
-            resolved.chains.close()
-        return self._with_bench_metadata(result, run_seed=run_seed)
+            if _cache_token is not None:
+                reset_batch_cache(_cache_token)
 
     @staticmethod
     def _with_bench_metadata(result: RunResult, *, run_seed: int) -> RunResult:
@@ -380,13 +393,14 @@ class MasBenchRunner:
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
         controls: Sequence[str] = (),
+        batch_cache: Any = None,
     ) -> RunResult | _ControllerTarget:
         entry_manifest = config
         entry_manifest_path = spec_path
 
         resolved_mas_path = mas_path or mas_manifest_path(config, spec_path)
         if resolved_mas_path is None:
-            has_oasf_doc = isinstance(config.get("metadata"), dict) and isinstance(config.get("spec"), dict)
+            has_oasf_doc = is_oasf_document(config)
             if _manifest_kind_on_disk(spec_path) == "agent" and (is_loaded_mas_raw(config) or not has_oasf_doc):
                 entry_manifest, entry_manifest_path = agent_manifest_from_path(
                     spec_path,
@@ -394,7 +408,7 @@ class MasBenchRunner:
                     overlays_dir=overlays_dir,
                     overlay_base_dir=overlay_base_dir,
                 )
-            elif str(config.get("kind", "")).lower() == "agent" and not has_oasf_doc:
+            elif manifest_kind(config) == "agent" and not has_oasf_doc:
                 entry_manifest, entry_manifest_path = agent_manifest_from_path(
                     spec_path,
                     overlay_refs=overlay_refs,
@@ -403,12 +417,26 @@ class MasBenchRunner:
                 )
             if should_merge_stacked_entry_agent_config(config):
                 entry_manifest = merge_stacked_entry_agent_manifest(entry_manifest, config)
+            if loop_binding(entry_manifest) is not None:
+                try:
+                    return self._run_with_loop(
+                        flavour=flavour,
+                        entry_manifest=entry_manifest,
+                        entry_manifest_path=entry_manifest_path,
+                        queries=queries,
+                        output_dir=output_dir,
+                        run_seed=run_seed,
+                        workspace_root=workspace_root,
+                        controls=controls,
+                    )
+                except (BindError, ControlError, ValueError) as exc:
+                    return RunResult(content="", status="error", error=str(exc))
             try:
                 return self._standalone_controller_target(
                     flavour=flavour,
                     entry_manifest=entry_manifest,
                     entry_manifest_path=entry_manifest_path,
-                    events_file=str(output_dir / "traces" / "events.jsonl"),
+                    output_dir=output_dir,
                     infra_refs=infra_refs,
                     checkpoint_path=checkpoint_path,
                     checkpoint_dir=checkpoint_dir,
@@ -440,6 +468,7 @@ class MasBenchRunner:
                 overlay_paths=overlay_paths,
                 infra_refs=infra_refs,
                 validate=False,
+                cache=batch_cache,
             )
         )
         try:
@@ -464,6 +493,14 @@ class MasBenchRunner:
         # Bench runs are unattended: nobody can answer request_human_input.
         bind.hitl_mode = "auto"
         entry = entry_agent_id(compose.mas_config)
+        _, obs_cfg = bench_obs_config(
+            output_dir,
+            entry_manifest,
+            entry_manifest_path,
+            mas_config=compose.mas_config,
+            flavour=flavour,
+        )
+        bind.obs_config = obs_cfg
 
         if len(bind.agents) <= 1:
             pattern_plugin_id = resolve_entry_pattern_plugin_id(compose, entry, entry_manifest=entry_manifest)
@@ -482,6 +519,9 @@ class MasBenchRunner:
                     hitl_contract=hitl_contract_for_mode("auto"),
                     events_file=str(output_dir / "traces" / "events.jsonl"),
                     flavour_spec=flavour_spec_of(flavour),
+                    obs_config=obs_cfg,
+                    obs_from_cli=True,
+                    obs_binding_override=obs_config_to_binding(obs_cfg),
                 ),
             )
             _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -498,13 +538,6 @@ class MasBenchRunner:
         materialized = materialize_mas_compose(compose, mas_base_dir=resolved_mas_path.parent)
 
         try:
-            events_path, obs_cfg = bench_obs_config(
-                output_dir,
-                entry_manifest,
-                entry_manifest_path,
-                mas_config=compose.mas_config,
-                flavour=flavour,
-            )
             try:
                 prepared = prepare_delegation_entry_session(
                     materialized,
@@ -589,7 +622,7 @@ class MasBenchRunner:
         workspace_root: Path | None = None,
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
-        events_file: str | None = None,
+        output_dir: Path,
         controls: Sequence[str] = (),
     ) -> _ControllerTarget:
         workspace = WorkspaceConfig.load(workspace_root or entry_manifest_path.parent)
@@ -609,6 +642,9 @@ class MasBenchRunner:
         )
         resolved = bind_session(resolved, flavour, agent_ids=[entry_id])
         pattern_plugin_id = resolve_entry_pattern_plugin_id(None, entry_id, entry_manifest=entry_manifest)
+        # The run's own events file, whatever ``observability`` the agent or a Control names: without it a
+        # ``native`` entry the manifest carries builds its sink at its own default path and the run has no events.
+        events_path, obs_cfg = bench_obs_config(output_dir, entry_manifest, entry_manifest_path, flavour=flavour)
         instance, store = instantiate_runtime(
             InstantiationOptions(
                 agent_manifest=entry_manifest,
@@ -622,8 +658,11 @@ class MasBenchRunner:
                 experiment_default_model=experiment_default_model,
                 experiment_model_slots=experiment_model_slots,
                 hitl_contract=hitl_contract_for_mode("auto"),
-                events_file=events_file,
+                events_file=str(events_path),
                 flavour_spec=flavour_spec_of(flavour),
+                obs_config=obs_cfg,
+                obs_from_cli=True,
+                obs_binding_override=obs_config_to_binding(obs_cfg),
             ),
         )
         _attach_tool_fixtures([instance], tool_fixtures, run_params)
@@ -651,6 +690,60 @@ class MasBenchRunner:
             working_memory_registry=working_memory_registry,
             chains=chains,
             turn_guard=chains.turn_lock(entry_id),
+        )
+
+    def _run_with_loop(
+        self,
+        *,
+        flavour: Any,
+        entry_manifest: dict[str, Any],
+        entry_manifest_path: Path,
+        queries: list[str],
+        output_dir: Path,
+        run_seed: int,
+        workspace_root: Path | None,
+        controls: Sequence[str],
+    ) -> RunResult:
+        """Run a standalone agent whose ``spec.loop`` names an agent loop (a harness, not the kernel loop).
+
+        The turns, the events file and the result keep the shape of a kernel run; governance (the Controls)
+        judges each task at the boundary, and a refused or failed task is an error result.
+        """
+        from mas.ctl.session.observability import setup_observability
+        from mas.runtime.boundary.loop import LoopError, LoopTask
+
+        flavour = session_flavour_with_controls(
+            flavour,
+            controls=controls,
+            search_dirs=control_search_dirs(workspace_root, entry_manifest_path.parent, Path.cwd()),
+        )
+        host = loop_from_spec(
+            entry_manifest,
+            manifest_dir=entry_manifest_path.parent,
+            flavour_spec=flavour_spec_of(flavour),
+        )
+        events_path, obs_cfg = bench_obs_config(output_dir, entry_manifest, entry_manifest_path, flavour=flavour)
+        host.recorder = setup_observability(host.shell, obs_cfg, base_dir=output_dir)
+        session_id = str(uuid.uuid4())
+        text = ""
+        try:
+            for turn, query in enumerate(queries, start=1):
+                text = host.loop.run(LoopTask(text=query, session_id=session_id, task_id=f"u{turn}")).text
+        except LoopError as exc:
+            return RunResult(content="", status="error", error=str(exc))
+        finally:
+            host.close()
+            ensure_live_otel_span_files(events_path, obs_cfg)
+        return RunResult(
+            content=text,
+            status="ok",
+            artifacts=_events_artifacts(events_path, entry_manifest, entry_manifest_path),
+            metadata={
+                "run_seed": run_seed,
+                "turns": len(queries),
+                "session_id": session_id,
+                "loop": host.loop.loop_id,
+            },
         )
 
     @staticmethod

@@ -105,6 +105,12 @@ Cartesian and one-factor experiments that filter by `id`, `group`, or `category`
 Evaluators read app-specific ground truth from `expectations.details` on the Dataset item, never from tool-fixture YAML.
 Overlay-only files are not a ground-truth home. If a run needs scoring, make it a Dataset item.
 
+## New fields that are not a migration
+
+`environment:` on an item is new. It is not a rename of `tool_fixtures`,
+overlay params, or `inputs.hitl`. Leave those keys where they are.
+See [dataset.md §10](dataset.md#10-world-around-the-item-environment).
+
 ## Generate-dataset pipeline step
 
 The `generate_dataset` pipeline step (`GenerateDatasetStep`, `library-lab`) writes `kind: Dataset` items with `inputs.user`, not `prompt:`.

@@ -5,13 +5,84 @@ import logging
 from typing import Any
 
 import httpx
-from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.helpers import new_text_message
-from a2a.types import Role, SendMessageRequest
+from a2a.types import Role, SendMessageRequest, StreamResponse, TaskState
 from google.protobuf.json_format import MessageToDict
 from mas.runtime.aio import LoopCache
+from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
 logger = logging.getLogger(__name__)
+
+#: Task states that end a send in failure, and the word the error says. The remote's own status text is not
+#: carried: it is the peer's, and an error shows only the word.
+_FAILED_STATES = {
+    TaskState.TASK_STATE_FAILED: "failed",
+    TaskState.TASK_STATE_REJECTED: "rejected",
+    TaskState.TASK_STATE_CANCELED: "canceled",
+}
+
+
+def _kind(response: Any) -> str:
+    """Which payload a stream response carries; ``""`` for anything that is not a ``StreamResponse``."""
+    return response.WhichOneof("payload") or "" if isinstance(response, StreamResponse) else ""
+
+
+def raise_if_failed(responses: list[Any]) -> None:
+    """``AgentCommError`` when an answer or a streamed update says the task failed, was rejected or was canceled."""
+    for response in responses:
+        payload = _kind(response)
+        if payload == "task":
+            state = response.task.status.state
+        elif payload == "status_update":
+            state = response.status_update.status.state
+        else:
+            continue
+        word = _FAILED_STATES.get(state)
+        if word:
+            raise AgentCommError(f"remote A2A task {word}")
+
+
+def streamed_text(responses: list[Any]) -> str:
+    """The text of the artifact updates and messages in a stream, in order: it ends on a status update with none."""
+    out: list[str] = []
+    for response in responses:
+        kind = _kind(response)
+        if kind == "artifact_update":
+            out.extend(part.text for part in response.artifact_update.artifact.parts)
+        elif kind == "message":
+            out.extend(part.text for part in response.message.parts)
+    return "".join(out)
+
+
+def closing_text(responses: list[Any]) -> str:
+    """The streamed text to reply with when the closing response carries none of its own, else ``""``."""
+    streamed = streamed_text(responses)
+    last = responses[-1]
+    kind = _kind(last)
+    bare_task = kind == "task" and not last.task.artifacts and not last.task.status.message.parts
+    return streamed if streamed and (bare_task or kind not in {"task", "message"}) else ""
+
+
+_SDK_NAMES = frozenset({"A2ACardResolver", "ClientConfig", "create_client"})
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve the SDK client names on first access so loading the plugin does not import grpc."""
+    if name not in _SDK_NAMES:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import a2a.client as sdk
+
+    value = vars(sdk)[name]
+    globals()[name] = value
+    return value
+
+
+def _sdk(name: str) -> Any:
+    """A module-level SDK name: a patched or already resolved value, else the lazy import."""
+    try:
+        return globals()[name]
+    except KeyError:
+        return __getattr__(name)
 
 
 class A2AClient:
@@ -31,6 +102,25 @@ class A2AClient:
         self.transport = transport
         self._agent_card_cache: dict[str, Any] | None = None
         self._connections = LoopCache()
+        self.local_agent_id = ""
+        self.peer_id = ""
+        self.session_id = ""
+
+    def _transport_interceptors(self) -> list[Any]:
+        from mas.runtime.transport.emit import protocol_config
+
+        cfg = protocol_config("a2a")
+        if not (cfg.hooks or cfg.propagate_metadata):
+            return []
+        from library_ioa.plugins.a2a.hooks import A2ATransportInterceptor
+
+        return [
+            A2ATransportInterceptor(
+                agent_id=self.local_agent_id,
+                peer_id=self.peer_id,
+                session_id=self.session_id,
+            )
+        ]
 
     def _normalize_sdk_payload(self, payload: Any) -> dict[str, Any]:
         if hasattr(payload, "model_dump"):
@@ -54,17 +144,25 @@ class A2AClient:
             return {"status": "completed", "result": data}
         return {"status": "completed", "result": data}
 
-    async def _sdk_get_agent_card(self, httpx_client: httpx.AsyncClient) -> dict[str, Any]:
-        resolver = A2ACardResolver(httpx_client=httpx_client, base_url=self.url)
-        card = await resolver.get_agent_card()
-        if hasattr(card, "ListFields"):
+    def _record_agent_card(self, card: Any) -> dict[str, Any]:
+        if hasattr(card, "model_dump"):
+            data = card.model_dump(mode="json", exclude_none=True)
+        elif hasattr(card, "ListFields"):
             data = MessageToDict(card, preserving_proto_field_name=True)
         elif isinstance(card, dict):
             data = card
         else:
             data = {"name": "remote-agent", "description": "Remote agent", "url": self.url}
         self._agent_card_cache = data
+        from library_ioa.plugins.a2a.hooks import emit_agent_card
+
+        emit_agent_card(data, side="client", agent_id=str(data.get("name") or self.peer_id or ""))
         return dict(data)
+
+    async def _sdk_get_agent_card(self, httpx_client: httpx.AsyncClient) -> dict[str, Any]:
+        resolver = _sdk("A2ACardResolver")(httpx_client=httpx_client, base_url=self.url)
+        card = await resolver.get_agent_card()
+        return self._record_agent_card(card)
 
     async def _connection(self) -> "_Connection":
         return self._connections.get(lambda: _Connection(self))
@@ -77,12 +175,51 @@ class A2AClient:
         metadata: dict[str, str] | None = None,
         stream: bool = False,
     ) -> dict[str, Any]:
+        call_context = self._call_context()
+        state = getattr(call_context, "state", None)
         try:
-            return await self._send_once(message, context_id=context_id, metadata=metadata, stream=stream)
-        except Exception:
-            # a card or client kept from before the failure may be stale (the peer restarted, its card changed)
-            self._connections.drop()
+            payload = await self._send_once(
+                message, context_id=context_id, metadata=metadata, stream=stream, call_context=call_context
+            )
+        except BaseException as exc:
+            # a card or client kept from before the failure may be stale (the peer restarted, its card changed); a
+            # task the peer answered and failed leaves the connection fine
+            if isinstance(exc, Exception) and not isinstance(exc, AgentCommError):
+                self._connections.drop()
+            self._finish_call(state, exc)
             raise
+        self._finish_call(state, None)
+        return payload
+
+    def _call_context(self) -> Any:
+        """The SDK call context that carries this call's identity to the transport interceptor."""
+        from mas.runtime.transport.emit import protocol_config
+
+        cfg = protocol_config("a2a")
+        if not (cfg.hooks or cfg.propagate_metadata):
+            return None
+        from a2a.client.client import ClientCallContext
+
+        from library_ioa.plugins.a2a.hooks import current_identity, peer_label, start_call_state
+
+        source, target, session_id = current_identity()
+        context = ClientCallContext()
+        start_call_state(
+            context.state,
+            key="",
+            source=source or self.local_agent_id,
+            target=target or peer_label(self.peer_id),
+            session_id=session_id or self.session_id,
+        )
+        return context
+
+    @staticmethod
+    def _finish_call(state: Any, error: BaseException | None) -> None:
+        if state is None:
+            return
+        from library_ioa.plugins.a2a.hooks import finish_call
+
+        finish_call(state, error=error)
 
     async def _send_once(
         self,
@@ -91,6 +228,7 @@ class A2AClient:
         context_id: str,
         metadata: dict[str, str] | None,
         stream: bool,
+        call_context: Any = None,
     ) -> dict[str, Any]:
         client = await (await self._connection()).client(bool(stream))
         request = SendMessageRequest(
@@ -103,12 +241,16 @@ class A2AClient:
         if metadata:
             request.message.metadata.update(metadata)
         chunks: list[Any] = []
-        async for chunk in client.send_message(request):
+        async for chunk in client.send_message(request, context=call_context):
             chunks.append(chunk)
+        raise_if_failed(chunks)
         if not chunks:
             return {"status": "completed", "result": ""}
         payload = self._normalize_sdk_payload(chunks[-1])
         payload.setdefault("status", "completed")
+        streamed = closing_text(chunks)
+        if streamed:
+            payload["result"] = streamed
         return payload
 
     async def aget_agent_card(self, *, fresh: bool = False) -> dict[str, Any]:
@@ -163,22 +305,29 @@ class _Connection:
             if found is not None:
                 return found
             if self._card is None:
-                resolver = A2ACardResolver(httpx_client=self._http, base_url=self._owner.url)
+                resolver = _sdk("A2ACardResolver")(httpx_client=self._http, base_url=self._owner.url)
                 self._card = await resolver.get_agent_card()
+                if self.card_data is None:
+                    self.card_data = self._owner._record_agent_card(self._card)
             owner = self._owner
             grpc_channel_factory = None
             if owner.transport == "GRPC":
-                import grpc
+                from library_ioa.plugins.a2a.grpc_extra import load_a2a_grpc
 
+                grpc = load_a2a_grpc()
                 grpc_channel_factory = grpc.aio.insecure_channel
-            config = ClientConfig(
+            config = _sdk("ClientConfig")(
                 streaming=streaming,
                 httpx_client=self._http,
                 grpc_channel_factory=grpc_channel_factory,
                 supported_protocol_bindings=[owner.transport] if owner.transport else [],
                 use_client_preference=owner.transport is not None,
             )
-            found = self._clients[streaming] = await create_client(agent=self._card, client_config=config)
+            found = self._clients[streaming] = await _sdk("create_client")(
+                agent=self._card,
+                client_config=config,
+                interceptors=list(owner._transport_interceptors()),
+            )
             return found
 
     async def aclose(self) -> None:

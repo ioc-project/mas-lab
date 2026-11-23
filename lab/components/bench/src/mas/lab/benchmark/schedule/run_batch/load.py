@@ -36,6 +36,8 @@ class LoadedExperiment:
     n_runs: int
     trace_cache_dir: Optional[Path]
     controls: tuple[str, ...] = ()
+    declared_scenario_ids: tuple[str, ...] = ()
+    """Every scenario the experiment declares, before ``--scenario`` / limits narrow ``scenario_ids``."""
 
 
 def load_experiment(
@@ -193,13 +195,26 @@ def load_experiment(
         logger.debug(f"configs_dir not found: {configs_dir} — no overlay files (scenarios explicitly declared)")
         configs_dir = None
 
+    if exp.mas and exp.mas.manifest and exp.mas.manifest.is_file():
+        from mas.lab.manifests.ref_checks import manifest_to_run
+
+        try:  # one refusal before any service starts, not one per run
+            manifest_to_run(exp.mas.manifest)
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return None
+
     _pipeline_specs = resolve_pipeline_specs(exp, experiment_yaml)
     dataset_items = _view_dataset_items(
         _load_dataset_items(exp),
         dataset_filter=exp.dataset_filter,
         dataset_limit=exp.dataset_limit,
     )
+    all_scenario_ids = list(scenario_ids)
     try:
+        from mas.lab.benchmark.execution.plan import check_item_scenarios
+
+        check_item_scenarios(scenario_ids, dataset_items)
         scenario_ids = _select_scenario_ids(scenario_ids, scenario_id)
         dataset_items = _select_dataset_items(dataset_items, dataset_item)
     except ValueError as exc:
@@ -236,6 +251,7 @@ def load_experiment(
         flavour=_flavour,
         flavour_name=flavour_name,
         controls=tuple(controls or ()),
+        declared_scenario_ids=tuple(all_scenario_ids),
         infra_name=infra_name,
         n_runs=n_runs,
         trace_cache_dir=trace_cache_dir,
@@ -351,18 +367,34 @@ def _load_dataset_items(exp: Any) -> list:
 def print_dry_run(loaded: LoadedExperiment) -> None:
     """Print dry-run summary to stdout."""
     exp = loaded.exp
-    total = len(loaded.scenario_ids) * len(loaded.dataset_items) * loaded.n_runs
+    from mas.lab.benchmark.execution.plan import build_execution_plan, skipped_by_scenario
+    from mas.lab.benchmark.schedule.metadata import execution_as_dict
+
+    execution = execution_as_dict(exp)
+    try:
+        total: int | str = len(
+            build_execution_plan(loaded.scenario_ids, loaded.dataset_items, loaded.n_runs, execution=execution)
+        )
+        skipped: int | str = skipped_by_scenario(loaded.scenario_ids, loaded.dataset_items, execution=execution)
+    except ValueError as exc:  # a dry run reports a plan the run would refuse instead of failing on it
+        total = skipped = f"refused ({exc})"
     print()
     print("=" * 70)
     print("DRY RUN — MAS Benchmark Configuration")
     print("=" * 70)
     print(f"Experiment : {exp.name}")
     if exp.mas and exp.mas.manifest:
-        print(f"Manifest   : {exp.mas.manifest}")
+        from mas.lab.manifests.ref_checks import manifest_to_run
+
+        try:
+            print(f"Manifest   : {manifest_to_run(exp.mas.manifest)}")
+        except ValueError as exc:  # report a manifest the run would refuse; do not fail the dry run on it
+            print(f"Manifest   : refused ({exc})")
     print(f"configs_dir: {loaded.configs_dir}")
     print(f"Scenarios  : {loaded.scenario_ids}")
     print(f"Dataset    : {len(loaded.dataset_items)} items")
     print(f"Runs/item  : {loaded.n_runs}")
+    print(f"Skipped    : {skipped} items skipped by scenario")
     print(f"Total      : {total} executions")
     _pipeline_specs = loaded.pipeline_specs
     if _pipeline_specs:

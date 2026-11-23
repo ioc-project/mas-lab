@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -91,6 +92,43 @@ def test_list_and_call_each_close_http_transport() -> None:
     assert all(t.exits == 1 for t in transports)
     session.call_tool.assert_awaited()
     assert "read_timeout_seconds" not in session.call_tool.call_args.kwargs
+
+
+def test_list_and_call_emit_when_hooks_are_on() -> None:
+    from mas.runtime.schema.transport import TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+    emit.bind_sink(Sink())
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search", "inputSchema": {"type": "object"}})])])
+    try:
+        with (
+            patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+            patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+        ):
+            asyncio.run(client.list_tools(agent_id="worker"))
+            asyncio.run(client.list_tools(agent_id="worker"))  # cached: discovery already announced
+            asyncio.run(client.call_tool("web-search", {"query": "Apple"}))
+            session.call_tool = AsyncMock(side_effect=RuntimeError("down"))
+            with pytest.raises(RuntimeError):
+                asyncio.run(client.call_tool("web-search", {}))
+    finally:
+        emit.reset()
+    kinds = [e.kind for e in captured]
+    assert "transport.discovery" in kinds
+    assert "transport.message.sent" in kinds
+    assert "transport.message.completed" in kinds
+    assert "transport.error" in kinds
+    assert all(e.agent_id != "ctx.user" for e in captured if e.kind == "transport.discovery")
 
 
 def test_call_tool_forwards_timeout_and_meta() -> None:
@@ -400,6 +438,77 @@ def test_list_tools_honors_ttl_and_invalidate() -> None:
         assert [t["name"] for t in asyncio.run(client.list_tools())] == ["b"]
 
 
+def _real_result(*, ttl_ms: int | None = None) -> Any:
+    from mcp.types import ListToolsResult, Tool
+
+    tool = Tool(name="a", inputSchema={"type": "object"})
+    if ttl_ms is None:
+        return ListToolsResult.model_validate({"tools": [tool.model_dump(by_alias=True)]})
+    return ListToolsResult.model_validate({"tools": [tool.model_dump(by_alias=True)], "ttlMs": ttl_ms})
+
+
+def test_list_without_ttl_is_listed_once_per_client() -> None:
+    """The SDK result fills an absent ttlMs with 0; that must not read as 'do not cache'."""
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        for _ in range(5):
+            assert [t["name"] for t in asyncio.run(client.list_tools())] == ["a"]
+    assert session.list_tools.await_count == 1
+
+
+def test_list_with_ttl_zero_from_the_server_is_not_cached() -> None:
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(ttl_ms=0), _real_result(ttl_ms=0)])
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 2
+
+
+def test_tool_list_changed_notification_drops_the_cached_list() -> None:
+    from mcp.types import ToolListChangedNotification
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        asyncio.run(client.list_tools())
+        assert session.list_tools.await_count == 1
+        asyncio.run(client._on_session_message(ToolListChangedNotification()))
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 2
+
+
+def test_closing_a_held_session_rediscovers_the_list() -> None:
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+
+    async def scenario() -> None:
+        await client.connect()
+        await client.list_tools()
+        await client.list_tools()
+        assert session.list_tools.await_count == 1
+        await client.disconnect()
+        await client.list_tools()
+
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(scenario())
+    assert session.list_tools.await_count == 2
+
+
 def test_list_tools_ttl_zero_skips_cache() -> None:
     client = MCPClient(url="http://127.0.0.1:9001/mcp", cache_ttl_ms=0)
     first = _Session(list_pages=[_ListResult([_Dump({"name": "a"})])])
@@ -471,6 +580,64 @@ def test_list_tools_private_cache_is_per_user() -> None:
         assert [t["name"] for t in asyncio.run(client.list_tools(user="alice"))] == ["a"]
 
 
+def test_list_tools_emits_discovery_once_hooks_are_on() -> None:
+    """Mutation: tools/list while the bus is off is cached forever, so later capture never emits."""
+    from library_ioa.plugins.mcp.hooks import PROTOCOL
+    from mas.runtime.schema.transport import DISCOVERY, TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search"})])])
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        assert asyncio.run(client.list_tools())[0]["name"] == "web-search"
+        assert captured == []
+        emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+        emit.bind_sink(Sink())
+        assert asyncio.run(client.list_tools())[0]["name"] == "web-search"
+    emit.reset()
+    kinds = [e.kind for e in captured if e.protocol == PROTOCOL]
+    assert kinds == [DISCOVERY]
+    session.list_tools.assert_awaited_once()
+
+
+def test_list_tools_stamps_the_listing_agent_not_the_mcp_user() -> None:
+    """Mutation: emit_tools_discovered uses user= (often empty) so SCOPE agent.name is missing."""
+    from mas.runtime.schema.transport import TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_ListResult([_Dump({"name": "web-search"})])])
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+    emit.bind_sink(Sink())
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools(user="", agent_id="worker"))
+    emit.reset()
+    assert captured[0].agent_id == "worker"
+    assert captured[0].attributes.get("source") == "worker"
+
+
 def test_run_sync_from_running_event_loop() -> None:
     from library_ioa.plugins.mcp.client.wrapper import run_sync
 
@@ -481,3 +648,190 @@ def test_run_sync_from_running_event_loop() -> None:
         return run_sync(_value())
 
     assert asyncio.run(_inner()) == 7
+
+
+@pytest.mark.parametrize("sticky", [False, True])
+def test_refused_session_setup_is_attempted_once_per_tool_call(sticky):
+    """The generic client does not retry a refused setup inside one call: one attempt, then the error."""
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    attempts: list[int] = []
+
+    async def refuse(_stack):
+        attempts.append(1)
+        raise PermissionError("setup refused")
+
+    client._enter_session = refuse  # type: ignore[method-assign]
+
+    async def scenario():
+        if sticky:
+            await client.connect()
+        with pytest.raises(PermissionError):
+            await client.call_tool("t", {})
+        assert len(attempts) == 1
+
+    asyncio.run(scenario())
+
+
+def test_list_without_server_ttl_expires_after_the_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A server that never says tools changed does not pin the list forever."""
+    from library_ioa.plugins.mcp import client as client_mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(client_mod.time, "monotonic", lambda: clock[0])
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        clock[0] += client_mod.DEFAULT_LIST_TTL_MS / 1000 - 1
+        asyncio.run(client.list_tools())
+        assert session.list_tools.await_count == 1
+        clock[0] += 2
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 2
+
+
+def test_a_listing_in_flight_when_the_list_changes_is_not_stored() -> None:
+    from mcp.types import ToolListChangedNotification
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    real = session.list_tools.side_effect
+
+    async def changed_while_listing(params=None):
+        await client._on_session_message(ToolListChangedNotification())
+        return real(params)
+
+    session.list_tools = AsyncMock(side_effect=changed_while_listing)
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 2
+
+
+def test_a_protocol_error_on_a_call_drops_the_cached_list() -> None:
+    from library_ioa.plugins.mcp.client import McpError
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    session.call_tool = AsyncMock(side_effect=McpError(-32602, "unknown tool"))
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        with pytest.raises(McpError):
+            asyncio.run(client.call_tool("a", {}))
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 2
+
+
+def test_a_caller_cannot_change_the_cached_list() -> None:
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result()])
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        first = asyncio.run(client.list_tools())
+        first[0]["name"] = "changed"
+        first.clear()
+        assert [t["name"] for t in asyncio.run(client.list_tools())] == ["a"]
+
+
+def test_an_auth_refusal_on_a_call_does_not_drop_the_cached_list() -> None:
+    from library_ioa.plugins.mcp.client import McpError
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    session.call_tool = AsyncMock(side_effect=McpError(-32001, "denied"))
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        for _ in range(3):
+            with pytest.raises(McpError):
+                asyncio.run(client.call_tool("a", {}))
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 1
+
+
+def test_bad_arguments_do_not_drop_the_cached_list() -> None:
+    from library_ioa.plugins.mcp.client import McpError
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    session.call_tool = AsyncMock(side_effect=McpError(-32602, "field 'x' is required"))
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        with pytest.raises(McpError):
+            asyncio.run(client.call_tool("a", {}))
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 1
+
+
+def test_a_stale_listing_is_not_announced() -> None:
+    from mcp.types import ToolListChangedNotification
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    real = session.list_tools.side_effect
+
+    async def changed_while_listing(params=None):
+        await client._on_session_message(ToolListChangedNotification())
+        return real(params)
+
+    session.list_tools = AsyncMock(side_effect=changed_while_listing)
+    announced: list[int] = []
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+        patch.object(client, "_emit_listed", lambda *a, **k: announced.append(1)),
+    ):
+        asyncio.run(client.list_tools())
+    assert announced == []
+
+
+def test_the_session_is_built_with_the_list_changed_handler() -> None:
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    with patch("library_ioa.plugins.mcp.client.ClientSession") as factory:
+        client._client_session(object(), object())
+    assert factory.call_args.kwargs["message_handler"] == client._on_session_message
+
+
+def test_expired_entries_of_other_users_are_evicted(monkeypatch: pytest.MonkeyPatch) -> None:
+    from library_ioa.plugins.mcp import client as client_mod
+
+    clock = [0.0]
+    monkeypatch.setattr(client_mod.time, "monotonic", lambda: clock[0])
+    client = MCPClient(url="http://127.0.0.1:9001/mcp", cache_scope="private", cache_ttl_ms=1000)
+    client._store_list("alice", [{"name": "a"}])
+    clock[0] = 5.0
+    client._store_list("bob", [{"name": "b"}])
+    assert list(client._list_cache) == ["bob"]
+
+
+def test_method_not_found_on_a_call_drops_the_cached_list() -> None:
+    from library_ioa.plugins.mcp.client import McpError
+
+    client = MCPClient(url="http://127.0.0.1:9001/mcp")
+    session = _Session(list_pages=[_real_result(), _real_result()])
+    session.call_tool = AsyncMock(side_effect=McpError(-32601, "method not found"))
+    with (
+        patch("library_ioa.plugins.mcp.client.streamable_http_client", return_value=_Transport()),
+        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+    ):
+        asyncio.run(client.list_tools())
+        with pytest.raises(McpError):
+            asyncio.run(client.call_tool("a", {}))
+        asyncio.run(client.list_tools())
+    assert session.list_tools.await_count == 2

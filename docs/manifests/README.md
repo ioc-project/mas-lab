@@ -31,7 +31,8 @@ experiment.yaml          <- what to run (scenarios x dataset x n_runs + pipeline
     |
     +-- application     -> mas.yaml / registered app
     +-- scenarios[]     -> overlay stacks, one per variant
-    +-- dataset         -> Dataset items (inputs + expectations)
+    +-- environment     -> world around a run (fixtures, clock, triggers)
+    +-- dataset         -> Dataset items (inputs + expectations + optional environment overlay)
     +-- run/item/scenario/post -> pipeline steps (metrics, plots)
 
 mas.yaml                 <- team topology, workflow, transport
@@ -49,11 +50,12 @@ config.yaml       <- project defaults (flavour, infra_refs, .env path)
 | **Tools** | `Tool`, `ToolBundle`; runtime-owned system plugins | [tool.md](tool.md) · [system-plugins.md](system-plugins.md) |
 | **MAS** | `MAS`, `Workflow` | [mas.md](mas.md) |
 | **Override** | `Overlay` | [overlay.md](overlay.md) |
-| **Environment** | `Flavour`, `Control`; infra kinds (`InfraBundle`, `LLMProxy`, `InfraMiddleware`, …) | [flavour.md](flavour.md) · [control.md](control.md) · [infra.md](infra.md) · [llm-cache.md](llm-cache.md) · [llm-prompt-cache.md](llm-prompt-cache.md) · [llm-providers.md](llm-providers.md) |
+| **Flavour / infra** | `Flavour`, `Control`; infra kinds (`InfraBundle`, `LLMProxy`, `InfraMiddleware`, …) | [flavour.md](flavour.md) · [control.md](control.md) · [infra.md](infra.md) · [llm-cache.md](llm-cache.md) · [llm-prompt-cache.md](llm-prompt-cache.md) · [llm-providers.md](llm-providers.md) |
+| **World around a run** | `environment:` on the experiment, scenario, or dataset item (not a `kind`) | [environment.md](environment.md) · [dataset.md](dataset.md#10-world-around-the-item-environment) |
 | **Engine tuning** | `RuntimeEngine` | [runtime-engine.md](runtime-engine.md) · [execution.md](execution.md) (removed agent `spec.execution`) |
 | **Model data** | LLM model catalog (shipped data file, not a kind) | [llm-model-catalog.md](llm-model-catalog.md) |
 | **Experiment** | `experiment:` root | [experiment.md](experiment.md) |
-| **Inputs** | `Dataset` (`apiVersion: lab/v1`) | [dataset.md](dataset.md) · [dataset-migration.md](dataset-migration.md) |
+| **Inputs** | `Dataset` (`apiVersion: lab/v1`); optional item `environment:` overlay | [dataset.md](dataset.md) · [dataset-migration.md](dataset-migration.md) · [environment.md](environment.md) |
 | **Processing** | `pipeline:` root / `kind: Pipeline` | [pipeline.md](pipeline.md) |
 | **Lab folder** | `lab:` root (`lab-config.yaml`) | [lab.md](lab.md) |
 

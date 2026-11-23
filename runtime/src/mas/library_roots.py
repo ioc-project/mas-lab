@@ -52,6 +52,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
+from mas.runtime import hostenv
 from mas.runtime.constants import LAB_CONFIG_FILENAME, LIBRARY_MANIFEST_FILENAME
 
 _LAB_DIR_SUFFIX = ".lab"
@@ -187,8 +188,12 @@ def resolve_manifest_library_package(module: str, dist_name: str | None = None) 
         return None
 
 
-def _installed_named_libraries() -> dict[str, Path]:
-    """Return library name → root for installed libraries."""
+_INSTALLED_NAMED_CACHE: dict[str, Path] | None = None
+_INSTALLED_LOCK = threading.Lock()
+
+
+def _compute_installed_named_libraries() -> dict[str, Path]:
+    """Return library name → root for installed libraries (uncached)."""
     named: dict[str, Path] = {}
     try:
         eps = importlib.metadata.entry_points(group="mas.runtime.manifest_libraries")
@@ -207,6 +212,23 @@ def _installed_named_libraries() -> dict[str, Path]:
         if root is not None and ep.name and ep.name not in named:
             named[ep.name] = root
     return named
+
+
+def _installed_named_libraries() -> dict[str, Path]:
+    """Return library name → root for installed libraries.
+
+    Memoized for the life of a lab batch. :func:`clear_library_discovery_cache`
+    drops it; the scheduler calls that at batch start and end.
+    """
+    global _INSTALLED_NAMED_CACHE
+    with _INSTALLED_LOCK:
+        hit = _INSTALLED_NAMED_CACHE
+    if hit is not None:
+        return dict(hit)
+    named = _compute_installed_named_libraries()
+    with _INSTALLED_LOCK:
+        _INSTALLED_NAMED_CACHE = named
+    return dict(named)
 
 
 def _installed_library_roots() -> list[Path]:
@@ -249,7 +271,7 @@ def _known_library_paths() -> list[Path]:
     Each ``os.pathsep``-separated entry is a **search path** (a library
     root, or a parent of sibling library folders).
     """
-    raw = os.environ.get("MAS_LIBRARY_PATHS", "")
+    raw = hostenv.get("MAS_LIBRARY_PATHS", "")
     roots: list[Path] = []
     seen: set[Path] = set()
     for entry in raw.split(os.pathsep):
@@ -597,17 +619,23 @@ def discover_library_roots(*anchors: Path | None) -> list[Path]:
 
 
 def clear_library_discovery_cache() -> None:
-    """Drop this module's memoized ``library.yaml`` reads.
+    """Drop this module's memoized ``library.yaml`` reads and installed roots.
 
     :func:`_read_library_manifest_silently` is ``lru_cache``-memoized by
-    resolved root. Call this (together with
+    resolved root. :func:`_installed_named_libraries` memoizes
+    ``entry_points`` for the life of a lab batch. Call this (together with
     :func:`mas.library_catalog.clear_catalog_discovery_cache`) after a
     library's on-disk contents change — e.g. a temp library directory
-    rewritten mid-test — so the next resolution re-reads them. Discovery
-    functions that only orchestrate roots (``discover_library_roots``,
-    ``iter_named_library_roots``, ``resolve_named_library_root``) are
-    intentionally left uncached: they are the entry points tests and
-    callers monkeypatch/re-configure (workspace config, env vars, installed
-    libraries) expecting the very next call to reflect it.
+    rewritten mid-test — so the next resolution re-reads them. The
+    scheduler also calls it at batch start and end. Discovery functions
+    that only orchestrate roots (``discover_library_roots``,
+    ``iter_named_library_roots``, ``resolve_named_library_root``) stay
+    uncached except for the installed-library map they call: they are the
+    entry points tests and callers monkeypatch/re-configure (workspace
+    config, env vars, installed libraries) expecting the very next call to
+    reflect it.
     """
+    global _INSTALLED_NAMED_CACHE
     _read_library_manifest_silently.cache_clear()
+    with _INSTALLED_LOCK:
+        _INSTALLED_NAMED_CACHE = None

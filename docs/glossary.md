@@ -7,6 +7,37 @@
 This page defines the terms you meet in YAML files and CLI output. Look a term
 up here when another page uses it without explanation.
 
+## How we name things
+
+Three words cover most of the confusion: *harness*, *kernel* and *lab*. A
+**harness** hosts one agent (or one multi-agent system) and everything around
+it. A **lab** runs a harness many times and collects the results. The
+**kernel** is the small core inside the harness that runs one turn.
+
+```mermaid
+flowchart LR
+    lab["Lab (tool)<br/>schedules runs, collects results"] -->|runs| harness
+    subgraph harness["Harness"]
+        direction TB
+        kernel["Kernel<br/>runs one turn"]
+        stack["Stack of layers<br/>one per protocol row"]
+        plugins["Plugins<br/>from libraries"]
+        control["Control API<br/>mas-ctl"]
+    end
+    harness --> models["Models"]
+    harness --> tools["Tools"]
+    harness --> peers["Peers"]
+```
+
+| Term | Meaning |
+|------|---------|
+| **Harness** | The software that hosts one agent or MAS and everything around it. It runs the agent's turns (the **kernel**), connects the agent to models, tools and peers (the **stack** of layers), applies governance, records what happens (observability) and lets you control a live session (the control API). In this repo the harness is the **runtime package**, the plugins that libraries register for it, and `mas-ctl`. Some pages and code names also use the word for two narrower things: a *harness composition* is a named recipe of kernel operations (`react`, `plan_mode`; see [kernel operations](references/kernel-primitives.md#layers)), and a *harness profile* is an overlay that makes the harness behave like a given agent framework. |
+| **Kernel** | The state machine inside the harness that runs one turn of an agent: it takes the next input, calls the model and tools through the boundary contracts, and updates the agent's state. See [kernel operations](references/kernel-primitives.md). |
+| **Runtime package** | The Python package `mas-lab-runtime` (import name `mas.runtime`, directory `runtime/`). It holds the kernel and the contracts at its boundary. It is the core of the harness, not the whole harness. In prose, say *harness* for the whole and *runtime package* for this package. The bare word *runtime* stays in package names, imports, file paths, manifest kinds such as `RuntimeEngine`, and code identifiers. |
+| **Layer** | One step in a stack. A call enters at the top, each layer hands it to the one below, and the bottom layer (the transport) talks to the outside. Examples: retry, cache, `a2a-framing`, `http`. See [communication stack](references/comm-stack.md#stack). |
+| **Stack** | The ordered list of layers, bottom first, between an agent and a transport for one protocol row (send to a peer, call a model, call a tool). Declared with a Flavour `bind` row or a `kind: Stack` infra row. Some pages say *chain* for the same thing. See [communication stack](references/comm-stack.md#stack). |
+| **Lab (tool)** | The `mas-lab` command and the `lab/components/` packages (core, bench, controller). It acts as a runtime for experiments: it expands an experiment into runs, schedules them, runs the harness once per run, and collects the traces and results. It is not part of the harness. The folder `*.lab/` is the **Lab (definition)** row below: the input the tool reads. |
+
 | Term | Meaning |
 |------|---------|
 | **Scope** | A place the controller can list catalog items from: a **library** (`library:<name>`) or a **lab** (`lab:<name>`). The UI never builds a server path. |
@@ -32,11 +63,17 @@ up here when another page uses it without explanation.
 | **Item** | One case of the dataset (`item:` hooks, CLI `--item`). Older material calls it `test:`. |
 | **Dataset** | The input items (prompts, expected fields) the experiment runs over. Referenced as `dataset:` in `experiment.yaml`. |
 | **Run** | One execution of the agent or MAS for a given scenario, item, and repeat index. It writes `traces/events.jsonl`. |
+| **Environment** | The world around a run: fixtures, clock, timers, triggers and world actions (`environment:` on the experiment, scenario, or dataset item). Not Flavour / Control / Infra, and not Tutorial 0 (machine setup). See [environment.md](manifests/environment.md). |
+| **Fixture** | A paired process the lab starts for a run (or item / scenario scope) and always stops. Not `inputs.tool_fixtures` (mock payloads) and not pipeline `service_start`. |
+| **World action** | An environment step (`http_call`, `clock_advance`, `sleep`, …) that changes the world, not the kernel. |
+| **Trigger** | A `when` → `do` rule. Structured YAML and gdb `break` lines compile to the same model. |
+| **Timer** | A trigger whose `when.on` is `timer` (virtual due-time or wall). |
+| **Environment event** | One line of `traces/environment.jsonl` (`custom.environment`). Value-free. |
 | **`n_runs`** | How many times to repeat each (scenario, item) for variance. Declared under `run.n_runs`. |
-| **Benchmark** | `mas-lab benchmark run` — executes all runs, then runs level hooks. |
+| **Benchmark** | `mas-lab benchmark run` — runs the level hooks around execution: the `pre` hooks of a level before it executes, then the runs, then the `post` hooks. |
 | **Pipeline** | Ordered **pipeline steps** that read run artifacts and write CSV/PNG under `results/`. A pipeline is not a separate key of the experiment: it is declared as steps in the level hooks (inline, or by reference to a pipeline file). |
-| **Level hooks** | `run.post` / `item.post` / `scenario.post` / experiment `post:` in `experiment.yaml` — the places where pipeline steps are attached, one per level of the hierarchy experiment → scenario → item → run. |
-| **Pipeline step** | One unit in a level hook (e.g. `extract_trace_stats`, `plotnine`). Declared with `name`, `type`, `config`. |
+| **Level hooks** | `pre:` and `post:` lists of pipeline steps in `experiment.yaml`, one pair per level of the hierarchy experiment → scenario → item → run (`run.pre`, `run.post`, `item.pre`, `item.post`, `scenario.pre`, `scenario.post`, and the experiment-root `pre:` / `post:`). `pre` steps run before that level executes (for example to start a service the runs need); `post` steps run after it (analysis, tear-down). |
+| **Pipeline step** | One unit in a level hook (e.g. `extract_trace_stats`, `plotnine`, or `service_start` under `pre:` with its `service_stop` under `post:`). Declared with `name`, `type`, `config`. |
 | **Hierarchy levels** | The experiment hierarchy is *experiment → scenario → item → run*. Older material may say *test* for *item*, or *application* for the experiment level; use the names above. |
 | **`events.jsonl`** | The machine-readable trace of a run: one JSON object per line (model calls, tool calls, governance, routing). |
 | **Exchange log** | Human-readable transcript on stderr during `mas-ctl chat` (`--trace` = summary + timestamps; `--trace full` for the payload dump). Persist with `mas_ctl.trace` in `config.yaml`. Not used for experiment scoring. |

@@ -189,6 +189,7 @@ def chat_cmd(
     events_file: str | None,
     events_stdout: bool,
     events_format: str | None,
+    transport_observability: tuple[str, ...],
     trace_mode: str | None,
     no_trace: bool,
     trace_timestamps: bool | None,
@@ -417,6 +418,7 @@ def chat_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
+            transport_observability=transport_observability,
             agent_id=agent_id,
             manifest=agent_data,
             flavour_spec=flavour_spec,
@@ -451,6 +453,7 @@ def chat_cmd(
                     obs_binding_override=(
                         obs_config_to_binding(obs_cfg) if cli_replaced_plugin_set(events, events_format) else None
                     ),
+                    obs_config=None if without_obs else obs_cfg,
                 ),
                 hitl=hitl_responder,
             )
@@ -469,11 +472,17 @@ def chat_cmd(
         else:
             controller_store = store
 
-        obs_rec = setup_observability(
-            instance,
-            obs_cfg,
-            base_dir=session.manifest_dir if manifest else session.original_cwd,
-        )
+        if without_obs:
+            from mas.ctl.session.observability import _apply_transport
+
+            _apply_transport(None)
+            obs_rec = None
+        else:
+            obs_rec = setup_observability(
+                instance,
+                obs_cfg,
+                base_dir=session.manifest_dir if manifest else session.original_cwd,
+            )
 
         from mas.ctl.session.session_flags import validate_chat_session
 

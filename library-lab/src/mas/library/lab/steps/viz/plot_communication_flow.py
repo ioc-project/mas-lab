@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """PlotCommunicationFlowStep — pipeline step for the communication-flow diagram.
 
 Wraps :func:`~mas.lab.plots.communication_flow.plot_communication_flow`
@@ -32,24 +35,26 @@ Example pipeline YAML::
 
 import logging
 
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_named_file
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.library.lab.steps._io import path_from_config_or_deps
 
 logger = logging.getLogger(__name__)
 
 
-class PlotCommunicationFlowStep(PipelineStep):
+class PlotCommunicationFlowStep(FigureStep):
     """Generate an agent communication-flow diagram from a trace."""
 
     type = "plot_communication_flow"
+    HONORS = frozenset({"format", "title"})
+    FORMATS = ("html", "mermaid")
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
-        from mas.lab.plots.trajectory import load_trace
         from mas.lab.plots.communication_flow import plot_communication_flow
+        from mas.lab.plots.trajectory import load_trace
 
-        config = self.config
+        config = self.apply_style(self.config, ctx)
         fmt = str(config.get("format", "html")).lower()
         title = str(config.get("title", "MAS Agent Communication Flow"))
         resolved_path = path_from_config_or_deps(

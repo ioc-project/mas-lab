@@ -343,6 +343,8 @@ def _annotate_one_event(
             "GovernanceEvent",
             "ContextContribution",
             "Worker",
+            "Agent",
+            "Tool",
             "ExecutionElement",
             None,
         ):

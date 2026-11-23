@@ -99,14 +99,14 @@ class TestHitlModeResolution:
         assert isinstance(responder, AutoDenyResponder)
         assert terminal is None
 
-    def test_interactive_mode_falls_back_to_auto_approve_when_not_a_terminal(self):
-        """hitl_config.py: interactive + non-interactive session => auto-approve, not a hang."""
+    def test_interactive_mode_falls_back_to_auto_deny_when_not_a_terminal(self):
+        """hitl_config.py: interactive + non-interactive session => auto-deny, never an approval and not a hang."""
         from mas.ctl.session.hitl_config import resolve_hitl_from_manifest
-        from mas.library.standard.plugins.hitl.responders import AutoApproveResponder
+        from mas.library.standard.plugins.hitl.responders import AutoDenyResponder
 
         manifest, flavour = _merged_agent("tools.yaml", "governance-interactive.yaml")
         responder, _terminal = resolve_hitl_from_manifest(manifest, session_interactive=False, flavour_spec=flavour)
-        assert isinstance(responder, AutoApproveResponder)
+        assert isinstance(responder, AutoDenyResponder)
 
 
 def _calc_engine(*, expression: str = "125 * 3 + 42", answer: str = "The total is $417."):

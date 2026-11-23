@@ -156,6 +156,7 @@ nav:
           - "12 Spawned subagents": tutorials/12-subagents/README.md
           - "13 Control and debug": tutorials/13-control-and-debug/README.md
           - "14 Governance and HITL": tutorials/14-governance-hitl/README.md
+          - "15 World events and fixtures": tutorials/15-world-events-and-fixtures/README.md
       - Labs: discover/labs.md
       - Integrations:
           - IoC integrations: discover/integrations.md
@@ -217,18 +218,27 @@ nav:
           - Manifest fields: manifests/runtime.md
           - Context management: references/context-management.md
           - Reliability: references/reliability.md
+          - Hardening: references/hardening.md
           - Event model: references/event-model.md
+          - Transport observability:
+              - Overview: references/transport-observability.md
+              - Inventory: references/transport-observability-inventory.md
+              - KG mapping: references/transport-observability-kg-mapping.md
           - Communication headers: references/comm-headers.md
           - Communication stack: references/comm-stack.md
+          - Agent loop: references/agent-loop.md
           - LLM cache: references/llm-cache.md
           - Contracts: references/contracts.md
           - Snapshots vs checkpoints: references/snapshots.md
+          - Kernel invariants: references/kernel-invariants.md
           - Kernel operations: references/kernel-primitives.md
           - Thin waist: references/thin-waist.md
           - System tools: references/system-tools.md
           - Package docs: references/runtime.md
       - Lab:
           - Experiment: manifests/experiment.md
+          - Lab run throughput: references/lab-throughput.md
+          - Environment: manifests/environment.md
           - Dataset: manifests/dataset.md
           - Pipeline: manifests/pipeline.md
           - Lab folder: manifests/lab.md

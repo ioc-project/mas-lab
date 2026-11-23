@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 from mas.ctl.cli.bind_flags import control_option
+from mas.runtime import hostenv
 
 
 @click.command("run")
@@ -247,6 +248,8 @@ def run_cmd(
         "pipeline_attachments": list(pipeline_attachments),
         "experiment_overlays": list(experiment_overlays),
         "clean_stale": clean_stale,
+        # The CLI is where the environment is read; fixture processes inherit it (minus secret-looking names).
+        "fixture_env": hostenv.snapshot(),
     }
 
     client = ControllerClient()

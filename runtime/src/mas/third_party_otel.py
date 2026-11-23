@@ -14,10 +14,14 @@ at ERROR, one full traceback per call (GitHub issue #127).
 The flag is read once at import of ``a2a.utils.telemetry``. This module
 must run before any ``a2a`` import. Importing it has the pin as a side
 effect; ``pin_third_party_otel_off`` is also safe to call explicitly.
+The CLI overwrites the flag from ``transport.<protocol>.sdk_spans`` after
+it parses the manifest, still before the SDK is imported. Default remains
+off.
 
 This does **not** set ``OTEL_SDK_DISABLED``. That would disable the
 first-party ``otel`` plugin. Explicit ``OTEL_INSTRUMENTATION_A2A_SDK_ENABLED=true``
-in the process environment is left alone (``setdefault``).
+in the process environment is left alone by ``setdefault``; a manifest
+``sdk_spans`` value then overrides it.
 
 Same reasoning, same mechanism, for ``OBSERVE_REALTIME_OBSERVABILITY_ENABLED``:
 the ``ioa-observe-sdk`` dependency (see the telemetry library) defaults

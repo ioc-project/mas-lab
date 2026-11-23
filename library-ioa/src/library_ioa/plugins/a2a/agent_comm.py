@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
@@ -27,6 +28,7 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
     ) -> None:
         self.endpoint = url
         self._client = A2AClient(url=url, headers=headers, timeout=timeout)
+        self._client.peer_id = url
 
     async def aprobe(self, target_agent_id: str) -> bool:
         """Fetch the remote agent card afresh: the peer answers, or this raises."""
@@ -35,7 +37,7 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
             await self._client.aget_agent_card(fresh=True)
         except Exception as exc:
             self._client.reset()
-            raise AgentCommError(str(exc)) from exc
+            raise AgentCommError(safe_text(exc)) from exc
         return True
 
     def stop(self) -> None:
@@ -58,26 +60,34 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
         kind = str(getattr(context, "intent", None) or "task").strip().lower() or "task"
         if kind not in self.HONOURED_SEND_INTENTS:
             raise AgentCommError(f"intent {kind!r} is not supported")
-        del target_agent_id, headers, context
+        # The sender is what the link says it speaks for. ``context.sender`` is caller supplied and not trusted.
+        sender = str(self.agent_id or "")
+        del headers, context
+        from library_ioa.plugins.a2a.hooks import bound_identity
+
         try:
-            response = await self._client.asend_message(
-                task,
-                context_id=context_id,
-                metadata={
-                    "mas.correlation_id": str(correlation_id),
-                    "mas.caller_call_id": caller_call_id,
-                },
-            )
+            with bound_identity(sender, str(target_agent_id or "")):
+                response = await self._client.asend_message(
+                    task,
+                    context_id=context_id,
+                    metadata={
+                        "mas.correlation_id": str(correlation_id),
+                        "mas.caller_call_id": caller_call_id,
+                    },
+                )
         except Exception as exc:
-            raise AgentCommError(str(exc)) from exc
+            raise AgentCommError(safe_text(exc)) from exc
 
         status = str(response.get("status") or "").lower()
         if status in {"failed", "error"}:
-            raise AgentCommError(str(response.get("error") or "remote A2A task failed"))
+            raise AgentCommError(safe_text(response.get("error") or "remote A2A task failed"))
         result: Any = response.get("result", response)
         if isinstance(result, str):
             return result
         if isinstance(result, dict):
+            task_text = _task_text(result.get("task"))
+            if task_text:
+                return task_text
             message = result.get("message")
             if isinstance(message, dict):
                 parts = message.get("parts") or []
@@ -91,3 +101,18 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
             if text:
                 return text
         return str(result)
+
+
+def _task_text(task: Any) -> str:
+    """The reply text of a task result: its artifacts, else the text of its status message."""
+    if not isinstance(task, dict):
+        return ""
+
+    def parts_text(parts: Any) -> str:
+        return "".join(str(p.get("text") or "") for p in parts or [] if isinstance(p, dict))
+
+    artifacts = "".join(parts_text(a.get("parts")) for a in task.get("artifacts") or [] if isinstance(a, dict))
+    if artifacts:
+        return artifacts
+    message = (task.get("status") or {}).get("message")
+    return parts_text(message.get("parts")) if isinstance(message, dict) else ""

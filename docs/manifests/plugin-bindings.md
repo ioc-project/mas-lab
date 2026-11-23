@@ -6,7 +6,7 @@
 
 A **plugin binding** is how an Agent manifest names a plugin and passes it parameters.
 A *plugin* is a class that a library manifest (`library.yaml`) registers under a type. The slot name is that type.
-Use a binding to pick a non-default plugin for `design_pattern`, `context_manager`, `assembler`, `hitl_contract`, or `user_io_contract`. Use it also for the list slots `governance`, `observability`, and `context_sources`.
+Use a binding to pick a non-default plugin for `design_pattern`, `context_manager`, `assembler`, `hitl_contract`, `user_io_contract`, or `loop` (an `agent_loop` plugin: see [Agent loop](../references/agent-loop.md)). Use it also for the list slots `governance`, `observability`, and `context_sources`.
 [plugins-reference.md](../plugins-reference.md) lists the registered plugins.
 
 Minimal working bindings, in shorthand:
@@ -183,7 +183,7 @@ Card: [summarizer.md](https://github.com/ioc-project/mas-lab/blob/main/library-s
 
 | Slot | Default | Shipped plugins |
 |------|---------|-----------------|
-| `governance` | `[]` | `sample` / `sample_governance`, `gov_no_undeclared_tool` (alias `no_undeclared_tool`), `gov_no_undeclared_peer` (alias `no_undeclared_peer`), `retry_on_error`, `backtrack_on_error` |
+| `governance` | `[]` | `sample` / `sample_governance`, `gov_no_undeclared_tool` (alias `no_undeclared_tool`), `gov_no_undeclared_peer` (alias `no_undeclared_peer`), `gov_hardening_profile` (alias `hardening_profile`), `retry_on_error`, `backtrack_on_error` |
 | `observability` | `[]` (flavour/CLI may attach `native`) | `native`, `otel` (from `library-telemetry`) |
 | `context_sources` | `[]` | `native`, `adk`, `langchain` (skill engines from `library-skills`) |
 

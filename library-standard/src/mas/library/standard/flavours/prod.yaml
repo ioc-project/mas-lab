@@ -8,7 +8,17 @@ metadata:
   description: >
     Production Flavour. require_usage is true: every agent of the session
     must have a bind chain or an agent-keyed Application row. An agent
-    with none is refused.
+    with none is refused. hardening.profile is production: a session or a
+    listener that fails a named hardening check (see docs/references/hardening.md)
+    is refused, unless your own Flavour file, written with this posture,
+    waives the check with a reason. The with-hardened Control is attached to
+    every agent, so agents without their own ingress governance pass the
+    ingress check.
 
 spec:
   require_usage: true
+  control:
+    - ref: pkg://mas.library.standard/controls/with-hardened.yaml
+      agents: $all
+  hardening:
+    profile: production

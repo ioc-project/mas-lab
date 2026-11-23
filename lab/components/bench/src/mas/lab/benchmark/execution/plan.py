@@ -1,11 +1,97 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+"""Execution plan construction and cartesian guards."""
 
 from __future__ import annotations
 
-"""Execution plan construction and cartesian guards."""
-
 _MODES = frozenset({"cartesian", "coupled", "one_factor"})
+
+
+def _declared_scenarios(item: dict) -> set[str] | None:
+    """The scenario ids on *item*, or ``None`` when the field is omitted (every scenario).
+
+    A lone string is one id. An empty list means no scenario. A mapping is an error.
+    """
+    declared = item.get("scenarios")
+    if declared is None:
+        return None
+    if isinstance(declared, str):
+        token = declared.strip()
+        if not token:
+            raise ValueError(f"item {item.get('id')!r} scenarios is empty: omit it to run in every scenario")
+        return {token}
+    if isinstance(declared, bool):
+        raise ValueError(f"item {item.get('id')!r} scenarios must be a list of ids, not a boolean")
+    if isinstance(declared, dict):
+        raise ValueError(f"item {item.get('id')!r} scenarios must be a list of ids, not a mapping")
+    if isinstance(declared, (int, float)):
+        raise ValueError(f"item {item.get('id')!r} scenarios must be a list of ids, not a number")
+    try:
+        entries = list(declared)
+    except TypeError:
+        raise ValueError(f"item {item.get('id')!r} scenarios must be a list of ids") from None
+    if not entries:
+        raise ValueError(f"item {item.get('id')!r} scenarios is empty: omit it to run in every scenario")
+    out: set[str] = set()
+    for s in entries:
+        if not isinstance(s, str):
+            raise ValueError(f"item {item.get('id')!r} scenarios entries must be non-empty strings")
+        token = s.strip()
+        if not token:
+            raise ValueError(f"item {item.get('id')!r} scenarios entries must be non-empty strings")
+        out.add(token)
+    return out
+
+
+def check_item_scenarios(scenario_ids: list, dataset_items: list) -> None:
+    """Refuse an item whose ``scenarios`` names an id the experiment does not declare.
+
+    A misspelt id would otherwise drop the item from every scenario without a word.
+    """
+    known = {str(s).strip() for s in scenario_ids}
+    problems: list[str] = []
+    for item in dataset_items:
+        declared = _declared_scenarios(item)
+        unknown = sorted(declared - known) if declared else []
+        if unknown:
+            problems.append(f"item {item.get('id')!r} names unknown scenario(s) {unknown}")
+    if problems:
+        raise ValueError("; ".join(problems) + f"; the experiment declares {sorted(known)}")
+
+
+def item_applies(item: dict, scenario_id: str) -> bool:
+    """True when *item* runs in *scenario_id*: no ``scenarios`` list on the item means every scenario."""
+    declared = _declared_scenarios(item)
+    return declared is None or str(scenario_id).strip() in declared
+
+
+def skipped_by_scenario(
+    scenario_ids: list,
+    dataset_items: list,
+    *,
+    execution: dict | None = None,
+    strategy: str = "coverage",
+    design: dict | None = None,
+) -> int:
+    """Count of unique (scenario, item) pairs the items' ``scenarios`` lists leave out of the plan."""
+    raw = _raw_plan(
+        scenario_ids,
+        dataset_items,
+        1,
+        execution=execution,
+        strategy=strategy,
+        design=design,
+    )
+    seen: set[tuple[str, int]] = set()
+    skipped = 0
+    for sid, item, _ in raw:
+        key = (str(sid), id(item))
+        if key in seen:
+            continue
+        seen.add(key)
+        if not item_applies(item, sid):
+            skipped += 1
+    return skipped
 
 
 def build_execution_plan(
@@ -18,28 +104,40 @@ def build_execution_plan(
     design: dict | None = None,
 ) -> list[tuple[str, dict, int]]:
     """Return ordered ``(scenario_id, item, run_idx)`` triples."""
+    plan = _raw_plan(
+        scenario_ids,
+        dataset_items,
+        n_runs,
+        execution=execution,
+        strategy=strategy,
+        design=design,
+    )
+    plan = [(sid, item, run_idx) for sid, item, run_idx in plan if item_applies(item, sid)]
+    execution = execution or {}
+    design = design or execution.get("design") or {}
+    enforce_max_executions(len(plan), execution, design=design)
+    return plan
+
+
+def _raw_plan(
+    scenario_ids: list,
+    dataset_items: list,
+    n_runs: int,
+    *,
+    execution: dict | None = None,
+    strategy: str = "coverage",
+    design: dict | None = None,
+) -> list[tuple[str, dict, int]]:
     execution = execution or {}
     design = design or execution.get("design") or {}
     mode = design.get("mode", "cartesian")
     if mode not in _MODES:
-        raise ValueError(
-            f"design.mode {mode!r} is not one of {sorted(_MODES)}"
-        )
-
+        raise ValueError(f"design.mode {mode!r} is not one of {sorted(_MODES)}")
     if mode == "coupled":
-        plan = _build_coupled_plan(design.get("couplings"), dataset_items, n_runs)
-    elif mode == "one_factor":
-        plan = _build_one_factor_plan(
-            design,
-            scenario_ids,
-            dataset_items,
-            n_runs,
-        )
-    else:
-        plan = _build_cartesian_plan(scenario_ids, dataset_items, n_runs, strategy)
-
-    enforce_max_executions(len(plan), execution, design=design)
-    return plan
+        return _build_coupled_plan(design.get("couplings"), dataset_items, n_runs)
+    if mode == "one_factor":
+        return _build_one_factor_plan(design, scenario_ids, dataset_items, n_runs)
+    return _build_cartesian_plan(scenario_ids, dataset_items, n_runs, strategy)
 
 
 def _build_cartesian_plan(
@@ -92,10 +190,7 @@ def _build_coupled_plan(
         if item_ids is None:
             selected = dataset_items
         else:
-            selected = [
-                items_by_id[iid]
-                for iid in _require_ids(item_ids, set(items_by_id), kind="item")
-            ]
+            selected = [items_by_id[iid] for iid in _require_ids(item_ids, set(items_by_id), kind="item")]
         for run_idx in range(n_runs):
             for item in selected:
                 plan.append((scenario_id, item, run_idx))
@@ -114,8 +209,7 @@ def _build_one_factor_plan(
     values = vary.get("values") or []
     if axis not in {"scenario", "item"} or not values:
         raise ValueError(
-            "design.mode is one_factor; design.vary must set axis "
-            "(scenario|item) and a non-empty values list"
+            "design.mode is one_factor; design.vary must set axis (scenario|item) and a non-empty values list"
         )
 
     scenario_set = {str(s) for s in scenario_ids}
@@ -127,10 +221,7 @@ def _build_one_factor_plan(
     )
     pinned_items = design.get("pin_items")
     if pinned_items is not None:
-        base_items = [
-            items_by_id[iid]
-            for iid in _require_ids(pinned_items, set(items_by_id), kind="item")
-        ]
+        base_items = [items_by_id[iid] for iid in _require_ids(pinned_items, set(items_by_id), kind="item")]
     else:
         base_items = dataset_items
 

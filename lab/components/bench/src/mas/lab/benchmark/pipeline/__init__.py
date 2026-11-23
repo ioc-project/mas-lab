@@ -1,12 +1,36 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
+
 """
 Pipeline system for declarative evaluation workflows.
 """
 
 
+# Register built-in artifact types.
+from mas.lab.benchmark.pipeline import types as _types  # noqa: F401
+from mas.lab.benchmark.pipeline.artifact import Artifact, ArtifactContext, ArtifactType
+from mas.lab.benchmark.pipeline.binding import (
+    bind_mapping,
+    context_bag,
+    is_binding,
+    pipeline_catalog,
+    resolve,
+)
 from mas.lab.benchmark.pipeline.cache import CacheManager
+from mas.lab.benchmark.pipeline.channel import (
+    InprocChannel,
+    LogChannel,
+    StreamFrame,
+    TelemetryChannel,
+    get_channel,
+    install_channel,
+    make_channel,
+    native_body,
+    set_channel,
+)
+from mas.lab.benchmark.pipeline.config import PipelineEngineSpec, pipeline_settings
 from mas.lab.benchmark.pipeline.core import (
     BatchPipelineStep,
     Pipeline,
@@ -25,6 +49,8 @@ from mas.lab.benchmark.pipeline.executor import (
     ExecutionPlan,
     PipelineExecutor,
 )
+from mas.lab.benchmark.pipeline.figure import FigureStep, FigureStyle
+from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.models import (
     _CONFIG_KNOWN_KEYS,
     _MISSING,
@@ -36,27 +62,17 @@ from mas.lab.benchmark.pipeline.models import (
     StepOutput,
 )
 from mas.lab.benchmark.pipeline.resolver import DependencyResolver
-from mas.lab.benchmark.pipeline.artifact import Artifact, ArtifactContext, ArtifactType
-from mas.lab.benchmark.pipeline.channel import (
-    InprocChannel,
-    LogChannel,
-    StreamFrame,
-    TelemetryChannel,
-    get_channel,
-    install_channel,
-    make_channel,
-    native_body,
-    set_channel,
-)
-from mas.lab.benchmark.pipeline.config import PipelineEngineSpec, pipeline_settings
-from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.scheduler import Scheduler
 from mas.lab.benchmark.pipeline.store import ArtifactStore
 
-# Register built-in artifact types.
-from mas.lab.benchmark.pipeline import types as _types  # noqa: F401
-
 __all__ = [
+    "FigureStep",
+    "FigureStyle",
+    "bind_mapping",
+    "context_bag",
+    "is_binding",
+    "pipeline_catalog",
+    "resolve",
     "_MISSING",
     "_STEP_KNOWN_KEYS",
     "_CONFIG_KNOWN_KEYS",

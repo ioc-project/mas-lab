@@ -4,9 +4,10 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
+
+from mas.runtime import hostenv
 
 REF_KEYS = frozenset(
     {
@@ -28,7 +29,7 @@ _OUTPUT_PATH_PARENTS = frozenset({"telemetry", "artifacts", "storage", "native"}
 
 
 def resolve_refs_enabled() -> bool:
-    return os.environ.get("MAS_MANIFEST_RESOLVE_REFS", "1") not in ("0", "false", "False")
+    return hostenv.get("MAS_MANIFEST_RESOLVE_REFS", "1") not in ("0", "false", "False")
 
 
 def _is_scheme_ref(value: str) -> bool:
@@ -76,10 +77,7 @@ def iter_ref_paths(obj: Any, prefix: str = "") -> list[tuple[str, str]]:
         for k, v in obj.items():
             p = f"{prefix}.{k}" if prefix else k
             parent_key = prefix.rsplit(".", 1)[-1] if "." in prefix else prefix
-            if k == "path" and (
-                parent_key in _OUTPUT_PATH_PARENTS
-                or "artifacts" in prefix.split(".")
-            ):
+            if k == "path" and (parent_key in _OUTPUT_PATH_PARENTS or "artifacts" in prefix.split(".")):
                 pass  # runtime output path — not a file ref
             elif k in REF_KEYS and is_path_ref(k, v):
                 found.append((p, v))
@@ -103,9 +101,7 @@ def _check_mas_workflow_ids(spec: dict[str, Any]) -> list[str]:
     node_ids = {n.get("id") for n in nodes if isinstance(n, dict) and n.get("id")}
     entry = workflow.get("entry")
     if entry and node_ids and entry not in node_ids:
-        violations.append(
-            f"spec.workflow.entry = {entry!r} — unknown node id (known: {sorted(node_ids)})"
-        )
+        violations.append(f"spec.workflow.entry = {entry!r} — unknown node id (known: {sorted(node_ids)})")
     for i, node in enumerate(nodes):
         if not isinstance(node, dict):
             continue
@@ -113,8 +109,7 @@ def _check_mas_workflow_ids(spec: dict[str, Any]) -> list[str]:
         for j, target in enumerate(node.get("delegates_to") or []):
             if node_ids and target not in node_ids:
                 violations.append(
-                    f"spec.workflow.nodes[{i}] ({node_id!r}).delegates_to[{j}] "
-                    f"= {target!r} — unknown node id"
+                    f"spec.workflow.nodes[{i}] ({node_id!r}).delegates_to[{j}] = {target!r} — unknown node id"
                 )
     return violations
 
@@ -152,9 +147,7 @@ def check_refs(data: dict[str, Any], kind: str | None, base_dir: Path | None) ->
     tools_ref = spec.get("tools_ref")
     if tools_ref and isinstance(tools_ref, str):
         if "/" in tools_ref or "\\" in tools_ref or tools_ref.endswith(".json"):
-            violations.append(
-                f"spec.tools_ref = {tools_ref!r} — must be a logical name, not a file path"
-            )
+            violations.append(f"spec.tools_ref = {tools_ref!r} — must be a logical name, not a file path")
 
     if kind == "mas":
         violations.extend(_check_mas_workflow_ids(spec))

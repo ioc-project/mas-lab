@@ -90,7 +90,7 @@ def test_ingress_denied_closes_envelope() -> None:
     assert symbols == [s.value for s in INGRESS_ENVELOPE_SYMBOLS]
 
 
-def test_hitl_skipped_still_closes_envelope() -> None:
+def test_hitl_hold_answered_by_turn_approval_still_runs_the_chain() -> None:
     q = QProduct()
     q.hitl_results_approved_turn = True
     q.pending_tool_name = "web-search"
@@ -122,7 +122,7 @@ def test_hitl_skipped_still_closes_envelope() -> None:
     symbols = [e.payload.get("symbol") for e in obs.events if e.kind == ObsEventKind.ENVELOPE_ACTIVITY]
     assert EnvelopeSymbol.OBSERVABILITY_POST_EXECUTE.value in symbols
     assert EnvelopeSymbol.CONTRACT_END.value in symbols
-    assert EnvelopeSymbol.GOVERNANCE_VALIDATE.value not in symbols
+    assert EnvelopeSymbol.GOVERNANCE_VALIDATE.value in symbols
 
 
 def test_backtrack_decision_returns_session_boundary_signal_without_committing_error():
@@ -277,6 +277,7 @@ def test_ingress_skip_of_model_tool_call_does_not_schedule_the_tool() -> None:
 def test_ingress_blacklist_skips_tool_result_and_sets_flag() -> None:
     q = QProduct()
     q.tool = ToolState.EXECUTING
+    q.pending_tool_name = "secret_tool"
     event = EngineIoReturn(
         correlation_id=3,
         response_kind="TOOL_RESULT",
@@ -284,7 +285,7 @@ def test_ingress_blacklist_skips_tool_result_and_sets_flag() -> None:
         text="secret",
     )
     q, run, _out, evaluate = _apply_ingress(GovernanceAction.BLACKLIST, event, q=q)
-    assert q.tool_blacklisted is True
+    assert q.tool_blacklist == ["secret_tool"]
     assert run.events[0].text == ""
     evaluate.assert_called_once()
 

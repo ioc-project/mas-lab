@@ -1,6 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
+
 """
 Pipeline executor with automatic dependency resolution and caching.
 """
@@ -11,9 +13,9 @@ import logging
 import re
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from dataclasses import dataclass, field
 
 try:
     import yaml as _yaml
@@ -21,25 +23,24 @@ except ImportError:  # pragma: no cover
     _yaml = None  # type: ignore[assignment]
 from datetime import datetime
 
+from mas.lab import paths as _paths
 from mas.lab.benchmark.pipeline.artifact_paths import (
     check_simple_name,
     resolve_step_root,
     validate_step_config_paths,
 )
-from mas.lab.benchmark.pipeline.core import Pipeline, PipelineStep
+from mas.lab.benchmark.pipeline.cache import CacheManager
+from mas.lab.benchmark.pipeline.core import Pipeline
 from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.resolver import DependencyResolver
-from mas.lab.benchmark.pipeline.cache import CacheManager
 from mas.lab.benchmark.pipeline.resources import (
     ResourceRegistry,
     ScopeContext,
     resolve_resource_refs,
 )
 from mas.lab.benchmark.pipeline.schema_validation import validate_payload
-from mas.lab import paths as _paths
 from mas.library_roots import find_ancestor_with_file
 from mas.runtime.constants import LAB_CONFIG_FILENAME
-
 
 logger = logging.getLogger(__name__)
 
@@ -187,9 +188,7 @@ class _TypeProgress:
             self.artifacts[name] = self.artifacts.get(name, 0) + count
         extra = _format_artifact_counts(counts)
         suffix = f"   {extra}" if extra else ""
-        self.line.finish(
-            f"{self.current}  {n}/{total}   {_format_step_duration(ms)}{suffix}"
-        )
+        self.line.finish(f"{self.current}  {n}/{total}   {_format_step_duration(ms)}{suffix}")
         self.timings.append((self.current, ms, n))
         self.current = None
         self._files = []
@@ -198,27 +197,28 @@ class _TypeProgress:
 @dataclass
 class ExecutionPlan:
     """Plan for pipeline execution."""
-    
+
     execution_order: List[str]
     """Steps in execution order."""
-    
+
     steps_to_rerun: List[str]
     """Steps that will be rerun (cache miss or force_rerun)."""
-    
+
     steps_cached: List[str]
     """Steps that will be skipped (cache hit)."""
-    
+
     execution_layers: List[List[str]]
     """Layers for parallel execution."""
-    
+
     def summary(self) -> str:
         """Human-readable summary."""
+        max_par = max(len(layer) for layer in self.execution_layers) if self.execution_layers else 0
         lines = [
-            f"Execution Plan:",
+            "Execution Plan:",
             f"  Total steps: {len(self.execution_order)}",
             f"  To rerun: {len(self.steps_to_rerun)} ({compact_step_names(self.steps_to_rerun) or 'none'})",
             f"  Cached: {len(self.steps_cached)} ({compact_step_names(self.steps_cached) or 'none'})",
-            f"  Layers: {len(self.execution_layers)} (max parallelism: {max(len(l) for l in self.execution_layers) if self.execution_layers else 0})",
+            f"  Layers: {len(self.execution_layers)} (max parallelism: {max_par})",
         ]
         return "\n".join(lines)
 
@@ -226,19 +226,19 @@ class ExecutionPlan:
 @dataclass
 class ExecutionContext:
     """Context passed to step execution."""
-    
+
     pipeline: Pipeline
     """Pipeline being executed."""
-    
+
     output_dir: Path
     """Base output directory."""
-    
+
     cache_manager: CacheManager
     """Cache manager."""
-    
+
     step_outputs: Dict[str, StepOutput] = field(default_factory=dict)
     """Outputs from completed steps."""
-    
+
     dry_run: bool = False
     """If True, don't actually execute steps."""
 
@@ -247,6 +247,8 @@ class ExecutionContext:
 
     Available for ``{key}`` substitution in step config strings.
     ``output_dir`` is always pre-populated from ``ctx.output_dir``.
+    Nested catalogs (``experiment``, ``scenarios``, ``tests``) are the
+    pipeline context: steps bind ``$scenario.metadata.legend`` against them.
     """
 
     progress_sink: Optional[Callable[[str], None]] = None
@@ -300,6 +302,28 @@ class ExecutionContext:
     published_streams: set[str] = field(default_factory=set)
     """Stream ids this context already published onto (seal, don't re-dump)."""
 
+    def emit_event(self, name: str, payload: Optional[Dict[str, Any]] = None) -> bool:
+        """Emit a named environment event into this run. False if not delivered."""
+        from mas.lab.benchmark.environment.hub import get_environment_hub
+        from mas.lab.benchmark.pipeline.keys import RunKey, run_key_from_parts
+
+        key = self.template_vars.get("run_key")
+        if isinstance(key, RunKey):
+            return bool(get_environment_hub().emit(key, name, payload or {}))
+        experiment = str(self.template_vars.get("experiment") or self.lab_name or "")
+        scenario = str(self.scope_context.scenario or self.template_vars.get("scenario") or "")
+        item = str(self.scope_context.test or self.template_vars.get("test") or "")
+        run = str(self.scope_context.run or self.template_vars.get("run") or "")
+        if experiment and scenario and item and run:
+            return bool(
+                get_environment_hub().emit(
+                    run_key_from_parts(experiment=experiment, scenario=scenario, item=item, run=run),
+                    name,
+                    payload or {},
+                )
+            )
+        return False
+
     def publish(self, record: Dict[str, Any], *, stream_id: Optional[str] = None) -> None:
         """Publish one record onto the current step's output stream during ``execute``."""
         from mas.lab.benchmark.pipeline.channel import get_channel
@@ -320,7 +344,7 @@ class ExecutionContext:
         """Get output data from a dependency step."""
         if step_name not in self.step_outputs:
             raise ValueError(f"Step '{step_name}' has not been executed yet")
-        
+
         return self.step_outputs[step_name].data
 
     def get_resource(self, name: str) -> Any:
@@ -345,7 +369,7 @@ class ExecutionContext:
         if self.resource_registry is None:
             return config
         return resolve_resource_refs(config, self.resource_registry, self.scope_context)
-    
+
     def get_step_output_dir(self, step_name: str) -> Path:
         """Get output directory for a step.
 
@@ -357,29 +381,42 @@ class ExecutionContext:
             return self.output_dir / sc.scenario / sc.test / sc.run
         check_simple_name(step_name, "name", step_name)
         return self.output_dir / "data" / step_name
-    
+
     def get_step_log_dir(self, step_name: str) -> Path:
         """Get log directory for a step."""
         check_simple_name(step_name, "name", step_name)
         return self.output_dir / "logs" / step_name
 
+    def bind(self, value: Any, datum: Optional[Dict[str, Any]] = None) -> Any:
+        """Resolve a ``$path`` binding against :attr:`pipeline_vars` (and *datum*)."""
+        from mas.lab.benchmark.pipeline.binding import context_bag, resolve
+
+        return resolve(value, context_bag(self, datum))
+
+    @property
+    def pipeline_vars(self) -> Dict[str, Any]:
+        """``$experiment`` / ``$scenario`` / ``$test`` / ``$run`` bag for this step."""
+        from mas.lab.benchmark.pipeline.binding import context_bag
+
+        return context_bag(self)
+
 
 @dataclass
 class ExecutionResult:
     """Result of pipeline execution."""
-    
+
     success: bool
     """Whether all steps succeeded."""
-    
+
     executed_steps: List[str]
     """Steps that were executed."""
-    
+
     failed_steps: List[str]
     """Steps that failed."""
-    
+
     step_outputs: Dict[str, StepOutput]
     """Outputs from all steps."""
-    
+
     duration_ms: float
     """Total execution time in milliseconds."""
 
@@ -391,7 +428,7 @@ class ExecutionResult:
 
     step_errors: Dict[str, str] = field(default_factory=dict)
     """Error message of each step that raised (steps skipped for a failed dependency have none)."""
-    
+
     def summary(self) -> str:
         """Human-readable summary."""
         status = "✓ SUCCESS" if self.success else "✗ FAILED"
@@ -399,9 +436,9 @@ class ExecutionResult:
             f"Execution Result: {status}",
             f"  Executed: {len(self.executed_steps)} steps",
             f"  Failed: {len(self.failed_steps)} steps",
-            f"  Duration: {self.duration_ms:.0f}ms ({self.duration_ms/1000:.1f}s)",
+            f"  Duration: {self.duration_ms:.0f}ms ({self.duration_ms / 1000:.1f}s)",
         ]
-        
+
         if self.failed_steps:
             lines.append(f"  Failed steps: {', '.join(self.failed_steps)}")
 
@@ -413,7 +450,7 @@ class ExecutionResult:
         if self.artifacts:
             lines.append("  Artifacts:")
             lines.append(f"    {_format_artifact_counts(self.artifacts)}")
-        
+
         return "\n".join(lines)
 
 
@@ -471,9 +508,7 @@ def _find_lab_meta(
     if config_path is None:
         return override_name, None
 
-    candidate = find_ancestor_with_file(
-        config_path.resolve().parent, LAB_CONFIG_FILENAME, stop_at_suffix=".lab"
-    )
+    candidate = find_ancestor_with_file(config_path.resolve().parent, LAB_CONFIG_FILENAME, stop_at_suffix=".lab")
     if candidate is not None:
         lab_yaml = candidate / LAB_CONFIG_FILENAME
         name = override_name
@@ -497,7 +532,7 @@ def _find_lab_meta(
 
 class PipelineExecutor:
     """Executes pipelines with dependency resolution and caching."""
-    
+
     def __init__(
         self,
         pipeline: Pipeline,
@@ -513,15 +548,11 @@ class PipelineExecutor:
         self.resource_registry = resource_registry
         self.progress = progress
         self.scope_context = scope_context or ScopeContext()
-        self.workspace_data: Optional[Path] = (
-            workspace_data if workspace_data is not None else _paths.data_root()
-        )
+        self.workspace_data: Optional[Path] = workspace_data if workspace_data is not None else _paths.data_root()
 
         # Derive lab_name and lab_data_dir by finding lab-config.yaml in parent dirs
-        self.lab_name, self.lab_data_dir = _find_lab_meta(
-            pipeline.config_path, override_name=lab_name
-        )
-        
+        self.lab_name, self.lab_data_dir = _find_lab_meta(pipeline.config_path, override_name=lab_name)
+
         # Determine output directory
         if output_dir is None:
             base_dir = pipeline.config.output.get("base_dir", "./output")
@@ -534,17 +565,17 @@ class PipelineExecutor:
                 # a config_path is available.
                 stem = pipeline.config_path.stem if pipeline.config_path else "pipeline"
                 output_dir = _paths.lab_output() / stem / Path(base_dir).name
-        
+
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Setup cache
         cache_dir = data_cache_dir if data_cache_dir is not None else self.output_dir / ".cache"
         self.cache_manager = CacheManager(cache_dir)
-        
+
         # Setup resolver
         self.resolver = DependencyResolver(pipeline)
-    
+
     async def run(
         self,
         steps: Optional[List[str]] = None,
@@ -618,14 +649,9 @@ class PipelineExecutor:
         steps_cached = []
         for step_name in execution_order:
             step = self.pipeline.get_step(step_name)
-            dep_outputs = {
-                dep: ctx.step_outputs[dep]
-                for dep in step.depends_on
-                if dep in ctx.step_outputs
-            }
-            should_rerun = (
-                step_name in force_rerun
-                or self.cache_manager.should_rerun(step, dep_outputs, self.output_dir)
+            dep_outputs = {dep: ctx.step_outputs[dep] for dep in step.depends_on if dep in ctx.step_outputs}
+            should_rerun = step_name in force_rerun or self.cache_manager.should_rerun(
+                step, dep_outputs, self.output_dir
             )
             if should_rerun:
                 steps_to_rerun.append(step_name)
@@ -640,8 +666,7 @@ class PipelineExecutor:
         logger.info(plan.summary())
         if self.progress:
             print(
-                f"\nPipeline: {len(execution_order)} steps "
-                f"({len(steps_to_rerun)} to run, {len(steps_cached)} cached)"
+                f"\nPipeline: {len(execution_order)} steps ({len(steps_to_rerun)} to run, {len(steps_cached)} cached)"
             )
             if steps_cached:
                 print(f"  cached: {compact_step_names(steps_cached)}")
@@ -692,9 +717,8 @@ class PipelineExecutor:
                 steps_to_rerun.append(step_name)
             else:
                 from mas.lab.benchmark.pipeline import StepOutput as _SO
-                restored_files = _SO(
-                    data=data, files=files, metadata={"cached": True}
-                )
+
+                restored_files = _SO(data=data, files=files, metadata={"cached": True})
                 ctx.step_outputs[step_name] = restored_files
                 _republish_cached_output(step_name, restored_files)
         type_totals: Dict[str, int] = {}
@@ -727,21 +751,21 @@ class PipelineExecutor:
     ) -> BoundPipeline:
         """Wire the stream-engine scheduler (caller drains via BoundPipeline)."""
         from mas.lab.benchmark.pipeline.adapter import LegacyStepAdapter
-        from mas.lab.benchmark.pipeline.channel import get_channel
+        from mas.lab.benchmark.pipeline.channel import get_channel, install_channel
         from mas.lab.benchmark.pipeline.config import pipeline_settings
-        from mas.lab.benchmark.pipeline.channel import install_channel
         from mas.lab.benchmark.pipeline.fanout import (
             folds_batches,
             publish_output_stream,
             pump_stream,
             stream_sealed,
         )
-        from mas.lab.benchmark.pipeline.scheduler import _fold_stream_id, _should_pump
         from mas.lab.benchmark.pipeline.keys import run_key_from_parts
         from mas.lab.benchmark.pipeline.scheduler import (
             Node,
             ResourcePool,
             Scheduler,
+            _fold_stream_id,
+            _should_pump,
             scope_parent_id,
         )
 
@@ -827,34 +851,22 @@ class PipelineExecutor:
 
                     output = _SO(data={})
                 ctx.step_outputs[node.name] = output
-                dep_outputs = {
-                    dep: ctx.step_outputs[dep]
-                    for dep in step.depends_on
-                    if dep in ctx.step_outputs
-                }
+                dep_outputs = {dep: ctx.step_outputs[dep] for dep in step.depends_on if dep in ctx.step_outputs}
                 fingerprint = self.cache_manager.compute_fingerprint(step, dep_outputs)
                 self.cache_manager.persist_output(step, fingerprint, output)
                 if type_progress is not None:
-                    type_progress.tick(
-                        step.type, n=1, files=list(output.files or [])
-                    )
+                    type_progress.tick(step.type, n=1, files=list(output.files or []))
                 return output
             await self._execute_step(node.name, ctx, progress=type_progress)
             output = ctx.step_outputs.get(node.name)
-            if (
-                channel is not None
-                and output is not None
-                and not stream_sealed(channel, node.name)
-            ):
+            if channel is not None and output is not None and not stream_sealed(channel, node.name):
                 try:
                     if node.name in ctx.published_streams:
                         channel.seal_sync(node.name)
                     else:
                         publish_output_stream(channel, node.name, output)
                 except Exception:
-                    logger.debug(
-                        "publish_output_stream skipped for %s", node.name, exc_info=True
-                    )
+                    logger.debug("publish_output_stream skipped for %s", node.name, exc_info=True)
             return output
 
         sched = Scheduler(
@@ -887,14 +899,14 @@ class PipelineExecutor:
         logger.info(f"Executing step: {step_name} (type: {step.type})")
         if progress is not None:
             progress.begin(step.type)
-        
+
         compact = len(self.pipeline.steps) > COMPACT_STEP_LIST_THRESHOLD
         if self.progress and not compact and progress is None:
             print(f"  ▶ {step_name} ({step.type}) ...", end="", flush=True)
-        
+
         step_start = datetime.now()
         ctx.current_step = step_name
-        
+
         if ctx.resource_registry is not None:
             step.config = ctx.resolve_config(step.config or {})
         step.config = self._resolve_config_templates(step.config or {}, ctx)
@@ -909,11 +921,7 @@ class PipelineExecutor:
             )
 
         schema_base_dir = self.pipeline.config_path.parent if self.pipeline.config_path else Path.cwd()
-        input_stream = {
-            dep: ctx.step_outputs[dep].data
-            for dep in step.depends_on
-            if dep in ctx.step_outputs
-        }
+        input_stream = {dep: ctx.step_outputs[dep].data for dep in step.depends_on if dep in ctx.step_outputs}
         from mas.lab.benchmark.pipeline.run_artifacts import run_input_stream
 
         run_payload = run_input_stream(ctx, step.config)
@@ -937,19 +945,15 @@ class PipelineExecutor:
             label=f"Step '{step_name}' output data",
             base_dir=schema_base_dir,
         )
-        
+
         step_duration = (datetime.now() - step_start).total_seconds() * 1000
         output.metadata["duration_ms"] = step_duration
-        
+
         # Store output
         ctx.step_outputs[step_name] = output
-        
+
         # Update cache
-        dep_outputs = {
-            dep: ctx.step_outputs[dep]
-            for dep in step.depends_on
-            if dep in ctx.step_outputs
-        }
+        dep_outputs = {dep: ctx.step_outputs[dep] for dep in step.depends_on if dep in ctx.step_outputs}
         fingerprint = self.cache_manager.compute_fingerprint(step, dep_outputs)
         self.cache_manager.persist_output(step, fingerprint, output)
 
@@ -966,7 +970,7 @@ class PipelineExecutor:
                 _cc = output.data.get("metrics_cached", 0)
                 _data_summary = f" [computed={_mc}, cached={_cc}]"
             print(f" ✓ {_format_step_duration(step_duration)}{_data_summary}{extra}")
-        
+
         logger.debug("✓ Step '%s' completed in %.0fms", step_name, step_duration)
 
     @staticmethod
@@ -1001,7 +1005,10 @@ class PipelineExecutor:
 
         # --var values may have introduced an escaping path: re-check once resolved.
         return validate_step_config_paths(
-            ctx.current_step or "?", _substitute(config), framework_injected=True, warn=False,
+            ctx.current_step or "?",
+            _substitute(config),
+            framework_injected=True,
+            warn=False,
             step_type=getattr(ctx.pipeline.get_step(ctx.current_step), "type", None),
         )
 
@@ -1011,7 +1018,7 @@ class PipelineExecutor:
         force_rerun: Optional[List[str]] = None,
     ) -> ExecutionPlan:
         """Get execution plan without running.
-        
+
         Useful for:
         - Previewing what will run
         - Understanding dependencies
@@ -1020,11 +1027,11 @@ class PipelineExecutor:
         # Build plan directly (avoid async issues)
         execution_order = self.resolver.resolve(steps)
         execution_layers = self.resolver.get_execution_layers(steps)
-        
+
         force_rerun_set = set(force_rerun or [])
         steps_to_rerun = []
         steps_cached = []
-        
+
         for step_name in execution_order:
             if step_name in force_rerun_set:
                 steps_to_rerun.append(step_name)
@@ -1035,7 +1042,7 @@ class PipelineExecutor:
                     steps_to_rerun.append(step_name)
                 else:
                     steps_cached.append(step_name)
-        
+
         return ExecutionPlan(
             execution_order=execution_order,
             steps_to_rerun=steps_to_rerun,

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from time import time
 
+from mas.runtime import hostenv
+
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
+
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -33,19 +35,21 @@ class OtlpLocalHandler(BaseHTTPRequestHandler):
         self.server.storage_path.parent.mkdir(parents=True, exist_ok=True)
         with self.server.storage_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry) + "\n")
-        self.server.hook_bus.emit({
-            "kind": "otlp_received",
-            "payload": entry,
-        })
+        self.server.hook_bus.emit(
+            {
+                "kind": "otlp_received",
+                "payload": entry,
+            }
+        )
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"{}")
 
 
 def main() -> None:
-    host = os.getenv("OTLP_LOCAL_HOST", "0.0.0.0")
-    port = int(os.getenv("OTLP_LOCAL_PORT", "4318"))
-    storage_path = Path(os.getenv("OTLP_LOCAL_LOG", "logs/otel_otlp.jsonl"))
+    host = hostenv.get("OTLP_LOCAL_HOST", "0.0.0.0")
+    port = int(hostenv.get("OTLP_LOCAL_PORT", "4318"))
+    storage_path = Path(hostenv.get("OTLP_LOCAL_LOG", "logs/otel_otlp.jsonl"))
     server = ReusableThreadingHTTPServer((host, port), OtlpLocalHandler)
     server.storage_path = storage_path
     server.hook_bus = HookBus.from_env(default_hooks="ui", source="otlp_local")

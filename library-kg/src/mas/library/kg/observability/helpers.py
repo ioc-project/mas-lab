@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Union
+
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ def ns_to_s(ns: Union[int, str, None]) -> float:
 #: Resolved from ``$MAS_TRACE_CACHE``; defaults to ``~/.mas-lab/data/trace-cache``.
 #: The run-ref indirection pattern resolves ``{root}/{run_ref}/traces/…``.
 def _resolve_trace_cache_root() -> Path:
-    raw = os.environ.get("MAS_TRACE_CACHE", "").strip()
+    raw = hostenv.get("MAS_TRACE_CACHE", "").strip()
     return Path(raw).expanduser() if raw else Path.home() / ".mas-lab" / "data" / "trace-cache"
 
 

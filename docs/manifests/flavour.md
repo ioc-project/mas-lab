@@ -14,7 +14,7 @@ plugin of its own.
 
 `spec.control` attaches [`kind: Control`](control.md) documents. `bind.events`
 names Application rows of observability sinks. `spec.require_usage` refuses an
-agent with no bind chain or agent-keyed Application row (bundled `prod` sets it).
+agent with no bind chain or agent-keyed Application row (bundled `prod` sets it). `spec.hardening` selects the [production posture](../references/hardening.md).
 Flavours also still accept leftover keys from before `bind` (`observability`,
 `telemetry`, `agent_comm`, `tools`, and a leftover `control` mapping). They are
 not what a Flavour is. Those leftover keys are accepted and read by nothing.
@@ -76,6 +76,7 @@ Its declared sections are:
 | `observability` | Deprecated and ignored. Observability is a Control entry or `--events*`. `bind.events` names sink rows. Native records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins. |
 | `control` | Control manifests this Flavour attaches: a list of `{ref, agents}`. `agents` is `$all` (default), `$entry`, `$not-entry`, `$delegates`, one agent id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`) — the same idea as `bind.agents.<id>` for one agent and the default `bind.agent_comm` chain for every agent. A leftover mapping is unread. |
 | `require_usage` | When true, every agent of the session must have a bind chain or an agent-keyed Application row. Bundled `prod` sets this. A file named `prod.yaml` does not. |
+| `hardening` | `profile: production` makes the session refuse to start when a named hardening check fails; `waive: [{check, reason}]` accepts a failure and records why. Omitted, nothing runs. Bundled `prod` sets `profile: production`; `local` sets nothing. See [hardening.md](../references/hardening.md). |
 | `tools` | Deprecated and ignored leftover tool-exposure block (not `bind.tools`). Tool exposure is infra; `bind.tools` picks a Stack. |
 | `config` | Free-form deployment configuration. Never store secret values. |
 | `operator` | Operator/provisioner metadata. |
@@ -174,7 +175,7 @@ spec:
 
 `structured` is opt-in. It injects `response_format` into the in-flight chat and returns a validated `parsed` object on the same provider result path. Omit the stack (or the schema) and the call is unchanged.
 
-Bundled names: `local` (in-process, the default) and `prod` (`require_usage`: every agent must have a bind chain or an agent-keyed Application row). `--connect` / `--listen` / `--bind` write agent-keyed Application rows; they are not copied into Flavour `bind`.
+Bundled names: `local` (in-process, the default) and `prod` (`require_usage`: every agent must have a bind chain or an agent-keyed Application row; `hardening.profile: production`: a failed hardening check refuses the session, a listener must verify its callers, and the `with-hardened` Control is attached to every agent; a `waive` entry in your own Flavour is the explicit, logged escape hatch). `--connect` / `--listen` / `--bind` write agent-keyed Application rows; they are not copied into Flavour `bind`.
 
 An agent with no entry rides the default chain with `connect`; with no default
 chain it keeps the in-process link. Set `listen` (on the agent, or as `bind.usage`)

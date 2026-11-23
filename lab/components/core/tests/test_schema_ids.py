@@ -72,6 +72,31 @@ def test_schema_registry_rebuilds_on_same_size_rewrite_with_mtime_held(tmp_path:
     assert second.contents("mas-test/same")["type"] == "string"
 
 
+def test_schema_registry_skips_stamp_when_batch_cache_holds_it(tmp_path: Path, monkeypatch) -> None:
+    from mas.lab.schemas import validate as schema_mod
+    from mas.runtime.spec.batch_cache import BatchCache, bind_batch_cache, reset_batch_cache
+
+    path = tmp_path / "sample.schema.yaml"
+    path.write_text("$id: mas-test/batch\ntype: object\n", encoding="utf-8")
+    cache = BatchCache()
+    token = bind_batch_cache(cache)
+    stamps = {"n": 0}
+    real = schema_mod._schema_dir_stamp
+
+    def wrapped(root: Path) -> object:
+        stamps["n"] += 1
+        return real(root)
+
+    monkeypatch.setattr(schema_mod, "_schema_dir_stamp", wrapped)
+    try:
+        first = schema_registry_from_dir(tmp_path)
+        second = schema_registry_from_dir(tmp_path)
+        assert first is second
+        assert stamps["n"] == 1
+    finally:
+        reset_batch_cache(token)
+
+
 def test_clear_schema_registry_cache_empties_the_cache(tmp_path: Path) -> None:
     path = tmp_path / "sample.schema.yaml"
     path.write_text("$id: mas-test/clear\ntype: object\n", encoding="utf-8")

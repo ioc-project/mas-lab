@@ -112,7 +112,26 @@ def _wrapped_tool_fn(
             from library_ioa.plugins.mcp.contract import as_mcp_tool_result
 
             ctx = kwargs.pop("ctx", None)
-            result = await _invoke_tool(tool_instance, tool_name, kwargs, ctx=ctx, accepts_context=accepts_context)
+            from library_ioa.plugins.mcp.hooks import (
+                emit_call_completed,
+                emit_call_error,
+                emit_call_received,
+                hooks_enabled,
+                new_call_key,
+            )
+
+            announce = hooks_enabled()
+            key = new_call_key(tool_name) if announce else ""
+            if announce:
+                emit_call_received(tool=tool_name, source="", target="", key=key)
+            try:
+                result = await _invoke_tool(tool_instance, tool_name, kwargs, ctx=ctx, accepts_context=accepts_context)
+            except BaseException as exc:
+                if announce:
+                    emit_call_error(side="server", tool=tool_name, key=key, error_type=type(exc).__name__)
+                raise
+            if announce:
+                emit_call_completed(side="server", tool=tool_name, source="", target="", key=key)
             return as_mcp_tool_result(result)
 
     else:
@@ -121,9 +140,27 @@ def _wrapped_tool_fn(
             from library_ioa.plugins.mcp.contract import as_mcp_tool_result
 
             ctx = kwargs.pop("ctx", None)
-            return as_mcp_tool_result(
-                _invoke_tool(tool_instance, tool_name, kwargs, ctx=ctx, accepts_context=accepts_context)
+            from library_ioa.plugins.mcp.hooks import (
+                emit_call_completed,
+                emit_call_error,
+                emit_call_received,
+                hooks_enabled,
+                new_call_key,
             )
+
+            announce = hooks_enabled()
+            key = new_call_key(tool_name) if announce else ""
+            if announce:
+                emit_call_received(tool=tool_name, source="", target="", key=key)
+            try:
+                result = _invoke_tool(tool_instance, tool_name, kwargs, ctx=ctx, accepts_context=accepts_context)
+            except BaseException as exc:
+                if announce:
+                    emit_call_error(side="server", tool=tool_name, key=key, error_type=type(exc).__name__)
+                raise
+            if announce:
+                emit_call_completed(side="server", tool=tool_name, source="", target="", key=key)
+            return as_mcp_tool_result(result)
 
     wrapped.__name__ = tool_name
     wrapped.__doc__ = description

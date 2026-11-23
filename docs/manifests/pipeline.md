@@ -6,9 +6,11 @@
 
 **Package:** `lab/components/bench`.
 
-A **pipeline** is an ordered list of **pipeline steps** that read **run** artifacts and write CSV and PNG files under `results/`.
+A **pipeline** is an ordered list of **pipeline steps** attached as `pre:` or `post:` on a level.
 A pipeline step is one processor, for example `extract_trace_stats` or `plotnine`.
 A run is one execution of the MAS for a scenario, a dataset item, and a repeat index. It writes `events.jsonl`.
+`pre:` runs before that level (no telemetry yet). `post:` reads artifacts the level produced: one run, or a group of runs (metrics, then a figure).
+`run.post` may fold events as they arrive (`on_batch`) or wait until the run is done (`execute`). Both are `post`. YAML `realtime:` selects the mode when a class implements both handlers; execute-only is enough for non-realtime. Converter `realtime:` and leftover `role: batch` are not this axis.
 Write a pipeline when you need to turn raw run output into tables, plots, or scores.
 
 Two file formats exist. Do not mix them in one file.
@@ -34,6 +36,9 @@ Related commands:
 - `mas-lab benchmark pipeline show`: show steps and dependencies.
 - `mas-lab benchmark pipeline validate`: check steps, dependencies, and types.
 - `mas-lab validate pipeline.yaml`: schema check of a `pipeline:` file.
+
+A live `run.post` step can emit an environment event (`ctx.emit_event`) that
+triggers world actions in the same run. See [environment.md](environment.md).
 
 Terms: [glossary.md](../glossary.md). Hands-on: [Tutorial 3](../tutorials/03-experiments-and-analysis/README.md).
 
@@ -70,6 +75,15 @@ pipeline:
 String values in a step's `config` may use any `{key}` passed with `--var key=value`.
 Unknown placeholders stay as written.
 Environment variables are not substituted.
+
+A value that is `$path` is a **runtime binding** into the pipeline context
+(`$experiment`, `$scenario`, `$test`, `$run`, `$artefact`, `$row`). Anything
+else is free text. Write `$$foo` for a literal `$foo`. This is how plot
+keys (and any other step config) map experiment or artefact metadata the
+way ggplot maps aesthetics: `title: Session trajectories` is constant,
+`legend: $scenario.metadata.legend` is per series. Context is injected
+when the step runs, so a standalone pipeline file reused with several
+experiments keeps working. See [pipeline.md](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline.md#pipeline-context-path).
 
 Steps reference upstream outputs by step name (`@step`) or by a path relative to their level
 folder (see [Output locations](#output-locations)).
@@ -190,7 +204,8 @@ They are written to files or infra sinks when a step sets `outputs` paths.
   Metric ticks are ingest-only. They are not republished onto the native run stream.
   `events.jsonl` is the log-sink export of that stream. Consumers do not tail it.
 - **Step keys** (standalone `pipeline:` files):
-    - `role`: `native`, `wrap`, or `batch` (default `batch`).
+    - `role`: leftover v2 class tag (`native`, `wrap`, or `batch`; default `batch`). The scheduler ignores it. Not the realtime axis.
+    - `realtime`: `true` folds `on_batch` as records arrive; `false` waits until every input has arrived. Omit when the class has only one handler. This is a step key, not a figure `config` key.
     - `resource`: `cpu`, `io`, `net`, or `judge` (default `cpu`).
     - `concurrency: N`: per-type semaphore (default 1).
     - `refresh: progressive`: UI-only partial re-evaluation, never persisted.
@@ -218,6 +233,7 @@ See [CLI commands and their pipelines](https://github.com/ioc-project/mas-lab/bl
 ## See also
 
 - [experiment.md](experiment.md)
+- [environment.md](environment.md): world around a run; `service_start` stays the pipeline pre/post pair
 - [lab.md](lab.md)
 - [summarization.md](summarization.md): `eval_mce` judge model
 - [Pipeline guide](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/pipeline.md)

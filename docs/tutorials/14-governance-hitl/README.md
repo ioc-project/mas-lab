@@ -31,7 +31,7 @@ applies, and `--control` attaches it. All files are in `docs/tutorials/14-govern
 | `controls/governance-auto-approve.yaml`, `governance-auto-deny.yaml` | 5 | Decide without a person |
 | `overlays/agent-asks-user.yaml` | 7 | Agent asks a question |
 
-The runtime enforces the rule. The agent cannot bypass it by changing its
+The harness enforces the rule. The agent cannot bypass it by changing its
 answer or tool arguments. The flow is: the agent proposes a tool call, a rule
 asks for approval, a reject stops it, an approval runs the tool, and an
 optional second approval comes before the model sees the result.
@@ -249,7 +249,10 @@ class ReadOnlyToolsOnly:
 
 For production, use the typed
 [`GovernancePlugin` contract](https://github.com/ioc-project/mas-lab/blob/main/runtime/src/mas/runtime/boundary/gov/plugin.py)
-and register the plugin in a library. Rules run in listed order. `ALLOW`
+and register the plugin in a library. A plugin that holds a call can also check
+the human's answer with `evaluate_hitl_resolve(request, resolve)`; see
+[Checking a HITL answer](../../manifests/governance.md#checking-a-hitl-answer).
+Rules run in listed order. `ALLOW`
 passes to the next rule, and `BLOCK` stops at once.
 
 ## What you learned
@@ -257,7 +260,8 @@ passes to the next rule, and `BLOCK` stops at once.
 1. Governance rules, not prompts, decide whether a tool runs.
    `hitl_on_tool` pauses before the call and `hitl_on_tool_result` before the
    model sees the result.
-2. Batch and CI runs need an explicit `auto-approve` or `auto-deny` Control.
+2. Batch and CI runs refuse a hold unless a Control sets `auto-approve`;
+   `auto-deny` says it outright.
    `BLOCK` / auto-deny stops the tool and ends the turn with the operator
    denial. `SKIP` with steering lets the model continue from that text. The
    decision, operator, and steering land in `traces/events.jsonl`.

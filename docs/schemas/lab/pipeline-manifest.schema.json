@@ -93,6 +93,10 @@
                 "enum": ["run", "test", "scenario", "application", "experiment"],
                 "description": "(v2) Execution scope, normally inferred from the enclosing experiment-level block."
               },
+              "realtime": {
+                "type": "boolean",
+                "description": "When the class implements both on_batch and execute: true folds as records arrive; false waits until every input has arrived. Step key, not a figure config key."
+              },
               "config": {
                 "type": "object"
               }

@@ -702,9 +702,9 @@ class StateMachinePlugin(_DeterministicBase):
     def _make_state(self) -> _MachineState:
         return _MachineState()
 
-    def _reset_state(self, participants: list[str], task: str) -> _MachineState:  # type: ignore[override]
+    def _reset_state(self, participants: list[str], task: str, q: QProduct | None = None) -> _MachineState:  # type: ignore[override]
         self._failure, self._result, self._finished = "", "", False
-        return super()._reset_state(participants, task)  # type: ignore[return-value]
+        return super()._reset_state(participants, task, q=q)  # type: ignore[return-value]
 
     def _state(self) -> _MachineState:  # type: ignore[override]
         return self._turn_state  # type: ignore[return-value]

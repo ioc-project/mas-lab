@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from mas.library.standard.lib.observability.emit import JsonlFileEmitter
 from mas.library.standard.lib.observability.native.envelope import stamp_envelope_fields
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
@@ -155,6 +156,47 @@ def test_native_jsonl_plugin_contract_call_alone_produces_no_llm_call(tmp_path) 
         )
     )
     assert not any("llm_call" in line for line in events_path.read_text().splitlines())
+
+
+def test_native_plugin_close_closes_jsonl_handle(tmp_path, monkeypatch) -> None:
+    import os
+
+    events_path = tmp_path / "events.jsonl"
+    real_open = os.open
+    held: list[int] = []
+
+    def recording_open(path, flags, *args, **kwargs):  # noqa: ANN001
+        fd = real_open(path, flags, *args, **kwargs)
+        held.append(fd)
+        return fd
+
+    monkeypatch.setattr(os, "open", recording_open)
+    emitter = JsonlFileEmitter(events_path)
+    monkeypatch.undo()
+    plugin = NativeObservabilityPlugin(
+        transforms=[NativeObservabilityTransform()],
+        emitters=[emitter],
+        context=TransformContext(agent_id="planner", run_id="run-1"),
+    )
+    plugin.on_transition(
+        TransitionEvent(
+            contract_id="tool",
+            mealy_symbol="TOOL_CALL",
+            phase="start",
+            agent_id="planner",
+            run_id="run-1",
+            correlation_id=1,
+            boundary_kind="engine.io",
+            attributes={"op": "TOOL_CALL", "tool_name": "lookup_schedule"},
+        )
+    )
+    [fd] = held
+    os.fstat(fd)
+    plugin.close()
+    with pytest.raises(OSError):
+        os.fstat(fd)
+    lines = [json.loads(line) for line in events_path.read_text().splitlines() if line.strip()]
+    assert lines[0]["kind"] == "tool_call_start"
 
 
 def test_native_from_binding_uses_mas_name(tmp_path) -> None:

@@ -11,6 +11,8 @@ from pathlib import Path
 import opentelemetry.sdk  # noqa: F401  (part of the [dev] extra; a missing install fails here)
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 # test-only helpers shared with the other library suites; shipped in no package
 _SUPPORT = Path(__file__).resolve().parents[2] / "tests" / "support"
 if str(_SUPPORT) not in sys.path:

@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
+from mas.library.standard.lib.comm.text import safe_text
 from mas.runtime.registry.provider_protocol import ToolProvider
 from mas.runtime.spec.endpoint_usage import usage_connects
 
@@ -172,8 +173,11 @@ class MCPToolProvider(ToolProvider):
     def _list_user(self, ctx: Any) -> str:
         return str(getattr(ctx, "user", "") or "")
 
+    def _list_agent_id(self, ctx: Any) -> str:
+        return str(getattr(ctx, "agent_id", "") or "")
+
     def _list_coro(self, ctx: Any):
-        return self._client.list_tools(user=self._list_user(ctx))
+        return self._client.list_tools(user=self._list_user(ctx), agent_id=self._list_agent_id(ctx))
 
     def close(self) -> None:
         """Close the held MCP session (and a stdio server process). Idempotent."""
@@ -198,7 +202,8 @@ class MCPToolProvider(ToolProvider):
             tools = self._run(self._list_coro(ctx))
             return [as_mas_tool_spec(item) for item in (tools or []) if isinstance(item, dict)]
         except Exception as exc:
-            logger.error("Failed to list tools from MCP client: %s", exc, exc_info=True)
+            logger.error("Failed to list tools from MCP client: %s", safe_text(exc))
+            logger.debug("MCP tool list traceback", exc_info=True)
             raise
 
     def list_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
@@ -234,5 +239,6 @@ class MCPToolProvider(ToolProvider):
                 mapped.setdefault("tool", tool_name)
             return mapped
         except Exception as exc:
-            logger.error("Error calling MCP tool %s: %s", tool_name, exc, exc_info=True)
+            logger.error("Error calling MCP tool %s: %s", safe_text(tool_name), safe_text(exc))
+            logger.debug("MCP tool call traceback", exc_info=True)
             return translate_mcp_error(exc)

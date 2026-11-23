@@ -82,6 +82,10 @@ class PipelineStepSpec:
     resource: str = "cpu"
     refresh: str = ""
     batch: Dict[str, Any] = field(default_factory=dict)
+    realtime: Optional[bool] = None
+    """When the class implements both ``on_batch`` and ``execute``, YAML
+    ``realtime:`` picks the mode. ``true`` folds as records arrive.
+    ``false`` waits until every input has arrived. Omitted: class default."""
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PipelineStepSpec":
@@ -96,6 +100,10 @@ class PipelineStepSpec:
         )
 
         step_label = step_config_label(data)
+        raw_realtime = data.get("realtime")
+        if raw_realtime is not None and not isinstance(raw_realtime, bool):
+            raise ValueError(f"step {step_label}: realtime must be true or false, got {raw_realtime!r}")
+        realtime = raw_realtime
         return cls(
             type=data["type"],
             name=data.get("name"),
@@ -104,9 +112,7 @@ class PipelineStepSpec:
             concurrency=int(data.get("concurrency", 1)),
             phase=data.get("phase", "post"),
             scope=data.get("scope", ""),
-            config=validate_step_config_paths(
-                step_label, data.get("config", {}), step_type=str(data["type"])
-            ),
+            config=validate_step_config_paths(step_label, data.get("config", {}), step_type=str(data["type"])),
             depends_on=data.get("depends_on", []),
             inputs=inputs,
             outputs=outputs,
@@ -114,6 +120,7 @@ class PipelineStepSpec:
             resource=str(data.get("resource") or "cpu"),
             refresh=str(data.get("refresh") or ""),
             batch=dict(data.get("batch") or {}),
+            realtime=realtime,
         )
 
 
@@ -129,7 +136,7 @@ def _confined_artifact_template(name: str, path: str) -> str:
     head = ""
     for prefix in ("{run_dir}", "{level_dir}", "{scenario_dir}"):
         if path.startswith(prefix):
-            head, path = prefix + "/", path[len(prefix):].lstrip("/\\")
+            head, path = prefix + "/", path[len(prefix) :].lstrip("/\\")
             break
     return head + str(normalize_relative_value(f"artifact {name}", "path", path))
 
@@ -189,11 +196,7 @@ class ArtifactSpec:
         ``plot`` artifacts do not collapse onto ``plot.png``.
         """
         if self.path:
-            parts = [
-                p
-                for p in Path(self.path).parts
-                if not (p.startswith("{") and p.endswith("}"))
-            ]
+            parts = [p for p in Path(self.path).parts if not (p.startswith("{") and p.endswith("}"))]
             return Path(*parts) if parts else Path(Path(self.path).name)
         fmt = self.format
         return Path(self.name if not fmt else f"{self.name}.{fmt}")
@@ -222,6 +225,7 @@ class ArtifactSpec:
 # ---------------------------------------------------------------------------
 # LevelSpec — artifacts + pipeline at a hierarchy level
 # ---------------------------------------------------------------------------
+
 
 def _pipeline_ref_raw(entry: dict) -> Optional[str]:
     """Return a library id / file path from ``{ref:}`` or ``{id:}`` wrappers."""
@@ -289,13 +293,9 @@ def _expand_pipeline_entries(
             continue
         if isinstance(entry, dict) and "steps" in entry:
             for step in entry["steps"]:
-                steps.append(
-                    PipelineStepSpec.from_dict({**step, "scope": level, "phase": phase})
-                )
+                steps.append(PipelineStepSpec.from_dict({**step, "scope": level, "phase": phase}))
         elif isinstance(entry, dict) and "type" in entry:
-            steps.append(
-                PipelineStepSpec.from_dict({**entry, "scope": level, "phase": phase})
-            )
+            steps.append(PipelineStepSpec.from_dict({**entry, "scope": level, "phase": phase}))
         else:
             raise ValueError(
                 f"{level}.{phase}: each entry must be a step object, "
@@ -334,27 +334,13 @@ class LevelSpec:
         base_dir: Optional[Path] = None,
     ) -> "LevelSpec":
         if "pipeline" in data:
-            raise ValueError(
-                f"experiment.{level}.pipeline is removed; use {level}.pre or {level}.post"
-            )
-        artifacts = [
-            ArtifactSpec.from_entry(name, value)
-            for name, value in data.get("artifacts", {}).items()
-        ]
+            raise ValueError(f"experiment.{level}.pipeline is removed; use {level}.pre or {level}.post")
+        artifacts = [ArtifactSpec.from_entry(name, value) for name, value in data.get("artifacts", {}).items()]
         pipeline: List[PipelineStepSpec] = []
-        pipeline.extend(
-            _expand_pipeline_entries(
-                data.get("pre", []), level=level, phase="pre", base_dir=base_dir
-            )
-        )
-        pipeline.extend(
-            _expand_pipeline_entries(
-                data.get("post", []), level=level, phase="post", base_dir=base_dir
-            )
-        )
+        pipeline.extend(_expand_pipeline_entries(data.get("pre", []), level=level, phase="pre", base_dir=base_dir))
+        pipeline.extend(_expand_pipeline_entries(data.get("post", []), level=level, phase="post", base_dir=base_dir))
         for step in pipeline:
             if not step.scope:
                 step.scope = level
         n_runs = data.get("n_runs") if level == "run" else None
         return cls(level=level, artifacts=artifacts, pipeline=pipeline, n_runs=n_runs)
-

@@ -642,7 +642,7 @@ It sets only the required connection fields, and runtime defaults supply the opt
 | `headers` | `{}` | Omit unless auth is needed. Secrets: `env:VAR` (unset omits the header) |
 | `timeout` | `30` | Per-call timeout (seconds) |
 | `follow_pagination` | `true` | Walk MCP `nextCursor` and flatten |
-| `cache_ttl_ms` | omit | Client list-cache TTL in ms (`0` disables; omit caches until invalidate) |
+| `cache_ttl_ms` | omit | Client list-cache TTL in ms (`0` disables; omit uses the server's `ttlMs`, else 60 s; `notifications/tools/list_changed` or a failed tool call drops it sooner) |
 | `cache_scope` | omit | `public` \| `private` (private keys the list cache by user) |
 | `tools` | `"*"` | Discover all names, or declare an explicit list in infra |
 

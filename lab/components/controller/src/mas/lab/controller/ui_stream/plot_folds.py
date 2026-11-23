@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import importlib
 import json
-import os
 import re
 from typing import Any, Callable
 
 from mas.lab.controller.ui_stream.refs import DataSourceRef
 from mas.lab.controller.ui_stream.spec_snapshot import _HUB_HINTS, _HUB_TOOLS, pick_entry
+from mas.runtime import hostenv
 from mas.runtime.boundary.delegation.policy import parse_delegate_tool_name
 
 _CHANNEL_SPLIT = re.compile(r"<\|?channel\|?>", re.I)
@@ -288,9 +288,7 @@ def fold_chat_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str, A
         if delegate and state.pop("_open_group", None) == agent:
             prev = _latest_reply(cards, agent)
             force = prev is not None and bool(prev.get("tools"))
-        bubble = _open_turn(
-            cards, agent, depth=_bubble_depth(state, agent), t=t, for_tool=True, force=force
-        )
+        bubble = _open_turn(cards, agent, depth=_bubble_depth(state, agent), t=t, for_tool=True, force=force)
         state["_delegates"] = inflight
         tools = list(bubble.get("tools") or [])
         tools.append(
@@ -502,7 +500,7 @@ def load_ui_folds() -> list[Any]:
         seen.add(token)
         folds.append(obj() if isinstance(obj, type) else obj)
 
-    for spec in str(os.environ.get("MAS_UI_FOLDS") or "").split(","):
+    for spec in str(hostenv.get("MAS_UI_FOLDS") or "").split(","):
         spec = spec.strip()
         if not spec:
             continue
@@ -516,11 +514,7 @@ def load_ui_folds() -> list[Any]:
         from importlib.metadata import entry_points
 
         eps = entry_points()
-        group = (
-            eps.select(group="mas.lab.ui.folds")
-            if hasattr(eps, "select")
-            else eps.get("mas.lab.ui.folds", [])
-        )
+        group = eps.select(group="mas.lab.ui.folds") if hasattr(eps, "select") else eps.get("mas.lab.ui.folds", [])
         for ep in group or []:
             try:
                 add(ep.load(), f"ep:{getattr(ep, 'name', ep)}")
@@ -600,9 +594,7 @@ class LivePlotFolds:
         key: str,
         record: dict[str, Any],
     ) -> None:
-        state = self._topo.setdefault(
-            key, {"kind": "topology", "nodes": [], "edges": [], "activity": []}
-        )
+        state = self._topo.setdefault(key, {"kind": "topology", "nodes": [], "edges": [], "activity": []})
         prev = _blob(state)
         fold_topology_event(state, record)
         if _blob(state) != prev:

@@ -35,9 +35,11 @@ from mas.runtime.kernel.hitl_gate import emit_egress_hitl_pause
 from mas.runtime.kernel.inflight import register_inflight
 from mas.runtime.kernel.state import (
     DpState,
+    LifecycleState,
     QProduct,
     RunLedger,
     ScheduledEgress,
+    end_turn,
 )
 from mas.runtime.kernel.types import InflightKind
 from mas.runtime.machines.memory import memory_on_egress_start
@@ -64,10 +66,19 @@ def _append_synthetic_skip(
     q: QProduct,
     run: RunLedger,
     *,
+    cid: int,
+    call_id: str = "",
     text: str = "",
     next_step: str = "STOP",
 ) -> None:
-    run.append_placeholder(text=text, next_step=next_step)
+    run.append_placeholder(
+        cid=cid,
+        text=text,
+        next_step=next_step,
+        call_id=call_id,
+        tool_name=q.pending_tool_name,
+        tool_arguments=q.pending_tool_args,
+    )
     q.model = model_on_abort(q.model)
     q.tool = tool_on_abort(q.tool)
     q.inflight_kind = "NONE"
@@ -81,6 +92,7 @@ def _record_blocked_tool(
     *,
     cid: int,
     text: str,
+    call_id: str = "",
 ) -> None:
     """Write the denial as this tool's result. The call does not run.
 
@@ -90,7 +102,14 @@ def _record_blocked_tool(
     q.scheduled_egress = "NONE"
     q.inflight_kind = "NONE"
     q.tool = tool_on_abort(q.tool)
-    run.append_placeholder(cid=cid, text=text, next_step="LLM_CALL")
+    run.append_placeholder(
+        cid=cid,
+        text=text,
+        next_step="LLM_CALL",
+        tool_name=q.pending_tool_name,
+        tool_arguments=q.pending_tool_args,
+        call_id=call_id,
+    )
     q.dp = DpState.EVALUATING
     control_on_idle(q)
 
@@ -130,8 +149,8 @@ def _envelope_context(
         scheduled_op=op,
         observability=get_bound_observability(),
         config=config,
-        tool_name=q.pending_tool_name,
-        tool_arguments=dict(q.pending_tool_args or {}),
+        tool_name=q.pending_tool_name if op == "TOOL_CALL" else "",
+        tool_arguments=dict(q.pending_tool_args or {}) if op == "TOOL_CALL" else {},
         destructive=destructive,
         hitl_gov_override=hitl_override,
     )
@@ -151,6 +170,7 @@ class AuthorizedEgress:
     cid: int
     view: EgressIntentView
     decision: GovDecision
+    call_id: str = ""
 
 
 def emit_scheduled_egress(
@@ -172,9 +192,24 @@ def authorize_scheduled_egress(
     """Run the chokepoint. A list is the final answer; ``AuthorizedEgress`` still needs a commit."""
     if q.scheduled_egress == "NONE":
         return [NoOp()]
-    if q.tool_blacklisted and q.scheduled_egress == "TOOL_CALL":
+    if q.ctrl != LifecycleState.RUNNING:
+        # No egress while paused or stopped: drop the call and leave the kernel idle (pending holds stay).
+        end_turn(q, keep_holds=True)
+        return [NoOp()]
+    # A human approval covers the call it was asked for: take it now, so a path
+    # that returns before the commit cannot leave it for the next call.
+    approved_call = q.hitl_gov_override
+    q.hitl_gov_override = False
+    # The id of this call if it was judged before (held, or retried); likewise taken now.
+    call_cid = q.call_cid
+    q.call_cid = 0
+    call_id = q.pending_call_id
+    q.pending_call_id = ""
+    # The call's id, fixed here so that every path that answers it (skip, block, run) answers under it.
+    cid = call_cid or run.allocate_correlation_id()
+    if q.scheduled_egress == "TOOL_CALL" and q.pending_tool_name in q.tool_blacklist:
         q.scheduled_egress = "NONE"
-        _append_synthetic_skip(q, run)
+        _append_synthetic_skip(q, run, cid=cid, call_id=call_id)
         return [NoOp()]
 
     op = q.scheduled_egress
@@ -183,16 +218,17 @@ def authorize_scheduled_egress(
         _append_synthetic_skip(
             q,
             run,
+            cid=cid,
+            call_id=call_id,
             text="Tool call suppressed after operator HITL block.",
         )
         return [NoOp()]
 
     enter_egress_chokepoint(q)
     coord_before_egress(q)
-    cid = run.allocate_correlation_id()
     destructive = _destructive_for_op(op, config)
     hitl_override = bool(
-        q.hitl_gov_override or (config.hitl_once_per_turn and q.hitl_tools_approved_turn and op == "TOOL_CALL")
+        approved_call or (config.hitl_once_per_turn and q.hitl_tools_approved_turn and op == "TOOL_CALL")
     )
     env_ctx = _envelope_context(
         q,
@@ -213,8 +249,8 @@ def authorize_scheduled_egress(
         op=op,
         destructive=destructive,
         correlation_id=cid,
-        tool_name=q.pending_tool_name,
-        tool_arguments=q.pending_tool_args,
+        tool_name=q.pending_tool_name if op == "TOOL_CALL" else "",
+        tool_arguments=q.pending_tool_args if op == "TOOL_CALL" else {},
         offered_tools=q.offered_tools,
         running_spec=q.running_spec,
     )
@@ -225,6 +261,7 @@ def authorize_scheduled_egress(
                 q,
                 cid=cid,
                 op=op,
+                call_id=call_id,
                 question="Approve tool call?",
                 question_type=HitlQuestionType.CONFIRM,
                 offered_actions=[
@@ -261,7 +298,7 @@ def authorize_scheduled_egress(
             # that left a wait open while other tools in the same reply were
             # still starting. Ask the model after the batch, as for a result.
             coord_on_egress_blocked(q)
-            _record_blocked_tool(q, run, cid=cid, text=block_reason)
+            _record_blocked_tool(q, run, cid=cid, text=block_reason, call_id=call_id)
             return [NoOp()]
         apply_gov_block(q)
         coord_on_egress_blocked(q)
@@ -281,10 +318,10 @@ def authorize_scheduled_egress(
 
     if decision in {GovDecision.SKIP, GovDecision.BLACKLIST}:
         close_envelope(env_ctx, error=decision.value)
-        if decision == GovDecision.BLACKLIST:
-            q.tool_blacklisted = True
+        if decision == GovDecision.BLACKLIST and op == "TOOL_CALL" and q.pending_tool_name not in q.tool_blacklist:
+            q.tool_blacklist.append(q.pending_tool_name)
         q.scheduled_egress = "NONE"
-        _append_synthetic_skip(q, run)
+        _append_synthetic_skip(q, run, cid=cid, call_id=call_id)
         return [NoOp()]
 
     if decision == GovDecision.RETRY:
@@ -294,10 +331,15 @@ def authorize_scheduled_egress(
             return [RaiseBoundaryError(code="GOV_RETRY_EXHAUSTED", recoverable=True)]
         q.gov_retry_count += 1
         q.dp = DpState.EGRESS_PENDING
-        return [NoOp()]
+        # The same call goes through the chain again under the same id, so a plugin that counts calls counts
+        # it once, and a human approval already given still covers it. Bounded: the count above ends it.
+        q.call_cid = cid
+        q.pending_call_id = call_id
+        q.hitl_gov_override = approved_call
+        return authorize_scheduled_egress(q, run, config)
 
     view = apply_egress_modify(view, GovernanceAction(decision.value))
-    return AuthorizedEgress(env_ctx=env_ctx, cid=cid, view=view, decision=decision)
+    return AuthorizedEgress(env_ctx=env_ctx, cid=cid, view=view, decision=decision, call_id=call_id)
 
 
 def abandon_egress(authorized: AuthorizedEgress, *, error: str = "BATCH_ABORTED") -> None:
@@ -308,10 +350,11 @@ def abandon_egress(authorized: AuthorizedEgress, *, error: str = "BATCH_ABORTED"
 def commit_egress(q: QProduct, authorized: AuthorizedEgress) -> list[EgressSymbol]:
     """Register the wait and emit the engine call for an authorized egress."""
     cid, view, decision = authorized.cid, authorized.view, authorized.decision
-    q.hitl_gov_override = False
     _apply_engine_allow(q, view)
     egress_kind: InflightKind = "MODEL" if view.op == "LLM_CALL" else "TOOL"
     register_inflight(q, cid, kind=egress_kind, op=view.op)
+    if authorized.call_id:
+        q.call_slots[cid] = authorized.call_id
     q.pending_engine_correlation_id = cid
     coord_after_egress_allowed(q)
 

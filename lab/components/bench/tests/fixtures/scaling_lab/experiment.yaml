@@ -1,0 +1,49 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+experiment:
+  name: lab-run-throughput
+  description: >
+    Loopback fixture: one agent, a scripted OpenAI-compatible model, a
+    loopback MCP tool server, 24 items. Items in group wall-clock sleep;
+    skip them when comparing result rows.
+  default_flavour: local
+  default_infra: loopback
+  models:
+    main: gpt-4o-mini
+  application:
+    manifest: ./agent.yaml
+    configs_dir: ./overlays
+  scenarios:
+    - id: work
+      overlays:
+        logic: [work]
+        control: []
+        infra: []
+  dataset:
+    path: ./dataset.yaml
+  bench_emulation:
+    runtime:
+      cache: disabled
+  run:
+    n_runs: 1
+  schedule:
+    parallel_scenarios: 1
+    pause_between_runs: 0
+    max_attempts: 1
+    retry_backoff_s: 0
+    ordering: coverage
+    timeout: 120
+  pre:
+    - name: start-tools
+      type: service_start
+      config: {service: fake-tools, infra: services, health_timeout: 20}
+    - name: start-model
+      type: service_start
+      config: {service: fake-model, infra: services, health_timeout: 20}
+  post:
+    - name: stop-tools
+      type: service_stop
+      config: {service: fake-tools, infra: services}
+    - name: stop-model
+      type: service_stop
+      config: {service: fake-model, infra: services}

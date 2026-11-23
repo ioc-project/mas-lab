@@ -1,0 +1,919 @@
+{
+  "protocol": "a2a",
+  "scenario": "failure",
+  "sdk_version": "1.1.5",
+  "span_count": 66,
+  "spans": [
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 117, in _dispatch_loop\n    event = await self._incoming_queue.get()\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjor\u2026[truncated]",
+            "exception.type": "asyncio.exceptions.CancelledError"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._dispatch_loop",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-2",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.remove_sink",
+      "parent_span_id": "$span-6",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-5",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 117, in _dispatch_loop\n    event = await self._incoming_queue.get()\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjor\u2026[truncated]",
+            "exception.type": "asyncio.exceptions.CancelledError"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._dispatch_loop",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-8",
+      "status": "UNSET",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.remove_sink",
+      "parent_span_id": "$span-11",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-10",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 261, in dequeue_event\n    return await self._default_sink.dequeue_event()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"\u2026[truncated]",
+            "exception.type": "asyncio.queues.QueueShutDown"
+          },
+          "name": "exception"
+        },
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/opentelemetry/trace/__init__.py\", line 602, in use_span\n    yield span\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/opentelemetry/sdk/trace/__init__.py\", line 1136, in start_as_current_span\n    yield span\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = awa\u2026[truncated]",
+            "exception.type": "asyncio.queues.QueueShutDown"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.dequeue_event",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-12",
+      "status": "ERROR",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-13",
+      "status": "OK",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 261, in dequeue_event\n    return await self._default_sink.dequeue_event()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"\u2026[truncated]",
+            "exception.type": "asyncio.queues.QueueShutDown"
+          },
+          "name": "exception"
+        },
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/opentelemetry/trace/__init__.py\", line 602, in use_span\n    yield span\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/opentelemetry/sdk/trace/__init__.py\", line 1136, in start_as_current_span\n    yield span\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = awa\u2026[truncated]",
+            "exception.type": "asyncio.queues.QueueShutDown"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.dequeue_event",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-14",
+      "status": "ERROR",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-15",
+      "status": "OK",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._join_incoming_queue",
+      "parent_span_id": "$span-17",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-16",
+      "status": "OK",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-18",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-6",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._join_incoming_queue",
+      "parent_span_id": "$span-20",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-19",
+      "status": "OK",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-18",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-11",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.remove_sink",
+      "parent_span_id": "$span-17",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-21",
+      "status": "OK",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 117, in _dispatch_loop\n    event = await self._incoming_queue.get()\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjor\u2026[truncated]",
+            "exception.type": "asyncio.exceptions.CancelledError"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._dispatch_loop",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-22",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.remove_sink",
+      "parent_span_id": "$span-20",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-23",
+      "status": "OK",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 117, in _dispatch_loop\n    event = await self._incoming_queue.get()\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjor\u2026[truncated]",
+            "exception.type": "asyncio.exceptions.CancelledError"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._dispatch_loop",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-24",
+      "status": "UNSET",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-18",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-25",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-18",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-26",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 300, in close\n    await asyncio.gather(\n        *(sink.close(immediate=False) for sink in sinks_to_close)\n    )\nasyncio.exceptions.Can\u2026[truncated]",
+            "exception.type": "asyncio.exceptions.CancelledError"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-17",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 300, in close\n    await asyncio.gather(\n        *(sink.close(immediate=False) for sink in sinks_to_close)\n    )\nasyncio.exceptions.Can\u2026[truncated]",
+            "exception.type": "asyncio.exceptions.CancelledError"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-20",
+      "status": "UNSET",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-27",
+      "status": "OK",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-3",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-28",
+      "status": "OK",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-29",
+      "status": "OK",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-9",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-30",
+      "status": "OK",
+      "trace_id": "$trace-7"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.request_handlers.default_request_handler_v2.DefaultRequestHandlerV2.aclose",
+      "parent_span_id": null,
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-18",
+      "status": "OK",
+      "trace_id": "$trace-4"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.request_handlers.default_request_handler_v2.DefaultRequestHandlerV2._setup_active_task",
+      "parent_span_id": "$span-33",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-32",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.tap",
+      "parent_span_id": "$span-33",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-34",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.enqueue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-35",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.enqueue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-36",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.enqueue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-37",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._deliver_to_sink",
+      "parent_span_id": "$span-39",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-38",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.dequeue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-40",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.enqueue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-41",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.task_done",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-42",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._deliver_to_sink",
+      "parent_span_id": "$span-44",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-43",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._deliver_to_sink",
+      "parent_span_id": "$span-39",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-45",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.dequeue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-46",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.enqueue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-47",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.task_done",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-48",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._deliver_to_sink",
+      "parent_span_id": "$span-44",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-49",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._deliver_to_sink",
+      "parent_span_id": "$span-39",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-50",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.request_handlers.default_request_handler_v2.DefaultRequestHandlerV2._validate_task_id_match",
+      "parent_span_id": "$span-33",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-51",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.dequeue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-52",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.enqueue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-53",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.task_done",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-54",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._dispatch_loop",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-39",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._deliver_to_sink",
+      "parent_span_id": "$span-44",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-55",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.remove_sink",
+      "parent_span_id": "$span-33",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-56",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.request_handlers.default_request_handler_v2.DefaultRequestHandlerV2.on_message_send",
+      "parent_span_id": "$span-57",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-33",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.routes.jsonrpc_dispatcher.JsonRpcDispatcher._handle_send_message",
+      "parent_span_id": "$span-58",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-57",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.routes.jsonrpc_dispatcher.JsonRpcDispatcher._process_non_streaming_request",
+      "parent_span_id": "$span-59",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-58",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.routes.jsonrpc_dispatcher.JsonRpcDispatcher._create_response",
+      "parent_span_id": "$span-59",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-60",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.routes.jsonrpc_dispatcher.JsonRpcDispatcher.handle_requests",
+      "parent_span_id": null,
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-59",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._join_incoming_queue",
+      "parent_span_id": "$span-62",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-61",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.remove_sink",
+      "parent_span_id": "$span-62",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-63",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = await func(*args, **kwargs)\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/server/events/event_queue_v2.py\", line 261, in dequeue_event\n    return await self._default_sink.dequeue_event()\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"\u2026[truncated]",
+            "exception.type": "asyncio.queues.QueueShutDown"
+          },
+          "name": "exception"
+        },
+        {
+          "attributes": {
+            "exception.escaped": "False",
+            "exception.message": "",
+            "exception.stacktrace": "Traceback (most recent call last):\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/opentelemetry/trace/__init__.py\", line 602, in use_span\n    yield span\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/opentelemetry/sdk/trace/__init__.py\", line 1136, in start_as_current_span\n    yield span\n  File \"/Users/augjorda/repos/worktrees/.venv-mas-lab/lib/python3.14/site-packages/a2a/utils/telemetry.py\", line 242, in async_wrapper\n    result = awa\u2026[truncated]",
+            "exception.type": "asyncio.queues.QueueShutDown"
+          },
+          "name": "exception"
+        }
+      ],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.dequeue_event",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-64",
+      "status": "ERROR",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-65",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-62",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._dispatch_loop",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-44",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource._join_incoming_queue",
+      "parent_span_id": "$span-67",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-66",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-67",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "CLIENT",
+      "name": "a2a.client.transports.jsonrpc.JsonRpcTransport._send_request",
+      "parent_span_id": "$span-70",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-69",
+      "status": "OK",
+      "trace_id": "$trace-68"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "CLIENT",
+      "name": "a2a.client.transports.jsonrpc.JsonRpcTransport.send_message",
+      "parent_span_id": null,
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-70",
+      "status": "OK",
+      "trace_id": "$trace-68"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-71",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "SERVER",
+      "name": "a2a.server.events.event_queue_v2.EventQueueSource.close",
+      "parent_span_id": "$span-32",
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-72",
+      "status": "OK",
+      "trace_id": "$trace-31"
+    },
+    {
+      "attributes": {},
+      "events": [],
+      "kind": "CLIENT",
+      "name": "a2a.client.transports.jsonrpc.JsonRpcTransport.close",
+      "parent_span_id": null,
+      "scope_name": "a2a-python-sdk",
+      "scope_version": "1.0.0",
+      "span_id": "$span-74",
+      "status": "OK",
+      "trace_id": "$trace-73"
+    }
+  ],
+  "token_context_error": false,
+  "token_error_count": 0
+}

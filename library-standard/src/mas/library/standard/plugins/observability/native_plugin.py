@@ -21,6 +21,9 @@ from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.event_stream import publish_event
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.transition import TransitionEvent
+from mas.runtime.schema.transport import TransportEvent
+from mas.runtime.transport.config import NATIVE_SINK_NAMES, plugin_cfg
+from mas.runtime.transport.emit import bind_sink, unbind_sink
 
 _logger = logging.getLogger(__name__)
 
@@ -77,6 +80,21 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
             self._fanout = FanOutEmitter(*self.emitters)
         # The base context and every per-agent context share one registry.
         self.context.shared = self.shared
+        bind_sink(self)
+
+    def emit(self, event: TransportEvent) -> None:
+        """Transport bus sink: write one native record to JSONL and the stream."""
+        try:
+            rec = event.to_record()
+            rec.setdefault("run_id", self.context.run_id)
+            rec.setdefault("mas_id", self.mas_id)
+            if not self._category_allowed(rec):
+                return
+            if self._fanout is not None:
+                self._fanout.emit(rec)
+            publish_event(rec)
+        except Exception:
+            _logger.debug("transport event emit failed", exc_info=True)
 
     def events_jsonl_path(self) -> Path | None:
         for emitter in self.emitters:
@@ -168,6 +186,7 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
             self._fanout.flush()
 
     def close(self) -> None:
+        unbind_sink(self)
         if self._fanout:
             self._fanout.close()
 
@@ -180,7 +199,7 @@ class NativeObservabilityPlugin(ObservabilityPlugin):
         agent_id: str,
     ) -> "NativeObservabilityPlugin":
         base_path = Path(base_dir)
-        native_cfg = binding.plugin_configs.get("native") or {}
+        native_cfg = plugin_cfg(binding.plugin_configs, NATIVE_SINK_NAMES)
         events_path = Path(binding.events_file) if binding.events_file else base_path / "traces" / "events.jsonl"
         if native_cfg.get("path"):
             p = Path(str(native_cfg["path"]))

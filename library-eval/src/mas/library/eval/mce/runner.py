@@ -31,13 +31,13 @@ stub (unfinished TODO prompt) and is not wired into this runner.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from mas.library.eval.mce.catalog import run_mce_class, session_scope
+from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ def _compute_deepeval_score(
     Returns ``{"value": float|None, "reasoning": str, "error": str|None}``.
     Score is natively 0.0–1.0 continuous (no BinaryGrading schema injected).
     """
-    if os.environ.get("MAS_MCE_OFFLINE", "").lower() in ("1", "true", "yes"):
+    if hostenv.get("MAS_MCE_OFFLINE", "").lower() in ("1", "true", "yes"):
         if not (input_query or "").strip():
             return {"value": None, "reasoning": "", "error": "input_query_empty"}
         if not (final_response or "").strip():
@@ -203,7 +203,7 @@ def install_openai_llm_service(
         return _effective_model
 
     effective_api_base = infra_api_base or None
-    effective_api_key = os.environ.get(api_key_env or infra_api_key_env) or os.environ.get("OPENAI_API_KEY") or "none"
+    effective_api_key = hostenv.get(api_key_env or infra_api_key_env) or hostenv.get("OPENAI_API_KEY") or "none"
 
     from openai import OpenAI
 

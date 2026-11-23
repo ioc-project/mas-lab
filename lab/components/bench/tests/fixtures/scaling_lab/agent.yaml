@@ -1,0 +1,17 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Agent
+
+metadata:
+  name: throughput-agent
+
+spec:
+  models:
+    - model: gpt-4o-mini
+
+  description: One-tool agent for the loopback fixture.
+  context:
+    intent: "Call the work tool, then report its result."
+    role: |
+      You have one tool, work. Call it once, then reply with the tool result.

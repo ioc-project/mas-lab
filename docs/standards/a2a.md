@@ -33,7 +33,7 @@ or `--port` flags.
 | Piece | Package |
 | --- | --- |
 | Client and server plugins | `library-ioa` |
-| Official SDK | `a2a-sdk[http-server,sqlite]>=1.1.5` |
+| Official SDK | `a2a-sdk[http-server,sqlite]>=1.1.5`. gRPC is extra `a2a-grpc` of `mas-lab-library-ioa`. |
 | Official CLI (Go binary `a2a`) | not the PyPI package `a2a-cli` |
 
 ## Compliance
@@ -95,15 +95,16 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 
 | Field | Meaning |
 | --- | --- |
-| `protocol` | `a2a` on a server row selects the A2A `agent_comm` / `agent_expose` plugins. `a2a-framing` is the framing layer above a transport, not those plugins. |
+| `protocol` | `a2a` on a server row selects the A2A `agent_comm` / `agent_expose` plugins. `a2a+grpc` is the same plugins plus the gRPC extra. `a2a-framing` is the framing layer above a transport, not those plugins. |
 | `usage` | `connect` (client route only), `listen` (listen only), or `[connect, listen]`. Omitted means `connect`. `use`, `deploy`, `use-and-deploy` are deprecated aliases. The legacy `expose: true` reads as `[connect, listen]` when `usage` is absent. |
 | `url` | Advertised absolute `http(s)://host:port` URL. It cannot carry a path prefix. |
 | `headers`, `timeout` | Client-side options passed to the outbound A2A client (`usage: connect`). |
 | `a2a.listen.host` / `a2a.listen.port` | Local bind address when it differs from `url`. Required when `url` is `https://`. |
-| `a2a.grpc_port` / `a2a.grpc_url` | Also serve and advertise gRPC (dedicated `mas-ctl serve` only). |
+| `a2a.grpc_port` / `a2a.grpc_url` | Also serve and advertise gRPC (dedicated `mas-ctl serve` only). Needs `pip install 'mas-lab-library-ioa[a2a-grpc]'`. |
+| `a2a.admission.callers` | Who may call a listener: a map of caller name to bearer token (`env:NAME`, at least 32 bytes). Given, every request but the public agent card needs a listed token, and the caller is the name in the map, never what the request claims; a conversation is then keyed by (caller, `contextId`). An empty map, or a short or unset token, is refused at start. Not served with `a2a.grpc_port` (refused). Omitted, everyone is admitted. |
 | `a2a.capabilities` | AgentCard capabilities: `streaming`, `pushNotifications`, `extendedAgentCard`, `extensions`. All default to off. |
 
-The endpoint serves `/.well-known/agent-card.json`, JSON-RPC at `/`, and HTTP+JSON under `/a2a/rest`. gRPC is added when `a2a.grpc_port` is set.
+The endpoint serves `/.well-known/agent-card.json`, JSON-RPC at `/`, and HTTP+JSON under `/a2a/rest`. gRPC is added when `a2a.grpc_port` is set, and only `mas-ctl serve` starts that listener (`chat`, `tui`, and `run-mas` listen on HTTP).
 
 ## `--connect`
 

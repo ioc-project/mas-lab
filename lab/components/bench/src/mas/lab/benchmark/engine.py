@@ -40,6 +40,9 @@ class BenchmarkRunOptions:
     experiment_overlays: list = field(default_factory=list)
     clean_stale: bool | None = None
     pipeline_engine: str | None = None
+    fixture_env: dict[str, str] | None = None  # the CLI's environment, for fixture processes
+    # What the demo UI bound for this run: ingest_url, ref, scenario_infra_refs, scenario_overlays.
+    demo_ui: dict[str, Any] | None = None
 
     @classmethod
     def from_spec(cls, spec: dict[str, Any]) -> "BenchmarkRunOptions":
@@ -71,7 +74,24 @@ class BenchmarkRunOptions:
             experiment_overlays=spec.get("experiment_overlays") or [],
             clean_stale=spec.get("clean_stale"),
             pipeline_engine=spec.get("pipeline_engine"),
+            fixture_env=spec.get("fixture_env"),
+            demo_ui=_demo_ui_from_spec(spec),
         )
+
+
+def _demo_ui_from_spec(spec: dict[str, Any]) -> dict[str, Any] | None:
+    out = {
+        "ingest_url": spec.get("demo_ui_ingest_url"),
+        "ref": spec.get("demo_ui_ref"),
+        "scenario_infra_refs": spec.get("scenario_infra_refs"),
+        "scenario_overlays": spec.get("scenario_overlays"),
+        "llm_cache_path": spec.get("llm_cache_path"),
+    }
+    out = {k: v for k, v in out.items() if v}
+    # [] means "ignore the process's MAS_INFRA_REFS"; absent means "leave it".
+    if spec.get("workspace_infra_refs") is not None:
+        out["workspace_infra_refs"] = [str(r) for r in spec["workspace_infra_refs"] if r]
+    return out or None
 
 
 def _is_mas_experiment_yaml(experiment_yaml: Path) -> bool:
@@ -153,6 +173,8 @@ async def run_benchmark(
         experiment_overlays=opts.experiment_overlays,
         clean_stale=opts.clean_stale,
         pipeline_engine=opts.pipeline_engine,
+        fixture_env=opts.fixture_env,
+        demo_ui=opts.demo_ui,
     )
 
 

@@ -1,0 +1,271 @@
+{
+ "blacklisted": {
+  "pattern_plugin_id": "react@v1",
+  "q": {
+   "control_phase": "IDLE",
+   "cot_pass": 0,
+   "ctrl": "RUNNING",
+   "ctx": "IDLE",
+   "dp": "IDLE",
+   "gov_retry_count": 0,
+   "gov_state": "IDLE",
+   "hitl_block_committed": false,
+   "hitl_gov_override": false,
+   "hitl_pending_schedule": "NONE",
+   "hitl_question_type": "",
+   "hitl_request_id": 0,
+   "hitl_skip_committed": false,
+   "hitl_tools_approved_turn": false,
+   "inflight_correlation_ids": [],
+   "inflight_kind": "NONE",
+   "memory": "IDLE",
+   "model": "IDLE",
+   "obs_state": "IDLE",
+   "offered_tools": null,
+   "outbound_waits": [],
+   "parallel_tool_batch": [],
+   "pending_engine_correlation_id": 0,
+   "pending_tool_args": {},
+   "pending_tool_name": "",
+   "pending_tools_by_cid": {},
+   "queued_tools": [],
+   "scheduled_egress": "NONE",
+   "session": "IDLE",
+   "tool": "IDLE",
+   "tool_blacklisted": true,
+   "transport": "IDLE"
+  },
+  "run": {
+   "events": [
+    {
+     "correlation_id": 1,
+     "finish_reason": "",
+     "next_step": "TOOL_CALL",
+     "parallel_tools": [],
+     "response_kind": "MODEL_TEXT",
+     "text": "",
+     "tool_arguments": {
+      "k": 1
+     },
+     "tool_name": "lookup"
+    },
+    {
+     "correlation_id": 3,
+     "finish_reason": "",
+     "next_step": "STOP",
+     "parallel_tools": [],
+     "placeholder": true,
+     "response_kind": "TOOL_RESULT",
+     "text": "",
+     "tool_arguments": {},
+     "tool_name": ""
+    }
+   ]
+  }
+ },
+ "egress_hold": {
+  "pattern_plugin_id": "react@v1",
+  "q": {
+   "control_phase": "AUTHZ",
+   "cot_pass": 0,
+   "ctrl": "RUNNING",
+   "ctx": "IDLE",
+   "dp": "AWAITING_INGRESS",
+   "gov_retry_count": 0,
+   "gov_state": "HITL_PENDING",
+   "hitl_block_committed": false,
+   "hitl_gov_override": false,
+   "hitl_pending_schedule": "TOOL_CALL",
+   "hitl_question_type": "CONFIRM",
+   "hitl_request_id": 2,
+   "hitl_skip_committed": false,
+   "hitl_tools_approved_turn": false,
+   "inflight_correlation_ids": [
+    2
+   ],
+   "inflight_kind": "TOOL",
+   "memory": "IDLE",
+   "model": "IDLE",
+   "obs_state": "IDLE",
+   "offered_tools": null,
+   "outbound_waits": [
+    {
+     "correlation_id": 2,
+     "kind": "HITL",
+     "op": "TOOL_CALL"
+    }
+   ],
+   "parallel_tool_batch": [],
+   "pending_engine_correlation_id": 0,
+   "pending_tool_args": {
+    "k": 1
+   },
+   "pending_tool_name": "lookup",
+   "pending_tools_by_cid": {},
+   "queued_tools": [],
+   "scheduled_egress": "NONE",
+   "session": "IDLE",
+   "tool": "WAIT_GOV",
+   "tool_blacklisted": false,
+   "transport": "IDLE"
+  },
+  "run": {
+   "events": [
+    {
+     "correlation_id": 1,
+     "finish_reason": "",
+     "next_step": "TOOL_CALL",
+     "parallel_tools": [],
+     "response_kind": "MODEL_TEXT",
+     "text": "",
+     "tool_arguments": {
+      "k": 1
+     },
+     "tool_name": "lookup"
+    }
+   ]
+  }
+ },
+ "idle": {
+  "pattern_plugin_id": "react@v1",
+  "q": {
+   "control_phase": "IDLE",
+   "cot_pass": 0,
+   "ctrl": "RUNNING",
+   "ctx": "IDLE",
+   "dp": "IDLE",
+   "gov_retry_count": 0,
+   "gov_state": "IDLE",
+   "hitl_block_committed": false,
+   "hitl_gov_override": false,
+   "hitl_pending_schedule": "NONE",
+   "hitl_question_type": "",
+   "hitl_request_id": 0,
+   "hitl_skip_committed": false,
+   "hitl_tools_approved_turn": false,
+   "inflight_correlation_ids": [],
+   "inflight_kind": "NONE",
+   "memory": "IDLE",
+   "model": "IDLE",
+   "obs_state": "IDLE",
+   "offered_tools": null,
+   "outbound_waits": [],
+   "parallel_tool_batch": [],
+   "pending_engine_correlation_id": 0,
+   "pending_tool_args": {},
+   "pending_tool_name": "",
+   "pending_tools_by_cid": {},
+   "queued_tools": [],
+   "scheduled_egress": "NONE",
+   "session": "IDLE",
+   "tool": "IDLE",
+   "tool_blacklisted": false,
+   "transport": "IDLE"
+  },
+  "run": {
+   "events": [
+    {
+     "correlation_id": 1,
+     "finish_reason": "",
+     "next_step": "TOOL_CALL",
+     "parallel_tools": [],
+     "response_kind": "MODEL_TEXT",
+     "text": "",
+     "tool_arguments": {
+      "k": 1
+     },
+     "tool_name": "lookup"
+    },
+    {
+     "correlation_id": 2,
+     "finish_reason": "",
+     "next_step": "LLM_CALL",
+     "parallel_tools": [],
+     "response_kind": "TOOL_RESULT",
+     "text": "r",
+     "tool_arguments": {},
+     "tool_name": ""
+    },
+    {
+     "correlation_id": 3,
+     "finish_reason": "",
+     "next_step": "STOP",
+     "parallel_tools": [],
+     "response_kind": "MODEL_TEXT",
+     "text": "ans",
+     "tool_arguments": {},
+     "tool_name": ""
+    }
+   ]
+  }
+ },
+ "result_hold": {
+  "pattern_plugin_id": "react@v1",
+  "q": {
+   "control_phase": "EGRESS",
+   "cot_pass": 0,
+   "ctrl": "RUNNING",
+   "ctx": "IDLE",
+   "dp": "AWAITING_INGRESS",
+   "gov_retry_count": 0,
+   "gov_state": "HITL_PENDING",
+   "hitl_block_committed": false,
+   "hitl_gov_override": false,
+   "hitl_pending_schedule": "NONE",
+   "hitl_question_type": "CONFIRM",
+   "hitl_request_id": 3,
+   "hitl_skip_committed": false,
+   "hitl_tools_approved_turn": false,
+   "inflight_correlation_ids": [
+    2,
+    3
+   ],
+   "inflight_kind": "TOOL",
+   "memory": "IDLE",
+   "model": "IDLE",
+   "obs_state": "IDLE",
+   "offered_tools": null,
+   "outbound_waits": [
+    {
+     "correlation_id": 2,
+     "kind": "TOOL",
+     "op": "TOOL_CALL"
+    },
+    {
+     "correlation_id": 3,
+     "kind": "HITL",
+     "op": "NONE"
+    }
+   ],
+   "parallel_tool_batch": [],
+   "pending_engine_correlation_id": 2,
+   "pending_tool_args": {
+    "k": 1
+   },
+   "pending_tool_name": "lookup",
+   "pending_tools_by_cid": {},
+   "queued_tools": [],
+   "scheduled_egress": "NONE",
+   "session": "IDLE",
+   "tool": "DONE",
+   "tool_blacklisted": false,
+   "transport": "IDLE"
+  },
+  "run": {
+   "events": [
+    {
+     "correlation_id": 1,
+     "finish_reason": "",
+     "next_step": "TOOL_CALL",
+     "parallel_tools": [],
+     "response_kind": "MODEL_TEXT",
+     "text": "",
+     "tool_arguments": {
+      "k": 1
+     },
+     "tool_name": "lookup"
+    }
+   ]
+  }
+ }
+}

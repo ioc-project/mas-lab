@@ -1,5 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -80,9 +81,7 @@ def canonicalize_experiment_dict(
         item = data.get("item")
         test = data["test"]
         if item and test:
-            raise ValueError(
-                f"{path or 'experiment'}: declare item: or test:, not both"
-            )
+            raise ValueError(f"{path or 'experiment'}: declare item: or test:, not both")
         data["item"] = test
         del data["test"]
 
@@ -180,6 +179,9 @@ class MASRunBase:
     output_dir: Path = field(default_factory=lambda: Path("./output"))
     """Where per-run outputs are written (JSONL feeds, artefacts, metrics)."""
 
+    environment: Dict[str, Any] = field(default_factory=dict)
+    """Experiment-level ``environment:`` (clock, fixtures, triggers)."""
+
     trace_cache_dir: Optional[Path] = None
     """Override the global trace-cache directory for this experiment.
 
@@ -265,14 +267,10 @@ class MASRunBase:
         Level is ``experiment`` for the top-level ``artifacts:`` map, otherwise
         the section name (``run``, ``item``, ``scenario``).
         """
-        rows: List[tuple[str, ArtifactSpec]] = [
-            ("experiment", art) for art in self.artifacts
-        ]
+        rows: List[tuple[str, ArtifactSpec]] = [("experiment", art) for art in self.artifacts]
         for level_name in ("run", "item", "scenario"):
             if level_name in self.levels:
-                rows.extend(
-                    (level_name, art) for art in self.levels[level_name].artifacts
-                )
+                rows.extend((level_name, art) for art in self.levels[level_name].artifacts)
         return rows
 
     def all_pipeline_steps(self) -> List["PipelineStepSpec"]:
@@ -341,9 +339,7 @@ class MASRunBase:
         """
         from mas.lab import paths as _paths
 
-        _reject_deprecated_experiment_keys(
-            data, path=yaml_path, allow_output_dir=allow_output_dir
-        )
+        _reject_deprecated_experiment_keys(data, path=yaml_path, allow_output_dir=allow_output_dir)
         canonicalize_experiment_dict(data, path=yaml_path)
 
         mas: Optional[MASSpec] = None
@@ -359,11 +355,7 @@ class MASRunBase:
             # Pre-applications alias: mas: {manifest|app, configs_dir}
             from mas.lab.deprecations import warn_deprecated
 
-            code = (
-                "lab.mas"
-                if yaml_path is not None and yaml_path.name == "lab-config.yaml"
-                else "experiment.mas"
-            )
+            code = "lab.mas" if yaml_path is not None and yaml_path.name == "lab-config.yaml" else "experiment.mas"
             warn_deprecated(code, where=str(yaml_path or "experiment"))
             mas_raw = data["mas"]
             if isinstance(mas_raw, list) and mas_raw:
@@ -371,10 +363,7 @@ class MASRunBase:
             else:
                 mas = MASSpec.from_dict(mas_raw, base_dir)
 
-        scenarios = [
-            MASScenarioSpec.from_dict(s, base_dir)
-            for s in data.get("scenarios", [])
-        ]
+        scenarios = [MASScenarioSpec.from_dict(s, base_dir) for s in data.get("scenarios", [])]
 
         dataset: Optional[Path] = None
         dataset_filter: Dict[str, Any] = {}
@@ -405,20 +394,14 @@ class MASRunBase:
                 if locator:
                     from mas.lab.benchmark.experiment import _resolve_dataset_by_name
 
-                    dataset = _resolve_dataset_by_name(
-                        base_dir, str(ds["name"]), locator=str(locator)
-                    )
+                    dataset = _resolve_dataset_by_name(base_dir, str(ds["name"]), locator=str(locator))
                 else:
                     from mas.lab.benchmark.experiment import _resolve_dataset_by_name
 
                     try:
-                        dataset = _resolve_dataset_by_name(
-                            base_dir, str(ds["name"]), locator=None
-                        )
+                        dataset = _resolve_dataset_by_name(base_dir, str(ds["name"]), locator=None)
                     except FileNotFoundError:
-                        dataset = resolve_path_ref(
-                            f"datasets/{ds['name']}.yaml", base_dir
-                        )
+                        dataset = resolve_path_ref(f"datasets/{ds['name']}.yaml", base_dir)
             else:
                 dataset = resolve_path_ref(ds["path"], base_dir)
             # Filtering: group shorthand or explicit filter dict
@@ -430,12 +413,7 @@ class MASRunBase:
                 dataset_limit = int(ds["limit"])
             if isinstance(ds.get("source"), dict):
                 dataset_source = dict(ds["source"])
-            if (
-                dataset is not None
-                and mas is not None
-                and mas.manifest is not None
-                and Path(dataset).is_file()
-            ):
+            if dataset is not None and mas is not None and mas.manifest is not None and Path(dataset).is_file():
                 from mas.library_catalog import ensure_dataset_supports_app
 
                 ensure_dataset_supports_app(Path(dataset), mas.manifest.parent)
@@ -452,9 +430,7 @@ class MASRunBase:
         if allow_output_dir and "output_dir" in data:
             explicit_output_dir = Path(data["output_dir"]).expanduser()
             output_dir = (
-                explicit_output_dir
-                if explicit_output_dir.is_absolute()
-                else base_dir / explicit_output_dir
+                explicit_output_dir if explicit_output_dir.is_absolute() else base_dir / explicit_output_dir
             ).resolve()
         elif lab_name:
             output_dir = _paths.labs_root() / lab_name / exp_name
@@ -476,9 +452,7 @@ class MASRunBase:
         for level_name in ("run", "item", "scenario"):
             if level_name in data:
                 canonical = "item" if level_name == "test" else level_name
-                levels[canonical] = LevelSpec.from_dict(
-                    canonical, data[level_name], base_dir=base_dir
-                )
+                levels[canonical] = LevelSpec.from_dict(canonical, data[level_name], base_dir=base_dir)
 
         # Experiment-level hooks live on the experiment object (CLI --depth exp).
         if data.get("pre") or data.get("post"):
@@ -494,8 +468,7 @@ class MASRunBase:
 
         # Experiment-level artifacts (when not already consumed as level artifacts)
         artifacts: List[ArtifactSpec] = [
-            ArtifactSpec.from_entry(name, value)
-            for name, value in data.get("artifacts", {}).items()
+            ArtifactSpec.from_entry(name, value) for name, value in data.get("artifacts", {}).items()
         ]
 
         if "experiment" in levels:
@@ -511,9 +484,7 @@ class MASRunBase:
 
         raw_models = data.get("models") if isinstance(data.get("models"), dict) else {}
         authored_models = {
-            str(k).strip(): ("" if v is None else str(v).strip())
-            for k, v in raw_models.items()
-            if str(k).strip()
+            str(k).strip(): ("" if v is None else str(v).strip()) for k, v in raw_models.items() if str(k).strip()
         }
         slots = normalize_model_slots(model=data.get("model"), models=raw_models)
         model = slots.get("main") or ANY_MODEL
@@ -557,6 +528,7 @@ class MASRunBase:
             levels=levels,
             artifacts=artifacts,
             output_schema=dict(data.get("output_schema") or {}),
+            environment=dict(data.get("environment") or {}),
         )
 
 
@@ -577,9 +549,7 @@ def _inject_eval_mce_judge_model(
         )
     except ImportError:
         return
-    app_model, app_source = unique_application_model(
-        mas.manifest if mas is not None else None
-    )
+    app_model, app_source = unique_application_model(mas.manifest if mas is not None else None)
     resolved = resolve_judge_model(
         evaluation_model=evaluation.model if evaluation else None,
         evaluation_config=evaluation.config if evaluation else None,
@@ -593,4 +563,3 @@ def _inject_eval_mce_judge_model(
         return
     for level in levels.values():
         apply_eval_mce_model_defaults(list(level.pipeline), resolved)
-

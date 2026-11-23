@@ -63,6 +63,56 @@ def test_unknown_kind_is_flagged():
     assert violations == [{"kind": "totally_unknown_kind", "call_id": None, "timestamp": 1.23}]
 
 
+def test_mcp_message_is_covered_without_nodes() -> None:
+    events = [
+        {
+            "kind": "transport.message.sent",
+            "protocol": "mcp",
+            "run_id": "r1",
+            "agent_id": "worker",
+            "timestamp": 1.0,
+            "attributes": {"source": "worker", "target": "echo", "tool": "echo"},
+        }
+    ]
+    ok, violations = check_native_trace_completeness(events, [], "r1")
+    assert ok
+    assert violations == []
+
+
+def test_empty_mcp_discovery_is_a_gap() -> None:
+    """Mutation: MCP discovery with no agent and no tools is treated as covered."""
+    events = [
+        {
+            "kind": "transport.discovery",
+            "protocol": "mcp",
+            "run_id": "r1",
+            "agent_id": "",
+            "timestamp": 1.0,
+            "attributes": {"discovery_kind": "tools"},
+        }
+    ]
+    ok, violations = check_native_trace_completeness(events, [], "r1")
+    assert not ok
+    assert violations[0]["kind"] == "transport.discovery"
+
+
+def test_empty_non_mcp_message_is_a_gap() -> None:
+    """Mutation: a message with no names is treated as covered, hiding a missing A2A identity."""
+    events = [
+        {
+            "kind": "transport.message.sent",
+            "protocol": "a2a",
+            "run_id": "r1",
+            "agent_id": "",
+            "timestamp": 1.0,
+            "attributes": {},
+        }
+    ]
+    ok, violations = check_native_trace_completeness(events, [], "r1")
+    assert not ok
+    assert violations[0]["kind"] == "transport.message.sent"
+
+
 def test_real_trip_planner_fixture_is_complete_across_all_layers():
     """Golden check: every event in a real native-events fixture must be
     accounted for once all optional layers (governance/infrastructure/

@@ -1,5 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 """PlotNineStep — render a plotnine (ggplot2-style) chart from a DataFrame.
 
 The ``data`` field accepts a file path (CSV, Parquet, JSON) or an in-memory
@@ -108,19 +110,22 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline.lib.data_source import resolve_dataframe
 
 logger = logging.getLogger(__name__)
 
 
-class PlotNineStep(PipelineStep):
+class PlotNineStep(FigureStep):
     """Render a plotnine chart from a file or in-memory DataFrame."""
 
     type = "plotnine"
+    HONORS = frozenset({"palette", "labels", "title", "subtitle", "xlabel", "ylabel", "caption"})
 
     async def execute(self, ctx: "ExecutionContext") -> StepOutput:  # noqa: F821
+        config = self.apply_style(self.config, ctx)
+        self.config = config
         # Force non-interactive backend before any matplotlib/plotnine import so
         # the step works from worker threads (benchmark run) as well as the main
         # thread (benchmark pipeline run).

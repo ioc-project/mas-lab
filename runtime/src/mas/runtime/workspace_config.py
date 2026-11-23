@@ -8,12 +8,12 @@ The legacy workspace filename is not read (see ``LEGACY_WORKSPACE_CONFIG_FILENAM
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
+from mas.runtime import hostenv
 from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 from mas.runtime.xdg import mas_user_config_file
 
@@ -70,7 +70,7 @@ def resolve_config_relative(raw: str, config_file: Path) -> Path:
 
 def find_workspace_file(start: Path | None = None) -> Path | None:
     """Return the active workspace config file path, or ``None`` if none exists."""
-    env_root = os.environ.get("MAS_WORKSPACE_ROOT")
+    env_root = hostenv.get("MAS_WORKSPACE_ROOT")
     if env_root:
         root = Path(env_root).expanduser().resolve()
         candidate = root / _CONFIG_FILE

@@ -5,16 +5,23 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from mas.lab.benchmark.schedule.run_batch.execute import execute_batch
-from mas.lab.benchmark.schedule.run_batch.finalize import finalize_batch
+from mas.lab.benchmark.schedule.run_batch.finalize import abort_batch, finalize_batch
 from mas.lab.benchmark.schedule.run_batch.load import load_experiment, print_dry_run
 from mas.lab.benchmark.schedule.run_batch.prepare import prepare_batch
 
+logger = logging.getLogger(__name__)
 
-async def run_mas_benchmark(
+_ACTIVE = [0]  # batches running in this process
+_ACTIVE_LOCK = threading.Lock()
+
+
+async def _run_mas_benchmark(
     experiment_yaml: Path,
     progress: bool = True,
     overrides: Optional[list[str]] = None,
@@ -37,6 +44,8 @@ async def run_mas_benchmark(
     experiment_overlays: Optional[list] = None,
     clean_stale: Optional[bool] = None,
     pipeline_engine: Optional[str] = None,
+    fixture_env: Optional[dict[str, str]] = None,
+    demo_ui: Optional[dict] = None,
 ) -> bool:
     """Run a MAS batch benchmark from a *MASExperimentConfig* YAML.
 
@@ -47,6 +56,9 @@ async def run_mas_benchmark(
 
     Use ``force=True`` (``--force`` on the CLI) to wipe all prior outputs and
     start fresh.
+
+    ``demo_ui`` carries what the demo UI bound for this run: ``ingest_url``, ``ref``,
+    ``scenario_infra_refs`` and ``scenario_overlays``. Nothing is read from the environment.
 
     Returns True on success (exit code 0).
     """
@@ -90,27 +102,109 @@ async def run_mas_benchmark(
         print_dry_run(loaded)
         return True
 
-    prepared = await prepare_batch(
-        loaded,
-        output_dir=output_dir,
-        force=force,
-        data_cache_dir=data_cache_dir,
-        clean_stale=clean_stale,
-    )
-    execution = await execute_batch(
-        loaded,
-        prepared,
-        progress=progress,
-        force=force,
-        strategy=strategy,
-    )
-    return await finalize_batch(
-        loaded,
-        prepared,
-        execution,
-        progress=progress,
-        data_cache_dir=data_cache_dir,
-    )
+    prepared = None
+    terminated = False
+    import atexit
+    import signal
+
+    def _stop_fixtures(*, force: bool, last: bool = True) -> None:
+        from mas.lab.benchmark.service_manager import stop_all_shared
+
+        registry = getattr(prepared, "fixture_registry", None)
+        if registry is not None:
+            try:
+                registry.close_all(force=force)
+            except Exception:
+                logger.warning("fixture shutdown failed", exc_info=True)
+        if last:  # a batch that ends while another runs in this process must not stop that one's services
+            stop_all_shared(include_keep_running=force)
+
+    def _at_exit() -> None:
+        _stop_fixtures(force=False)
+
+    atexit.register(_at_exit)
+
+    def _on_term(_signum: int, _frame: object) -> None:
+        # No cleanup here: a handler runs between any two bytecodes and could re-enter a lock the
+        # interrupted code holds. The ``finally`` below does the work, with ``force`` set.
+        nonlocal terminated
+        terminated = True
+        raise KeyboardInterrupt
+
+    prev_term = signal.getsignal(signal.SIGTERM)
+    try:
+        signal.signal(signal.SIGTERM, _on_term)
+    except (ValueError, OSError):
+        prev_term = None
+
+    from contextlib import ExitStack
+
+    from mas.runtime.engine.llm_scheduler import default_user
+
+    run_scope = ExitStack()  # the scheduler's fairness key for this run only
+    run_scope.enter_context(default_user(getattr(loaded.exp, "name", "") or "experiment"))
+    with _ACTIVE_LOCK:
+        _ACTIVE[0] += 1
+    try:
+        prepared = await prepare_batch(
+            loaded,
+            output_dir=output_dir,
+            force=force,
+            data_cache_dir=data_cache_dir,
+            clean_stale=clean_stale,
+            base_env=fixture_env,
+            demo_ui=demo_ui,
+        )
+        try:
+            execution = await execute_batch(
+                loaded,
+                prepared,
+                progress=progress,
+                force=force,
+                strategy=strategy,
+            )
+        except BaseException as exc:
+            abort_batch(prepared, exc)
+            raise
+        return await finalize_batch(
+            loaded,
+            prepared,
+            execution,
+            progress=progress,
+            data_cache_dir=data_cache_dir,
+        )
+    finally:
+        if prev_term is not None:
+            try:
+                signal.signal(signal.SIGTERM, prev_term)
+            except (ValueError, OSError):
+                pass
+        with _ACTIVE_LOCK:
+            _ACTIVE[0] -= 1
+            last = _ACTIVE[0] == 0
+        _stop_fixtures(force=terminated, last=last)
+        run_scope.close()
+        atexit.unregister(_at_exit)  # one handler per batch, not one per call for the life of the process
+
+
+async def run_mas_benchmark(experiment_yaml: Path, *, demo_ui: Optional[dict] = None, **kwargs: Any) -> bool:
+    """Run a MAS batch benchmark; see :func:`_run_mas_benchmark` for the options."""
+    from mas.lab.benchmark.pipeline.ui_bridge import DemoUiBinding, bind_demo_ui
+
+    binding = None
+    if demo_ui and (demo_ui.get("ingest_url") or demo_ui.get("ref")):
+        binding = DemoUiBinding(ingest_url=str(demo_ui.get("ingest_url") or ""), ref=dict(demo_ui.get("ref") or {}))
+    from contextlib import ExitStack
+
+    from mas.ctl.workspace.config import bind_infra_refs
+    from mas.runtime.engine.llm_cache import bind_paths
+
+    ui = demo_ui or {}
+    with ExitStack() as stack:
+        stack.enter_context(bind_demo_ui(binding))
+        stack.enter_context(bind_infra_refs(ui.get("workspace_infra_refs")))
+        stack.enter_context(bind_paths(default=ui.get("llm_cache_path")))
+        return await _run_mas_benchmark(experiment_yaml, demo_ui=demo_ui, **kwargs)
 
 
 __all__ = ["run_mas_benchmark"]

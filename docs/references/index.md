@@ -60,15 +60,19 @@ The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 | Runtime manifests (Agent, MAS, overlay) | [Manifest fields](../manifests/runtime.md) |
 | Context window, summarization, pinned prompt parts, cache and token usage | [Context management](context-management.md) |
 | Reliability (retries, circuit, `error_policy`, logging) | [reliability.md](reliability.md) |
+| Hardening: the production posture and its named checks | [hardening.md](hardening.md) |
 | LLM response cache (`llm_cache` infra middleware) | [llm-cache.md](llm-cache.md) |
 | Communication headers | [comm-headers.md](comm-headers.md) |
 | Communication stack | [comm-stack.md](comm-stack.md) |
+| Agent loop (front or drive another harness) | [agent-loop.md](agent-loop.md) |
 | Contracts & Mealy envelope | [Contracts](contracts.md) · [runtime package docs](runtime.md) |
 | Thin waist (plugin vs catalog) | [thin-waist.md](thin-waist.md) |
 | Snapshots vs checkpoints | [snapshots.md](snapshots.md) |
+| Kernel invariants | [kernel-invariants.md](kernel-invariants.md) |
 | Kernel operations | [kernel-primitives.md](kernel-primitives.md) |
 | Run logs | [Observability](../cli/observability.md) (CLI) |
 | Native event stream | [Event model](event-model.md) |
+| Protocol boundary telemetry (A2A, MCP, SLIM) | [Transport observability](transport-observability.md) · [inventory](transport-observability-inventory.md) · [KG mapping](transport-observability-kg-mapping.md) |
 
 ---
 
@@ -79,7 +83,9 @@ Experiments, datasets, pipelines, and analysis (`mas-lab`).
 | Topic | Reference |
 |-------|-----------|
 | Experiment manifest | [experiment.md](../manifests/experiment.md) |
-| Dataset | [dataset.md](../manifests/dataset.md) |
+| World around a run | [environment.md](../manifests/environment.md) |
+| Lab run throughput | [lab-throughput.md](lab-throughput.md) |
+| Dataset | [dataset.md](../manifests/dataset.md) · [dataset.md §10](../manifests/dataset.md#10-world-around-the-item-environment) |
 | Pipeline steps | [pipeline.md](../manifests/pipeline.md) |
 | Interactive lab demo | [lab.md](../manifests/lab.md) |
 | Bench design & steps | [Lab package docs](lab.md) |

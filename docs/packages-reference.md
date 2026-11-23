@@ -100,15 +100,14 @@ MAS Runtime V2 — Mealy kernel (embeddable library)
 
 ```bash
 uv pip install -e runtime  # source
-uv pip install "mas-lab-runtime[grpc,dev]"  # PyPI, all extras
+uv pip install "mas-lab-runtime[dev]"  # PyPI, all extras
 ```
 
 **Optional extras:**
 
-| Extra  | Packages / features                      |
-| ------ | ---------------------------------------- |
-| `grpc` | `grpcio>=1.60.0`, `grpcio-tools>=1.60.0` |
-| `dev`  | `pytest>=8.0`, `pytest-asyncio>=0.24`    |
+| Extra | Packages / features                   |
+| ----- | ------------------------------------- |
+| `dev` | `pytest>=8.0`, `pytest-asyncio>=0.24` |
 
 **CLI commands:**
 
@@ -284,7 +283,7 @@ uv pip install mas-lab-library-lab  # PyPI
 
 **Python entry point `mas.lab.eval.plugins`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.eval.plugins` without a hard-coded path.
 
-**Python entry point `mas.lab.ui.plots`:** this package advertises 1 discoverable item(s) so the runtime can load `lab.ui.plots` without a hard-coded path.
+**Python entry point `mas.lab.ui.plots`:** this package advertises 2 discoverable item(s) so the runtime can load `lab.ui.plots` without a hard-coded path.
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 
@@ -318,11 +317,12 @@ uv pip install "mas-lab-library-ioa[all]"  # PyPI, all extras
 
 **Optional extras:**
 
-| Extra  | Packages / features     |
-| ------ | ----------------------- |
-| `cli`  | `mcp[cli]`              |
-| `all`  | `mcp[cli]`              |
-| `slim` | `slim-bindings>=2.2,<3` |
+| Extra      | Packages / features     |
+| ---------- | ----------------------- |
+| `cli`      | `mcp[cli]`              |
+| `all`      | `mcp[cli]`              |
+| `slim`     | `slim-bindings>=2.2,<3` |
+| `a2a-grpc` | `a2a-sdk[grpc]>=1.1.5`  |
 
 **CLI commands:**
 

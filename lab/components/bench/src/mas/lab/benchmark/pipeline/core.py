@@ -15,7 +15,7 @@ import sys  # noqa: E402
 import warnings as _warnings_module  # noqa: E402
 from abc import ABC, abstractmethod  # noqa: E402
 from pathlib import Path  # noqa: E402
-from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union  # noqa: E402
+from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple, Union  # noqa: E402
 
 import yaml  # noqa: E402
 from mas.lab.benchmark.pipeline.models import (  # noqa: E402
@@ -39,6 +39,16 @@ from mas.runtime.registry import get_registry, register_plugin  # noqa: E402
 # registered plugin at all, but a raw 'module.path:ClassName' or
 # './file.py:ClassName' reference straight from pipeline YAML.
 # ---------------------------------------------------------------------------
+
+
+def _artifact_names(value: Any) -> tuple[str, ...]:
+    if value is None or value == "":
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, Sequence):
+        return tuple(str(item) for item in value if item)
+    return (str(value),)
 
 
 def register_step(name: str, obj: Any, *, attributes: dict[str, Any] | None = None) -> None:
@@ -69,6 +79,19 @@ def get_step(name: str | None = None, *, attributes: dict[str, Any] | None = Non
     registry = get_registry()
     info = registry.get("step", str(name) if name else None, attributes=attributes)
     return info.load_class() if info is not None else None
+
+
+def step_worker_safety(step_type: str, *, base_dir: Optional[Path] = None) -> bool | None:
+    """The declared ``worker_safe`` of a step type, or ``None`` when nothing declares it.
+
+    A registry entry declares it as ``worker_safe`` under ``attributes``; any other
+    step (a class path, a lab-local step) declares it on its class.
+    """
+    for entry in get_registry().entries_named(step_type, "step"):
+        if "worker_safe" in entry.attributes:
+            return bool(entry.attributes["worker_safe"])
+    step_class = resolve_step_class(step_type, base_dir=base_dir, required_base=PipelineStep)
+    return step_class.declared_worker_safe()
 
 
 def list_steps() -> dict[str, Any]:
@@ -205,6 +228,9 @@ class PipelineStep(ABC):
         self.resource = str(resource or type(self).resource or "cpu")
         self.refresh = refresh
         self.concurrency = max(1, int(concurrency or 1))
+        self.ins: tuple[str, ...] = ()
+        self.out: tuple[str, ...] = ()
+        self.realtime: bool | None = None
 
     def is_persistent(self) -> bool:
         cfg_val = self.config.get("persist")
@@ -215,6 +241,23 @@ class PipelineStep(ABC):
     def on_batch(self, batch: List[Dict[str, Any]], ctx: "ExecutionContext") -> None:  # noqa: F821
         """Fold a batch of records. Default is a no-op; override to consume streams."""
         del batch, ctx
+        return None
+
+    worker_safe: ClassVar[bool]
+    """Declared by each step class that may run beside ``schedule.worker_processes > 1``.
+
+    Pipeline steps run in the parent process; process workers run only the MAS.
+    ``True`` says the step patches no process state that MAS runs depend
+    on. There is no default: a step that does not declare it is refused when the
+    schedule asks for process workers (see :func:`step_worker_safety`).
+    """
+
+    @classmethod
+    def declared_worker_safe(cls) -> bool | None:
+        """The nearest class-level ``worker_safe`` declaration, or ``None`` when no class declares it."""
+        for klass in cls.__mro__:
+            if "worker_safe" in vars(klass):
+                return bool(vars(klass)["worker_safe"])
         return None
 
     async def finish(self, ctx: "ExecutionContext") -> StepOutput:  # noqa: F821
@@ -230,7 +273,26 @@ class PipelineStep(ABC):
 
     @property
     def output_artifacts(self) -> List[Tuple[str, Any]]:
-        return []
+        """Artifacts this step publishes, from YAML ``out:`` when set."""
+        names = tuple(self.out or ())
+        if not names:
+            return []
+        from mas.lab.benchmark.pipeline.resources import Artifact, Scope
+
+        arts: List[Tuple[str, Any]] = []
+        for name in names:
+            if name in {"plot", "figure"}:
+                rel = str((self.config or {}).get("output") or "plot.svg")
+                art = Artifact(
+                    name=Path(rel).stem,
+                    format=Path(rel).suffix.lstrip(".") or "svg",
+                    scope=Scope.EXPERIMENT,
+                )
+                art._relative_path = rel  # type: ignore[attr-defined]
+                arts.append(("output", art))
+            else:
+                arts.append((f"{name}_path", Artifact(name=name, format="json", scope=Scope.EXPERIMENT)))
+        return arts
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], base_dir: Optional[Path] = None) -> PipelineStep:
@@ -278,6 +340,12 @@ class PipelineStep(ABC):
         step.resource = resource
         step.refresh = refresh
         step.concurrency = max(1, concurrency)
+        step.ins = _artifact_names(data.get("in"))
+        step.out = _artifact_names(data.get("out"))
+        if data.get("realtime") is not None:
+            if not isinstance(data["realtime"], bool):
+                raise ValueError(f"step {step.name!r}: realtime must be true or false, got {data['realtime']!r}")
+            step.realtime = data["realtime"]
         return step
 
     @classmethod

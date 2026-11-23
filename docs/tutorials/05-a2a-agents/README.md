@@ -80,7 +80,7 @@ In a second terminal, fetch the agent card:
 a2a card get http://127.0.0.1:9006
 ```
 
-You should see `Name: schedule_agent`, its interfaces (`JSONRPC` on port 9006, `HTTP+JSON`), and the skill `transport-schedule-lookup`. The runtime generates the card from the agent manifest.
+You should see `Name: schedule_agent`, its interfaces (`JSONRPC` on port 9006, `HTTP+JSON`), and the skill `transport-schedule-lookup`. The harness generates the card from the agent manifest.
 
 ## Step 3 — Mix local and A2A agents
 

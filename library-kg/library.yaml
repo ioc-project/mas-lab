@@ -11,38 +11,59 @@ plugins:
     name: normalize_events
     module: mas.library.kg.bench
     class: NormalizeEventsStep
+    warm:
+      - mas.library.kg.observability.native.handlers
+      - mas.library.kg.observability.otel_completion
+    attributes:
+      worker_safe: true
   - type: step
     name: normalize_otel
     module: mas.library.kg.bench
     class: NormalizeOtelStep
+    attributes:
+      worker_safe: true
   - type: step
     name: validate_kg
     module: mas.library.kg.bench
     class: ValidateKgStep
+    attributes:
+      worker_safe: true
   - type: step
     name: verify_events
     module: mas.library.kg.bench
     class: VerifyEventsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: compare_kg
     module: mas.library.kg.bench
     class: CompareKgStep
+    attributes:
+      worker_safe: true
   - type: step
     name: plot_multilevel_trajectory_kg
     module: mas.library.kg.plots
     class: PlotMultilevelTrajectoryKGStep
+    attributes:
+      worker_safe: true
   - type: step
     name: embed_states
     module: mas.library.kg.steps.embed_states
     class: EmbedStatesStep
+    attributes:
+      worker_safe: true
   - type: step
     name: neo4j_push
     module: mas.library.kg.bench
     class: Neo4jPushStep
+    attributes:
+      worker_safe: true
   - type: step
     name: neo4j_dump
     module: mas.library.kg.bench
     class: Neo4jDumpStep
+    attributes:
+      worker_safe: true
   - type: codec
     name: kg-neo4j
     urn: mas.codec.kg_neo4j

@@ -20,8 +20,10 @@ types:
   - tool_provider
   - agent_comm
   - agent_expose
+  - agent_loop
   - layer
   - webserver
+  - transport_classifier
 
 plugins:
   - type: tool_provider
@@ -53,6 +55,20 @@ plugins:
     urn: mas.agent_comm.a2a
     module: library_ioa.plugins.a2a.agent_comm
     class: A2AAgentComm
+    warm:
+      - a2a.client
+      - a2a.server.agent_execution
+      - a2a.server.events
+      - a2a.server.request_handlers
+      - a2a.server.routes
+      - a2a.server.tasks
+      - a2a.utils.grpc_status
+      - a2a.types.a2a_pb2_grpc
+      - a2a.server.request_handlers.grpc_handler
+      - grpc
+      - grpc.aio
+      - google.rpc.status_pb2
+      - fastapi
     attributes:
       protocol_name: a2a
       url_schemes: {a2a: http, a2as: https}
@@ -63,6 +79,15 @@ plugins:
     urn: mas.agent_expose.a2a
     module: library_ioa.plugins.a2a.exposure
     class: A2AExposure
+  - type: agent_loop
+    name: a2a-harness
+    urn: mas.agent_loop.a2a-harness
+    module: library_ioa.plugins.a2a.harness
+    class: A2AHarnessLoop
+    description: >
+      Drive a remote A2A agent as the agent's loop: send the task, return the reply.
+    shortcuts:
+      - a2a-harness
   - type: layer
     name: slim
     urn: mas.layer.slim
@@ -95,3 +120,27 @@ plugins:
     urn: mas.webserver.uvicorn
     module: library_ioa.plugins.webserver
     class: UvicornWebServer
+  - type: transport_classifier
+    name: a2a
+    urn: mas.transport_classifier.a2a
+    module: library_ioa.plugins.a2a.classifier
+    class: A2ATransportClassifier
+    attributes:
+      default_sdk_spans: false
+      default_propagate_metadata: false
+  - type: transport_classifier
+    name: mcp
+    urn: mas.transport_classifier.mcp
+    module: library_ioa.plugins.mcp.classifier
+    class: MCPTransportClassifier
+    attributes:
+      default_sdk_spans: false
+      default_propagate_metadata: false
+  - type: transport_classifier
+    name: slim
+    urn: mas.transport_classifier.slim
+    module: library_ioa.plugins.slim.classifier
+    class: SlimTransportClassifier
+    attributes:
+      default_sdk_spans: false
+      default_propagate_metadata: false

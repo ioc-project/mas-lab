@@ -14,11 +14,11 @@ the same ``RelatedStatePlugin`` and stay out of Q.
 from __future__ import annotations
 
 import hashlib
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
+from mas.runtime import hostenv
 from mas.runtime.boundary.related_state import RelatedStateRef
 
 
@@ -40,7 +40,7 @@ class GitWorktreeRelatedState:
                 locator=str(self.root),
                 adapter="content-hash",
             )
-        env = os.environ.copy()
+        env = hostenv.snapshot()
         env["GIT_INDEX_FILE"] = str(self.root / ".git" / "mas-lab-index")
         _git(self.root, "add", "-A", env=env)
         tree = _git(self.root, "write-tree", env=env).strip()

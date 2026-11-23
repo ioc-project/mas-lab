@@ -12,10 +12,10 @@ Offline CI replays a recorded live provider through ``llm_cache`` (``raise_on_mi
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
+from mas.runtime import hostenv
 from mas.runtime.contracts.tool_semantics import existing_attr
 from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.registry.llm_provider_protocol import adapt_llm_provider, require_achat_completion
@@ -113,7 +113,7 @@ def _fill_api_key(spec: dict[str, Any]) -> None:
     env_name = str(spec.get("api_key_env") or "").strip()
     if not env_name:
         return
-    value = os.environ.get(env_name, "").strip()
+    value = hostenv.get(env_name, "").strip()
     if value:
         spec["api_key"] = value
 

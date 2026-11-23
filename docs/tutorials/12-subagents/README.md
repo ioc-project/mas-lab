@@ -76,7 +76,7 @@ exchange. The reviewer runs as its own instance for this one call.
 1. `create_subagent` plus a template list gives the parent a bounded "ask a
    specialist" capability with no tool code.
 2. A template is an ordinary Agent manifest.
-3. The runtime, not the model, enforces budgets and template paths.
+3. The harness, not the model, enforces budgets and template paths.
 
 ## Next
 

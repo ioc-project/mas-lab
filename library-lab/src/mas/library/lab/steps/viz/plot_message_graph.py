@@ -1,6 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
+# fmt: off
 from __future__ import annotations
+
 """PlotMessageGraphStep — pipeline step that renders a whole-run message-flow diagram.
 
 Generates a swimlane SVG or HTML (``message-graph.svg`` / ``.html``) from a
@@ -33,18 +36,20 @@ Example pipeline YAML::
 
 import logging
 
+from mas.lab.benchmark.pipeline import FigureStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_named_file
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.library.lab.steps._io import path_from_config_or_deps
 
 logger = logging.getLogger(__name__)
 
 
-class PlotMessageGraphStep(PipelineStep):
+class PlotMessageGraphStep(FigureStep):
     """Render a whole-run agent message-flow swimlane diagram from kg.json."""
 
     type = "plot_message_graph"
+    HONORS = frozenset({"format", "title"})
+    FORMATS = ("svg", "html")
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
         """Render the message-graph SVG.
@@ -58,7 +63,7 @@ class PlotMessageGraphStep(PipelineStep):
         from mas.lab.plots.kg_adapter import load_kg
         from mas.lab.plots.message_graph import plot_message_graph
 
-        config   = self.config
+        config   = self.apply_style(self.config, ctx)
         fmt      = config.get("format", "svg").lower()
         title    = config.get("title", "")
         resolved_path = path_from_config_or_deps(

@@ -21,8 +21,9 @@ that holds the secret, not an ``env:`` lookup.
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
+
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def resolve_env_string(value: str) -> str:
         var, default = rest, ""
     if not var:
         return default
-    resolved = os.environ.get(var)
+    resolved = hostenv.get(var)
     if resolved:
         logger.debug("env_resolve: %s resolved from env", var)
         if var.upper().endswith(_ENDPOINT_SUFFIXES):

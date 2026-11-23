@@ -97,7 +97,7 @@ Plugins declare `gets` (snapshot on refresh) and `subscribes` (live frames only)
 | `MAS_DEMO_UI_INGEST_URL` | Override ingest URL (default `http://127.0.0.1:8090/api/ingest`) |
 | `MAS_DEMO_UI_TOKEN` | Shared secret for ingest, commands, plots, and `/ws` |
 | `MAS_DEMO_UI_SSL_CERTFILE` / `MAS_DEMO_UI_SSL_KEYFILE` | Required with the token for a non-loopback bind |
-| `MAS_LLM_CACHE` | Judge LLM cache (default `infra/.cache/eval.llm-cache.json` on a UI live job) |
+| `MAS_LLM_CACHE` | Judge LLM cache. A UI live job defaults to `infra/.cache/eval.llm-cache.json`; this variable, read by the `mas-ctl` / `mas-lab` entry point, wins over that default |
 | `MAS_UI_FOLDS` | Registers extra library folds for `mas-lab replay` |
 
 `serve` proxies the Vite app. Vite proxies `/api`, `/ws`, and `/health` back.

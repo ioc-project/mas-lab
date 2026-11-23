@@ -9,6 +9,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from mas.runtime import hostenv
+
 T = TypeVar("T")
 
 
@@ -23,28 +25,18 @@ class WorkdirSandbox:
 
     def run(self, fn: Callable[[], T], *, tool_name: str = "") -> T:
         previous = os.getcwd()
-        previous_env = os.environ.get("MAS_EXECUTE_ROOT")
         os.chdir(self.root)
-        os.environ["MAS_EXECUTE_ROOT"] = str(self.root)
         try:
-            return fn()
+            with hostenv.overlay({"MAS_EXECUTE_ROOT": str(self.root)}):
+                return fn()
         finally:
             os.chdir(previous)
-            if previous_env is None:
-                os.environ.pop("MAS_EXECUTE_ROOT", None)
-            else:
-                os.environ["MAS_EXECUTE_ROOT"] = previous_env
 
     async def arun(self, fn: Callable[[], Any], *, tool_name: str = "") -> Any:
         previous = os.getcwd()
-        previous_env = os.environ.get("MAS_EXECUTE_ROOT")
         os.chdir(self.root)
-        os.environ["MAS_EXECUTE_ROOT"] = str(self.root)
         try:
-            return await fn()
+            with hostenv.overlay({"MAS_EXECUTE_ROOT": str(self.root)}):
+                return await fn()
         finally:
             os.chdir(previous)
-            if previous_env is None:
-                os.environ.pop("MAS_EXECUTE_ROOT", None)
-            else:
-                os.environ["MAS_EXECUTE_ROOT"] = previous_env

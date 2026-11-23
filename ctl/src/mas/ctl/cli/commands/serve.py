@@ -24,6 +24,7 @@ from mas.ctl.session.bootstrap import InstantiationOptions, instantiate_runtime
 from mas.ctl.session.exposure import expose_agent
 from mas.ctl.session.flavour import FlavourError, resolve_session_flavour
 from mas.ctl.session.infra_resolve import resolve_session_infra
+from mas.ctl.session.loop import loop_binding, loop_from_spec
 from mas.ctl.session.manifest_config import require_agent_id_from_manifest
 from mas.ctl.session.observability import cli_replaced_plugin_set, obs_config_to_binding, setup_observability
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
@@ -88,6 +89,7 @@ def serve_agent_cmd(
     events_file: str | None,
     events_stdout: bool,
     events_format: str | None,
+    transport_observability: tuple[str, ...] = (),
 ) -> None:
     """Serve an agent through the agent_expose plugin selected by its infra endpoint."""
     from mas.ctl.paths import manifest_cwd
@@ -164,6 +166,7 @@ def serve_agent_cmd(
             events_file=events_file,
             events_stdout=events_stdout,
             events_format=events_format,
+            transport_observability=transport_observability,
             agent_id=agent_id,
             manifest=manifest,
             flavour_spec=flavour_spec,
@@ -171,6 +174,16 @@ def serve_agent_cmd(
             entry_id=agent_id,
         )
         replaced = cli_replaced_plugin_set(events, events_format)
+        if loop_binding(manifest) is not None:
+            _serve_with_loop(
+                manifest,
+                endpoint,
+                session=session,
+                flavour_spec=flavour_spec,
+                obs_config=obs_config,
+                replaced=replaced,
+            )
+            return
         instance, _ = instantiate_runtime(
             InstantiationOptions(
                 pattern_plugin_id=pattern_plugin_id,
@@ -183,6 +196,7 @@ def serve_agent_cmd(
                 events_file=obs_config.events_file,
                 obs_from_cli=replaced,
                 obs_binding_override=obs_config_to_binding(obs_config) if replaced else None,
+                obs_config=obs_config,
             )
         )
         recorder = setup_observability(
@@ -209,8 +223,28 @@ def serve_agent_cmd(
                 endpoint,
                 blocking=True,
                 control_dir=None if no_control else (control_dir or default_control_dir()),
+                flavour_spec=flavour_spec,
             )
         finally:
             peer_handles.close()
             if recorder is not None:
                 recorder.close()
+
+
+def _serve_with_loop(manifest, endpoint, *, session, flavour_spec, obs_config, replaced) -> None:
+    """Serve an agent whose ``spec.loop`` names an agent_loop: no kernel, the same listener and boundary."""
+    try:
+        host = loop_from_spec(
+            manifest,
+            manifest_dir=session.manifest_dir,
+            flavour_spec=flavour_spec,
+            obs_binding_override=obs_config_to_binding(obs_config) if replaced else None,
+            obs_from_cli=replaced,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    host.recorder = setup_observability(host.shell, obs_config, base_dir=session.manifest_dir or session.original_cwd)
+    try:
+        expose_agent(None, manifest, endpoint, blocking=True, loop=host.loop, flavour_spec=flavour_spec)
+    finally:
+        host.close()

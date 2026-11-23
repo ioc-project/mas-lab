@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
+from mas.runtime.transport.config import TransportObservabilityConfig
+
 
 @dataclass(frozen=True)
 class ObservabilityBinding:
@@ -27,6 +29,8 @@ class ObservabilityBinding:
     trace_content: bool = True
     # Emit events to stdout as well as file
     stdout: bool = False
+    # Protocol-boundary telemetry. Follows native/otel sinks (off when neither is listed).
+    transport: TransportObservabilityConfig = field(default_factory=TransportObservabilityConfig)
 
     def with_mas_id(self, mas_id: str) -> "ObservabilityBinding":
         """Stamp the MAS name onto native/otel plugin configs when blank."""
@@ -34,10 +38,7 @@ class ObservabilityBinding:
         if not name:
             return self
         if "/" in name or "\\" in name:
-            raise ValueError(
-                "MAS app name must be a declared identity, not a filesystem path: "
-                f"{name!r}"
-            )
+            raise ValueError(f"MAS app name must be a declared identity, not a filesystem path: {name!r}")
         configs = {key: dict(value) for key, value in self.plugin_configs.items()}
         for plugin in self.plugins:
             cfg = dict(configs.get(plugin) or {})

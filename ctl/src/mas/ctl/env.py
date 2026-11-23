@@ -8,6 +8,8 @@ import logging
 import os
 from pathlib import Path
 
+from mas.runtime import hostenv
+
 logger = logging.getLogger(__name__)
 
 _HF_TOKEN_ENV = "HF_TOKEN"
@@ -32,12 +34,11 @@ def huggingface_token(
         if not text:
             raise ValueError(f"token file {path} is empty")
         return text
-    env = os.environ.get(_HF_TOKEN_ENV, "").strip()
+    env = hostenv.get(_HF_TOKEN_ENV, "").strip()
     if env:
         return env
-    raise ValueError(
-        "Hugging Face token is required (--token, --token-file, or HF_TOKEN)"
-    )
+    raise ValueError("Hugging Face token is required (--token, --token-file, or HF_TOKEN)")
+
 
 _warned_overrides: set[tuple[str, str]] = set()
 
@@ -65,7 +66,7 @@ def env_model_override(*, replaces: str = "the declared model") -> str | None:
     Empty values are ignored. Logs once per value via :func:`warn_env_override`.
     """
     for env_name in _ENV_MODEL_VARS:
-        token = os.environ.get(env_name, "").strip()
+        token = hostenv.get(env_name, "").strip()
         if token:
             warn_env_override(env_name, token, replaces=replaces)
             return token
@@ -80,7 +81,7 @@ def env_named_secret(name: str) -> str:
     token = str(name or "").strip()
     if not token or any(ch in token for ch in " \n=/"):
         raise ValueError("secret_env must be an environment variable name")
-    value = os.environ.get(token, "").strip()
+    value = hostenv.get(token, "").strip()
     if not value:
         raise ValueError(f"missing secret in environment variable {token!r}")
     return value
@@ -123,4 +124,8 @@ def load_dotenv(
 
     if loaded is not None:
         os.environ.setdefault("MAS_DOTENV_LOADED", str(loaded))
+        # The file may add MAS_LLM_* and MAS_LLM_CACHE as well as plain variables: re-read all of them.
+        from mas.ctl.session.llm_scheduler_env import refresh_env_overrides
+
+        refresh_env_overrides()
     return loaded

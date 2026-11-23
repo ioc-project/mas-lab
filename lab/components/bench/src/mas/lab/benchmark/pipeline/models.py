@@ -1,12 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+# ruff: noqa: E402
 from __future__ import annotations
+
 """
 Pipeline data models and manifest descriptors.
 """
 
 
-from abc import ABC
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
@@ -14,24 +15,40 @@ from typing import Any, Dict, List
 import yaml
 
 #: Keys accepted at the step level in a pipeline YAML.
-_STEP_KNOWN_KEYS: frozenset = frozenset({
-    "name", "type", "config", "depends_on", "description", "persist", "phase",
-    "per_scenario",
-    "per_run",
-    "concurrency",
-    "in",
-    "out",
-    "scope",
-    "role",
-    "resource",
-    "refresh",
-    "batch",
-})
+_STEP_KNOWN_KEYS: frozenset = frozenset(
+    {
+        "name",
+        "type",
+        "config",
+        "depends_on",
+        "description",
+        "persist",
+        "phase",
+        "per_scenario",
+        "per_run",
+        "concurrency",
+        "in",
+        "out",
+        "scope",
+        "role",
+        "resource",
+        "refresh",
+        "batch",
+        "realtime",
+    }
+)
 
 #: Keys accepted at the pipeline-config level.
-_CONFIG_KNOWN_KEYS: frozenset = frozenset({
-    "name", "version", "description", "output", "steps", "max_active",
-})
+_CONFIG_KNOWN_KEYS: frozenset = frozenset(
+    {
+        "name",
+        "version",
+        "description",
+        "output",
+        "steps",
+        "max_active",
+    }
+)
 
 _MISSING = object()  # sentinel for "no default"
 

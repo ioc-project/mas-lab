@@ -28,3 +28,8 @@ commands
   continue
 end
 ```
+
+`if N`, `if every`, and `agent ID` (`agent $entry` for the MAS entry agent)
+use the same matcher as lab `environment:` triggers. `env NAME` runs a named
+environment action list when a lab port is bound; `emit NAME` records a
+`user.*` event. Outside a lab run both print a skipped line.

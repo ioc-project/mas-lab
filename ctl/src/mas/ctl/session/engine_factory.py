@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +14,7 @@ from mas.ctl.infra.bind import apply_agent_call_stacks
 from mas.ctl.infra.resolve import api_key_for_infra, resolution_anchor, resolve_infra_refs
 from mas.ctl.session.manifest_config import engine_use_tool_loop, kernel_config_from_manifest
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
+from mas.runtime import hostenv
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.engine.infra_pipeline import filter_pipeline_for_kind, split_pipeline_layers
@@ -318,7 +318,7 @@ def build_engine(
         from mas.ctl.infra.env_resolve import warn_endpoint_from_env
 
         warn_endpoint_from_env(
-            "OPENAI_BASE_URL" if os.environ.get("OPENAI_BASE_URL", "").strip() else "OPENAI_API_BASE", env_base
+            "OPENAI_BASE_URL" if hostenv.get("OPENAI_BASE_URL", "").strip() else "OPENAI_API_BASE", env_base
         )
     if infra_base and env_base and infra_base.rstrip("/") != env_base.rstrip("/"):
         logger.warning(
@@ -490,7 +490,7 @@ def _ensure_llm_cache_pipeline(
 
 
 def _bool_env(name: str) -> bool | None:
-    raw = os.environ.get(name)
+    raw = hostenv.get(name)
     if raw is None or raw.strip() == "":
         return None
     return raw.strip().lower() in ("1", "true", "yes", "on")
@@ -499,7 +499,7 @@ def _bool_env(name: str) -> bool | None:
 def _env_llm_base() -> str:
     """OpenAI SDK ``OPENAI_BASE_URL``, then the older ``OPENAI_API_BASE`` name."""
     for name in ("OPENAI_BASE_URL", "OPENAI_API_BASE"):
-        raw = os.environ.get(name)
+        raw = hostenv.get(name)
         if raw and raw.strip():
             return raw.strip()
     return ""

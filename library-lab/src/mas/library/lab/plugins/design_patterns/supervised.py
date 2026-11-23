@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
+from mas.library.standard.plugins.design_patterns.base import _DeterministicBase
+from mas.library.standard.plugins.design_patterns.utils import dispatch_parallel, dispatch_single
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.state import QProduct, RunLedger
 from mas.runtime.schema.egress import EgressSymbol
-
-from mas.library.standard.plugins.design_patterns.base import _DeterministicBase
-from mas.library.standard.plugins.design_patterns.utils import dispatch_parallel, dispatch_single
 
 
 class DeterministicSupervisedPlugin(_DeterministicBase):
@@ -32,7 +31,7 @@ class DeterministicSupervisedPlugin(_DeterministicBase):
         st = self._state()
         if not st.participants:
             return self._no_participants(q)
-        tool_results = self._extract_tool_results(run)
+        tool_results = self._extract_tool_results(run, q)
         workers = st.participants[:-1]
         supervisor = st.participants[-1]
 

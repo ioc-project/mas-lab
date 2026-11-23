@@ -15,7 +15,6 @@ traces (``--only`` to pick lanes, ``--align time`` for a shared clock,
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 import urllib.error
@@ -25,8 +24,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-DEFAULT_REPLAY_TIME = 15.0
-
 from mas.lab.controller.ui_stream.ui_trace import (
     cached_pipeline_files,
     discover_ui_traces,
@@ -35,15 +32,13 @@ from mas.lab.controller.ui_stream.ui_trace import (
     read_ui_trace,
     write_ui_trace,
 )
+from mas.runtime import hostenv
+
+DEFAULT_REPLAY_TIME = 15.0
 
 
 def ingest_url(url: str | None = None) -> str:
-    raw = (
-        url
-        or os.environ.get("MAS_DEMO_UI_INGEST_URL")
-        or os.environ.get("MAS_CONTROLLER_URL")
-        or "http://127.0.0.1:8090"
-    )
+    raw = url or hostenv.get("MAS_DEMO_UI_INGEST_URL") or hostenv.get("MAS_CONTROLLER_URL") or "http://127.0.0.1:8090"
     base = raw.rstrip("/")
     if base.endswith("/api/ingest"):
         return base
@@ -518,8 +513,7 @@ def replay_ui_traces(
     span = record_span(all_rows)
     expected = (span / used) if used > 0 else 0.0
     print(
-        f"demo-ui: pacing {len(all_rows)} events, trace={span:.1f}s, "
-        f"speedup={used:.2f}×, wall~{expected:.0f}s",
+        f"demo-ui: pacing {len(all_rows)} events, trace={span:.1f}s, speedup={used:.2f}×, wall~{expected:.0f}s",
         file=sys.stderr,
     )
     source_lanes: list[dict[str, Any]] = []
@@ -651,8 +645,7 @@ def replay_target(
     span = record_span(all_rows)
     expected = (span / used) if used > 0 else 0.0
     print(
-        f"demo-ui: pacing {len(all_rows)} events, trace={span:.1f}s, "
-        f"speedup={used:.2f}×, wall~{expected:.0f}s",
+        f"demo-ui: pacing {len(all_rows)} events, trace={span:.1f}s, speedup={used:.2f}×, wall~{expected:.0f}s",
         file=sys.stderr,
     )
     use_align = align == "time" and len(lanes) > 1
@@ -668,9 +661,7 @@ def replay_target(
         job_id = str(posted.get("job_id") or "")
         source_lanes = live_fold_lanes(lanes[0]["path"] if lanes else None)
         for extra in lanes[1:]:
-            source_lanes.append(
-                {"name": extra["scenario"], "source": "file", "path": extra["path"], "tree": "runtime"}
-            )
+            source_lanes.append({"name": extra["scenario"], "source": "file", "path": extra["path"], "tree": "runtime"})
         if wait and job_id and used > 0:
             posted.update(wait_job(url, job_id, expected_s=expected or None, lanes=source_lanes))
         else:

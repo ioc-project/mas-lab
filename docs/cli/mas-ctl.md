@@ -236,7 +236,7 @@ Field reference: [config.yaml](../references/config.yaml.md#mas_ctl).
 
 ### `events.jsonl` flags
 
-`chat`, `run-mas`, and `tui` share these flags. Details: [observability.md](observability.md).
+`chat`, `run-mas`, `tui`, and `serve` share these flags. Details: [observability.md](observability.md).
 
 | Flag | Default | Description |
 | --- | --- | --- |
@@ -244,6 +244,7 @@ Field reference: [config.yaml](../references/config.yaml.md#mas_ctl).
 | `--events-file PATH` | `traces/events.jsonl` | Native JSONL output path. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
 | `--events-stderr` / `--events-stdout` | off | Also stream native JSONL on stderr. `--events-stdout` is a legacy alias. Adds `native` when it is not in the plugin set; never replaces a plugin. |
 | `--events-format` | manifest | `native`, `otel`, and `both` replace the plugin set. `boundary` is the transform chain only. |
+| `--transport-observability` | manifest | Protocol capture overlay, e.g. `a2a=off` or `a2a.sdk_spans=true`. Repeatable. Needs native or otel. |
 
 ### Interactive commands
 
@@ -319,10 +320,11 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `--events-file PATH` | `traces/events.jsonl` | Native JSONL output path. Adds `native` to the plugin set when it is not in it; never replaces a plugin. |
 | `--events-stderr` / `--events-stdout` | off | Also stream native JSONL on stderr. `--events-stdout` is a legacy alias. |
 | `--events-format` | manifest | `native`, `otel`, and `both` replace the plugin set. `boundary` is the transform chain only. |
+| `--transport-observability` | manifest | Protocol capture overlay, e.g. `a2a=off`. Repeatable. Needs native or otel. |
 | `--control-dir PATH` | `$XDG_RUNTIME_DIR/mas-ctl`, else `/var/run/mas-ctl`, else a temp dir | Advertise control so `mas-ctl control attach` can find the A2A `contextId`. |
 | `--no-control-dir` | off | Do not advertise a control endpoint. Pair of `--control-dir`, not of `--control`. `--no-control` is the same flag. |
 
-`serve` also takes the `--events*` flags.
+`serve` also takes the `--events*` flags and `--transport-observability`.
 
 ## `mas-ctl tui [MANIFEST]`
 
@@ -351,7 +353,9 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 
 | Command | Purpose | Typical flags |
 | --- | --- | --- |
-| `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay` |
+| `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay`, `--profile default\|production` |
+| `mas-ctl hardening list` | List the named hardening checks with severity, rationale and fix. See [hardening.md](../references/hardening.md). | `--json` |
+| `mas-ctl hardening check MANIFEST` | Run the hardening checks over an Agent or MAS as a session resolves it. Default posture is advisory (exit 0); `production` exits 1 on a failed check. | `--profile`, `--flavour`, `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--control`, `--json` |
 | `mas-ctl schemas` | List registered schema kinds. | none |
 | `mas-ctl compile MANIFEST` | Print the resolved Agent or MAS spec after overlays and defaults. See [compile.md](compile.md). | `-o/--overlay`, `--control`, `--flavour`, `--override`, `-O/--output`, `--layout auto\|tree\|bundle`, `--no-defaults`, `--no-validate`, `--no-header` |
 | `mas-ctl compose MANIFEST` | Print the effective bind and placement plan. | `-d/--deployment`, `-o/--overlay`, `--override`, `--connect`, `--infra-ref`, `--runtime-ref`, `--kernel`, `-O/--output`, `--no-validate` |

@@ -22,51 +22,77 @@ plugins:
     name: figure_call_counts
     module: lifecycle_control_lab.steps.figure_call_counts
     class: FigureCallCountsStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_governance_overhead
     module: lifecycle_control_lab.steps.figure_governance_overhead
     class: FigureGovernanceOverheadStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_precision_recall_detail
     module: lifecycle_control_lab.steps.figure_precision_recall_detail
     class: FigurePrecisionRecallDetailStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_moodbar_detail
     module: lifecycle_control_lab.steps.figure_moodbar_detail
     class: FigureMoodbarDetailStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_stacking_detail
     module: lifecycle_control_lab.steps.figure_stacking_detail
     class: FigureStackingDetailStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_per_call
     module: lifecycle_control_lab.steps.figure_per_call
     class: FigurePerCallStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_nonllm
     module: lifecycle_control_lab.steps.figure_nonllm
     class: FigureNonllmStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_trajectory_automaton
     module: lifecycle_control_lab.steps.figure_trajectory_automaton
     class: FigureTrajectoryAutomatonStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_trajectory_swimlane
     module: lifecycle_control_lab.steps.figure_trajectory_swimlane
     class: FigureTrajectorySwimlaneStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_trajectory_compact
     module: lifecycle_control_lab.steps.figure_trajectory_compact
     class: FigureTrajectoryCompactStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_trajectory_bw
     module: lifecycle_control_lab.steps.figure_trajectory_bw
     class: FigureTrajectoryBwStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_trajectory_paper
     module: lifecycle_control_lab.steps.figure_trajectory_paper
     class: FigureTrajectoryPaperStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_trajectory_bw_plot
     module: lifecycle_control_lab.steps.figure_trajectory_bw_plot
     class: FigureTrajectoryBwPlotStep
+    attributes:
+      worker_safe: true

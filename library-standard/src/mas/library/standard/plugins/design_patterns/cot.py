@@ -4,12 +4,11 @@
 
 from __future__ import annotations
 
+from mas.library.standard.plugins.design_patterns.react import ReactPlugin
 from mas.runtime.kernel.config import KernelConfig
 from mas.runtime.kernel.egress_gate import emit_scheduled_egress
-from mas.library.standard.plugins.design_patterns.react import ReactPlugin
-from mas.runtime.schema.egress import EgressSymbol, NoOp
-from mas.runtime.schema.ingress import IngressSymbol, UserInputReceived
 from mas.runtime.kernel.state import CtxState, DpState, ModelState, QProduct, RunLedger, ToolState
+from mas.runtime.schema.egress import EgressSymbol, NoOp
 
 
 class CotPlugin(ReactPlugin):
@@ -17,18 +16,6 @@ class CotPlugin(ReactPlugin):
 
     def __init__(self) -> None:
         self._max_cot_pass = 1
-
-    def handle_event(
-        self,
-        q: QProduct,
-        run: RunLedger,
-        event: IngressSymbol,
-        *,
-        config: KernelConfig,
-    ) -> list[EgressSymbol]:
-        if isinstance(event, UserInputReceived) and q.dp == DpState.IDLE:
-            q.cot_pass = 0
-        return super().handle_event(q, run, event, config=config)
 
     def _evaluate(self, q: QProduct, run: RunLedger, config: KernelConfig) -> list[EgressSymbol]:
         if q.dp != DpState.EVALUATING or not run.events:

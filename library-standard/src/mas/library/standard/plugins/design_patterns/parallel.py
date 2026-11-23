@@ -22,9 +22,9 @@ class DeterministicParallelPlugin(_DeterministicBase):
         st = self._state()
         if not st.participants:
             return self._no_participants(q)
-        tool_results = self._extract_tool_results(run)
+        tool_results = self._extract_tool_results(run, q)
         if st.round_num == 1 and st.next_idx == 0:
             st.next_idx = 1
             return dispatch_parallel(self, q, run, config, st.original_task, st.participants)
-        merged = "\n\n".join(f"=== {i+1} ===\n{x}" for i, x in enumerate(tool_results))
+        merged = "\n\n".join(f"=== {i + 1} ===\n{x}" for i, x in enumerate(tool_results))
         return self._finish(q, merged or "Deterministic parallel run complete.")

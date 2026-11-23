@@ -7,8 +7,8 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol, runtime_checkable
 
-from mas.lab.benchmark.pipeline.models import StepOutput
 from mas.lab.benchmark.pipeline.keys import RunKey
+from mas.lab.benchmark.pipeline.models import StepOutput
 
 
 @runtime_checkable
@@ -43,7 +43,15 @@ def declared_callable(step: object, name: str):
 
 
 def folds_batches(step: object) -> bool:
-    """True when the step class implements ``on_batch`` (live or sealed fold)."""
+    """True when the step class implements ``on_batch`` (live or sealed fold).
+
+    YAML ``realtime: false`` does not fold: the step draws once from its
+    inputs when the pipeline seals.
+    """
+    from mas.lab.benchmark.pipeline.core import PipelineStep
+
+    if isinstance(step, PipelineStep) and step.realtime is False:
+        return False
     return declared_callable(step, "on_batch") is not None
 
 

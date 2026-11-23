@@ -121,7 +121,7 @@ jobs:
       - name: Tests and changed-line coverage
         env:
           GITHUB_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: task ${{ matrix.task }} COVERAGE=1 COVERAGE_PACKAGE=${{ github.event_name != 'pull_request' && '1' || '0' }}
+        run: task ${{ matrix.task }} COVERAGE=1 COVERAGE_PACKAGE=1
 
   # The oldest supported Python (.github/python-support.json), on pushes to main only. The full
   # version matrix runs weekly and before a release (python-matrix.yml).

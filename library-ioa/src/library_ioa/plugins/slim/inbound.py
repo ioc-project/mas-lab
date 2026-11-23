@@ -61,6 +61,18 @@ class SlimInbound:
         kind = str(envelope.get("kind") or "message")
         if kind == "request":
             intent = str(envelope.get("intent") or "task")
+            from library_ioa.plugins.slim.hooks import (
+                call_key,
+                emit_completed,
+                emit_error,
+                emit_received,
+                hooks_enabled,
+            )
+
+            announce = hooks_enabled()
+            key = call_key(str(envelope.get("context_id") or ""), envelope.get("correlation_id")) if announce else ""
+            if announce:
+                emit_received(source=sender, target=self.name, key=key)
             try:
                 with bound_headers(headers), bound_inbound(sender=sender, intent=intent):
                     request = {
@@ -79,13 +91,19 @@ class SlimInbound:
                         reply = await self._handle_request(**request)
                     else:  # a layer above decodes the request (a stack's inbound chain)
                         reply = str(await acall(handler, inbound_envelope(**request, intent=intent, headers=headers)))
+                if announce:
+                    emit_completed(side="server", source=sender, target=self.name, key=key)
                 return json.dumps({"kind": "reply", "task": reply}).encode("utf-8")
             except StackError as exc:
+                if announce:
+                    emit_error(side="server", key=key, source=sender, target=self.name, error_type=type(exc).__name__)
                 if "no turn to serve" in str(exc):
                     return json.dumps({"kind": "error", "error": NOT_SERVED}).encode("utf-8")
                 logger.exception("slim inbound handler failed")
                 return json.dumps({"kind": "error", "error": HANDLER_ERROR}).encode("utf-8")
-            except Exception:
+            except Exception as exc:
+                if announce:
+                    emit_error(side="server", key=key, source=sender, target=self.name, error_type=type(exc).__name__)
                 logger.exception("slim inbound handler failed")
                 return json.dumps({"kind": "error", "error": HANDLER_ERROR}).encode("utf-8")
         to = envelope.get("to")

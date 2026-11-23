@@ -1,0 +1,44 @@
+{
+  "protocol": "mcp",
+  "scenario": "tools_call_failure",
+  "sdk_version": "2.2.0",
+  "span_count": 2,
+  "spans": [
+    {
+      "attributes": {
+        "error.type": "tool_error",
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "boom",
+        "jsonrpc.request.id": "4",
+        "mcp.method.name": "tools/call",
+        "mcp.protocol.version": "2025-11-25"
+      },
+      "events": [],
+      "kind": "SERVER",
+      "name": "tools/call boom",
+      "parent_span_id": "$span-3",
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-2",
+      "status": "ERROR",
+      "trace_id": "$trace-1"
+    },
+    {
+      "attributes": {
+        "jsonrpc.request.id": "4",
+        "mcp.method.name": "tools/call"
+      },
+      "events": [],
+      "kind": "CLIENT",
+      "name": "MCP send tools/call boom",
+      "parent_span_id": null,
+      "scope_name": "mcp-python-sdk",
+      "scope_version": "",
+      "span_id": "$span-3",
+      "status": "UNSET",
+      "trace_id": "$trace-1"
+    }
+  ],
+  "token_context_error": false,
+  "token_error_count": 0
+}

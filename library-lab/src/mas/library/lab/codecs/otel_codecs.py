@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """OTel codecs — encoder/decoder pairs for ``otel_traces`` and ``events`` artifact kinds.
 
 Registered codecs
@@ -51,19 +50,20 @@ Usage in a pipeline YAML::
           session_id: "{session_id}"
 """
 
+from __future__ import annotations
 
+import base64
 import json
 import logging
-import os
 import urllib.error
 import urllib.parse
 import urllib.request
-import base64
 from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.codecs.base import Codec
 from mas.lab.infra.datastore import DatastoreSpec
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +73,13 @@ logger = logging.getLogger(__name__)
 # (canonical ClickHouse row → otel_sdk_spans conversion)
 # ---------------------------------------------------------------------------
 
+
 def _ns_to_isoformat(ns: int) -> str:
     """Convert Unix nanoseconds to ISO-8601 string (microsecond precision)."""
     import datetime
+
     us = ns // 1000
-    dt = (
-        datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
-        + datetime.timedelta(microseconds=us)
-    )
+    dt = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc) + datetime.timedelta(microseconds=us)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
 
 
@@ -101,40 +100,36 @@ def ch_row_to_sdk_span(row: dict[str, Any]) -> dict[str, Any]:
     """
     start_ns = int(row["StartNs"])
     duration = int(row.get("Duration", 0))
-    end_ns   = start_ns + duration
+    end_ns = start_ns + duration
 
-    trace_id  = "0x" + row["TraceId"].lower()
-    span_id   = "0x" + row["SpanId"].lower()
-    parent_id = (
-        "0x" + row["ParentSpanId"].lower()
-        if row.get("ParentSpanId")
-        else None
-    )
+    trace_id = "0x" + row["TraceId"].lower()
+    span_id = "0x" + row["SpanId"].lower()
+    parent_id = "0x" + row["ParentSpanId"].lower() if row.get("ParentSpanId") else None
 
-    attrs          = dict(row.get("SpanAttributes") or {})
+    attrs = dict(row.get("SpanAttributes") or {})
     resource_attrs = dict(row.get("ResourceAttributes") or {})
     resource_attrs.setdefault("service.name", row.get("ServiceName", ""))
 
     return {
-        "name":    row["SpanName"],
+        "name": row["SpanName"],
         "context": {
-            "trace_id":    trace_id,
-            "span_id":     span_id,
+            "trace_id": trace_id,
+            "span_id": span_id,
             "trace_state": "[]",
         },
-        "kind":      "SpanKind.INTERNAL",
+        "kind": "SpanKind.INTERNAL",
         "parent_id": parent_id,
         "start_time": _ns_to_isoformat(start_ns),
-        "end_time":   _ns_to_isoformat(end_ns),
+        "end_time": _ns_to_isoformat(end_ns),
         "status": {
             "status_code": _ch_status_to_sdk(row.get("StatusCode", "")),
         },
         "attributes": attrs,
-        "events":   [],
-        "links":    [],
+        "events": [],
+        "links": [],
         "resource": {
             "attributes": resource_attrs,
-            "schema_url":  "",
+            "schema_url": "",
         },
     }
 
@@ -142,6 +137,7 @@ def ch_row_to_sdk_span(row: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # ClickHouse connection helpers
 # ---------------------------------------------------------------------------
+
 
 def _resolve_ch_conn(store: DatastoreSpec) -> dict[str, Any]:
     """Resolve ClickHouse connection from DatastoreSpec + connections.yaml fallback.
@@ -155,7 +151,7 @@ def _resolve_ch_conn(store: DatastoreSpec) -> dict[str, Any]:
 
     password = ""
     if store.password_env:
-        password = os.environ.get(store.password_env, "")
+        password = hostenv.get(store.password_env, "")
 
     conn = resolve_clickhouse_conn(
         host=store.host or None,
@@ -209,9 +205,7 @@ def _clickhouse_query(
             ) from exc
         raise RuntimeError(f"ClickHouse HTTP {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(
-            f"Could not connect to ClickHouse at {base_url}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Could not connect to ClickHouse at {base_url}: {exc}") from exc
 
     return [json.loads(line) for line in body.splitlines() if line.strip()]
 
@@ -219,6 +213,7 @@ def _clickhouse_query(
 # ---------------------------------------------------------------------------
 # ("otel_traces", "otlp")  — encode only
 # ---------------------------------------------------------------------------
+
 
 class OtlpOtelCodec(Codec):
     """Push OTel spans to an OTLP HTTP endpoint (encode only).
@@ -238,10 +233,10 @@ class OtlpOtelCodec(Codec):
     """
 
     artifact_kind: str = "otel_traces"
-    store_type:    str = "otlp"
+    store_type: str = "otlp"
 
     def encode(self, artifact: Any, **opts: Any) -> None:
-        from mas.lab.telemetry.otlp_push import push_file, load_events
+        from mas.lab.telemetry.otlp_push import load_events, push_file
 
         service_name: str = opts.get("service_name", "mas-runtime")
         batch_size: int = int(opts.get("batch_size", 200))
@@ -260,9 +255,7 @@ class OtlpOtelCodec(Codec):
         elif isinstance(artifact, list):
             events = artifact
         else:
-            raise TypeError(
-                f"OtlpOtelCodec.encode: expected list[dict] or Path, got {type(artifact)!r}"
-            )
+            raise TypeError(f"OtlpOtelCodec.encode: expected list[dict] or Path, got {type(artifact)!r}")
 
         if dry_run:
             logger.info("[dry-run] Would push %d events to %s", len(events), endpoint)
@@ -278,14 +271,14 @@ class OtlpOtelCodec(Codec):
 
     def decode(self, **_: Any) -> Any:
         raise NotImplementedError(
-            "OtlpOtelCodec supports encode only. "
-            "Use ClickHouseOtelCodec (store_type='clickhouse') to read OTel spans."
+            "OtlpOtelCodec supports encode only. Use ClickHouseOtelCodec (store_type='clickhouse') to read OTel spans."
         )
 
 
 # ---------------------------------------------------------------------------
 # ("otel_traces", "clickhouse")  — decode only
 # ---------------------------------------------------------------------------
+
 
 class ClickHouseOtelCodec(Codec):
     """Query OTel spans from ClickHouse (decode only).
@@ -304,21 +297,20 @@ class ClickHouseOtelCodec(Codec):
     """
 
     artifact_kind: str = "otel_traces"
-    store_type:    str = "clickhouse"
+    store_type: str = "clickhouse"
 
     def encode(self, artifact: Any, **_: Any) -> None:
         raise NotImplementedError(
-            "ClickHouseOtelCodec supports decode only. "
-            "Use OtlpOtelCodec (store_type='otlp') to push OTel spans."
+            "ClickHouseOtelCodec supports decode only. Use OtlpOtelCodec (store_type='otlp') to push OTel spans."
         )
 
     def decode(self, **opts: Any) -> list[dict[str, Any]]:
         session_id: str | None = opts.get("session_id")
-        run_id:     str | None = opts.get("run_id")
-        trace_id:   str | None = opts.get("trace_id")
-        by:         str        = opts.get("by", "session")
-        app_name:   str | None = opts.get("app_name")
-        table:      str = opts.get("table", "otel_traces")
+        run_id: str | None = opts.get("run_id")
+        trace_id: str | None = opts.get("trace_id")
+        by: str = opts.get("by", "session")
+        app_name: str | None = opts.get("app_name")
+        table: str = opts.get("table", "otel_traces")
 
         # Normalise: --by trace or trace_id kwarg
         if by == "trace" and not trace_id:
@@ -326,9 +318,7 @@ class ClickHouseOtelCodec(Codec):
             session_id = run_id = None
 
         if not session_id and not run_id and not trace_id:
-            raise ValueError(
-                "ClickHouseOtelCodec.decode: provide session_id, run_id, or trace_id in opts."
-            )
+            raise ValueError("ClickHouseOtelCodec.decode: provide session_id, run_id, or trace_id in opts.")
 
         database = self.store.database or "default"
         db_table = f"{database}.{table}"
@@ -359,7 +349,8 @@ class ClickHouseOtelCodec(Codec):
 
         logger.info(
             "ClickHouseOtelCodec.decode: %s table=%s",
-            log_key, db_table,
+            log_key,
+            db_table,
         )
         raw_rows = _clickhouse_query(self.store, query)
         return [ch_row_to_sdk_span(row) for row in raw_rows]
@@ -368,6 +359,7 @@ class ClickHouseOtelCodec(Codec):
 # ---------------------------------------------------------------------------
 # ("otel_traces", "filesystem")  — encode + decode
 # ---------------------------------------------------------------------------
+
 
 class FilesystemOtelCodec(Codec):
     """Write/read OTel spans as JSONL on the local filesystem.
@@ -381,7 +373,7 @@ class FilesystemOtelCodec(Codec):
     """
 
     artifact_kind: str = "otel_traces"
-    store_type:    str = "filesystem"
+    store_type: str = "filesystem"
 
     def encode(self, artifact: Any, **opts: Any) -> None:
         filename: str = opts.get("filename", "otel_spans.jsonl")
@@ -391,6 +383,7 @@ class FilesystemOtelCodec(Codec):
 
         if isinstance(artifact, (str, Path)):
             import shutil
+
             shutil.copy2(artifact, out)
             logger.info("FilesystemOtelCodec: copied %s → %s", artifact, out)
         elif isinstance(artifact, list):
@@ -399,9 +392,7 @@ class FilesystemOtelCodec(Codec):
                     fh.write(json.dumps(item) + "\n")
             logger.info("FilesystemOtelCodec: wrote %d spans → %s", len(artifact), out)
         else:
-            raise TypeError(
-                f"FilesystemOtelCodec.encode: expected list[dict] or Path, got {type(artifact)!r}"
-            )
+            raise TypeError(f"FilesystemOtelCodec.encode: expected list[dict] or Path, got {type(artifact)!r}")
 
     def decode(self, **opts: Any) -> list[dict[str, Any]]:
         filename: str = opts.get("filename", "otel_spans.jsonl")
@@ -416,6 +407,7 @@ class FilesystemOtelCodec(Codec):
 # ("events", "filesystem")  — encode + decode
 # ---------------------------------------------------------------------------
 
+
 class FilesystemEventsCodec(Codec):
     """Write/read raw events (``events.jsonl`` format) on the local filesystem.
 
@@ -425,7 +417,7 @@ class FilesystemEventsCodec(Codec):
     """
 
     artifact_kind: str = "events"
-    store_type:    str = "filesystem"
+    store_type: str = "filesystem"
 
     def encode(self, artifact: Any, **opts: Any) -> None:
         filename: str = opts.get("filename", "events.jsonl")
@@ -435,6 +427,7 @@ class FilesystemEventsCodec(Codec):
 
         if isinstance(artifact, (str, Path)):
             import shutil
+
             shutil.copy2(artifact, out)
             logger.info("FilesystemEventsCodec: copied %s → %s", artifact, out)
         elif isinstance(artifact, list):
@@ -443,9 +436,7 @@ class FilesystemEventsCodec(Codec):
                     fh.write(json.dumps(item) + "\n")
             logger.info("FilesystemEventsCodec: wrote %d events → %s", len(artifact), out)
         else:
-            raise TypeError(
-                f"FilesystemEventsCodec.encode: expected list[dict] or Path, got {type(artifact)!r}"
-            )
+            raise TypeError(f"FilesystemEventsCodec.encode: expected list[dict] or Path, got {type(artifact)!r}")
 
     def decode(self, **opts: Any) -> list[dict[str, Any]]:
         filename: str = opts.get("filename", "events.jsonl")

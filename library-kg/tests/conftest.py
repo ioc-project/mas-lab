@@ -5,6 +5,8 @@
 import sys
 from pathlib import Path
 
+pytest_plugins = ["mas.runtime.hostenv_pytest"]
+
 # Ensure src/ is on the path for editable-install-free test runs
 _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:

@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import hmac
-import os
 from typing import Any
 
 from fastapi import HTTPException, Request, WebSocket
+from mas.runtime import hostenv
 from starlette.datastructures import Headers
 
 _LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1", "testclient", "testserver"})
@@ -33,7 +33,7 @@ CSP = (
 
 
 def ui_token() -> str:
-    return str(os.environ.get("MAS_DEMO_UI_TOKEN") or "").strip()
+    return str(hostenv.get("MAS_DEMO_UI_TOKEN") or "").strip()
 
 
 def is_loopback(host: str) -> bool:
@@ -44,8 +44,8 @@ def is_loopback(host: str) -> bool:
 
 
 def ssl_enabled() -> bool:
-    cert = str(os.environ.get("MAS_DEMO_UI_SSL_CERTFILE") or "").strip()
-    key = str(os.environ.get("MAS_DEMO_UI_SSL_KEYFILE") or "").strip()
+    cert = str(hostenv.get("MAS_DEMO_UI_SSL_CERTFILE") or "").strip()
+    key = str(hostenv.get("MAS_DEMO_UI_SSL_KEYFILE") or "").strip()
     return bool(cert and key)
 
 
@@ -53,8 +53,8 @@ def ssl_uvicorn_kwargs() -> dict[str, str]:
     if not ssl_enabled():
         return {}
     return {
-        "ssl_certfile": str(os.environ.get("MAS_DEMO_UI_SSL_CERTFILE") or "").strip(),
-        "ssl_keyfile": str(os.environ.get("MAS_DEMO_UI_SSL_KEYFILE") or "").strip(),
+        "ssl_certfile": str(hostenv.get("MAS_DEMO_UI_SSL_CERTFILE") or "").strip(),
+        "ssl_keyfile": str(hostenv.get("MAS_DEMO_UI_SSL_KEYFILE") or "").strip(),
     }
 
 
@@ -117,7 +117,9 @@ def authorize_ws(ws: WebSocket, hello: dict[str, Any] | None = None) -> None:
 
 def path_is_protected(path: str) -> bool:
     raw = str(path or "")
-    return any(raw == prefix or raw.startswith(prefix + "/") or raw.startswith(prefix + "?") for prefix in _PROTECTED_PREFIXES)
+    return any(
+        raw == prefix or raw.startswith(prefix + "/") or raw.startswith(prefix + "?") for prefix in _PROTECTED_PREFIXES
+    )
 
 
 def ingest_headers() -> dict[str, str]:

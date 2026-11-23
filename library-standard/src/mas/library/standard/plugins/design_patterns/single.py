@@ -22,7 +22,7 @@ class DeterministicSingleAgentPlugin(_DeterministicBase):
         st = self._state()
         if not st.participants:
             return self._no_participants(q)
-        tool_results = self._extract_tool_results(run)
+        tool_results = self._extract_tool_results(run, q)
         if st.next_idx == 0:
             st.next_idx = 1
             return dispatch_single(self, q, run, config, st.original_task, st.participants[0])

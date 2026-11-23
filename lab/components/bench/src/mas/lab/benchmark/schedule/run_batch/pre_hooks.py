@@ -14,6 +14,7 @@ reaches the hook):
 Steps are expanded for the exact node they belong to — never by scanning
 run folders on disk.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,10 +24,10 @@ from typing import Any, Awaitable, Callable, Optional
 
 from mas.lab.benchmark.schedule.pipeline import (
     PipelineExecutionError,
+    _effective_scope,
     make_node,
     node_scope,
     run_pipeline_phase,
-    _effective_scope,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,8 +66,7 @@ class LevelPreHooks:
             level: [
                 s
                 for s in specs or []
-                if getattr(s, "phase", "post") == "pre"
-                and node_scope(_effective_scope(s)) == node_scope(level)
+                if getattr(s, "phase", "post") == "pre" and node_scope(_effective_scope(s)) == node_scope(level)
             ]
             for level in _HOOK_SCOPES
         }
@@ -117,7 +117,5 @@ class LevelPreHooks:
                 lambda: self._run_level("item", node, f"{scenario}-{test}"),
             )
         if self._specs["run"]:
-            node = make_node(
-                "run", self._output_dir / scenario / test / run, scenario, test, run
-            )
+            node = make_node("run", self._output_dir / scenario / test / run, scenario, test, run)
             await self._run_level("run", node, f"{scenario}-{test}-{run}")

@@ -175,6 +175,35 @@ def test_capabilities_omit_isolation_and_reliable() -> None:
     assert caps["unicast"] is True
 
 
+async def test_a_send_emits_sent_completed_and_error() -> None:
+    from mas.runtime.schema.transport import TransportEvent
+    from mas.runtime.transport import emit
+    from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+
+    captured: list[TransportEvent] = []
+
+    class Sink:
+        def emit(self, event: TransportEvent) -> None:
+            captured.append(event)
+
+    emit.reset()
+    emit.bind_config(TransportObservabilityConfig(present=True, defaults=ProtocolTransportConfig()))
+    emit.bind_sink(Sink())
+    try:
+        a, b, _c = _triple()
+        assert (await a.asend("b", "hello")) == "ack:hello"
+        _set_run_turn(b, lambda task, **_kw: (_ for _ in ()).throw(RuntimeError("no")))
+        with pytest.raises(AgentCommError):
+            await a.asend("b", "fail")
+    finally:
+        emit.reset()
+    kinds = [e.kind for e in captured]
+    assert "transport.message.sent" in kinds
+    assert "transport.message.received" in kinds
+    assert "transport.message.completed" in kinds
+    assert "transport.error" in kinds
+
+
 async def test_check_agent_comm_on_fake_bindings() -> None:
     links = _triple()
 

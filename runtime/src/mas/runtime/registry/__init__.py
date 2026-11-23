@@ -25,6 +25,9 @@ class VariantInfo:
     description: str = ""
     requires: list[str] = field(default_factory=list)
     extra: str = ""
+    warm: list[str] = field(default_factory=list)
+    """Modules the plugin imports lazily on first use (an SDK it keeps out of import time). A batch imports
+    them, when installed, with the plugin so no two run threads first-import them together."""
 
     def load_class(self) -> type:
         mod = importlib.import_module(self.module)

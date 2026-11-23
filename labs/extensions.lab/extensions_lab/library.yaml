@@ -23,27 +23,41 @@ plugins:
     name: attribution_flow
     module: extensions_lab.steps.attribution_flow
     class: AttributionFlowStep
+    attributes:
+      worker_safe: true
   - type: step
     name: eval_fact_recall
     module: extensions_lab.steps.eval_fact_recall
     class: EvalFactRecallStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_provenance_record
     module: extensions_lab.steps.figure_provenance_record
     class: FigureProvenanceRecordStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_recall_summary
     module: extensions_lab.steps.figure_recall_summary
     class: FigureRecallSummaryStep
+    attributes:
+      worker_safe: true
   - type: step
     name: figure_smoke_evidence
     module: extensions_lab.steps.figure_smoke_evidence
     class: FigureSmokeEvidenceStep
+    attributes:
+      worker_safe: true
   - type: step
     name: governance_overhead
     module: extensions_lab.steps.governance_overhead
     class: GovernanceOverheadStep
+    attributes:
+      worker_safe: true
   - type: step
     name: sankey_flow
     module: extensions_lab.steps.sankey_flow
     class: SankeyFlowStep
+    attributes:
+      worker_safe: true

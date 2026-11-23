@@ -4,29 +4,16 @@
 
 from __future__ import annotations
 
-from mas.runtime.kernel.config import KernelConfig
 from mas.library.standard.plugins.design_patterns.cot import CotPlugin
-from mas.runtime.schema.egress import EgressSymbol, NoOp
-from mas.runtime.schema.ingress import IngressSymbol, UserInputReceived
-from mas.runtime.kernel.state import DpState, QProduct, RunLedger
+from mas.runtime.kernel.config import KernelConfig
+from mas.runtime.kernel.state import QProduct, RunLedger
+from mas.runtime.schema.egress import EgressSymbol
 
 
 class IntrospectionPlugin(CotPlugin):
     """Reflection/introspection — extra LLM critique pass (tutorial ``reflection`` overlay)."""
 
     plugin_id = "introspection@v1"
-
-    def handle_event(
-        self,
-        q: QProduct,
-        run: RunLedger,
-        event: IngressSymbol,
-        *,
-        config: KernelConfig,
-    ) -> list[EgressSymbol]:
-        if isinstance(event, UserInputReceived) and q.dp == DpState.IDLE:
-            q.cot_pass = 0
-        return super().handle_event(q, run, event, config=config)
 
     def _evaluate(self, q: QProduct, run: RunLedger, config: KernelConfig) -> list[EgressSymbol]:
         max_pass = max(config.max_cot_pass, 1)

@@ -21,6 +21,7 @@ from .processing import handle_processing_call
 from .session import handle_mas_call
 from .structural import handle_worker
 from .tool import handle_skill_call, handle_tool_call
+from .transport import handle_transport
 
 HandlerFn = Callable[[Dict[str, Any], Any], List[Dict[str, Any]]]
 
@@ -40,6 +41,7 @@ HANDLERS: Dict[str, HandlerFn] = {
     "GovernanceEvent": handle_annotation,
     "ContextContribution": handle_context_contribution,
     "Worker": handle_worker,
+    "Agent": handle_transport,
 }
 
 __all__ = ["HANDLERS"]

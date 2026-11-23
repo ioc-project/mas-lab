@@ -94,6 +94,8 @@ class MasRuntimePyKernelBackend:
                 parent_spec=mas_config if isinstance(mas_config, dict) else None,
                 hitl_contract=hitl_contract_for_mode(bind.hitl_mode),
                 flavour_spec=bind.flavour_spec,
+                obs_config=bind.obs_config,
+                obs_attach_plugins=bind.obs_attach_plugins,
             ),
         )
         instance.driver.agent_id = agent_id

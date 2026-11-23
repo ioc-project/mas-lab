@@ -24,6 +24,7 @@ from mas.library.standard.lib.comm.payload import (
     send_result,
 )
 from mas.library.standard.lib.comm.send_context import align_send
+from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack.layer import ChainMember
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
@@ -237,6 +238,9 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         # Anycast targets the bare three-part service, so subscribe to it too.
         shared = sb.Name.new_with_id(parts[0], parts[1], parts[2], id=self._instance_id)
         await self._call(app.subscribe_async(shared, conn_id))
+        from library_ioa.plugins.slim.hooks import emit_session
+
+        emit_session(side="client", key=f"session:{self.name}", agent_id=self.local_agent_id)
         await asyncio.sleep(actor.SUBSCRIBE_SETTLE_S)
         self._service = service
         self._conn_id = conn_id
@@ -351,31 +355,50 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         ).encode("utf-8")
         # One request at a time per target: they share a session, so a second request's reply would
         # otherwise be read by the first.
-        async with self._target_locks.setdefault(target_agent_id, asyncio.Lock()):
-            session = await self._p2p_session(target_agent_id)
-            try:
-                await self._wait_handle(session.publish_async(raw, None, None))
-                reply = await self._call(
-                    session.get_message_async(timeout=datetime.timedelta(seconds=self.reply_timeout_s))
-                )
-            except BaseException:
-                # No reply was read (or none was sent): a late one would answer the next request.
-                await self._drop_p2p_session(session)
-                raise
-        if len(reply.payload) > self.max_message_size + ENVELOPE_SLACK:
-            raise AgentCommError(HANDLER_ERROR)
+        from library_ioa.plugins.slim.hooks import call_key, emit_completed, emit_error, emit_sent, hooks_enabled
+
+        announce = hooks_enabled()
+        key = call_key(context_id, correlation_id) if announce else ""
         try:
-            incoming = json.loads(reply.payload.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            raise AgentCommError(HANDLER_ERROR) from exc
-        if not isinstance(incoming, dict) or str(incoming.get("kind") or "") == "error":
-            text = str(incoming.get("error") or "") if isinstance(incoming, dict) else ""
-            raise AgentCommError(text if text in {HANDLER_ERROR, NOT_SERVED} else HANDLER_ERROR)
-        source = str(reply.context.source_name or "")
-        parts = tuple(p for p in target_agent_id.split("/") if p)
-        if len(parts) == 3 and source:
-            self._sticky[target_agent_id] = source
-        return send_result(kind, str(incoming.get("task") or ""))
+            if announce:
+                emit_sent(source=self.local_agent_id, target=target_agent_id, key=key)
+            async with self._target_locks.setdefault(target_agent_id, asyncio.Lock()):
+                session = await self._p2p_session(target_agent_id)
+                try:
+                    await self._wait_handle(session.publish_async(raw, None, None))
+                    reply = await self._call(
+                        session.get_message_async(timeout=datetime.timedelta(seconds=self.reply_timeout_s))
+                    )
+                except BaseException:
+                    # No reply was read (or none was sent): a late one would answer the next request.
+                    await self._drop_p2p_session(session)
+                    raise
+            if len(reply.payload) > self.max_message_size + ENVELOPE_SLACK:
+                raise AgentCommError(HANDLER_ERROR)
+            try:
+                incoming = json.loads(reply.payload.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError) as exc:
+                raise AgentCommError(HANDLER_ERROR) from exc
+            if not isinstance(incoming, dict) or str(incoming.get("kind") or "") == "error":
+                text = str(incoming.get("error") or "") if isinstance(incoming, dict) else ""
+                raise AgentCommError(text if text in {HANDLER_ERROR, NOT_SERVED} else HANDLER_ERROR)
+            source = str(reply.context.source_name or "")
+            parts = tuple(p for p in target_agent_id.split("/") if p)
+            if len(parts) == 3 and source:
+                self._sticky[target_agent_id] = source
+            if announce:
+                emit_completed(side="client", source=self.local_agent_id, target=target_agent_id, key=key)
+            return send_result(kind, str(incoming.get("task") or ""))
+        except BaseException as exc:
+            if announce:
+                emit_error(
+                    side="client",
+                    key=key,
+                    source=self.local_agent_id,
+                    target=target_agent_id,
+                    error_type=type(exc).__name__,
+                )
+            raise
 
     async def _drop_p2p_session(self, session: Any) -> None:
         """Forget a point-to-point session and close it, so the next request opens a fresh one."""
@@ -599,7 +622,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             raise
         except Exception as exc:
             # create_app_with_secret takes the secret, and a binding may echo its arguments in an error
-            text = str(exc).replace(self._secret, "***") if self._secret else str(exc)
+            text = safe_text(str(exc).replace(self._secret, "***") if self._secret else str(exc))
             raise AgentCommError(text or "slim binding error") from None
 
     async def _call(self, value: Any) -> Any:
@@ -614,7 +637,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         except (AttributeError, TypeError, KeyboardInterrupt, SystemExit):
             raise
         except Exception as exc:
-            raise AgentCommError(str(exc) or "slim binding error") from exc
+            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
 
     def _run(self, coro: Any) -> Any:
         if not asyncio.iscoroutine(coro):

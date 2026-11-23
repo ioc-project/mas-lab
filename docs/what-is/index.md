@@ -12,7 +12,7 @@ A multi-agent system (MAS) is a team of LLM agents with tools and a workflow
 that says who talks to whom. MAS Lab is an open toolkit to engineer one.
 
 1. You describe agents, tools, workflows, and policies in YAML files (manifests).
-2. The runtime runs them and checks behaviour at boundaries such as tool calls and delegations.
+2. The harness runs them and checks behaviour at boundaries such as tool calls and delegations.
 3. Experiments and traces let you compare designs and audit what happened.
 
 The same specification serves local development, benchmarks, and governed

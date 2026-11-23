@@ -7,15 +7,17 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from mas.runtime import hostenv
+
 
 def llm_http_retry_overrides() -> dict[str, Any]:
     """Param overlay for the llm retry layer. Empty when the env vars are unset."""
     out: dict[str, Any] = {}
     if "MAS_LLM_HTTP_RETRIES" in os.environ:
-        raw = os.environ.get("MAS_LLM_HTTP_RETRIES") or "3"
+        raw = hostenv.get("MAS_LLM_HTTP_RETRIES") or "3"
         out["max_attempts"] = max(1, int(raw) + 1)
     if "MAS_LLM_HTTP_RETRY_BACKOFF" in os.environ:
-        raw = os.environ.get("MAS_LLM_HTTP_RETRY_BACKOFF") or "0.5"
+        raw = hostenv.get("MAS_LLM_HTTP_RETRY_BACKOFF") or "0.5"
         out["backoff_s"] = max(0.05, float(raw))
         out["jitter"] = False
     return out

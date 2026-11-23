@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import os
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -36,6 +35,7 @@ from mas.library.standard.plugins.checkpoint import (
 from mas.library.standard.plugins.checkpoint import (
     JsonCheckpointStore as LibraryJsonCheckpointStore,
 )
+from mas.runtime import hostenv
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.context.manifest_context import context_chunks_from_spec
 from mas.runtime.driver.instance import RuntimeInstance
@@ -120,8 +120,36 @@ class InstantiationOptions:
     flavour_spec: dict | None = None
     obs_binding_override: Any | None = None
     obs_from_cli: bool = False
+    obs_config: Any | None = None
+    obs_attach_plugins: bool = True
     entry_id: str | None = None
     delegate_ids: tuple[str, ...] = ()
+
+
+def _enforce_hardening(options: InstantiationOptions, spec: dict) -> dict:
+    """Refuse to start under the Flavour's ``production`` hardening posture when a check fails.
+
+    Without ``spec.hardening.profile: production`` this does nothing and returns ``spec`` as it is.
+    With it, the report goes to the ``gov_hardening_profile`` plugin when the Control declares it.
+    """
+    from mas.ctl.hardening import apply_posture
+    from mas.ctl.hardening.collect import from_session, raw_infra_documents
+    from mas.ctl.hardening.posture import with_report
+    from mas.ctl.session.manifest_config import agent_id_from_manifest
+
+    agent_id = agent_id_from_manifest(options.agent_manifest)
+
+    def build():
+        infra = options.resolved_infra
+        refs = list(infra.refs) if infra is not None else []
+        anchor = Path(options.manifest_dir) if options.manifest_dir else Path.cwd()
+        documents = raw_infra_documents(refs, anchor)
+        if isinstance(options.agent_manifest, dict):
+            documents += ((f"agent {agent_id!r}", options.agent_manifest),)
+        return from_session({agent_id: spec}, infra, raw_documents=documents)
+
+    report = apply_posture(options.flavour_spec, build)
+    return spec if report is None else with_report(spec, report)
 
 
 def hitl_contract_for_mode(mode: str) -> object | None:
@@ -251,6 +279,7 @@ def instantiate_runtime(
             entry_id=entry,
             delegate_ids=delegates,
         )
+    spec = _enforce_hardening(options, spec)
     spawn_params = spawn_subagent_params(spec)
     ctx.allow_subagent_spawning = is_spawn_subagent_enabled(spec)
     ctx.allow_control_tools = is_control_tools_enabled(spec)
@@ -348,6 +377,7 @@ def instantiate_runtime(
         runtime_engine=_runtime_engine,
         obs_binding_override=options.obs_binding_override,
         obs_from_cli=options.obs_from_cli,
+        attach_obs_plugins=options.obs_attach_plugins,
     )
     working_memory_spec = spec.get("working_memory")
     if isinstance(working_memory_spec, dict):
@@ -381,6 +411,12 @@ def instantiate_runtime(
             )
 
     instance.capture_session_baseline()
+    ctx_obj = getattr(instance.driver, "ctx", None)
+    if ctx_obj is not None and not str(getattr(ctx_obj, "agent_id", "") or ""):
+        ctx_obj.agent_id = agent_id
+    if not getattr(instance.driver, "agent_id", None):
+        instance.driver.agent_id = agent_id
+    _arm_transport_before_tools(options, instance, agent_id)
     # Attach tools even in CLI-only mode (manifest_dir may be None for --tool flags)
     if options.agent_manifest:
         from mas.runtime.engine.manifest_tool_provider import attach_manifest_tools_to_instance
@@ -412,8 +448,51 @@ def instantiate_runtime(
             ),
         )
     if rebuild is not None:
-        instance.conversation_factory = lambda: instantiate_runtime(_conversation_options(rebuild), hitl=hitl)[0]
+
+        def _new_conversation(
+            _options: InstantiationOptions = rebuild,
+            _hitl: Any = hitl,
+            _parent: RuntimeInstance = instance,
+            _agent_id: str = agent_id,
+        ) -> RuntimeInstance:
+            child, _ = instantiate_runtime(_conversation_options(_options), hitl=_hitl)
+            plugin_set = _parent.obs_plugin_set
+            if plugin_set is not None:
+                from mas.runtime.boundary.obs.plugins import attach_observability_plugin_set
+
+                attach_observability_plugin_set(plugin_set, child, agent_id=_agent_id, begin_run=False)
+            return child
+
+        instance.conversation_factory = _new_conversation
     return instance, store
+
+
+def _arm_transport_before_tools(
+    options: InstantiationOptions,
+    instance: "RuntimeInstance",
+    agent_id: str,
+) -> None:
+    """Bind sinks and the process bus before MCP ``tools/list`` (and other protocol I/O)."""
+    from mas.ctl.session.observability import _apply_transport, obs_config_to_binding, setup_instance_obs
+
+    if not options.enable_observability:
+        _apply_transport(None)
+        return
+    if options.obs_config is None:
+        return
+    if instance.obs_plugin_set is None and options.obs_attach_plugins:
+        setup_instance_obs(
+            instance,
+            options.obs_config,
+            base_dir=options.manifest_dir or Path.cwd(),
+            agent_id=agent_id,
+        )
+        return
+    _apply_transport(obs_config_to_binding(options.obs_config))
+    plugin_set = instance.obs_plugin_set
+    op = instance.driver.observability
+    if plugin_set is not None and op is not None:
+        plugin_set.begin_run(op)
 
 
 def _conversation_options(options: InstantiationOptions) -> InstantiationOptions | None:
@@ -431,6 +510,7 @@ def _conversation_options(options: InstantiationOptions) -> InstantiationOptions
         experiment_model_slots=dict(options.experiment_model_slots or {}) or None,
         checkpoint_path=None,
         checkpoint_dir=None,
+        obs_attach_plugins=False,
     )
 
 
@@ -531,7 +611,7 @@ def _resolve_skill_plugin_config(
     Priority: spec.context_sources (plugin list, same shape as observability)
     > legacy manifest tool/context declarations > env var > default.
     """
-    env_impl = str(os.getenv("MAS_SKILL_IMPL") or "").strip().lower() or "native"
+    env_impl = str(hostenv.get("MAS_SKILL_IMPL") or "").strip().lower() or "native"
     supported_impls = _supported_skill_impls()
     impl = env_impl if env_impl in supported_impls else "native"
     rel_base: str | None = None

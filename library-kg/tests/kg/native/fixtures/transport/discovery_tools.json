@@ -1,0 +1,97 @@
+{
+  "events": [
+    {
+      "kind": "transport.discovery",
+      "timestamp": 1.0,
+      "run_id": "r1",
+      "agent_id": "worker",
+      "mas_id": "demo",
+      "protocol": "example",
+      "side": "client",
+      "correlation_key": "tools:worker",
+      "source": "hook",
+      "attributes": {
+        "discovery_kind": "tools",
+        "tools": {
+          "tools": [
+            {
+              "name": "echo",
+              "description": "ping"
+            }
+          ]
+        },
+        "source": "worker"
+      }
+    },
+    {
+      "kind": "transport.discovery",
+      "timestamp": 1.0,
+      "run_id": "r1",
+      "agent_id": "worker",
+      "mas_id": "demo",
+      "protocol": "example",
+      "side": "client",
+      "correlation_key": "card:worker",
+      "source": "hook",
+      "attributes": {
+        "discovery_kind": "agent_card",
+        "card": {
+          "name": "worker"
+        }
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "node_type": "Agent",
+      "id": "worker",
+      "name": "worker",
+      "declared": true,
+      "@type": "Agent",
+      "description": ""
+    },
+    {
+      "node_type": "MAS",
+      "id": "catalog:mas:demo",
+      "name": "demo",
+      "declared": true,
+      "@type": "MAS",
+      "description": ""
+    },
+    {
+      "node_type": "Session",
+      "id": "session-r1",
+      "sessionId": "session-r1",
+      "name": "Session session-r1",
+      "@type": "Session"
+    },
+    {
+      "node_type": "Tool",
+      "id": "catalog:tool:echo",
+      "name": "echo",
+      "description": "ping",
+      "declared": false,
+      "@type": "Tool"
+    }
+  ],
+  "edges": [
+    {
+      "edge_type": "belongsToMAS",
+      "from_id": "worker",
+      "to_id": "catalog:mas:demo",
+      "id": "belongsToMAS:worker->catalog:mas:demo",
+      "@type": "belongsToMAS",
+      "source_id": "worker",
+      "target_id": "catalog:mas:demo"
+    },
+    {
+      "edge_type": "usesTool",
+      "from_id": "worker",
+      "to_id": "catalog:tool:echo",
+      "id": "usesTool:worker->catalog:tool:echo",
+      "@type": "usesTool",
+      "source_id": "worker",
+      "target_id": "catalog:tool:echo"
+    }
+  ]
+}

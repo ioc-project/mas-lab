@@ -6,7 +6,9 @@ title: "mas-lab Run Input Envelope (v1)"
 description: >
   Per-run document. ``user`` is prompt text (string) or ``{ref: file}``.
   ``tool_fixtures`` / ``memory_seeds`` use ``{ref:}`` or a bare path
-  shorthand. Expectation values and tool-fixture payloads are free-form.
+  shorthand. ``environment`` overlays timers and triggers on the
+  experiment world (no fixtures). Expectation values and tool-fixture
+  payloads are free-form.
 
 type: object
 additionalProperties: false
@@ -114,6 +116,9 @@ properties:
       session_id:
         type: string
         minLength: 1
+
+  environment:
+    $ref: "urn:mas-lab:fragments:environment-item:v1"
 
   expectations:
     description: >

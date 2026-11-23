@@ -285,6 +285,7 @@ def compute_run_hash(
     flavour_info: dict,
     base_path: "Path | None" = None,
     infra_info: "dict | None" = None,
+    environment_digest: str = "",
 ) -> str:
     """Compute a 20-character SHA-256 prefix that uniquely identifies a MAS run.
 
@@ -350,6 +351,8 @@ def compute_run_hash(
         "flavour": _effective_flavour,
         "infra": infra_info,
     }
+    if environment_digest:
+        payload["environment_digest"] = environment_digest
     serialized = json.dumps(payload, sort_keys=True, default=str)
     return hashlib.sha256(serialized.encode()).hexdigest()[:20]
 

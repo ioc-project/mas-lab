@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from pathlib import Path
@@ -29,27 +30,40 @@ class EventEmitter(Protocol):
 
 
 class JsonlFileEmitter:
-    """Append native records to ``events.jsonl``. Truncates on open."""
+    """Append native records to ``events.jsonl``. Truncates once, when the emitter is created.
+
+    The file is opened once in append mode and kept open for the life of the
+    emitter. Each ``emit`` is one unbuffered write of one whole line, so lines
+    of two emitters (or two threads) on one path never interleave. ``close``
+    releases the handle; an ``emit`` after ``close`` raises.
+    """
 
     def __init__(self, path) -> None:
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_bytes(b"")
         self._lock = threading.Lock()
+        self._fd: int | None = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_TRUNC, 0o644)
 
     def emit(self, record: dict) -> None:
-        if envelope_only_kind(str(record.get("kind") or "")):
-            return
-        line = json.dumps(record, default=str) + "\n"
+        skip = envelope_only_kind(str(record.get("kind") or ""))
+        data = b"" if skip else (json.dumps(record, default=str) + "\n").encode("utf-8")
         with self._lock:
-            with self._path.open("a", encoding="utf-8") as handle:
-                handle.write(line)
+            if self._fd is None:
+                raise RuntimeError("JsonlFileEmitter.emit after close")
+            if skip:
+                return
+            view = memoryview(data)
+            while view:
+                view = view[os.write(self._fd, view) :]
 
     def flush(self) -> None:
         pass
 
     def close(self) -> None:
-        pass
+        with self._lock:
+            fd, self._fd = self._fd, None
+            if fd is not None:
+                os.close(fd)
 
     @property
     def path(self):

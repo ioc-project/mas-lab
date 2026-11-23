@@ -195,6 +195,23 @@ def test_create_otel_export_service_name_is_not_identity(tmp_path):
         )
 
 
+def test_realtime_requires_the_observe_sdk(tmp_path, monkeypatch) -> None:
+    import builtins
+
+    from mas.library.telemetry.conversion.session import create_otel_export
+
+    real = builtins.__import__
+
+    def fake(name, *args, **kwargs):
+        if name == "ioa_observe.sdk.tracing.runtime_events":
+            raise ImportError("missing observe")
+        return real(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake)
+    with pytest.raises(ImportError, match="ioa-observe"):
+        create_otel_export(spans_path=tmp_path / "s.jsonl", app_name="demo", realtime=True)
+
+
 def test_replay_service_name_is_not_identity(tmp_path):
     from mas.library.telemetry.conversion.replay import replay_events_file
 

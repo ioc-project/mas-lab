@@ -14,16 +14,18 @@ inside runtime.
 
 from __future__ import annotations
 
-import os
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.operator import ObservabilityOperator
 from mas.runtime.registry import get_registry
+from mas.runtime.transport.config import ProtocolTransportConfig, TransportObservabilityConfig
+from mas.runtime.transport.emit import bind_config
 
 if TYPE_CHECKING:
     from mas.runtime.driver.instance import RuntimeInstance
@@ -81,7 +83,7 @@ class ObsPluginSet:
         for plugin in self.plugins:
             op.subscribe(plugin)
         op.enable_async_plugins()
-        op.set_context(agent_id=agent_id, run_id=run_id or os.environ.get("UI_RUN_ID", ""))
+        op.set_context(agent_id=agent_id, run_id=run_id or hostenv.get("UI_RUN_ID", ""))
         self._all_operators.append(op)
         if self._operator is None:
             self._operator = op
@@ -135,6 +137,55 @@ class ObsPluginSet:
             op.shutdown_plugin_worker()
 
 
+def _transport_plugin_defaults() -> dict[str, ProtocolTransportConfig]:
+    registry = get_registry()
+    out: dict[str, ProtocolTransportConfig] = {}
+    for entry in registry.get_by_category("transport_classifier"):
+        attrs = entry.attributes or {}
+        name = entry.urn.rsplit(".", 1)[-1]
+        out[name] = ProtocolTransportConfig(
+            sdk_spans=bool(attrs.get("default_sdk_spans", False)),
+            propagate_metadata=bool(attrs.get("default_propagate_metadata", False)),
+        )
+    return out
+
+
+def _bind_transport(config: TransportObservabilityConfig) -> None:
+    defaults = _transport_plugin_defaults()
+    known = set(defaults)
+    unknown = sorted(set(config.protocols) - known)
+    if unknown and config.present:
+        raise ValueError(
+            f"unknown transport protocol(s) {unknown}; register a transport_classifier plugin or omit them"
+        )
+    merged = TransportObservabilityConfig(
+        present=config.present,
+        defaults=config.defaults,
+        protocols=config.protocols,
+        plugin_defaults={**defaults, **dict(config.plugin_defaults)},
+    )
+    bind_config(merged)
+
+
+def _resolved_transport(binding: ObservabilityBinding) -> TransportObservabilityConfig:
+    if not binding.transport.present and binding.plugins:
+        return TransportObservabilityConfig.from_plugins(binding.plugins, binding.plugin_configs)
+    return binding.transport
+
+
+def bind_transport_if_idle(binding: ObservabilityBinding | None) -> None:
+    """Embedders: bind the process bus from *binding* unless one is already bound.
+
+    Never turns the bus off. A child instance built without a binding, or with its
+    own spec, must not undo or replace what the session setup installed.
+    """
+    from mas.runtime.transport.emit import is_enabled
+
+    if binding is None or is_enabled():
+        return
+    _bind_transport(_resolved_transport(binding))
+
+
 def build_observability_plugin_set(
     binding: ObservabilityBinding | None,
     *,
@@ -150,7 +201,13 @@ def build_observability_plugin_set(
     more :class:`~mas.runtime.driver.instance.RuntimeInstance` should follow
     up with :func:`attach_observability_plugin_set`.
     """
-    if binding is None or not binding.plugins:
+    if binding is None:
+        _bind_transport(TransportObservabilityConfig())
+        return None
+    binding = replace(binding, transport=_resolved_transport(binding))
+    # Always bound: a run with no transport config must turn the process bus off, not inherit the last run's.
+    _bind_transport(binding.transport)
+    if not binding.plugins:
         return None
     plugins = build_observability_plugins(binding, base_dir=base_dir, agent_id=agent_id or "")
     return ObsPluginSet(plugins=plugins)

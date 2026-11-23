@@ -13,7 +13,6 @@ plugin on the spec and set ``$OTEL_EXPORTER_OTLP_ENDPOINT``.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,15 +21,19 @@ from mas.library.standard.lib.observability.native.emit_transition import projec
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.library.telemetry.conversion.layers import ExportLayers, parse_export_layers
 from mas.library.telemetry.conversion.session import OtelExport, create_otel_export
+from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
 from mas.runtime.boundary.obs.transition import TransitionEvent
+from mas.runtime.schema.transport import TransportEvent
+from mas.runtime.transport.config import OTEL_SINK_NAMES, plugin_cfg
+from mas.runtime.transport.emit import bind_sink, protocol_config, unbind_sink
 
 _TRUE = {"1", "true", "yes", "on"}
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
+    raw = hostenv.get(name)
     if raw is None:
         return default
     return raw.strip().lower() in _TRUE
@@ -49,6 +52,7 @@ def create_otel_plugin(
     converter_profile: str | None = "observe_sdk",
     realtime: bool = False,
     extensions: bool | None = None,
+    runtime_logs: bool = False,
 ) -> OtelObservabilityPlugin:
     from mas.library.telemetry.conversion.topology import require_mas_name
 
@@ -62,6 +66,7 @@ def create_otel_plugin(
         converter_profile=converter_profile,
         realtime=realtime,
         extensions=extensions,
+        runtime_logs=runtime_logs,
     )
     plugin = OtelObservabilityPlugin(
         converter=export.converter,
@@ -87,6 +92,10 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
     spans_path: Path | None = None
     realtime: bool = False
     _export: OtelExport | None = field(default=None, init=False, repr=False)
+    _alias_tables: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        bind_sink(self)
 
     def reset_run(self) -> None:
         if self.converter is not None:
@@ -110,6 +119,62 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
         ):
             self.converter.process_event(rec)
 
+    def emit(self, event: TransportEvent) -> None:
+        """Transport bus sink: observe-sdk aliases SCOPE's norm already reads."""
+        cfg = protocol_config(event.protocol)
+        if not cfg.aliases_enabled():
+            return
+        logger = getattr(self.converter, "_event_logger", None) if self.converter is not None else None
+        if logger is None:
+            return
+        from mas.library.telemetry.transport.projector import project
+
+        result = project(
+            [event],
+            mode="contract",
+            aliases=self._alias_table(event.protocol),
+            emit_aliases=True,
+        )
+        self._emit_aliases(event, result.aliases, logger)
+
+    def _alias_table(self, protocol: str) -> Any:
+        cached = self._alias_tables.get(protocol)
+        if cached is not None:
+            return cached
+        from mas.runtime.registry import get_registry
+        from mas.runtime.transport.classifier import AliasTable
+
+        table = AliasTable()
+        for entry in get_registry().get_by_category("transport_classifier"):
+            if entry.urn.rsplit(".", 1)[-1] != protocol:
+                continue
+            table = entry.resolve().load_class()().aliases()
+            break
+        if table.events:
+            self._alias_tables[protocol] = table
+        return table
+
+    def _emit_aliases(self, event: TransportEvent, aliases: list[Any], logger: Any) -> None:
+        import time
+
+        from opentelemetry._logs import LogRecord, SeverityNumber
+
+        when = int(float(event.timestamp) * 1e9) if event.timestamp else time.time_ns()
+        for alias in aliases:
+            attrs = {"event.name": alias.name, **dict(alias.attributes)}
+            if event.mas_id and "application_id" not in attrs:
+                attrs.setdefault("application_id", event.mas_id)
+            logger.emit(
+                LogRecord(
+                    timestamp=when,
+                    observed_timestamp=when,
+                    severity_text="INFO",
+                    severity_number=SeverityNumber.INFO,
+                    body=alias.name,
+                    attributes=attrs,
+                )
+            )
+
     def flush(self) -> None:
         if self._export is not None:
             self._export.finish()
@@ -117,6 +182,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             self.converter.finish()
 
     def close(self) -> None:
+        unbind_sink(self)
         if self._export is not None:
             self._export.close()
         else:
@@ -130,7 +196,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
         base_dir: str | Path,
         agent_id: str,
     ) -> "OtelObservabilityPlugin" | None:
-        otel_cfg = binding.plugin_configs.get("otel") or {}
+        otel_cfg = plugin_cfg(binding.plugin_configs, OTEL_SINK_NAMES)
         base_path = Path(base_dir)
         events_path = binding.events_file or str(base_path / "traces" / "events.jsonl")
         out = otel_cfg.get("output_path") or otel_cfg.get("otel_file")
@@ -145,7 +211,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             spans_path = (base_path / spans_path).resolve()
 
         env_name = str(otel_cfg.get("otlp_endpoint_env") or binding.otlp_endpoint_env or "OTEL_EXPORTER_OTLP_ENDPOINT")
-        endpoint = os.environ.get(env_name, "").strip() or None
+        endpoint = hostenv.get(env_name, "").strip() or None
 
         from mas.library.telemetry.conversion.topology import require_mas_name
 
@@ -168,6 +234,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             converter_profile=profile,
             realtime=realtime,
             extensions=None if ext_cfg is None else bool(ext_cfg),
+            runtime_logs=binding.transport.any_aliases(),
         )
 
 

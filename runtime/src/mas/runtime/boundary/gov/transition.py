@@ -149,6 +149,23 @@ def _tool_call_attributes(symbol: Any, q: "QProduct | None") -> dict[str, Any]:
     return {"tool_name": name, "tool_arguments": dict(args or {})}
 
 
+def _tool_result_attributes(symbol: Any, q: "QProduct | None") -> dict[str, Any]:
+    """Name the tool behind an ingress TOOL_RESULT EngineIoReturn.
+
+    The return carries the result, not which tool produced it. Kernel state
+    still holds the pending call at this point (governance runs before the
+    transition commits the result), resolved as in ``_tool_call_attributes``.
+    """
+    if q is None or getattr(symbol, "response_kind", "") != "TOOL_RESULT":
+        return {}
+    correlation_id = getattr(symbol, "correlation_id", 0)
+    by_cid = q.pending_tools_by_cid.get(correlation_id)
+    name, args = by_cid if by_cid is not None else (q.pending_tool_name, q.pending_tool_args)
+    if not name:
+        return {}
+    return {"tool_name": name, "tool_arguments": dict(args or {})}
+
+
 def build_gov_transition(
     hook: GovHook,
     symbol: "IngressSymbol | EgressSymbol",
@@ -165,6 +182,8 @@ def build_gov_transition(
     )
     if hook == "egress":
         attributes.update(_tool_call_attributes(symbol, q))
+    else:
+        attributes.update(_tool_result_attributes(symbol, q))
     return GovTransition(
         hook=hook,
         symbol=symbol,

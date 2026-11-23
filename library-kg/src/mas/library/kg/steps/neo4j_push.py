@@ -1,12 +1,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Standalone step: push kg.jsonld to Neo4j."""
+
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+
+from mas.runtime import hostenv
 
 from mas.library.kg.artifact import KGArtifact
 
@@ -33,10 +35,10 @@ def _resolve_conn(
 ) -> Dict[str, str]:
     """Resolve Neo4j connection params, falling back to environment variables."""
     return {
-        "uri": uri or os.environ.get(_ENV_URI, "bolt://localhost:7687"),
-        "username": username or os.environ.get(_ENV_USER, "neo4j"),
-        "password": password or os.environ.get(password_env or _ENV_PASSWORD, ""),
-        "database": database or os.environ.get(_ENV_DATABASE, "neo4j"),
+        "uri": uri or hostenv.get(_ENV_URI, "bolt://localhost:7687"),
+        "username": username or hostenv.get(_ENV_USER, "neo4j"),
+        "password": password or hostenv.get(password_env or _ENV_PASSWORD, ""),
+        "database": database or hostenv.get(_ENV_DATABASE, "neo4j"),
     }
 
 

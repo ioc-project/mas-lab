@@ -1,0 +1,24 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: infra/v1
+kind: LLMProxy
+
+metadata:
+  name: loopback
+  description: OpenAI-compatible loopback model for the throughput lab.
+
+spec:
+  protocol: openai
+  proxy:
+    api_base: http://127.0.0.1:18765/v1
+    api_key_env: OPENAI_API_KEY
+    timeout: 30
+
+  models:
+    mappings:
+      default: gpt-4o-mini
+    allowed:
+      - gpt-4o-mini
+      - gpt-4o
+    defaults:
+      llm: default
